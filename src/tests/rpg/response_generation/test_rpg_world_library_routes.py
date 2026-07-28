@@ -45,6 +45,43 @@ def test_world_library_routes_are_available_without_openapi_drift(monkeypatch) -
     assert "/api/rpg/worlds/{world_id}/library" not in app.openapi()["paths"]
 
 
+def test_world_and_scenario_create_routes_allow_backend_generated_ids(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_world(contract):
+        captured["world_id"] = contract.world_id
+        return {"id": "world:glass-sea:abc123", "title": contract.title}
+
+    def fake_scenario(contract):
+        captured["scenario_id"] = contract.scenario_id
+        return {
+            "id": "scenario:first-light:def456",
+            "world_id": contract.world_id,
+            "title": contract.title,
+        }
+
+    monkeypatch.setattr("app.gateway.rpg_world_routes.create_world_project", fake_world)
+    monkeypatch.setattr("app.gateway.rpg_world_routes.create_scenario_project", fake_scenario)
+    app = FastAPI()
+    register_rpg_world_routes(app)
+    client = TestClient(app)
+
+    world = client.post(
+        "/api/rpg/worlds",
+        json={"title": "The Glass Sea", "source_mode": "hybrid"},
+    )
+    scenario = client.post(
+        "/api/rpg/scenarios",
+        json={"world_id": "world:glass-sea:abc123", "title": "First Light"},
+    )
+
+    assert world.status_code == 200
+    assert world.json()["world"]["id"] == "world:glass-sea:abc123"
+    assert scenario.status_code == 200
+    assert scenario.json()["scenario"]["id"] == "scenario:first-light:def456"
+    assert captured == {"world_id": None, "scenario_id": None}
+
+
 def test_published_scenario_launch_route_preserves_fast_launch_contract(monkeypatch) -> None:
     captured: dict[str, object] = {}
 

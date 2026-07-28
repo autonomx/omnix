@@ -5,19 +5,65 @@ from typing import Any, Mapping
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
+from app.rpg.session.genesis.world_forge_profile_generation import (
+    ProfileResolution,
+    resolve_or_generate_genre_profile,
+)
+from app.rpg.session.genesis.world_forge_profile_graph import build_profile_topic_graph
 
 from .generation_coordinator import reconcile_world_generation, start_world_generation
 from .generation_jobs import WorldTopicGenerationSettings, canonical_hash
-from .generation_publication import publish_world_generation
+from .generation_publication_guard import publish_world_generation
+from .generation_routing import resolve_world_forge_route
 from .generation_scope import resolve_generation_scope
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
 from .map_blueprint_authoring import list_map_blueprints
+from .profile_authoring import require_approved_profile
+from .profile_generation_jobs import profile_manifest_run, profile_resolution_from_world
 
 
 def _database(value: Any | None) -> Any | None:
     return value
+
+
+def _world_generation_context(
+    world: Mapping[str, Any],
+    *,
+    starting_location: str,
+    background_expansion: bool,
+    route: Any,
+    profile_resolution: ProfileResolution | None = None,
+    approved_profile_hash: str = "",
+) -> dict[str, Any]:
+    """Build a durable, authoritative setting brief for every topic request."""
+
+    metadata = dict(world.get("metadata") or {})
+    genre = str(world.get("genre") or "classic_fantasy")
+    tone = str(world.get("tone") or "heroic adventure")
+    context: dict[str, Any] = {
+        "world_brief": {
+            "title": str(world.get("title") or "").strip(),
+            "description": str(world.get("description") or "").strip(),
+            "source_mode": str(world.get("source_mode") or "").strip(),
+            "genre": genre,
+            "tone": tone,
+            "campaign_template": str(metadata.get("campaign_template") or "").strip(),
+        },
+        "genre": genre,
+        "tone": tone,
+        "starting_location": starting_location,
+        "background_expansion": background_expansion,
+        "requested_provider_route": route.requested_provider,
+        "requested_model": route.requested_model,
+        "resolved_provider_source": route.source,
+        "approved_profile_hash": approved_profile_hash,
+    }
+    if profile_resolution is not None:
+        context["genre_profile_resolution"] = profile_resolution.as_dict()
+        context["resolved_genre_profile"] = profile_resolution.profile.as_dict()
+        context["resolved_profile_hash"] = profile_resolution.profile.content_hash
+    return context
 
 
 def read_world_library(
@@ -77,6 +123,13 @@ def read_world_detail(
         releases = work.world_library.list_world_releases(context, world_id)
         scenarios = work.world_library.list_scenarios(context, world_id=world_id)
         runs = work.world_library.list_generation_runs(context, world_id=world_id)
+        generation_topic_results = {
+            str(run["run_id"]): work.world_generation.list_topic_results(
+                context,
+                run_id=str(run["run_id"]),
+            )
+            for run in runs
+        }
         scenario_revisions = {
             scenario["id"]: work.world_library.list_scenario_revisions(
                 context,
@@ -85,6 +138,10 @@ def read_world_detail(
             for scenario in scenarios
         }
         work.rollback()
+    if not runs:
+        manifest_run = profile_manifest_run(world)
+        if manifest_run is not None:
+            runs = [manifest_run]
     return {
         "ok": True,
         "world": world,
@@ -95,6 +152,7 @@ def read_world_detail(
         "scenarios": scenarios,
         "scenario_revisions": scenario_revisions,
         "generation_runs": runs,
+        "generation_topic_results": generation_topic_results,
     }
 
 
@@ -136,6 +194,28 @@ def save_world_topic(
     return {"ok": True, "topic": stored}
 
 
+def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
+    plan = dict(run.get("plan") or {})
+    progress = dict(run.get("progress") or {})
+    queued_jobs = list(plan.get("new_job_ids") or ())
+    active_topics = list(progress.get("active_topic_ids") or ())
+    return {
+        "queued_topic_ids": active_topics,
+        "queued_job_ids": queued_jobs,
+        "reused_topic_ids": list(plan.get("reusable_topic_ids") or ()),
+        "protected_topic_ids": list(plan.get("protected_topic_ids") or ()),
+        "target_topic_ids": list(plan.get("topic_ids") or ()),
+        "queued_count": len(queued_jobs),
+        "reused_count": len(plan.get("reusable_topic_ids") or ()),
+        "protected_count": len(plan.get("protected_topic_ids") or ()),
+        "active_count": len(active_topics),
+        "accepted_count": len(progress.get("accepted_topic_ids") or ()),
+        "flagged_count": len(progress.get("flagged_topic_ids") or ()),
+        "failed_count": len(progress.get("failed_topic_ids") or ()),
+        "blocked_count": len(progress.get("blocked_topic_ids") or ()),
+    }
+
+
 def start_world_library_generation(
     world_id: str,
     *,
@@ -166,16 +246,32 @@ def start_world_library_generation(
             limit=1,
         )
         work.rollback()
-    graph = build_campaign_topic_graph(
-        campaign_template=str(
-            world.get("metadata", {}).get("campaign_template") or "classic_fantasy"
-        ),
-        genre=str(world.get("genre") or "classic_fantasy"),
-        tone=str(world.get("tone") or "heroic adventure"),
+
+    profile_review = require_approved_profile(world)
+    route = resolve_world_forge_route(provider_route, model)
+    metadata = dict(world.get("metadata") or {})
+    campaign_template = str(metadata.get("campaign_template") or "classic_fantasy")
+    profile_resolution = profile_resolution_from_world(world)
+    if profile_resolution is None:
+        profile_resolution = resolve_or_generate_genre_profile(
+            genre=str(world.get("genre") or campaign_template),
+            description=str(world.get("description") or ""),
+            campaign_mode=str(
+                metadata.get("campaign_mode") or "persistent_living_world"
+            ),
+        )
+    if profile_resolution.profile.content_hash != str(profile_review["approved_profile_hash"]):
+        raise ValueError("world_profile_approval_hash_mismatch")
+    graph = build_profile_topic_graph(
+        profile_resolution.profile,
+        campaign_template=campaign_template,
         depth=depth,
+        tone=str(world.get("tone") or ""),
         starting_location=starting_location,
         background_expansion=background_expansion,
+        runtime_capabilities=dict(metadata.get("runtime_capabilities") or {}),
     )
+
     target_topic_ids, forced_topic_ids, normalized_scope = resolve_generation_scope(
         graph,
         scope=scope,
@@ -184,23 +280,26 @@ def start_world_library_generation(
         latest_run=runs[0] if runs else None,
         replace_locked=replace_locked,
     )
+    generation_context = _world_generation_context(
+        world,
+        starting_location=starting_location,
+        background_expansion=background_expansion,
+        route=route,
+        profile_resolution=profile_resolution,
+        approved_profile_hash=str(profile_review["approved_profile_hash"]),
+    )
     run = start_world_generation(
         world_id=world_id,
         draft_revision=int(world["draft_revision"]),
         graph=graph,
-        generation_context={
-            "genre": str(world.get("genre") or "classic_fantasy"),
-            "tone": str(world.get("tone") or "heroic adventure"),
-            "starting_location": starting_location,
-            "background_expansion": background_expansion,
-        },
+        generation_context=generation_context,
         topic_directives=dict(topic_directives or {}),
         entity_manifest_hash=canonical_hash(dict(entity_manifest or {})),
         settings=WorldTopicGenerationSettings(
             generator_version=generator_version,
             prompt_version=prompt_version,
-            provider_route=provider_route,
-            model=model,
+            provider_route=route.provider,
+            model=route.model,
             seed=int(world.get("seed") or 0),
         ),
         target_topic_ids=target_topic_ids,
@@ -208,13 +307,29 @@ def start_world_library_generation(
         scope=normalized_scope,
         strategy=strategy,
         database=database,
+        tenant_context=context,
     )
-    worker_started = kick_world_generation_worker(database=database) if kick_worker else False
+    worker_started = (
+        kick_world_generation_worker(
+            database=database,
+            provider_route=route.provider,
+        )
+        if kick_worker
+        else False
+    )
     return {
         "ok": True,
         "run": run,
         "worker_started": worker_started,
         "scope": normalized_scope,
+        "execution_summary": _execution_summary(run),
+        "resolved_route": {
+            "provider": route.provider,
+            "model": route.model,
+            "source": route.source,
+        },
+        "genre_profile": profile_resolution.as_dict(),
+        "approved_profile_hash": profile_review["approved_profile_hash"],
     }
 
 
@@ -233,7 +348,20 @@ def read_world_generation(
             work.rollback()
         if run is None:
             raise KeyError(f"world_generation_run_not_found:{run_id}")
-    return {"ok": True, "run": run}
+    if str(run.get("status") or "") in {"planned", "running"}:
+        settings = dict(run.get("settings") or {})
+        kick_world_generation_worker(
+            database=database,
+            provider_route=str(settings.get("provider_route") or ""),
+        )
+    context = bootstrap_local_tenant(_database(database))
+    with unit_of_work(database) as work:
+        topic_results = work.world_generation.list_topic_results(
+            context,
+            run_id=run_id,
+        )
+        work.rollback()
+    return {"ok": True, "run": run, "topic_results": topic_results}
 
 
 def publish_world_library_generation(

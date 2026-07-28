@@ -169,19 +169,58 @@ export interface RpgDeferredMaterializationResponse {
   materialization: Record<string, unknown>;
 }
 
+export interface RpgWorldGenerationMutationResponse {
+  ok: boolean;
+  run: RpgWorldGenerationRun;
+  worker_started: boolean;
+  scope?: Record<string, unknown>;
+  retry_of_run_id?: string;
+  continue_of_run_id?: string;
+  diagnostic_id?: string;
+  diagnostic_log?: string;
+}
+
+export class RpgWorldGenerationRequestError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly retryable: boolean;
+
+  constructor(status: number, code: string, message: string, retryable = false) {
+    super(message);
+    this.name = 'RpgWorldGenerationRequestError';
+    this.status = status;
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   const text = await response.text();
   if (!response.ok) {
-    let detail = text;
+    let detail: unknown = text;
+    let code = 'world_generation_request_failed';
+    let retryable = false;
     try {
       const parsed = JSON.parse(text) as { detail?: unknown; error?: unknown };
       const candidate = parsed.detail ?? parsed.error;
-      detail = typeof candidate === 'string' ? candidate : JSON.stringify(candidate);
+      detail = candidate;
+      if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+        const error = candidate as Record<string, unknown>;
+        if (typeof error.error === 'string') code = error.error;
+        if (typeof error.retryable === 'boolean') retryable = error.retryable;
+        if (typeof error.message === 'string') detail = error.message;
+      }
     } catch {
       // Preserve the raw response body.
     }
-    throw new Error(`Omnix API request failed with status ${response.status}${detail ? `: ${detail}` : ''}`);
+    const message = typeof detail === 'string' ? detail : JSON.stringify(detail);
+    throw new RpgWorldGenerationRequestError(
+      response.status,
+      code,
+      `Omnix API request failed with status ${response.status}${message ? `: ${message}` : ''}`,
+      retryable,
+    );
   }
   return (text ? JSON.parse(text) : {}) as T;
 }
@@ -225,6 +264,15 @@ export const rpgWorldLibraryClient = {
     );
   },
 
+  materializeMapBlueprints(
+    worldId: string,
+  ): Promise<{ ok: boolean; created: RpgMapBlueprintRevision[]; created_count: number }> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/map-blueprints/materialize`,
+      jsonInit({}),
+    );
+  },
+
   archiveWorld(worldId: string): Promise<{ ok: boolean; world: RpgWorldSummary; idempotent: boolean }> {
     return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/archive`, jsonInit({}));
   },
@@ -248,8 +296,31 @@ export const rpgWorldLibraryClient = {
   startGeneration(
     worldId: string,
     body: Record<string, unknown>,
-  ): Promise<{ ok: boolean; run: RpgWorldGenerationRun; worker_started: boolean }> {
+  ): Promise<RpgWorldGenerationMutationResponse> {
     return request(`/api/rpg/worlds/${encodeURIComponent(worldId)}/generation`, jsonInit(body));
+  },
+
+  retryFailedGeneration(runId: string): Promise<RpgWorldGenerationMutationResponse> {
+    return request(
+      `/api/rpg/world-generation/${encodeURIComponent(runId)}/retry-failed`,
+      jsonInit({}),
+    );
+  },
+
+  continueGeneration(runId: string): Promise<RpgWorldGenerationMutationResponse> {
+    return request(
+      `/api/rpg/world-generation/${encodeURIComponent(runId)}/continue`,
+      jsonInit({}),
+    );
+  },
+
+  generationDiagnostics(): Promise<{
+    ok: boolean;
+    path: string;
+    format: string;
+    contains_generated_content: boolean;
+  }> {
+    return request('/api/rpg/world-generation/diagnostics');
   },
 
   generation(runId: string): Promise<{ ok: boolean; run: RpgWorldGenerationRun }> {

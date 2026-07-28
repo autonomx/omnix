@@ -1,4 +1,4 @@
-"""Resolve full, selected, stale, and failed world-generation scopes."""
+"""Resolve full, selected, stale, failed, and review world-generation scopes."""
 from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
@@ -61,19 +61,51 @@ def resolve_generation_scope(
     mode = str(raw.get("mode") or ("selected" if raw.get("topic_ids") else "full"))
     all_ids = _generation_ids(graph)
     rows = {str(row.get("topic_id") or ""): row for row in topic_rows}
+    progress = dict((latest_run or {}).get("progress") or {})
     if mode == "full":
         selected = all_ids
     elif mode == "selected":
-        selected = tuple(dict.fromkeys(str(value) for value in raw.get("topic_ids") or () if str(value)))
+        selected = tuple(
+            dict.fromkeys(
+                str(value) for value in raw.get("topic_ids") or () if str(value)
+            )
+        )
     elif mode == "stale":
         selected = tuple(
-            topic_id for topic_id in all_ids if str(rows.get(topic_id, {}).get("status") or "") == "stale"
+            topic_id
+            for topic_id in all_ids
+            if str(rows.get(topic_id, {}).get("status") or "") == "stale"
         )
     elif mode == "failed":
-        progress = dict((latest_run or {}).get("progress") or {})
         selected = tuple(
-            topic_id for topic_id in progress.get("failed_topic_ids") or () if str(topic_id) in all_ids
+            topic_id
+            for topic_id in progress.get("failed_topic_ids") or ()
+            if str(topic_id) in all_ids
         )
+    elif mode == "review":
+        requested = tuple(
+            dict.fromkeys(
+                str(value) for value in raw.get("topic_ids") or () if str(value)
+            )
+        )
+        reviewable = tuple(
+            dict.fromkeys(
+                str(topic_id)
+                for key in (
+                    "flagged_topic_ids",
+                    "failed_topic_ids",
+                    "blocked_topic_ids",
+                )
+                for topic_id in progress.get(key) or ()
+                if str(topic_id) in all_ids
+            )
+        )
+        selected = requested or reviewable
+        invalid = sorted(set(selected) - set(reviewable))
+        if invalid:
+            raise ValueError(
+                "generation_topics_not_reviewable:" + ",".join(invalid)
+            )
     else:
         raise ValueError(f"invalid_generation_scope_mode:{mode}")
     if not selected:

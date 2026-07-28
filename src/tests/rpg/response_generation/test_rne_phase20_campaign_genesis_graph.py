@@ -18,8 +18,12 @@ def test_standard_world_forge_graph_is_prose_free_valid_and_launch_ordered() -> 
     )
     assert graph.validate() == ()
     ordered = [node.topic_id for node in graph.topological_order()]
-    assert ordered.index("realm") < ordered.index("regions") < ordered.index("locations")
-    assert ordered.index("factions") < ordered.index("npcs") < ordered.index("opening_threads")
+    assert ordered.index("realm") < ordered.index("regions") < ordered.index(
+        "locations"
+    )
+    assert ordered.index("factions") < ordered.index("npcs") < ordered.index(
+        "opening_threads"
+    )
     assert ordered[-2:] == ["retrieval_index", "opening_materialization"]
     payload = graph.as_dict()
     assert payload["depth"] == "standard"
@@ -35,7 +39,7 @@ def test_generation_depth_profiles_match_launch_targets() -> None:
     assert fallback.depth == "standard"
 
 
-def test_genesis_compiler_embeds_world_forge_policy_and_dependency_graph() -> None:
+def test_genesis_compiler_embeds_profile_policy_and_dependency_graph() -> None:
     contract = CampaignGenesisContract.model_validate(
         {
             "campaign_template": "summoned_heroes",
@@ -53,7 +57,9 @@ def test_genesis_compiler_embeds_world_forge_policy_and_dependency_graph() -> No
                 "depth": "epic",
                 "background_expansion": False,
                 "max_parallel_jobs": 99,
-                "custom_directives": ["Summoned heroes destabilize politics."],
+                "custom_directives": [
+                    "Summoned heroes destabilize politics."
+                ],
             },
         }
     )
@@ -63,5 +69,9 @@ def test_genesis_compiler_embeds_world_forge_policy_and_dependency_graph() -> No
     assert world_forge["depth_profile"]["depth"] == "epic"
     assert world_forge["max_parallel_jobs"] == 4
     assert world_forge["topic_graph"]["campaign_template"] == "summoned_heroes"
-    assert "opening_materialization" in world_forge["topic_graph"]["launch_required_topic_ids"]
-    assert compiled["compiler_version"] == "rpg_genesis_compiler_v2"
+    assert "opening_materialization" in world_forge["topic_graph"][
+        "launch_required_topic_ids"
+    ]
+    assert world_forge["resolved_profile_hash"].startswith("sha256:")
+    assert world_forge["genre_profile_resolution"]["generated"] is True
+    assert compiled["compiler_version"] == "rpg_genesis_compiler_v3"

@@ -13,9 +13,10 @@ from app.rpg.session.genesis.compiler import compile_campaign_genesis
 from app.rpg.session.genesis.contract import CampaignGenesisContract
 from app.rpg.session.genesis.materialization import persist_campaign_genesis
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
-from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
+from app.rpg.session.genesis.world_forge_deterministic import (
+    DeterministicWorldForgeGenerator,
+)
 from app.rpg.session.genesis.world_forge_pipeline import run_campaign_world_forge
-
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -73,7 +74,12 @@ def test_campaign_genesis_materializes_bible_and_ready_gate_atomically() -> None
             compiled_genesis=compiled,
             generator=generator,
         )
-        assert world_forge.launch_ready is True
+        assert world_forge.launch_ready is True, {
+            "failed_topic_ids": world_forge.generation.failed_topic_ids,
+            "jobs": [job.as_dict() for job in world_forge.generation.jobs],
+            "audit": world_forge.audit.as_dict(),
+            "compilation": world_forge.compilation.as_dict(),
+        }
         session = {
             "manifest": {
                 "session_id": "campaign:genesis",
@@ -101,7 +107,23 @@ def test_campaign_genesis_materializes_bible_and_ready_gate_atomically() -> None
             campaign = work.rpg.get_campaign(context, "campaign:genesis")
             work.rollback()
         assert campaign is not None
-        assert bible is not None and bible["document"]["entities"]["npc:vexira_umbra"]
-        assert genesis is not None and genesis["bible_content_hash"] == bible["content_hash"]
+        assert bible is not None
+        document = bible["document"]
+        profile_hash = document["topic_graph"]["metadata"]["resolved_profile_hash"]
+        assert profile_hash.startswith("sha256:")
+        assert document["completeness"]["opening_location_ids"] == [
+            "place:vanta_gate"
+        ]
+        actor_entities = [
+            entity
+            for entity in document["entities"].values()
+            if entity.get("kind") == "actor"
+        ]
+        assert actor_entities
+        assert all(
+            entity.get("dossier_status") == "complete" for entity in actor_entities
+        )
+        assert genesis is not None
+        assert genesis["bible_content_hash"] == bible["content_hash"]
     finally:
         database.close()

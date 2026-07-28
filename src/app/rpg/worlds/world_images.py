@@ -14,6 +14,7 @@ from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
 
 _ROLE_BY_TOPIC: Mapping[str, str] = {
+    "realm": "landscape",
     "regions": "landscape",
     "locations": "scene",
     "points_of_interest": "scene",
@@ -31,6 +32,13 @@ _ROLE_BY_TOPIC: Mapping[str, str] = {
     "opening_scenarios": "cover",
 }
 
+_IMAGE_PROMPT_VERSION = "world-cinematic-poster-v5"
+_MAP_NO_TEXT_CONSTRAINT = (
+    "Absolutely no typography or written marks anywhere in the artwork: no place names, labels, "
+    "letters, words, numbers, runes, legends, cartouches, compass labels, signage, watermarks, "
+    "or UI. Render pure unlabeled pictorial geography; names are supplied only by application overlay markers."
+)
+
 
 def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
@@ -38,6 +46,198 @@ def _record(value: Any) -> dict[str, Any]:
 
 def _text(value: Any, fallback: str = "") -> str:
     return str(value).strip() if value is not None and str(value).strip() else fallback
+
+
+def _dossier_section_text(entity: Mapping[str, Any], section_id: str) -> str:
+    sections = _record(entity.get("dossier")).get("sections") or ()
+    for section_value in sections:
+        section = _record(section_value)
+        if _text(section.get("id")).casefold() != section_id.casefold():
+            continue
+        paragraphs = [
+            _text(paragraph)
+            for paragraph in section.get("paragraphs") or ()
+            if _text(paragraph)
+        ]
+        return " ".join(paragraphs)
+    return ""
+
+
+def _canon_value_text(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return "; ".join(
+            f"{str(key).replace('_', ' ')}: {_canon_value_text(item)}"
+            for key, item in value.items()
+            if _canon_value_text(item)
+        )
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return "; ".join(filter(None, (_canon_value_text(item) for item in value)))
+    return _text(value)
+
+
+def _entity_canon_details(
+    entity: Mapping[str, Any],
+    *,
+    target_type: str,
+    role: str,
+) -> str:
+    fields_by_role = {
+        "portrait": ("short_summary", "registry_distinction", "appearance", "behaviour", "capabilities", "weaknesses"),
+        "icon": ("short_summary", "function", "capability", "limitations", "availability", "cost", "failure_mode"),
+        "emblem": ("short_summary", "registry_distinction", "observable_signs", "resources", "current_objective", "internal_divisions"),
+        "scene": ("short_summary", "setup", "complications", "outcomes", "observable_evidence", "current_pressure", "current_state"),
+        "landscape": ("short_summary", "identity", "boundaries", "landmarks", "dangers", "current_pressure"),
+        "cover": ("short_summary", "premise", "objectives", "stakes", "complications", "beats", "rewards"),
+        "illustration": (
+            "short_summary", "registry_distinction", "capability", "dependency", "failure_mode",
+            "values", "customs", "internal_tensions", "observable_effects", "observable_consequences",
+            "capabilities", "equipment_ids", "cause", "consequences", "present_day_legacies",
+        ),
+    }
+    sections_by_role = {
+        "portrait": ("appearance", "overview", "details"),
+        "icon": ("overview", "details"),
+        "emblem": ("overview", "details", "connections"),
+        "scene": ("situation", "atmosphere", "setting", "overview", "complications"),
+        "landscape": ("geography", "identity", "landmarks", "dangers", "overview"),
+        "cover": ("overview", "opening", "objectives", "stakes", "complications"),
+        "illustration": ("overview", "details", "history", "connections"),
+    }
+    fragments: list[str] = []
+    for field in ("description", "appearance", "sensory_profile", "summary"):
+        value = _canon_value_text(entity.get(field))
+        if value:
+            fragments.append(f"{field.replace('_', ' ')}: {value}")
+    for field in fields_by_role.get(role, ("short_summary", "registry_distinction")):
+        value = _canon_value_text(entity.get(field))
+        if value:
+            fragments.append(f"{field.replace('_', ' ')}: {value}")
+    for section_id in sections_by_role.get(role, ("overview", "details")):
+        value = _dossier_section_text(entity, section_id)
+        if value:
+            fragments.append(f"{section_id.replace('_', ' ')}: {value}")
+    if not fragments:
+        fragments.append(f"structured {target_type.replace('_', ' ')} canon")
+    return " ".join(fragments)[:1400]
+
+
+def _threat_portrait_prompt(*, subject: str, genre: str, details: str) -> str:
+    return (
+        f"Cinematic {genre} RPG threat key art of {subject}. Show one complete, immediately readable "
+        "threat design in a three-quarter view, with the head or primary sensor cluster and full silhouette "
+        "clearly separated from the background. Define anatomy, chassis, armour, weapons, movement, damage, "
+        f"and scale directly from this canon: {details} Depict one controlled threatening action and one visible "
+        "weakness or functional limitation. Use a simple environment with a single scale cue and minimal "
+        "out-of-focus background activity. Dramatic rim light, realistic materials, restrained volumetric "
+        "atmosphere, readable detail. No generic soldier or monster design, no duplicate creatures, no crowded "
+        "background, no excessive armour unrelated to canon, no extra limbs, malformed anatomy, fused equipment, "
+        "text, logos, watermarks, or UI."
+    )
+
+
+def _character_portrait_prompt(
+    *,
+    subject: str,
+    entity: Mapping[str, Any],
+    genre: str,
+    tone: str,
+    details: str,
+) -> str:
+    subject_key = subject.casefold().replace("’", "'")
+    if "kaelen" in subject_key and "voss" in subject_key:
+        return (
+            f"Cinematic cyberpunk RPG character key art of {subject}, shown in a tight chest-up portrait. "
+            "His head and both shoulders are fully visible, with his face occupying roughly one-third "
+            "of the composition. He is a lean, battle-worn covert operative in his early thirties with "
+            "a narrow angular face, pale olive skin, short dark hair shaved at the sides, grey-green eyes, "
+            "light stubble, and a thin diagonal scar crossing his right eyebrow. "
+            "A distinctive matte-titanium augmentation runs from his left temple, around the ear, and down "
+            "the jaw, built from fitted surgical plates, flexible black synthetic joints, visible mounting "
+            "seams, and a compact optical-camouflage emitter behind the ear. The augmentation is functional "
+            "and restrained, not decorative. His left iris contains a subtle mechanical aperture. "
+            "He wears a weathered asymmetric stealth coat made from matte black technical fabric, with one "
+            "reinforced ceramic shoulder panel and concealed magnetic fasteners. No bulky armour, excessive "
+            "pouches, or superhero styling. He turns sharply toward the viewer while touching the camouflage "
+            "control behind his ear. One edge of his shoulder is partially obscured by physically believable "
+            "optical distortion, bending rain and background light around his silhouette. His expression is "
+            "controlled, suspicious, and defiant. Behind him is a simplified cyberpunk maintenance district "
+            "with one elevated catwalk, large filtration pipes, rain, drifting steam, and a distant corporate "
+            "searchlight sweeping through the haze. A dismantled surveillance drone on a workbench subtly "
+            "suggests rebel activity. Keep background figures minimal and out of focus. Eye-level camera, "
+            "three-quarter facial angle, shallow depth of field, strong cool blue rim light on one side and "
+            "restrained warm industrial light on the other, realistic skin texture, believable metal and "
+            "fabric materials, volumetric rain and steam, rich cinematic colour grading, premium poster-quality "
+            "realistic illustration, intricate but readable detail. Preserve the canonical subtle neural "
+            "interfaces and faint eye patterns. No text, logos, watermarks, UI, generic fashion-model appearance, "
+            "symmetrical implants, glowing facial lines, excessive cybernetics, crowded background, distorted "
+            "anatomy, extra fingers, malformed ears, fused clothing, or modern photography artifacts."
+        )
+
+    appearance = _dossier_section_text(entity, "appearance") or details
+    role = _text(entity.get("registry_role") or entity.get("kind"), "character")
+    return (
+        f"Cinematic {genre} RPG character key art of {subject}, a {role}. Tight chest-up portrait; "
+        "head and both shoulders fully inside the frame; face occupying roughly one-third of the image; "
+        "eye-level camera; three-quarter view; shallow depth of field. Establish one consistent identity "
+        f"from this canonical appearance: {appearance} Use an alert, controlled pose that visibly expresses "
+        f"the {tone} tone. Prioritize the face, clothing silhouette, augmentations or signature equipment, "
+        "and one unique identifying feature. Use a simple environment with only one clear story element and "
+        "minimal out-of-focus background figures. Realistic materials and skin, dramatic rim light, restrained "
+        "blue-orange contrast, volumetric atmosphere, intricate but readable detail. No generic model appearance, "
+        "symmetrical implants unless canonical, excessive armour, bulky exoskeleton, superhero pose, glowing "
+        "lines covering the face, crowded background, extra limbs or fingers, distorted ears, fused clothing, "
+        "text, logos, watermarks, UI, or modern photography artifacts."
+    )
+
+
+def _visual_subject_brief(*, subject: str, details: str, genre: str, role: str) -> str:
+    """Turn a canon label into concrete, image-model-friendly art direction."""
+    subject_key = subject.casefold()
+    genre_key = genre.casefold()
+    if "atmospheric filtration" in subject_key or "filtration system" in subject_key:
+        return (
+            f"Depict {subject} as a colossal life-support machine rising above a polluted "
+            "cyberpunk city: towering purification stacks, turbine-sized intake vents, pressure "
+            "chambers, industrial ducts, and dense illuminated pipes. Show enormous rotating fans "
+            "drawing toxic orange smog inward and blue-white clean vapour venting into the upper "
+            "atmosphere, creating shafts of light through the haze. Its dark weathered metal is "
+            "heavily reinforced and covered with maintenance platforms, cables, valves, modular "
+            "filters, and hacked additions from underground technicians. Add neon indicators, "
+            "electrical sparks, steam bursts, wet reflective surfaces, and small augmented rebels "
+            "in practical techwear on surrounding catwalks to establish immense scale and corporate "
+            "control."
+        )
+
+    setting = "cyberpunk" if "cyberpunk" in genre_key else genre
+    direction = {
+        "icon": (
+            "Show the complete object alone in a three-quarter product view with a clean silhouette, believable "
+            "materials, visible operating parts, wear, and one small functional effect. Use one neutral supporting "
+            "surface and no background characters."
+        ),
+        "emblem": (
+            "Design one bold physical insignia using motifs, materials, damage, hierarchy, and a limited colour "
+            "palette derived from the faction canon. Centered, symmetrical overall silhouette, no letters or words."
+        ),
+        "scene": (
+            "Stage one decisive action at its most readable moment. Use a clear foreground subject, one environmental "
+            "focal landmark, and a restrained background. Make the conflict, participants, consequence, and location visible."
+        ),
+        "landscape": (
+            "Create one establishing view with a strong foreground anchor, readable geography, signature landmarks, "
+            "inhabitants at scale, and visible environmental pressure."
+        ),
+        "cover": (
+            "Build an iconic poster composition around one protagonist or objective, one opposing force, and one "
+            "location cue. Make the stakes visually legible without depicting every event."
+        ),
+        "illustration": (
+            "Show one concrete subject or representative figure performing the defining function. Make materials, "
+            "mechanism, cultural markers, cost, and consequence visible; keep secondary elements subordinate."
+        ),
+        "map": "Make the named subject a readable place at map scale, with distinct terrain and landmarks.",
+    }.get(role, "Use one unambiguous focal subject with a clear foreground, midground, and background.")
+    return f"Depict {subject} as a physically credible {setting} image. {direction} Canon source material: {details}."
 
 
 def _status(value: Any) -> str:
@@ -85,6 +285,100 @@ def _entity_rows(content: Mapping[str, Any]) -> Iterable[dict[str, Any]]:
                 yield dict(value)
 
 
+def _clip(value: Any, maximum: int) -> str:
+    text = _text(value)
+    return text[:maximum].rstrip() if text else ""
+
+
+def _location_details(entity: Mapping[str, Any]) -> str:
+    dossier = _record(entity.get("dossier"))
+    metadata = _record(entity.get("metadata"))
+    metadata_dossier = _record(metadata.get("dossier"))
+    for value in (
+        entity.get("description"),
+        entity.get("short_summary"),
+        entity.get("summary"),
+        entity.get("sensory_profile"),
+        dossier.get("description"),
+        dossier.get("sensory_profile"),
+        metadata.get("description"),
+        metadata.get("summary"),
+        metadata_dossier.get("description"),
+    ):
+        if _text(value):
+            return _clip(value, 220)
+    return ""
+
+
+def _location_landmark(entity: Mapping[str, Any]) -> dict[str, str]:
+    """Turn a semantic location into a visual instruction for regional map art."""
+    name = _text(entity.get("name") or entity.get("title"), "Unnamed location")
+    explicit_type = _text(
+        entity.get("location_type")
+        or entity.get("subtype")
+        or entity.get("category")
+        or entity.get("type")
+    )
+    details = _location_details(entity)
+    cues = " ".join((name, explicit_type, details)).lower()
+    landmark_by_cue = (
+        (("town", "city", "village", "settlement", "market", "port"), "a compact settlement with streets, roofs, and a clear civic centre"),
+        (("castle", "fortress", "keep", "citadel", "gate", "watchtower"), "a fortified stronghold with walls and towers"),
+        (("mountain", "peak", "pass", "ridge", "highland"), "a dramatic mountain landmark with a visible pass or ridge"),
+        (("forest", "wood", "grove", "jungle"), "a dense forest landmark with a distinctive canopy"),
+        (("river", "lake", "waterfall", "coast", "harbor", "harbour"), "a prominent waterway or shoreline landmark"),
+        (("ruin", "temple", "shrine", "monastery"), "ancient ruins or a sacred complex"),
+        (("mine", "quarry", "cavern", "cave"), "a mine or cave entrance set into the terrain"),
+        (("swamp", "marsh", "bog"), "a winding wetland with dark pools and reed beds"),
+        (("desert", "dune", "wasteland"), "a desert landmark with dunes or weathered stone"),
+        (("bridge", "crossroads", "road", "trail"), "a travel landmark with a visible bridge, crossroads, or route"),
+    )
+    visual = next(
+        (description for keywords, description in landmark_by_cue if any(keyword in cues for keyword in keywords)),
+        "a distinct regional landmark that reflects its canonical setting",
+    )
+    return {"name": name, "visual": visual, "details": details}
+
+
+def _map_locations(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Merge lightweight topic rows with canonical locations for map-art direction."""
+    entities: dict[str, dict[str, Any]] = {}
+
+    def merge(entity_id: Any, entity: Mapping[str, Any]) -> None:
+        identifier = _text(entity_id)
+        if identifier:
+            entities[identifier] = {"id": identifier, **entities.get(identifier, {}), **dict(entity)}
+
+    for topic in detail.get("topics") or ():
+        topic = _record(topic)
+        if _text(topic.get("topic_id")) not in {"locations", "places", "regions", "points_of_interest"}:
+            continue
+        for entity in _entity_rows(_record(topic.get("content"))):
+            merge(entity.get("id") or entity.get("entity_id"), entity)
+
+    revisions = detail.get("revisions") or ()
+    revision = _record(revisions[0]) if revisions else {}
+    document = _record(revision.get("document"))
+    topology_locations = {
+        _text(location)
+        for location in _record(document.get("topology")).get("locations") or ()
+        if _text(location)
+    }
+    for source in (
+        _record(_record(document.get("entity_manifest")).get("entities")),
+        _record(_record(document.get("canon")).get("entities")),
+    ):
+        for entity_id, raw_entity in source.items():
+            entity = _record(raw_entity)
+            if (
+                entity_id in entities
+                or entity_id in topology_locations
+                or _text(entity.get("kind")).lower() == "location"
+            ):
+                merge(entity_id, entity)
+    return list(entities.values())
+
+
 def _prompt(
     *,
     world: Mapping[str, Any],
@@ -100,32 +394,80 @@ def _prompt(
         details = _text(world.get("description"), "a reusable campaign setting")
     else:
         subject = _text(entity.get("name") or entity.get("title"), "World entity")
-        details = _text(
-            entity.get("description")
-            or entity.get("appearance")
-            or entity.get("sensory_profile")
-            or entity.get("summary"),
-            f"structured {target_type.replace('_', ' ')} canon",
+        details = _entity_canon_details(
+            entity,
+            target_type=target_type,
+            role=role,
         )
+    character_kinds = {"actor", "character", "npc", "person"}
+    entity_kind = _text(entity.get("kind") if entity else None, target_type).casefold()
+    if role == "portrait" and entity is not None and entity_kind in character_kinds:
+        return _character_portrait_prompt(
+            subject=subject,
+            entity=entity,
+            genre=genre,
+            tone=tone,
+            details=details,
+        )
+    if role == "portrait" and entity is not None:
+        return _threat_portrait_prompt(subject=subject, genre=genre, details=details)
     format_hint = {
-        "cover": "cinematic vertical RPG cover art with clear central composition",
-        "banner": "wide cinematic RPG banner art with room for title typography",
-        "portrait": "detailed character portrait, shoulders and face visible",
-        "icon": "clean readable inventory icon on a simple background",
-        "emblem": "distinct heraldic faction emblem, readable silhouette",
-        "landscape": "wide environmental landscape concept art",
-        "scene": "environmental scene concept art with story details",
-        "illustration": "polished RPG sourcebook illustration",
-    }.get(role, "polished RPG concept art")
+        "cover": "vertical cinematic key art for a premium RPG poster, with an iconic central composition",
+        "banner": "widescreen cinematic key art for a premium RPG poster, with a bold focal point and negative space for title treatment",
+        "portrait": "cinematic character key art, shoulders and face visible, expressive pose and dramatic rim lighting",
+        "icon": "premium collectible RPG inventory icon, dramatically lit with a clean readable silhouette",
+        "emblem": "premium heraldic faction emblem, dramatically lit with a distinct readable silhouette",
+        "landscape": "cinematic establishing shot, sweeping environmental key art with a strong foreground, midground, and background",
+        "map": (
+            "premium illustrated top-down RPG atlas with cinematic colour grading, legible terrain, "
+            "landmarks, and travel routes; " + _MAP_NO_TEXT_CONSTRAINT
+        ),
+        "scene": "cinematic environmental key art with a strong focal point, story details, and a sense of scale",
+        "illustration": "cinematic editorial RPG key art with a striking, poster-quality composition",
+    }.get(role, "cinematic RPG key art with a striking, poster-quality composition")
+    visual_brief = _visual_subject_brief(
+        subject=subject,
+        details=details,
+        genre=genre,
+        role=role,
+    )
     return (
-        f"{format_hint}. Subject: {subject}. World: {title}. Genre: {genre}. "
-        f"Tone: {tone}. Canon details: {details}. Preserve canonical features and "
-        "avoid text, logos, watermarks, UI, or modern photography artifacts."
+        f"{format_hint}. {visual_brief} World: {title}. Genre: {genre}. "
+        f"Tone: {tone}. Premium cinematic, poster-quality illustration, "
+        "dramatic composition, theatrical lighting, volumetric atmosphere, rich colour grading, "
+        "intricate but readable detail, cohesive art direction. Preserve canonical features and "
+        "avoid rendered text, logos, watermarks, UI, or modern photography artifacts."
     )
 
 
 def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     world = _record(detail.get("world"))
+    map_blueprints = [
+        {
+            "map_id": _text(blueprint.get("map_id")),
+            "revision": blueprint.get("blueprint_revision"),
+            "document": _record(blueprint.get("document")),
+        }
+        for blueprint in (_record(row) for row in detail.get("map_blueprints") or ())
+    ]
+    map_locations = _map_locations(detail)
+    map_landmarks = [_location_landmark(entity) for entity in map_locations][:12]
+    map_context = {"landmarks": map_landmarks, "blueprints": map_blueprints}
+    landmark_directions = "; ".join(
+        f"{landmark['name']}: show {landmark['visual']}"
+        + (f"; canonical cues: {landmark['details']}" if landmark["details"] else "")
+        for landmark in map_landmarks
+    )
+    map_subject = {
+        "name": f"{_text(world.get('title'), 'Fantasy World')} world map",
+        "description": (
+            "A coherent regional atlas. Depict every listed canonical location as "
+            "a distinct visible landmark at map scale. " + _MAP_NO_TEXT_CONSTRAINT + " "
+            + landmark_directions
+            if landmark_directions
+            else "A coherent regional atlas showing the world’s major areas."
+        ),
+    }
     targets = [
         {
             "target_id": "world:cover",
@@ -139,6 +481,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                     "genre": world.get("genre"),
                     "tone": world.get("tone"),
                     "role": "cover",
+                    "image_prompt_version": _IMAGE_PROMPT_VERSION,
                 }
             ),
             "suggested_prompt": _prompt(
@@ -160,6 +503,7 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                     "genre": world.get("genre"),
                     "tone": world.get("tone"),
                     "role": "banner",
+                    "image_prompt_version": _IMAGE_PROMPT_VERSION,
                 }
             ),
             "suggested_prompt": _prompt(
@@ -169,7 +513,81 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
             ),
             "metadata": {"topic_id": "overview", "aspect": "landscape"},
         },
+        {
+            "target_id": "world:map",
+            "target_type": "map",
+            "entity_id": str(world.get("id") or ""),
+            "role": "map",
+            "source_content_hash": canonical_hash(
+                {
+                    "world": {
+                        "title": world.get("title"),
+                        "description": world.get("description"),
+                        "genre": world.get("genre"),
+                        "tone": world.get("tone"),
+                    },
+                    "map": map_context,
+                    "image_prompt_version": _IMAGE_PROMPT_VERSION,
+                }
+            ),
+            "suggested_prompt": _prompt(
+                world=world,
+                target_type="map",
+                role="map",
+                entity=map_subject,
+            ),
+            "metadata": {"topic_id": "map", "aspect": "landscape", "entity_name": "World map"},
+        },
     ]
+    blueprints_by_location = {
+        _text(blueprint["document"].get("location_id")): blueprint
+        for blueprint in map_blueprints
+        if _text(blueprint["document"].get("location_id"))
+    }
+    for location in map_locations:
+        location_id = _text(location.get("id") or location.get("entity_id"))
+        if not location_id:
+            continue
+        landmark = _location_landmark(location)
+        blueprint = blueprints_by_location.get(location_id, {})
+        local_map_subject = {
+            "name": f"{landmark['name']} local map",
+            "description": (
+                "A detailed, navigable local RPG map for a single canonical location. "
+                f"Show {landmark['visual']} as the central place. "
+                "Include distinct roads, paths, districts, approaches, and landmarks that "
+                "follow the canonical cues. " + _MAP_NO_TEXT_CONSTRAINT + " "
+                + (f"Canonical cues: {landmark['details']}" if landmark["details"] else "")
+            ),
+        }
+        targets.append(
+            {
+                "target_id": f"entity:{location_id}:map",
+                "target_type": "map",
+                "entity_id": location_id,
+                "role": "map",
+                "source_content_hash": canonical_hash(
+                    {
+                        "location": location,
+                        "blueprint": blueprint,
+                        "role": "location_map",
+                        "image_prompt_version": _IMAGE_PROMPT_VERSION,
+                    }
+                ),
+                "suggested_prompt": _prompt(
+                    world=world,
+                    target_type="location map",
+                    role="map",
+                    entity=local_map_subject,
+                ),
+                "metadata": {
+                    "topic_id": "map",
+                    "map_level": "location",
+                    "parent_target_id": "world:map",
+                    "entity_name": landmark["name"],
+                },
+            }
+        )
     for topic in detail.get("topics") or []:
         topic = _record(topic)
         topic_id = _text(topic.get("topic_id"))
@@ -187,7 +605,9 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
                     "target_type": entity_type,
                     "entity_id": entity_id,
                     "role": role,
-                    "source_content_hash": canonical_hash(entity),
+                    "source_content_hash": canonical_hash(
+                        {"entity": entity, "image_prompt_version": _IMAGE_PROMPT_VERSION}
+                    ),
                     "suggested_prompt": _prompt(
                         world=world,
                         target_type=entity_type,
@@ -303,18 +723,44 @@ def _sync_jobs(work: Any, context: Any, world_id: str) -> None:
                 str(job_id),
             ),
         )
+        if mapped == "ready" and asset_id and str(target_id) in {"world:cover", "world:banner"}:
+            metadata_key = (
+                "cover_image_asset_id"
+                if str(target_id) == "world:cover"
+                else "hero_image_asset_id"
+            )
+            work.connection.execute(
+                "UPDATE omnix_rpg_worlds SET metadata_jsonb = "
+                "COALESCE(metadata_jsonb, '{}'::jsonb) || %s::jsonb, "
+                "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s "
+                "AND EXISTS (SELECT 1 FROM omnix_rpg_world_image_targets "
+                "WHERE workspace_id = %s AND world_id = %s AND target_id = %s "
+                "AND review_state <> 'rejected')",
+                (
+                    json.dumps({metadata_key: asset_id}, sort_keys=True),
+                    context.workspace_id,
+                    world_id,
+                    context.workspace_id,
+                    world_id,
+                    str(target_id),
+                ),
+            )
         if mapped == "ready" and not asset_id:
             mapped = "failed"
         work.connection.execute(
             "UPDATE omnix_rpg_world_image_targets SET status = %s, "
-            "active_asset_id = CASE WHEN %s = 'ready' AND %s IS NOT NULL "
-            "AND review_state = 'approved' THEN %s ELSE active_asset_id END, "
+            "active_asset_id = CASE WHEN %s = 'ready' AND %s::text IS NOT NULL "
+            "AND review_state <> 'rejected' THEN %s ELSE active_asset_id END, "
+            "review_state = CASE WHEN %s = 'ready' AND %s::text IS NOT NULL "
+            "AND review_state = 'pending' THEN 'approved' ELSE review_state END, "
             "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s "
             "AND world_id = %s AND target_id = %s",
             (
                 mapped,
                 mapped,
                 asset_id,
+                asset_id,
+                mapped,
                 asset_id,
                 context.workspace_id,
                 world_id,
@@ -398,12 +844,20 @@ def generate_world_images(
                 (prompts or {}).get(str(target["target_id"])),
                 str(target["suggested_prompt"]),
             )
-            target_width = 1024 if target["role"] == "banner" else width
-            target_height = 576 if target["role"] == "banner" else height
+            is_location_map = _text(_record(target.get("metadata")).get("map_level")) == "location"
+            # Flux Klein caps requests at 1,048,576 pixels. Keep local maps square
+            # at the maximum supported resolution so they remain useful for deep zoom.
+            if is_location_map:
+                target_width, target_height = 1024, 1024
+            else:
+                target_width = 1024 if target["role"] in {"banner", "map"} else width
+                target_height = 576 if target["role"] == "banner" else 768 if target["role"] == "map" else height
             job = enqueue_image_job(
                 default_job_store(),
-                owner_id=str(context.workspace_id),
-                module="rpg-world-authoring",
+                # Job ownership is a user foreign key.  The workspace ID scopes
+                # the record separately in the PostgreSQL job store, but is not
+                # itself a valid job owner.
+                owner_id=str(context.user_id),
                 payload={
                     "prompt": prompt,
                     "provider_id": provider_id,

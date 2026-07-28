@@ -1,20 +1,46 @@
 """Parallel, dependency-aware World Forge topic generation.
 
 Generation is provider-pluggable. Hosted tests use the deterministic generator;
-production may inject a Hermes/model-backed generator that returns the same
-structured topic contract.
+production may inject a model-backed generator that returns the same validated
+topic contract.
 """
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Protocol
 
+from .world_forge_anchor_registry import anchor_slice_for_domain
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
+from .world_forge_planning import planning_slice_for_topic
+
+_COLLECTION_NAMES = (
+    "documents",
+    "entities",
+    "facts",
+    "relationships",
+    "knowledge_rules",
+    "story_threads",
+)
+
+
+def _validated_rows(value: Any, name: str) -> tuple[Mapping[str, Any], ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise ValueError(f"generated_topic.{name}_must_be_array")
+    rows: list[Mapping[str, Any]] = []
+    for index, row in enumerate(value):
+        if not isinstance(row, Mapping):
+            raise ValueError(f"generated_topic.{name}[{index}]_must_be_object")
+        rows.append(dict(row))
+    return tuple(rows)
 
 
 @dataclass(frozen=True)
 class GeneratedTopic:
+    """Domain-valid generated topic envelope."""
+
     topic_id: str
     documents: tuple[Mapping[str, Any], ...] = ()
     entities: tuple[Mapping[str, Any], ...] = ()
@@ -23,6 +49,17 @@ class GeneratedTopic:
     knowledge_rules: tuple[Mapping[str, Any], ...] = ()
     story_threads: tuple[Mapping[str, Any], ...] = ()
     provenance: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        topic_id = str(self.topic_id or "").strip()
+        if not topic_id:
+            raise ValueError("generated_topic.topic_id_required")
+        object.__setattr__(self, "topic_id", topic_id)
+        for name in _COLLECTION_NAMES:
+            object.__setattr__(self, name, _validated_rows(getattr(self, name), name))
+        if not isinstance(self.provenance, Mapping):
+            raise ValueError("generated_topic.provenance_must_be_object")
+        object.__setattr__(self, "provenance", dict(self.provenance))
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -38,23 +75,69 @@ class GeneratedTopic:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "GeneratedTopic":
-        def rows(name: str) -> tuple[Mapping[str, Any], ...]:
-            return tuple(
-                dict(row)
-                for row in value.get(name) or ()
-                if isinstance(row, Mapping)
-            )
-
+        if not isinstance(value, Mapping):
+            raise ValueError("generated_topic.root_must_be_object")
+        provenance = value.get("provenance")
+        if provenance is None:
+            provenance = {}
+        if not isinstance(provenance, Mapping):
+            raise ValueError("generated_topic.provenance_must_be_object")
         return cls(
             topic_id=str(value.get("topic_id") or ""),
-            documents=rows("documents"),
-            entities=rows("entities"),
-            facts=rows("facts"),
-            relationships=rows("relationships"),
-            knowledge_rules=rows("knowledge_rules"),
-            story_threads=rows("story_threads"),
-            provenance=dict(value.get("provenance") or {}),
+            documents=_validated_rows(value.get("documents"), "documents"),
+            entities=_validated_rows(value.get("entities"), "entities"),
+            facts=_validated_rows(value.get("facts"), "facts"),
+            relationships=_validated_rows(value.get("relationships"), "relationships"),
+            knowledge_rules=_validated_rows(value.get("knowledge_rules"), "knowledge_rules"),
+            story_threads=_validated_rows(value.get("story_threads"), "story_threads"),
+            provenance=dict(provenance),
         )
+
+
+@dataclass(frozen=True)
+class GeneratedTopicValidationReceipt:
+    schema_version: str
+    topic_id: str
+    source_contract: str = ""
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "schema_version": self.schema_version,
+            "topic_id": self.topic_id,
+            "source_contract": self.source_contract,
+        }
+
+
+@dataclass(frozen=True)
+class ValidatedGeneratedTopic:
+    topic: GeneratedTopic
+    receipt: GeneratedTopicValidationReceipt
+
+
+def validate_generated_topic_for_publication(
+    topic: GeneratedTopic,
+    *,
+    expected_topic_id: str = "",
+) -> ValidatedGeneratedTopic:
+    """Revalidate a topic immediately before compilation or persistence."""
+
+    if not isinstance(topic, GeneratedTopic):
+        raise TypeError("generated_topic.publication_requires_domain_type")
+    canonical = GeneratedTopic.from_dict(topic.as_dict())
+    expected = str(expected_topic_id or "").strip()
+    if expected and canonical.topic_id != expected:
+        raise ValueError(
+            f"generated_topic.topic_id_mismatch:{canonical.topic_id}:expected:{expected}"
+        )
+    contract = str(canonical.provenance.get("structured_contract") or "")
+    return ValidatedGeneratedTopic(
+        topic=canonical,
+        receipt=GeneratedTopicValidationReceipt(
+            schema_version="rpg_generated_topic_domain_v2",
+            topic_id=canonical.topic_id,
+            source_contract=contract,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -123,6 +206,51 @@ def _counts(topic: GeneratedTopic) -> dict[str, int]:
     }
 
 
+def _topic_campaign_context(topic_id: str, context: Mapping[str, Any]) -> dict[str, Any]:
+    scoped = dict(context)
+    planning_topics = context.get("planning_topics")
+    if not isinstance(planning_topics, Mapping):
+        return scoped
+    planning_slice = planning_slice_for_topic(topic_id, planning_topics)
+    anchor_registry = planning_slice.get("anchor_registry")
+    if isinstance(anchor_registry, Mapping):
+        planning_slice["anchor_registry"] = anchor_slice_for_domain(topic_id, anchor_registry)
+    scoped["planning_slice"] = planning_slice
+    scoped.pop("planning_topics", None)
+    return scoped
+
+
+def _authoritative_generation_node(
+    node: CampaignTopicNode,
+    campaign_context: Mapping[str, Any],
+) -> CampaignTopicNode:
+    planning_slice = campaign_context.get("planning_slice")
+    if not isinstance(planning_slice, Mapping):
+        return node
+    anchor_registry = planning_slice.get("anchor_registry")
+    if not isinstance(anchor_registry, Mapping):
+        return node
+    anchor_ids = tuple(
+        str(row.get("id") or "")
+        for row in anchor_registry.get("anchors") or ()
+        if isinstance(row, Mapping) and str(row.get("id") or "")
+    )
+    if not anchor_ids:
+        return node
+    if len(anchor_ids) != node.target_count:
+        raise ValueError(
+            f"authoritative_anchor_count_mismatch:{node.topic_id}:{len(anchor_ids)}:{node.target_count}"
+        )
+    return replace(
+        node,
+        metadata={
+            **dict(node.metadata),
+            "authoritative_entity_ids": list(anchor_ids),
+            "anchor_registry_hash": str(anchor_registry.get("registry_hash") or ""),
+        },
+    )
+
+
 def _default_generator() -> WorldForgeTopicGenerator:
     from .world_forge_deterministic import DeterministicWorldForgeGenerator
 
@@ -143,12 +271,14 @@ def generate_campaign_topics(
     selected_generator = generator or _default_generator()
     context = dict(campaign_context or {})
     node_map = graph.node_map()
-    topics: dict[str, GeneratedTopic] = dict(existing_topics or {})
+    topics: dict[str, GeneratedTopic] = {
+        topic_id: validate_generated_topic_for_publication(topic, expected_topic_id=topic_id).topic
+        for topic_id, topic in dict(existing_topics or {}).items()
+    }
     pending = {
         node.topic_id: set(node.dependencies)
         for node in graph.nodes
-        if node.category not in _NON_GENERATION_CATEGORIES
-        and node.topic_id not in topics
+        if node.category not in _NON_GENERATION_CATEGORIES and node.topic_id not in topics
     }
     jobs: dict[str, WorldForgeJobRecord] = {
         topic_id: WorldForgeJobRecord(
@@ -187,22 +317,26 @@ def generate_campaign_topics(
         with ThreadPoolExecutor(max_workers=min(workers, len(ready))) as executor:
             futures = {}
             for topic_id in ready:
-                node = node_map[topic_id]
-                dependencies = {dep: topics[dep] for dep in node.dependencies if dep in topics}
+                original_node = node_map[topic_id]
+                dependencies = {
+                    dep: topics[dep] for dep in original_node.dependencies if dep in topics
+                }
+                scoped_context = _topic_campaign_context(topic_id, context)
+                generation_node = _authoritative_generation_node(original_node, scoped_context)
                 future = executor.submit(
                     selected_generator.generate,
-                    node,
+                    generation_node,
                     seed=seed,
-                    campaign_context=context,
+                    campaign_context=scoped_context,
                     dependency_topics=dependencies,
                 )
-                futures[future] = node
+                futures[future] = original_node
             for future in as_completed(futures):
                 node = futures[future]
                 try:
-                    topic = future.result()
-                    if topic.topic_id != node.topic_id:
-                        raise ValueError(f"generator returned {topic.topic_id} for {node.topic_id}")
+                    topic = validate_generated_topic_for_publication(
+                        future.result(), expected_topic_id=node.topic_id
+                    ).topic
                     topics[node.topic_id] = topic
                     jobs[node.topic_id] = WorldForgeJobRecord(
                         node.topic_id,
@@ -241,7 +375,9 @@ def generate_campaign_topics(
         if node.topic_id in topics
     )
     ordered_jobs = tuple(jobs[topic_id] for topic_id in sorted(jobs))
-    failed_ids = tuple(sorted(job.topic_id for job in ordered_jobs if job.status != "completed"))
+    failed_ids = tuple(
+        sorted(job.topic_id for job in ordered_jobs if job.status != "completed")
+    )
     return WorldForgeGenerationResult(
         ordered_topics,
         ordered_jobs,

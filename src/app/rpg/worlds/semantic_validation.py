@@ -21,6 +21,7 @@ from .contracts import (
     WorldRevisionDocument,
     canonical_content_hash,
 )
+from .release_artifact_refresh import refresh_release_runtime_artifacts
 
 _PROTAGONIST_IDS = {"protagonist", "actor:protagonist", "player:protagonist"}
 
@@ -131,6 +132,7 @@ def certify_world_release(
     release: WorldReleaseDocument,
     definitions: Mapping[str, GridMapDefinition],
 ) -> WorldReleaseDocument:
+    release = refresh_release_runtime_artifacts(world_revision, release)
     validate_release_bindings(world_revision, release, definitions)
     findings = release_launch_findings(world_revision, release)
     certification = dict(release.certification)
@@ -189,7 +191,10 @@ def _operation_cell(
         raise WorldSemanticError("scenario_spawn_point_missing", spawn_id)
     raw_cell = operation.payload.get("cell")
     if not isinstance(raw_cell, (list, tuple)) or len(raw_cell) != 2:
-        raise WorldSemanticError("scenario_actor_placement_target_missing", operation.operation_id)
+        raise WorldSemanticError(
+            "scenario_actor_placement_target_missing",
+            operation.operation_id,
+        )
     cell = (int(raw_cell[0]), int(raw_cell[1]))
     definition.require_inside(cell)
     if not definition.is_walkable(cell):
@@ -213,7 +218,10 @@ def validate_scenario_against_release(
     for operation in scenario.map_initialization:
         definition = definitions.get(operation.map_id)
         if definition is None:
-            raise WorldSemanticError("scenario_initialization_map_missing", operation.map_id)
+            raise WorldSemanticError(
+                "scenario_initialization_map_missing",
+                operation.map_id,
+            )
         ids = _definition_ids(definition)
         if operation.type == "place_actor":
             _operation_cell(definition, operation)

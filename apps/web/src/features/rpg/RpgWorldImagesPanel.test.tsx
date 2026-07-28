@@ -132,4 +132,47 @@ describe('RpgWorldImagesPanel', () => {
       active_asset_id: 'image:old-cover',
     });
   });
+
+  it('keeps an edited image prompt when regenerating', async () => {
+    renderPanel();
+
+    const prompt = await screen.findByLabelText('Prompt for Aurelia cover');
+    fireEvent.change(prompt, { target: { value: 'A hand-painted moonlit cover for Aurelia' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(() => expect(requests.some((request) => request.url.includes('/regenerate'))).toBe(true));
+    const regenerated = requests.find((request) => request.url.includes('/regenerate'));
+    expect(JSON.parse(String(regenerated?.init?.body))).toMatchObject({
+      prompt: 'A hand-painted moonlit cover for Aurelia',
+      no_cache: true,
+    });
+  });
+
+  it('regenerates selected or all suggested prompts without queueing images', async () => {
+    renderPanel();
+
+    expect(await screen.findByText('Aurelia cover')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate All Prompts' }));
+    await waitFor(() => expect(requests.some((request) => request.url.includes('/image-prompts/regenerate'))).toBe(true));
+    const allPrompts = requests.find((request) => request.url.includes('/image-prompts/regenerate'));
+    expect(JSON.parse(String(allPrompts?.init?.body))).toEqual({ target_ids: ['world:cover'] });
+
+    fireEvent.click(screen.getByLabelText('Select'));
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate Selected Prompts (1)' }));
+    await waitFor(() => expect(requests.filter((request) => request.url.includes('/image-prompts/regenerate'))).toHaveLength(2));
+  });
+
+  it('regenerates every image with no-cache enabled', async () => {
+    renderPanel();
+
+    expect(await screen.findByText('Aurelia cover')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate All Images' }));
+    await waitFor(() => expect(requests.some((request) => request.url.endsWith('/image-generation'))).toBe(true));
+    const regenerated = requests.find((request) => request.url.endsWith('/image-generation'));
+    expect(JSON.parse(String(regenerated?.init?.body))).toMatchObject({
+      target_ids: ['world:cover'],
+      prompts: { 'world:cover': 'A cinematic cover for Aurelia' },
+      no_cache: true,
+    });
+  });
 });

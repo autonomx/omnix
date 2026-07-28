@@ -35,7 +35,18 @@ def test_database_settings_load_validated_environment(monkeypatch: pytest.Monkey
         reset_database_settings_cache()
 
 
+def test_database_settings_require_an_explicit_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OMNIX_DATABASE_URL", raising=False)
+    reset_database_settings_cache()
+    try:
+        with pytest.raises(DatabaseConfigurationError, match="OMNIX_DATABASE_URL must be configured"):
+            database_settings()
+    finally:
+        reset_database_settings_cache()
+
+
 def test_database_settings_reject_invalid_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OMNIX_DATABASE_URL", "postgresql://user:pw@db.local:5433/app")
     monkeypatch.setenv("OMNIX_DATABASE_POOL_MIN", "20")
     monkeypatch.setenv("OMNIX_DATABASE_POOL_MAX", "10")
     reset_database_settings_cache()

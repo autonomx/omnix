@@ -14,7 +14,6 @@ from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
 
 from .authoring_presentations import (
-    COLLECTION_CATEGORIES as _COLLECTION_CATEGORIES,
     PIPELINE_CATEGORIES as _PIPELINE_CATEGORIES,
     SYSTEM_SECTIONS as _SYSTEM_SECTIONS,
     entity_card,
@@ -24,6 +23,7 @@ from .authoring_presentations import (
     section_page_kind,
     text as _text,
 )
+from .generation_jobs import WORLD_TOPIC_JOB_TYPE
 from .library_service import read_world_detail
 from .lifecycle_service import require_world_writable
 
@@ -51,6 +51,168 @@ _ENTITY_KEYS = (
 
 def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _token_count(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _usage_value(usage: Mapping[str, Any], *keys: str) -> int:
+    for key in keys:
+        value = _token_count(usage.get(key))
+        if value:
+            return value
+    return 0
+
+
+def _world_token_usage(
+    topics: Sequence[Mapping[str, Any]],
+    *,
+    topic_results: Sequence[Mapping[str, Any]] = (),
+    active_job_progresses: Sequence[Mapping[str, Any]] = (),
+) -> dict[str, Any]:
+    """Project all recorded world-generation usage into a clear total.
+
+    Generation-result records are authoritative for the current run because
+    they are retained for candidates that were rejected during review as well
+    as candidates accepted into durable world topics. Provider usage is
+    preferred; the generator records a labelled character-based estimate when
+    a local provider omits token usage.
+    """
+
+    totals = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "provider_reported_topics": 0,
+        "estimated_topics": 0,
+        "unavailable_topics": 0,
+        "in_flight_topics": 0,
+        "generation_duration_ms": 0,
+        "timed_topics": 0,
+        "repair_count": 0,
+        "repair_tokens": 0,
+        "provider_reported_repairs": 0,
+        "estimated_repairs": 0,
+    }
+    generated_topic_count = 0
+    accounted_topic_ids: set[str] = set()
+
+    def add_usage(
+        provenance: Mapping[str, Any],
+        fallback: Mapping[str, Any] = {},
+        *,
+        is_repair: bool = False,
+    ) -> None:
+        if is_repair:
+            totals["repair_count"] += 1
+        duration_ms = _token_count(provenance.get("latency_ms")) or _token_count(
+            fallback.get("latency_ms")
+        )
+        if duration_ms:
+            totals["generation_duration_ms"] += duration_ms
+            totals["timed_topics"] += 1
+        usage = _record(provenance.get("usage"))
+        if not usage:
+            usage = _record(fallback.get("usage"))
+        prompt_tokens = _usage_value(usage, "prompt_tokens", "input_tokens")
+        completion_tokens = _usage_value(usage, "completion_tokens", "output_tokens")
+        total_tokens = _usage_value(usage, "total_tokens", "total")
+        if total_tokens:
+            totals["prompt_tokens"] += prompt_tokens
+            totals["completion_tokens"] += completion_tokens
+            totals["total_tokens"] += total_tokens
+            totals["provider_reported_topics"] += 1
+            if is_repair:
+                totals["repair_tokens"] += total_tokens
+                totals["provider_reported_repairs"] += 1
+            return
+        estimate = _record(provenance.get("token_estimate"))
+        if not estimate:
+            estimate = _record(fallback.get("token_estimate"))
+        estimated_total = _token_count(estimate.get("total_tokens"))
+        if estimated_total:
+            totals["prompt_tokens"] += _token_count(estimate.get("prompt_tokens"))
+            totals["completion_tokens"] += _token_count(
+                estimate.get("completion_tokens")
+            )
+            totals["total_tokens"] += estimated_total
+            totals["estimated_topics"] += 1
+            if is_repair:
+                totals["repair_tokens"] += estimated_total
+                totals["estimated_repairs"] += 1
+            return
+        totals["unavailable_topics"] += 1
+
+    for result in topic_results:
+        candidate = _record(result.get("candidate"))
+        provenance = _record(candidate.get("provenance"))
+        if not provenance:
+            continue
+        generated_topic_count += 1
+        accounted_topic_ids.add(_text(result.get("topic_id") or candidate.get("topic_id")))
+        add_usage(provenance, _record(result.get("provider")))
+
+    for topic in topics:
+        if _text(topic.get("source")) != "ai" or _text(topic.get("topic_id")) in accounted_topic_ids:
+            continue
+        generated_topic_count += 1
+        add_usage(_record(topic.get("provenance")))
+    for topic in topics:
+        authoring = _record(_record(topic.get("provenance")).get("authoring"))
+        repair_usage = authoring.get("dossier_regeneration_usage")
+        if not isinstance(repair_usage, list):
+            continue
+        for usage in repair_usage:
+            if isinstance(usage, Mapping):
+                add_usage(usage, is_repair=True)
+    totals["topic_count"] = generated_topic_count
+    for progress in active_job_progresses:
+        totals["in_flight_topics"] += 1
+        usage = _record(progress.get("token_usage"))
+        prompt_tokens = _token_count(usage.get("prompt_tokens"))
+        completion_tokens = _token_count(usage.get("completion_tokens"))
+        total_tokens = _token_count(usage.get("total_tokens"))
+        if total_tokens:
+            totals["prompt_tokens"] += prompt_tokens
+            totals["completion_tokens"] += completion_tokens
+            totals["total_tokens"] += total_tokens
+            if _text(usage.get("source")) == "provider_reported":
+                totals["provider_reported_topics"] += 1
+            else:
+                totals["estimated_topics"] += 1
+    return totals
+
+
+def _active_world_topic_progresses(
+    run_id: str,
+    *,
+    database: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Read optional batch checkpoints without making the authoring view fragile."""
+
+    if not run_id:
+        return []
+    try:
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            progresses = [
+                _record(job.get("progress"))
+                for job in work.jobs.list_jobs(context, limit=500)
+                if _text(job.get("job_type")) == WORLD_TOPIC_JOB_TYPE
+                and _text(_record(job.get("metadata")).get("run_id")) == run_id
+                and _text(job.get("status"))
+                in {"leased", "running", "cancel_requested"}
+            ]
+            work.rollback()
+        return progresses
+    except Exception:
+        # Live usage is an enhancement of the durable topic projection.  A
+        # temporary jobs-store read problem must not make authoring unavailable.
+        return []
 
 
 def _topic_entity_rows(content: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -162,6 +324,37 @@ def _system_status(section_id: str, detail: Mapping[str, Any]) -> tuple[str, int
     return "empty", 0
 
 
+def _image_section_status(
+    world_id: str,
+    *,
+    database: Any | None = None,
+) -> tuple[str, int]:
+    """Summarize the durable image targets shown on the Images page."""
+
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        rows = work.connection.execute(
+            "SELECT status, COUNT(*) FROM omnix_rpg_world_image_targets "
+            "WHERE workspace_id = %s AND world_id = %s GROUP BY status",
+            (context.workspace_id, world_id),
+        ).fetchall()
+        work.rollback()
+
+    counts = {_text(status): int(count) for status, count in rows}
+    total = sum(counts.values())
+    if not total:
+        return "empty", 0
+    if counts.get("queued", 0) or counts.get("generating", 0):
+        return "generating", total
+    if counts.get("ready", 0):
+        return "complete", total
+    if counts.get("stale", 0):
+        return "stale", total
+    if counts.get("failed", 0):
+        return "failed", total
+    return "empty", total
+
+
 def read_authoring_manifest(
     world_id: str,
     *,
@@ -228,7 +421,10 @@ def read_authoring_manifest(
     for section in _SYSTEM_SECTIONS:
         if section["id"] in graph_ids:
             continue
-        status, count = _system_status(str(section["id"]), detail)
+        if section["id"] == "images":
+            status, count = _image_section_status(world_id, database=database)
+        else:
+            status, count = _system_status(str(section["id"]), detail)
         sections.append(
             {
                 **section,
@@ -245,9 +441,24 @@ def read_authoring_manifest(
         )
     return {
         "ok": True,
-        "world": detail["world"],
+        # Keep the overview dashboard on the same durable generation snapshot as
+        # the dedicated Generation page.  Without this, the overview falls back
+        # to counting every authoring section (including auxiliary sections),
+        # which can disagree with the run's topic progress.
+        "world": {**detail["world"], "generation": latest_run or None},
         "sections": sections,
         "generation": latest_run,
+        "token_usage": _world_token_usage(
+            detail["topics"],
+            topic_results=_record(detail.get("generation_topic_results")).get(
+                _text(latest_run.get("run_id")),
+                [],
+            ),
+            active_job_progresses=_active_world_topic_progresses(
+                _text(latest_run.get("run_id")),
+                database=database,
+            ),
+        ),
     }
 
 
@@ -370,6 +581,40 @@ def read_authoring_section(
             section_id,
             _text(_record(graph_node).get("title"), section_id.replace("_", " ").title()),
         )
+        content_provenance = _record(content.get("provenance"))
+        generator = _text(
+            content_provenance.get("generator")
+            or _record(topic.get("provenance")).get("generator")
+        )
+        deterministic_lore = generator.startswith("deterministic_")
+        if _text(topic.get("status")) == "failed" or deterministic_lore:
+            retry_note = _record(_record(content.get("provenance")).get("retry_note"))
+            message = _text(
+                retry_note.get("message"),
+                (
+                    "This topic was generated by a retired deterministic fallback and "
+                    "is hidden. Retry it with a configured provider; no fallback lore "
+                    "will be published."
+                    if deterministic_lore
+                    else "This topic could not be generated. No fallback lore was published."
+                ),
+            )
+            return {
+                "ok": True,
+                "section_id": section_id,
+                "page_kind": "document",
+                "title": title,
+                "summary": "Generation needs retry",
+                "body": [
+                    {
+                        "kind": "section",
+                        "title": "Generation needs retry",
+                        "body": message,
+                    }
+                ],
+                "related_entities": [],
+                "topic": topic,
+            }
         if page_kind == "collection":
             entities = _topic_entity_rows(content)
             metadata = _record(_record(graph_node).get("metadata"))
@@ -406,7 +651,16 @@ def read_authoring_section(
                 content.get("summary") or content.get("description")
             ),
             "body": _document_blocks(content),
-            "related_entities": [],
+            "related_entities": [
+                entity_card(
+                    row,
+                    card_type=section_id,
+                    kind=_text(row.get("kind"), section_id.rstrip("s")),
+                    index=index,
+                    content=content,
+                )
+                for index, row in enumerate(_topic_entity_rows(content))
+            ],
             "topic": topic,
         }
     if section_id == "overview":

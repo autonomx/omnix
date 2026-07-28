@@ -41,6 +41,12 @@ The protected value is written outside the repository under
 5. Auto-start launcher-managed services. Each child inherits the same database environment without placing it in command arguments or launcher logs.
 6. Stop launcher-managed child processes when the launcher shuts down.
 
+`OMNIX_DATABASE_URL` is required for every authoritative runtime process. Omnix
+does not fall back to the development `omnix` password: a direct gateway start
+without the protected credential fails fast instead of accepting work that could
+later fail database authentication. Use `start_all.bat` (or the credential
+loader's `launch` action) to start the gateway and workers.
+
 The session environment intentionally takes precedence over the DPAPI credential for recovery rehearsals and disposable test databases. If Docker, the provisioned container, the protected credential, or PostgreSQL health is unavailable, startup fails closed before application services launch.
 
 For a content-free credential and database startup rehearsal without opening the launcher or application services:

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { StableClauseAccumulator, mergeStreamText } from './live-voice-clause-stabilizer';
+import {
+  StableClauseAccumulator,
+  mergeStreamText,
+  sanitizeLiveVoiceSpokenText,
+} from './live-voice-clause-stabilizer';
 
 describe('stable live voice clauses', () => {
   it('commits strong terminal punctuation incrementally', () => {
@@ -83,5 +87,29 @@ describe('stable live voice clauses', () => {
   it('merges punctuation chunks without introducing spoken spacing artifacts', () => {
     expect(mergeStreamText('Hello', '.')).toBe('Hello.');
     expect(mergeStreamText('Use', '(carefully')).toBe('Use (carefully');
+  });
+
+  it('removes screenplay annotations, stacked fillers, markdown, and emoji', () => {
+    const malformed = 'Hmm... *(soft pause, typing sounds implied)* Um, okay—trying this out feels weirdly fun? '
+      + '*(nervous little "hehe...")* Like... *(sighs lightly, playful tone)* honestly? '
+      + 'I love that you asked. *(tilts head gently, curious)* It feels *surprisingly* natural. 😅';
+
+    expect(sanitizeLiveVoiceSpokenText(malformed)).toBe(
+      'okay—trying this out feels weirdly fun? Like... honestly? '
+      + 'I love that you asked. It feels surprisingly natural.',
+    );
+  });
+
+  it('preserves ordinary parenthetical language while removing stage directions', () => {
+    expect(sanitizeLiveVoiceSpokenText(
+      'The result (after normalization) is stable. (sighs lightly) That is *actually* useful.',
+    )).toBe('The result (after normalization) is stable. That is actually useful.');
+  });
+
+  it('drops annotation-only clauses before they reach delivery or TTS', () => {
+    const accumulator = new StableClauseAccumulator({ minimumClauseCharacters: 4 });
+
+    expect(accumulator.append('*(soft pause)*', 0)).toEqual([]);
+    expect(accumulator.flush()).toEqual([]);
   });
 });

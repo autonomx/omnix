@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from app.rpg.narrative_engine import (
+    CampaignBibleSnapshot,
     EvidenceRecord,
     campaign_bible_evidence,
 )
@@ -14,6 +15,8 @@ from app.rpg.narrative_engine.shadow import runtime_evidence
 from .campaign_bible_runtime import load_campaign_bible_snapshot
 from .hermes_campaign_research import CampaignResearchPacket, research_campaign_turn
 from .npc_lore_sync import sync_encountered_npc_lore
+from .runtime_lore_store import ensure_turn_scene_lore
+from .turn_canon_snapshot import select_complete_turn_snapshot
 
 
 _LORE_QUERY_PREFIXES = (
@@ -103,13 +106,29 @@ def _session(result: Mapping[str, Any], campaign_id: str) -> Mapping[str, Any]:
         return {}
 
 
+def _portable_materialized_snapshot(
+    session: Mapping[str, Any],
+    campaign_id: str,
+) -> CampaignBibleSnapshot | None:
+    projection = _mapping(session.get("campaign_bible_projection"))
+    if not projection:
+        return None
+    return CampaignBibleSnapshot(
+        campaign_id=campaign_id,
+        revision=int(projection.get("canon_revision") or 0),
+        content_hash=str(projection.get("content_hash") or ""),
+        document=projection,
+        provenance={"source": "portable_materialized_turn_authority"},
+        consistency_report={},
+        completeness=_mapping(projection.get("completeness")),
+    )
+
+
 def _faction_ids(session: Mapping[str, Any], speaker_id: str | None) -> tuple[str, ...]:
     if not speaker_id:
         return ()
     state = _mapping(session.get("state"))
-    dossier = _mapping(
-        _mapping(state.get("npc_dossiers")).get(speaker_id)
-    )
+    dossier = _mapping(_mapping(state.get("npc_dossiers")).get(speaker_id))
     values = dossier.get("faction_ids")
     if not isinstance(values, list | tuple | set):
         return ()
@@ -183,7 +202,7 @@ def build_turn_grounding_packet(
     max_topics: int = 5,
     runtime_only: bool = False,
 ) -> TurnGroundingPacket:
-    """Assemble evidence and persist newly encountered NPC canon without changing simulation."""
+    """Assemble evidence after materializing current-scene canon without changing simulation."""
 
     lore_required = campaign_lore_research_required(player_input, result)
     requested_runtime_only = runtime_only
@@ -210,22 +229,50 @@ def build_turn_grounding_packet(
             "changed": False,
             "error": type(exc).__name__,
         }
-    snapshot = (
-        None
-        if runtime_only
-        else load_campaign_bible_snapshot(
-            campaign_id,
-            session=session,
+
+    explicit_entity_ids = tuple(
+        dict.fromkeys(
+            str(value).strip()
+            for value in (*actor_ids, speaker_id or "")
+            if str(value or "").strip()
         )
     )
-    bible_evidence = (
-        campaign_bible_evidence(snapshot) if snapshot is not None else ()
+    session, scene_lore = ensure_turn_scene_lore(
+        campaign_id,
+        session,
+        result,
+        explicit_entity_ids=explicit_entity_ids,
     )
+    target_entity_ids = tuple(scene_lore.get("target_entity_ids") or ())
+    portable_snapshot = _portable_materialized_snapshot(session, campaign_id)
+    prefer_postgresql = scene_lore.get("postgresql_persisted") is not False
+    loaded_snapshot = None
+    if not runtime_only:
+        loaded_snapshot = load_campaign_bible_snapshot(
+            campaign_id,
+            session=session,
+            prefer_postgresql=prefer_postgresql,
+        )
+    snapshot, bible_evidence, missing_materialized = (
+        (None, (), ())
+        if runtime_only
+        else select_complete_turn_snapshot(
+            loaded_snapshot,
+            portable_snapshot,
+            target_entity_ids,
+        )
+    )
+    if target_entity_ids and not runtime_only and (
+        snapshot is None or missing_materialized
+    ):
+        missing = ",".join(missing_materialized or target_entity_ids)
+        raise RuntimeError(f"turn_lore_source_of_truth_unavailable:{missing}")
+
     entity_ids = _entity_ids(result, session, speaker_id, actor_ids)
     factions = _faction_ids(session, speaker_id)
     research = (
         None
-        if runtime_only
+        if runtime_only or snapshot is None
         else research_campaign_turn(
             campaign_id=campaign_id,
             query=player_input,
@@ -234,8 +281,12 @@ def build_turn_grounding_packet(
             actor_ids=actor_ids,
             faction_ids=factions,
             entity_ids=entity_ids,
-            research_id=f"research:{campaign_id}:{result.get('turn_id') or result.get('tick') or 0}",
+            research_id=(
+                f"research:{campaign_id}:"
+                f"{result.get('turn_id') or result.get('tick') or 0}"
+            ),
             max_topics=max_topics,
+            snapshot=snapshot,
         )
     )
     hermes_evidence = research.result.evidence() if research else ()
@@ -255,11 +306,11 @@ def build_turn_grounding_packet(
         "lore_topics_researched": len(topic_titles),
         "lore_topic_titles": topic_titles,
         "grounding_entity_ids": list(entity_ids),
-        "hermes_source_ids": [
-            source.source_id for source in research.result.sources
-        ]
-        if research
-        else [],
+        "hermes_source_ids": (
+            [source.source_id for source in research.result.sources]
+            if research
+            else []
+        ),
         "campaign_bible_revision": (
             research.snapshot.revision
             if research
@@ -279,11 +330,36 @@ def build_turn_grounding_packet(
         "npc_lore_sync_mode": str(npc_lore_sync.get("mode") or ""),
         "npc_lore_persisted": npc_lore_sync.get("persisted") is True,
         "npc_lore_changed": npc_lore_sync.get("changed") is True,
-        "encountered_npc_ids": list(npc_lore_sync.get("encountered_npc_ids") or ()),
-        "created_npc_lore_ids": list(npc_lore_sync.get("created_npc_ids") or ()),
+        "encountered_npc_ids": list(
+            npc_lore_sync.get("encountered_npc_ids") or ()
+        ),
+        "created_npc_lore_ids": list(
+            npc_lore_sync.get("created_npc_ids") or ()
+        ),
+        "scene_lore_materialization_mode": str(scene_lore.get("mode") or ""),
+        "scene_lore_persisted": scene_lore.get("persisted") is True,
+        "scene_lore_postgresql_persisted": (
+            scene_lore.get("postgresql_persisted") is not False
+        ),
+        "scene_lore_changed": scene_lore.get("changed") is True,
+        "scene_lore_target_entity_ids": list(target_entity_ids),
+        "scene_lore_created_entity_ids": list(
+            scene_lore.get("created_entity_ids") or ()
+        ),
+        "scene_lore_created_document_ids": list(
+            scene_lore.get("created_document_ids") or ()
+        ),
+        "scene_lore_source_of_truth_ready": not missing_materialized,
+        "scene_lore_snapshot_source": str(
+            _mapping(snapshot.provenance).get("source") if snapshot else ""
+        ),
     }
     if npc_lore_sync.get("error"):
         metadata["npc_lore_sync_error"] = str(npc_lore_sync.get("error"))
+    if scene_lore.get("database_error"):
+        metadata["scene_lore_database_error"] = str(
+            scene_lore.get("database_error")
+        )
     if runtime_only:
         metadata["runtime_only"] = True
     elif requested_runtime_only:

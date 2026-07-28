@@ -60,6 +60,7 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
     @gateway.get("/api/image-generation/assets", response_model=AssetListResponse, include_in_schema=False)
     def image_assets(limit: int = Query(default=DEFAULT_IMAGE_ASSET_LIMIT, ge=1, le=MAX_IMAGE_ASSET_LIMIT)) -> AssetListResponse:
         job_store = default_job_store()
+        rpg_world_asset_ids = _rpg_world_image_asset_ids(job_store)
         assets = [
             asset
             for asset in default_asset_store().list_assets().assets
@@ -67,6 +68,8 @@ def register_image_workspace_routes(gateway: FastAPI) -> None:
             and asset.module in {"image", "image-generation"}
             and _is_usable_image_asset(asset)
             and not _is_character_avatar_asset(asset, job_store)
+            and not _is_rpg_world_image_asset(asset, job_store)
+            and asset.id not in rpg_world_asset_ids
         ]
         assets.sort(key=lambda asset: (asset.created_at, asset.id), reverse=True)
         return AssetListResponse(assets=assets[:limit])
@@ -134,6 +137,49 @@ def _is_character_avatar_asset(asset: AssetRecord, job_store: Any) -> bool:
         return False
     source_job = job_store.get_job(source_job_id)
     return bool(source_job and source_job.module == "character-avatar")
+
+
+def _is_rpg_world_image_asset(asset: AssetRecord, job_store: Any) -> bool:
+    if _has_rpg_world_target_metadata(asset.metadata):
+        return True
+    source_job_id = str(asset.source_job_id or "").strip()
+    if not source_job_id:
+        return False
+    source_job = job_store.get_job(source_job_id)
+    payload = source_job.input_payload if source_job else None
+    return bool(
+        isinstance(payload, dict)
+        and _has_rpg_world_target_metadata(payload.get("metadata"))
+    )
+
+
+def _has_rpg_world_target_metadata(metadata: Any) -> bool:
+    if not isinstance(metadata, dict):
+        return False
+    return bool(
+        metadata.get("rpg_world_image")
+        or (
+            str(metadata.get("world_id") or "").strip()
+            and str(metadata.get("target_id") or "").strip()
+        )
+    )
+
+
+def _rpg_world_image_asset_ids(job_store: Any) -> set[str]:
+    try:
+        jobs = job_store.list_jobs()
+    except Exception:
+        return set()
+    return {
+        asset_id
+        for job in jobs
+        if _has_rpg_world_target_metadata(
+            (job.input_payload or {}).get("metadata")
+            if isinstance(getattr(job, "input_payload", None), dict)
+            else None
+        )
+        for asset_id in _job_image_asset_ids(job)
+    }
 
 
 def _delete_jobs_for_image_asset(asset: AssetRecord) -> None:

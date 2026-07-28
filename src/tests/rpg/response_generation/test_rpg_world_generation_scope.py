@@ -6,6 +6,7 @@ from app.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
+from app.rpg.worlds.library_service import _world_generation_context
 from app.rpg.worlds.generation_scope import resolve_generation_scope
 
 
@@ -78,3 +79,37 @@ def test_forced_locked_topic_requires_explicit_replacement() -> None:
             latest_run=None,
             replace_locked=False,
         )
+
+
+def test_generation_context_preserves_authored_world_brief() -> None:
+    route = type(
+        "Route",
+        (),
+        {
+            "requested_provider": "lmstudio",
+            "requested_model": "local-model",
+            "source": "settings_control_center",
+        },
+    )()
+
+    context = _world_generation_context(
+        {
+            "title": "Fallout",
+            "description": "A retro-futuristic nuclear wasteland of Vaults and mutants.",
+            "genre": "classic_fantasy",
+            "tone": "heroic adventure",
+            "metadata": {"campaign_template": "classic_fantasy"},
+        },
+        starting_location="",
+        background_expansion=True,
+        route=route,
+    )
+
+    assert context["world_brief"] == {
+        "title": "Fallout",
+        "description": "A retro-futuristic nuclear wasteland of Vaults and mutants.",
+        "source_mode": "",
+        "genre": "classic_fantasy",
+        "tone": "heroic adventure",
+        "campaign_template": "classic_fantasy",
+    }

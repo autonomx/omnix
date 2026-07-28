@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   RpgAuthoringCollectionPage,
@@ -59,9 +59,19 @@ const page: RpgAuthoringCollectionPage = {
         eyebrow: 'Class / Discipline',
         badges: [],
         highlights: [],
-        groups: [],
+        groups: [
+          {
+            label: 'Capabilities',
+            items: ['Cross active wards'],
+            style: 'list',
+          },
+        ],
       },
-      metadata: {},
+      metadata: {
+        id: 'class:ward_runner',
+        name: 'Ward Runner',
+        capabilities: ['Cross active wards'],
+      },
     },
     {
       id: 'discipline:glass_reader',
@@ -134,5 +144,17 @@ describe('RpgWorldAuthoringPage collections', () => {
     });
     expect(screen.getByRole('heading', { name: 'Ward Runner' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Glass Reader' })).not.toBeInTheDocument();
+  });
+
+  it('opens a compact class card into its complete routed dossier', () => {
+    renderPage();
+
+    expect(screen.queryByText('Cross active wards')).not.toBeInTheDocument();
+    const wardRunnerCard = screen.getByRole('heading', { name: 'Ward Runner' }).closest('article');
+    expect(wardRunnerCard).not.toBeNull();
+    fireEvent.click(within(wardRunnerCard as HTMLElement).getByRole('button', { name: 'View details' }));
+
+    expect(screen.getByRole('main', { name: 'Ward Runner details' })).toBeInTheDocument();
+    expect(screen.getByText('Cross active wards')).toBeInTheDocument();
   });
 });

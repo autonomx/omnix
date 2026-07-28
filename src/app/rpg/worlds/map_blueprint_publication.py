@@ -59,5 +59,9 @@ def merge_authored_blueprints(
             **dict(world_release.certification),
             "authored_map_blueprint_count": len(authored),
         },
+        artifact_stage=world_release.artifact_stage,
+        runtime_seed=world_release.runtime_seed,
+        materialization=world_release.materialization,
+        playtest_report=world_release.playtest_report,
     )
     return revision, release

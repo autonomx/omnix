@@ -130,6 +130,25 @@
   line-height: 1.45;
 }
 
+.rpg-world-card-description {
+  /* Ten description lines at the 1.45 line height above. */
+  block-size: 14.5em;
+  margin-top: 0.35rem !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(196, 181, 253, 0.58) transparent;
+  scrollbar-width: thin;
+}
+
+.rpg-world-card-description::-webkit-scrollbar {
+  width: 0.45rem;
+}
+
+.rpg-world-card-description::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(196, 181, 253, 0.58);
+}
+
 .rpg-world-card-facts {
   display: flex;
   flex-wrap: wrap;

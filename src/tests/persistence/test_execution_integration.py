@@ -235,6 +235,38 @@ def test_job_retry_then_dead_letter() -> None:
         database.close()
 
 
+def test_claim_reconciles_a_stale_attempt_record() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:stale-attempt", max_attempts=2)
+            work.connection.execute(
+                "INSERT INTO omnix_job_attempts "
+                "(job_id, attempt, worker_id, lease_token, status) "
+                "VALUES ('job:stale-attempt', 1, 'worker:stale', 'stale-token', 'leased')"
+            )
+            claimed = work.jobs.claim_next(
+                context,
+                worker_id="worker:current",
+                resource_classes=["gpu:image"],
+            )
+            work.commit()
+
+        assert claimed is not None
+        assert claimed["id"] == "job:stale-attempt"
+        assert claimed["attempt_count"] == 1
+        with database.connection() as connection:
+            attempt = connection.execute(
+                "SELECT worker_id, lease_token, status FROM omnix_job_attempts "
+                "WHERE job_id = 'job:stale-attempt' AND attempt = 1"
+            ).fetchone()
+        assert tuple(attempt) == ("worker:current", claimed["lease_token"], "leased")
+    finally:
+        database.close()
+
+
 def test_cancel_queued_and_active_jobs() -> None:
     database = _database()
     try:

@@ -120,6 +120,29 @@ def test_image_asset_file_allows_only_trusted_svg(tmp_path, monkeypatch) -> None
     assert accepted.headers["content-type"] == "image/svg+xml"
 
 
+def test_image_asset_file_allows_legacy_curated_svg(tmp_path, monkeypatch) -> None:
+    svg_path = tmp_path / "curated-map.svg"
+    svg_path.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
+    store = _store_with_asset(
+        tmp_path,
+        AssetRecord(
+            id="image:legacy-curated-map",
+            module="sample-world",
+            type=AssetType.IMAGE,
+            mime_type="image/svg+xml",
+            storage_path=str(svg_path),
+            compat={"source": "curated-svg"},
+            created_at="2026-01-01T00:00:00+00:00",
+        ),
+    )
+    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: store)
+
+    response = TestClient(create_gateway_app()).get("/api/assets/image:legacy-curated-map/file")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/svg+xml"
+
+
 def test_image_asset_file_rejects_non_image(tmp_path, monkeypatch) -> None:
     audio_path = tmp_path / "audio.wav"
     audio_path.write_bytes(b"RIFF")

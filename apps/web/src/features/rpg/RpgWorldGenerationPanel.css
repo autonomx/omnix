@@ -1,16 +1,36 @@
 .rpg-generation-panel {
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
+  padding: 0.95rem;
+  border-top: 1px solid rgba(215, 174, 89, 0.13);
+  background: linear-gradient(180deg, rgba(9, 13, 31, 0.5), rgba(5, 9, 24, 0.28));
+}
+
+.is-operational-dashboard .rpg-generation-panel .rpg-authoring-page-heading {
+  align-items: center;
+  margin: 0;
+  padding: 0 0 0.85rem;
+  border-bottom: 1px solid rgba(215, 174, 89, 0.14);
+}
+
+.is-operational-dashboard .rpg-generation-panel .rpg-authoring-page-heading h2 {
+  color: #fff9ef;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.is-operational-dashboard .rpg-generation-panel .rpg-authoring-page-heading > span {
+  color: #e4bd69;
+  font-size: 0.72rem;
 }
 
 .rpg-generation-settings {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-  padding: 1rem;
-  border: 1px solid rgba(168, 139, 250, 0.18);
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.44);
+  gap: 0.85rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(215, 174, 89, 0.18);
+  border-radius: 6px;
+  background: rgba(10, 14, 34, 0.7);
 }
 
 .rpg-generation-settings label,
@@ -19,18 +39,29 @@
   gap: 0.35rem;
 }
 
-.rpg-generation-settings input,
+.rpg-generation-settings input:not([type='checkbox']),
 .rpg-generation-settings select,
 .rpg-generation-advanced-grid input,
 .rpg-generation-advanced-grid textarea,
 .rpg-generation-topic-grid textarea {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid rgba(168, 139, 250, 0.24);
-  border-radius: 10px;
-  background: rgba(2, 6, 23, 0.78);
+  min-height: 38px;
+  border: 1px solid rgba(215, 174, 89, 0.2);
+  border-radius: 5px;
+  background: rgba(5, 9, 24, 0.88);
   color: #f8fafc;
-  padding: 0.65rem 0.75rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.rpg-generation-settings input:not([type='checkbox']):focus,
+.rpg-generation-settings select:focus,
+.rpg-generation-advanced-grid input:focus,
+.rpg-generation-advanced-grid textarea:focus,
+.rpg-generation-topic-grid textarea:focus {
+  border-color: #d7ae59;
+  outline: 2px solid rgba(215, 174, 89, 0.16);
+  outline-offset: 1px;
 }
 
 .rpg-generation-advanced-grid textarea {
@@ -42,18 +73,32 @@
 .rpg-generation-settings .rpg-authoring-checkbox {
   grid-column: 1 / -1;
   display: flex;
+  align-items: center;
+  justify-self: start;
+  gap: 0.55rem;
+  color: rgba(226, 232, 240, 0.74);
+  font-size: 0.72rem;
+}
+
+.rpg-generation-settings .rpg-authoring-checkbox input[type='checkbox'] {
+  width: 1rem;
+  min-width: 1rem;
+  height: 1rem;
+  min-height: 1rem;
+  margin: 0;
+  accent-color: #d7ae59;
 }
 
 .rpg-generation-advanced {
-  padding: 0.9rem 1rem;
-  border: 1px solid rgba(168, 139, 250, 0.18);
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.32);
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(215, 174, 89, 0.16);
+  border-radius: 5px;
+  background: rgba(10, 14, 34, 0.56);
 }
 
 .rpg-generation-advanced > summary {
   cursor: pointer;
-  color: #c4b5fd;
+  color: #cdb6ef;
   font-weight: 800;
 }
 
@@ -66,8 +111,8 @@
 
 .rpg-generation-advanced-grid label > span,
 .rpg-generation-settings label > span {
-  color: var(--omnix-muted, #a7a4b8);
-  font-size: 0.76rem;
+  color: rgba(203, 213, 225, 0.68);
+  font-size: 0.68rem;
   font-weight: 800;
 }
 
@@ -78,7 +123,42 @@
 .rpg-generation-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: 0.55rem;
+}
+
+.rpg-generation-actions button {
+  min-height: 38px;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid rgba(215, 174, 89, 0.2);
+  border-radius: 5px;
+  background: rgba(10, 14, 34, 0.82);
+  color: rgba(241, 245, 249, 0.9);
+  font-size: 0.72rem;
+}
+
+.rpg-generation-actions button:first-child {
+  border-color: #e2bb65;
+  background: linear-gradient(180deg, #ecd27f, #d8aa51);
+  color: #23190a;
+  font-weight: 800;
+}
+
+.rpg-generation-actions button:not(:disabled):hover,
+.rpg-generation-actions button:not(:disabled):focus-visible {
+  border-color: #f0d27e;
+  box-shadow: 0 0 0 2px rgba(227, 189, 104, 0.18);
+  outline: 0;
+}
+
+.rpg-generation-actions button:disabled {
+  opacity: 0.42;
+}
+
+.rpg-generation-panel .rpg-authoring-feedback {
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: 5px;
+  background: rgba(6, 45, 54, 0.68);
+  color: #9eeccf;
 }
 
 .rpg-generation-topic-grid {
@@ -91,9 +171,9 @@
   display: grid;
   gap: 0.65rem;
   padding: 0.8rem;
-  border: 1px solid rgba(168, 139, 250, 0.16);
-  border-radius: 12px;
-  background: rgba(7, 12, 28, 0.64);
+  border: 1px solid rgba(215, 174, 89, 0.14);
+  border-radius: 5px;
+  background: rgba(10, 14, 34, 0.68);
 }
 
 .rpg-generation-topic-choice {

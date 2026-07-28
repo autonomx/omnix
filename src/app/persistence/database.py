@@ -9,12 +9,113 @@ from .config import DatabaseSettings, database_settings
 from .transaction_policy import transaction_scope
 
 
-class DatabaseUnavailableError(RuntimeError):
-    """Raised when the authoritative PostgreSQL service cannot be reached."""
+class PostgresOperationError(RuntimeError):
+    """Typed PostgreSQL operation failure with safe diagnostic metadata."""
 
-    def __init__(self, message: str, *, sqlstate: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        sqlstate: str | None = None,
+        error_class: str = "postgres_operation",
+        table: str | None = None,
+        constraint: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.sqlstate = sqlstate
+        self.error_class = error_class
+        self.table = table
+        self.constraint = constraint
+
+
+class DatabaseUnavailableError(PostgresOperationError):
+    """Raised only when the authoritative PostgreSQL service cannot be reached."""
+
+    def __init__(self, message: str, *, sqlstate: str | None = None) -> None:
+        super().__init__(
+            message,
+            sqlstate=sqlstate,
+            error_class="database_unavailable",
+        )
+
+
+class PostgresRetryableTransactionError(PostgresOperationError):
+    pass
+
+
+class PostgresLockTimeoutError(PostgresOperationError):
+    pass
+
+
+class PostgresStatementTimeoutError(PostgresOperationError):
+    pass
+
+
+class PostgresConstraintError(PostgresOperationError):
+    pass
+
+
+def _diagnostic_value(error: Exception, name: str) -> str | None:
+    diagnostic = getattr(error, "diag", None)
+    value = getattr(diagnostic, name, None) if diagnostic is not None else None
+    text = str(value or "").strip()
+    return text or None
+
+
+def _classified_postgres_error(error: Exception) -> PostgresOperationError:
+    sqlstate = str(getattr(error, "sqlstate", None) or "").strip() or None
+    table = _diagnostic_value(error, "table_name")
+    constraint = _diagnostic_value(error, "constraint_name")
+    primary = _diagnostic_value(error, "message_primary") or str(error)
+    message = f"PostgreSQL operation failed: {type(error).__name__}: {primary}"
+    module = error.__class__.__module__
+    name = error.__class__.__name__
+
+    if (sqlstate and sqlstate.startswith("08")) or (
+        not sqlstate
+        and module.startswith("psycopg")
+        and name in {"OperationalError", "InterfaceError"}
+    ):
+        return DatabaseUnavailableError(message, sqlstate=sqlstate)
+    if sqlstate in {"40001", "40P01"}:
+        return PostgresRetryableTransactionError(
+            message,
+            sqlstate=sqlstate,
+            error_class="transaction_retryable",
+            table=table,
+            constraint=constraint,
+        )
+    if sqlstate == "55P03":
+        return PostgresLockTimeoutError(
+            message,
+            sqlstate=sqlstate,
+            error_class="lock_timeout",
+            table=table,
+            constraint=constraint,
+        )
+    if sqlstate == "57014":
+        return PostgresStatementTimeoutError(
+            message,
+            sqlstate=sqlstate,
+            error_class="statement_timeout",
+            table=table,
+            constraint=constraint,
+        )
+    if sqlstate and sqlstate.startswith("23"):
+        return PostgresConstraintError(
+            message,
+            sqlstate=sqlstate,
+            error_class="constraint_error",
+            table=table,
+            constraint=constraint,
+        )
+    return PostgresOperationError(
+        message,
+        sqlstate=sqlstate,
+        error_class="postgres_operation",
+        table=table,
+        constraint=constraint,
+    )
 
 
 class PostgresDatabase:
@@ -35,9 +136,6 @@ class PostgresDatabase:
             ) from exc
 
         def configure(connection: Any) -> None:
-            # psycopg_pool requires configure callbacks to return an idle
-            # connection. Apply session settings and commit them explicitly so
-            # the first borrower never inherits an open setup transaction.
             with connection.cursor() as cursor:
                 cursor.execute("SELECT set_config('TimeZone', 'UTC', false)")
                 cursor.execute(
@@ -68,9 +166,11 @@ class PostgresDatabase:
                 self._pool.wait(timeout=float(self.settings.connect_timeout_seconds))
             except Exception as exc:
                 self.close()
+                classified = _classified_postgres_error(exc)
+                if classified.sqlstate is not None:
+                    raise classified from exc
                 raise DatabaseUnavailableError(
                     f"PostgreSQL is unavailable at {self.settings.redacted_url}",
-                    sqlstate=getattr(exc, "sqlstate", None),
                 ) from exc
 
     def close(self) -> None:
@@ -87,10 +187,7 @@ class PostgresDatabase:
                 yield connection
         except Exception as exc:
             if exc.__class__.__module__.startswith("psycopg"):
-                raise DatabaseUnavailableError(
-                    "PostgreSQL operation failed",
-                    sqlstate=getattr(exc, "sqlstate", None),
-                ) from exc
+                raise _classified_postgres_error(exc) from exc
             raise
 
     @contextmanager
@@ -120,6 +217,8 @@ class PostgresDatabase:
                 "database_url": self.settings.redacted_url,
                 "latency_ms": round((perf_counter() - started) * 1000.0, 3),
                 "error": exc.__class__.__name__,
+                "error_class": getattr(exc, "error_class", None),
+                "sqlstate": getattr(exc, "sqlstate", None),
             }
         return {
             "ok": True,

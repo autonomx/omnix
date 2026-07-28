@@ -184,6 +184,7 @@ class PostgresJobRepository:
                    AND status IN ('queued', 'retrying', 'waiting')
                    AND available_at <= CURRENT_TIMESTAMP
                    AND resource_class = ANY(%s)
+                   AND attempt_count < max_attempts
                  ORDER BY priority DESC, created_at ASC, id ASC
                  FOR UPDATE SKIP LOCKED
                  LIMIT 1
@@ -217,6 +218,13 @@ class PostgresJobRepository:
             INSERT INTO omnix_job_attempts
                 (job_id, attempt, worker_id, lease_token, status)
             VALUES (%s, %s, %s, %s, 'leased')
+            ON CONFLICT (job_id, attempt) DO UPDATE
+               SET worker_id = EXCLUDED.worker_id,
+                   lease_token = EXCLUDED.lease_token,
+                   status = 'leased',
+                   started_at = CURRENT_TIMESTAMP,
+                   completed_at = NULL,
+                   error = NULL
             """,
             (result["id"], result["attempt_count"], worker_id, token),
         )
@@ -289,6 +297,40 @@ class PostgresJobRepository:
         )
         self._event(context, job_id, "job.running", {"worker_id": worker_id})
         return result
+
+    def update_progress(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        worker_id: str,
+        lease_token: str,
+        progress: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Persist a worker checkpoint without changing job state or ownership."""
+
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs
+               SET progress = %s::jsonb,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = %s AND workspace_id = %s
+               AND lease_owner = %s AND lease_token = %s
+               AND status IN ('leased', 'running', 'cancel_requested')
+               AND lease_expires_at > CURRENT_TIMESTAMP
+            RETURNING {_JOB_COLUMNS}
+            """,
+            (
+                _json(progress),
+                job_id,
+                context.workspace_id,
+                worker_id,
+                lease_token,
+            ),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"job progress update rejected: {job_id}")
+        return _job(row)
 
     def mark_record_only_running(
         self,

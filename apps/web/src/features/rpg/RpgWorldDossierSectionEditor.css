@@ -1,0 +1,230 @@
+.rpg-dossier-section-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.rpg-dossier-editor-fields,
+.rpg-dossier-editor-preview {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.rpg-dossier-editor-fields > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.rpg-dossier-editor-fields h5,
+.rpg-dossier-editor-fields p,
+.rpg-dossier-editor-preview h4,
+.rpg-dossier-editor-preview p {
+  margin-top: 0;
+}
+
+.rpg-dossier-editor-fields > header p {
+  margin-bottom: 0;
+  color: rgba(203, 213, 225, 0.72);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.rpg-dossier-editor-fields > header > span {
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(76, 29, 149, 0.38);
+  color: #ddd6fe;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.rpg-dossier-editor-fields label,
+.rpg-dossier-editor-section-list article > header label {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.rpg-dossier-editor-fields label > span,
+.rpg-dossier-editor-section-list article > header label > span {
+  color: rgba(196, 181, 253, 0.86);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rpg-dossier-editor-fields input,
+.rpg-dossier-editor-fields textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid rgba(168, 139, 250, 0.23);
+  border-radius: 10px;
+  outline: none;
+  background: rgba(2, 6, 23, 0.72);
+  color: #f8fafc;
+  padding: 0.7rem 0.75rem;
+}
+
+.rpg-dossier-editor-fields input:focus,
+.rpg-dossier-editor-fields textarea:focus {
+  border-color: rgba(250, 204, 21, 0.58);
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.08);
+}
+
+.rpg-dossier-editor-quote-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.35fr);
+  gap: 0.7rem;
+}
+
+.rpg-dossier-quick-fact-editor,
+.rpg-dossier-editor-section-list > article {
+  border: 1px solid rgba(168, 139, 250, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.rpg-dossier-quick-fact-editor {
+  padding: 0.75rem;
+}
+
+.rpg-dossier-quick-fact-editor summary {
+  cursor: pointer;
+  color: #ddd6fe;
+  font-weight: 800;
+}
+
+.rpg-dossier-quick-fact-editor > div {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.65rem;
+}
+
+.rpg-dossier-quick-fact-editor article {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr) auto;
+  gap: 0.55rem;
+}
+
+.rpg-dossier-editor-section-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.rpg-dossier-editor-section-list > article {
+  overflow: hidden;
+}
+
+.rpg-dossier-editor-section-list article > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(150px, 0.34fr) auto;
+  gap: 0.6rem;
+  align-items: end;
+  padding: 0.75rem;
+  background: rgba(76, 29, 149, 0.2);
+}
+
+.rpg-dossier-editor-section-list article > header > span {
+  align-self: center;
+  color: #fde68a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+}
+
+.rpg-dossier-editor-section-list article > div {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.8rem;
+}
+
+.rpg-dossier-editor-section-list article > div > label {
+  padding: 0.7rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.rpg-dossier-editor-section-list article > div > label > button {
+  justify-self: end;
+}
+
+.rpg-dossier-editor-preview {
+  position: sticky;
+  top: 90px;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid rgba(250, 204, 21, 0.2);
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(30, 20, 58, 0.72), rgba(5, 8, 24, 0.94));
+}
+
+.rpg-dossier-editor-preview > h4 {
+  margin-bottom: 0.2rem;
+  color: #fffaf0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.65rem;
+}
+
+.rpg-dossier-preview-subtitle {
+  color: #c4b5fd;
+  font-style: italic;
+}
+
+.rpg-dossier-editor-preview blockquote {
+  margin: 0;
+  padding: 0.8rem;
+  border-left: 2px solid #d4af37;
+  background: rgba(76, 29, 149, 0.2);
+  color: #ede9fe;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.55;
+}
+
+.rpg-dossier-editor-preview cite {
+  display: block;
+  margin-top: 0.45rem;
+  color: rgba(226, 232, 240, 0.7);
+  font-family: system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.rpg-dossier-editor-preview section {
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(168, 139, 250, 0.14);
+}
+
+.rpg-dossier-editor-preview section h5 {
+  margin: 0 0 0.45rem;
+  color: #fde68a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+}
+
+.rpg-dossier-editor-preview section p {
+  color: rgba(226, 232, 240, 0.84);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 1100px) {
+  .rpg-dossier-section-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .rpg-dossier-editor-preview {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .rpg-dossier-editor-quote-fields,
+  .rpg-dossier-quick-fact-editor article,
+  .rpg-dossier-editor-section-list article > header {
+    grid-template-columns: 1fr;
+  }
+}

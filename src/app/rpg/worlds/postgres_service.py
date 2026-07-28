@@ -1,7 +1,9 @@
 """Transactional services for reusable RPG world and scenario resources."""
 from __future__ import annotations
 
+import re
 from typing import Any, TypeVar
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -18,7 +20,14 @@ from .contracts import (
     WorldRevisionDocument,
     canonical_content_hash,
 )
+from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_scenario_writable, require_world_writable
+from .profile_generation_jobs import plan_world_profile_creation
+from .revision_authorship import (
+    prepare_direct_world_revision,
+    require_release_authorship,
+    require_revision_authorship,
+)
 from .semantic_validation import (
     WorldSemanticError,
     certify_world_release,
@@ -37,6 +46,33 @@ def _ensure_hash(document: _HashedContract, field: str) -> _HashedContract:
     payload[field] = ""
     payload[field] = canonical_content_hash(payload)
     return type(document).model_validate(payload)
+
+
+def _resource_slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().casefold()).strip("-")
+    return (slug or "untitled")[:48]
+
+
+def _allocate_resource_id(
+    work: Any,
+    context: Any,
+    *,
+    prefix: str,
+    title: str,
+    exists_sql: str,
+) -> str:
+    """Allocate a friendly, collision-safe technical id inside the write transaction."""
+
+    slug = _resource_slug(title)
+    for _ in range(16):
+        candidate = f"{prefix}:{slug}:{uuid4().hex[:12]}"
+        existing = work.connection.execute(
+            exists_sql,
+            (context.workspace_id, candidate),
+        ).fetchone()
+        if existing is None:
+            return candidate
+    raise RuntimeError(f"{prefix}_id_allocation_exhausted")
 
 
 def _definitions_from_work(
@@ -75,19 +111,58 @@ def create_world_project(
     database: Any | None = None,
 ) -> dict[str, Any]:
     context = bootstrap_local_tenant(database)
+    profile_plan = None
     with unit_of_work(database) as work:
+        world_id = str(request.world_id or "").strip()
+        if world_id:
+            if work.world_scenarios.get_world(context, world_id) is not None:
+                raise ValueError(f"world_already_exists:{world_id}")
+        else:
+            world_id = _allocate_resource_id(
+                work,
+                context,
+                prefix="world",
+                title=request.title,
+                exists_sql=(
+                    "SELECT 1 FROM omnix_rpg_worlds "
+                    "WHERE workspace_id = %s AND id = %s"
+                ),
+            )
+        request_metadata = dict(request.metadata or {})
+        profile_plan = plan_world_profile_creation(
+            world_id=world_id,
+            title=request.title,
+            genre=request.genre,
+            description=request.description,
+            tone=request.tone,
+            campaign_mode=str(
+                request_metadata.get("campaign_mode") or "persistent_living_world"
+            ),
+            seed=request.seed,
+        )
+        metadata = {
+            **request_metadata,
+            "genre_profile_binding": dict(profile_plan.binding),
+        }
         world = work.world_scenarios.create_world(
             context,
-            world_id=request.world_id,
+            world_id=world_id,
             title=request.title,
             description=request.description,
             source_mode=request.source_mode,
             genre=request.genre,
             tone=request.tone,
             seed=request.seed,
-            metadata=request.metadata,
+            metadata=metadata,
         )
+        if profile_plan.job_payload is not None:
+            work.jobs.create_job(context, dict(profile_plan.job_payload))
         work.commit()
+    if profile_plan is not None and profile_plan.job_payload is not None:
+        kick_world_generation_worker(
+            database=database,
+            provider_route=profile_plan.provider_route,
+        )
     return world
 
 
@@ -109,10 +184,11 @@ def publish_world_revision(
     expected_revision: int,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    document = _ensure_hash(document, "content_hash")
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
-        require_world_writable(work, context, document.world_id)
+        world = require_world_writable(work, context, document.world_id)
+        document = prepare_direct_world_revision(world, document)
+        document = _ensure_hash(document, "content_hash")
         stored = work.world_scenarios.publish_world_revision(
             context,
             world_id=document.world_id,
@@ -138,6 +214,7 @@ def publish_world_release(
             document.world_id,
             document.world_revision,
         )
+        authorship_receipt = require_revision_authorship(world_revision)
         next_row = work.connection.execute(
             "SELECT COALESCE(MAX(release), 0) + 1 FROM omnix_rpg_world_releases "
             "WHERE workspace_id = %s AND world_id = %s AND world_revision = %s",
@@ -149,6 +226,14 @@ def publish_world_release(
                 "world_release_sequence_mismatch",
                 f"expected={next_release}:received={document.release}",
             )
+        release_payload = document.model_dump(mode="json")
+        release_payload["certification"] = {
+            **dict(document.certification),
+            "authorship_validated": True,
+            "authorship_source": str(authorship_receipt.get("source") or "field_origin_ledger"),
+            "authorship_schema_version": str(authorship_receipt.get("schema_version") or ""),
+        }
+        document = WorldReleaseDocument.model_validate(release_payload)
         definitions = _definitions_from_work(work, context, document)
         certified = certify_world_release(world_revision, document, definitions)
         stored = work.world_scenarios.publish_world_release(
@@ -170,16 +255,29 @@ def create_scenario_project(
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         require_world_writable(work, context, request.world_id)
-        existing = work.connection.execute(
-            "SELECT 1 FROM omnix_rpg_scenarios "
-            "WHERE workspace_id = %s AND id = %s",
-            (context.workspace_id, request.scenario_id),
-        ).fetchone()
-        if existing is not None:
-            raise ValueError(f"scenario_already_exists:{request.scenario_id}")
+        scenario_id = str(request.scenario_id or "").strip()
+        if scenario_id:
+            existing = work.connection.execute(
+                "SELECT 1 FROM omnix_rpg_scenarios "
+                "WHERE workspace_id = %s AND id = %s",
+                (context.workspace_id, scenario_id),
+            ).fetchone()
+            if existing is not None:
+                raise ValueError(f"scenario_already_exists:{scenario_id}")
+        else:
+            scenario_id = _allocate_resource_id(
+                work,
+                context,
+                prefix="scenario",
+                title=request.title,
+                exists_sql=(
+                    "SELECT 1 FROM omnix_rpg_scenarios "
+                    "WHERE workspace_id = %s AND id = %s"
+                ),
+            )
         scenario = work.world_scenarios.create_scenario(
             context,
-            scenario_id=request.scenario_id,
+            scenario_id=scenario_id,
             world_id=request.world_id,
             title=request.title,
             description=request.description,
@@ -215,6 +313,7 @@ def publish_scenario_revision(
             document.world_id,
             document.world_revision,
         )
+        require_revision_authorship(world_revision)
         if document.world_revision_hash != world_revision.content_hash:
             raise WorldSemanticError("scenario_world_hash_mismatch")
         if document.compatible_release is not None:
@@ -231,6 +330,7 @@ def publish_scenario_revision(
                     f"{document.compatible_release}"
                 )
             release = WorldReleaseDocument.model_validate(release_row["document"])
+            require_release_authorship(world_revision, release)
             definitions = _definitions_from_work(work, context, release)
             validate_release_bindings(world_revision, release, definitions)
             validate_scenario_against_release(document, release, definitions)
@@ -254,6 +354,26 @@ def bind_campaign_world(
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         require_scenario_writable(work, context, binding.scenario_id)
+        world_revision = _world_revision_from_work(
+            work,
+            context,
+            binding.world_id,
+            binding.world_revision,
+        )
+        require_revision_authorship(world_revision)
+        release_row = work.world_scenarios.get_world_release(
+            context,
+            binding.world_id,
+            binding.world_revision,
+            binding.world_release,
+        )
+        if release_row is None:
+            raise KeyError(
+                f"world_release_not_found:{binding.world_id}:"
+                f"{binding.world_revision}:{binding.world_release}"
+            )
+        release = WorldReleaseDocument.model_validate(release_row["document"])
+        require_release_authorship(world_revision, release)
         stored = work.world_scenarios.bind_campaign(
             context,
             campaign_id=binding.campaign_id,
@@ -286,6 +406,7 @@ def load_release_definitions(
     *,
     database: Any | None = None,
 ) -> dict[str, GridMapDefinition]:
+    require_release_authorship(world_revision, release)
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
         definitions = _definitions_from_work(work, context, release)
@@ -325,8 +446,8 @@ def load_published_resources(
         raise KeyError(
             f"scenario_revision_not_found:{scenario_id}:{scenario_revision}"
         )
-    return (
-        WorldRevisionDocument.model_validate(revision["document"]),
-        WorldReleaseDocument.model_validate(release["document"]),
-        ScenarioRevisionDocument.model_validate(scenario["document"]),
-    )
+    revision_document = WorldRevisionDocument.model_validate(revision["document"])
+    release_document = WorldReleaseDocument.model_validate(release["document"])
+    scenario_document = ScenarioRevisionDocument.model_validate(scenario["document"])
+    require_release_authorship(revision_document, release_document)
+    return revision_document, release_document, scenario_document

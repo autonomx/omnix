@@ -116,6 +116,7 @@ class PostgresJobRepository(_BaseJobRepository):
                    AND queued.status IN ('queued', 'retrying', 'waiting')
                    AND queued.available_at <= CURRENT_TIMESTAMP
                    AND queued.resource_class = ANY(%s)
+                   AND queued.attempt_count < queued.max_attempts
                  ORDER BY queued.priority DESC, queued.created_at ASC, queued.id ASC
                  FOR UPDATE SKIP LOCKED
                  LIMIT 1
@@ -149,6 +150,13 @@ class PostgresJobRepository(_BaseJobRepository):
             INSERT INTO omnix_job_attempts
                 (job_id, attempt, worker_id, lease_token, status)
             VALUES (%s, %s, %s, %s, 'leased')
+            ON CONFLICT (job_id, attempt) DO UPDATE
+               SET worker_id = EXCLUDED.worker_id,
+                   lease_token = EXCLUDED.lease_token,
+                   status = 'leased',
+                   started_at = CURRENT_TIMESTAMP,
+                   completed_at = NULL,
+                   error = NULL
             """,
             (result["id"], result["attempt_count"], worker_id, token),
         )

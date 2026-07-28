@@ -66,24 +66,54 @@ def _merchant_state_root(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return root
 
 
+def _causal_price_multiplier_bps(
+    simulation_state: Dict[str, Any],
+    merchant: Dict[str, Any] | None = None,
+) -> int:
+    root = _merchant_state_root(simulation_state)
+    economy = _safe_dict(simulation_state.get("economy_state"))
+    value = _safe_int(
+        _safe_dict(merchant).get("causal_price_multiplier_bps")
+        or root.get("causal_price_multiplier_bps")
+        or economy.get("causal_price_multiplier_bps"),
+        10000,
+    )
+    return max(8000, min(15000, value))
+
+
 def ensure_merchant_state(simulation_state: Dict[str, Any], merchant_id: str) -> Dict[str, Any]:
     root = _merchant_state_root(simulation_state)
     merchants = _safe_dict(root.get("merchants"))
 
     existing = _safe_dict(merchants.get(merchant_id))
     if existing:
+        existing["causal_price_multiplier_bps"] = _causal_price_multiplier_bps(
+            simulation_state,
+            existing,
+        )
+        merchants[merchant_id] = existing
+        root["merchants"] = merchants
         return existing
 
     default = get_default_merchant(merchant_id)
     if not default:
         return {}
 
-    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(_safe_dict(default.get("inventory")).get("items"))]
-    default["inventory"] = recalculate_inventory_derived_fields({
-        "items": items,
-        "equipment": {},
-        "carry_capacity": 9999.0,
-    })
+    items = [
+        normalize_item_instance(_safe_dict(item))
+        for item in _safe_list(_safe_dict(default.get("inventory")).get("items"))
+    ]
+    default["inventory"] = recalculate_inventory_derived_fields(
+        {
+            "items": items,
+            "equipment": {},
+            "carry_capacity": 9999.0,
+        }
+    )
+    default["causal_price_multiplier_bps"] = _causal_price_multiplier_bps(
+        simulation_state,
+        default,
+    )
 
     merchants[merchant_id] = default
     root["merchants"] = merchants
@@ -139,13 +169,18 @@ def _item_base_value(item: Dict[str, Any]) -> Dict[str, int]:
     return _safe_dict(normalized.get("value") or definition.get("value"))
 
 
-def _purchased_item_from_merchant_item(merchant_item: Dict[str, Any], *, quantity: int) -> Dict[str, Any]:
+def _purchased_item_from_merchant_item(
+    merchant_item: Dict[str, Any],
+    *,
+    quantity: int,
+) -> Dict[str, Any]:
     """Create the player-owned item while preserving merchant item metadata.
 
     Some survival supplies are intentionally local merchant definitions rather
-    than global catalog definitions.  Reconstructing by definition_id alone would
+    than global catalog definitions. Reconstructing by definition_id alone would
     lose their tags/value/waterskin charges and break later survival actions.
     """
+
     bought_item = normalize_item_instance(deepcopy(_safe_dict(merchant_item)))
     bought_item["item_id"] = ""
     bought_item["quantity"] = max(1, _safe_int(quantity, 1))
@@ -190,7 +225,11 @@ def apply_merchant_interaction(
             action=action,
         )
 
-    merchant_id = _safe_str(action.get("merchant_id") or action.get("secondary_target_id") or "npc:Elara")
+    merchant_id = _safe_str(
+        action.get("merchant_id")
+        or action.get("secondary_target_id")
+        or "npc:Elara"
+    )
     merchant = ensure_merchant_state(simulation_state, merchant_id)
     if not merchant:
         return _result(
@@ -201,6 +240,10 @@ def apply_merchant_interaction(
             extra={"merchant_id": merchant_id},
         )
 
+    causal_multiplier_bps = _causal_price_multiplier_bps(
+        simulation_state,
+        merchant,
+    )
     player_state = _player_state(simulation_state)
     player_inventory = _player_inventory(simulation_state)
     merchant_inventory = _safe_dict(merchant.get("inventory"))
@@ -243,13 +286,20 @@ def apply_merchant_interaction(
                 },
             )
 
+        base_multiplier = float(
+            merchant_item.get("price_multiplier")
+            or merchant.get("buy_price_multiplier")
+            or 1.0
+        )
         unit_price = multiply_currency(
             _item_base_value(merchant_item),
-            float(merchant_item.get("price_multiplier") or merchant.get("buy_price_multiplier") or 1.0),
+            base_multiplier * causal_multiplier_bps / 10000.0,
         )
         total_price = multiply_currency(unit_price, quantity)
 
-        currency_before = currency_snapshot(player_state.get("currency") or player_state.get("money"))
+        currency_before = currency_snapshot(
+            player_state.get("currency") or player_state.get("money")
+        )
         subtract = subtract_currency(currency_before, total_price)
         if not subtract.get("ok"):
             return _result(
@@ -263,6 +313,7 @@ def apply_merchant_interaction(
                     "price": total_price,
                     "currency_before": currency_before,
                     "missing_copper": subtract.get("missing_copper"),
+                    "causal_price_multiplier_bps": causal_multiplier_bps,
                 },
             )
 
@@ -279,14 +330,22 @@ def apply_merchant_interaction(
                 action=action,
             )
 
-        bought_item = _purchased_item_from_merchant_item(merchant_item, quantity=quantity)
+        bought_item = _purchased_item_from_merchant_item(
+            merchant_item,
+            quantity=quantity,
+        )
 
-        player_add = add_item_to_items_list(_safe_list(player_inventory.get("items")), bought_item)
+        player_add = add_item_to_items_list(
+            _safe_list(player_inventory.get("items")),
+            bought_item,
+        )
         player_inventory["items"] = _safe_list(player_add.get("items"))
         player_inventory = recalculate_inventory_derived_fields(player_inventory)
 
         merchant_inventory["items"] = _safe_list(merchant_remove.get("items"))
-        merchant["inventory"] = recalculate_inventory_derived_fields(merchant_inventory)
+        merchant["inventory"] = recalculate_inventory_derived_fields(
+            merchant_inventory
+        )
 
         player_state["currency"] = subtract.get("currency")
         player_state["inventory"] = player_inventory
@@ -306,6 +365,7 @@ def apply_merchant_interaction(
                 "currency_after": player_state["currency"],
                 "item": bought_item,
                 "stacked": bool(player_add.get("stacked")),
+                "causal_price_multiplier_bps": causal_multiplier_bps,
                 "tick": int(tick or 0),
             },
         )
@@ -317,7 +377,10 @@ def apply_merchant_interaction(
         if definition_id:
             item = _find_item_by_definition(player_items, definition_id)
         if not item:
-            item = _find_item_by_id(player_items, _safe_str(action.get("target_id")))
+            item = _find_item_by_id(
+                player_items,
+                _safe_str(action.get("target_id")),
+            )
 
         if not item:
             return _result(
@@ -333,7 +396,10 @@ def apply_merchant_interaction(
 
         sale_price = multiply_currency(
             _item_base_value(item),
-            float(merchant.get("sell_price_multiplier") or 0.5) * sell_qty,
+            float(merchant.get("sell_price_multiplier") or 0.5)
+            * sell_qty
+            * causal_multiplier_bps
+            / 10000.0,
         )
 
         remove = remove_quantity_from_items_list(
@@ -354,9 +420,13 @@ def apply_merchant_interaction(
 
         merchant_add = add_item_to_items_list(merchant_items, sold_item)
         merchant_inventory["items"] = _safe_list(merchant_add.get("items"))
-        merchant["inventory"] = recalculate_inventory_derived_fields(merchant_inventory)
+        merchant["inventory"] = recalculate_inventory_derived_fields(
+            merchant_inventory
+        )
 
-        currency_before = currency_snapshot(player_state.get("currency") or player_state.get("money"))
+        currency_before = currency_snapshot(
+            player_state.get("currency") or player_state.get("money")
+        )
         player_state["currency"] = add_currency(currency_before, sale_price)
 
         player_inventory["items"] = _safe_list(remove.get("items"))
@@ -377,6 +447,7 @@ def apply_merchant_interaction(
                 "sale_price": sale_price,
                 "currency_before": currency_before,
                 "currency_after": player_state["currency"],
+                "causal_price_multiplier_bps": causal_multiplier_bps,
                 "tick": int(tick or 0),
             },
         )

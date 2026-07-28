@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
+from .world_forge_causal_audit import audit_causal_canon
 from .world_forge_generation import GeneratedTopic
-
 
 _ALLOWED_VISIBILITY = {
     "public",
@@ -288,6 +288,16 @@ def audit_generated_canon(
     issues.extend(_knowledge_issues(facts, knowledge_rules, entity_ids))
     issues.extend(_temporal_issues(entities, facts))
     issues.extend(_geography_issues(entities, entity_ids))
+    causal_findings = audit_causal_canon(topic_list)
+    issues.extend(
+        CanonAuditIssue(
+            finding.code,
+            finding.message,
+            finding.item_id,
+            severity=finding.severity,
+        )
+        for finding in causal_findings
+    )
     patches = tuple(issue.patch for issue in issues if issue.patch is not None)
     error_count = sum(1 for issue in issues if issue.severity == "error")
     return CanonAuditReport(
@@ -301,6 +311,7 @@ def audit_generated_canon(
             "facts": len(facts),
             "relationships": len(relationships),
             "knowledge_rules": len(knowledge_rules),
+            "causal_findings": len(causal_findings),
             "errors": error_count,
         },
     )

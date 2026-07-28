@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.rpg.worlds.authoring_service import (
+    _world_token_usage,
     read_authoring_manifest,
     read_authoring_section,
 )
@@ -142,6 +143,10 @@ def test_manifest_uses_user_facing_sections_and_hides_pipeline_nodes(monkeypatch
         "app.rpg.worlds.authoring_service.read_world_detail",
         lambda world_id, database=None: _detail(),
     )
+    monkeypatch.setattr(
+        "app.rpg.worlds.authoring_service._image_section_status",
+        lambda world_id, database=None: ("complete", 3),
+    )
 
     manifest = read_authoring_manifest("world:aurelia")
     sections = {row["id"]: row for row in manifest["sections"]}
@@ -152,8 +157,171 @@ def test_manifest_uses_user_facing_sections_and_hides_pipeline_nodes(monkeypatch
     assert sections["npcs"]["label"] == "Characters"
     assert sections["points_of_interest"]["page_kind"] == "collection"
     assert sections["classes"]["page_kind"] == "collection"
+    assert sections["images"]["operational_status"] == "complete"
+    assert sections["images"]["entity_count"] == 3
     assert "areas" not in sections
     assert "canon_compile" not in sections
+    assert manifest["world"]["generation"] == manifest["generation"]
+
+
+def test_world_token_usage_prefers_provider_usage_and_marks_estimates() -> None:
+    summary = _world_token_usage(
+        (
+            {
+                "source": "ai",
+                "provenance": {
+                    "usage": {
+                        "prompt_tokens": 120,
+                        "completion_tokens": 30,
+                        "total_tokens": 150,
+                    }
+                },
+            },
+            {
+                "source": "ai",
+                "provenance": {
+                    "token_estimate": {
+                        "prompt_tokens": 80,
+                        "completion_tokens": 20,
+                        "total_tokens": 100,
+                    }
+                },
+            },
+            {"source": "manual", "provenance": {}},
+        )
+    )
+
+    assert summary == {
+        "prompt_tokens": 200,
+        "completion_tokens": 50,
+        "total_tokens": 250,
+        "provider_reported_topics": 1,
+        "estimated_topics": 1,
+        "unavailable_topics": 0,
+        "topic_count": 2,
+        "in_flight_topics": 0,
+        "generation_duration_ms": 0,
+        "timed_topics": 0,
+        "repair_count": 0,
+        "repair_tokens": 0,
+        "provider_reported_repairs": 0,
+        "estimated_repairs": 0,
+    }
+
+
+def test_world_token_usage_includes_active_entity_batch_checkpoints() -> None:
+    summary = _world_token_usage(
+        (),
+        active_job_progresses=(
+            {
+                "token_usage": {
+                    "prompt_tokens": 90,
+                    "completion_tokens": 45,
+                    "total_tokens": 135,
+                    "source": "estimated",
+                }
+            },
+            {
+                "token_usage": {
+                    "prompt_tokens": 120,
+                    "completion_tokens": 60,
+                    "total_tokens": 180,
+                    "source": "provider_reported",
+                }
+            },
+        ),
+    )
+
+    assert summary == {
+        "prompt_tokens": 210,
+        "completion_tokens": 105,
+        "total_tokens": 315,
+        "provider_reported_topics": 1,
+        "estimated_topics": 1,
+        "unavailable_topics": 0,
+        "topic_count": 0,
+        "in_flight_topics": 2,
+        "generation_duration_ms": 0,
+        "timed_topics": 0,
+        "repair_count": 0,
+        "repair_tokens": 0,
+        "provider_reported_repairs": 0,
+        "estimated_repairs": 0,
+    }
+
+
+def test_world_token_usage_includes_rejected_generation_results() -> None:
+    summary = _world_token_usage(
+        (
+            {
+                "topic_id": "accepted",
+                "source": "ai",
+                "provenance": {"usage": {"total_tokens": 100}},
+            },
+        ),
+        topic_results=(
+            {
+                "topic_id": "accepted",
+                "status": "accepted",
+                "candidate": {
+                    "provenance": {
+                        "latency_ms": 15_000,
+                        "usage": {"total_tokens": 100},
+                    }
+                },
+            },
+            {
+                "topic_id": "rejected",
+                "status": "needs_review",
+                "candidate": {
+                    "provenance": {
+                        "token_estimate": {
+                            "prompt_tokens": 80,
+                            "completion_tokens": 20,
+                            "total_tokens": 100,
+                        },
+                        "latency_ms": 5_000,
+                    }
+                },
+            },
+        ),
+    )
+
+    assert summary["total_tokens"] == 200
+    assert summary["provider_reported_topics"] == 1
+    assert summary["estimated_topics"] == 1
+    assert summary["topic_count"] == 2
+    assert summary["generation_duration_ms"] == 20_000
+    assert summary["timed_topics"] == 2
+
+
+def test_world_token_usage_includes_dossier_regeneration_usage() -> None:
+    summary = _world_token_usage((
+        {
+            "source": "ai",
+            "provenance": {
+                "authoring": {
+                    "dossier_regeneration_usage": [
+                        {"usage": {"prompt_tokens": 90, "completion_tokens": 30, "total_tokens": 120}},
+                        {"token_estimate": {"prompt_tokens": 60, "completion_tokens": 20, "total_tokens": 80}},
+                    ],
+                },
+            },
+        },
+    ))
+
+    assert summary["total_tokens"] == 200
+    assert summary["repair_count"] == 2
+    assert summary["repair_tokens"] == 200
+    assert summary["provider_reported_repairs"] == 1
+    assert summary["estimated_repairs"] == 1
+
+
+def test_world_token_usage_does_not_mark_an_unreported_live_call_unavailable() -> None:
+    summary = _world_token_usage((), active_job_progresses=({},))
+
+    assert summary["in_flight_topics"] == 1
+    assert summary["unavailable_topics"] == 0
 
 
 def test_lore_with_entities_stays_a_document_page(monkeypatch) -> None:
@@ -168,6 +336,68 @@ def test_lore_with_entities_stays_a_document_page(monkeypatch) -> None:
     assert page["title"] == "Realm Overview"
     assert page["body"][0]["kind"] == "section"
     assert "living magic" in page["body"][0]["body"]
+    assert page["related_entities"][0]["title"] == "Aurelia"
+
+
+def test_failed_lore_shows_a_retry_note_instead_of_fallback_canon(monkeypatch) -> None:
+    detail = _detail()
+    detail["topics"][0] = {
+        "topic_id": "realm",
+        "status": "failed",
+        "content": {
+            "provenance": {
+                "retry_note": {
+                    "message": "The provider could not complete this topic. Retry it after generation finishes.",
+                }
+            }
+        },
+        "provenance": {},
+    }
+    monkeypatch.setattr(
+        "app.rpg.worlds.authoring_service.read_world_detail",
+        lambda world_id, database=None: detail,
+    )
+
+    page = read_authoring_section("world:aurelia", "realm")
+
+    assert page["page_kind"] == "document"
+    assert page["summary"] == "Generation needs retry"
+    assert page["body"][0]["title"] == "Generation needs retry"
+    assert "Retry it" in page["body"][0]["body"]
+
+
+def test_legacy_deterministic_lore_is_hidden_pending_provider_retry(monkeypatch) -> None:
+    detail = _detail()
+    detail["topics"][0]["content"]["provenance"] = {
+        "generator": "deterministic_profile_fixture_v1",
+    }
+    monkeypatch.setattr(
+        "app.rpg.worlds.authoring_service.read_world_detail",
+        lambda world_id, database=None: detail,
+    )
+
+    page = read_authoring_section("world:aurelia", "realm")
+
+    assert page["summary"] == "Generation needs retry"
+    assert "retired deterministic fallback" in page["body"][0]["body"]
+
+
+def test_realm_card_uses_a_readable_dossier_label_when_source_canon_omits_a_name() -> None:
+    card = entity_card(
+        {
+            "entity_id": "ent:realm:001",
+            "dossier": {
+                "quick_facts": [
+                    {"label": "Readable label", "value": "The Post-War American Wasteland"},
+                ],
+            },
+        },
+        card_type="realm",
+        kind="realm",
+        index=0,
+    )
+
+    assert card["title"] == "The Post-War American Wasteland"
 
 
 def test_points_of_interest_and_classes_have_typed_card_presentations(monkeypatch) -> None:

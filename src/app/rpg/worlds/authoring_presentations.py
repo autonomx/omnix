@@ -1,7 +1,9 @@
-"""Stable page and card presentation schemas for reusable-world authoring."""
+"""Stable page, card, and rich dossier schemas for reusable-world authoring."""
 from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
+
+from app.rpg.session.genesis.world_forge_dossiers import project_entity_dossier
 
 SYSTEM_SECTIONS: tuple[dict[str, Any], ...] = (
     {"id": "overview", "label": "Overview", "group": "workspace", "page_kind": "document"},
@@ -28,19 +30,38 @@ WORLD_COLLECTION_CATEGORIES = {
     "items",
     "spells",
     "feats",
-    "quests",
+    "places",
+    "groups",
+    "cultures",
+    "actors",
+    "networks",
+    "technology_augmentations",
+    "equipment_vehicles",
+    "roles_archetypes",
+    "threats",
 }
+LORE_COLLECTION_CATEGORIES = {"economy_law", "pressures"}
 GAME_MASTER_COLLECTION_CATEGORIES = {
+    "quests",
     "encounter_seeds",
     "one_shots",
+    "opening_threads",
     "opening_scenarios",
 }
-COLLECTION_CATEGORIES = WORLD_COLLECTION_CATEGORIES | GAME_MASTER_COLLECTION_CATEGORIES
+COLLECTION_CATEGORIES = (
+    WORLD_COLLECTION_CATEGORIES
+    | LORE_COLLECTION_CATEGORIES
+    | GAME_MASTER_COLLECTION_CATEGORIES
+)
 PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 
 _SECTION_LABELS = {
+    "realm": "Realm Overview",
     "locations": "Areas",
     "npcs": "Characters",
+    "actors": "Actors and NPCs",
+    "places": "Places and Points of Interest",
+    "groups": "Organisations and Institutions",
     "one_shots": "One-Shots",
     "opening_scenarios": "Opening Scenarios",
     "encounter_seeds": "Encounter Seeds",
@@ -59,6 +80,12 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
         "eyebrow": "Area",
         "badges": ("dossier_status", "visibility"),
         "highlights": (("Region", "region_id"),),
+    },
+    "places": {
+        "eyebrow": "Place / Point of Interest",
+        "badges": ("dossier_status", "visibility"),
+        "highlights": (("Region", "region_id"), ("Parent", "parent_place_id")),
+        "groups": (("Access Routes", "access_routes", "list"),),
     },
     "points_of_interest": {
         "eyebrow": "Point of Interest",
@@ -80,6 +107,16 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
             ("Motives", "motives", "chips"),
         ),
     },
+    "actors": {
+        "eyebrow": "Actor / NPC",
+        "badges": ("dossier_status", "visibility"),
+        "highlights": (("Location", "location_id"), ("Goal", "goal")),
+        "groups": (
+            ("Groups", "group_ids", "chips"),
+            ("Reaction Conditions", "reaction_conditions", "list"),
+            ("Knowledge Limits", "knowledge_limits", "list"),
+        ),
+    },
     "races": {
         "eyebrow": "Race / Ancestry",
         "badges": ("visibility",),
@@ -89,6 +126,16 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
             ("Cultures", "cultures", "chips"),
             ("Traits", "traits", "list"),
             ("Languages", "languages", "chips"),
+        ),
+    },
+    "cultures": {
+        "eyebrow": "Culture / Subculture",
+        "badges": ("visibility",),
+        "groups": (
+            ("Regions", "region_ids", "chips"),
+            ("Groups", "group_ids", "chips"),
+            ("Values", "values", "list"),
+            ("Customs", "customs", "list"),
         ),
     },
     "classes": {
@@ -101,10 +148,39 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
             ("Institutions", "institution_ids", "chips"),
         ),
     },
+    "roles_archetypes": {
+        "eyebrow": "Role / Archetype",
+        "badges": ("visibility",),
+        "groups": (
+            ("Capabilities", "capabilities", "list"),
+            ("Progression", "progression", "list"),
+            ("Equipment", "equipment_ids", "chips"),
+            ("Groups", "group_ids", "chips"),
+        ),
+    },
     "factions": {
         "eyebrow": "Faction",
         "badges": ("visibility",),
         "groups": (("Values", "values", "chips"), ("Goals", "goals", "list")),
+    },
+    "groups": {
+        "eyebrow": "Organisation / Institution",
+        "badges": ("visibility",),
+        "highlights": (("Objective", "current_objective"),),
+        "groups": (
+            ("Controlled Places", "controlled_place_ids", "chips"),
+            ("Resources", "resources", "list"),
+            ("Internal Divisions", "internal_divisions", "list"),
+        ),
+    },
+    "networks": {
+        "eyebrow": "Network / Digital Space",
+        "badges": ("visibility",),
+        "highlights": (("Security Pressure", "security_pressure"),),
+        "groups": (
+            ("Controllers", "controller_group_ids", "chips"),
+            ("Access Conditions", "access_conditions", "list"),
+        ),
     },
     "monsters": {
         "eyebrow": "Monster / Creature",
@@ -116,11 +192,34 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
             ("Weaknesses", "weaknesses", "list"),
         ),
     },
+    "threats": {
+        "eyebrow": "Threat / Hostile Entity",
+        "badges": ("threat_level", "visibility"),
+        "highlights": (("Behaviour", "behaviour"),),
+        "groups": (
+            ("Places", "place_ids", "chips"),
+            ("Groups", "group_ids", "chips"),
+            ("Capabilities", "capabilities", "list"),
+            ("Weaknesses", "weaknesses", "list"),
+        ),
+    },
     "items": {
         "eyebrow": "Item / Relic",
         "badges": ("item_type", "rarity"),
         "highlights": (("Value", "value"),),
         "groups": (("Effects", "effects", "list"), ("Origins", "origin_ids", "chips")),
+    },
+    "technology_augmentations": {
+        "eyebrow": "Technology / Augmentation",
+        "badges": ("visibility",),
+        "highlights": (("Capability", "capability"), ("Cost", "cost")),
+        "groups": (("Sources", "source_group_ids", "chips"), ("Failure Mode", "failure_mode", "list")),
+    },
+    "equipment_vehicles": {
+        "eyebrow": "Equipment / Vehicle / Commodity",
+        "badges": ("visibility",),
+        "highlights": (("Function", "function"), ("Availability", "availability"), ("Cost", "cost")),
+        "groups": (("Producers", "producer_group_ids", "chips"), ("Limitations", "limitations", "list")),
     },
     "spells": {
         "eyebrow": "Spell / Ritual",
@@ -140,6 +239,27 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
             ("Benefits", "benefits", "list"),
             ("Limitations", "limitations", "list"),
             ("Classes", "class_ids", "chips"),
+        ),
+    },
+    "economy_law": {
+        "eyebrow": "Economy / Law / Service",
+        "badges": ("visibility",),
+        "highlights": (("Failure Effect", "failure_effect"),),
+        "groups": (
+            ("Controllers", "controller_group_ids", "chips"),
+            ("Affected Places", "affected_place_ids", "chips"),
+            ("Rules", "rules", "list"),
+            ("Services", "services", "list"),
+        ),
+    },
+    "pressures": {
+        "eyebrow": "Conflict / Pressure",
+        "badges": ("visibility",),
+        "highlights": (("Current State", "current_state"), ("Next Change", "next_tick_change")),
+        "groups": (
+            ("Actors", "actor_ids", "chips"),
+            ("Groups", "group_ids", "chips"),
+            ("Places", "place_ids", "chips"),
         ),
     },
     "quests": {
@@ -164,6 +284,16 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
             ("Outcomes", "outcomes", "list"),
         ),
     },
+    "opening_threads": {
+        "eyebrow": "Opening Thread",
+        "badges": ("visibility",),
+        "groups": (
+            ("Actors", "actor_ids", "chips"),
+            ("Places", "place_ids", "chips"),
+            ("Pressures", "pressure_ids", "chips"),
+            ("Player Choices", "player_choices", "list"),
+        ),
+    },
     "one_shots": {
         "eyebrow": "One-Shot",
         "badges": ("visibility",),
@@ -178,10 +308,12 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
     "opening_scenarios": {
         "eyebrow": "Opening Scenario",
         "badges": ("visibility",),
-        "highlights": (("Starting Location", "starting_location_id"),),
+        "highlights": (("Starting Location", "starting_location_id"), ("Starting Place", "starting_place_id")),
         "groups": (
             ("Initial Characters", "initial_npc_ids", "chips"),
+            ("Initial Actors", "initial_actor_ids", "chips"),
             ("Opening Seeds", "opening_seed_ids", "chips"),
+            ("Opening Threads", "opening_thread_ids", "chips"),
             ("Starting Resources", "starting_resources", "list"),
         ),
     },
@@ -207,16 +339,27 @@ _CARD_SPECS: Mapping[str, Mapping[str, Any]] = {
 
 _SUMMARY_FIELDS: Mapping[str, tuple[str, ...]] = {
     "points_of_interest": ("purpose", "sensory_profile", "description"),
+    "places": ("current_pressure", "description", "sensory_profile"),
     "npcs": ("personality", "appearance", "backstory", "description"),
+    "actors": ("goal", "current_pressure", "personality", "description"),
     "locations": ("sensory_profile", "description"),
     "races": ("description", "lifespan"),
+    "cultures": ("description", "values"),
     "classes": ("description",),
+    "roles_archetypes": ("description", "capabilities"),
     "monsters": ("description",),
+    "threats": ("behaviour", "description"),
     "items": ("description",),
+    "technology_augmentations": ("capability", "failure_mode", "description"),
+    "equipment_vehicles": ("function", "availability", "description"),
+    "networks": ("security_pressure", "description"),
+    "economy_law": ("failure_effect", "description"),
+    "pressures": ("current_state", "next_tick_change", "description"),
     "spells": ("description",),
     "feats": ("description",),
     "quests": ("stakes", "description"),
     "encounter_seeds": ("setup", "description"),
+    "opening_threads": ("initial_evidence", "description"),
     "one_shots": ("premise", "description"),
     "opening_scenarios": ("premise", "description"),
 }
@@ -265,15 +408,30 @@ def _identity(row: Mapping[str, Any], card_type: str, index: int) -> str:
 
 def _title(row: Mapping[str, Any], entity_id: str, card_type: str) -> str:
     document = row.get("document") if isinstance(row.get("document"), Mapping) else {}
+    dossier = row.get("dossier") if isinstance(row.get("dossier"), Mapping) else {}
+    quick_facts = rows(dossier.get("quick_facts"))
+    readable_label = next(
+        (
+            text(fact.get("value"))
+            for fact in quick_facts
+            if text(fact.get("label")).lower() in {"readable label", "display name"}
+            and text(fact.get("value"))
+        ),
+        "",
+    )
+    identifier = entity_id.split(":", 1)[-1].replace("_", " ").title()
+    fallback = section_label(card_type) if identifier.isdecimal() else identifier
     return text(
         row.get("name")
         or row.get("title")
         or row.get("label")
         or row.get("scenario_name")
-        or document.get("title"),
-        entity_id.split(":", 1)[-1].replace("_", " ").title()
-        if ":" in entity_id
-        else f"{section_label(card_type)} {entity_id}",
+        or document.get("title")
+        or readable_label
+        or dossier.get("title")
+        or dossier.get("name")
+        or dossier.get("subtitle"),
+        fallback if ":" in entity_id else f"{section_label(card_type)} {entity_id}",
     )
 
 
@@ -301,6 +459,7 @@ def _linked_summary(content: Mapping[str, Any], entity_id: str) -> str:
 
 def _summary(row: Mapping[str, Any], card_type: str, content: Mapping[str, Any], entity_id: str) -> str:
     candidates = (
+        "short_summary",
         "summary",
         "description",
         "role",
@@ -359,10 +518,21 @@ def entity_card(
 ) -> dict[str, Any]:
     entity_id = _identity(row, card_type, index)
     source = dict(row)
+    canon = dict(content or {})
+    short_summary, dossier = project_entity_dossier(
+        source,
+        card_type=card_type,
+        content=canon,
+        entity_id=entity_id,
+    )
+    if short_summary == "No overview has been written yet.":
+        short_summary = _summary(source, card_type, canon, entity_id)
     return {
         "id": entity_id,
         "title": _title(source, entity_id, card_type),
-        "summary": _summary(source, card_type, dict(content or {}), entity_id),
+        "summary": short_summary,
+        "short_summary": short_summary,
+        "dossier": dossier,
         "kind": kind,
         "card_type": card_type,
         "image_target_id": f"{kind}:{entity_id}",

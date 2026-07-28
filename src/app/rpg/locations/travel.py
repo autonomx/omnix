@@ -168,6 +168,36 @@ def calculate_route_travel_cost(start_location_id: str, end_location_id: str) ->
     }
 
 
+def apply_causal_travel_projection(
+    cost: Dict[str, Any],
+    travel_state: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Apply the projected causal multiplier to one already validated route cost."""
+
+    result = deepcopy(_safe_dict(cost))
+    if result.get("ok") is not True:
+        return result
+    state = _safe_dict(travel_state)
+    multiplier_bps = max(8000, min(16000, _safe_int(state.get("causal_cost_multiplier_bps"), 10000)))
+    safety_index = max(0, min(100, _safe_int(state.get("causal_safety_index"), 100)))
+    totals = _safe_dict(result.get("totals"))
+    adjusted: Dict[str, int] = {}
+    for key in ("minutes", "fatigue", "ration_units", "water_units"):
+        base = max(0, _safe_int(totals.get(key), 0))
+        value = int(round(base * multiplier_bps / 10000))
+        adjusted[key] = max(1, value) if base > 0 else 0
+    result["base_totals"] = deepcopy(totals)
+    result["totals"] = adjusted
+    result["causal_cost_multiplier_bps"] = multiplier_bps
+    result["causal_safety_index"] = safety_index
+    result["causal_projection_source"] = "deterministic_causal_runtime"
+    risk_flags = list(_safe_list(result.get("risk_flags")))
+    if safety_index < 35 and "causal_instability" not in risk_flags:
+        risk_flags.append("causal_instability")
+    result["risk_flags"] = risk_flags
+    return result
+
+
 def apply_travel(
     simulation_state: Dict[str, Any],
     *,
@@ -189,7 +219,10 @@ def apply_travel(
         }
     if not get_canonical_location(end):
         return {"ok": False, "reason": "unknown_destination", "destination_id": end, "source": SOURCE}
-    cost = calculate_route_travel_cost(start, end)
+    cost = apply_causal_travel_projection(
+        calculate_route_travel_cost(start, end),
+        travel_state,
+    )
     if not cost.get("ok"):
         return {"ok": False, "reason": cost.get("reason"), "cost": cost, "source": SOURCE}
     totals = _safe_dict(cost.get("totals"))
@@ -214,6 +247,7 @@ def apply_travel(
         "ration_units": _safe_int(totals.get("ration_units"), 0),
         "water_units": _safe_int(totals.get("water_units"), 0),
         "risk_flags": list(_safe_list(cost.get("risk_flags"))),
+        "causal_cost_multiplier_bps": _safe_int(cost.get("causal_cost_multiplier_bps"), 10000),
         "source": SOURCE,
     }
     travel_state["current_location_id"] = end

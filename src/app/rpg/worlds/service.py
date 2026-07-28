@@ -8,10 +8,13 @@ from .contracts import (
     MapDefinitionBinding,
     MapInitializationOperation,
     ScenarioRevisionDocument,
+    WorldArtifactStage,
     WorldReleaseDocument,
     WorldRevisionDocument,
     canonical_content_hash,
 )
+from .generation_authorship_signing import sign_record
+from .revision_authorship import attach_revision_human_authorship
 
 
 def _hashed_payload(payload: Mapping[str, Any], hash_field: str) -> dict[str, Any]:
@@ -19,6 +22,28 @@ def _hashed_payload(payload: Mapping[str, Any], hash_field: str) -> dict[str, An
     value[hash_field] = ""
     value[hash_field] = canonical_content_hash(value)
     return value
+
+
+def _signed_generation_receipt(
+    *,
+    world_id: str,
+    revision: int,
+    canon: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    return sign_record(
+        {
+            "schema_version": "rpg_world_revision_generation_receipt_v2",
+            "world_id": world_id,
+            "revision": revision,
+            "generation_run_id": str(provenance.get("generation_run_id") or ""),
+            "topic_hashes": {
+                str(key): str(value)
+                for key, value in dict(provenance.get("topic_hashes") or {}).items()
+            },
+            "canon_hash": canonical_content_hash(dict(canon)),
+        }
+    )
 
 
 def compile_world_revision(
@@ -33,16 +58,31 @@ def compile_world_revision(
     blueprint_requirements: Iterable[Mapping[str, Any]] = (),
     provenance: Mapping[str, Any] | None = None,
 ) -> WorldRevisionDocument:
+    revision_provenance = dict(provenance or {})
+    compiled_canon = dict(canon)
+    if str(revision_provenance.get("source") or "") == "durable_world_generation":
+        revision_provenance["authorship_receipt"] = _signed_generation_receipt(
+            world_id=world_id,
+            revision=revision,
+            canon=compiled_canon,
+            provenance=revision_provenance,
+        )
+    else:
+        revision_provenance = attach_revision_human_authorship(
+            compiled_canon,
+            revision_provenance,
+            event_id=f"humancompile:{world_id}:{revision}",
+        )
     payload = {
         "world_id": world_id,
         "revision": revision,
         "title": title,
-        "canon": dict(canon),
+        "canon": compiled_canon,
         "entity_manifest": dict(entity_manifest),
         "topology": dict(topology),
         "adventure_seeds": tuple(dict(row) for row in adventure_seeds),
         "blueprint_requirements": tuple(dict(row) for row in blueprint_requirements),
-        "provenance": dict(provenance or {}),
+        "provenance": revision_provenance,
     }
     return WorldRevisionDocument.model_validate(
         _hashed_payload(payload, "content_hash")
@@ -58,6 +98,10 @@ def compile_world_release(
     asset_bindings: Mapping[str, Any] | None = None,
     compiler_provenance: Mapping[str, Any] | None = None,
     certification: Mapping[str, Any] | None = None,
+    artifact_stage: WorldArtifactStage = "canon_validated",
+    runtime_seed: Mapping[str, Any] | None = None,
+    materialization: Mapping[str, Any] | None = None,
+    playtest_report: Mapping[str, Any] | None = None,
 ) -> WorldReleaseDocument:
     revision_hash = world_revision.content_hash or canonical_content_hash(world_revision)
     payload = {
@@ -72,6 +116,10 @@ def compile_world_release(
         "asset_bindings": dict(asset_bindings or {}),
         "compiler_provenance": dict(compiler_provenance or {}),
         "certification": dict(certification or {}),
+        "artifact_stage": artifact_stage,
+        "runtime_seed": dict(runtime_seed or {}),
+        "materialization": dict(materialization or {}),
+        "playtest_report": dict(playtest_report or {}),
     }
     return WorldReleaseDocument.model_validate(
         _hashed_payload(payload, "release_hash")
@@ -92,6 +140,7 @@ def compile_scenario_revision(
     starting_resources: Mapping[str, Any] | None = None,
     opening_seed_ids: Iterable[str] = (),
     map_initialization: Iterable[MapInitializationOperation] = (),
+    runtime_seed_hash: str = "",
 ) -> ScenarioRevisionDocument:
     revision_hash = world_revision.content_hash or canonical_content_hash(world_revision)
     payload = {
@@ -111,6 +160,7 @@ def compile_scenario_revision(
         "map_initialization": tuple(
             operation.model_dump(mode="json") for operation in map_initialization
         ),
+        "runtime_seed_hash": runtime_seed_hash,
     }
     return ScenarioRevisionDocument.model_validate(
         _hashed_payload(payload, "content_hash")
@@ -141,6 +191,12 @@ def resolve_campaign_binding(
         and scenario_revision.compatible_release != world_release.release
     ):
         raise ValueError("scenario_release_incompatible")
+    if (
+        scenario_revision.runtime_seed_hash
+        and scenario_revision.runtime_seed_hash
+        != str(world_release.runtime_seed.get("content_hash") or "")
+    ):
+        raise ValueError("scenario_runtime_seed_hash_mismatch")
 
     pins = {
         binding.map_id: binding.definition_hash

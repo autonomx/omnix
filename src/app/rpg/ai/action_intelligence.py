@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+
+from app.providers.structured.legacy import decode_legacy_json_object
 from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
 
@@ -20,52 +23,86 @@ _ALLOWED_SKILLS = {
 }
 
 
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
+class _StrictActionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
-def _safe_list(v: Any) -> List[Any]:
-    return v if isinstance(v, list) else []
+class ActionNpcLine(_StrictActionModel):
+    speaker: str = Field(default="", max_length=80)
+    line: str = Field(default="", max_length=900)
 
 
-def _safe_str(v: Any) -> str:
-    return str(v) if v is not None else ""
+class ActionVisibleResponse(_StrictActionModel):
+    narration: str = Field(default="", max_length=500)
+    npc: ActionNpcLine = Field(default_factory=ActionNpcLine)
 
 
-def _safe_bool(v: Any, default: bool = False) -> bool:
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, str):
-        lowered = v.strip().lower()
+class ActionAdvisoryPayload(_StrictActionModel):
+    action_type: str
+    difficulty: str
+    skill_id: str = ""
+    intent_tags: list[str] = Field(default_factory=list, max_length=6)
+    narrative_goal: str = Field(default="", max_length=120)
+    target_id: str = Field(default="", max_length=180)
+    target_name: str = Field(default="", max_length=80)
+    stateful: StrictBool
+    needs_runtime_resolution: StrictBool
+    visible_response: ActionVisibleResponse = Field(default_factory=ActionVisibleResponse)
+    reason: str = Field(default="", max_length=160)
+
+    @field_validator("action_type")
+    @classmethod
+    def validate_action_type(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in _ALLOWED_ACTION_TYPES:
+            raise ValueError("unsupported_action_type")
+        return normalized
+
+    @field_validator("difficulty")
+    @classmethod
+    def validate_difficulty(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in _ALLOWED_DIFFICULTIES:
+            raise ValueError("unsupported_difficulty")
+        return normalized
+
+    @field_validator("skill_id")
+    @classmethod
+    def validate_skill(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized and normalized not in _ALLOWED_SKILLS:
+            raise ValueError("unsupported_skill_id")
+        return normalized
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return str(value) if value is not None else ""
+
+
+def _safe_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
         if lowered in {"1", "true", "yes", "y", "on"}:
             return True
         if lowered in {"0", "false", "no", "n", "off"}:
             return False
-    if v is None:
+    if value is None:
         return default
-    return bool(v)
+    return bool(value)
 
 
 def _clip_text(text: Any, limit: int = 240) -> str:
     return _safe_str(text).strip()[:limit]
-
-
-def _extract_json_object(text: str) -> Dict[str, Any]:
-    text = _safe_str(text).strip()
-    if not text:
-        return {}
-    try:
-        return _safe_dict(json.loads(text))
-    except Exception:
-        pass
-    start = text.find("{")
-    end = text.rfind("}")
-    if start >= 0 and end > start:
-        try:
-            return _safe_dict(json.loads(text[start:end + 1]))
-        except Exception:
-            return {}
-    return {}
 
 
 def _prompt_payload(prompt: str) -> Dict[str, Any]:
@@ -87,6 +124,7 @@ def _attach_first_call_diagnostics(
     provider_called: bool = False,
     provider_error: str = "",
     parse_ok: bool | None = None,
+    fallback_used: bool = False,
 ) -> Dict[str, Any]:
     advisory = _safe_dict(advisory)
     prompt = _safe_str(prompt)
@@ -94,7 +132,11 @@ def _attach_first_call_diagnostics(
     raw_text = _safe_str(raw_text)
     parsed_visible_response = bool(_safe_dict(advisory.get("visible_response")))
     if parse_ok is None:
-        parse_ok = bool(_safe_dict(raw_result)) if isinstance(raw_result, dict) else bool(_extract_json_object(raw_text))
+        parse_ok = (
+            bool(_safe_dict(raw_result))
+            if isinstance(raw_result, dict)
+            else bool(decode_legacy_json_object(raw_text))
+        )
     provider_response_empty = provider_called and not raw_text.strip() and not parse_ok
     provider_malformed_json = provider_called and bool(raw_text.strip()) and not parse_ok
     if source == FAST_PATH_SOURCE:
@@ -111,16 +153,19 @@ def _attach_first_call_diagnostics(
         provider_status = "called_without_parseable_json"
     else:
         provider_status = "not_called"
-    prompt_built = bool(prompt)
     diagnostics = {
         "source": source,
         "prompt": prompt,
         "prompt_preview": prompt[:4000],
         "prompt_truncated": len(prompt) > 4000,
-        "prompt_built": prompt_built,
-        "prompt_available": prompt_built,
+        "prompt_built": bool(prompt),
+        "prompt_available": bool(prompt),
         "turn_grounding_packet": _safe_dict(payload.get("turn_grounding_packet")),
-        "normalized_result": {k: v for k, v in advisory.items() if k != "first_call_grounding_diagnostics"},
+        "normalized_result": {
+            key: value
+            for key, value in advisory.items()
+            if key != "first_call_grounding_diagnostics"
+        },
         "raw_text": _clip_text(raw_text, 4000),
         "raw_text_length": len(raw_text),
         "raw_result_type": type(raw_result).__name__,
@@ -133,12 +178,19 @@ def _attach_first_call_diagnostics(
         "provider_malformed_json": provider_malformed_json,
         "provider_visible_response_present": parsed_visible_response,
         "provider_non_stateful": not _safe_bool(advisory.get("stateful"), True),
-        "provider_needs_runtime_resolution": _safe_bool(advisory.get("needs_runtime_resolution"), True),
+        "provider_needs_runtime_resolution": _safe_bool(
+            advisory.get("needs_runtime_resolution"), True
+        ),
+        "provider_fallback_used": fallback_used,
         "intent_fast_path_used": source == FAST_PATH_SOURCE,
         "intent_llm_used": bool(provider_called and source != FAST_PATH_SOURCE),
-        "intent_fast_path_reason": _safe_str(advisory.get("pre_runtime_intent_fast_path_reason")),
-        "intent_fast_path_source": _safe_str(advisory.get("pre_runtime_intent_fast_path_source")),
-        "format_version": "first_call_grounding_diagnostics_v3",
+        "intent_fast_path_reason": _safe_str(
+            advisory.get("pre_runtime_intent_fast_path_reason")
+        ),
+        "intent_fast_path_source": _safe_str(
+            advisory.get("pre_runtime_intent_fast_path_source")
+        ),
+        "format_version": "first_call_grounding_diagnostics_v4",
     }
     advisory["first_call_grounding_diagnostics"] = diagnostics
     return advisory
@@ -147,14 +199,19 @@ def _attach_first_call_diagnostics(
 def _complete_raw_text(llm_gateway: Any, prompt: str) -> tuple[Any, str, str]:
     if hasattr(llm_gateway, "complete"):
         result = llm_gateway.complete(prompt)
-        if isinstance(result, dict):
-            raw_text = _safe_str(result.get("text") or result.get("content") or "")
-        else:
-            raw_text = _safe_str(result)
+        raw_text = (
+            _safe_str(result.get("text") or result.get("content") or "")
+            if isinstance(result, dict)
+            else _safe_str(result)
+        )
         return result, raw_text, "action_intelligence.complete"
     if hasattr(llm_gateway, "complete_json"):
         result = llm_gateway.complete_json(prompt)
-        raw_text = json.dumps(result, ensure_ascii=False, sort_keys=True) if isinstance(result, dict) and result else ""
+        raw_text = (
+            json.dumps(result, ensure_ascii=False, sort_keys=True)
+            if isinstance(result, dict) and result
+            else ""
+        )
         return result, raw_text, "action_intelligence.complete_json"
     return {}, "", "action_intelligence.no_provider_method"
 
@@ -183,35 +240,21 @@ def build_action_intelligence_prompt(
     }
     instructions = (
         "You are the RPG first-call action-intent extraction layer.\n"
-        "Return JSON only.\n"
-        "Use the provided turn_grounding_packet before classifying intent.\n"
-        "The packet may contain rich NPC biography, personality, speech examples, relationship, inventory, capabilities, and knowledge boundaries.\n"
-        "World/runtime state is authoritative and overrides older memory/profile data.\n"
-        "Do not decide outcomes, damage, XP, hit chance, prices, stock, inventory mutation, quest completion, travel success, or rewards.\n"
-        "You may only suggest bounded action metadata for deterministic runtime.\n"
-        "If the input is non-stateful interpretive NPC dialogue, mark stateful false and include a visible_response candidate.\n"
-        "If the input might mutate state, buy/sell items, start combat, travel, accept/complete quests, change relationships, or reveal facts, mark stateful true and needs_runtime_resolution true.\n"
-        "Never reveal private_context or private NPC biography/inventory in visible_response.\n"
-        "Schema:\n"
-        "{\n"
-        '  "action_type": string,\n'
-        '  "difficulty": string,\n'
-        '  "skill_id": string,\n'
-        '  "intent_tags": [string],\n'
-        '  "narrative_goal": string,\n'
-        '  "target_id": string,\n'
-        '  "target_name": string,\n'
-        '  "stateful": true,\n'
-        '  "needs_runtime_resolution": true,\n'
-        '  "visible_response": {"narration": string, "npc": {"speaker": string, "line": string}},\n'
-        '  "reason": string\n'
-        "}\n"
-        "Prefer the candidate_action action_type unless the text clearly implies a better allowed action.\n"
+        "Return JSON only. Use the provided turn_grounding_packet before classifying intent.\n"
+        "World/runtime state is authoritative. Do not decide outcomes, damage, XP, prices, "
+        "inventory mutation, quest completion, travel success, or rewards.\n"
+        "Return action_type, difficulty, skill_id, intent_tags, narrative_goal, target_id, "
+        "target_name, strict boolean stateful, strict boolean needs_runtime_resolution, "
+        "visible_response, and reason. Never reveal private context.\n"
+        "Prefer candidate_action.action_type unless the text clearly implies a better allowed action.\n"
     )
     return instructions + "\nINPUT:\n" + json.dumps(payload, sort_keys=True)
 
 
-def normalize_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_action_advisory(
+    advisory: Dict[str, Any],
+    candidate_action: Dict[str, Any],
+) -> Dict[str, Any]:
     advisory = _safe_dict(advisory)
     candidate_action = _safe_dict(candidate_action)
     action_type = _safe_str(advisory.get("action_type")).strip().lower()
@@ -240,17 +283,26 @@ def normalize_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[s
         npc = _safe_dict(visible_response.get("npc"))
         normalized_visible_response = {
             "narration": _clip_text(visible_response.get("narration"), 500),
-            "npc": {"speaker": _clip_text(npc.get("speaker"), 80), "line": _clip_text(npc.get("line"), 900)},
+            "npc": {
+                "speaker": _clip_text(npc.get("speaker"), 80),
+                "line": _clip_text(npc.get("line"), 900),
+            },
         }
     stateful = _safe_bool(advisory.get("stateful"), True)
-    needs_runtime_resolution = _safe_bool(advisory.get("needs_runtime_resolution"), stateful)
+    needs_runtime_resolution = _safe_bool(
+        advisory.get("needs_runtime_resolution"), stateful
+    )
     normalized = {
         "action_type": action_type,
         "difficulty": difficulty,
         "skill_id": skill_id,
         "intent_tags": intent_tags,
         "narrative_goal": _clip_text(advisory.get("narrative_goal"), 120),
-        "target_id": _safe_str(advisory.get("target_id") or candidate_action.get("target_id") or candidate_action.get("npc_id")).strip(),
+        "target_id": _safe_str(
+            advisory.get("target_id")
+            or candidate_action.get("target_id")
+            or candidate_action.get("npc_id")
+        ).strip(),
         "target_name": _clip_text(advisory.get("target_name"), 80),
         "stateful": stateful,
         "needs_runtime_resolution": needs_runtime_resolution,
@@ -258,35 +310,47 @@ def normalize_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[s
         "grounding_packet_version": "turn_grounding_packet_v1",
         "reason": _clip_text(advisory.get("reason"), 160),
     }
-    for key in ("pre_runtime_intent_fast_path", "pre_runtime_intent_fast_path_reason", "pre_runtime_intent_fast_path_source"):
+    for key in (
+        "pre_runtime_intent_fast_path",
+        "pre_runtime_intent_fast_path_reason",
+        "pre_runtime_intent_fast_path_source",
+    ):
         if key in advisory:
             normalized[key] = advisory[key]
     return normalized
 
 
-def merge_action_advisory(candidate_action: Dict[str, Any], advisory: Dict[str, Any]) -> Dict[str, Any]:
+def merge_action_advisory(
+    candidate_action: Dict[str, Any],
+    advisory: Dict[str, Any],
+) -> Dict[str, Any]:
     candidate_action = _safe_dict(candidate_action)
     advisory = _safe_dict(advisory)
     merged = dict(candidate_action)
-    merged["action_type"] = _safe_str(advisory.get("action_type") or candidate_action.get("action_type")).strip()
-    if advisory.get("difficulty"):
-        merged["difficulty"] = advisory.get("difficulty")
-    if advisory.get("skill_id"):
-        merged["skill_id"] = advisory.get("skill_id")
-    if advisory.get("target_id"):
-        merged["target_id"] = advisory.get("target_id")
-    if advisory.get("target_name"):
-        merged["target_name"] = advisory.get("target_name")
+    merged["action_type"] = _safe_str(
+        advisory.get("action_type") or candidate_action.get("action_type")
+    ).strip()
+    for key in ("difficulty", "skill_id", "target_id", "target_name"):
+        if advisory.get(key):
+            merged[key] = advisory.get(key)
     metadata = _safe_dict(merged.get("metadata"))
     metadata["intent_tags"] = _safe_list(advisory.get("intent_tags"))
     metadata["narrative_goal"] = _safe_str(advisory.get("narrative_goal"))
     metadata["llm_reason"] = _safe_str(advisory.get("reason"))
     metadata["llm_advisory"] = True
     metadata["stateful"] = _safe_bool(advisory.get("stateful"), True)
-    metadata["needs_runtime_resolution"] = _safe_bool(advisory.get("needs_runtime_resolution"), metadata["stateful"])
-    metadata["visible_response_if_no_runtime_needed"] = _safe_dict(advisory.get("visible_response"))
-    metadata["grounding_packet_version"] = _safe_str(advisory.get("grounding_packet_version") or "turn_grounding_packet_v1")
-    metadata["first_call_grounding_diagnostics"] = _safe_dict(advisory.get("first_call_grounding_diagnostics"))
+    metadata["needs_runtime_resolution"] = _safe_bool(
+        advisory.get("needs_runtime_resolution"), metadata["stateful"]
+    )
+    metadata["visible_response_if_no_runtime_needed"] = _safe_dict(
+        advisory.get("visible_response")
+    )
+    metadata["grounding_packet_version"] = _safe_str(
+        advisory.get("grounding_packet_version") or "turn_grounding_packet_v1"
+    )
+    metadata["first_call_grounding_diagnostics"] = _safe_dict(
+        advisory.get("first_call_grounding_diagnostics")
+    )
     merged["metadata"] = metadata
     return merged
 
@@ -300,18 +364,53 @@ def get_action_advisory(
 ) -> Dict[str, Any]:
     if llm_gateway is None:
         return {}
-    prompt = build_action_intelligence_prompt(player_input, simulation_state, runtime_state, candidate_action)
+    prompt = build_action_intelligence_prompt(
+        player_input,
+        simulation_state,
+        runtime_state,
+        candidate_action,
+    )
     raw_result: Any = {}
     raw_text = ""
     source = "action_intelligence.complete"
     parsed: Dict[str, Any] = {}
     provider_error = ""
+    fallback_used = False
     try:
-        raw_result, raw_text, source = _complete_raw_text(llm_gateway, prompt)
-        parsed = _safe_dict(raw_result) if source.endswith("complete_json") else _extract_json_object(raw_text)
+        if hasattr(llm_gateway, "generate_typed"):
+            typed = llm_gateway.generate_typed(
+                prompt,
+                output_model=ActionAdvisoryPayload,
+                contract_id="rpg.action_intelligence.advisory",
+                contract_version=2,
+                timeout_s=12.0,
+                max_provider_calls=2,
+                max_format_downgrades=1,
+                max_validation_regenerations=1,
+                temperature=0.0,
+                max_tokens=1600,
+                schema_profile="local",
+                schema_name="rpg_action_advisory",
+            )
+            parsed = typed.model_dump(mode="python")
+            raw_result = parsed
+            raw_text = json.dumps(parsed, ensure_ascii=False, sort_keys=True)
+            source = "action_intelligence.generate_typed"
+        else:
+            raw_result, raw_text, source = _complete_raw_text(llm_gateway, prompt)
+            parsed = (
+                _safe_dict(raw_result)
+                if source.endswith("complete_json")
+                else decode_legacy_json_object(raw_text)
+            )
     except Exception as exc:
         provider_error = f"{type(exc).__name__}: {exc}"
+        fallback_used = True
+    if not parsed:
+        fallback_used = True
     advisory = normalize_action_advisory(parsed, candidate_action)
+    if fallback_used:
+        advisory["reason"] = advisory.get("reason") or "deterministic_candidate_fallback"
     return _attach_first_call_diagnostics(
         advisory,
         prompt=prompt,
@@ -321,4 +420,5 @@ def get_action_advisory(
         provider_called=not source.endswith("no_provider_method"),
         provider_error=provider_error,
         parse_ok=bool(parsed),
+        fallback_used=fallback_used,
     )

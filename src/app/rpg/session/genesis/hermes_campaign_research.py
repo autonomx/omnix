@@ -14,7 +14,6 @@ from app.rpg.narrative_engine import (
     HermesResearchPolicy,
     HermesResearchRequest,
     HermesResearchResult,
-    VisibilityClass,
     run_bounded_hermes_research,
 )
 
@@ -182,12 +181,15 @@ def research_campaign_turn(
     entity_ids: tuple[str, ...] = (),
     research_id: str | None = None,
     max_topics: int = 5,
+    snapshot: CampaignBibleSnapshot | None = None,
 ) -> CampaignResearchPacket | None:
-    snapshot = load_campaign_bible_snapshot(
+    """Research one turn against the exact snapshot selected for narrative grounding."""
+
+    resolved_snapshot = snapshot or load_campaign_bible_snapshot(
         campaign_id,
         session=session,
     )
-    if snapshot is None:
+    if resolved_snapshot is None:
         return None
     access = EvidenceAccessContext(
         player_id="player",
@@ -219,12 +221,12 @@ def research_campaign_turn(
     )
     result = run_bounded_hermes_research(
         request,
-        CampaignBibleHermesResearcher(snapshot, access=access),
+        CampaignBibleHermesResearcher(resolved_snapshot, access=access),
         policy=policy,
     )
     return CampaignResearchPacket(
         result=result,
-        snapshot=snapshot,
+        snapshot=resolved_snapshot,
         topic_titles=tuple(
             str(source.title) for source in result.sources
         ),

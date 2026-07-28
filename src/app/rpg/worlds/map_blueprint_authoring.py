@@ -212,6 +212,153 @@ def reconcile_blueprint_scenarios(
     )
 
 
+def generated_location_blueprint_documents(
+    locations: Mapping[str, Mapping[str, Any]],
+) -> tuple[MapBlueprintDocument, ...]:
+    """Build the safe semantic baseline for generated world locations."""
+
+    documents: list[MapBlueprintDocument] = []
+    for location_id, entity in sorted(locations.items()):
+        identifier = str(location_id).strip()
+        if not identifier:
+            continue
+        description = " ".join(
+            str(entity.get(key) or "")
+            for key in ("name", "title", "description", "summary", "kind")
+        ).casefold()
+        level: MapLevel = (
+            "dungeon"
+            if any(token in description for token in ("dungeon", "vault", "catacomb"))
+            else "interior"
+            if any(token in description for token in ("interior", "building", "facility"))
+            else "encounter"
+            if any(token in description for token in ("battlefield", "encounter", "ambush"))
+            else "settlement"
+        )
+        documents.append(
+            MapBlueprintDocument(
+                map_id=f"map:{identifier}",
+                location_id=identifier,
+                level=level,
+                required_spawn_point_ids=("spawn:arrival",),
+                required_zone_ids=("zone:main",),
+                directives={"generation": "baseline_location_blueprint"},
+                metadata={
+                    "source": "generated_location_blueprint_v1",
+                    "entity_name": str(entity.get("name") or entity.get("title") or identifier),
+                },
+            )
+        )
+    return tuple(documents)
+
+
+def _insert_blueprint(
+    work: Any,
+    context: Any,
+    world_id: str,
+    document: MapBlueprintDocument,
+    *,
+    revision: int,
+) -> dict[str, Any]:
+    payload = document.model_dump(mode="json")
+    content_hash = canonical_content_hash(payload)
+    semantic_hash = canonical_content_hash(document.semantic_interface())
+    findings = reconcile_blueprint_scenarios(
+        document,
+        _latest_scenarios(work, context, world_id),
+    )
+    row = work.connection.execute(
+        "INSERT INTO omnix_rpg_map_blueprint_revisions ("
+        "workspace_id, world_id, map_id, blueprint_revision, document_jsonb, "
+        "content_hash, semantic_interface_hash, status, findings_jsonb) "
+        "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s::jsonb) "
+        "RETURNING world_id, map_id, blueprint_revision, document_jsonb, "
+        "content_hash, semantic_interface_hash, status, findings_jsonb, created_at",
+        (
+            context.workspace_id,
+            world_id,
+            document.map_id,
+            revision,
+            _json(payload),
+            content_hash,
+            semantic_hash,
+            "invalid" if findings else "ready",
+            _json(findings),
+        ),
+    ).fetchone()
+    return _row(row)
+
+
+def materialize_generated_location_blueprints(
+    work: Any,
+    context: Any,
+    world_id: str,
+    locations: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Insert one baseline blueprint per generated location, without overwriting edits."""
+
+    documents = generated_location_blueprint_documents(locations)
+    rows = work.connection.execute(
+        "SELECT map_id FROM omnix_rpg_map_blueprint_revisions "
+        "WHERE workspace_id = %s AND world_id = %s",
+        (context.workspace_id, world_id),
+    ).fetchall()
+    existing_map_ids = {str(row[0]) for row in rows}
+    created = []
+    for document in documents:
+        if document.map_id in existing_map_ids:
+            continue
+        created.append(
+            _insert_blueprint(
+                work,
+                context,
+                world_id,
+                document,
+                revision=1,
+            )
+        )
+    return created
+
+
+def materialize_missing_location_blueprints(
+    world_id: str,
+    *,
+    database: Any | None = None,
+) -> dict[str, Any]:
+    """Backfill baseline blueprints for an already-generated world in one action."""
+
+    from .library_service import read_world_detail
+
+    detail = read_world_detail(world_id, database=database)
+    locations: dict[str, Mapping[str, Any]] = {}
+    for topic in detail.get("topics") or ():
+        if not isinstance(topic, Mapping) or str(topic.get("topic_id") or "") != "locations":
+            continue
+        content = topic.get("content")
+        if not isinstance(content, Mapping):
+            continue
+        entities = content.get("entities")
+        if not isinstance(entities, Sequence) or isinstance(entities, (str, bytes)):
+            continue
+        for entity in entities:
+            if not isinstance(entity, Mapping):
+                continue
+            identifier = str(entity.get("id") or entity.get("entity_id") or "").strip()
+            if identifier:
+                locations[identifier] = entity
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        require_world_writable(work, context, world_id)
+        created = materialize_generated_location_blueprints(
+            work,
+            context,
+            world_id,
+            locations,
+        )
+        work.commit()
+    return {"ok": True, "created": created, "created_count": len(created)}
+
+
 def save_map_blueprint(
     world_id: str,
     document: MapBlueprintDocument,
@@ -234,35 +381,15 @@ def save_map_blueprint(
                 "map_blueprint_revision_conflict:"
                 f"expected={expected_revision}:current={current_revision}"
             )
-        payload = document.model_dump(mode="json")
-        content_hash = canonical_content_hash(payload)
-        semantic_hash = canonical_content_hash(document.semantic_interface())
-        findings = reconcile_blueprint_scenarios(
+        row = _insert_blueprint(
+            work,
+            context,
+            world_id,
             document,
-            _latest_scenarios(work, context, world_id),
+            revision=current_revision + 1,
         )
-        next_revision = current_revision + 1
-        row = work.connection.execute(
-            "INSERT INTO omnix_rpg_map_blueprint_revisions ("
-            "workspace_id, world_id, map_id, blueprint_revision, document_jsonb, "
-            "content_hash, semantic_interface_hash, status, findings_jsonb) "
-            "VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s::jsonb) "
-            "RETURNING world_id, map_id, blueprint_revision, document_jsonb, "
-            "content_hash, semantic_interface_hash, status, findings_jsonb, created_at",
-            (
-                context.workspace_id,
-                world_id,
-                document.map_id,
-                next_revision,
-                _json(payload),
-                content_hash,
-                semantic_hash,
-                "invalid" if findings else "ready",
-                _json(findings),
-            ),
-        ).fetchone()
         work.commit()
-    return {"ok": True, "map_blueprint": _row(row)}
+    return {"ok": True, "map_blueprint": row}
 
 
 def list_map_blueprints(

@@ -109,6 +109,38 @@ export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Image regeneration failed.'),
   });
 
+  const regenerateAllImages = useMutation({
+    mutationFn: () => rpgWorldImageClient.generate(worldId, {
+      target_ids: targets.map((target) => target.target_id),
+      prompts: Object.fromEntries(targets.map((target) => [
+        target.target_id,
+        prompts[target.target_id] ?? target.suggested_prompt,
+      ])),
+      provider_id: providerId,
+      width,
+      height,
+      style,
+      no_cache: true,
+    }),
+    onSuccess: async (result) => {
+      setFeedback(`Queued fresh generations for ${result.jobs.length} image${result.jobs.length === 1 ? '' : 's'}.`);
+      await refresh();
+    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Images could not be regenerated.'),
+  });
+
+  const regeneratePrompts = useMutation({
+    mutationFn: (targetIds: string[]) => rpgWorldImageClient.regeneratePrompts(worldId, { target_ids: targetIds }),
+    onSuccess: async (_result, targetIds) => {
+      setPrompts((current) => Object.fromEntries(
+        Object.entries(current).filter(([targetId]) => !targetIds.includes(targetId)),
+      ));
+      setFeedback(`Regenerated ${targetIds.length} image prompt${targetIds.length === 1 ? '' : 's'}.`);
+      await refresh();
+    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Image prompts could not be regenerated.'),
+  });
+
   const toggleTarget = (targetId: string, checked: boolean) => {
     setSelected((current) => (
       checked
@@ -124,7 +156,10 @@ export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
         <span>{targets.length} target{targets.length === 1 ? '' : 's'}</span>
       </div>
       <div className="rpg-world-images-toolbar">
+        <button className="rpg-secondary-button" type="button" disabled={!targets.length || regenerateAllImages.isPending} onClick={() => regenerateAllImages.mutate()}>{regenerateAllImages.isPending ? 'Queuing fresh images...' : 'Regenerate All Images'}</button>
         <button type="button" disabled={!selected.length || generate.isPending} onClick={() => generate.mutate()}>{generate.isPending ? 'Queuing…' : `Generate Selected (${selected.length})`}</button>
+        <button className="rpg-secondary-button" type="button" disabled={!selected.length || regeneratePrompts.isPending} onClick={() => regeneratePrompts.mutate(selected)}>{regeneratePrompts.isPending ? 'Regenerating promptsâ€¦' : `Regenerate Selected Prompts (${selected.length})`}</button>
+        <button className="rpg-secondary-button" type="button" disabled={!targets.length || regeneratePrompts.isPending} onClick={() => regeneratePrompts.mutate(targets.map((target) => target.target_id))}>Regenerate All Prompts</button>
         <button className="rpg-secondary-button" type="button" onClick={() => setSelected(targets.filter((target) => ['missing', 'stale', 'failed'].includes(target.status)).map((target) => target.target_id))}>Select Missing &amp; Stale</button>
         <button className="rpg-secondary-button" type="button" disabled={!selected.length} onClick={() => setSelected([])}>Clear Selection</button>
       </div>
@@ -156,7 +191,10 @@ export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
                 <h3>{String(target.metadata.entity_name ?? target.target_id)}</h3>
                 <p>{label(target.target_type)} · {label(target.role)}</p>
                 <div className="rpg-chip-row"><span>{label(target.status)}</span><span>{label(target.review_state)}</span>{target.active_asset_id ? <span>Active</span> : null}</div>
-                <label className="rpg-world-image-prompt"><span>Prompt</span><textarea aria-label={`Prompt for ${String(target.metadata.entity_name ?? target.target_id)}`} rows={4} value={prompts[target.target_id] ?? target.suggested_prompt} onChange={(event) => setPrompts((current) => ({ ...current, [target.target_id]: event.currentTarget.value }))} /></label>
+                <label className="rpg-world-image-prompt"><span>Prompt</span><textarea aria-label={`Prompt for ${String(target.metadata.entity_name ?? target.target_id)}`} rows={4} value={prompts[target.target_id] ?? target.suggested_prompt} onChange={(event) => {
+                  const prompt = event.currentTarget.value;
+                  setPrompts((current) => ({ ...current, [target.target_id]: prompt }));
+                }} /></label>
                 <div className="rpg-world-image-actions">
                   <button className="rpg-secondary-button" type="button" disabled={regenerate.isPending} onClick={() => regenerate.mutate(target)}>Regenerate</button>
                   <button type="button" disabled={!generatedAsset || review.isPending} onClick={() => review.mutate({ targetId: target.target_id, reviewState: 'approved', assetId: generatedAsset })}>Approve latest</button>

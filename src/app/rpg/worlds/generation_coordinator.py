@@ -1,10 +1,13 @@
-"""Durable world-owned topic generation using the shared generic job system."""
+"""Durable single-pass World Forge topic generation and review orchestration."""
 from __future__ import annotations
 
+import logging
 import threading
 import uuid
+from collections import Counter
 from typing import Any, Mapping, Sequence
 
+from app.persistence.database import DatabaseUnavailableError
 from app.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
@@ -13,7 +16,17 @@ from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
     WorldForgeTopicGenerator,
 )
+from app.rpg.session.genesis.world_forge_review import (
+    failure_report,
+    result_status,
+    review_report,
+)
 
+from .generation_candidate_spool import (
+    delete_candidate_spool,
+    read_candidate_spool,
+    write_candidate_spool,
+)
 from .generation_jobs import (
     WORLD_TOPIC_JOB_TYPE,
     WorldTopicGenerationSettings,
@@ -29,6 +42,7 @@ _TERMINAL_JOB_STATUSES = {"completed", "failed", "canceled", "stale"}
 _ACTIVE_JOB_STATUSES = {"queued", "leased", "running", "waiting", "retrying"}
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 _reconcile_lock = threading.Lock()
+_LOGGER = logging.getLogger(__name__)
 
 
 def _database(value: Any | None) -> Any:
@@ -76,13 +90,13 @@ def _settings_from_payload(value: Mapping[str, Any]) -> WorldTopicGenerationSett
         model=str(value.get("model") or "configured"),
         seed=int(value.get("seed") or 0),
         topic_contract_version=str(
-            value.get("topic_contract_version") or "rpg_world_topic_job_v1"
+            value.get("topic_contract_version") or "rpg_world_topic_job_v2"
         ),
         output_schema_version=str(
-            value.get("output_schema_version") or "rpg_world_topic_output_v1"
+            value.get("output_schema_version") or "rpg_world_topic_output_v2"
         ),
         compiler_version=str(value.get("compiler_version") or "world-compiler-v1"),
-        max_attempts=int(value.get("max_attempts") or 3),
+        max_attempts=2,
         priority=int(value.get("priority") or 10),
     )
 
@@ -100,6 +114,28 @@ def _protected(row: Mapping[str, Any]) -> bool:
     )
 
 
+def _available_result_row(result: Mapping[str, Any]) -> dict[str, Any] | None:
+    status = str(result.get("status") or "")
+    candidate = result.get("candidate")
+    if status not in {"accepted", "needs_review"} or not isinstance(candidate, Mapping):
+        return None
+    return {
+        "topic_id": str(result.get("topic_id") or ""),
+        "status": "ready",
+        "source": "ai",
+        "content": dict(candidate),
+        "content_hash": str(result.get("candidate_hash") or ""),
+        "input_hash": "",
+        "dependency_hashes": dict(result.get("dependency_hashes") or {}),
+        "dependency_trust": "quarantined" if status == "needs_review" else "accepted",
+        "provenance": {
+            **dict(dict(candidate).get("provenance") or {}),
+            "run_id": str(result.get("run_id") or ""),
+            "generation_result_status": status,
+        },
+    }
+
+
 def available_completed_topics(
     graph: CampaignTopicGraph,
     *,
@@ -109,33 +145,53 @@ def available_completed_topics(
     entity_manifest_hash: str,
     settings: WorldTopicGenerationSettings,
     forced_topic_ids: Sequence[str] = (),
+    current_run_id: str = "",
+    run_results: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[
     dict[str, Mapping[str, Any]],
     tuple[str, ...],
     tuple[str, ...],
 ]:
-    """Return dependency-usable rows, generated reuses, and protected rows."""
+    """Return same-run candidates plus reusable/protected approved authoring rows."""
 
     available: dict[str, Mapping[str, Any]] = {}
     reusable: list[str] = []
     protected: list[str] = []
     forced = set(forced_topic_ids)
+    results = dict(run_results or {})
     for node in graph.topological_order():
         if node.category in _NON_GENERATION_CATEGORIES:
             continue
+        if not set(node.dependencies).issubset(available):
+            continue
+
+        result_row = _available_result_row(results.get(node.topic_id) or {})
+        if result_row is not None:
+            available[node.topic_id] = result_row
+            continue
+
         row = rows.get(node.topic_id)
         if row is None or str(row.get("status") or "") != "ready":
             continue
-        if not set(node.dependencies).issubset(available):
-            continue
-        if node.topic_id in forced:
+        provenance = row.get("provenance")
+        provenance = provenance if isinstance(provenance, Mapping) else {}
+        if (
+            node.topic_id in forced
+            and str(provenance.get("run_id") or "") != current_run_id
+        ):
             continue
         if _protected(row):
-            available[node.topic_id] = row
+            available[node.topic_id] = {**dict(row), "dependency_trust": "accepted"}
             protected.append(node.topic_id)
             continue
         dependency_hashes = {
             dependency_id: str(available[dependency_id]["content_hash"])
+            for dependency_id in node.dependencies
+        }
+        dependency_trust = {
+            dependency_id: str(
+                available[dependency_id].get("dependency_trust") or "accepted"
+            )
             for dependency_id in node.dependencies
         }
         fingerprint, input_hash, directive_hash = topic_generation_fingerprint(
@@ -144,14 +200,13 @@ def available_completed_topics(
                 "generation_context": dict(generation_context),
                 "target_count": node.target_count,
                 "visibility": node.visibility,
+                "dependency_trust": dependency_trust,
             },
             dependency_hashes=dependency_hashes,
             directives=dict(topic_directives.get(node.topic_id) or {}),
             entity_manifest_hash=entity_manifest_hash,
             settings=settings,
         )
-        provenance = row.get("provenance")
-        provenance = provenance if isinstance(provenance, Mapping) else {}
         if str(provenance.get("generation_fingerprint") or "") != fingerprint:
             continue
         if str(row.get("input_hash") or "") != input_hash:
@@ -160,7 +215,7 @@ def available_completed_topics(
             continue
         if dict(row.get("dependency_hashes") or {}) != dependency_hashes:
             continue
-        available[node.topic_id] = row
+        available[node.topic_id] = {**dict(row), "dependency_trust": "accepted"}
         reusable.append(node.topic_id)
     return available, tuple(reusable), tuple(protected)
 
@@ -201,6 +256,7 @@ def start_world_generation(
     scope: Mapping[str, Any] | None = None,
     strategy: str = "reuse_unchanged",
     database: Any | None = None,
+    tenant_context: Any | None = None,
 ) -> dict[str, Any]:
     issues = graph.validate()
     if issues:
@@ -209,12 +265,9 @@ def start_world_generation(
     from app.persistence.identity_service import bootstrap_local_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = tenant_context or bootstrap_local_tenant(db)
     targets = generation_topic_ids(graph, target_topic_ids)
-    scope_payload = {
-        "topic_ids": list(targets),
-        **dict(scope or {}),
-    }
+    scope_payload = {"topic_ids": list(targets), **dict(scope or {})}
     scope_hash = canonical_hash(
         {
             "scope": scope_payload,
@@ -243,6 +296,7 @@ def start_world_generation(
         "strategy": strategy,
         "target_topic_ids": list(targets),
         "forced_topic_ids": sorted(set(forced_topic_ids)),
+        "content_generation_policy": "single_pass_manual_retry",
     }
     with unit_of_work(db) as work:
         if work.world_scenarios.get_world(context, world_id) is None:
@@ -258,7 +312,6 @@ def start_world_generation(
             plan={"job_ids": [], "topic_ids": list(targets)},
             progress=generation_progress(
                 graph,
-                completed_topic_ids=(),
                 active_topic_ids=(),
                 target_topic_ids=targets,
             ),
@@ -276,6 +329,188 @@ def reconcile_world_generation(
 
     with _reconcile_lock:
         return _reconcile_world_generation_unlocked(run_id, database=database)
+
+
+def _result_map(rows: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    return {str(row.get("topic_id") or ""): row for row in rows}
+
+
+def _record_reused_results(
+    work: Any,
+    context: Any,
+    *,
+    run: Mapping[str, Any],
+    available: Mapping[str, Mapping[str, Any]],
+    reusable_ids: Sequence[str],
+    protected_ids: Sequence[str],
+    existing_results: Mapping[str, Mapping[str, Any]],
+) -> None:
+    for topic_id in (*reusable_ids, *protected_ids):
+        if topic_id in existing_results:
+            continue
+        row = available[topic_id]
+        content = dict(row.get("content") or {})
+        work.world_generation.put_topic_result(
+            context,
+            run_id=str(run["run_id"]),
+            world_id=str(run["world_id"]),
+            draft_revision=int(run["draft_revision"]),
+            topic_id=topic_id,
+            status="accepted",
+            candidate=content,
+            candidate_hash=str(row.get("content_hash") or canonical_hash(content)),
+            validation={
+                "schema_version": "rpg_world_generation_review_v1",
+                "status": "accepted",
+                "blocking": False,
+                "reason_codes": [],
+                "issues": [],
+                "summary": "Reused approved authoring topic.",
+            },
+            provider={
+                "source": "protected_authoring" if topic_id in protected_ids else "reused_authoring",
+            },
+            dependency_hashes=dict(row.get("dependency_hashes") or {}),
+            dependency_trust={
+                dependency_id: str(
+                    available[dependency_id].get("dependency_trust") or "accepted"
+                )
+                for dependency_id in dict(row.get("dependency_hashes") or {})
+                if dependency_id in available
+            },
+            job_id="",
+        )
+
+
+def _job_list(work: Any, context: Any, run_id: str) -> list[Mapping[str, Any]]:
+    return [
+        job
+        for job in work.jobs.list_jobs(context, limit=1000)
+        if job["job_type"] == WORLD_TOPIC_JOB_TYPE
+        and str(job["metadata"].get("run_id") or "") == run_id
+    ]
+
+
+def _terminal_job_failure_result(
+    work: Any,
+    context: Any,
+    *,
+    run: Mapping[str, Any],
+    job: Mapping[str, Any],
+) -> None:
+    topic_id = str(dict(job.get("metadata") or {}).get("topic_id") or "")
+    if not topic_id or work.world_generation.get_topic_result(
+        context, run_id=str(run["run_id"]), topic_id=topic_id
+    ) is not None:
+        return
+    error = dict(job.get("error") or {})
+    work.world_generation.put_topic_result(
+        context,
+        run_id=str(run["run_id"]),
+        world_id=str(run["world_id"]),
+        draft_revision=int(run["draft_revision"]),
+        topic_id=topic_id,
+        status="failed",
+        candidate=None,
+        candidate_hash="",
+        validation={
+            "schema_version": "rpg_world_generation_review_v1",
+            "status": "failed",
+            "blocking": True,
+            "error_type": str(error.get("type") or "WorldTopicJobFailure"),
+            "reason_codes": [str(error.get("code") or "world_topic_job_failed")],
+            "issues": [
+                {
+                    "code": str(error.get("code") or "world_topic_job_failed"),
+                    "topic_id": topic_id,
+                    "entity_id": "",
+                    "field_id": "",
+                    "message": str(error.get("message") or error),
+                }
+            ],
+            "summary": str(error.get("message") or error),
+        },
+        provider={},
+        dependency_hashes=dict(dict(job.get("input_payload") or {}).get("dependency_hashes") or {}),
+        dependency_trust=dict(dict(job.get("input_payload") or {}).get("dependency_trust") or {}),
+        job_id=str(job.get("id") or ""),
+    )
+
+
+def _issue_counts(results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    by_code: Counter[str] = Counter()
+    by_field: Counter[str] = Counter()
+    by_topic: Counter[str] = Counter()
+    for result in results:
+        validation = dict(result.get("validation") or {})
+        for issue in validation.get("issues") or ():
+            if not isinstance(issue, Mapping):
+                continue
+            code = str(issue.get("code") or "unknown")
+            field = str(issue.get("field_id") or "")
+            topic = str(issue.get("topic_id") or result.get("topic_id") or "")
+            by_code[code] += 1
+            if field:
+                by_field[field] += 1
+            if topic:
+                by_topic[topic] += 1
+    return {
+        "by_code": dict(sorted(by_code.items())),
+        "by_field": dict(sorted(by_field.items())),
+        "by_topic": dict(sorted(by_topic.items())),
+    }
+
+
+def _mark_blocked_results(
+    work: Any,
+    context: Any,
+    *,
+    run: Mapping[str, Any],
+    graph: CampaignTopicGraph,
+    targets: Sequence[str],
+    available: Mapping[str, Mapping[str, Any]],
+    results: Mapping[str, Mapping[str, Any]],
+) -> None:
+    node_map = graph.node_map()
+    for topic_id in targets:
+        if topic_id in results or topic_id in available:
+            continue
+        node = node_map[topic_id]
+        missing = tuple(
+            dependency for dependency in node.dependencies if dependency not in available
+        )
+        work.world_generation.put_topic_result(
+            context,
+            run_id=str(run["run_id"]),
+            world_id=str(run["world_id"]),
+            draft_revision=int(run["draft_revision"]),
+            topic_id=topic_id,
+            status="blocked",
+            candidate=None,
+            candidate_hash="",
+            validation={
+                "schema_version": "rpg_world_generation_review_v1",
+                "status": "blocked",
+                "blocking": True,
+                "error_type": "DependencyUnavailable",
+                "reason_codes": ["dependency_no_candidate"],
+                "issues": [
+                    {
+                        "code": "dependency_no_candidate",
+                        "topic_id": topic_id,
+                        "entity_id": "",
+                        "field_id": "dependencies",
+                        "message": "No candidate was available for: " + ",".join(missing),
+                        "supplied_value": list(missing),
+                    }
+                ],
+                "summary": "Topic could not be scheduled because a dependency has no candidate.",
+            },
+            provider={},
+            dependency_hashes={},
+            dependency_trust={dependency: "missing" for dependency in missing},
+            job_id="",
+        )
 
 
 def _reconcile_world_generation_unlocked(
@@ -309,7 +544,9 @@ def _reconcile_world_generation_unlocked(
             world_id=run["world_id"],
             draft_revision=run["draft_revision"],
         )
-        topic_map = {row["topic_id"]: row for row in topic_rows}
+        topic_map = {str(row["topic_id"]): row for row in topic_rows}
+        result_rows = work.world_generation.list_topic_results(context, run_id=run_id)
+        results = _result_map(result_rows)
         available, reusable_ids, protected_ids = available_completed_topics(
             graph,
             rows=topic_map,
@@ -318,14 +555,39 @@ def _reconcile_world_generation_unlocked(
             entity_manifest_hash=entity_manifest_hash,
             settings=settings,
             forced_topic_ids=forced,
+            current_run_id=run_id,
+            run_results=results,
         )
-        jobs = [
-            job
-            for job in work.jobs.list_jobs(context, limit=500)
-            if job["job_type"] == WORLD_TOPIC_JOB_TYPE
-            and str(job["metadata"].get("run_id") or "") == run_id
-        ]
-        existing_job_ids = [job["id"] for job in jobs]
+        _record_reused_results(
+            work,
+            context,
+            run=run,
+            available=available,
+            reusable_ids=reusable_ids,
+            protected_ids=protected_ids,
+            existing_results=results,
+        )
+        result_rows = work.world_generation.list_topic_results(context, run_id=run_id)
+        results = _result_map(result_rows)
+        available, reusable_ids, protected_ids = available_completed_topics(
+            graph,
+            rows=topic_map,
+            generation_context=generation_context,
+            topic_directives=topic_directives,
+            entity_manifest_hash=entity_manifest_hash,
+            settings=settings,
+            forced_topic_ids=forced,
+            current_run_id=run_id,
+            run_results=results,
+        )
+
+        jobs = _job_list(work, context, run_id)
+        for job in jobs:
+            if str(job.get("status") or "") == "failed":
+                _terminal_job_failure_result(work, context, run=run, job=job)
+        result_rows = work.world_generation.list_topic_results(context, run_id=run_id)
+        results = _result_map(result_rows)
+        existing_job_ids = [str(job["id"]) for job in jobs]
         plans = plan_ready_topic_jobs(
             graph,
             run_id=run_id,
@@ -342,42 +604,57 @@ def _reconcile_world_generation_unlocked(
         for plan in plans:
             work.jobs.create_job(context, dict(plan.job_payload))
             existing_job_ids.append(plan.job_id)
-        if plans:
-            jobs.extend(
-                work.jobs.get_job(context, plan.job_id)
-                for plan in plans
-                if work.jobs.get_job(context, plan.job_id) is not None
-            )
+        jobs = _job_list(work, context, run_id)
         active_topics = [
-            str(job["metadata"].get("topic_id") or "")
+            str(dict(job.get("metadata") or {}).get("topic_id") or "")
             for job in jobs
-            if job["status"] in _ACTIVE_JOB_STATUSES
+            if str(job.get("status") or "") in _ACTIVE_JOB_STATUSES
         ]
-        failed_topics = [
-            str(job["metadata"].get("topic_id") or "")
-            for job in jobs
-            if job["status"] == "failed"
-        ]
+
+        if not plans and not active_topics:
+            _mark_blocked_results(
+                work,
+                context,
+                run=run,
+                graph=graph,
+                targets=targets,
+                available=available,
+                results=results,
+            )
+            result_rows = work.world_generation.list_topic_results(context, run_id=run_id)
+            results = _result_map(result_rows)
+
+        accepted = [topic_id for topic_id, row in results.items() if row["status"] == "accepted"]
+        flagged = [topic_id for topic_id, row in results.items() if row["status"] == "needs_review"]
+        failed = [topic_id for topic_id, row in results.items() if row["status"] == "failed"]
+        blocked = [topic_id for topic_id, row in results.items() if row["status"] == "blocked"]
         progress = generation_progress(
             graph,
-            completed_topic_ids=tuple(available),
+            accepted_topic_ids=accepted,
+            flagged_topic_ids=flagged,
+            failed_topic_ids=failed,
+            blocked_topic_ids=blocked,
             active_topic_ids=active_topics,
-            failed_topic_ids=failed_topics,
+            issue_counts=_issue_counts(result_rows),
             target_topic_ids=targets,
         )
-        if progress["failed_topic_ids"]:
-            status = "failed"
-        elif progress["generation_complete"]:
-            status = "review"
-        else:
-            status = "running"
+        status = "review" if progress["generation_complete"] else "running"
         plan_payload = {
             "job_ids": sorted(set(existing_job_ids)),
             "new_job_ids": [plan.job_id for plan in plans],
+            "recovery_job_ids": [],
             "available_topic_ids": sorted(available),
             "reusable_topic_ids": sorted(reusable_ids),
             "protected_topic_ids": sorted(protected_ids),
             "topic_ids": list(targets),
+            "topic_results": {
+                topic_id: {
+                    "status": str(row.get("status") or ""),
+                    "candidate_hash": str(row.get("candidate_hash") or ""),
+                    "reason_codes": list(dict(row.get("validation") or {}).get("reason_codes") or ()),
+                }
+                for topic_id, row in sorted(results.items())
+            },
         }
         updated = work.world_generation.update(
             context,
@@ -385,17 +662,83 @@ def _reconcile_world_generation_unlocked(
             status=status,
             plan=plan_payload,
             progress=progress,
-            error=(
-                {
-                    "code": "world_topic_job_failed",
-                    "topic_ids": progress["failed_topic_ids"],
-                }
-                if progress["failed_topic_ids"]
-                else {}
-            ),
+            error={},
         )
         work.commit()
     return updated
+
+
+def _provider_metadata(topic: GeneratedTopic) -> dict[str, Any]:
+    provenance = dict(topic.provenance)
+    return {
+        "provider": provenance.get("provider"),
+        "model": provenance.get("model"),
+        "prompt_contract": provenance.get("provider_contract"),
+        "structured_contract": provenance.get("structured_contract"),
+        "schema_hash": provenance.get("schema_hash"),
+        "response_format": provenance.get("response_format"),
+        "finish_reason": provenance.get("finish_reason"),
+        "provider_calls": provenance.get("attempt_count"),
+        "latency_ms": provenance.get("latency_ms"),
+        "usage": dict(provenance.get("usage") or {}),
+        "token_estimate": dict(provenance.get("token_estimate") or {}),
+    }
+
+
+def _terminally_fail_job(
+    work: Any,
+    context: Any,
+    *,
+    job: Mapping[str, Any],
+    worker_id: str,
+    lease_token: str,
+    error: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    work.connection.execute(
+        "UPDATE omnix_jobs SET max_attempts = attempt_count "
+        "WHERE workspace_id = %s AND id = %s",
+        (context.workspace_id, str(job["id"])),
+    )
+    return work.jobs.fail(
+        context,
+        job_id=str(job["id"]),
+        worker_id=worker_id,
+        lease_token=lease_token,
+        error=dict(error),
+        retry_delay_seconds=0,
+    )
+
+
+def _load_dependency_candidate(
+    work: Any,
+    context: Any,
+    *,
+    run_id: str,
+    world_id: str,
+    dependency_id: str,
+    expected_hash: str,
+) -> GeneratedTopic:
+    result = work.world_generation.get_topic_result(
+        context,
+        run_id=run_id,
+        topic_id=dependency_id,
+    )
+    if result is not None and result.get("candidate") is not None:
+        if str(result.get("candidate_hash") or "") != expected_hash:
+            raise RuntimeError(
+                f"world_topic_dependency_mismatch:{dependency_id}:result_hash"
+            )
+        return GeneratedTopic.from_dict(dict(result["candidate"]))
+    row = work.world_generation.get_topic(
+        context,
+        world_id=world_id,
+        topic_id=dependency_id,
+    )
+    if row is None or str(row.get("content_hash") or "") != expected_hash:
+        raise RuntimeError(
+            f"world_topic_dependency_mismatch:{dependency_id}:authoring_hash"
+        )
+    return GeneratedTopic.from_dict(dict(row["content"]))
 
 
 def execute_claimed_world_topic_job(
@@ -414,6 +757,7 @@ def execute_claimed_world_topic_job(
     topic_payload = dict(payload.get("topic") or {})
     topic_id = str(topic_payload.get("topic_id") or "")
     lease_token = str(job.get("lease_token") or "")
+    job_id = str(job.get("id") or "")
     from app.persistence.identity_service import bootstrap_local_tenant
     from app.persistence.unit_of_work import unit_of_work
 
@@ -424,132 +768,264 @@ def execute_claimed_world_topic_job(
             if run is None:
                 raise KeyError(f"world_generation_run_not_found:{run_id}")
             dependency_hashes = dict(payload.get("dependency_hashes") or {})
-            dependency_topics: dict[str, GeneratedTopic] = {}
-            for dependency_id, expected_hash in sorted(dependency_hashes.items()):
-                row = work.world_generation.get_topic(
+            dependency_topics = {
+                dependency_id: _load_dependency_candidate(
+                    work,
                     context,
+                    run_id=run_id,
                     world_id=world_id,
-                    topic_id=dependency_id,
+                    dependency_id=dependency_id,
+                    expected_hash=str(expected_hash),
                 )
-                if row is None or row["content_hash"] != expected_hash:
-                    raise RuntimeError(
-                        f"world_topic_dependency_mismatch:{topic_id}:{dependency_id}"
-                    )
-                dependency_topics[dependency_id] = GeneratedTopic.from_dict(
-                    row["content"]
-                )
+                for dependency_id, expected_hash in sorted(dependency_hashes.items())
+            }
             work.rollback()
+
         node = CampaignTopicNode(
             topic_id=topic_id,
             title=str(topic_payload.get("title") or topic_id),
             category=str(topic_payload.get("category") or "lore"),
-            dependencies=tuple(
-                str(item) for item in topic_payload.get("dependencies") or ()
-            ),
+            dependencies=tuple(str(item) for item in topic_payload.get("dependencies") or ()),
             generator_role=str(topic_payload.get("generator_role") or "world_forge"),
-            required_before_launch=bool(
-                topic_payload.get("required_before_launch", True)
-            ),
+            required_before_launch=bool(topic_payload.get("required_before_launch", True)),
             visibility=str(topic_payload.get("visibility") or "game_master_canon"),
             target_count=int(topic_payload.get("target_count") or 1),
             metadata=dict(topic_payload.get("metadata") or {}),
         )
         selected_generator = generator
         if selected_generator is None:
-            from app.rpg_world_forge_provider import (
-                build_production_world_forge_generator,
+            from .generation_routing import build_world_forge_generator_from_settings
+
+            selected_generator = build_world_forge_generator_from_settings(
+                dict(payload.get("settings") or {})
             )
 
-            selected_generator = build_production_world_forge_generator()
-        from app.rpg.llm_priority import background_rpg_llm_priority
+        from app.rpg_world_forge_provider import attach_world_forge_progress_callback
 
-        with background_rpg_llm_priority():
-            generated = selected_generator.generate(
-                node,
-                seed=int(dict(payload.get("settings") or {}).get("seed") or 0),
-                campaign_context={
-                    **dict(payload.get("generation_context") or {}),
+        def checkpoint_batch_progress(checkpoint: Mapping[str, Any]) -> None:
+            token_usage = dict(checkpoint.get("token_usage") or {})
+            batch_current = max(0, int(checkpoint.get("batch_current") or 0))
+            batch_total = max(1, int(checkpoint.get("batch_total") or 1))
+            try:
+                with unit_of_work(db) as checkpoint_work:
+                    checkpoint_work.jobs.update_progress(
+                        context,
+                        job_id=job_id,
+                        worker_id=worker_id,
+                        lease_token=lease_token,
+                        progress={
+                            "current": batch_current,
+                            "total": batch_total,
+                            "message": f"world entity batch {batch_current}/{batch_total} generated",
+                            "topic_id": topic_id,
+                            "token_usage": token_usage,
+                        },
+                    )
+                    checkpoint_work.commit()
+            except Exception:
+                _LOGGER.warning(
+                    "world_generation_progress_checkpoint_failed",
+                    exc_info=True,
+                    extra={"run_id": run_id, "topic_id": topic_id, "job_id": job_id},
+                )
+
+        spooled = read_candidate_spool(job_id)
+        if spooled is not None:
+            if (
+                str(spooled.get("run_id") or "") != run_id
+                or str(spooled.get("topic_id") or "") != topic_id
+            ):
+                raise RuntimeError(f"world_generation_spool_identity_mismatch:{job_id}")
+            generated = GeneratedTopic.from_dict(dict(spooled.get("candidate") or {}))
+            content = generated.as_dict()
+            content_hash = str(spooled.get("candidate_hash") or canonical_hash(content))
+            status = str(spooled.get("status") or result_status(generated))
+            validation = dict(spooled.get("validation") or review_report(generated))
+            provider = dict(spooled.get("provider") or _provider_metadata(generated))
+        else:
+            detach = attach_world_forge_progress_callback(
+                selected_generator,
+                checkpoint_batch_progress,
+            )
+            from app.rpg.llm_priority import background_rpg_llm_priority
+
+            try:
+                with background_rpg_llm_priority():
+                    generated = selected_generator.generate(
+                        node,
+                        seed=int(dict(payload.get("settings") or {}).get("seed") or 0),
+                        campaign_context={
+                            **dict(payload.get("generation_context") or {}),
+                            "world_id": world_id,
+                            "draft_revision": int(payload.get("draft_revision") or 1),
+                            "topic_directives": dict(payload.get("directives") or {}),
+                            "dependency_trust": dict(payload.get("dependency_trust") or {}),
+                        },
+                        dependency_topics=dependency_topics,
+                    )
+            finally:
+                detach()
+            if generated.topic_id != topic_id:
+                raise RuntimeError(
+                    f"world_topic_generator_returned:{generated.topic_id}:expected:{topic_id}"
+                )
+            content = generated.as_dict()
+            content_hash = canonical_hash(content)
+            status = result_status(generated)
+            validation = review_report(generated)
+            if not validation:
+                validation = {
+                    "schema_version": "rpg_world_generation_review_v1",
+                    "status": "accepted",
+                    "blocking": False,
+                    "error_type": "",
+                    "reason_codes": [],
+                    "issues": [],
+                    "summary": "Candidate passed blocking validation.",
+                }
+            provider = _provider_metadata(generated)
+            write_candidate_spool(
+                job_id,
+                {
+                    "schema_version": "rpg_world_generation_candidate_spool_v1",
+                    "run_id": run_id,
                     "world_id": world_id,
                     "draft_revision": int(payload.get("draft_revision") or 1),
-                    "topic_directives": dict(payload.get("directives") or {}),
+                    "topic_id": topic_id,
+                    "candidate": content,
+                    "candidate_hash": content_hash,
+                    "status": status,
+                    "validation": validation,
+                    "provider": provider,
+                    "dependency_hashes": dict(payload.get("dependency_hashes") or {}),
+                    "dependency_trust": dict(payload.get("dependency_trust") or {}),
+                    "job_id": job_id,
                 },
-                dependency_topics=dependency_topics,
             )
-        if generated.topic_id != topic_id:
-            raise RuntimeError(
-                f"world_topic_generator_returned:{generated.topic_id}:expected:{topic_id}"
-            )
-        content = generated.as_dict()
-        content_hash = canonical_hash(content)
+
         provenance = {
             **dict(generated.provenance),
             "generation_fingerprint": str(payload.get("fingerprint") or ""),
             "directive_hash": str(payload.get("directive_hash") or ""),
             "entity_manifest_hash": str(payload.get("entity_manifest_hash") or ""),
-            "job_id": str(job.get("id") or ""),
+            "job_id": job_id,
             "run_id": run_id,
+            "generation_result_status": status,
         }
+        content = {**content, "provenance": provenance}
+        content_hash = canonical_hash(content)
         with unit_of_work(db) as work:
-            work.world_scenarios.put_topic(
+            stored_result = work.world_generation.put_topic_result(
                 context,
+                run_id=run_id,
                 world_id=world_id,
-                topic_id=topic_id,
                 draft_revision=int(payload.get("draft_revision") or 1),
-                source="ai",
-                status="ready",
-                content=content,
-                directives=dict(payload.get("directives") or {}),
+                topic_id=topic_id,
+                status=status,
+                candidate=content,
+                candidate_hash=content_hash,
+                validation=validation,
+                provider=provider,
                 dependency_hashes=dict(payload.get("dependency_hashes") or {}),
-                input_hash=str(payload.get("input_hash") or ""),
-                content_hash=content_hash,
-                provenance=provenance,
+                dependency_trust=dict(payload.get("dependency_trust") or {}),
+                job_id=job_id,
             )
+            if status == "accepted":
+                work.world_scenarios.put_topic(
+                    context,
+                    world_id=world_id,
+                    topic_id=topic_id,
+                    draft_revision=int(payload.get("draft_revision") or 1),
+                    source="ai",
+                    status="ready",
+                    content=content,
+                    directives=dict(payload.get("directives") or {}),
+                    dependency_hashes=dict(payload.get("dependency_hashes") or {}),
+                    input_hash=str(payload.get("input_hash") or ""),
+                    content_hash=content_hash,
+                    provenance=provenance,
+                )
             completed = work.jobs.complete(
                 context,
-                job_id=str(job["id"]),
+                job_id=job_id,
                 worker_id=worker_id,
                 lease_token=lease_token,
                 output_refs=[
                     {
+                        "run_id": run_id,
                         "world_id": world_id,
                         "draft_revision": int(payload.get("draft_revision") or 1),
                         "topic_id": topic_id,
-                        "content_hash": content_hash,
+                        "candidate_hash": content_hash,
+                        "result_status": status,
                     }
                 ],
                 progress={
                     "current": 1,
                     "total": 1,
-                    "message": "world topic completed",
+                    "message": (
+                        "world topic accepted"
+                        if status == "accepted"
+                        else "world topic retained for review"
+                    ),
                 },
             )
             work.commit()
+        delete_candidate_spool(job_id)
         run = reconcile_world_generation(run_id, database=db)
         return {
             "ok": True,
             "status": "completed",
+            "result_status": status,
             "job": completed,
+            "topic_result": stored_result,
             "topic_id": topic_id,
             "content_hash": content_hash,
             "run": run,
         }
+    except DatabaseUnavailableError:
+        # A second lease may resume this exact spool, but no provider call is repeated.
+        raise
     except Exception as exc:
-        with unit_of_work(db) as work:
-            failed = work.jobs.fail(
-                context,
-                job_id=str(job["id"]),
-                worker_id=worker_id,
-                lease_token=lease_token,
-                error={"code": "world_topic_generation_failed", "message": str(exc)},
-                retry_delay_seconds=1,
-            )
-            work.commit()
-        if failed["status"] == "failed":
+        try:
+            with unit_of_work(db) as work:
+                report = failure_report(topic_id, exc)
+                diagnostics = dict(getattr(exc, "diagnostics", {}) or {})
+                work.world_generation.put_topic_result(
+                    context,
+                    run_id=run_id,
+                    world_id=world_id,
+                    draft_revision=int(payload.get("draft_revision") or 1),
+                    topic_id=topic_id,
+                    status="failed",
+                    candidate=None,
+                    candidate_hash="",
+                    validation=report,
+                    provider=diagnostics,
+                    dependency_hashes=dict(payload.get("dependency_hashes") or {}),
+                    dependency_trust=dict(payload.get("dependency_trust") or {}),
+                    job_id=job_id,
+                )
+                failed_job = _terminally_fail_job(
+                    work,
+                    context,
+                    job=job,
+                    worker_id=worker_id,
+                    lease_token=lease_token,
+                    error={
+                        "code": "world_topic_generation_failed",
+                        "type": type(exc).__name__,
+                        "message": str(exc),
+                    },
+                )
+                work.commit()
             reconcile_world_generation(run_id, database=db)
+        except DatabaseUnavailableError:
+            raise
         return {
             "ok": False,
-            "status": failed["status"],
-            "job": failed,
+            "status": "failed",
+            "job": failed_job,
             "topic_id": topic_id,
             "error": "world_topic_generation_failed",
             "detail": str(exc),

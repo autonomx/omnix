@@ -75,6 +75,16 @@ export const rpgWorldImageClient = {
     );
   },
 
+  regeneratePrompts(
+    worldId: string,
+    body: Record<string, unknown>,
+  ): Promise<{ ok: boolean; world_id: string; targets: RpgWorldImageTarget[] }> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/image-prompts/regenerate`,
+      json('POST', body),
+    );
+  },
+
   update(
     worldId: string,
     targetId: string,

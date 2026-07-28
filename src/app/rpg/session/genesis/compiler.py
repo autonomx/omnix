@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from .contract import CampaignGenesisContract, genesis_contract_hash
-from .world_forge_contract import build_campaign_topic_graph, world_forge_depth_profile
+from .world_forge_contract import world_forge_depth_profile
+from .world_forge_profile_generation import resolve_or_generate_genre_profile
+from .world_forge_profile_graph import build_profile_topic_graph
 
-GENESIS_COMPILER_VERSION = "rpg_genesis_compiler_v2"
+GENESIS_COMPILER_VERSION = "rpg_genesis_compiler_v3"
 _WORLD_PROFILE_TRAITS = {
     "harsh_frontier": ["scarce_resources", "remote_start", "active_factions"],
     "quiet_start": ["low_pressure", "local_rumors"],
@@ -122,22 +124,38 @@ def _decision_biases(contract: CampaignGenesisContract) -> dict[str, float]:
 
 
 def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any]:
-    """Compile declarative genesis into deterministic pre-bootstrap state."""
+    """Compile declarative genesis and pin the exact resolved lore ontology."""
 
     intents = _gear_intents(contract)
-    profile = world_forge_depth_profile(contract.world_forge.depth)
-    graph = build_campaign_topic_graph(
+    depth_profile = world_forge_depth_profile(contract.world_forge.depth)
+    profile_resolution = resolve_or_generate_genre_profile(
+        genre=contract.genre or contract.campaign_template,
+        description=" ".join(contract.world_forge.custom_directives),
+        campaign_mode=(
+            "persistent_living_world"
+            if contract.world_options.world_activity == "living_world"
+            else "bounded_campaign"
+        ),
+    )
+    graph = build_profile_topic_graph(
+        profile_resolution.profile,
         campaign_template=contract.campaign_template,
-        genre=contract.genre,
-        tone=contract.tone,
         depth=contract.world_forge.depth,
+        tone=contract.tone,
         starting_location=contract.world_options.starting_location,
         background_expansion=contract.world_forge.background_expansion,
+        runtime_capabilities={
+            "living_world": contract.world_options.world_activity == "living_world",
+            "economy_pressure": contract.world_options.economy_pressure == "strict",
+            "high_consequence_combat": contract.world_options.combat_lethality == "deadly",
+        },
     )
-    max_parallel_jobs = contract.world_forge.max_parallel_jobs or profile.max_parallel_jobs
+    max_parallel_jobs = (
+        contract.world_forge.max_parallel_jobs or depth_profile.max_parallel_jobs
+    )
     max_parallel_jobs = max(
         1,
-        min(int(max_parallel_jobs), profile.max_parallel_jobs, 4),
+        min(int(max_parallel_jobs), depth_profile.max_parallel_jobs, 4),
     )
     return {
         "compiler_version": GENESIS_COMPILER_VERSION,
@@ -156,7 +174,9 @@ def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any
         "compiled_decision_biases": _decision_biases(contract),
         "compiled_gear_intents": intents,
         "compiled_starter_loadout": _starter_loadout(intents),
-        "compiled_story_state": contract.story_options.model_dump(mode="json", exclude_none=True),
+        "compiled_story_state": contract.story_options.model_dump(
+            mode="json", exclude_none=True
+        ),
         "compiled_feature_flags": contract.system_options.model_dump(mode="json"),
         "compiled_world_forge": {
             "enabled": contract.world_forge.enabled,
@@ -165,13 +185,16 @@ def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any
             "require_opening_dossiers": contract.world_forge.require_opening_dossiers,
             "background_expansion": contract.world_forge.background_expansion,
             "custom_directives": list(contract.world_forge.custom_directives),
-            "depth_profile": profile.as_dict(),
+            "depth_profile": depth_profile.as_dict(),
             "max_parallel_jobs": max_parallel_jobs,
+            "genre_profile_resolution": profile_resolution.as_dict(),
+            "resolved_profile_hash": profile_resolution.profile.content_hash,
             "topic_graph": graph.as_dict(),
         },
         "compiled_provenance": {
             "contract_version": contract.contract_version,
             "compiler_version": GENESIS_COMPILER_VERSION,
             "contract_hash": genesis_contract_hash(contract),
+            "resolved_profile_hash": profile_resolution.profile.content_hash,
         },
     }
