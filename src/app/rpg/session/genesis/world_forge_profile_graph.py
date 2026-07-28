@@ -11,6 +11,7 @@ from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_lore_quality import lore_quality_contract
 from .world_forge_planning import planning_contract_metadata
 from .world_forge_profiles import DomainDefinition, FieldDefinition, GenreProfile
+from .world_forge_spatial_routes import minimum_route_count
 
 _PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
 _MISSION_DOMAIN_IDS = {
@@ -21,6 +22,7 @@ _MISSION_DOMAIN_IDS = {
 }
 _ACTOR_DOMAIN_IDS = {"actors"}
 _NETWORK_DOMAIN_IDS = {"networks"}
+_SPATIAL_DOMAIN_IDS = {"places"}
 _NETWORK_CAPABILITY = "digital_spaces"
 _MISSION_FIELDS = (
     FieldDefinition(
@@ -83,7 +85,10 @@ _NETWORK_FIELDS = (
         required=True,
         allowed_target_domains=("places",),
         semantic_role="network_coverage",
-        description="Canonical places reached by this network; never claim universal coverage in prose.",
+        description=(
+            "Canonical places reached by this network; never claim universal "
+            "coverage in prose."
+        ),
     ),
     FieldDefinition(
         field_id="network_constraint_signature",
@@ -91,9 +96,35 @@ _NETWORK_FIELDS = (
         required=True,
         semantic_role="network_constraint_signature",
         description=(
-            "Structured bounded network model with coverage_scope, access_model, latency_class, "
-            "monitoring_mode, blind_spot, traceability_limit, failure_mode, and "
-            "jurisdiction_model. Use concise categorical values, not prose."
+            "Structured bounded network model with coverage_scope, access_model, "
+            "latency_class, monitoring_mode, blind_spot, traceability_limit, "
+            "failure_mode, and jurisdiction_model. Use concise categorical values, "
+            "not prose."
+        ),
+    ),
+)
+_SPATIAL_FIELDS = (
+    FieldDefinition(
+        field_id="connected_place_ids",
+        value_type="entity_ref_list",
+        required=True,
+        allowed_target_domains=("places",),
+        semantic_role="travel_route",
+        description=(
+            "Canonical places directly reachable from this place. Do not include "
+            "the current place or invent unregistered endpoints."
+        ),
+    ),
+    FieldDefinition(
+        field_id="travel_route_signature",
+        value_type="structured_object",
+        required=True,
+        semantic_role="travel_route_signature",
+        description=(
+            "Structured route constraints with travel_time_band, access_mode, "
+            "route_blocker, failure_condition, capacity_class, and "
+            "information_delay. Portals are allowed only as explicit access modes "
+            "with non-zero time, blockers, and failure conditions."
         ),
     ),
 )
@@ -107,7 +138,13 @@ def _network_contract_enabled(
     domain: DomainDefinition,
     capability_flags: Mapping[str, bool],
 ) -> bool:
-    return bool(capability_flags.get(_NETWORK_CAPABILITY)) and domain.domain_id in _NETWORK_DOMAIN_IDS
+    return bool(capability_flags.get(_NETWORK_CAPABILITY)) and (
+        domain.domain_id in _NETWORK_DOMAIN_IDS
+    )
+
+
+def _spatial_contract_enabled(domain: DomainDefinition) -> bool:
+    return domain.domain_id in _SPATIAL_DOMAIN_IDS and domain.target_range.epic[1] > 1
 
 
 def _domain_fields(
@@ -129,6 +166,8 @@ def _domain_fields(
         additions = (*additions, *_ACTOR_FIELDS)
     if network_enabled:
         additions = (*additions, *_NETWORK_FIELDS)
+    if _spatial_contract_enabled(domain):
+        additions = (*additions, *_SPATIAL_FIELDS)
     fields.extend(field for field in additions if field.field_id not in existing)
     return tuple(fields)
 
@@ -136,6 +175,8 @@ def _domain_fields(
 def _field_metadata(
     domain: DomainDefinition,
     capability_flags: Mapping[str, bool],
+    *,
+    depth: str,
 ) -> dict[str, Any]:
     fields = _domain_fields(domain, capability_flags)
     required_fields = [field.field_id for field in fields if field.required]
@@ -150,10 +191,12 @@ def _field_metadata(
     guidance = dict(domain.generation_guidance)
     presentation = _record(guidance.get("presentation"))
     network_enabled = _network_contract_enabled(domain, capability_flags)
+    spatial_enabled = _spatial_contract_enabled(domain)
     upgraded = (
         domain.domain_id in _MISSION_DOMAIN_IDS
         or domain.domain_id in _ACTOR_DOMAIN_IDS
         or network_enabled
+        or spatial_enabled
     )
     metadata = {
         "entity_kind": domain.entity_kind,
@@ -222,6 +265,25 @@ def _field_metadata(
                 "jurisdiction_model",
             ],
         }
+    if spatial_enabled:
+        place_count = max(1, domain.target_range.target(depth))
+        metadata["spatial_route_contract"] = {
+            "schema_version": "rpg_world_spatial_route_contract_v1",
+            "required": True,
+            "connection_field": "connected_place_ids",
+            "signature_field": "travel_route_signature",
+            "signature_components": [
+                "travel_time_band",
+                "access_mode",
+                "route_blocker",
+                "failure_condition",
+                "capacity_class",
+                "information_delay",
+            ],
+            "place_count": place_count,
+            "minimum_route_count": minimum_route_count(place_count, depth),
+            "depth": str(depth or "standard"),
+        }
     return metadata
 
 
@@ -253,7 +315,7 @@ def _domain_node(
     depth: str,
     capability_flags: Mapping[str, bool],
 ) -> CampaignTopicNode:
-    metadata = _field_metadata(domain, capability_flags)
+    metadata = _field_metadata(domain, capability_flags, depth=depth)
     presentation = _record(metadata.get("presentation"))
     page_kind = str(presentation.get("page_kind") or "document")
     category = domain.category
@@ -357,6 +419,7 @@ def build_profile_topic_graph(
         if capability_flags.get(_NETWORK_CAPABILITY)
         else set()
     )
+    enabled_spatial_domains = sorted(_SPATIAL_DOMAIN_IDS.intersection(domain_ids))
     base_profile_hash = str(
         dict(profile.provenance).get("base_profile_hash") or profile.content_hash
     )
@@ -388,6 +451,21 @@ def build_profile_topic_graph(
             "capability": _NETWORK_CAPABILITY,
             "domain_ids": enabled_network_domains,
             "required_before_launch": True,
+        }
+    if enabled_spatial_domains:
+        place_node = next(
+            node for node in domain_nodes if node.topic_id in enabled_spatial_domains
+        )
+        metadata["spatial_route_contract"] = {
+            "schema_version": "rpg_world_spatial_route_contract_v1",
+            "domain_ids": enabled_spatial_domains,
+            "required_before_launch": True,
+            "depth": str(depth or "standard"),
+            "place_count": place_node.target_count,
+            "minimum_route_count": minimum_route_count(
+                place_node.target_count,
+                depth,
+            ),
         }
     graph = CampaignTopicGraph(
         graph_version="rpg_profile_topic_graph_v2",
@@ -436,13 +514,17 @@ def build_profile_launch_topic_graph(
         or set(domain.semantic_roles)
         & set(profile.launch_requirements.required_semantic_roles)
     )
-    network_contract = _record(graph.metadata.get("network_constraint_contract"))
-    if bool(network_contract.get("required_before_launch")):
-        selected.update(
-            str(topic_id)
-            for topic_id in network_contract.get("domain_ids") or ()
-            if str(topic_id)
-        )
+    for contract_name in (
+        "network_constraint_contract",
+        "spatial_route_contract",
+    ):
+        contract = _record(graph.metadata.get(contract_name))
+        if bool(contract.get("required_before_launch")):
+            selected.update(
+                str(topic_id)
+                for topic_id in contract.get("domain_ids") or ()
+                if str(topic_id)
+            )
     selected = _dependency_closure(graph, selected)
     selected.update(_PIPELINE_CATEGORIES)
     pipeline_ids = {
