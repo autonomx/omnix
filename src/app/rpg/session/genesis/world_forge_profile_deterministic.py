@@ -8,6 +8,7 @@ from .world_forge_actor_incentives import deterministic_actor_incentive_signatur
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_countervailing_powers import deterministic_countervailing_power_signature
 from .world_forge_economic_scale import deterministic_economic_scale_signature
+from .world_forge_extension_values import extension_structured_value, same_domain_reference_fields
 from .world_forge_generation import GeneratedTopic
 from .world_forge_local_markets import deterministic_local_market_signature
 from .world_forge_network_constraints import deterministic_network_constraint_signature
@@ -135,6 +136,9 @@ def _structured_value(field_id: str, *, name: str, anchor: str, index: int, enti
         return deterministic_local_market_signature(index)
     if field_id == "countervailing_power_signature":
         return deterministic_countervailing_power_signature(index)
+    extended = extension_structured_value(field_id, index=index, entity_kind=entity_kind)
+    if extended is not None:
+        return extended
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     label = {
         "observable_consequences": "visible consequence", "access_routes": "access route",
@@ -160,9 +164,10 @@ def _value_for_field(
     value_type = str(definition.get("value_type") or "string")
     if field_id in _OPTIONAL_ARC_FIELDS:
         return None
+    local_reference_fields = {"connected_place_ids", "constrained_by_group_ids", "route_effects"} | set(same_domain_reference_fields())
     candidates = (
         tuple(value for value in same_domain_ids if value != current_entity_id)
-        if field_id in {"connected_place_ids", "constrained_by_group_ids", "route_effects"}
+        if field_id in local_reference_fields
         else _reference_candidates(definition, known)
     )
     if field_id == "resource_consumer_ids" and len(candidates) > 1:
