@@ -10,6 +10,9 @@ from .world_forge_generation import GeneratedTopic
 from .world_forge_network_constraints import (
     deterministic_network_constraint_signature,
 )
+from .world_forge_resource_dependencies import (
+    deterministic_resource_dependency_signature,
+)
 from .world_forge_spatial_routes import deterministic_spatial_route_signature
 
 _DISTINCTIONS = (
@@ -204,6 +207,9 @@ def _structured_value(
         return deterministic_network_constraint_signature(index)
     if field_id == "travel_route_signature":
         return deterministic_spatial_route_signature(index)
+    if field_id == "resource_dependency_signature":
+        kind_offset = sum(ord(character) for character in entity_kind)
+        return deterministic_resource_dependency_signature(index + kind_offset)
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     labels = {
         "observable_consequences": "visible consequence",
@@ -255,6 +261,8 @@ def _value_for_field(
         )
     else:
         candidates = _reference_candidates(definition, known)
+    if field_id == "resource_consumer_ids" and len(candidates) > 1:
+        candidates = (*candidates[1:], candidates[0])
     if field_id == "name":
         return name
     if value_type == "string":
