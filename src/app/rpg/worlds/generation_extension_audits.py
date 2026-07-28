@@ -20,6 +20,10 @@ from .generation_starter_core_locations import (
     require_valid_starter_core_locations,
     starter_core_location_report,
 )
+from .generation_starter_neighbor import (
+    require_valid_starter_neighbor,
+    starter_neighbor_report,
+)
 from .generation_starter_region import (
     require_valid_starter_region,
     starter_region_report,
@@ -65,6 +69,11 @@ def extension_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
             "starter_core_locations",
             starter_core_location_report,
             require_valid_starter_core_locations,
+        ),
+        (
+            "starter_neighbor",
+            starter_neighbor_report,
+            require_valid_starter_neighbor,
         ),
     )
 
