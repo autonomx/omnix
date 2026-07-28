@@ -61,14 +61,27 @@ def starter_bubble_contract_enabled(topic_graph: Mapping[str, Any] | None) -> bo
     return actor_vendor and place_routes
 
 
-def canonical_places(
+def _domain_entities(
     topic_rows: Sequence[Mapping[str, Any]],
+    domain_id: str,
 ) -> dict[str, dict[str, Any]]:
     return {
         str(row.get("id") or ""): row
         for topic_id, _index, row in entities(topic_rows)
-        if topic_id == "places" and str(row.get("id") or "")
+        if topic_id == domain_id and str(row.get("id") or "")
     }
+
+
+def canonical_places(
+    topic_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    return _domain_entities(topic_rows, "places")
+
+
+def canonical_regions(
+    topic_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    return _domain_entities(topic_rows, "regions")
 
 
 def resolve_starting_place(
@@ -106,14 +119,56 @@ def resolve_neighboring_place(
     )
 
 
+def resolve_starting_region(
+    starting_place_id: str,
+    places: Mapping[str, Mapping[str, Any]],
+    regions: Mapping[str, Mapping[str, Any]],
+) -> str:
+    region_id = str(mapping(places.get(starting_place_id)).get("region_id") or "")
+    return region_id if region_id in regions else ""
+
+
+def _bind_canonical_region(
+    plan: StarterBubblePlan,
+    region_id: str,
+    region: Mapping[str, Any],
+) -> StarterBubblePlan:
+    synthetic = next(slot.location_id for slot in plan.slots if slot.role == "region")
+    slots = tuple(
+        slot.model_copy(
+            update={
+                "location_id": region_id,
+                "title": str(region.get("name") or slot.title),
+                "metadata": {
+                    **dict(slot.metadata),
+                    "canonical_region": True,
+                    "source_region_id": region_id,
+                },
+            }
+        )
+        if slot.role == "region"
+        else slot
+        for slot in plan.slots
+    )
+    topology = dict(plan.topology)
+    topology["region_id"] = region_id
+    topology["locations"] = [
+        region_id if str(value) == synthetic else str(value)
+        for value in topology.get("locations") or ()
+    ]
+    return plan.model_copy(update={"slots": slots, "topology": topology})
+
+
 def derive_starter_bubble(
     topic_rows: Sequence[Mapping[str, Any]],
     topic_graph: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     enabled = starter_bubble_contract_enabled(topic_graph)
     places = canonical_places(topic_rows)
+    regions = canonical_regions(topic_rows)
     start = resolve_starting_place(places, topic_graph) if enabled else ""
     neighbor = resolve_neighboring_place(start, places) if start else ""
+    region_id = resolve_starting_region(start, places, regions) if start else ""
     metadata = mapping(mapping(topic_graph).get("metadata"))
     plan: StarterBubblePlan | None = None
     if enabled and start and neighbor:
@@ -123,23 +178,29 @@ def derive_starter_bubble(
             starting_location_id=start,
             neighboring_location_id=neighbor,
         )
+        if region_id:
+            plan = _bind_canonical_region(plan, region_id, regions[region_id])
     return {
         "contract_enabled": enabled,
         "place_ids": tuple(sorted(places)),
+        "region_ids": tuple(sorted(regions)),
         "starting_place_id": start,
         "neighboring_place_id": neighbor,
+        "starting_region_id": region_id,
         "plan": plan,
     }
 
 
 __all__ = [
     "canonical_places",
+    "canonical_regions",
     "derive_starter_bubble",
     "entities",
     "mapping",
     "normalise",
     "resolve_neighboring_place",
     "resolve_starting_place",
+    "resolve_starting_region",
     "rows",
     "starter_bubble_contract_enabled",
 ]
