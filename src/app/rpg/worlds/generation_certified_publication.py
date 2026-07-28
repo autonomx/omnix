@@ -18,6 +18,7 @@ from .generation_publication_transaction import (
     require_publication_run_ready,
 )
 from .generation_starter_bubble_publication import (
+    StarterBubblePublicationError,
     apply_certified_starter_bubble,
     persist_certified_starter_maps,
 )
@@ -85,6 +86,34 @@ def _starter_certificate(certification: Mapping[str, Any]) -> Mapping[str, Any] 
         return None
     materialization = report.get("materialization")
     return dict(materialization) if isinstance(materialization, Mapping) else None
+
+
+def _required_starter_certificate(
+    compilation_run: Mapping[str, Any],
+    certification: Mapping[str, Any],
+) -> Mapping[str, Any] | None:
+    graph = dict(compilation_run.get("graph") or {})
+    metadata = dict(graph.get("metadata") or {})
+    contract = metadata.get("starter_bubble_contract")
+    required = isinstance(contract, Mapping) and bool(contract.get("required"))
+    certificate = _starter_certificate(certification)
+    if required and (
+        certificate is None or not bool(certificate.get("contract_enabled"))
+    ):
+        raise StarterBubblePublicationError(
+            (
+                {
+                    "code": "starter_bubble_certificate_required",
+                    "severity": "error",
+                    "blocking": True,
+                    "evidence": {
+                        "contract": dict(contract),
+                        "certificate_present": certificate is not None,
+                    },
+                },
+            )
+        )
+    return certificate
 
 
 def _final_certification(
@@ -213,7 +242,10 @@ def publish_certified_world_generation(
         )
         starter_bundle = apply_certified_starter_bubble(
             compiled,
-            _starter_certificate(artifact.certification),
+            _required_starter_certificate(
+                compilation_run,
+                artifact.certification,
+            ),
         )
         compiled = starter_bundle.publication
         final_certification = _final_certification(
