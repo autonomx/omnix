@@ -16,6 +16,10 @@ from .generation_starting_market import (
     require_valid_starting_market,
     starting_market_report,
 )
+from .generation_starter_region import (
+    require_valid_starter_region,
+    starter_region_report,
+)
 from .generation_starter_topology import (
     require_valid_starter_topology,
     starter_topology_report,
@@ -47,6 +51,11 @@ def extension_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
             "starter_topology",
             starter_topology_report,
             require_valid_starter_topology,
+        ),
+        (
+            "starter_region",
+            starter_region_report,
+            require_valid_starter_region,
         ),
     )
 
