@@ -10,6 +10,10 @@ from .generation_cross_topic_duplicates import (
     cross_topic_duplicate_field_report,
     require_no_cross_topic_duplicate_fields,
 )
+from .generation_entity_contamination import (
+    entity_identity_contamination_report,
+    require_no_entity_identity_contamination,
+)
 from .generation_finding_policy import finding_waiver_policy_report
 from .generation_manifest_references import (
     manifest_reference_report,
@@ -109,6 +113,7 @@ def _certification_with_integrity(
     cross_topic_duplicates: Mapping[str, Any],
     mission_portfolio: Mapping[str, Any],
     objective_named_claims: Mapping[str, Any],
+    entity_identity_contamination: Mapping[str, Any],
     audit_stages: Mapping[str, Any],
     finding_policy: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -122,6 +127,7 @@ def _certification_with_integrity(
         "cross_topic_duplicate_fields": dict(cross_topic_duplicates),
         "mission_portfolio": dict(mission_portfolio),
         "objective_named_claims": dict(objective_named_claims),
+        "entity_identity_contamination": dict(entity_identity_contamination),
         "audit_stages": dict(audit_stages),
         "finding_waiver_policy": dict(finding_policy),
     }
@@ -138,6 +144,7 @@ def _certification_with_integrity(
         (cross_topic_duplicates.get("passed"), "cross_topic_duplicate_fields"),
         (mission_portfolio.get("passed"), "mission_portfolio"),
         (objective_named_claims.get("passed"), "objective_named_claims"),
+        (entity_identity_contamination.get("passed"), "entity_identity_contamination"),
         (audit_stages.get("passed"), "post_repair_audit"),
         (finding_policy.get("passed"), "finding_waiver_policy"),
     ):
@@ -174,6 +181,10 @@ def compile_world_generation_artifact(
     )
     mission_portfolio = mission_portfolio_report(topic_rows, topic_graph)
     objective_named_claims = objective_named_claim_report(topic_rows)
+    entity_identity_contamination = entity_identity_contamination_report(
+        topic_rows,
+        topic_graph,
+    )
     finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
@@ -183,6 +194,7 @@ def compile_world_generation_artifact(
         require_no_cross_topic_duplicate_fields(topic_rows, topic_graph)
         require_valid_mission_portfolio(topic_rows, topic_graph)
         require_resolved_objective_named_claims(topic_rows)
+        require_no_entity_identity_contamination(topic_rows, topic_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -207,6 +219,7 @@ def compile_world_generation_artifact(
         cross_topic_duplicates=cross_topic_duplicates,
         mission_portfolio=mission_portfolio,
         objective_named_claims=objective_named_claims,
+        entity_identity_contamination=entity_identity_contamination,
         audit_stages=audit_stages,
         finding_policy=finding_policy,
     )
