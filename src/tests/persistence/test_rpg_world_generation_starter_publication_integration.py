@@ -28,6 +28,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def _deterministic_world_forge_test_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RPG_TEST_MODE", "deterministic")
+
+
 def _forced_starter_artifact(**kwargs: Any) -> WorldGenerationCertifiedArtifact:
     artifact = _forced_launch_ready_artifact(**kwargs)
     publication = artifact.publication
