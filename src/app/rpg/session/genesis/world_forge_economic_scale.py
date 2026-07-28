@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 _COMPONENTS = (
+    "scale_scope",
     "served_population_band",
     "workforce_band",
     "service_reach_band",
@@ -77,9 +78,18 @@ def economic_scale_components() -> tuple[str, ...]:
     return _COMPONENTS
 
 
-def deterministic_economic_scale_signature(index: int) -> dict[str, Any]:
+def deterministic_economic_scale_signature(
+    index: int,
+    *,
+    scope: str,
+) -> dict[str, Any]:
     """Return internally consistent scale bands for one place or service system."""
 
+    scale_scope = (
+        "place_population"
+        if str(scope).casefold() in {"place", "location", "settlement"}
+        else "service_system"
+    )
     population_rank = index % len(_POPULATION_BANDS)
     workforce_rank = max(0, population_rank - 1)
     reach_rank = min(population_rank, (index * 3 + 1) % len(_SERVICE_REACH_BANDS))
@@ -89,6 +99,7 @@ def deterministic_economic_scale_signature(index: int) -> dict[str, Any]:
     )
     scarcity_rank = (index * 3 + 1) % len(_SCARCITY_LEVELS)
     return {
+        "scale_scope": scale_scope,
         "served_population_band": _POPULATION_BANDS[population_rank],
         "workforce_band": _WORKFORCE_BANDS[workforce_rank],
         "service_reach_band": _SERVICE_REACH_BANDS[reach_rank],
