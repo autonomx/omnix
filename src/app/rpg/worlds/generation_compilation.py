@@ -27,6 +27,10 @@ from .generation_named_claims import (
     objective_named_claim_report,
     require_resolved_objective_named_claims,
 )
+from .generation_naming_portfolio import (
+    naming_portfolio_report,
+    require_valid_naming_portfolio,
+)
 from .generation_profile_dossiers import (
     profile_dossier_report,
     require_profile_dossier_quality,
@@ -114,6 +118,7 @@ def _certification_with_integrity(
     mission_portfolio: Mapping[str, Any],
     objective_named_claims: Mapping[str, Any],
     entity_identity_contamination: Mapping[str, Any],
+    naming_portfolio: Mapping[str, Any],
     audit_stages: Mapping[str, Any],
     finding_policy: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -128,6 +133,7 @@ def _certification_with_integrity(
         "mission_portfolio": dict(mission_portfolio),
         "objective_named_claims": dict(objective_named_claims),
         "entity_identity_contamination": dict(entity_identity_contamination),
+        "naming_portfolio": dict(naming_portfolio),
         "audit_stages": dict(audit_stages),
         "finding_waiver_policy": dict(finding_policy),
     }
@@ -145,6 +151,7 @@ def _certification_with_integrity(
         (mission_portfolio.get("passed"), "mission_portfolio"),
         (objective_named_claims.get("passed"), "objective_named_claims"),
         (entity_identity_contamination.get("passed"), "entity_identity_contamination"),
+        (naming_portfolio.get("passed"), "naming_portfolio"),
         (audit_stages.get("passed"), "post_repair_audit"),
         (finding_policy.get("passed"), "finding_waiver_policy"),
     ):
@@ -185,6 +192,7 @@ def compile_world_generation_artifact(
         topic_rows,
         topic_graph,
     )
+    naming_portfolio = naming_portfolio_report(topic_rows, topic_graph)
     finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
@@ -195,6 +203,7 @@ def compile_world_generation_artifact(
         require_valid_mission_portfolio(topic_rows, topic_graph)
         require_resolved_objective_named_claims(topic_rows)
         require_no_entity_identity_contamination(topic_rows, topic_graph)
+        require_valid_naming_portfolio(topic_rows, topic_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -220,6 +229,7 @@ def compile_world_generation_artifact(
         mission_portfolio=mission_portfolio,
         objective_named_claims=objective_named_claims,
         entity_identity_contamination=entity_identity_contamination,
+        naming_portfolio=naming_portfolio,
         audit_stages=audit_stages,
         finding_policy=finding_policy,
     )
