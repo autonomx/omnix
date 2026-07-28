@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.rpg.worlds import generation_compilation
@@ -37,6 +39,30 @@ def _compile_kwargs() -> dict:
         "topic_rows": [],
         "revision": 2,
     }
+
+
+@pytest.fixture(autouse=True)
+def _exact_artifact_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    prepared = SimpleNamespace(
+        graph={},
+        topic_rows=(),
+        topic_hashes={},
+        content_hash="sha256:" + "a" * 64,
+    )
+    monkeypatch.setattr(
+        generation_compilation,
+        "prepare_world_generation_audit_rows",
+        lambda **_kwargs: prepared,
+    )
+    monkeypatch.setattr(
+        generation_compilation,
+        "exact_artifact_binding_report",
+        lambda *_args: {
+            "schema_version": "rpg_world_exact_artifact_binding_v1",
+            "passed": True,
+            "issues": [],
+        },
+    )
 
 
 def test_diagnostic_mode_exposes_no_release_document(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -78,6 +104,7 @@ def test_certified_mode_is_the_only_release_shaped_artifact(
     assert payload["world_revision"] == {"kind": "revision"}
     assert payload["world_release"] == {"kind": "release"}
     assert payload["certification"]["compilation_mode"] == "certified_release"
+    assert payload["certification"]["exact_artifact_binding"]["passed"] is True
 
 
 def test_unknown_compilation_mode_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
