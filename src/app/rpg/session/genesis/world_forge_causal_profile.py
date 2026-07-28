@@ -134,6 +134,16 @@ def _causal_fields(domain_id: str) -> tuple[FieldDefinition, ...]:
                     "enforcement, shock sensitivity, and recovery state."
                 ),
             ),
+            _field(
+                "route_effects",
+                "structured_object",
+                required=True,
+                semantic_role="route_effects",
+                description=(
+                    "Endpoint-keyed travel cost, variance, hazard, supply, price, "
+                    "information-delay, and closure-recovery effects for connected places."
+                ),
+            ),
         )
     if domain_id == "groups":
         return (
