@@ -232,7 +232,9 @@ def test_diagnostic_draft_retains_profile_dossier_failure(
 
     assert payload["certification"]["launch_ready"] is False
     assert payload["certification"]["profile_dossier_quality"]["passed"] is False
+    assert payload["certification"]["manifest_reference_closure"]["passed"] is False
     assert payload["certification"]["missing_requirements"] == [
-        "profile_dossier_quality"
+        "profile_dossier_quality",
+        "manifest_reference_closure",
     ]
     assert "world_release" not in payload
