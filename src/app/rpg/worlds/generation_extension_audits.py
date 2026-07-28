@@ -16,6 +16,10 @@ from .generation_starting_market import (
     require_valid_starting_market,
     starting_market_report,
 )
+from .generation_starter_bubble_release import (
+    require_valid_starter_bubble_release,
+    starter_bubble_release_report,
+)
 from .generation_starter_core_locations import (
     require_valid_starter_core_locations,
     starter_core_location_report,
@@ -83,6 +87,11 @@ def extension_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
             "starter_neighbor_artifacts",
             starter_neighbor_artifact_report,
             require_valid_starter_neighbor_artifacts,
+        ),
+        (
+            "starter_bubble_release",
+            starter_bubble_release_report,
+            require_valid_starter_bubble_release,
         ),
     )
 
