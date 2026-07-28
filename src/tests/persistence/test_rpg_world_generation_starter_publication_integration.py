@@ -178,9 +178,9 @@ def test_certified_publication_persists_starter_maps_and_exact_bindings(
         assert release is not None
         assert len(definition_rows) == 3
         assert all(int(row[1]) == 1 and int(row[2]) == 1 for row in definition_rows)
-        assert revision["document"]["topology"]["starter_bubble"][
-            "starting_location_id"
-        ] == "location:harbor"
+        starter_topology = revision["document"]["topology"]["starter_bubble"]
+        assert starter_topology["region_id"]
+        assert "location:harbor" in starter_topology["locations"]
         bindings = release["document"]["map_bindings"]
         assert len(bindings) == 3
         stored_by_map = {
