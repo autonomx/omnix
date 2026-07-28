@@ -39,6 +39,10 @@ from .generation_naming_portfolio import (
     naming_portfolio_report,
     require_valid_naming_portfolio,
 )
+from .generation_network_constraints import (
+    network_constraint_report,
+    require_valid_network_constraints,
+)
 from .generation_profile_dossiers import (
     profile_dossier_report,
     require_profile_dossier_quality,
@@ -129,6 +133,7 @@ def _certification_with_integrity(
     naming_portfolio: Mapping[str, Any],
     conflict_portfolio: Mapping[str, Any],
     actor_portfolio: Mapping[str, Any],
+    network_constraints: Mapping[str, Any],
     audit_stages: Mapping[str, Any],
     finding_policy: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -146,6 +151,7 @@ def _certification_with_integrity(
         "naming_portfolio": dict(naming_portfolio),
         "conflict_portfolio": dict(conflict_portfolio),
         "actor_portfolio": dict(actor_portfolio),
+        "network_constraints": dict(network_constraints),
         "audit_stages": dict(audit_stages),
         "finding_waiver_policy": dict(finding_policy),
     }
@@ -166,6 +172,7 @@ def _certification_with_integrity(
         (naming_portfolio.get("passed"), "naming_portfolio"),
         (conflict_portfolio.get("passed"), "conflict_portfolio"),
         (actor_portfolio.get("passed"), "actor_portfolio"),
+        (network_constraints.get("passed"), "network_constraints"),
         (audit_stages.get("passed"), "post_repair_audit"),
         (finding_policy.get("passed"), "finding_waiver_policy"),
     ):
@@ -209,6 +216,7 @@ def compile_world_generation_artifact(
     naming_portfolio = naming_portfolio_report(topic_rows, topic_graph)
     conflict_portfolio = conflict_portfolio_report(topic_rows, topic_graph)
     actor_portfolio = actor_portfolio_report(topic_rows, topic_graph)
+    network_constraints = network_constraint_report(topic_rows, topic_graph)
     finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
@@ -222,6 +230,7 @@ def compile_world_generation_artifact(
         require_valid_naming_portfolio(topic_rows, topic_graph)
         require_valid_conflict_portfolio(topic_rows, topic_graph)
         require_valid_actor_portfolio(topic_rows, topic_graph)
+        require_valid_network_constraints(topic_rows, topic_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -250,6 +259,7 @@ def compile_world_generation_artifact(
         naming_portfolio=naming_portfolio,
         conflict_portfolio=conflict_portfolio,
         actor_portfolio=actor_portfolio,
+        network_constraints=network_constraints,
         audit_stages=audit_stages,
         finding_policy=finding_policy,
     )
