@@ -244,7 +244,7 @@ def test_certified_compilation_fails_before_legacy_compiler_on_open_reference(
 
     with pytest.raises(ManifestReferenceCompilationError) as exc_info:
         generation_compilation.compile_world_generation_certified_artifact(
-            run={"run_id": "run:1", "graph": _graph()},
+            run={"run_id": "run:1", "graph": {}},
             world={"id": "world:1"},
             topic_rows=rows,
             revision=1,
@@ -269,7 +269,7 @@ def test_diagnostic_compilation_retains_reference_closure_report(
     rows[1]["candidate"]["relationships"][0]["target_id"] = "ent:place:missing"
 
     artifact = generation_compilation.compile_world_generation_diagnostic_draft(
-        run={"run_id": "run:1", "graph": _graph()},
+        run={"run_id": "run:1", "graph": {}},
         world={"id": "world:1"},
         topic_rows=rows,
         revision=1,
