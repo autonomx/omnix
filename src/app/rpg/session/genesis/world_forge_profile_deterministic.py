@@ -13,6 +13,7 @@ from .world_forge_local_markets import deterministic_local_market_signature
 from .world_forge_network_constraints import deterministic_network_constraint_signature
 from .world_forge_ordinary_life import deterministic_ordinary_life_signature
 from .world_forge_resource_dependencies import deterministic_resource_dependency_signature
+from .world_forge_route_effects import deterministic_route_effect_signature
 from .world_forge_spatial_routes import deterministic_spatial_route_signature
 
 _DISTINCTIONS = (
@@ -161,11 +162,15 @@ def _value_for_field(
         return None
     candidates = (
         tuple(value for value in same_domain_ids if value != current_entity_id)
-        if field_id in {"connected_place_ids", "constrained_by_group_ids"}
+        if field_id in {"connected_place_ids", "constrained_by_group_ids", "route_effects"}
         else _reference_candidates(definition, known)
     )
     if field_id == "resource_consumer_ids" and len(candidates) > 1:
         candidates = (*candidates[1:], candidates[0])
+    if field_id == "route_effects":
+        width = min(2, len(candidates))
+        selected = [candidates[(index + offset) % len(candidates)] for offset in range(width)] if candidates else []
+        return {endpoint: deterministic_route_effect_signature(index + offset) for offset, endpoint in enumerate(selected)}
     if field_id == "name":
         return name
     if value_type == "string":
