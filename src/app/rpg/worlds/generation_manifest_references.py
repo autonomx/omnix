@@ -39,6 +39,7 @@ _KNOWN_REFERENCE_FIELDS = {
     "entities",
     "entity_refs",
     "known_by",
+    "subject",
 }
 
 
@@ -135,22 +136,28 @@ def _binding(candidate: Mapping[str, Any]) -> dict[str, Any]:
 
 def _ownership(
     topic_rows: Sequence[Mapping[str, Any]],
+    *,
+    require_binding: bool,
 ) -> tuple[
     set[str],
     set[str],
     set[str],
     list[ManifestReferenceIssue],
+    int,
 ]:
     all_entity_ids: set[str] = set()
     owned_entity_ids: set[str] = set()
     legacy_aliases: set[str] = set()
     issues: list[ManifestReferenceIssue] = []
+    binding_topic_count = 0
     for index, row in enumerate(topic_rows, start=1):
         candidate = _candidate(row)
         topic_id = str(
             row.get("topic_id") or candidate.get("topic_id") or f"topic:{index}"
         )
         binding = _binding(candidate)
+        if binding:
+            binding_topic_count += 1
         slot_ids = [str(value) for value in binding.get("slot_ids") or () if str(value)]
         entity_ids = [
             str(value) for value in binding.get("entity_ids") or () if str(value)
@@ -162,6 +169,7 @@ def _ownership(
             if str(key)
         )
         entities = _rows(candidate.get("entities"))
+        provisional_topic = bool(entities) and not binding and not require_binding
         for entity_index, entity in enumerate(entities, start=1):
             entity_id = str(entity.get("id") or "")
             item_id = entity_id or f"{topic_id}:entity:{entity_index}"
@@ -178,6 +186,9 @@ def _ownership(
                 )
                 continue
             all_entity_ids.add(entity_id)
+            if provisional_topic:
+                owned_entity_ids.add(entity_id)
+                continue
             manifest_slot_id = str(entity.get("manifest_slot_id") or "")
             if not manifest_slot_id:
                 issues.append(
@@ -217,7 +228,13 @@ def _ownership(
                 )
                 continue
             owned_entity_ids.add(entity_id)
-    return all_entity_ids, owned_entity_ids, legacy_aliases, issues
+    return (
+        all_entity_ids,
+        owned_entity_ids,
+        legacy_aliases,
+        issues,
+        binding_topic_count,
+    )
 
 
 def _walk_references(
@@ -295,13 +312,16 @@ def _walk_references(
     )
 
 
-def manifest_reference_issues(
+def _manifest_reference_issues(
     topic_rows: Sequence[Mapping[str, Any]],
     topic_graph: Mapping[str, Any] | None,
-) -> tuple[ManifestReferenceIssue, ...]:
-    """Validate manifest ownership and recursively close all structured references."""
-
-    all_ids, owned_ids, aliases, issues = _ownership(topic_rows)
+    *,
+    require_binding: bool,
+) -> tuple[tuple[ManifestReferenceIssue, ...], int]:
+    all_ids, owned_ids, aliases, issues, binding_count = _ownership(
+        topic_rows,
+        require_binding=require_binding,
+    )
     declared_fields = _profile_reference_fields(topic_graph)
     for index, row in enumerate(topic_rows, start=1):
         candidate = _candidate(row)
@@ -335,14 +355,32 @@ def manifest_reference_issues(
         (issue.code, issue.topic_id, issue.path, issue.target_id, issue.item_id): issue
         for issue in issues
     }
-    return tuple(unique[key] for key in sorted(unique))
+    return tuple(unique[key] for key in sorted(unique)), binding_count
+
+
+def manifest_reference_issues(
+    topic_rows: Sequence[Mapping[str, Any]],
+    topic_graph: Mapping[str, Any] | None,
+) -> tuple[ManifestReferenceIssue, ...]:
+    issues, _ = _manifest_reference_issues(
+        topic_rows,
+        topic_graph,
+        require_binding=True,
+    )
+    return issues
 
 
 def manifest_reference_report(
     topic_rows: Sequence[Mapping[str, Any]],
     topic_graph: Mapping[str, Any] | None,
+    *,
+    require_binding: bool = False,
 ) -> dict[str, Any]:
-    issues = manifest_reference_issues(topic_rows, topic_graph)
+    issues, binding_count = _manifest_reference_issues(
+        topic_rows,
+        topic_graph,
+        require_binding=require_binding,
+    )
     entity_count = sum(len(_rows(_candidate(row).get("entities"))) for row in topic_rows)
     return {
         "schema_version": "rpg_world_manifest_reference_closure_v1",
@@ -354,6 +392,8 @@ def manifest_reference_report(
             "profile_reference_field_count": len(
                 _profile_reference_fields(topic_graph)
             ),
+            "binding_evidence_topic_count": binding_count,
+            "ownership_mode": "certified" if require_binding else "diagnostic",
         },
     }
 
@@ -362,10 +402,18 @@ def require_manifest_reference_closure(
     topic_rows: Sequence[Mapping[str, Any]],
     topic_graph: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    issues = manifest_reference_issues(topic_rows, topic_graph)
+    issues, _ = _manifest_reference_issues(
+        topic_rows,
+        topic_graph,
+        require_binding=True,
+    )
     if issues:
         raise ManifestReferenceCompilationError(issues)
-    return manifest_reference_report(topic_rows, topic_graph)
+    return manifest_reference_report(
+        topic_rows,
+        topic_graph,
+        require_binding=True,
+    )
 
 
 __all__ = [
