@@ -106,6 +106,36 @@ def test_missing_interior_definition_is_blocking(monkeypatch: pytest.MonkeyPatch
     assert any(row["code"] == "starter_core_map_definition_missing" for row in report["issues"])
 
 
+def test_emitted_map_level_role_and_hash_corruption_is_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = generation_starter_core_locations.build_starter_map_definitions
+
+    def corrupted(*args: object, **kwargs: object) -> tuple[object, ...]:
+        definitions = list(original(*args, **kwargs))
+        for index, definition in enumerate(definitions):
+            if definition.metadata.get("starter_role") == "settlement":
+                definitions[index] = definition.model_copy(
+                    update={
+                        "level": "interior",
+                        "metadata": {
+                            **dict(definition.metadata),
+                            "starter_role": "interior",
+                        },
+                    }
+                )
+                break
+        return tuple(definitions)
+
+    monkeypatch.setattr(generation_starter_core_locations, "build_starter_map_definitions", corrupted)
+    report = starter_core_location_report(_rows(), _graph())
+    codes = {row["code"] for row in report["issues"]}
+
+    assert report["passed"] is False
+    assert "starter_core_map_binding_invalid" in codes
+    assert "starter_core_map_hash_invalid" in codes
+
+
 def test_legacy_graph_without_release6_contract_is_skipped() -> None:
     graph = {"metadata": {}, "nodes": [{"topic_id": "places", "metadata": {"field_definitions": []}}]}
 
