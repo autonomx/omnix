@@ -12,28 +12,6 @@ _BLOCKING_PROGRESS_FIELDS = (
     "kept_previous_topic_ids",
     "potentially_stale_topic_ids",
 )
-_CERTIFICATION_REPORT_FIELDS = (
-    "strict_integrity",
-    "profile_reference_integrity",
-    "profile_dossier_quality",
-    "manifest_reference_closure",
-    "cross_topic_duplicate_fields",
-    "mission_portfolio",
-    "objective_named_claims",
-    "entity_identity_contamination",
-    "naming_portfolio",
-    "conflict_portfolio",
-    "actor_portfolio",
-    "network_constraints",
-    "spatial_reachability",
-    "resource_dependencies",
-    "economic_scale",
-    "ordinary_life",
-    "countervailing_powers",
-    "local_markets",
-    "audit_stages",
-    "finding_waiver_policy",
-)
 
 
 class WorldGenerationCertificationError(ValueError):
@@ -54,6 +32,16 @@ class WorldGenerationCertificationError(ValueError):
 
 def _values(progress: Mapping[str, Any], field: str) -> list[str]:
     return sorted({str(value) for value in progress.get(field) or () if str(value)})
+
+
+def _failed_reports(certification: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    """Return every registered report that explicitly exposes passed=false."""
+
+    failures: dict[str, Mapping[str, Any]] = {}
+    for name, value in certification.items():
+        if isinstance(value, Mapping) and "passed" in value and not bool(value.get("passed")):
+            failures[str(name)] = dict(value)
+    return failures
 
 
 def publication_transaction_report(
@@ -77,24 +65,18 @@ def publication_transaction_report(
         reasons.append("unresolved_topic_blockers")
 
     payload = dict(certification or {})
-    report_failures: dict[str, Mapping[str, Any]] = {}
     if certification is not None:
         if not bool(payload.get("launch_ready")):
             reasons.append("release_not_launch_ready")
         missing = [str(value) for value in payload.get("missing_requirements") or () if str(value)]
         if missing:
             reasons.append("release_requirements_missing")
-        consistency = payload.get("consistency_report")
-        if isinstance(consistency, Mapping) and not bool(consistency.get("passed")):
-            report_failures["consistency_report"] = dict(consistency)
-        for field in _CERTIFICATION_REPORT_FIELDS:
-            value = payload.get(field)
-            if isinstance(value, Mapping) and not bool(value.get("passed")):
-                report_failures[field] = dict(value)
+        report_failures = _failed_reports(payload)
         if report_failures:
             reasons.append("certification_report_failed")
     else:
         missing = []
+        report_failures = {}
 
     return {
         "schema_version": "rpg_world_publication_transaction_v1",
