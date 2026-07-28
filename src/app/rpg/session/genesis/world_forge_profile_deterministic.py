@@ -6,6 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from .world_forge_actor_incentives import deterministic_actor_incentive_signature
 from .world_forge_contract import CampaignTopicNode
+from .world_forge_economic_scale import deterministic_economic_scale_signature
 from .world_forge_generation import GeneratedTopic
 from .world_forge_network_constraints import (
     deterministic_network_constraint_signature,
@@ -210,6 +211,12 @@ def _structured_value(
     if field_id == "resource_dependency_signature":
         kind_offset = sum(ord(character) for character in entity_kind)
         return deterministic_resource_dependency_signature(index + kind_offset)
+    if field_id == "economic_scale_signature":
+        kind_offset = sum(ord(character) for character in entity_kind)
+        return deterministic_economic_scale_signature(
+            index + kind_offset,
+            scope=entity_kind,
+        )
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     labels = {
         "observable_consequences": "visible consequence",
