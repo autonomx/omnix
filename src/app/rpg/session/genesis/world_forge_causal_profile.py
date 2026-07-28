@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Iterable
 
+from .world_forge_profile_extensions import extension_fields
 from .world_forge_profiles import (
     DomainDefinition,
     DomainTargetRange,
@@ -288,7 +289,8 @@ def augment_profile_with_causal_traceability(profile: GenreProfile) -> GenreProf
     domains: list[DomainDefinition] = []
     inserted = False
     for domain in profile.domains:
-        domains.append(_append_fields(domain, _causal_fields(domain.domain_id)))
+        additions = (*_causal_fields(domain.domain_id), *extension_fields(domain.domain_id))
+        domains.append(_append_fields(domain, additions))
         if domain.domain_id == "actors":
             domains.append(_causal_links_domain())
             inserted = True
