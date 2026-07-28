@@ -6,6 +6,10 @@ from typing import Any, Literal, Mapping, Sequence
 
 from .contracts import WorldRevisionDocument
 from .generation_audit_stages import two_stage_audit_report
+from .generation_conflict_portfolio import (
+    conflict_portfolio_report,
+    require_valid_conflict_portfolio,
+)
 from .generation_cross_topic_duplicates import (
     cross_topic_duplicate_field_report,
     require_no_cross_topic_duplicate_fields,
@@ -119,6 +123,7 @@ def _certification_with_integrity(
     objective_named_claims: Mapping[str, Any],
     entity_identity_contamination: Mapping[str, Any],
     naming_portfolio: Mapping[str, Any],
+    conflict_portfolio: Mapping[str, Any],
     audit_stages: Mapping[str, Any],
     finding_policy: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -134,6 +139,7 @@ def _certification_with_integrity(
         "objective_named_claims": dict(objective_named_claims),
         "entity_identity_contamination": dict(entity_identity_contamination),
         "naming_portfolio": dict(naming_portfolio),
+        "conflict_portfolio": dict(conflict_portfolio),
         "audit_stages": dict(audit_stages),
         "finding_waiver_policy": dict(finding_policy),
     }
@@ -152,6 +158,7 @@ def _certification_with_integrity(
         (objective_named_claims.get("passed"), "objective_named_claims"),
         (entity_identity_contamination.get("passed"), "entity_identity_contamination"),
         (naming_portfolio.get("passed"), "naming_portfolio"),
+        (conflict_portfolio.get("passed"), "conflict_portfolio"),
         (audit_stages.get("passed"), "post_repair_audit"),
         (finding_policy.get("passed"), "finding_waiver_policy"),
     ):
@@ -193,6 +200,7 @@ def compile_world_generation_artifact(
         topic_graph,
     )
     naming_portfolio = naming_portfolio_report(topic_rows, topic_graph)
+    conflict_portfolio = conflict_portfolio_report(topic_rows, topic_graph)
     finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
@@ -204,6 +212,7 @@ def compile_world_generation_artifact(
         require_resolved_objective_named_claims(topic_rows)
         require_no_entity_identity_contamination(topic_rows, topic_graph)
         require_valid_naming_portfolio(topic_rows, topic_graph)
+        require_valid_conflict_portfolio(topic_rows, topic_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -230,6 +239,7 @@ def compile_world_generation_artifact(
         objective_named_claims=objective_named_claims,
         entity_identity_contamination=entity_identity_contamination,
         naming_portfolio=naming_portfolio,
+        conflict_portfolio=conflict_portfolio,
         audit_stages=audit_stages,
         finding_policy=finding_policy,
     )
