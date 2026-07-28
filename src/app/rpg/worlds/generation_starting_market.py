@@ -5,6 +5,54 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
+_PRICE_LEVEL_BPS = {
+    "discounted": 8000,
+    "stable": 10000,
+    "elevated": 12500,
+    "volatile": 14000,
+    "crisis": 18000,
+    "barter_dominant": 11000,
+}
+_SCARCITY_BPS = {
+    "abundant": 8000,
+    "stable": 10000,
+    "constrained": 12000,
+    "scarce": 15000,
+    "critical": 20000,
+}
+_CATEGORY_BPS = {
+    "staple": 9000,
+    "energy": 10500,
+    "tool": 11500,
+    "medical": 12500,
+    "weapon": 14000,
+    "luxury": 16000,
+    "vehicle": 18000,
+    "general": 10000,
+}
+_SUPPLY_STOCK_DELTA = {
+    "robust": 2,
+    "seasonal": 1,
+    "intermittent": 0,
+    "single_route": -1,
+    "rationed": -2,
+    "smuggled": -1,
+}
+_SCARCITY_STOCK_DELTA = {
+    "abundant": 2,
+    "stable": 1,
+    "constrained": 0,
+    "scarce": -1,
+    "critical": -2,
+}
+_RESERVE_STOCK_DELTA = {
+    "seasonal": 1,
+    "months": 1,
+    "weeks": 0,
+    "days": -1,
+    "hours": -2,
+}
+
 
 @dataclass(frozen=True)
 class StartingMarketIssue:
@@ -106,14 +154,94 @@ def _starting_place(
     return matches[0] if len(matches) == 1 else ""
 
 
-def _price(item_id: str) -> int:
+def _item_category(item: Mapping[str, Any]) -> str:
+    value = _normalise(
+        " ".join(
+            str(item.get(key) or "")
+            for key in ("item_category", "category", "kind", "type", "name")
+        )
+    )
+    groups = (
+        ("staple", ("ration", "food", "water", "grain", "staple")),
+        ("medical", ("med", "medicine", "bandage", "stim", "antidote")),
+        ("energy", ("cell", "battery", "fuel", "power", "lamp")),
+        ("tool", ("tool", "repair", "kit", "parts", "component")),
+        ("weapon", ("weapon", "blade", "gun", "rifle", "armour", "armor")),
+        ("vehicle", ("vehicle", "mount", "car", "bike", "wagon")),
+        ("luxury", ("luxury", "jewel", "silk", "art", "wine")),
+    )
+    for category, tokens in groups:
+        if any(token in value for token in tokens):
+            return category
+    return "general"
+
+
+def _market_context(place: Mapping[str, Any]) -> dict[str, str]:
+    local = _map(place.get("local_market_signature"))
+    scale = _map(place.get("economic_scale_signature"))
+    return {
+        "price_level": _normalise(local.get("price_level")) or "stable",
+        "supply_reliability": _normalise(local.get("supply_reliability")) or "intermittent",
+        "shock_sensitivity": _normalise(local.get("shock_sensitivity")) or "moderate",
+        "scarcity_level": _normalise(scale.get("scarcity_level")) or "stable",
+        "reserve_horizon": _normalise(scale.get("reserve_horizon")) or "weeks",
+        "price_basis": _normalise(scale.get("price_basis")) or "market_rate",
+        "demand_pressure": _normalise(scale.get("demand_pressure")) or "steady",
+    }
+
+
+def _base_price(item_id: str) -> int:
     digest = hashlib.sha256(f"price:{item_id}".encode()).hexdigest()
     return 5 + int(digest[:8], 16) % 196
 
 
-def _stock(vendor_id: str, item_id: str) -> int:
+def _price_projection(
+    item_id: str,
+    item: Mapping[str, Any],
+    context: Mapping[str, str],
+) -> tuple[int, dict[str, Any]]:
+    category = _item_category(item)
+    base = _base_price(item_id)
+    price_level_bps = _PRICE_LEVEL_BPS.get(context["price_level"], 10000)
+    scarcity_bps = _SCARCITY_BPS.get(context["scarcity_level"], 10000)
+    category_bps = _CATEGORY_BPS[category]
+    multiplier_bps = price_level_bps * scarcity_bps // 10000
+    multiplier_bps = multiplier_bps * category_bps // 10000
+    price = max(1, min(9999, (base * multiplier_bps + 5000) // 10000))
+    return price, {
+        "base_price": base,
+        "multiplier_bps": multiplier_bps,
+        "price_level": context["price_level"],
+        "scarcity_level": context["scarcity_level"],
+        "price_basis": context["price_basis"],
+        "item_category": category,
+    }
+
+
+def _base_stock(vendor_id: str, item_id: str) -> int:
     digest = hashlib.sha256(f"stock:{vendor_id}:{item_id}".encode()).hexdigest()
     return 1 + int(digest[:8], 16) % 6
+
+
+def _stock_projection(
+    vendor_id: str,
+    item_id: str,
+    context: Mapping[str, str],
+) -> tuple[int, dict[str, Any]]:
+    base = _base_stock(vendor_id, item_id)
+    supply_delta = _SUPPLY_STOCK_DELTA.get(context["supply_reliability"], 0)
+    scarcity_delta = _SCARCITY_STOCK_DELTA.get(context["scarcity_level"], 0)
+    reserve_delta = _RESERVE_STOCK_DELTA.get(context["reserve_horizon"], 0)
+    quantity = max(1, min(8, base + supply_delta + scarcity_delta + reserve_delta))
+    return quantity, {
+        "base_quantity": base,
+        "supply_delta": supply_delta,
+        "scarcity_delta": scarcity_delta,
+        "reserve_delta": reserve_delta,
+        "supply_reliability": context["supply_reliability"],
+        "scarcity_level": context["scarcity_level"],
+        "reserve_horizon": context["reserve_horizon"],
+    }
 
 
 def _empty_materialization(*, enabled: bool) -> dict[str, Any]:
@@ -122,6 +250,7 @@ def _empty_materialization(*, enabled: bool) -> dict[str, Any]:
         "contract_enabled": enabled,
         "skipped": not enabled,
         "place_id": "",
+        "market_context": {},
         "vendors": [],
         "vendor_count": 0,
         "inventory_item_count": 0,
@@ -140,6 +269,7 @@ def _materialize(
         for topic_id, _index, row in entities
         if topic_id == "places" and str(row.get("id") or "")
     )
+    place_by_id = {place_id: place for place_id, place in places}
     equipment = {
         str(row.get("id") or ""): row
         for topic_id, _index, row in entities
@@ -151,6 +281,7 @@ def _materialize(
         if topic_id == "actors" and str(row.get("id") or "")
     ]
     hub_id = _starting_place(places, topic_graph)
+    context = _market_context(place_by_id.get(hub_id, {}))
     issues: list[StartingMarketIssue] = []
     if not hub_id:
         issues.append(StartingMarketIssue(
@@ -176,13 +307,23 @@ def _materialize(
         valid_items = [value for value in item_ids if value in equipment][:5]
         if not valid_items:
             continue
+        inventory = []
+        for item_id in valid_items:
+            price, price_basis = _price_projection(item_id, equipment[item_id], context)
+            quantity, stock_basis = _stock_projection(actor_id, item_id, context)
+            inventory.append({
+                "item_id": item_id,
+                "price": price,
+                "quantity": quantity,
+                "economic_basis": {
+                    "pricing": price_basis,
+                    "stock": stock_basis,
+                },
+            })
         vendors.append({
             "vendor_id": actor_id,
             "place_id": hub_id,
-            "inventory": [
-                {"item_id": item_id, "price": _price(item_id), "quantity": _stock(actor_id, item_id)}
-                for item_id in valid_items
-            ],
+            "inventory": inventory,
         })
         if len(vendors) >= 2:
             break
@@ -205,6 +346,7 @@ def _materialize(
         "contract_enabled": True,
         "skipped": False,
         "place_id": hub_id,
+        "market_context": context,
         "vendors": vendors,
         "vendor_count": len(vendors),
         "inventory_item_count": sum(len(vendor["inventory"]) for vendor in vendors),
@@ -226,6 +368,7 @@ def starting_market_report(
             "contract_enabled": enabled,
             "skipped_when_not_declared": enabled or materialization["skipped"],
             "starting_place_resolved": not enabled or bool(materialization["place_id"]),
+            "economic_context_materialized": not enabled or bool(materialization["market_context"]),
             "vendor_materialized": not enabled or materialization["vendor_count"] >= 1,
             "inventory_materialized": not enabled or materialization["inventory_item_count"] >= 1,
             "bounded_vendor_count": materialization["vendor_count"] <= 2,
