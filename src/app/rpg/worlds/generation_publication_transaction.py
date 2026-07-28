@@ -21,6 +21,7 @@ _CERTIFICATION_REPORT_FIELDS = (
     "mission_portfolio",
     "objective_named_claims",
     "entity_identity_contamination",
+    "naming_portfolio",
     "audit_stages",
     "finding_waiver_policy",
 )
