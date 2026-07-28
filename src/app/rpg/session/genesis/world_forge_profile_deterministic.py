@@ -17,6 +17,76 @@ _OPTIONAL_CAUSAL_REFERENCE_ROLES = frozenset(
         "origin_region", "descended_from", "shaped_by", "cultural_affiliation",
     }
 )
+_OPTIONAL_ARC_FIELDS = frozenset({"campaign_arc_id", "arc_role", "arc_sequence"})
+_MISSION_ACTIVITIES = (
+    "investigate",
+    "recover",
+    "protect",
+    "negotiate",
+    "expose",
+    "disrupt",
+)
+_MISSION_TARGETS = (
+    "evidence_chain",
+    "scarce_resource",
+    "endangered_witness",
+    "contested_route",
+    "hidden_controller",
+    "unstable_system",
+)
+_MISSION_LOCATIONS = (
+    "public_hub",
+    "restricted_site",
+    "contested_transit",
+    "remote_perimeter",
+)
+_MISSION_PRINCIPALS = (
+    "local_sponsor",
+    "institutional_officer",
+    "affected_resident",
+    "independent_broker",
+    "reluctant_insider",
+)
+_MISSION_ANTAGONISTS = (
+    "institutional_rival",
+    "resource_controller",
+    "covert_operator",
+    "environmental_hazard",
+    "divided_authority",
+    "opportunistic_threat",
+    "compromised_ally",
+)
+_MISSION_PRESSURES = (
+    "time_window",
+    "resource_depletion",
+    "public_exposure",
+    "escalating_violence",
+    "loss_of_access",
+    "competing_claim",
+    "evidence_decay",
+    "trust_collapse",
+)
+_MISSION_RESOLUTIONS = (
+    "document",
+    "negotiate",
+    "extract",
+    "repair",
+    "redirect",
+    "expose",
+    "contain",
+    "sabotage",
+)
+_MISSION_CONSEQUENCES = (
+    "access_shift",
+    "trust_shift",
+    "resource_shift",
+    "authority_shift",
+    "route_shift",
+    "knowledge_shift",
+    "security_shift",
+    "faction_shift",
+    "infrastructure_shift",
+)
 
 
 def _slug(value: str) -> str:
@@ -95,13 +165,34 @@ def _string_value(field_id: str, *, name: str, anchor: str, index: int) -> str:
     )
 
 
+def _mission_signature(entity_kind: str, index: int) -> dict[str, Any]:
+    return {
+        "activity": _MISSION_ACTIVITIES[index % len(_MISSION_ACTIVITIES)],
+        "target": _MISSION_TARGETS[(index * 5 + 1) % len(_MISSION_TARGETS)],
+        "location": _MISSION_LOCATIONS[(index * 3 + 1) % len(_MISSION_LOCATIONS)],
+        "principal_actor": _MISSION_PRINCIPALS[(index * 2 + 1) % len(_MISSION_PRINCIPALS)],
+        "antagonist": _MISSION_ANTAGONISTS[(index * 3 + 2) % len(_MISSION_ANTAGONISTS)],
+        "pressure": _MISSION_PRESSURES[(index * 5 + 3) % len(_MISSION_PRESSURES)],
+        "resolution_modes": [
+            _MISSION_RESOLUTIONS[index % len(_MISSION_RESOLUTIONS)],
+            _MISSION_RESOLUTIONS[(index * 3 + 2) % len(_MISSION_RESOLUTIONS)],
+        ],
+        "consequence_type": _MISSION_CONSEQUENCES[
+            (index * 7 + len(entity_kind)) % len(_MISSION_CONSEQUENCES)
+        ],
+    }
+
+
 def _structured_value(
     field_id: str,
     *,
     name: str,
     anchor: str,
     index: int,
-) -> dict[str, str]:
+    entity_kind: str,
+) -> dict[str, Any]:
+    if field_id == "mission_signature":
+        return _mission_signature(entity_kind, index)
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     labels = {
         "observable_consequences": "visible consequence",
@@ -137,16 +228,25 @@ def _value_for_field(
     anchor: str,
     index: int,
     known: Mapping[str, tuple[str, ...]],
+    entity_kind: str,
 ) -> Any:
     field_id = str(definition.get("field_id") or "")
     value_type = str(definition.get("value_type") or "string")
+    if field_id in _OPTIONAL_ARC_FIELDS:
+        return None
     candidates = _reference_candidates(definition, known)
     if field_id == "name":
         return name
     if value_type == "string":
         return _string_value(field_id, name=name, anchor=anchor, index=index)
     if value_type == "structured_object":
-        return _structured_value(field_id, name=name, anchor=anchor, index=index)
+        return _structured_value(
+            field_id,
+            name=name,
+            anchor=anchor,
+            index=index,
+            entity_kind=entity_kind,
+        )
     if value_type == "entity_ref":
         return candidates[index % len(candidates)] if candidates else ""
     if value_type == "entity_ref_list":
@@ -238,6 +338,7 @@ def generate_deterministic_profile_topic(
                 anchor=anchor,
                 index=index,
                 known=known,
+                entity_kind=entity_kind,
             )
             if value in (None, "", [], (), {}) and not required:
                 continue
