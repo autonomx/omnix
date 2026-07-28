@@ -29,6 +29,7 @@ _CERTIFICATION_REPORT_FIELDS = (
     "resource_dependencies",
     "economic_scale",
     "ordinary_life",
+    "countervailing_powers",
     "audit_stages",
     "finding_waiver_policy",
 )
