@@ -11,6 +11,7 @@ from .generation_exact_artifact import (
     rebind_exact_artifact_report,
     require_exact_artifact_binding,
 )
+from .generation_profile_release_contracts import require_profile_release_contracts
 from .generation_publication import WorldGenerationPublication
 from .generation_publication_transaction import (
     require_certified_publication,
@@ -70,6 +71,7 @@ def _compilation_run(
         "world_id": world_id,
         "world_revision": int(target_revision),
     }
+    graph = require_profile_release_contracts(graph)
     return {
         **dict(run),
         "graph": graph,
