@@ -20,6 +20,7 @@ _CERTIFICATION_REPORT_FIELDS = (
     "cross_topic_duplicate_fields",
     "mission_portfolio",
     "objective_named_claims",
+    "entity_identity_contamination",
     "audit_stages",
     "finding_waiver_policy",
 )
