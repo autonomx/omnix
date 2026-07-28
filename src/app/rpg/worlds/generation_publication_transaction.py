@@ -19,6 +19,7 @@ _CERTIFICATION_REPORT_FIELDS = (
     "manifest_reference_closure",
     "cross_topic_duplicate_fields",
     "mission_portfolio",
+    "objective_named_claims",
     "audit_stages",
     "finding_waiver_policy",
 )
