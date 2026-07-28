@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Sequence
 
+from .world_forge_actor_incentives import deterministic_actor_incentive_signature
 from .world_forge_contract import CampaignTopicNode
 from .world_forge_generation import GeneratedTopic
 
@@ -193,6 +194,8 @@ def _structured_value(
 ) -> dict[str, Any]:
     if field_id == "mission_signature":
         return _mission_signature(entity_kind, index)
+    if field_id == "incentive_signature":
+        return deterministic_actor_incentive_signature(index)
     distinction = _DISTINCTIONS[index % len(_DISTINCTIONS)]
     labels = {
         "observable_consequences": "visible consequence",
