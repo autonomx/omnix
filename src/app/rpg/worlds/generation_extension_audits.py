@@ -24,6 +24,10 @@ from .generation_starter_neighbor import (
     require_valid_starter_neighbor,
     starter_neighbor_report,
 )
+from .generation_starter_neighbor_artifacts import (
+    require_valid_starter_neighbor_artifacts,
+    starter_neighbor_artifact_report,
+)
 from .generation_starter_region import (
     require_valid_starter_region,
     starter_region_report,
@@ -74,6 +78,11 @@ def extension_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
             "starter_neighbor",
             starter_neighbor_report,
             require_valid_starter_neighbor,
+        ),
+        (
+            "starter_neighbor_artifacts",
+            starter_neighbor_artifact_report,
+            require_valid_starter_neighbor_artifacts,
         ),
     )
 
