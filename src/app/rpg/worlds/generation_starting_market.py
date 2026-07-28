@@ -50,6 +50,21 @@ def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
     return dict(row)
 
 
+def _contract_enabled(topic_graph: Mapping[str, Any] | None) -> bool:
+    graph = _map(topic_graph)
+    contract = _map(_map(graph.get("metadata")).get("starting_market_contract"))
+    if contract.get("required") or contract.get("domain_ids"):
+        return True
+    for node in _rows(graph.get("nodes")):
+        fields = {
+            str(row.get("field_id") or "")
+            for row in _rows(_map(node.get("metadata")).get("field_definitions"))
+        }
+        if "vendor_inventory_item_ids" in fields:
+            return True
+    return False
+
+
 def _entities(topic_rows: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, int, dict[str, Any]], ...]:
     values: list[tuple[str, int, dict[str, Any]]] = []
     for topic_index, raw in enumerate(topic_rows, 1):
@@ -101,10 +116,24 @@ def _stock(vendor_id: str, item_id: str) -> int:
     return 1 + int(digest[:8], 16) % 6
 
 
+def _empty_materialization(*, enabled: bool) -> dict[str, Any]:
+    return {
+        "schema_version": "rpg_world_starting_market_materialization_v1",
+        "contract_enabled": enabled,
+        "skipped": not enabled,
+        "place_id": "",
+        "vendors": [],
+        "vendor_count": 0,
+        "inventory_item_count": 0,
+    }
+
+
 def _materialize(
     topic_rows: Sequence[Mapping[str, Any]],
     topic_graph: Mapping[str, Any] | None,
 ) -> tuple[dict[str, Any], tuple[StartingMarketIssue, ...]]:
+    if not _contract_enabled(topic_graph):
+        return _empty_materialization(enabled=False), ()
     entities = _entities(topic_rows)
     places = sorted(
         (str(row.get("id") or ""), row)
@@ -147,18 +176,13 @@ def _materialize(
         valid_items = [value for value in item_ids if value in equipment][:5]
         if not valid_items:
             continue
-        stock = [
-            {
-                "item_id": item_id,
-                "price": _price(item_id),
-                "quantity": _stock(actor_id, item_id),
-            }
-            for item_id in valid_items
-        ]
         vendors.append({
             "vendor_id": actor_id,
             "place_id": hub_id,
-            "inventory": stock,
+            "inventory": [
+                {"item_id": item_id, "price": _price(item_id), "quantity": _stock(actor_id, item_id)}
+                for item_id in valid_items
+            ],
         })
         if len(vendors) >= 2:
             break
@@ -170,8 +194,7 @@ def _materialize(
         ))
     if vendors and not all(
         row["price"] > 0 and row["quantity"] > 0
-        for vendor in vendors
-        for row in vendor["inventory"]
+        for vendor in vendors for row in vendor["inventory"]
     ):
         issues.append(StartingMarketIssue(
             "starting_vendor_stock_invalid", hub_id, "/starting_market/vendors",
@@ -179,6 +202,8 @@ def _materialize(
         ))
     return {
         "schema_version": "rpg_world_starting_market_materialization_v1",
+        "contract_enabled": True,
+        "skipped": False,
         "place_id": hub_id,
         "vendors": vendors,
         "vendor_count": len(vendors),
@@ -191,15 +216,18 @@ def starting_market_report(
     topic_graph: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     materialization, issues = _materialize(topic_rows, topic_graph)
+    enabled = bool(materialization["contract_enabled"])
     return {
         "schema_version": "rpg_world_starting_market_report_v1",
         "passed": not issues,
         "issues": [row.as_dict() for row in issues],
         "materialization": materialization,
         "checks": {
-            "starting_place_resolved": bool(materialization["place_id"]),
-            "vendor_materialized": materialization["vendor_count"] >= 1,
-            "inventory_materialized": materialization["inventory_item_count"] >= 1,
+            "contract_enabled": enabled,
+            "skipped_when_not_declared": enabled or materialization["skipped"],
+            "starting_place_resolved": not enabled or bool(materialization["place_id"]),
+            "vendor_materialized": not enabled or materialization["vendor_count"] >= 1,
+            "inventory_materialized": not enabled or materialization["inventory_item_count"] >= 1,
             "bounded_vendor_count": materialization["vendor_count"] <= 2,
             "bounded_inventory_count": materialization["inventory_item_count"] <= 10,
         },
