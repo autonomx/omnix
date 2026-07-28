@@ -30,6 +30,7 @@ _CERTIFICATION_REPORT_FIELDS = (
     "economic_scale",
     "ordinary_life",
     "countervailing_powers",
+    "local_markets",
     "audit_stages",
     "finding_waiver_policy",
 )
