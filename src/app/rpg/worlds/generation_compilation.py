@@ -12,6 +12,7 @@ from .generation_cross_topic_duplicates import cross_topic_duplicate_field_repor
 from .generation_countervailing_powers import countervailing_power_report, require_valid_countervailing_powers
 from .generation_economic_scale import economic_scale_report, require_valid_economic_scale
 from .generation_entity_contamination import entity_identity_contamination_report, require_no_entity_identity_contamination
+from .generation_extension_audits import extension_audits
 from .generation_finding_policy import finding_waiver_policy_report
 from .generation_local_markets import local_market_report, require_valid_local_markets
 from .generation_manifest_references import manifest_reference_report, require_manifest_reference_closure
@@ -101,6 +102,7 @@ def _graph_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
         ("ordinary_life", ordinary_life_report, require_valid_ordinary_life),
         ("countervailing_powers", countervailing_power_report, require_valid_countervailing_powers),
         ("local_markets", local_market_report, require_valid_local_markets),
+        *extension_audits(),
     )
 
 
