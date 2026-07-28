@@ -6,6 +6,10 @@ from typing import Any, Literal, Mapping, Sequence
 
 from .contracts import WorldRevisionDocument
 from .generation_audit_stages import two_stage_audit_report
+from .generation_cross_topic_duplicates import (
+    cross_topic_duplicate_field_report,
+    require_no_cross_topic_duplicate_fields,
+)
 from .generation_finding_policy import finding_waiver_policy_report
 from .generation_manifest_references import (
     manifest_reference_report,
@@ -94,6 +98,7 @@ def _certification_with_integrity(
     profile_references: Mapping[str, Any],
     profile_dossiers: Mapping[str, Any],
     manifest_references: Mapping[str, Any],
+    cross_topic_duplicates: Mapping[str, Any],
     audit_stages: Mapping[str, Any],
     finding_policy: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -104,6 +109,7 @@ def _certification_with_integrity(
         "profile_reference_integrity": dict(profile_references),
         "profile_dossier_quality": dict(profile_dossiers),
         "manifest_reference_closure": dict(manifest_references),
+        "cross_topic_duplicate_fields": dict(cross_topic_duplicates),
         "audit_stages": dict(audit_stages),
         "finding_waiver_policy": dict(finding_policy),
     }
@@ -117,6 +123,7 @@ def _certification_with_integrity(
         (profile_references.get("passed"), "profile_reference_integrity"),
         (profile_dossiers.get("passed"), "profile_dossier_quality"),
         (manifest_references.get("passed"), "manifest_reference_closure"),
+        (cross_topic_duplicates.get("passed"), "cross_topic_duplicate_fields"),
         (audit_stages.get("passed"), "post_repair_audit"),
         (finding_policy.get("passed"), "finding_waiver_policy"),
     ):
@@ -147,12 +154,17 @@ def compile_world_generation_artifact(
     profile_references = profile_reference_report(topic_rows, topic_graph)
     profile_dossiers = profile_dossier_report(topic_rows, topic_graph)
     manifest_references = manifest_reference_report(topic_rows, topic_graph)
+    cross_topic_duplicates = cross_topic_duplicate_field_report(
+        topic_rows,
+        topic_graph,
+    )
     finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
     if mode == "certified_release":
         require_unique_canon_identifiers(topic_rows)
         require_valid_profile_references(topic_rows, topic_graph)
         require_profile_dossier_quality(topic_rows, topic_graph)
         require_manifest_reference_closure(topic_rows, topic_graph)
+        require_no_cross_topic_duplicate_fields(topic_rows, topic_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
@@ -174,6 +186,7 @@ def compile_world_generation_artifact(
         profile_references=profile_references,
         profile_dossiers=profile_dossiers,
         manifest_references=manifest_references,
+        cross_topic_duplicates=cross_topic_duplicates,
         audit_stages=audit_stages,
         finding_policy=finding_policy,
     )
