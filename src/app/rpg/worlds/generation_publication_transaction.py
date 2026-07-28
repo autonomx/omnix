@@ -25,6 +25,7 @@ _CERTIFICATION_REPORT_FIELDS = (
     "conflict_portfolio",
     "actor_portfolio",
     "network_constraints",
+    "spatial_reachability",
     "audit_stages",
     "finding_waiver_policy",
 )
