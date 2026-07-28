@@ -9,38 +9,110 @@ from .world_forge_causal_profile import augment_profile_with_causal_traceability
 from .world_forge_contract import CampaignTopicGraph, CampaignTopicNode
 from .world_forge_lore_quality import lore_quality_contract
 from .world_forge_planning import planning_contract_metadata
-from .world_forge_profiles import DomainDefinition, GenreProfile
+from .world_forge_profiles import DomainDefinition, FieldDefinition, GenreProfile
 
 _PIPELINE_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
+_MISSION_DOMAIN_IDS = {
+    "quests",
+    "encounter_seeds",
+    "opening_threads",
+    "opening_scenarios",
+}
+_MISSION_FIELDS = (
+    FieldDefinition(
+        field_id="mission_signature",
+        value_type="structured_object",
+        required=True,
+        semantic_role="mission_signature",
+        description=(
+            "Structured mission shape with activity, target, location, principal_actor, "
+            "antagonist, pressure, resolution_modes, and consequence_type."
+        ),
+    ),
+    FieldDefinition(
+        field_id="campaign_arc_id",
+        value_type="string",
+        required=False,
+        semantic_role="campaign_arc",
+        description="Stable arc ID only when this mission is an intentional sequence member.",
+    ),
+    FieldDefinition(
+        field_id="arc_role",
+        value_type="string",
+        required=False,
+        semantic_role="campaign_arc",
+        description="Distinct role within an intentional arc, such as setup or reversal.",
+    ),
+    FieldDefinition(
+        field_id="arc_sequence",
+        value_type="integer",
+        required=False,
+        semantic_role="campaign_arc",
+        description="Positive unique order within an intentional campaign arc.",
+    ),
+)
 
 
 def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _domain_fields(domain: DomainDefinition) -> tuple[FieldDefinition, ...]:
+    if domain.domain_id not in _MISSION_DOMAIN_IDS:
+        return domain.fields
+    existing = {field.field_id for field in domain.fields}
+    return (
+        *domain.fields,
+        *(field for field in _MISSION_FIELDS if field.field_id not in existing),
+    )
+
+
 def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
-    required_fields = [field.field_id for field in domain.fields if field.required]
+    fields = _domain_fields(domain)
+    required_fields = [field.field_id for field in fields if field.required]
     reference_fields = {
         field.field_id: {
             "value_type": field.value_type,
             "allowed_target_domains": list(field.allowed_target_domains),
         }
-        for field in domain.fields
+        for field in fields
         if field.value_type in {"entity_ref", "entity_ref_list"}
     }
     guidance = dict(domain.generation_guidance)
     presentation = _record(guidance.get("presentation"))
-    return {
+    metadata = {
         "entity_kind": domain.entity_kind,
         "required_entity_fields": required_fields,
-        "field_definitions": [field_policy_row(field) for field in domain.fields],
-        "authorship_policy": topic_authorship_policy(domain.fields),
+        "field_definitions": [field_policy_row(field) for field in fields],
+        "authorship_policy": topic_authorship_policy(fields),
         "reference_fields": reference_fields,
         "semantic_roles": list(domain.semantic_roles),
         "generation_guidance": guidance,
         "presentation": presentation,
-        "schema_version": f"rpg_profile_domain_{domain.domain_id}_v1",
+        "schema_version": (
+            f"rpg_profile_domain_{domain.domain_id}_v2"
+            if domain.domain_id in _MISSION_DOMAIN_IDS
+            else f"rpg_profile_domain_{domain.domain_id}_v1"
+        ),
     }
+    if domain.domain_id in _MISSION_DOMAIN_IDS:
+        metadata["mission_signature_contract"] = {
+            "schema_version": "rpg_world_mission_signature_contract_v1",
+            "required": True,
+            "signature_field": "mission_signature",
+            "arc_fields": ["campaign_arc_id", "arc_role", "arc_sequence"],
+            "signature_components": [
+                "activity",
+                "target",
+                "location",
+                "principal_actor",
+                "antagonist",
+                "pressure",
+                "resolution_modes",
+                "consequence_type",
+            ],
+        }
+    return metadata
 
 
 def _effective_dependencies(domain: DomainDefinition) -> tuple[str, ...]:
@@ -54,7 +126,7 @@ def _effective_dependencies(domain: DomainDefinition) -> tuple[str, ...]:
 
     reference_domains = (
         target
-        for field in domain.fields
+        for field in _domain_fields(domain)
         if field.value_type in {"entity_ref", "entity_ref_list"}
         for target in field.allowed_target_domains
         if target != domain.domain_id
@@ -179,6 +251,10 @@ def build_profile_topic_graph(
             },
             "launch_requirements": profile.launch_requirements.as_dict(),
             "planning_contract": planning_contract_metadata(),
+            "mission_signature_contract": {
+                "schema_version": "rpg_world_mission_signature_contract_v1",
+                "domain_ids": sorted(_MISSION_DOMAIN_IDS),
+            },
         },
     )
     issues = graph.validate()
