@@ -107,6 +107,19 @@ def extension_fields(domain_id: str) -> tuple[FieldDefinition, ...]:
                 description="Bounded channel, latency, verification, distortion, interception, blackout, cadence, and confidence-decay profile.",
             ),
         )
+    if domain_id == "actors":
+        return (
+            _field(
+                "vendor_inventory_item_ids",
+                "entity_ref_list",
+                targets=("equipment_vehicles",),
+                role="starting_vendor_inventory",
+                description=(
+                    "Canonical equipment or commodity definitions this actor can offer when "
+                    "materialized as a local vendor."
+                ),
+            ),
+        )
     if domain_id in _LOCAL_NARRATIVE_DOMAINS:
         return _local_narrative_fields()
     return ()
