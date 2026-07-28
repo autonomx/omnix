@@ -124,6 +124,16 @@ def _causal_fields(domain_id: str) -> tuple[FieldDefinition, ...]:
             _field("founding_purpose", required=True),
             _field("economic_functions", "structured_object", required=True),
             _field("strategic_functions", "structured_object", required=True),
+            _field(
+                "local_market_signature",
+                "structured_object",
+                required=True,
+                semantic_role="local_market_signature",
+                description=(
+                    "Bounded place-local demand, supply, price, credit, informal trade, "
+                    "enforcement, shock sensitivity, and recovery state."
+                ),
+            ),
         )
     if domain_id == "groups":
         return (
