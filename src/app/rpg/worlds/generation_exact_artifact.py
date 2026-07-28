@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from .canon_repair import repair_generation_contracts
-from .contracts import canonical_content_hash
+from .contracts import WorldRevisionDocument, canonical_content_hash
 from .generation_publication import (
     WorldGenerationPublication,
     _generation_result,
@@ -122,37 +122,25 @@ def prepare_world_generation_audit_rows(
     )
 
 
-def exact_artifact_binding_report(
-    prepared: PreparedWorldGenerationAudit,
-    publication: WorldGenerationPublication,
+def _binding_report(
+    *,
+    audited_topic_hash: str,
+    expected_hashes: Mapping[str, str],
+    revision: WorldRevisionDocument,
 ) -> dict[str, Any]:
-    revision = publication.world_revision
-    if not hasattr(revision, "provenance"):
-        return {
-            "schema_version": "rpg_world_exact_artifact_binding_v1",
-            "passed": True,
-            "skipped": True,
-            "issues": [],
-            "checks": {"typed_revision_available": False},
-            "audited_topic_hash": prepared.content_hash,
-            "audited_topic_hashes": dict(prepared.topic_hashes),
-            "published_world_revision_hash": "",
-        }
-    provenance = getattr(revision, "provenance", {})
-    provenance_map = dict(provenance) if isinstance(provenance, Mapping) else {}
     published_hashes = {
         str(key): str(value)
-        for key, value in dict(provenance_map.get("topic_hashes") or {}).items()
+        for key, value in dict(revision.provenance.get("topic_hashes") or {}).items()
     }
-    expected_hashes = {
+    expected = {
         str(key): str(value)
-        for key, value in prepared.topic_hashes.items()
+        for key, value in expected_hashes.items()
     }
-    revision_hash = str(getattr(revision, "content_hash", "") or "")
+    revision_hash = str(revision.content_hash or "")
     checks = {
         "typed_revision_available": True,
-        "audited_topic_set_hashed": prepared.content_hash.startswith("sha256:"),
-        "published_topic_hashes_exact": published_hashes == expected_hashes,
+        "audited_topic_set_hashed": str(audited_topic_hash).startswith("sha256:"),
+        "published_topic_hashes_exact": published_hashes == expected,
         "published_revision_hashed": revision_hash.startswith("sha256:"),
     }
     issues = []
@@ -162,7 +150,7 @@ def exact_artifact_binding_report(
                 "code": "published_topic_hashes_mismatch",
                 "severity": "error",
                 "blocking": True,
-                "expected_topic_hashes": expected_hashes,
+                "expected_topic_hashes": expected,
                 "published_topic_hashes": published_hashes,
             }
         )
@@ -180,10 +168,51 @@ def exact_artifact_binding_report(
         "skipped": False,
         "issues": issues,
         "checks": checks,
-        "audited_topic_hash": prepared.content_hash,
-        "audited_topic_hashes": expected_hashes,
+        "audited_topic_hash": str(audited_topic_hash),
+        "audited_topic_hashes": expected,
         "published_world_revision_hash": revision_hash,
     }
+
+
+def exact_artifact_binding_report(
+    prepared: PreparedWorldGenerationAudit,
+    publication: WorldGenerationPublication,
+) -> dict[str, Any]:
+    revision = publication.world_revision
+    if not isinstance(revision, WorldRevisionDocument):
+        return {
+            "schema_version": "rpg_world_exact_artifact_binding_v1",
+            "passed": True,
+            "skipped": True,
+            "issues": [],
+            "checks": {"typed_revision_available": False},
+            "audited_topic_hash": prepared.content_hash,
+            "audited_topic_hashes": dict(prepared.topic_hashes),
+            "published_world_revision_hash": "",
+        }
+    return _binding_report(
+        audited_topic_hash=prepared.content_hash,
+        expected_hashes=prepared.topic_hashes,
+        revision=revision,
+    )
+
+
+def rebind_exact_artifact_report(
+    prior_report: Mapping[str, Any],
+    revision: WorldRevisionDocument,
+) -> dict[str, Any]:
+    """Refresh the binding after blueprint and starter-map assembly changes the hash."""
+
+    if bool(prior_report.get("skipped")):
+        return dict(prior_report)
+    return _binding_report(
+        audited_topic_hash=str(prior_report.get("audited_topic_hash") or ""),
+        expected_hashes={
+            str(key): str(value)
+            for key, value in dict(prior_report.get("audited_topic_hashes") or {}).items()
+        },
+        revision=revision,
+    )
 
 
 def require_exact_artifact_binding(report: Mapping[str, Any]) -> None:
@@ -196,5 +225,6 @@ __all__ = [
     "PreparedWorldGenerationAudit",
     "exact_artifact_binding_report",
     "prepare_world_generation_audit_rows",
+    "rebind_exact_artifact_report",
     "require_exact_artifact_binding",
 ]
