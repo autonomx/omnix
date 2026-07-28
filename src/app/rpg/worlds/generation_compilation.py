@@ -13,6 +13,7 @@ from .generation_countervailing_powers import countervailing_power_report, requi
 from .generation_economic_scale import economic_scale_report, require_valid_economic_scale
 from .generation_entity_contamination import entity_identity_contamination_report, require_no_entity_identity_contamination
 from .generation_exact_artifact import (
+    PreparedWorldGenerationAudit,
     exact_artifact_binding_report,
     prepare_world_generation_audit_rows,
     require_exact_artifact_binding,
@@ -125,6 +126,26 @@ def _require_certified(topic_rows: list[Mapping[str, Any]], graph: Mapping[str, 
     require_resolved_objective_named_claims(topic_rows)
 
 
+def _post_normalisation_report(
+    reports: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    failed = sorted(name for name, report in reports.items() if not bool(report.get("passed")))
+    return {
+        "schema_version": "rpg_world_post_normalisation_audits_v1",
+        "passed": not failed,
+        "issues": [
+            {
+                "code": "post_normalisation_audit_failed",
+                "severity": "error",
+                "blocking": True,
+                "failed_report_ids": failed,
+            }
+        ] if failed else [],
+        "failed_report_ids": failed,
+        "reports": {name: dict(report) for name, report in reports.items()},
+    }
+
+
 def _certification(
     base: Mapping[str, Any],
     *,
@@ -150,6 +171,28 @@ def _certification(
     return payload
 
 
+def _prepare_exact_input(
+    *,
+    mode: WorldGenerationCompilationMode,
+    run: Mapping[str, Any],
+    world: Mapping[str, Any],
+    topic_rows: list[Mapping[str, Any]],
+    starting_location_override: str,
+) -> tuple[PreparedWorldGenerationAudit | None, list[Mapping[str, Any]], Mapping[str, Any], str]:
+    try:
+        prepared = prepare_world_generation_audit_rows(
+            run=run,
+            world=world,
+            topic_rows=topic_rows,
+            starting_location_override=starting_location_override,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        if mode == "certified_release":
+            raise
+        return None, topic_rows, dict(run.get("graph") or {}), str(exc)
+    return prepared, list(prepared.topic_rows), dict(prepared.graph), ""
+
+
 def compile_world_generation_artifact(
     *,
     mode: WorldGenerationCompilationMode,
@@ -163,27 +206,42 @@ def compile_world_generation_artifact(
 ) -> WorldGenerationDiagnosticDraft | WorldGenerationCertifiedArtifact:
     if mode not in {"diagnostic_draft", "certified_release"}:
         raise ValueError(f"unsupported_world_generation_compilation_mode:{mode}")
-    prepared = prepare_world_generation_audit_rows(
+    graph = dict(run.get("graph") or {})
+    reports = _reports(topic_rows, graph)
+    finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
+    if mode == "certified_release":
+        _require_certified(topic_rows, graph)
+    prepared, publication_rows, publication_graph, preparation_error = _prepare_exact_input(
+        mode=mode,
         run=run,
         world=world,
         topic_rows=topic_rows,
         starting_location_override=starting_location_override,
     )
-    prepared_rows = list(prepared.topic_rows)
-    graph = dict(prepared.graph)
-    reports = _reports(prepared_rows, graph)
-    finding_policy = finding_waiver_policy_report(_review_rows(run, review_results))
-    if mode == "certified_release":
-        _require_certified(prepared_rows, graph)
+    if prepared is not None:
+        post_reports = _reports(publication_rows, publication_graph)
+        reports["post_normalisation_audits"] = _post_normalisation_report(post_reports)
+        if mode == "certified_release":
+            _require_certified(publication_rows, publication_graph)
     publication = compile_world_generation_publication(
         run=run,
         world=world,
-        topic_rows=prepared_rows,
+        topic_rows=publication_rows,
         revision=revision,
         starting_location_override=starting_location_override,
         asset_bindings=asset_bindings,
     )
-    binding = exact_artifact_binding_report(prepared, publication)
+    if prepared is None:
+        binding = {
+            "schema_version": "rpg_world_exact_artifact_binding_v1",
+            "passed": True,
+            "skipped": True,
+            "issues": [],
+            "checks": {"prepared_input_available": False},
+            "preparation_error": preparation_error,
+        }
+    else:
+        binding = exact_artifact_binding_report(prepared, publication)
     reports["exact_artifact_binding"] = binding
     if mode == "certified_release":
         require_exact_artifact_binding(binding)
