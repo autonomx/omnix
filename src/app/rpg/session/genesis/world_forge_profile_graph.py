@@ -18,6 +18,7 @@ _MISSION_DOMAIN_IDS = {
     "opening_threads",
     "opening_scenarios",
 }
+_ACTOR_DOMAIN_IDS = {"actors"}
 _MISSION_FIELDS = (
     FieldDefinition(
         field_id="mission_signature",
@@ -51,6 +52,19 @@ _MISSION_FIELDS = (
         description="Positive unique order within an intentional campaign arc.",
     ),
 )
+_ACTOR_FIELDS = (
+    FieldDefinition(
+        field_id="incentive_signature",
+        value_type="structured_object",
+        required=True,
+        semantic_role="actor_incentive_signature",
+        description=(
+            "Structured actor incentive with primary_motive, scarce_need, dependency_type, "
+            "risk_tolerance, preferred_method, red_line, alliance_preference, and "
+            "conflict_preference. Use concise categorical values, not prose."
+        ),
+    ),
+)
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -58,13 +72,15 @@ def _record(value: Any) -> dict[str, Any]:
 
 
 def _domain_fields(domain: DomainDefinition) -> tuple[FieldDefinition, ...]:
-    if domain.domain_id not in _MISSION_DOMAIN_IDS:
-        return domain.fields
-    existing = {field.field_id for field in domain.fields}
-    return (
-        *domain.fields,
-        *(field for field in _MISSION_FIELDS if field.field_id not in existing),
-    )
+    fields = list(domain.fields)
+    existing = {field.field_id for field in fields}
+    additions: tuple[FieldDefinition, ...] = ()
+    if domain.domain_id in _MISSION_DOMAIN_IDS:
+        additions = (*additions, *_MISSION_FIELDS)
+    if domain.domain_id in _ACTOR_DOMAIN_IDS:
+        additions = (*additions, *_ACTOR_FIELDS)
+    fields.extend(field for field in additions if field.field_id not in existing)
+    return tuple(fields)
 
 
 def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
@@ -80,6 +96,10 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
     }
     guidance = dict(domain.generation_guidance)
     presentation = _record(guidance.get("presentation"))
+    upgraded = (
+        domain.domain_id in _MISSION_DOMAIN_IDS
+        or domain.domain_id in _ACTOR_DOMAIN_IDS
+    )
     metadata = {
         "entity_kind": domain.entity_kind,
         "required_entity_fields": required_fields,
@@ -91,7 +111,7 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
         "presentation": presentation,
         "schema_version": (
             f"rpg_profile_domain_{domain.domain_id}_v2"
-            if domain.domain_id in _MISSION_DOMAIN_IDS
+            if upgraded
             else f"rpg_profile_domain_{domain.domain_id}_v1"
         ),
     }
@@ -110,6 +130,22 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
                 "pressure",
                 "resolution_modes",
                 "consequence_type",
+            ],
+        }
+    if domain.domain_id in _ACTOR_DOMAIN_IDS:
+        metadata["actor_incentive_contract"] = {
+            "schema_version": "rpg_world_actor_incentive_contract_v1",
+            "required": True,
+            "signature_field": "incentive_signature",
+            "signature_components": [
+                "primary_motive",
+                "scarce_need",
+                "dependency_type",
+                "risk_tolerance",
+                "preferred_method",
+                "red_line",
+                "alliance_preference",
+                "conflict_preference",
             ],
         }
     return metadata
@@ -254,6 +290,10 @@ def build_profile_topic_graph(
             "mission_signature_contract": {
                 "schema_version": "rpg_world_mission_signature_contract_v1",
                 "domain_ids": sorted(_MISSION_DOMAIN_IDS),
+            },
+            "actor_incentive_contract": {
+                "schema_version": "rpg_world_actor_incentive_contract_v1",
+                "domain_ids": sorted(_ACTOR_DOMAIN_IDS),
             },
         },
     )
