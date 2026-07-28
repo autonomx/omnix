@@ -16,6 +16,10 @@ from .generation_starting_market import (
     require_valid_starting_market,
     starting_market_report,
 )
+from .generation_starter_topology import (
+    require_valid_starter_topology,
+    starter_topology_report,
+)
 
 ReportFn = Callable[[Sequence[Mapping[str, Any]], Mapping[str, Any] | None], dict[str, Any]]
 RequireFn = Callable[[Sequence[Mapping[str, Any]], Mapping[str, Any] | None], Any]
@@ -38,6 +42,11 @@ def extension_audits() -> tuple[tuple[str, ReportFn, RequireFn], ...]:
             "starting_market",
             starting_market_report,
             require_valid_starting_market,
+        ),
+        (
+            "starter_topology",
+            starter_topology_report,
+            require_valid_starter_topology,
         ),
     )
 
