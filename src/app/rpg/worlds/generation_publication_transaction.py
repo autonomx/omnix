@@ -17,6 +17,7 @@ _CERTIFICATION_REPORT_FIELDS = (
     "profile_reference_integrity",
     "profile_dossier_quality",
     "manifest_reference_closure",
+    "cross_topic_duplicate_fields",
     "audit_stages",
     "finding_waiver_policy",
 )
