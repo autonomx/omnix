@@ -48,7 +48,11 @@ def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
 def _domains(graph: Mapping[str, Any] | None) -> set[str]:
     value = _map(graph)
     domains = {str(item) for item in _map(_map(value.get("metadata")).get("countervailing_power_contract")).get("domain_ids") or () if str(item)}
-    domains.update(str(node.get("topic_id") or "") for node in _rows(value.get("nodes")) if _map(_map(node.get("metadata")).get("countervailing_power_contract")).get("required"))
+    for node in _rows(value.get("nodes")):
+        metadata = _map(node.get("metadata"))
+        fields = {str(row.get("field_id") or "") for row in _rows(metadata.get("field_definitions"))}
+        if _map(metadata.get("countervailing_power_contract")).get("required") or "countervailing_power_signature" in fields:
+            domains.add(str(node.get("topic_id") or ""))
     domains.discard("")
     return domains
 
