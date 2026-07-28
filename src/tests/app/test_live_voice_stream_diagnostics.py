@@ -42,7 +42,13 @@ def test_live_voice_diagnostics_route_persists_correlated_batches(monkeypatch) -
                 {
                     "source": "audio_worklet",
                     "event": "worklet_underrun",
-                    "details": {"buffered_samples": 0, "underrun_count": 1},
+                    "details": {
+                        "buffered_samples": 0,
+                        "underrun_count": 1,
+                        "source": "nested_source",
+                        "event": "nested_event",
+                        "trace_id": "nested_trace",
+                    },
                 },
             ],
         },
@@ -59,7 +65,7 @@ def test_live_voice_diagnostics_route_persists_correlated_batches(monkeypatch) -
             "live-call:s1:test",
             "controller",
             "phrase_queued",
-            {"phrase_index": 0, "text": "Hello there."},
+            {"phrase_index": 0, "text_chars": 12},
         ),
         (
             "live-call:s1:test",

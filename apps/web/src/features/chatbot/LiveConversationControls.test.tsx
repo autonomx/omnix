@@ -104,4 +104,46 @@ describe('LiveConversationControls', () => {
       backchannelMode: 'off',
     });
   });
+
+  it('applies the full-duplex profile as one coherent session patch', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      requests.push({ url, init });
+      if (init?.method === 'PATCH') {
+        const patch = JSON.parse(String(init.body));
+        const updated = { ...profile, ...patch, profile_version: 2 };
+        return Response.json({
+          user_defaults: profile,
+          session_override: updated,
+          effective: updated,
+          source: 'session_override',
+        });
+      }
+      return Response.json({
+        user_defaults: profile,
+        session_override: null,
+        effective: profile,
+        source: 'user_defaults',
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<LiveConversationControls sessionId="chat:one" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Full duplex/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Full duplex/ })).toHaveAttribute('aria-pressed', 'true');
+    });
+    const patchRequest = requests.find((request) => request.init?.method === 'PATCH');
+    const patch = JSON.parse(String(patchRequest?.init?.body));
+    expect(patch).toMatchObject({
+      conversation_pace: 'quick',
+      interruption_preference: 'easy',
+      assistant_backchannel_mode: 'natural',
+      duplex_mode: 'echo_aware',
+      response_onset_style: 'immediate',
+    });
+    expect(Object.keys(patch)).toHaveLength(16);
+  });
 });

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from contextvars import copy_context
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Iterator
+
+import pytest
 
 from app import shared
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
@@ -135,3 +138,29 @@ def test_lmstudio_live_voice_disables_thinking_without_affecting_text_chat(monke
 
     assert payloads[0]["chat_template_kwargs"] == {"enable_thinking": False}
     assert "chat_template_kwargs" not in payloads[1]
+
+
+def test_live_voice_stream_can_advance_across_copied_contexts() -> None:
+    observed_context: list[bool] = []
+
+    def source() -> Iterator[dict[str, Any]]:
+        observed_context.append(profile._LIVE_VOICE_TURN.get())
+        yield {"type": "chunk", "text": "Hello"}
+        observed_context.append(profile._LIVE_VOICE_TURN.get())
+        yield {"type": "complete"}
+        observed_context.append(profile._LIVE_VOICE_TURN.get())
+
+    stream = profile._stream_with_live_voice_context(
+        source(),
+        is_live_voice=True,
+    )
+
+    assert copy_context().run(next, stream) == {"type": "chunk", "text": "Hello"}
+    assert profile._LIVE_VOICE_TURN.get() is False
+    assert copy_context().run(next, stream) == {"type": "complete"}
+    assert profile._LIVE_VOICE_TURN.get() is False
+    with pytest.raises(StopIteration):
+        copy_context().run(next, stream)
+
+    assert observed_context == [True, True, True]
+    assert profile._LIVE_VOICE_TURN.get() is False

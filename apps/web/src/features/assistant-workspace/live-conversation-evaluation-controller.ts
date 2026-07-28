@@ -139,8 +139,9 @@ export function initializeLiveConversationEvaluationController(): () => void {
     const conversation = liveConversationStore.getState().conversation;
     const speaking = conversation.assistantTurn === 'speaking' || conversation.delivery === 'audio_started';
     if (speaking && !previousAssistantSpeaking) assistantSpeechStartedAt = now();
-    if (!speaking && previousAssistantSpeaking) completeAssistantTurn();
+    const assistantTurnCompleted = !speaking && previousAssistantSpeaking;
     previousAssistantSpeaking = speaking;
+    if (assistantTurnCompleted) completeAssistantTurn();
   };
 
   window.addEventListener(CALL_START_EVENT, handleCallStart);
@@ -233,13 +234,15 @@ export function resetLiveConversationEvaluation(): EvaluationSnapshot {
 
 function completeAssistantTurn(): void {
   if (assistantSpeechStartedAt === null) return;
-  recordTurn(
-    'assistant',
-    Math.max(350, now() - assistantSpeechStartedAt),
-    pendingAssistantSummary?.questionCount ?? 0,
-  );
+  const startedAt = assistantSpeechStartedAt;
+  const questionCount = pendingAssistantSummary?.questionCount ?? 0;
   assistantSpeechStartedAt = null;
   pendingAssistantSummary = null;
+  recordTurn(
+    'assistant',
+    Math.max(350, now() - startedAt),
+    questionCount,
+  );
 }
 
 function recordTurn(role: 'user' | 'assistant', durationMs: number, questionCount: number): void {

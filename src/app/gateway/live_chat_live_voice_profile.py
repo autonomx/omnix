@@ -215,6 +215,41 @@ def _install_lmstudio_thinking_policy() -> None:
     setattr(LMStudioProvider, _LMSTUDIO_SENTINEL, True)
 
 
+def _stream_with_live_voice_context(
+    stream: Iterator[dict[str, Any]],
+    *,
+    is_live_voice: bool,
+) -> Iterator[dict[str, Any]]:
+    """Advance a stream without carrying ContextVar tokens across yields.
+
+    Starlette may advance a synchronous response iterator in a different copied
+    context for each chunk. A token created before ``yield`` therefore cannot be
+    reset reliably after the caller asks for the next chunk. Keep each token
+    entirely inside the single iterator advance that created it.
+    """
+
+    iterator = iter(stream)
+    try:
+        while True:
+            token = _LIVE_VOICE_TURN.set(is_live_voice)
+            try:
+                try:
+                    item = next(iterator)
+                except StopIteration:
+                    return
+            finally:
+                _LIVE_VOICE_TURN.reset(token)
+            yield item
+    finally:
+        close = getattr(iterator, "close", None)
+        if callable(close):
+            token = _LIVE_VOICE_TURN.set(is_live_voice)
+            try:
+                close()
+            finally:
+                _LIVE_VOICE_TURN.reset(token)
+
+
 def install_live_chat_live_voice_profile_hook() -> None:
     """Install the live-only prompt and provider policy after routing wrappers."""
 
@@ -246,18 +281,17 @@ def install_live_chat_live_voice_profile_hook() -> None:
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        token = _LIVE_VOICE_TURN.set(_is_live_voice_message(user_message))
-        try:
-            yield from original_stream(
+        yield from _stream_with_live_voice_context(
+            original_stream(
                 self,
                 session,
                 user_message,
                 provider_id=provider_id,
                 model_id=model_id,
                 context_items=context_items,
-            )
-        finally:
-            _LIVE_VOICE_TURN.reset(token)
+            ),
+            is_live_voice=_is_live_voice_message(user_message),
+        )
 
     @wraps(original_generate)
     def patched_generate(

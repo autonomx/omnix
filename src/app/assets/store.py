@@ -104,6 +104,20 @@ class SharedAssetStore:
             assets.setdefault(asset.id, asset)
         return AssetListResponse(assets=list(assets.values()))
 
+    def get_asset(self, asset_id: str) -> AssetRecord | None:
+        normalized_id = str(asset_id)
+        assets = self._load_manifest()
+        asset = assets.get(normalized_id)
+        if asset is not None:
+            return asset
+        for candidate in self._legacy_voice_clone_assets():
+            if candidate.id == normalized_id:
+                return candidate
+        for candidate in self._legacy_audio_assets():
+            if candidate.id == normalized_id:
+                return candidate
+        return None
+
     def upsert_asset(self, asset: AssetRecord) -> AssetRecord:
         manifest = self._load_manifest()
         manifest[asset.id] = asset

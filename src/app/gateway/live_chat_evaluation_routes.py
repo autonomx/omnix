@@ -31,13 +31,13 @@ def register_live_chat_evaluation_routes(
     router = APIRouter(prefix="/api/tts/live-call", include_in_schema=False)
 
     @router.post("/evaluations", response_model=VoiceSessionEvaluationRecord)
-    async def upsert_voice_session_evaluation(
+    def upsert_voice_session_evaluation(
         request: VoiceSessionEvaluationCreate,
     ) -> VoiceSessionEvaluationRecord:
         return evaluation_store.upsert(request)
 
     @router.get("/evaluations", response_model=list[VoiceSessionEvaluationRecord])
-    async def list_voice_session_evaluations(
+    def list_voice_session_evaluations(
         session_id: str | None = None,
         presence_preset: str | None = None,
         limit: Annotated[int, Query(ge=1, le=1_000)] = 100,
@@ -51,7 +51,7 @@ def register_live_chat_evaluation_routes(
         )
 
     @router.get("/evaluations/release-gate", response_model=LiveChatReleaseGateReport)
-    async def evaluate_durable_voice_session_evidence(
+    def evaluate_durable_voice_session_evidence(
         limit: Annotated[int, Query(ge=1, le=1_000)] = 1_000,
         persist_status: bool = True,
     ) -> LiveChatReleaseGateReport:
@@ -63,22 +63,22 @@ def register_live_chat_evaluation_routes(
         return report
 
     @router.get("/evaluations/export")
-    async def export_voice_session_evaluations() -> dict:
+    def export_voice_session_evaluations() -> dict:
         return evaluation_store.export()
 
     @router.get("/evaluations/{evaluation_id}", response_model=VoiceSessionEvaluationRecord)
-    async def get_voice_session_evaluation(evaluation_id: str) -> VoiceSessionEvaluationRecord:
+    def get_voice_session_evaluation(evaluation_id: str) -> VoiceSessionEvaluationRecord:
         record = evaluation_store.get(evaluation_id)
         if record is None:
             raise HTTPException(status_code=404, detail="voice session evaluation not found")
         return record
 
     @router.get("/presence-presets", response_model=dict[str, PresencePolicyVersion])
-    async def active_presence_policies() -> dict[str, PresencePolicyVersion]:
+    def active_presence_policies() -> dict[str, PresencePolicyVersion]:
         return evaluation_store.active_policies()
 
     @router.get("/presence-presets/versions", response_model=list[PresencePolicyVersion])
-    async def list_presence_policy_versions(
+    def list_presence_policy_versions(
         preset: str | None = None,
     ) -> list[PresencePolicyVersion]:
         if preset not in {None, "quiet", "natural", "engaged", "listener"}:
@@ -86,7 +86,7 @@ def register_live_chat_evaluation_routes(
         return evaluation_store.list_policy_versions(preset)  # type: ignore[arg-type]
 
     @router.post("/presence-presets/{preset}/versions", response_model=PresencePolicyVersion)
-    async def create_presence_policy_version(
+    def create_presence_policy_version(
         preset: str,
         request: PresencePolicyVersionCreate,
     ) -> PresencePolicyVersion:
@@ -98,7 +98,7 @@ def register_live_chat_evaluation_routes(
             raise HTTPException(status_code=422, detail=str(error)) from error
 
     @router.post("/presence-presets/{preset}/activate/{version}", response_model=PresencePolicyVersion)
-    async def activate_presence_policy(preset: str, version: int) -> PresencePolicyVersion:
+    def activate_presence_policy(preset: str, version: int) -> PresencePolicyVersion:
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
         try:
@@ -109,7 +109,7 @@ def register_live_chat_evaluation_routes(
             raise HTTPException(status_code=409, detail=str(error)) from error
 
     @router.post("/presence-presets/{preset}/rollback", response_model=PresencePolicyVersion)
-    async def rollback_presence_policy(preset: str) -> PresencePolicyVersion:
+    def rollback_presence_policy(preset: str) -> PresencePolicyVersion:
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
         try:
