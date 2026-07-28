@@ -1,6 +1,7 @@
 """Compile full and launch CampaignTopicGraph objects from validated profiles."""
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Iterable, Mapping
 
 from .world_forge_authorship_policy import field_policy_row, topic_authorship_policy
@@ -19,6 +20,8 @@ _MISSION_DOMAIN_IDS = {
     "opening_scenarios",
 }
 _ACTOR_DOMAIN_IDS = {"actors"}
+_NETWORK_DOMAIN_IDS = {"networks"}
+_NETWORK_CAPABILITY = "digital_spaces"
 _MISSION_FIELDS = (
     FieldDefinition(
         field_id="mission_signature",
@@ -65,26 +68,76 @@ _ACTOR_FIELDS = (
         ),
     ),
 )
+_NETWORK_FIELDS = (
+    FieldDefinition(
+        field_id="controller_group_ids",
+        value_type="entity_ref_list",
+        required=True,
+        allowed_target_domains=("groups",),
+        semantic_role="network_controller",
+        description="Canonical groups that operate, govern, or can disable this network.",
+    ),
+    FieldDefinition(
+        field_id="covered_place_ids",
+        value_type="entity_ref_list",
+        required=True,
+        allowed_target_domains=("places",),
+        semantic_role="network_coverage",
+        description="Canonical places reached by this network; never claim universal coverage in prose.",
+    ),
+    FieldDefinition(
+        field_id="network_constraint_signature",
+        value_type="structured_object",
+        required=True,
+        semantic_role="network_constraint_signature",
+        description=(
+            "Structured bounded network model with coverage_scope, access_model, latency_class, "
+            "monitoring_mode, blind_spot, traceability_limit, failure_mode, and "
+            "jurisdiction_model. Use concise categorical values, not prose."
+        ),
+    ),
+)
 
 
 def _record(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
-def _domain_fields(domain: DomainDefinition) -> tuple[FieldDefinition, ...]:
-    fields = list(domain.fields)
+def _network_contract_enabled(
+    domain: DomainDefinition,
+    capability_flags: Mapping[str, bool],
+) -> bool:
+    return bool(capability_flags.get(_NETWORK_CAPABILITY)) and domain.domain_id in _NETWORK_DOMAIN_IDS
+
+
+def _domain_fields(
+    domain: DomainDefinition,
+    capability_flags: Mapping[str, bool],
+) -> tuple[FieldDefinition, ...]:
+    network_enabled = _network_contract_enabled(domain, capability_flags)
+    fields = [
+        replace(field, required=True)
+        if network_enabled and field.field_id == "controller_group_ids"
+        else field
+        for field in domain.fields
+    ]
     existing = {field.field_id for field in fields}
     additions: tuple[FieldDefinition, ...] = ()
     if domain.domain_id in _MISSION_DOMAIN_IDS:
         additions = (*additions, *_MISSION_FIELDS)
     if domain.domain_id in _ACTOR_DOMAIN_IDS:
         additions = (*additions, *_ACTOR_FIELDS)
+    if network_enabled:
+        additions = (*additions, *_NETWORK_FIELDS)
     fields.extend(field for field in additions if field.field_id not in existing)
     return tuple(fields)
 
 
-def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
-    fields = _domain_fields(domain)
+def _field_metadata(
+    domain: DomainDefinition,
+    capability_flags: Mapping[str, bool],
+) -> dict[str, Any]:
+    fields = _domain_fields(domain, capability_flags)
     required_fields = [field.field_id for field in fields if field.required]
     reference_fields = {
         field.field_id: {
@@ -96,9 +149,11 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
     }
     guidance = dict(domain.generation_guidance)
     presentation = _record(guidance.get("presentation"))
+    network_enabled = _network_contract_enabled(domain, capability_flags)
     upgraded = (
         domain.domain_id in _MISSION_DOMAIN_IDS
         or domain.domain_id in _ACTOR_DOMAIN_IDS
+        or network_enabled
     )
     metadata = {
         "entity_kind": domain.entity_kind,
@@ -148,10 +203,32 @@ def _field_metadata(domain: DomainDefinition) -> dict[str, Any]:
                 "conflict_preference",
             ],
         }
+    if network_enabled:
+        metadata["network_constraint_contract"] = {
+            "schema_version": "rpg_world_network_constraint_contract_v1",
+            "required": True,
+            "capability": _NETWORK_CAPABILITY,
+            "controller_field": "controller_group_ids",
+            "coverage_field": "covered_place_ids",
+            "signature_field": "network_constraint_signature",
+            "signature_components": [
+                "coverage_scope",
+                "access_model",
+                "latency_class",
+                "monitoring_mode",
+                "blind_spot",
+                "traceability_limit",
+                "failure_mode",
+                "jurisdiction_model",
+            ],
+        }
     return metadata
 
 
-def _effective_dependencies(domain: DomainDefinition) -> tuple[str, ...]:
+def _effective_dependencies(
+    domain: DomainDefinition,
+    capability_flags: Mapping[str, bool],
+) -> tuple[str, ...]:
     """Make every cross-domain typed reference available to the generator.
 
     Profile fields are validated against the dependency topics passed into a single
@@ -162,7 +239,7 @@ def _effective_dependencies(domain: DomainDefinition) -> tuple[str, ...]:
 
     reference_domains = (
         target
-        for field in _domain_fields(domain)
+        for field in _domain_fields(domain, capability_flags)
         if field.value_type in {"entity_ref", "entity_ref_list"}
         for target in field.allowed_target_domains
         if target != domain.domain_id
@@ -170,8 +247,13 @@ def _effective_dependencies(domain: DomainDefinition) -> tuple[str, ...]:
     return tuple(dict.fromkeys((*domain.dependencies, *reference_domains)))
 
 
-def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
-    metadata = _field_metadata(domain)
+def _domain_node(
+    domain: DomainDefinition,
+    *,
+    depth: str,
+    capability_flags: Mapping[str, bool],
+) -> CampaignTopicNode:
+    metadata = _field_metadata(domain, capability_flags)
     presentation = _record(metadata.get("presentation"))
     page_kind = str(presentation.get("page_kind") or "document")
     category = domain.category
@@ -181,7 +263,7 @@ def _domain_node(domain: DomainDefinition, *, depth: str) -> CampaignTopicNode:
         topic_id=domain.domain_id,
         title=domain.title,
         category=category,
-        dependencies=_effective_dependencies(domain),
+        dependencies=_effective_dependencies(domain, capability_flags),
         generator_role=domain.generator_role,
         required_before_launch=domain.required_before_launch,
         visibility=domain.visibility_default,
@@ -261,41 +343,58 @@ def build_profile_topic_graph(
     """Build a deterministic graph from the exact validated profile revision."""
 
     profile = augment_profile_with_causal_traceability(profile)
-    domain_nodes = tuple(_domain_node(domain, depth=depth) for domain in profile.domains)
+    capability_flags = {
+        **profile.runtime_capability_defaults.as_dict(),
+        **dict(runtime_capabilities or {}),
+    }
+    domain_nodes = tuple(
+        _domain_node(domain, depth=depth, capability_flags=capability_flags)
+        for domain in profile.domains
+    )
     domain_ids = tuple(domain.domain_id for domain in profile.domains)
+    enabled_network_domains = sorted(
+        _NETWORK_DOMAIN_IDS.intersection(domain_ids)
+        if capability_flags.get(_NETWORK_CAPABILITY)
+        else set()
+    )
     base_profile_hash = str(
         dict(profile.provenance).get("base_profile_hash") or profile.content_hash
     )
+    metadata: dict[str, Any] = {
+        "genre_profile_id": profile.profile_id,
+        "genre_profile_version": profile.version,
+        "resolved_profile_hash": base_profile_hash,
+        "compiled_profile_hash": profile.content_hash,
+        "resolved_profile": profile.as_dict(),
+        "genre_tags": list(profile.genre_tags),
+        "tone": str(tone or ""),
+        "starting_location": str(starting_location or ""),
+        "background_expansion": bool(background_expansion),
+        "runtime_capabilities": capability_flags,
+        "launch_requirements": profile.launch_requirements.as_dict(),
+        "planning_contract": planning_contract_metadata(),
+        "mission_signature_contract": {
+            "schema_version": "rpg_world_mission_signature_contract_v1",
+            "domain_ids": sorted(_MISSION_DOMAIN_IDS),
+        },
+        "actor_incentive_contract": {
+            "schema_version": "rpg_world_actor_incentive_contract_v1",
+            "domain_ids": sorted(_ACTOR_DOMAIN_IDS),
+        },
+    }
+    if enabled_network_domains:
+        metadata["network_constraint_contract"] = {
+            "schema_version": "rpg_world_network_constraint_contract_v1",
+            "capability": _NETWORK_CAPABILITY,
+            "domain_ids": enabled_network_domains,
+            "required_before_launch": True,
+        }
     graph = CampaignTopicGraph(
         graph_version="rpg_profile_topic_graph_v2",
         campaign_template=str(campaign_template or profile.profile_id),
         depth=str(depth or "standard"),  # type: ignore[arg-type]
         nodes=(*domain_nodes, *_pipeline_nodes(domain_ids)),
-        metadata={
-            "genre_profile_id": profile.profile_id,
-            "genre_profile_version": profile.version,
-            "resolved_profile_hash": base_profile_hash,
-            "compiled_profile_hash": profile.content_hash,
-            "resolved_profile": profile.as_dict(),
-            "genre_tags": list(profile.genre_tags),
-            "tone": str(tone or ""),
-            "starting_location": str(starting_location or ""),
-            "background_expansion": bool(background_expansion),
-            "runtime_capabilities": {
-                **profile.runtime_capability_defaults.as_dict(),
-                **dict(runtime_capabilities or {}),
-            },
-            "launch_requirements": profile.launch_requirements.as_dict(),
-            "planning_contract": planning_contract_metadata(),
-            "mission_signature_contract": {
-                "schema_version": "rpg_world_mission_signature_contract_v1",
-                "domain_ids": sorted(_MISSION_DOMAIN_IDS),
-            },
-            "actor_incentive_contract": {
-                "schema_version": "rpg_world_actor_incentive_contract_v1",
-                "domain_ids": sorted(_ACTOR_DOMAIN_IDS),
-            },
-        },
+        metadata=metadata,
     )
     issues = graph.validate()
     if issues:
@@ -337,6 +436,13 @@ def build_profile_launch_topic_graph(
         or set(domain.semantic_roles)
         & set(profile.launch_requirements.required_semantic_roles)
     )
+    network_contract = _record(graph.metadata.get("network_constraint_contract"))
+    if bool(network_contract.get("required_before_launch")):
+        selected.update(
+            str(topic_id)
+            for topic_id in network_contract.get("domain_ids") or ()
+            if str(topic_id)
+        )
     selected = _dependency_closure(graph, selected)
     selected.update(_PIPELINE_CATEGORIES)
     pipeline_ids = {
