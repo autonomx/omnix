@@ -27,6 +27,8 @@ _CERTIFICATION_REPORT_FIELDS = (
     "network_constraints",
     "spatial_reachability",
     "resource_dependencies",
+    "economic_scale",
+    "ordinary_life",
     "audit_stages",
     "finding_waiver_policy",
 )
@@ -49,13 +51,7 @@ class WorldGenerationCertificationError(ValueError):
 
 
 def _values(progress: Mapping[str, Any], field: str) -> list[str]:
-    return sorted(
-        {
-            str(value)
-            for value in progress.get(field) or ()
-            if str(value)
-        }
-    )
+    return sorted({str(value) for value in progress.get(field) or () if str(value)})
 
 
 def publication_transaction_report(
@@ -65,11 +61,11 @@ def publication_transaction_report(
     """Describe every condition that must hold before revision/release inserts."""
 
     progress = dict(run.get("progress") or {})
-    blockers: dict[str, list[str]] = {}
-    for field in _BLOCKING_PROGRESS_FIELDS:
-        values = _values(progress, field)
-        if values:
-            blockers[field] = values
+    blockers = {
+        field: values
+        for field in _BLOCKING_PROGRESS_FIELDS
+        if (values := _values(progress, field))
+    }
     reasons: list[str] = []
     if str(run.get("status") or "") != "review":
         reasons.append("run_not_in_review")
@@ -78,23 +74,19 @@ def publication_transaction_report(
     if blockers:
         reasons.append("unresolved_topic_blockers")
 
-    certification_payload = dict(certification or {})
+    payload = dict(certification or {})
     report_failures: dict[str, Mapping[str, Any]] = {}
     if certification is not None:
-        if not bool(certification_payload.get("launch_ready")):
+        if not bool(payload.get("launch_ready")):
             reasons.append("release_not_launch_ready")
-        missing = [
-            str(value)
-            for value in certification_payload.get("missing_requirements") or ()
-            if str(value)
-        ]
+        missing = [str(value) for value in payload.get("missing_requirements") or () if str(value)]
         if missing:
             reasons.append("release_requirements_missing")
-        consistency = certification_payload.get("consistency_report")
+        consistency = payload.get("consistency_report")
         if isinstance(consistency, Mapping) and not bool(consistency.get("passed")):
             report_failures["consistency_report"] = dict(consistency)
         for field in _CERTIFICATION_REPORT_FIELDS:
-            value = certification_payload.get(field)
+            value = payload.get(field)
             if isinstance(value, Mapping) and not bool(value.get("passed")):
                 report_failures[field] = dict(value)
         if report_failures:
@@ -111,11 +103,7 @@ def publication_transaction_report(
         "topic_blockers": blockers,
         "missing_requirements": missing,
         "failed_reports": report_failures,
-        "launch_ready": (
-            bool(certification_payload.get("launch_ready"))
-            if certification is not None
-            else None
-        ),
+        "launch_ready": bool(payload.get("launch_ready")) if certification is not None else None,
     }
 
 
