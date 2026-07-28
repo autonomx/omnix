@@ -13,6 +13,23 @@ from app.rpg.worlds.generation_publication_transaction import (
     publication_transaction_report,
 )
 
+_TOPICS = (
+    "pressures",
+    "quests",
+    "opening_threads",
+    "encounter_seeds",
+) * 2
+_UNIQUE_NAMES = (
+    "Amber Reach",
+    "Copper Vale",
+    "Glass Orchard",
+    "Ivory Ward",
+    "Lantern Bridge",
+    "Mirror Quay",
+    "Thorn Meridian",
+    "Violet Trestle",
+)
+
 
 class _Document:
     def model_dump(self, *, mode: str) -> dict:
@@ -55,12 +72,7 @@ def _row(topic_id: str, entity: dict, ordinal: int = 1) -> dict:
         "topic_id": topic_id,
         "candidate": {
             "topic_id": topic_id,
-            "entities": [
-                {
-                    "manifest_slot_id": slot_id,
-                    **entity,
-                }
-            ],
+            "entities": [{"manifest_slot_id": slot_id, **entity}],
             "documents": [],
             "facts": [],
             "relationships": [],
@@ -79,35 +91,30 @@ def _row(topic_id: str, entity: dict, ordinal: int = 1) -> dict:
 
 
 def _conflict_rows(anchor_count: int) -> list[dict]:
-    topics = (
-        "pressures",
-        "quests",
-        "opening_threads",
-        "encounter_seeds",
-        "pressures",
-        "quests",
-        "opening_threads",
-        "encounter_seeds",
-    )
     counters: dict[str, int] = {}
     rows = []
-    for index, topic_id in enumerate(topics, start=1):
+    for index, (topic_id, name) in enumerate(zip(_TOPICS, _UNIQUE_NAMES, strict=True), start=1):
         counters[topic_id] = counters.get(topic_id, 0) + 1
-        entity = {
-            "id": f"ent:conflict:{index}",
-            "name": f"Conflict Vector {index}",
-        }
-        if index <= anchor_count:
-            entity["group_ids"] = ["ent:group:omnicorp"]
-        else:
-            entity["group_ids"] = [f"ent:group:other-{index}"]
-        rows.append(_row(topic_id, entity, counters[topic_id]))
+        rows.append(
+            _row(
+                topic_id,
+                {
+                    "id": f"ent:conflict:{index}",
+                    "name": name,
+                    "group_ids": [
+                        "ent:group:omnicorp"
+                        if index <= anchor_count
+                        else f"ent:group:other-{index}"
+                    ],
+                },
+                counters[topic_id],
+            )
+        )
     return rows
 
 
 def test_canonical_anchor_over_half_the_conflict_portfolio_is_blocking() -> None:
     report = conflict_portfolio_report(_conflict_rows(5), {})
-
     assert report["passed"] is False
     issue = report["issues"][0]
     assert issue["code"] == "dominant_undeclared_conflict_anchor"
@@ -119,37 +126,31 @@ def test_canonical_anchor_over_half_the_conflict_portfolio_is_blocking() -> None
 
 
 def test_exactly_half_the_conflict_portfolio_is_valid() -> None:
-    report = conflict_portfolio_report(_conflict_rows(4), {})
-
-    assert report["passed"] is True
+    assert conflict_portfolio_report(_conflict_rows(4), {})["passed"] is True
 
 
 def test_location_references_do_not_count_as_conflict_anchors() -> None:
-    rows = []
-    for index, topic_id in enumerate(
-        ("pressures", "quests", "opening_threads", "encounter_seeds") * 2,
-        start=1,
-    ):
-        rows.append(
-            _row(
-                topic_id,
-                {
-                    "id": f"ent:item:{index}",
-                    "name": f"Item {index}",
-                    "place_ids": ["ent:place:central"],
-                },
-                ordinal=(index + 3) // 4,
-            )
+    rows = [
+        _row(
+            topic_id,
+            {
+                "id": f"ent:item:{index}",
+                "name": name,
+                "place_ids": ["ent:place:central"],
+            },
+            ordinal=(index + 3) // 4,
         )
-
+        for index, (topic_id, name) in enumerate(
+            zip(_TOPICS, _UNIQUE_NAMES, strict=True),
+            start=1,
+        )
+    ]
     report = conflict_portfolio_report(rows, {})
-
     assert report["passed"] is True
     assert report["checks"]["tracked_anchor_count"] == 0
 
 
 def test_exact_core_conflict_scope_exempts_dominant_anchor() -> None:
-    rows = _conflict_rows(5)
     graph = {
         "metadata": {
             "core_conflicts": [
@@ -161,9 +162,7 @@ def test_exact_core_conflict_scope_exempts_dominant_anchor() -> None:
             ]
         }
     }
-
-    report = conflict_portfolio_report(rows, graph)
-
+    report = conflict_portfolio_report(_conflict_rows(5), graph)
     assert report["passed"] is True
     assert report["declared_core_conflicts"][0]["conflict_id"] == (
         "core:omnicorp-control"
@@ -171,7 +170,6 @@ def test_exact_core_conflict_scope_exempts_dominant_anchor() -> None:
 
 
 def test_incomplete_core_conflict_scope_does_not_exempt_extra_occurrence() -> None:
-    rows = _conflict_rows(5)
     graph = {
         "metadata": {
             "core_conflicts": [
@@ -183,34 +181,29 @@ def test_incomplete_core_conflict_scope_does_not_exempt_extra_occurrence() -> No
             ]
         }
     }
-
-    issues = conflict_portfolio_issues(rows, graph)
-
-    assert any(issue.anchor == "ent:group:omnicorp" for issue in issues)
+    assert any(
+        issue.anchor == "ent:group:omnicorp"
+        for issue in conflict_portfolio_issues(_conflict_rows(5), graph)
+    )
 
 
 def test_mission_antagonist_category_can_be_a_dominant_anchor() -> None:
     rows = []
-    topics = (
-        "quests",
-        "encounter_seeds",
-        "opening_threads",
-        "opening_scenarios",
-    ) * 2
-    for index, topic_id in enumerate(topics, start=1):
-        antagonist = "institutional_rival" if index <= 5 else f"rival_{index}"
+    for index, (topic_id, name) in enumerate(zip(_TOPICS, _UNIQUE_NAMES, strict=True), start=1):
         rows.append(
             _row(
                 topic_id,
                 {
                     "id": f"ent:mission:{index}",
-                    "name": f"Mission {index}",
+                    "name": name,
                     "mission_signature": {
                         "activity": f"activity_{index}",
                         "target": f"target_{index}",
                         "location": f"location_{index}",
                         "principal_actor": f"actor_{index}",
-                        "antagonist": antagonist,
+                        "antagonist": (
+                            "institutional_rival" if index <= 5 else f"rival_{index}"
+                        ),
                         "pressure": f"pressure_{index}",
                         "resolution_modes": [f"resolution_{index}"],
                         "consequence_type": f"consequence_{index}",
@@ -219,12 +212,9 @@ def test_mission_antagonist_category_can_be_a_dominant_anchor() -> None:
                 ordinal=(index + 3) // 4,
             )
         )
-
-    issues = conflict_portfolio_issues(rows, {})
-
     assert any(
         issue.anchor == "signature:antagonist:institutional_rival"
-        for issue in issues
+        for issue in conflict_portfolio_issues(rows, {})
     )
 
 
@@ -234,36 +224,29 @@ def test_small_portfolio_does_not_trigger_below_minimum_count() -> None:
             topic_id,
             {
                 "id": f"ent:small:{index}",
-                "name": f"Small Conflict {index}",
-                "group_ids": ["ent:group:shared" if index <= 3 else "ent:group:other"],
+                "name": _UNIQUE_NAMES[index - 1],
+                "group_ids": [
+                    "ent:group:shared" if index <= 3 else "ent:group:other"
+                ],
             },
         )
-        for index, topic_id in enumerate(
-            ("pressures", "quests", "opening_threads", "encounter_seeds"),
-            start=1,
-        )
+        for index, topic_id in enumerate(_TOPICS[:4], start=1)
     ]
-
-    report = conflict_portfolio_report(rows, {})
-
-    assert report["passed"] is True
+    assert conflict_portfolio_report(rows, {})["passed"] is True
 
 
 def _certification_rows() -> list[dict]:
     return [
         _row(
             "groups",
-            {
-                "id": "ent:group:omnicorp",
-                "name": "Omni Corporation",
-            },
+            {"id": "ent:group:omnicorp", "name": "Omni Corporation"},
         ),
         *[
             _row(
                 topic_id,
                 {
                     "id": f"ent:cert-conflict:{index}",
-                    "name": f"Certified Conflict {index}",
+                    "name": name,
                     "group_ids": [
                         "ent:group:omnicorp"
                         if index <= 5
@@ -272,14 +255,8 @@ def _certification_rows() -> list[dict]:
                 },
                 ordinal=(index + 3) // 4,
             )
-            for index, topic_id in enumerate(
-                (
-                    "pressures",
-                    "quests",
-                    "opening_threads",
-                    "encounter_seeds",
-                )
-                * 2,
+            for index, (topic_id, name) in enumerate(
+                zip(_TOPICS, _UNIQUE_NAMES, strict=True),
                 start=1,
             )
         ],
@@ -301,7 +278,6 @@ def test_certified_compilation_fails_before_legacy_compiler(
         "compile_world_generation_publication",
         _compile,
     )
-
     with pytest.raises(ConflictPortfolioCompilationError):
         generation_compilation.compile_world_generation_certified_artifact(
             run={"run_id": "run:1", "graph": {}},
@@ -309,7 +285,6 @@ def test_certified_compilation_fails_before_legacy_compiler(
             topic_rows=_certification_rows(),
             revision=1,
         )
-
     assert called is False
 
 
@@ -321,14 +296,12 @@ def test_diagnostic_compilation_retains_conflict_report(
         "compile_world_generation_publication",
         lambda **_kwargs: _publication(),
     )
-
     artifact = generation_compilation.compile_world_generation_diagnostic_draft(
         run={"run_id": "run:1", "graph": {}},
         world={"id": "world:1"},
         topic_rows=_certification_rows(),
         revision=1,
     )
-
     report = artifact.certification["conflict_portfolio"]
     assert report["passed"] is False
     assert artifact.certification["launch_ready"] is False
@@ -352,6 +325,5 @@ def test_publication_transaction_surfaces_conflict_failure() -> None:
             },
         },
     )
-
     assert report["publishable"] is False
     assert "conflict_portfolio" in report["failed_reports"]
