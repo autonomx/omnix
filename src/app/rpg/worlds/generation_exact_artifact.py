@@ -126,7 +126,7 @@ def _binding_report(
     *,
     audited_topic_hash: str,
     expected_hashes: Mapping[str, str],
-    revision: WorldRevisionDocument,
+    revision: Any,
 ) -> dict[str, Any]:
     published_hashes = {
         str(key): str(value)
@@ -179,7 +179,10 @@ def exact_artifact_binding_report(
     publication: WorldGenerationPublication,
 ) -> dict[str, Any]:
     revision = publication.world_revision
-    if not isinstance(revision, WorldRevisionDocument):
+    if not hasattr(revision, "provenance") or not hasattr(
+        revision,
+        "content_hash",
+    ):
         return {
             "schema_version": "rpg_world_exact_artifact_binding_v1",
             "passed": True,
