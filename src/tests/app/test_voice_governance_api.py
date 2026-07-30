@@ -30,41 +30,21 @@ def _client(tmp_path: Path, monkeypatch) -> TestClient:
     return TestClient(create_gateway_app())
 
 
-def test_governance_api_blocks_link_until_consent_is_granted(tmp_path: Path, monkeypatch) -> None:
+def test_governance_api_automatically_authorizes_cloned_voice_for_character_link(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
 
     initial = client.get("/api/voice-profiles/voice-cloning%3Amaya/governance")
     assert initial.status_code == 200
-    assert initial.json()["consent_status"] == "unverified"
-
-    blocked = client.post(
-        "/api/characters",
-        json={
-            "id": "maya",
-            "display_name": "Maya",
-            "personality_prompt": "Be warm and easygoing.",
-            "default_voice_asset_id": "voice-cloning:maya",
-        },
-    )
-    assert blocked.status_code == 422
-    assert "not granted" in blocked.json()["detail"]
-
-    governed = client.patch(
-        "/api/voice-profiles/voice-cloning%3Amaya/governance",
-        json={
-            "subject_owner": "Maya voice subject",
-            "source_type": "user_recording",
-            "source_reference": "consent-session:one",
-            "creator_id": "user:local",
-            "consent_status": "granted",
-            "allowed_uses": ["character", "live_call"],
-            "deletion_state": "active",
-            "deletion_reason": "",
-        },
-    )
-    assert governed.status_code == 200
-    assert governed.json()["source_sha256"]
-    assert governed.json()["consent_recorded_at"]
+    assert initial.json()["consent_status"] == "granted"
+    assert initial.json()["deletion_state"] == "active"
+    assert set(initial.json()["allowed_uses"]) == {
+        "character",
+        "general_tts",
+        "live_call",
+        "system_assistant",
+    }
+    assert initial.json()["source_sha256"]
+    assert initial.json()["consent_recorded_at"]
 
     created = client.post(
         "/api/characters",
@@ -79,22 +59,30 @@ def test_governance_api_blocks_link_until_consent_is_granted(tmp_path: Path, mon
     assert created.json()["default_voice_asset_id"] == "voice-cloning:maya"
 
 
-def test_deleted_voice_cannot_be_linked(tmp_path: Path, monkeypatch) -> None:
+def test_legacy_revoked_or_deleted_updates_are_normalized_to_ready(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     governed = client.patch(
         "/api/voice-profiles/voice-cloning%3Amaya/governance",
         json={
             "subject_owner": "Maya voice subject",
             "source_type": "user_recording",
-            "source_reference": "consent-session:one",
+            "source_reference": "legacy-consent-session",
             "creator_id": "user:local",
-            "consent_status": "granted",
-            "allowed_uses": ["character", "live_call"],
+            "consent_status": "revoked",
+            "allowed_uses": ["character"],
             "deletion_state": "deleted",
-            "deletion_reason": "voice subject requested deletion",
+            "deletion_reason": "legacy voice state",
         },
     )
     assert governed.status_code == 200
+    assert governed.json()["consent_status"] == "granted"
+    assert governed.json()["deletion_state"] == "active"
+    assert set(governed.json()["allowed_uses"]) == {
+        "character",
+        "general_tts",
+        "live_call",
+        "system_assistant",
+    }
 
     response = client.post(
         "/api/characters",
@@ -104,5 +92,4 @@ def test_deleted_voice_cannot_be_linked(tmp_path: Path, monkeypatch) -> None:
             "default_voice_asset_id": "voice-cloning:maya",
         },
     )
-    assert response.status_code == 422
-    assert "deleted" in response.json()["detail"]
+    assert response.status_code == 201
