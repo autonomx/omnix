@@ -48,3 +48,61 @@ def test_empty_cyberpunk_world_uses_standard_profile_sections_before_generation(
     assert sections["setting_rules"]["page_kind"] == "document"
     assert {"spells", "pantheon", "hero_system"}.isdisjoint(sections)
     assert manifest["generation"] == {}
+
+
+def test_profile_manifest_placeholder_does_not_hide_imported_topics(monkeypatch) -> None:
+    detail = _empty_cyberpunk_detail()
+    detail["topics"] = [
+        {
+            "topic_id": "regions",
+            "status": "ready",
+            "content": {
+                "entities": [
+                    {"id": "region:rainline", "name": "Rainline", "kind": "region"}
+                ]
+            },
+            "provenance": {},
+        },
+        {
+            "topic_id": "groups",
+            "status": "ready",
+            "content": {
+                "entities": [
+                    {"id": "group:helix", "name": "Helix", "kind": "group"}
+                ]
+            },
+            "provenance": {},
+        },
+    ]
+    detail["generation_runs"] = [
+        {
+            "run_id": "profile-manifest:world:cyberpunk-2099",
+            "status": "failed",
+            "graph": {
+                "nodes": [
+                    {
+                        "topic_id": "profile_resolution",
+                        "title": "Genre Profile",
+                        "category": "bootstrap",
+                    }
+                ]
+            },
+            "progress": {"active_topic_ids": [], "failed_topic_ids": []},
+        }
+    ]
+    monkeypatch.setattr(
+        "app.rpg.worlds.authoring_service.read_world_detail",
+        lambda world_id, database=None: detail,
+    )
+    monkeypatch.setattr(
+        "app.rpg.worlds.authoring_service._image_section_status",
+        lambda world_id, database=None: ("empty", 0),
+    )
+
+    manifest = read_authoring_manifest("world:cyberpunk-2099")
+    sections = {str(section["id"]): section for section in manifest["sections"]}
+
+    assert sections["regions"]["operational_status"] == "complete"
+    assert sections["regions"]["entity_count"] == 1
+    assert sections["groups"]["operational_status"] == "complete"
+    assert sections["groups"]["entity_count"] == 1

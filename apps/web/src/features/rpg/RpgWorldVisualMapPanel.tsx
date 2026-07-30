@@ -207,6 +207,11 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
     .filter((target) => target.metadata.map_level === 'location' && !(
       target.review_state === 'approved' && target.active_asset_id
     ));
+  const locationMapTargets = (imagesQuery.data?.targets ?? [])
+    .filter((target) => target.metadata.map_level === 'location');
+  const areaArtworkTotal = locationArtwork.size + missingLocationArtwork.length;
+  const queuedAreaArtwork = missingLocationArtwork.filter((target) => ['queued', 'generating'].includes(target.status)).length;
+  const areaArtworkPercent = areaArtworkTotal ? Math.round((locationArtwork.size / areaArtworkTotal) * 100) : 0;
   const missingBlueprints = locations.filter((location) => !blueprints.some(
     (blueprint) => text(record(blueprint.document).location_id) === location.id,
   ));
@@ -248,6 +253,18 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
       await queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-image-targets', worldId] });
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Detailed local maps could not be generated.'),
+  });
+  const regenerateAllLocationMaps = useMutation({
+    mutationFn: () => rpgWorldImageClient.generate(worldId, {
+      target_ids: locationMapTargets.map((target) => target.target_id),
+      style: 'detailed illustrated local RPG map',
+      no_cache: true,
+    }),
+    onSuccess: async (result) => {
+      setFeedback(`Queued ${result.jobs.length} detailed local map${result.jobs.length === 1 ? '' : 's'} for regeneration.`);
+      await queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-image-targets', worldId] });
+    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Detailed local maps could not be regenerated.'),
   });
   const generateMissingBlueprints = useMutation({
     mutationFn: () => rpgWorldLibraryClient.materializeMapBlueprints(worldId),
@@ -319,11 +336,17 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
         <div className="rpg-authoring-page-heading">
           <div><p className="eyebrow">World atlas</p><h2>Map</h2><p>Generated Areas receive baseline semantic blueprints automatically; open the editor only when you need to refine one.</p></div>
           <div className="rpg-visual-map-actions">
-            {missingLocationMaps.length ? <button className="rpg-secondary-button" type="button" disabled={generateMissingLocationMaps.isPending || imagesQuery.isPending} onClick={() => generateMissingLocationMaps.mutate()}>{generateMissingLocationMaps.isPending ? 'Queuing detailed maps' : `Generate Detail Maps (${missingLocationMaps.length})`}</button> : <span className="rpg-visual-map-artwork-ready">Detailed maps ready ({locationMapArtwork.size})</span>}
+            {missingLocationMaps.length ? <button className="rpg-secondary-button" type="button" disabled={generateMissingLocationMaps.isPending || imagesQuery.isPending} onClick={() => generateMissingLocationMaps.mutate()}>{generateMissingLocationMaps.isPending ? 'Queuing detailed maps' : `Generate Detail Maps (${missingLocationMaps.length})`}</button> : null}
+            {locationMapTargets.length ? <button className="rpg-secondary-button" type="button" disabled={regenerateAllLocationMaps.isPending || imagesQuery.isPending} onClick={() => regenerateAllLocationMaps.mutate()}>{regenerateAllLocationMaps.isPending ? 'Queuing detailed maps' : `Regenerate All Detailed Maps (${locationMapTargets.length})`}</button> : null}
+            {!missingLocationMaps.length && locationMapTargets.length ? <span className="rpg-visual-map-artwork-ready">Detailed maps ready ({locationMapArtwork.size})</span> : null}
             <button type="button" disabled={regenerateMap.isPending || imagesQuery.isPending} onClick={() => regenerateMap.mutate()}>{regenerateMap.isPending ? 'Queuing map artwork…' : mapAssetId ? 'Regenerate Map Artwork' : 'Generate Map Artwork'}</button>
             {missingLocationArtwork.length ? <button className="rpg-secondary-button" type="button" disabled={generateMissingLocationArtwork.isPending || imagesQuery.isPending} onClick={() => generateMissingLocationArtwork.mutate()}>{generateMissingLocationArtwork.isPending ? 'Queuing area artwork…' : `Generate Missing Area Artwork (${missingLocationArtwork.length})`}</button> : <span className="rpg-visual-map-artwork-ready">All area artwork ready ({locationArtwork.size})</span>}
             {missingBlueprints.length ? <button className="rpg-secondary-button" type="button" disabled={generateMissingBlueprints.isPending} onClick={() => generateMissingBlueprints.mutate()}>{generateMissingBlueprints.isPending ? 'Generating area blueprints…' : `Generate Area Blueprints (${missingBlueprints.length})`}</button> : null}
             <span>{locations.length} areas · {blueprints.filter((row) => row.status === 'ready').length} ready blueprints</span>
+            {areaArtworkTotal ? <div className="rpg-visual-map-progress">
+              <div><strong>Area artwork</strong><span>{locationArtwork.size} / {areaArtworkTotal} ready{queuedAreaArtwork ? ` · ${queuedAreaArtwork} generating` : ''}</span></div>
+              <div aria-label="Area artwork generation progress" aria-valuemax={areaArtworkTotal} aria-valuemin={0} aria-valuenow={locationArtwork.size} className="rpg-visual-map-progress-track" role="progressbar"><span style={{ width: `${areaArtworkPercent}%` }} /></div>
+            </div> : null}
           </div>
         </div>
         {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}

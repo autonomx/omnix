@@ -12,7 +12,7 @@ This writes:
 
 `examples/rpg/world-bundles/vesper-9-city-of-borrowed-minds.omnix-world.zip`
 
-Bundle SHA-256: `41b3a7f7bdd17d38253034d07b50962f640545b1e920e329116a779ca55c89be`
+Bundle SHA-256: `26ec674aa8fb1d6b73422224713319f4d1388734f4b97b841d938f53b2c6b1f6`
 
 Open **Worlds & Campaigns**, select **World bundle**, choose the generated ZIP, and import it. Leave the optional world ID empty to use `world:vesper-9-city-of-borrowed-minds`, or provide another ID to create a clone.
 

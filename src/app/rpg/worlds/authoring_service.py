@@ -283,7 +283,12 @@ def _graph_nodes(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
     runs = list(detail.get("generation_runs") or [])
     latest_run = _record(runs[0]) if runs else {}
     nodes = _rows(_record(latest_run.get("graph")).get("nodes"))
-    if nodes:
+    # Profile-resolution runs are bookkeeping only: before any authoring
+    # generation they contain a single bootstrap node (or another
+    # pipeline-only graph).  Imported bundles already contain durable topics,
+    # and using that placeholder as the authoring graph hides every one of
+    # them from the workspace.
+    if any(_text(node.get("category")) not in _PIPELINE_CATEGORIES for node in nodes):
         return nodes
     world = _record(detail.get("world"))
     metadata = _record(world.get("metadata"))

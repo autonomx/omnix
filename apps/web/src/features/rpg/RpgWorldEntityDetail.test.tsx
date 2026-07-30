@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import type { RpgAuthoringEntityCard } from '../../api/rpgWorldAuthoringClient';
 import { RpgWorldEntityDetail } from './RpgWorldEntityDetail';
@@ -121,5 +122,38 @@ describe('RpgWorldEntityDetail', () => {
     expect(screen.getByText(/structured canon was accepted/i)).toBeInTheDocument();
     expect(screen.queryByText(/raw fallback representation/)).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Ward Runner sections' })).not.toBeInTheDocument();
+  });
+
+  it('publishes curated imported canon projected into dossier sections', () => {
+    const importedEntity = {
+      ...characterClass,
+      dossier: {
+        ...characterClass.dossier,
+        generated_from_legacy: true,
+        sections: [{
+          id: 'overview',
+          title: 'Overview',
+          paragraphs: ['The Chromatic Saints preserve outlawed rituals in the flood levels.'],
+        }],
+      },
+    } as RpgAuthoringEntityCard;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RpgWorldEntityDetail
+          entity={importedEntity}
+          onClose={vi.fn()}
+          topic={{
+            topic_id: 'cultures', draft_revision: 1, source: 'imported', status: 'ready',
+            content: {}, directives: {}, dependency_hashes: {}, input_hash: '', content_hash: '', provenance: {}, updated_at: '',
+          }}
+          worldId="world:vesper-9-city-of-borrowed-minds"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByRole('heading', { name: 'LLM-authored lore required' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Overview' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Chromatic Saints preserve outlawed rituals/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('navigation', { name: 'Ward Runner sections' })).toBeInTheDocument();
   });
 });

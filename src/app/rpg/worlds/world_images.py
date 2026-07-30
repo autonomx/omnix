@@ -32,7 +32,7 @@ _ROLE_BY_TOPIC: Mapping[str, str] = {
     "opening_scenarios": "cover",
 }
 
-_IMAGE_PROMPT_VERSION = "world-cinematic-poster-v5"
+_IMAGE_PROMPT_VERSION = "world-cinematic-poster-v8"
 _MAP_NO_TEXT_CONSTRAINT = (
     "Absolutely no typography or written marks anywhere in the artwork: no place names, labels, "
     "letters, words, numbers, runes, legends, cartouches, compass labels, signage, watermarks, "
@@ -290,6 +290,65 @@ def _clip(value: Any, maximum: int) -> str:
     return text[:maximum].rstrip() if text else ""
 
 
+def _is_cyberpunk(genre: Any) -> bool:
+    """Keep map art aligned with the world family, not a fantasy-atlas default."""
+    normalized = _text(genre).casefold().replace("_", " ").replace("-", " ")
+    return "cyberpunk" in normalized or "corporate dystopia" in normalized
+
+
+def _map_format_hint(genre: Any) -> str:
+    if _is_cyberpunk(genre):
+        return (
+            "premium illustrated cyberpunk city atlas, viewed from a high oblique top-down angle; "
+            "a dense vertical megacity with layered expressways, elevated rail, corporate arcologies, "
+            "stacked districts, industrial pipes, flood barriers, utility infrastructure, and pools of neon "
+            "light reflected on rain-dark surfaces. Make class divisions and surveillance infrastructure visible "
+            "in the urban layout; avoid medieval, pastoral, village, parchment, and fantasy-town architecture; "
+            + _MAP_NO_TEXT_CONSTRAINT
+        )
+    return (
+        "premium illustrated top-down RPG atlas with cinematic colour grading, legible terrain, "
+        "landmarks, and travel routes; " + _MAP_NO_TEXT_CONSTRAINT
+    )
+
+
+def _map_blueprint_direction(blueprints: Sequence[Mapping[str, Any]]) -> str:
+    """Extract human-authored spatial direction without dumping blueprint internals into a prompt."""
+    useful_keys = (
+        "description", "summary", "layout", "districts", "zones", "landmarks",
+        "features", "terrain", "routes", "connections", "constraints", "environment",
+    )
+    fragments: list[str] = []
+    for blueprint in blueprints:
+        document = _record(blueprint.get("document"))
+        values = [
+            f"{key.replace('_', ' ')}: {_canon_value_text(document[key])}"
+            for key in useful_keys
+            if _canon_value_text(document.get(key))
+        ]
+        if values:
+            fragments.append("; ".join(values))
+    return _clip(" ".join(fragments), 1400)
+
+
+def _map_canon_direction(
+    *,
+    world: Mapping[str, Any],
+    blueprints: Sequence[Mapping[str, Any]],
+) -> str:
+    """Give map art the setting's own visual premise before applying genre fallback guidance."""
+    world_description = _clip(world.get("description"), 1000)
+    blueprint_direction = _map_blueprint_direction(blueprints)
+    fragments = [
+        "Use this authored world canon as the primary visual direction; do not substitute a generic genre setting.",
+    ]
+    if world_description:
+        fragments.append(f"World premise: {world_description}")
+    if blueprint_direction:
+        fragments.append(f"Authored map layout and landmark constraints: {blueprint_direction}")
+    return " ".join(fragments)
+
+
 def _location_details(entity: Mapping[str, Any]) -> str:
     dossier = _record(entity.get("dossier"))
     metadata = _record(entity.get("metadata"))
@@ -304,13 +363,16 @@ def _location_details(entity: Mapping[str, Any]) -> str:
         metadata.get("description"),
         metadata.get("summary"),
         metadata_dossier.get("description"),
+        _dossier_section_text(entity, "overview"),
+        _dossier_section_text(entity, "details"),
+        _dossier_section_text(entity, "setting"),
     ):
         if _text(value):
-            return _clip(value, 220)
+            return _clip(value, 520)
     return ""
 
 
-def _location_landmark(entity: Mapping[str, Any]) -> dict[str, str]:
+def _location_landmark(entity: Mapping[str, Any], *, genre: Any = "") -> dict[str, str]:
     """Turn a semantic location into a visual instruction for regional map art."""
     name = _text(entity.get("name") or entity.get("title"), "Unnamed location")
     explicit_type = _text(
@@ -321,6 +383,13 @@ def _location_landmark(entity: Mapping[str, Any]) -> dict[str, str]:
     )
     details = _location_details(entity)
     cues = " ".join((name, explicit_type, details)).lower()
+    is_vertical_structure = any(
+        keyword in cues
+        for keyword in (
+            "tower", "stack", "spire", "arcology", "high-rise", "highrise", "skyscraper",
+            "building", "complex", "clinic", "laboratory", "lab", "dormitory", "residence",
+        )
+    )
     landmark_by_cue = (
         (("town", "city", "village", "settlement", "market", "port"), "a compact settlement with streets, roofs, and a clear civic centre"),
         (("castle", "fortress", "keep", "citadel", "gate", "watchtower"), "a fortified stronghold with walls and towers"),
@@ -333,11 +402,44 @@ def _location_landmark(entity: Mapping[str, Any]) -> dict[str, str]:
         (("desert", "dune", "wasteland"), "a desert landmark with dunes or weathered stone"),
         (("bridge", "crossroads", "road", "trail"), "a travel landmark with a visible bridge, crossroads, or route"),
     )
-    visual = next(
-        (description for keywords, description in landmark_by_cue if any(keyword in cues for keyword in keywords)),
-        "a distinct regional landmark that reflects its canonical setting",
-    )
-    return {"name": name, "visual": visual, "details": details}
+    if _is_cyberpunk(genre):
+        cyberpunk_landmarks = (
+            (
+                ("spire", "arcology", "tower", "corporate", "executive"),
+                "a towering corporate arcology or needle-like megastructure with stacked skybridges and controlled access",
+            ),
+            (
+                ("market", "bazaar", "settlement", "town", "city", "district", "quarter"),
+                "a dense multi-level urban district with neon market lanes, stacked housing, service alleys, elevated transit, and utility conduits",
+            ),
+            (
+                ("port", "harbor", "harbour", "waterfront", "dock"),
+                "a floodlit industrial waterfront with container stacks, seawalls, cargo cranes, and elevated freight routes",
+            ),
+            (
+                ("factory", "forge", "plant", "filtration", "industrial"),
+                "a heavy industrial complex of processing towers, pipe forests, cooling stacks, and maintenance catwalks",
+            ),
+            (
+                ("slum", "under", "undercity", "sublevel"),
+                "a crowded undercity of improvised stacked dwellings beneath transit decks, saturated with cables, vents, and scavenged lighting",
+            ),
+        )
+        visual = next(
+            (description for keywords, description in cyberpunk_landmarks if any(keyword in cues for keyword in keywords)),
+            "a distinct cyberpunk urban landmark integrated into dense vertical infrastructure",
+        )
+    else:
+        visual = next(
+            (description for keywords, description in landmark_by_cue if any(keyword in cues for keyword in keywords)),
+            "a distinct regional landmark that reflects its canonical setting",
+        )
+    return {
+        "name": name,
+        "visual": visual,
+        "details": details,
+        "map_scope": "vertical_interior" if is_vertical_structure else "district",
+    }
 
 
 def _map_locations(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -418,10 +520,7 @@ def _prompt(
         "icon": "premium collectible RPG inventory icon, dramatically lit with a clean readable silhouette",
         "emblem": "premium heraldic faction emblem, dramatically lit with a distinct readable silhouette",
         "landscape": "cinematic establishing shot, sweeping environmental key art with a strong foreground, midground, and background",
-        "map": (
-            "premium illustrated top-down RPG atlas with cinematic colour grading, legible terrain, "
-            "landmarks, and travel routes; " + _MAP_NO_TEXT_CONSTRAINT
-        ),
+        "map": _map_format_hint(genre),
         "scene": "cinematic environmental key art with a strong focal point, story details, and a sense of scale",
         "illustration": "cinematic editorial RPG key art with a striking, poster-quality composition",
     }.get(role, "cinematic RPG key art with a striking, poster-quality composition")
@@ -451,8 +550,9 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         for blueprint in (_record(row) for row in detail.get("map_blueprints") or ())
     ]
     map_locations = _map_locations(detail)
-    map_landmarks = [_location_landmark(entity) for entity in map_locations][:12]
+    map_landmarks = [_location_landmark(entity, genre=world.get("genre")) for entity in map_locations][:12]
     map_context = {"landmarks": map_landmarks, "blueprints": map_blueprints}
+    canon_direction = _map_canon_direction(world=world, blueprints=map_blueprints)
     landmark_directions = "; ".join(
         f"{landmark['name']}: show {landmark['visual']}"
         + (f"; canonical cues: {landmark['details']}" if landmark["details"] else "")
@@ -463,9 +563,9 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         "description": (
             "A coherent regional atlas. Depict every listed canonical location as "
             "a distinct visible landmark at map scale. " + _MAP_NO_TEXT_CONSTRAINT + " "
-            + landmark_directions
+            + canon_direction + " " + landmark_directions
             if landmark_directions
-            else "A coherent regional atlas showing the world’s major areas."
+            else "A coherent regional atlas showing the world’s major areas. " + canon_direction
         ),
     }
     targets = [
@@ -548,15 +648,28 @@ def _desired_targets(detail: Mapping[str, Any]) -> list[dict[str, Any]]:
         location_id = _text(location.get("id") or location.get("entity_id"))
         if not location_id:
             continue
-        landmark = _location_landmark(location)
+        landmark = _location_landmark(location, genre=world.get("genre"))
         blueprint = blueprints_by_location.get(location_id, {})
+        location_canon_direction = _map_canon_direction(
+            world=world,
+            blueprints=[blueprint] if blueprint else (),
+        )
+        local_map_direction = (
+            "Create a detailed, navigable interior cutaway and floor-plan map of this single vertical structure. "
+            "Keep the named building as the full subject: show distinct floors or decks, elevator shafts, stairs, "
+            "corridors, rooms, service ducts, access control points, and one clear vertical circulation route. "
+            "Do not substitute a citywide aerial map or an unrelated surrounding district."
+            if landmark["map_scope"] == "vertical_interior"
+            else "Create a detailed, navigable local district map centered on this single canonical location. "
+            "Show its approaches, roads or paths, boundaries, and the immediate surrounding landmarks at local scale."
+        )
         local_map_subject = {
             "name": f"{landmark['name']} local map",
             "description": (
-                "A detailed, navigable local RPG map for a single canonical location. "
+                local_map_direction + " "
                 f"Show {landmark['visual']} as the central place. "
-                "Include distinct roads, paths, districts, approaches, and landmarks that "
-                "follow the canonical cues. " + _MAP_NO_TEXT_CONSTRAINT + " "
+                "Follow the canonical cues exactly. " + _MAP_NO_TEXT_CONSTRAINT + " "
+                + location_canon_direction + " "
                 + (f"Canonical cues: {landmark['details']}" if landmark["details"] else "")
             ),
         }

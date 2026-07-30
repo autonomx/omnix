@@ -385,14 +385,19 @@ def test_desired_targets_include_a_regenerable_world_map() -> None:
     assert "names are supplied only by application overlay markers" in map_target["suggested_prompt"]
     local_map_target = next(target for target in targets if target["target_id"] == "entity:location:moon_market:map")
     assert local_map_target["metadata"]["map_level"] == "location"
-    assert "detailed, navigable local RPG map" in local_map_target["suggested_prompt"]
+    assert "detailed, navigable local district map" in local_map_target["suggested_prompt"]
     assert "Absolutely no typography or written marks" in local_map_target["suggested_prompt"]
 
 
 def test_map_prompt_uses_places_as_canonical_landmarks() -> None:
     targets = world_images._desired_targets(
         {
-            "world": {"id": "world:neon", "title": "Neon Wastes", "genre": "cyberpunk"},
+            "world": {
+                "id": "world:neon",
+                "title": "Neon Wastes",
+                "genre": "cyberpunk",
+                "description": "A drowned vertical city where corporations own identity and memories can be repossessed.",
+            },
             "topics": [
                 {
                     "topic_id": "places",
@@ -413,7 +418,15 @@ def test_map_prompt_uses_places_as_canonical_landmarks() -> None:
 
     map_target = next(target for target in targets if target["target_id"] == "world:map")
     assert "OmniCorp Spire" in map_target["suggested_prompt"]
+    assert "illustrated cyberpunk city atlas" in map_target["suggested_prompt"]
+    assert "dense vertical megacity" in map_target["suggested_prompt"]
+    assert "corporate arcology" in map_target["suggested_prompt"]
+    assert "avoid medieval, pastoral, village, parchment, and fantasy-town architecture" in map_target["suggested_prompt"]
+    assert "drowned vertical city where corporations own identity" in map_target["suggested_prompt"]
     assert "Absolutely no typography or written marks" in map_target["suggested_prompt"]
+    local_map_target = next(target for target in targets if target["target_id"] == "entity:ent:places:spire:map")
+    assert "interior cutaway and floor-plan map" in local_map_target["suggested_prompt"]
+    assert "Do not substitute a citywide aerial map" in local_map_target["suggested_prompt"]
 
 
 def test_rpg_world_images_are_marked_for_the_rpg_asset_boundary(tmp_path) -> None:

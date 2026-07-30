@@ -87,6 +87,20 @@
 .rpg-world-overview-feature-grid strong { color: #f4d98f; font-size: 1.6rem; }
 
 .rpg-generation-dashboard-progress { margin: 0.25rem 0 1.2rem; }
+.rpg-visual-map-progress {
+  display: grid;
+  gap: 0.4rem;
+  width: min(100%, 360px);
+  margin-left: auto;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(110, 231, 183, 0.22);
+  border-radius: 12px;
+  background: rgba(6, 38, 41, 0.46);
+}
+.rpg-visual-map-progress > div:first-child { display: flex; justify-content: space-between; gap: 0.75rem; color: #b9c1d3; font-size: 0.78rem; }
+.rpg-visual-map-progress strong { color: #a7f3d0; }
+.rpg-visual-map-progress-track { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, 0.1); }
+.rpg-visual-map-progress-track > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #34d399, #67e8f9); transition: width 180ms ease-out; }
 .rpg-generation-dashboard-topic-list { display: grid; gap: 0.5rem; max-height: 520px; overflow-y: auto; }
 .rpg-generation-dashboard-topic-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0.8rem; border-left: 3px solid rgba(148, 163, 184, 0.35); border-radius: 10px; background: rgba(2, 6, 23, 0.5); }
 .rpg-generation-dashboard-topic-list article.is-complete { border-left-color: #34d399; }

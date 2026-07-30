@@ -51,6 +51,8 @@ describe('RpgWorldVisualMapPanel', () => {
     expect(screen.getByRole('button', { name: 'Open Moon Market (location:moon_market)' })).toHaveClass('has-artwork');
     expect(screen.getByRole('button', { name: 'Enter full screen map' })).toBeInTheDocument();
     expect(screen.getByText('All area artwork ready (1)')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Area artwork generation progress' })).toHaveAttribute('aria-valuenow', '1');
+    expect(screen.getByText('1 / 1 ready')).toBeInTheDocument();
     fireEvent.click(regenerate);
 
     await waitFor(() => expect(requests.some((request) => request.url.includes('/image-targets/world%3Amap/regenerate'))).toBe(true));
@@ -175,6 +177,7 @@ describe('RpgWorldVisualMapPanel', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     const { container } = render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
+    expect(await screen.findByRole('button', { name: 'Regenerate All Detailed Maps (1)' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Open Moon Market (location:moon_market)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Enter Moon Market Map' }));
 

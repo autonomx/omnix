@@ -91,7 +91,13 @@ export function RpgWorldEntityDetail({
 }: RpgWorldEntityDetailProps) {
   const presentation = entity.presentation;
   const dossier = entity.dossier;
-  const dossierNeedsLlmLore = Boolean(dossier?.generated_from_legacy);
+  // Imported bundles may provide curated, multi-paragraph canon as structured
+  // entity fields instead of the editable dossier envelope.  The backend
+  // projects those fields into legacy dossier sections; they are real reading
+  // content and must not be hidden behind the LLM-generation gate.
+  const dossierNeedsLlmLore = Boolean(
+    dossier?.generated_from_legacy && topic?.source !== 'imported',
+  );
   const sections = dossierNeedsLlmLore ? [] : dossier?.sections ?? [];
   const representedFields = new Set<string>();
   for (const highlight of presentation.highlights) representedFields.add(highlight.label.toLowerCase().replace(/\s+/g, '_'));
