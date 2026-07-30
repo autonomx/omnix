@@ -97,6 +97,10 @@ afterEach(() => {
 
 describe('ChatbotWorkspace character runtime projection', () => {
   it('keeps the active character projected before, during, and after a live call', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
     (window as typeof window & { __omnixLiveVoiceControllerInstalled?: boolean }).__omnixLiveVoiceControllerInstalled = true;
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
