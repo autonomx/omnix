@@ -107,14 +107,14 @@ describe('ChatbotWorkspace character runtime projection', () => {
       });
       if (path === '/api/assets') return Response.json({
         assets: [{
-id: 'voice-cloning:maya',
-type: 'voice_profile',
-module: 'voice-cloning',
-title: 'Maya Clone',
-storage_path: 'resources/voice_clones/maya.json',
-metadata: { voice_id: 'maya-clone', profile_name: 'Maya Clone' },
-created_at: '2026-07-30T20:00:00Z',
-updated_at: '2026-07-30T20:00:00Z',
+          id: 'voice-cloning:maya',
+          type: 'voice_profile',
+          module: 'voice-cloning',
+          title: 'Maya Clone',
+          storage_path: 'resources/voice_clones/maya.json',
+          metadata: { voice_id: 'maya-clone', profile_name: 'Maya Clone' },
+          created_at: '2026-07-30T20:00:00Z',
+          updated_at: '2026-07-30T20:00:00Z',
         }],
       });
       if (path === '/api/chat/sessions') return Response.json({ sessions: [session] });
