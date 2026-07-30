@@ -38,6 +38,39 @@ jobs:
           script_lines = [line[10:] if line.startswith('          ') else line for line in lines[start:end]]
           script = '\n'.join(script_lines)
           exec(compile(script, str(workflow), 'exec'))
+
+          store_path = Path('src/app/assets/store.py')
+          store = store_path.read_text(encoding='utf-8')
+
+          def indent_generated_method(source: str, signature: str, next_signature: str) -> str:
+              start_at = source.index(signature)
+              body_at = source.index('\n', start_at) + 1
+              end_at = source.index(next_signature, body_at)
+              body = source[body_at:end_at]
+              indented = ''.join(
+                  f'    {line}' if line.strip() else line
+                  for line in body.splitlines(keepends=True)
+              )
+              return source[:body_at] + indented + source[end_at:]
+
+          store = indent_generated_method(
+              store,
+              '    def _legacy_voice_clone_assets(self) -> list[AssetRecord]:',
+              '    def _legacy_audio_assets(self) -> list[AssetRecord]:',
+          )
+          store = indent_generated_method(
+              store,
+              '    def _load_manifest(self) -> dict[str, AssetRecord]:',
+              '    def _save_manifest(self, assets: dict[str, AssetRecord]) -> None:',
+          )
+          store_path.write_text(store, encoding='utf-8')
+
+          test_path = Path('src/tests/app/test_voice_library_index_recovery.py')
+          test_source = test_path.read_text(encoding='utf-8').replace(
+              '    import app.shared as shared',
+              '    from app import shared',
+          )
+          test_path.write_text(test_source, encoding='utf-8')
           PY
           git diff --check
 
