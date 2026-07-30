@@ -71,6 +71,39 @@ jobs:
               '    from app import shared',
           )
           test_path.write_text(test_source, encoding='utf-8')
+
+          workspace_path = Path('apps/web/src/features/voice/VoiceWorkspace.tsx')
+          workspace_source = workspace_path.read_text(encoding='utf-8')
+          old_helpers = '''function voiceAssetName(asset: VoiceAsset): string {
+            const source = voiceStoragePath(asset) || voiceAssetId(asset);
+            return source.split(/[\\\\/]/).pop()?.replace(/\\.[^.]+$/, '') || voiceAssetId(asset);
+          }
+
+          function voiceProfileName(asset: VoiceAsset): string {
+            return voiceAssetId(asset).replace(/^voice-cloning:/, '').replace(/^asset:/, '');
+          }'''
+          new_helpers = '''function voiceAssetMetadata(asset: VoiceAsset): Record<string, unknown> {
+            const value = (asset as { metadata?: unknown }).metadata;
+            return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+          }
+
+          function voiceAssetName(asset: VoiceAsset): string {
+            const metadata = voiceAssetMetadata(asset);
+            const preferred = metadata.profile_name ?? metadata.name ?? metadata.voice_name;
+            if (typeof preferred === 'string' && preferred.trim()) return preferred.trim();
+            const source = voiceStoragePath(asset) || voiceAssetId(asset);
+            return source.split(/[\\\\/]/).pop()?.replace(/\\.[^.]+$/, '') || voiceAssetId(asset);
+          }
+
+          function voiceProfileName(asset: VoiceAsset): string {
+            const metadata = voiceAssetMetadata(asset);
+            const preferred = metadata.voice_id ?? metadata.voice_clone_id;
+            if (typeof preferred === 'string' && preferred.trim()) return preferred.trim();
+            return voiceAssetId(asset).replace(/^voice-cloning:/, '').replace(/^asset:/, '');
+          }'''
+          if workspace_source.count(old_helpers) != 1:
+              raise SystemExit('Voice asset helper target was not unique')
+          workspace_path.write_text(workspace_source.replace(old_helpers, new_helpers, 1), encoding='utf-8')
           PY
           git diff --check
 
