@@ -23,6 +23,7 @@ from .store import (
     _legacy_audio_roots,
     SharedAssetStore as ManifestSharedAssetStore,
 )
+from .voice_clone_assets import discover_voice_clone_assets, voice_clone_sources
 
 
 def _root_scan(family: str, path: Path) -> AssetLegacyRootScan:
@@ -53,6 +54,10 @@ def _skipped_files(family: str, roots: list[Path], supported_suffixes: set[str])
 
 class SharedAssetStore(ManifestSharedAssetStore):
     """Shared asset store with non-mutating compatibility and curated read-through."""
+
+    def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
+        """Read voice profiles directly from the canonical resources directory."""
+        return discover_voice_clone_assets()
 
     def list_assets(self) -> AssetListResponse:
         assets = {asset.id: asset for asset in super().list_assets().assets}
@@ -86,7 +91,7 @@ class SharedAssetStore(ManifestSharedAssetStore):
         """Summarize non-image legacy assets without mutating any source."""
         manifest_assets = super()._load_manifest()
         legacy_assets = [
-            *super()._legacy_voice_clone_assets(),
+            *self._legacy_voice_clone_assets(),
             *super()._legacy_audio_assets(),
             *legacy_document_assets(),
         ]
@@ -128,18 +133,18 @@ class SharedAssetStore(ManifestSharedAssetStore):
 
 
 def _voice_clone_roots() -> list[AssetLegacyRootScan]:
-    try:
-        import app.shared as shared
-    except Exception:
-        return []
-
     roots: list[AssetLegacyRootScan] = []
-    clones_dir = getattr(shared, "VOICE_CLONES_DIR", None)
-    clones_file = getattr(shared, "VOICE_CLONES_FILE", None)
-    if clones_dir:
-        roots.append(_root_scan("voice_cloning", Path(str(clones_dir))))
-    if clones_file:
-        roots.append(_root_scan("voice_cloning_manifest", Path(str(clones_file))))
+    seen: set[tuple[str, str]] = set()
+    for clones_dir, clones_file in voice_clone_sources():
+        for family, path in (
+            ("voice_cloning", clones_dir),
+            ("voice_cloning_manifest", clones_file),
+        ):
+            key = (family, str(path))
+            if key in seen:
+                continue
+            seen.add(key)
+            roots.append(_root_scan(family, path))
     return roots
 
 
