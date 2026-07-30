@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   StreamingSttWebSocketClient,
   calculateRms,
+  deduplicateSegmentBoundary,
   downsampleFloat32To16Khz,
   encodePcm16Base64,
   getDefaultStreamingSttWebSocketUrl,
@@ -24,7 +25,6 @@ describe('live voice websocket helpers', () => {
   it('downsamples audio frames to 16khz deterministically', () => {
     const input = new Float32Array([0, 0.25, 0.5, 0.75, 1, 0.75]);
     const output = downsampleFloat32To16Khz(input, 48_000, 16_000);
-
     expect(Array.from(output)).toEqual([0, 0.75]);
   });
 
@@ -35,6 +35,11 @@ describe('live voice websocket helpers', () => {
   it('calculates rms for voice activity detection', () => {
     expect(calculateRms(new Float32Array([0, 0, 0]))).toBe(0);
     expect(calculateRms(new Float32Array([1, -1]))).toBe(1);
+  });
+
+  it('deduplicates bounded transcript overlap', () => {
+    expect(deduplicateSegmentBoundary('the quick brown fox', 'brown fox jumps now')).toBe('jumps now');
+    expect(deduplicateSegmentBoundary('alpha beta', 'gamma delta')).toBe('gamma delta');
   });
 
   it('rejects an initial websocket failure instead of leaving a half-open session', async () => {
@@ -65,6 +70,81 @@ describe('live voice websocket helpers', () => {
     expect(statuses).toEqual(['connecting', 'error']);
     expect(sockets[0].close).toHaveBeenCalledOnce();
   });
+
+  it('rotates to a new segment immediately after finalize', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5201/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      overlapMs: 0,
+    });
+    const connected = client.connect();
+    sockets[0].readyState = TestWebSocket.OPEN;
+    sockets[0].onopen?.();
+    await connected;
+    sockets[0].receive({ type: 'ready', protocol: 'segmented-v1' });
+
+    client.sendAudio(new Float32Array([0.1, 0.2]), 16_000);
+    client.sendFinal();
+    client.sendAudio(new Float32Array([0.3, 0.4]), 16_000);
+
+    const sent = sockets[0].sentJson();
+    const audio = sent.filter((message) => message.type === 'audio');
+    const finalize = sent.find((message) => message.type === 'finalize');
+    expect(audio).toHaveLength(2);
+    expect(audio[0].segmentId).not.toBe(audio[1].segmentId);
+    expect(finalize?.segmentId).toBe(audio[0].segmentId);
+    expect(audio[1].sequence).toBe(1);
+  });
+
+  it('commits out-of-order results in sequence order and suppresses overlap', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    const finals: string[] = [];
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5201/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      onAcceptedFinal: async (final) => { finals.push(final.text); return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: 'test', taskContractVersion: 1 }; },
+    });
+    const connected = client.connect();
+    sockets[0].readyState = TestWebSocket.OPEN;
+    sockets[0].onopen?.();
+    await connected;
+    sockets[0].receive({ type: 'ready', protocol: 'segmented-v1' });
+
+    client.sendAudio(new Float32Array([0.1, 0.2]), 16_000);
+    client.sendFinal();
+    client.sendAudio(new Float32Array([0.3, 0.4]), 16_000);
+    client.sendFinal();
+    const finalizes = sockets[0].sentJson().filter((message) => message.type === 'finalize');
+    expect(finalizes).toHaveLength(2);
+    const first = finalizes[0];
+    const second = finalizes[1];
+
+    sockets[0].receive({
+      type: 'result_available', sessionId: client.segmentState.sessionId, captureEpoch: client.segmentState.captureEpoch, segmentId: second.segmentId, sequence: second.sequence, resultId: 'r1', finalizeRequestId: second.finalizeRequestId, startSample: second.primaryStartSample, endSample: second.endSample, text: 'brown fox jumps',
+    });
+    expect(finals).toEqual([]);
+    sockets[0].receive({
+      type: 'result_available', sessionId: client.segmentState.sessionId, captureEpoch: client.segmentState.captureEpoch, segmentId: first.segmentId, sequence: first.sequence, resultId: 'r0', finalizeRequestId: first.finalizeRequestId, startSample: first.primaryStartSample, endSample: first.endSample, text: 'the brown fox',
+    });
+    await vi.waitFor(() => expect(finals).toEqual(['the brown fox', 'jumps']));
+  });
 });
 
 class TestStreamingSocket implements StreamingSttSocketLike {
@@ -79,4 +159,12 @@ class TestStreamingSocket implements StreamingSttSocketLike {
   });
 
   constructor(readonly url: string) {}
+
+  receive(payload: Record<string, unknown>): void {
+    this.onmessage?.({ data: JSON.stringify(payload) });
+  }
+
+  sentJson(): Array<Record<string, unknown>> {
+    return this.send.mock.calls.map((call) => JSON.parse(String(call[0])) as Record<string, unknown>);
+  }
 }

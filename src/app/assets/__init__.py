@@ -64,6 +64,24 @@ class SharedAssetStore(ManifestSharedAssetStore):
             assets.setdefault(asset.id, asset)
         return AssetListResponse(assets=list(assets.values()))
 
+    def get_asset(self, asset_id: str) -> AssetRecord | None:
+        normalized_id = str(asset_id)
+        asset = super().get_asset(normalized_id)
+        if asset is not None:
+            return asset
+        return next(
+            (
+                candidate
+                for candidate in [
+                    *self.preview_image_manifest_import().assets,
+                    *legacy_document_assets(),
+                    *curated_rpg_map_assets(),
+                ]
+                if candidate.id == normalized_id
+            ),
+            None,
+        )
+
     def preview_legacy_non_image_import(self) -> AssetLegacyImportDryRun:
         """Summarize non-image legacy assets without mutating any source."""
         manifest_assets = super()._load_manifest()

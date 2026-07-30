@@ -76,6 +76,10 @@ class TtsStreamRequest(BaseModel):
     parity_mode: bool | None = None
     request_id: str | None = None
     diagnostics_stream_id: str | None = None
+    output_id: str | None = Field(default=None, max_length=160)
+    generation_epoch: int = Field(default=0, ge=0)
+    output_order: int | None = Field(default=None, ge=0)
+    segment_id: str | None = Field(default=None, max_length=160)
     delivery_plan: SpeechPerformancePlan | None = None
     pronunciation_lexicon: list[TtsPronunciationEntry] = Field(default_factory=list, max_length=32)
 
@@ -218,18 +222,14 @@ def initial_speech_start_byte(
     if np is not None:
         samples = np.frombuffer(even_bytes, dtype="<i2").astype(np.int32, copy=False)
         speech_indices = np.flatnonzero(np.abs(samples) > threshold_int)
-        if speech_indices.size == 0:
+        if not speech_indices.size:
             return None
         start_sample = max(0, int(speech_indices[0]) - preroll_samples)
         return start_sample * 2
 
-    for sample_index in range(len(even_bytes) // 2):
-        offset = sample_index * 2
-        sample = int.from_bytes(
-            even_bytes[offset : offset + 2],
-            byteorder="little",
-            signed=True,
-        )
+    for index in range(0, len(even_bytes), 2):
+        sample = int.from_bytes(even_bytes[index : index + 2], byteorder="little", signed=True)
         if abs(sample) > threshold_int:
-            return max(0, sample_index - preroll_samples) * 2
+            start_sample = max(0, (index // 2) - preroll_samples)
+            return start_sample * 2
     return None

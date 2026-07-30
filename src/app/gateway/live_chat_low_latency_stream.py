@@ -114,6 +114,39 @@ def _last_whitespace_cut(text: str, *, minimum: int, maximum: int) -> int | None
     return cut
 
 
+def _json_safe_provider_value(value: Any) -> Any:
+    """Convert provider metadata into plain values safe for SSE JSON encoding."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {
+            str(key): _json_safe_provider_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_provider_value(item) for item in value]
+
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return _json_safe_provider_value(model_dump(mode="json"))
+        except TypeError:
+            return _json_safe_provider_value(model_dump())
+
+    dictionary = getattr(value, "dict", None)
+    if callable(dictionary):
+        return _json_safe_provider_value(dictionary())
+
+    attributes = getattr(value, "__dict__", None)
+    if isinstance(attributes, dict):
+        return {
+            str(key): _json_safe_provider_value(item)
+            for key, item in attributes.items()
+            if not str(key).startswith("_")
+        }
+    return str(value)
+
+
 def _stream_low_latency_reply(
     self: PromptChatSessionStore,
     session: Any,
@@ -208,6 +241,7 @@ def _stream_low_latency_reply(
         ),
         total_ms=round((time.perf_counter() - started) * 1000.0, 3),
     )
+    usage_payload = _json_safe_provider_value(usage)
     yield {
         "type": "complete",
         "content": full_text.strip(),
@@ -218,7 +252,7 @@ def _stream_low_latency_reply(
             "resolved_model": resolved_model,
             **self._active_memory_metadata(assembly, rendered),
             **self._active_history_metadata(assembly),
-            **({"usage": usage} if usage else {}),
+            **({"usage": usage_payload} if usage_payload is not None else {}),
         },
     }
 

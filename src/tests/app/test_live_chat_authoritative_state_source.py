@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.gateway.content_free_diagnostics import sanitize_content_free_details
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -27,6 +29,44 @@ def test_duplex_policy_no_longer_infers_playback_from_dom() -> None:
     assert "compareRecentWaveforms" in source
     assert "resolveLiveVoiceDeviceKey" in source
     assert "currentDeviceKey" in source
+
+
+def test_microphone_capture_policy_is_store_derived_and_buffers_finalization() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
+    policy = source[source.index("function processAudioFrame"):source.index("function updateVoiceVisualizer")]
+    assert "if (session.finalRequested) return" not in source
+    assert "FinalizationAudioBuffer" in source
+    assert "segmentedProtocolActive" in policy
+    assert "stt_finalization_buffer_overflow" in source
+    assert "stt_finalization_buffer_replayed" in source
+    assert "liveConversationStore.getState" in source
+    assert "function assistantIsSpeaking" not in source
+    assert ".querySelector" not in policy
+    assert ".dataset" not in policy
+    assert "readCurrentAssistantDiagnosticText" in source
+
+
+def test_segmented_stt_has_acknowledged_bounded_provider_owned_protocol() -> None:
+    browser = _source("apps/web/src/features/assistant-workspace/live-voice-websocket.ts")
+    server = _source("src/app/providers/stt_live_websocket.py")
+    scheduler = _source("src/app/providers/stt_segment_scheduler.py")
+
+    for event in ("audio_buffered", "finalize_queued", "result_available"):
+        assert event in browser
+        assert event in server
+    assert "captureStartSample" in browser
+    assert "primaryStartSample" in browser
+    assert "absoluteSample" in browser
+    assert "deduplicateSegmentBoundary" in browser
+    assert "replayPendingSegments" in browser
+    assert "ProviderSegmentScheduler" in server
+    assert "MAX_SEGMENT_AUDIO_MS" in server
+    assert "MAX_OPEN_SEGMENTS" in server
+    assert "max_queued_jobs" in scheduler
+    assert "max_session_jobs" in scheduler
+    assert "await _scheduler_for(legacy).submit" in server
+    receive_loop = server[server.index("while True:"):]
+    assert "await _run_transcription" not in receive_loop
 
 
 def test_initiative_policy_no_longer_reads_visible_voice_state() -> None:
@@ -76,6 +116,33 @@ def test_diagnostics_summarize_before_existing_redaction_boundary() -> None:
     assert source.index("observeAssistantDiagnostic(traceId, event, details)") < source.index(
         "sanitizeDiagnosticDetails(details"
     )
+    assert "mode === 'full_local_debug' ? 'lengths_only'" in source
+
+
+def test_server_diagnostics_enforce_content_free_boundary() -> None:
+    tts = _source("src/app/gateway/tts_stream_diagnostics.py")
+    browser_route = _source("src/app/gateway/live_voice_diagnostics_routes.py")
+    assert "sanitize_content_free_details(details)" in tts
+    assert "sanitize_content_free_details(item.details)" in browser_route
+    assert "**item.details" not in browser_route
+
+    sanitized = sanitize_content_free_details(
+        {
+            "text": "private phrase",
+            "sanitized_text": "private phrase",
+            "text_sha256": "dictionary-guessable",
+            "text_length": 14,
+            "phrase_index": 2,
+            "nested": {"transcript": "secret", "latency_ms": 42},
+        }
+    )
+    assert sanitized == {
+        "text_chars": 14,
+        "sanitized_text_chars": 14,
+        "text_length": 14,
+        "phrase_index": 2,
+        "nested": {"transcript_chars": 6, "latency_ms": 42},
+    }
 
 
 def test_durable_payload_uses_aggregates_not_event_or_content_uploads() -> None:
@@ -129,3 +196,44 @@ def test_fullscreen_shell_reuses_existing_runtime_owners() -> None:
     assert ".assistant-live-character-avatar" in adapters
     assert "requestFullscreen" in controller
     assert "exitFullscreen" in controller
+
+
+def test_live_voice_final_routing_has_no_composer_dependency() -> None:
+    controller = _source("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
+    coordinator = _source("apps/web/src/features/assistant-workspace/live-session-coordinator.ts")
+    interceptor = _source("apps/web/src/features/assistant-workspace/live-segment-submit-interceptor.ts")
+    assert "requestSubmit" not in controller
+    assert ".assistant-composer" not in controller
+    assert "populateComposer" not in controller
+    assert "querySelector" not in coordinator
+    assert "requestSubmit" not in coordinator
+    assert "document.addEventListener('submit'" not in interceptor
+    assert "onAcceptedFinal" in controller
+    assert "routeAcceptedFinal" in controller
+    assert "direct_final_routing: true" in _source("apps/web/src/features/assistant-workspace/live-runtime-provenance.ts")
+
+
+
+def test_stt_final_does_not_preempt_audio_before_coordination() -> None:
+    source = _source("apps/web/src/features/chatbot/ChatbotWorkspace.tsx")
+    marker = "if (detail.stage !== 'stt_final_received') return;"
+    handler = source[source.index(marker):source.index("window.addEventListener(LIVE_VOICE_PERF_EVENT", source.index(marker))]
+    assert "stopAssistantResponseAudio" not in handler
+
+
+def test_live_response_audio_is_call_scoped_and_owned() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts")
+    assert "sessionScoped: true" in source
+    assert "enqueueOutputPhrase" in source
+    assert "waitForOutputItem" in source
+    assert "cancelOutputItem" in source
+    assert "session.finish()" not in source
+
+
+def test_capture_owner_persists_direct_routing_provenance() -> None:
+    source = _source("apps/web/src/features/assistant-workspace/live-voice-controller.ts")
+    assert "live_runtime_provenance" in source
+    assert "live_task_contract_acknowledged" in source
+    assert "coordination_started" in source
+    assert "coordination_completed" in source
+    assert "currentLiveRuntimeProvenance()" in source

@@ -9,6 +9,7 @@ import {
   resetLiveConversationEvaluation,
 } from './live-conversation-evaluation-controller';
 import { liveConversationStore } from './live-conversation-store';
+import { initializeLiveConversationStoreBridge } from './live-conversation-store-bridge';
 
 describe('live conversation evaluation controller', () => {
   beforeEach(() => {
@@ -83,5 +84,23 @@ describe('live conversation evaluation controller', () => {
     expect(snapshot.report.unansweredObligationRate).toBe(0.5);
     expect(JSON.stringify(snapshot.events)).not.toMatch(/launch plan|assistant-one|assistant-two/);
     dispose();
+  });
+
+  it('publishes a completed assistant turn once when the store bridge feeds the report back into the store', () => {
+    const disposeBridge = initializeLiveConversationStoreBridge();
+    const disposeEvaluation = initializeLiveConversationEvaluationController();
+
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'assistant_turn', value: 'speaking' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'delivery', value: 'audio_started' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'assistant_turn', value: 'idle' } });
+    liveConversationStore.dispatch({ type: 'conversation', event: { type: 'delivery', value: 'completed' } });
+
+    const assistantTurns = readLiveConversationEvaluationSnapshot().events.filter(
+      (event) => event.type === 'turn' && event.role === 'assistant',
+    );
+    expect(assistantTurns).toHaveLength(1);
+
+    disposeEvaluation();
+    disposeBridge();
   });
 });

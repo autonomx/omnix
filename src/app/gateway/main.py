@@ -221,6 +221,9 @@ def _text_asset_supported(asset: AssetRecord) -> bool:
 
 
 def _asset_by_id(asset_store: SharedAssetStore, asset_id: str) -> AssetRecord | None:
+    get_asset = getattr(asset_store, "get_asset", None)
+    if callable(get_asset):
+        return get_asset(asset_id)
     return next((asset for asset in asset_store.list_assets().assets if asset.id == asset_id), None)
 
 
@@ -417,6 +420,8 @@ def create_gateway_app(
             yield f"data: {json.dumps({'type': 'user_message', 'message': user_message.model_dump(mode='json')}, sort_keys=True)}\n\n"
             content = ""
             metadata: dict[str, Any] = {"generation_status": "completed"}
+            completed = None
+            reply_persisted = False
             try:
                 for event in chat_store.stream_provider_reply_chunks(
                     session,
@@ -427,8 +432,25 @@ def create_gateway_app(
                     if event.get("type") == "complete":
                         content = str(event.get("content") or "").strip()
                         metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else metadata
+                        # Persist at the provider completion boundary, before the
+                        # completion event is yielded. Live voice playback can
+                        # outlast LLM generation and a later barge-in may close
+                        # the HTTP body before the session footer is requested.
+                        completed = chat_store.complete_streamed_reply(
+                            session.id,
+                            user_message.id,
+                            content,
+                            metadata,
+                        )
+                        reply_persisted = True
                     yield f"data: {json.dumps(event, sort_keys=True)}\n\n"
-                completed = chat_store.complete_streamed_reply(session.id, user_message.id, content, metadata)
+                if not reply_persisted:
+                    completed = chat_store.complete_streamed_reply(
+                        session.id,
+                        user_message.id,
+                        content,
+                        metadata,
+                    )
                 if completed is not None:
                     yield f"data: {json.dumps({'type': 'session', 'session': completed.model_dump(mode='json')}, sort_keys=True)}\n\n"
                 yield f"data: {json.dumps({'type': 'done'}, sort_keys=True)}\n\n"

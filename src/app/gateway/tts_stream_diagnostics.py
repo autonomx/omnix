@@ -18,6 +18,8 @@ from typing import Any
 
 from app.shared import LOGS_DIR
 
+from .content_free_diagnostics import sanitize_content_free_details
+
 TTS_STREAM_LOG_PATH = Path(LOGS_DIR) / "tts-streaming.log"
 TTS_STREAM_LOG_MAX_BYTES = 25_000_000
 TTS_STREAM_LOG_BACKUP_COUNT = 4
@@ -78,7 +80,7 @@ def normalize_stream_id(value: Any = None) -> str:
 
 
 def stream_log(stream_id: str, source: str, event: str, **details: Any) -> None:
-    """Queue one JSON-line diagnostics record without blocking audio work."""
+    """Queue one content-free JSON-line record without blocking audio work."""
     record = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "monotonic_ms": round(time.perf_counter_ns() / 1_000_000, 3),
@@ -89,7 +91,7 @@ def stream_log(stream_id: str, source: str, event: str, **details: Any) -> None:
         "process_id": os.getpid(),
         "thread_name": threading.current_thread().name,
         "thread_id": threading.get_ident(),
-        **details,
+        **sanitize_content_free_details(details),
     }
     try:
         _LOGGER.info(json.dumps(record, ensure_ascii=False, sort_keys=True, default=_json_default))

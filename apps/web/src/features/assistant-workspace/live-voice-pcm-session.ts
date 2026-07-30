@@ -23,6 +23,17 @@ const DRAIN_TIMEOUT_MS = 120_000;
 const CHARACTER_AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 const WEBSOCKET_OPEN = 1;
 
+export type LiveOutputOwnership = {
+  outputId: string;
+  generationEpoch: number;
+  outputOrder: number;
+};
+
+export type LiveVoicePcmSessionOptions = {
+  sessionScoped?: boolean;
+  onWorkletEvent?: (event: Record<string, unknown>) => void;
+};
+
 type StreamingAudioWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
   webkitAudioContext?: typeof AudioContext;
@@ -37,6 +48,13 @@ type ControlEvent = {
   stream_id?: string;
   phrase_index?: number;
   partial?: boolean;
+  output_id?: string;
+  generation_epoch?: number;
+  output_order?: number;
+  segment_id?: string;
+  last_frame_index?: number;
+  generated_through_frame?: number;
+  reason?: string;
 };
 
 type WorkletEvent = {
@@ -45,6 +63,9 @@ type WorkletEvent = {
   segment_id?: string;
   segment_kind?: 'speech' | 'silence' | 'cue';
   phrase_index?: number;
+  output_id?: string;
+  generation_epoch?: number;
+  output_order?: number;
   segment_played_samples?: number;
   buffered_samples?: number;
   buffered_speech_samples?: number;
@@ -60,6 +81,8 @@ type WorkletEvent = {
   waiting_for_following_speech?: boolean;
   input_ended?: boolean;
   reason?: string;
+  removed_samples?: number;
+  removed_speech_samples?: number;
 };
 
 type PhraseStats = {
@@ -77,11 +100,18 @@ type ActivePhrase = {
   phraseIndex: number;
   phraseStreamId: string;
   segmentId: string;
+  ownership: LiveOutputOwnership | null;
   startedAtMs: number;
   stats: PhraseStats;
   completed: boolean;
+  cancelled: boolean;
   resolve: () => void;
   reject: (error: Error) => void;
+};
+
+type QueuedOutput = {
+  ownership: LiveOutputOwnership;
+  cancelled: boolean;
 };
 
 export type LiveVoicePcmSession = {
@@ -89,6 +119,12 @@ export type LiveVoicePcmSession = {
   enqueuePhrase: (
     text: string,
     phraseIndex: number,
+    synthesisOptions?: SpeechSynthesisOptions,
+  ) => Promise<void>;
+  enqueueOutputPhrase: (
+    text: string,
+    phraseIndex: number,
+    ownership: LiveOutputOwnership,
     synthesisOptions?: SpeechSynthesisOptions,
   ) => Promise<void>;
   enqueueSilence: (
@@ -102,6 +138,10 @@ export type LiveVoicePcmSession = {
     gainValue?: number,
     allowProceduralFallback?: boolean,
   ) => Promise<void>;
+  cancelSegment: (segmentId: string, reason?: string) => void;
+  cancelOutputItem: (outputId: string, generationEpoch: number, reason?: string) => Promise<void>;
+  cancelAllAfter: (outputOrder: number, reason?: string) => void;
+  waitForOutputItem: (outputId: string, generationEpoch: number) => Promise<void>;
   setStartPolicy: (policy: Partial<PlaybackStartPolicyMs>) => void;
   finish: () => Promise<void>;
   stop: (reason?: string) => Promise<void>;
@@ -112,6 +152,7 @@ export async function createLiveVoicePcmSession(
   traceId: string,
   voiceId: string | null,
   reporter: LiveCallDiagnosticsReporter,
+  options: LiveVoicePcmSessionOptions = {},
 ): Promise<LiveVoicePcmSession> {
   const liveWindow = window as StreamingAudioWindow;
   const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
@@ -146,9 +187,22 @@ export async function createLiveVoicePcmSession(
   let resumes = 0;
   let silenceSequence = 0;
   let cueSequence = 0;
+  const queuedOutputs = new Map<string, QueuedOutput>();
+  const cancelledOutputKeys = new Set<string>();
+  const terminalOutputKeys = new Set<string>();
+  const outputWaiters = new Map<string, Set<() => void>>();
   const drainPromise = new Promise<void>((resolve) => {
     drainResolve = resolve;
   });
+
+  const outputKey = (outputId: string, generationEpoch: number): string => `${outputId}:${generationEpoch}`;
+  const settleOutput = (key: string): void => {
+    terminalOutputKeys.add(key);
+    while (terminalOutputKeys.size > 512) terminalOutputKeys.delete(terminalOutputKeys.values().next().value as string);
+    const waiters = outputWaiters.get(key);
+    outputWaiters.delete(key);
+    waiters?.forEach((resolve) => resolve());
+  };
 
   const resumeAudioContext = async (reason: string): Promise<void> => {
     const before = audioContext.state;
@@ -201,7 +255,7 @@ export async function createLiveVoicePcmSession(
     const eventType = event.data?.type ?? 'unknown';
     if (eventType === 'underrun') underruns += 1;
     if (eventType === 'resumed') resumes += 1;
-    reporter.record(`worklet_${eventType}`, {
+    const details = {
       ...event.data,
       sample_rate: event.data?.sample_rate ?? audioContext.sampleRate,
       audio_context_state: audioContext.state,
@@ -211,7 +265,15 @@ export async function createLiveVoicePcmSession(
       total_received_audio_ms: totalReceivedSamples * 1000 / REQUESTED_SAMPLE_RATE,
       underruns,
       resumes,
-    }, 'audio_worklet');
+    };
+    reporter.record(`worklet_${eventType}`, details, 'audio_worklet');
+    options.onWorkletEvent?.(details);
+    const outputId = event.data?.output_id;
+    const generationEpoch = event.data?.generation_epoch;
+    if (outputId && typeof generationEpoch === 'number'
+      && (eventType === 'segment_completed' || eventType === 'segment_cancelled' || eventType === 'segment_interrupted')) {
+      settleOutput(outputKey(outputId, generationEpoch));
+    }
     if (eventType === 'drained') {
       drained = true;
       drainResolve?.();
@@ -227,7 +289,7 @@ export async function createLiveVoicePcmSession(
     rebuffer_samples: Math.round(audioContext.sampleRate * REBUFFER_SECONDS),
     max_rebuffer_samples: Math.round(audioContext.sampleRate * MAX_REBUFFER_SECONDS),
     transition_fade_samples: Math.round(audioContext.sampleRate * TRANSITION_FADE_SECONDS),
-    websocket_scope: 'turn',
+    websocket_scope: options.sessionScoped ? 'live_session' : 'turn',
   }, 'pcm_session');
 
   let socketReadyResolve: (() => void) | null = null;
@@ -240,7 +302,25 @@ export async function createLiveVoicePcmSession(
   socket.binaryType = 'arraybuffer';
   reporter.record('session_websocket_created', {
     websocket_path: TTS_LIVE_CALL_WEBSOCKET_PATH,
+    websocket_scope: options.sessionScoped ? 'live_session' : 'turn',
   }, 'pcm_session');
+
+  const settleCancelledPhrase = (phrase: ActivePhrase, reason: string): void => {
+    if (phrase.completed) return;
+    phrase.completed = true;
+    phrase.cancelled = true;
+    if (activePhrase === phrase) activePhrase = null;
+    reporter.record('phrase_cancelled', {
+      segment_id: phrase.segmentId,
+      phrase_index: phrase.phraseIndex,
+      phrase_stream_id: phrase.phraseStreamId,
+      output_id: phrase.ownership?.outputId ?? null,
+      generation_epoch: phrase.ownership?.generationEpoch ?? null,
+      reason,
+      elapsed_ms: performance.now() - phrase.startedAtMs,
+    }, 'pcm_session');
+    phrase.resolve();
+  };
 
   const failActivePhrase = (error: Error): void => {
     const phrase = activePhrase;
@@ -251,6 +331,8 @@ export async function createLiveVoicePcmSession(
       segment_id: phrase.segmentId,
       phrase_index: phrase.phraseIndex,
       phrase_stream_id: phrase.phraseStreamId,
+      output_id: phrase.ownership?.outputId ?? null,
+      generation_epoch: phrase.ownership?.generationEpoch ?? null,
       text: phrase.text,
       text_length: phrase.text.length,
       elapsed_ms: performance.now() - phrase.startedAtMs,
@@ -261,8 +343,16 @@ export async function createLiveVoicePcmSession(
 
   const handleBinaryFrame = (buffer: ArrayBuffer): void => {
     const phrase = activePhrase;
-    if (!phrase || phrase.completed) {
+    if (!phrase || phrase.completed || phrase.cancelled) {
       reporter.record('unexpected_audio_frame', { bytes: buffer.byteLength }, 'pcm_session');
+      return;
+    }
+    if (phrase.ownership && cancelledOutputKeys.has(outputKey(phrase.ownership.outputId, phrase.ownership.generationEpoch))) {
+      reporter.record('cancelled_output_frame_rejected', {
+        output_id: phrase.ownership.outputId,
+        generation_epoch: phrase.ownership.generationEpoch,
+        bytes: buffer.byteLength,
+      }, 'pcm_session');
       return;
     }
     const now = performance.now();
@@ -272,6 +362,8 @@ export async function createLiveVoicePcmSession(
         segment_id: phrase.segmentId,
         phrase_index: phrase.phraseIndex,
         phrase_stream_id: phrase.phraseStreamId,
+        output_id: phrase.ownership?.outputId ?? null,
+        generation_epoch: phrase.ownership?.generationEpoch ?? null,
         first_frame_delay_ms: now - phrase.startedAtMs,
       }, 'pcm_session');
     }
@@ -290,27 +382,64 @@ export async function createLiveVoicePcmSession(
     const converted = pcm16ToFloat32(sourcePcm, phrase.stats.sampleRate, audioContext.sampleRate);
     phrase.stats.playbackSamples += converted.length;
     totalPlaybackSamples += converted.length;
-    node.port.postMessage({
+    const workletMessage: Record<string, unknown> = {
       type: 'push_segment_samples',
       segmentId: phrase.segmentId,
       segmentKind: 'speech',
       phraseIndex: phrase.phraseIndex,
       samples: converted,
-    }, [converted.buffer]);
+    };
+    if (phrase.ownership) {
+      workletMessage.outputId = phrase.ownership.outputId;
+      workletMessage.generationEpoch = phrase.ownership.generationEpoch;
+      workletMessage.outputOrder = phrase.ownership.outputOrder;
+    }
+    node.port.postMessage(workletMessage, [converted.buffer]);
+  };
+
+  const controlMatchesPhrase = (message: ControlEvent, phrase: ActivePhrase): boolean => {
+    if (message.stream_id && message.stream_id !== phrase.phraseStreamId) return false;
+    if (!phrase.ownership) return true;
+    if (message.output_id && message.output_id !== phrase.ownership.outputId) return false;
+    if (typeof message.generation_epoch === 'number'
+      && message.generation_epoch !== phrase.ownership.generationEpoch) return false;
+    return true;
   };
 
   const handleControlMessage = (message: ControlEvent): void => {
+    if (message.type === 'cancel_accepted' || message.type === 'cancelled') {
+      const outputId = message.output_id ?? '';
+      const generationEpoch = message.generation_epoch ?? 0;
+      if (outputId) cancelledOutputKeys.add(outputKey(outputId, generationEpoch));
+      const phrase = activePhrase;
+      if (phrase?.ownership
+        && phrase.ownership.outputId === outputId
+        && phrase.ownership.generationEpoch === generationEpoch) {
+        settleCancelledPhrase(phrase, message.reason ?? message.type);
+      }
+      reporter.record(`output_${message.type}`, {
+        output_id: outputId,
+        generation_epoch: generationEpoch,
+        segment_id: message.segment_id,
+        generated_through_frame: message.generated_through_frame,
+      }, 'pcm_session');
+      return;
+    }
     const phrase = activePhrase;
     if (!phrase || phrase.completed) {
       reporter.record('unexpected_control_message', { ...message }, 'pcm_session');
       return;
     }
-    if (message.stream_id && message.stream_id !== phrase.phraseStreamId) {
+    if (!controlMatchesPhrase(message, phrase)) {
       reporter.record('phrase_stream_id_mismatch', {
         segment_id: phrase.segmentId,
         phrase_index: phrase.phraseIndex,
         expected_stream_id: phrase.phraseStreamId,
         received_stream_id: message.stream_id,
+        expected_output_id: phrase.ownership?.outputId,
+        received_output_id: message.output_id,
+        expected_generation_epoch: phrase.ownership?.generationEpoch,
+        received_generation_epoch: message.generation_epoch,
         control_type: message.type,
       }, 'pcm_session');
       return;
@@ -336,6 +465,8 @@ export async function createLiveVoicePcmSession(
       segment_kind: 'speech',
       phrase_index: phrase.phraseIndex,
       phrase_stream_id: phrase.phraseStreamId,
+      output_id: phrase.ownership?.outputId ?? null,
+      generation_epoch: phrase.ownership?.generationEpoch ?? null,
       text: phrase.text,
       text_length: phrase.text.length,
       partial: message.partial ?? false,
@@ -357,9 +488,11 @@ export async function createLiveVoicePcmSession(
         stream_id: phrase.phraseStreamId,
         event: 'playback_finished',
         details: {
-          completion_scope: 'phrase_buffered_into_live_turn',
+          completion_scope: phrase.ownership ? 'output_item_buffered' : 'phrase_buffered_into_live_turn',
           segment_id: phrase.segmentId,
           phrase_index: phrase.phraseIndex,
+          output_id: phrase.ownership?.outputId,
+          generation_epoch: phrase.ownership?.generationEpoch,
           frames: phrase.stats.frameCount,
           received_samples: phrase.stats.receivedSamples,
           playback_samples: phrase.stats.playbackSamples,
@@ -414,7 +547,7 @@ export async function createLiveVoicePcmSession(
       session_closed: closed,
     }, 'pcm_session');
     if (closed) return;
-    const error = new Error('Live voice session WebSocket closed before turn completion.');
+    const error = new Error('Live voice session WebSocket closed before completion.');
     socketFailure = error;
     if (!socketOpened) socketReadyReject?.(error);
     failActivePhrase(error);
@@ -424,6 +557,7 @@ export async function createLiveVoicePcmSession(
     text: string,
     phraseIndex: number,
     synthesisOptions: SpeechSynthesisOptions,
+    ownership: LiveOutputOwnership | null,
   ): Promise<void> => {
     if (closed) throw new Error('Live voice PCM session is closed.');
     await socketReady;
@@ -431,9 +565,10 @@ export async function createLiveVoicePcmSession(
     if (socketFailure) throw socketFailure;
     if (socket.readyState !== WEBSOCKET_OPEN) throw new Error('Live voice session WebSocket is not open.');
     if (activePhrase) throw new Error('Live voice phrase generation is already active.');
+    if (ownership && cancelledOutputKeys.has(outputKey(ownership.outputId, ownership.generationEpoch))) return;
 
     const phraseStartedAtMs = performance.now();
-    const phraseStreamId = createPhraseStreamId(traceId, phraseIndex);
+    const phraseStreamId = createPhraseStreamId(traceId, phraseIndex, ownership);
     const segmentId = createSpeechSegmentId(traceId, phraseIndex);
     return new Promise<void>((resolve, reject) => {
       activePhrase = {
@@ -441,8 +576,10 @@ export async function createLiveVoicePcmSession(
         phraseIndex,
         phraseStreamId,
         segmentId,
+        ownership,
         startedAtMs: phraseStartedAtMs,
         completed: false,
+        cancelled: false,
         resolve,
         reject,
         stats: {
@@ -459,6 +596,9 @@ export async function createLiveVoicePcmSession(
         segment_id: segmentId,
         phrase_index: phraseIndex,
         phrase_stream_id: phraseStreamId,
+        output_id: ownership?.outputId ?? null,
+        generation_epoch: ownership?.generationEpoch ?? null,
+        output_order: ownership?.outputOrder ?? null,
         text_length: text.length,
         performance_schema_version: synthesisOptions.performancePlan?.schema_version ?? null,
         pronunciation_count: synthesisOptions.pronunciationLexicon?.length ?? 0,
@@ -471,6 +611,9 @@ export async function createLiveVoicePcmSession(
           request_id: phraseStreamId,
           phrase_index: phraseIndex,
           segment_id: segmentId,
+          output_id: ownership?.outputId,
+          generation_epoch: ownership?.generationEpoch ?? 0,
+          output_order: ownership?.outputOrder,
           text,
           speaker: voiceId,
           language: 'English',
@@ -490,6 +633,36 @@ export async function createLiveVoicePcmSession(
         failActivePhrase(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  };
+
+  const enqueueOutputPhrase = (
+    text: string,
+    phraseIndex: number,
+    ownership: LiveOutputOwnership,
+    synthesisOptions?: SpeechSynthesisOptions,
+  ): Promise<void> => {
+    if (closed || inputFinished) return Promise.reject(new Error('Live voice input is already closed.'));
+    const key = outputKey(ownership.outputId, ownership.generationEpoch);
+    if (queuedOutputs.has(key)) return Promise.reject(new Error('Live output epoch is already queued.'));
+    const queued: QueuedOutput = { ownership, cancelled: false };
+    queuedOutputs.set(key, queued);
+    const resolvedOptions = synthesisOptions ?? createLiveSpeechSynthesisOptions(text);
+    reporter.record('output_generation_queued', {
+      output_id: ownership.outputId,
+      generation_epoch: ownership.generationEpoch,
+      output_order: ownership.outputOrder,
+      phrase_index: phraseIndex,
+      text_length: text.length,
+    }, 'pcm_session');
+    const task = generationQueue.catch(() => undefined).then(async () => {
+      if (queued.cancelled || cancelledOutputKeys.has(key)) return;
+      void resumeAudioContext('output_generation_started');
+      await streamPhrase(text, phraseIndex, resolvedOptions, ownership);
+    }).finally(() => {
+      queuedOutputs.delete(key);
+    });
+    generationQueue = task;
+    return task;
   };
 
   const enqueuePhrase = (
@@ -512,7 +685,7 @@ export async function createLiveVoicePcmSession(
         phrase_index: phraseIndex,
         text_length: text.length,
       }, 'pcm_session');
-      return streamPhrase(text, phraseIndex, resolvedOptions);
+      return streamPhrase(text, phraseIndex, resolvedOptions, null);
     });
     generationQueue = task;
     return task;
@@ -614,103 +787,161 @@ export async function createLiveVoicePcmSession(
     return task;
   };
 
-  const setStartPolicy = (policy: Partial<PlaybackStartPolicyMs>): void => {
-    const notBeforeMs = Math.max(0, Number(policy.notBeforeMs ?? 0));
-    const minimumBufferedSpeechMs = Math.max(
-      1,
-      Number(policy.minimumBufferedSpeechMs ?? START_BUFFER_SECONDS * 1_000),
-    );
-    const notBeforeRenderSample = millisecondsToPlaybackSamples(notBeforeMs, audioContext.sampleRate);
-    const minimumBufferedSpeechSamples = millisecondsToPlaybackSamples(
-      minimumBufferedSpeechMs,
-      audioContext.sampleRate,
-    );
-    node.port.postMessage({
-      type: 'set_start_policy',
-      notBeforeRenderSample,
-      minimumBufferedSpeechSamples,
-    });
-    reporter.record('playback_start_policy_set', {
-      not_before_ms: notBeforeMs,
-      minimum_buffered_speech_ms: minimumBufferedSpeechMs,
-      not_before_render_sample: notBeforeRenderSample,
-      minimum_buffered_speech_samples: minimumBufferedSpeechSamples,
-      sample_rate: audioContext.sampleRate,
-    }, 'pcm_session');
+  const cancelSegment = (segmentId: string, reason = 'cancelled'): void => {
+    if (closed) return;
+    node.port.postMessage({ type: 'cancel_segment', segmentId, reason });
   };
 
-  const cleanup = async (reason: string): Promise<void> => {
+  const cancelOutputItem = async (
+    outputId: string,
+    generationEpoch: number,
+    reason = 'cancelled',
+  ): Promise<void> => {
+    if (closed) return;
+    const key = outputKey(outputId, generationEpoch);
+    cancelledOutputKeys.add(key);
+    const queued = queuedOutputs.get(key);
+    if (queued) queued.cancelled = true;
+    node.port.postMessage({ type: 'cancel_output', outputId, generationEpoch, reason });
+    if (socket.readyState === WEBSOCKET_OPEN) {
+      socket.send(JSON.stringify({
+        type: 'cancel',
+        output_id: outputId,
+        generation_epoch: generationEpoch,
+        segment_id: activePhrase?.ownership?.outputId === outputId ? activePhrase.segmentId : undefined,
+        reason,
+      }));
+    }
+    const phrase = activePhrase;
+    if (phrase?.ownership
+      && phrase.ownership.outputId === outputId
+      && phrase.ownership.generationEpoch === generationEpoch) {
+      settleCancelledPhrase(phrase, reason);
+    }
+    settleOutput(key);
+  };
+
+  const cancelAllAfter = (outputOrder: number, reason = 'cancelled_after'): void => {
+    if (closed) return;
+    for (const [key, queued] of queuedOutputs) {
+      if (queued.ownership.outputOrder <= outputOrder) continue;
+      queued.cancelled = true;
+      cancelledOutputKeys.add(key);
+      if (socket.readyState === WEBSOCKET_OPEN) {
+        socket.send(JSON.stringify({
+          type: 'cancel',
+          output_id: queued.ownership.outputId,
+          generation_epoch: queued.ownership.generationEpoch,
+          reason,
+        }));
+      }
+    }
+    node.port.postMessage({ type: 'cancel_all_after', outputOrder, reason });
+  };
+
+  const waitForOutputItem = (outputId: string, generationEpoch: number): Promise<void> => {
+    const key = outputKey(outputId, generationEpoch);
+    if (terminalOutputKeys.has(key) || cancelledOutputKeys.has(key)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const waiters = outputWaiters.get(key) ?? new Set<() => void>();
+      waiters.add(resolve);
+      outputWaiters.set(key, waiters);
+    });
+  };
+
+  const setStartPolicy = (policy: Partial<PlaybackStartPolicyMs>): void => {
+    if (closed) return;
+    node.port.postMessage({
+      type: 'set_start_policy',
+      notBeforeRenderSample: millisecondsToPlaybackSamples(
+        policy.notBeforeMs ?? 0,
+        audioContext.sampleRate,
+      ),
+      minimumBufferedSpeechSamples: millisecondsToPlaybackSamples(
+        policy.minimumBufferedSpeechMs ?? START_BUFFER_SECONDS * 1000,
+        audioContext.sampleRate,
+      ),
+    });
+  };
+
+  const waitForDrain = async (): Promise<void> => {
+    if (drained) return;
+    await Promise.race([
+      drainPromise,
+      new Promise<never>((_, reject) => {
+        window.setTimeout(() => reject(new Error('Live voice playback drain timed out.')), DRAIN_TIMEOUT_MS);
+      }),
+    ]);
+  };
+
+  const terminateSession = async (reason: string, workletAlreadyDrained = false): Promise<void> => {
     if (closed) return;
     closed = true;
-    reporter.record('pcm_session_cleanup', {
-      reason,
-      elapsed_ms: performance.now() - startedAtMs,
-      drained,
-      total_frames: totalFrames,
-      total_received_samples: totalReceivedSamples,
-      total_playback_samples: totalPlaybackSamples,
-      total_received_audio_ms: totalReceivedSamples * 1000 / REQUESTED_SAMPLE_RATE,
-      underruns,
-      resumes,
-      websocket_scope: 'turn',
-    }, 'pcm_session');
-    failActivePhrase(new Error(`Live voice PCM session stopped: ${reason}`));
-    if (socket.readyState === WEBSOCKET_OPEN) {
-      try { socket.send(JSON.stringify({ type: 'close', reason })); } catch { /* ignore cleanup failures */ }
-    }
-    try { socket.close(1000, reason.slice(0, 120)); } catch { /* ignore cleanup failures */ }
-    try { node.port.postMessage({ type: 'stop', reason }); } catch { /* ignore cleanup failures */ }
-    try { node.disconnect(); } catch { /* ignore cleanup failures */ }
+    [...outputWaiters.keys()].forEach(settleOutput);
     document.removeEventListener('visibilitychange', handlePlaybackResumeSignal);
     window.removeEventListener('focus', handlePlaybackResumeSignal);
     window.removeEventListener('pageshow', handlePlaybackResumeSignal);
-    await audioContext.close().catch(() => undefined);
-    if (!drained) drainResolve?.();
-  };
-
-  const waitForGenerationQueueToSettle = async (): Promise<void> => {
-    let observedQueue = generationQueue;
-    while (true) {
-      await observedQueue.catch(() => undefined);
-      await Promise.resolve();
-      if (generationQueue === observedQueue) return;
-      observedQueue = generationQueue;
+    if (!workletAlreadyDrained) node.port.postMessage({ type: 'stop', reason });
+    node.port.onmessage = null;
+    node.disconnect();
+    if (socket.readyState === WEBSOCKET_OPEN) {
+      try { socket.send(JSON.stringify({ type: 'close', reason })); } catch { /* ignore close send */ }
+      socket.close(1000, reason);
+    } else {
+      try { socket.close(); } catch { /* ignore close failures */ }
     }
+    await audioContext.close().catch((error: unknown) => {
+      reporter.record('audio_context_close_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      }, 'pcm_session');
+    });
   };
 
   const finish = async (): Promise<void> => {
     if (closed || inputFinished) return;
-    await waitForGenerationQueueToSettle();
+    let observedQueue = generationQueue;
+    while (true) {
+      await observedQueue.catch(() => undefined);
+      await Promise.resolve();
+      if (generationQueue === observedQueue) break;
+      observedQueue = generationQueue;
+    }
     if (closed || inputFinished) return;
     inputFinished = true;
-    reporter.record('turn_input_finished', {}, 'pcm_session');
-    await generationQueue;
+    await generationQueue.catch(() => undefined);
     if (closed) return;
-    await resumeAudioContext('turn_input_finished');
     node.port.postMessage({ type: 'end' });
-    await withTimeout(drainPromise, DRAIN_TIMEOUT_MS, 'Live voice playback drain timed out.');
+    await waitForDrain();
     reporter.record('turn_playback_drained', {
-      elapsed_ms: performance.now() - startedAtMs,
       total_frames: totalFrames,
       total_received_samples: totalReceivedSamples,
       total_playback_samples: totalPlaybackSamples,
-      total_received_audio_ms: totalReceivedSamples * 1000 / REQUESTED_SAMPLE_RATE,
+      semantic_speech_samples: totalReceivedSamples * audioContext.sampleRate / REQUESTED_SAMPLE_RATE,
       underruns,
       resumes,
+      elapsed_ms: performance.now() - startedAtMs,
     }, 'pcm_session');
-    await cleanup('finished');
+    await terminateSession('turn-finished', true);
   };
 
   const stop = async (reason = 'stopped'): Promise<void> => {
+    if (closed) return;
     inputFinished = true;
-    await cleanup(reason);
+    const phrase = activePhrase;
+    if (phrase && !phrase.completed) settleCancelledPhrase(phrase, reason);
+    await terminateSession(reason);
   };
 
   return {
     sampleRate: audioContext.sampleRate,
     enqueuePhrase,
+    enqueueOutputPhrase,
     enqueueSilence,
     enqueueCue,
+    cancelSegment,
+    cancelOutputItem,
+    cancelAllAfter,
+    waitForOutputItem,
     setStartPolicy,
     finish,
     stop,
@@ -718,66 +949,51 @@ export async function createLiveVoicePcmSession(
   };
 }
 
-function createPhraseStreamId(traceId: string, phraseIndex: number): string {
-  const safeTrace = traceId.replace(/[^A-Za-z0-9_.-]+/g, '-').slice(-48);
-  return `chat-live-${safeTrace}-p${phraseIndex}`.slice(0, 80);
-}
-
 function ttsWebSocketUrl(): string {
-  const url = new URL(TTS_LIVE_CALL_WEBSOCKET_PATH, window.location.href);
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  return url.toString();
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}${TTS_LIVE_CALL_WEBSOCKET_PATH}`;
 }
 
 function createWorkletModuleUrl(): { url: string; revoke: () => void } {
-  const source = liveVoicePcmWorkletSource();
-  if (typeof URL.createObjectURL === 'function') {
-    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
-    return { url, revoke: () => URL.revokeObjectURL(url) };
-  }
-  return {
-    url: `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`,
-    revoke: () => undefined,
-  };
+  const url = URL.createObjectURL(new Blob([liveVoicePcmWorkletSource()], { type: 'text/javascript' }));
+  return { url, revoke: () => URL.revokeObjectURL(url) };
 }
 
-function parseControlEvent(value: string): ControlEvent | null {
-  try { return JSON.parse(value) as ControlEvent; } catch { return null; }
+function createPhraseStreamId(
+  traceId: string,
+  phraseIndex: number,
+  ownership: LiveOutputOwnership | null = null,
+): string {
+  const base = traceId.replace(/[^A-Za-z0-9_.-]+/g, '-').slice(-56) || 'live';
+  const suffix = ownership
+    ? `${ownership.outputId.replace(/[^A-Za-z0-9_.-]+/g, '-').slice(-24)}-e${ownership.generationEpoch}`
+    : `p${phraseIndex}`;
+  return `chat-live-${base}-${suffix}`.slice(0, 80);
 }
 
-function pcm16ToFloat32(input: Int16Array, sourceRate: number, targetRate: number): Float32Array {
-  if (sourceRate === targetRate) {
-    const output = new Float32Array(input.length);
-    for (let index = 0; index < input.length; index += 1) output[index] = input[index] / 32768;
-    return output;
+function parseControlEvent(data: string): ControlEvent | null {
+  try {
+    const parsed = JSON.parse(data) as ControlEvent;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
   }
-  const outputLength = Math.max(1, Math.round(input.length * targetRate / sourceRate));
+}
+
+function pcm16ToFloat32(source: Int16Array, sourceRate: number, targetRate: number): Float32Array {
+  if (!source.length) return new Float32Array();
+  const normalized = new Float32Array(source.length);
+  for (let index = 0; index < source.length; index += 1) normalized[index] = source[index] / 32768;
+  if (sourceRate === targetRate) return normalized;
+  const ratio = sourceRate / targetRate;
+  const outputLength = Math.max(1, Math.round(normalized.length / ratio));
   const output = new Float32Array(outputLength);
-  const sourceStep = sourceRate / targetRate;
   for (let index = 0; index < outputLength; index += 1) {
-    const sourcePosition = Math.min(input.length - 1, index * sourceStep);
-    const leftIndex = Math.floor(sourcePosition);
-    const rightIndex = Math.min(input.length - 1, leftIndex + 1);
-    const fraction = sourcePosition - leftIndex;
-    const left = input[leftIndex] / 32768;
-    const right = input[rightIndex] / 32768;
-    output[index] = left + ((right - left) * fraction);
+    const sourcePosition = index * ratio;
+    const lower = Math.floor(sourcePosition);
+    const upper = Math.min(normalized.length - 1, lower + 1);
+    const fraction = sourcePosition - lower;
+    output[index] = normalized[lower] * (1 - fraction) + normalized[upper] * fraction;
   }
   return output;
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }

@@ -1,13 +1,12 @@
-"""Turn-scoped persistent PCM websocket transport for live voice."""
+"""Session-scoped persistent PCM websocket transport for live voice."""
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import threading
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Callable
 
@@ -34,7 +33,7 @@ from .tts_streaming import (
 _ROUTE_SENTINEL = "_omnix_tts_live_call_ws_registered"
 _HOOK_SENTINEL = "_omnix_tts_live_call_ws_hook_installed"
 TTS_LIVE_CALL_WEBSOCKET_PATH = "/api/tts/live-call/websocket"
-TTS_PCM_FRAME_SAMPLES = 2_400  # 100 ms at 24 kHz.
+TTS_PCM_FRAME_SAMPLES = 2_400
 FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS = 0.050
 
 
@@ -49,10 +48,22 @@ class FrameMessage:
 
 
 @dataclass
+class ActiveOutput:
+    output_id: str
+    generation_epoch: int
+    segment_id: str
+    phrase_index: int | None
+    stop_event: threading.Event
+    sent_frames: int = 0
+
+
+@dataclass
 class ConnectionState:
     stop_event: threading.Event
     requests: asyncio.Queue[dict[str, Any] | None]
     active_frames: asyncio.Queue[FrameMessage] | None = None
+    active_output: ActiveOutput | None = None
+    cancelled_outputs: set[tuple[str, int]] = field(default_factory=set)
 
 
 def _connection_details(websocket: WebSocket) -> dict[str, Any]:
@@ -64,6 +75,7 @@ def _connection_details(websocket: WebSocket) -> dict[str, Any]:
         "user_agent": websocket.headers.get("user-agent"),
         "websocket_path": websocket.url.path,
         "persistent_connection": True,
+        "websocket_scope": "live_session",
     }
 
 
@@ -72,10 +84,40 @@ def _phrase_index(payload: dict[str, Any]) -> int | None:
     return value if isinstance(value, int) and value >= 0 else None
 
 
+def _output_identity(payload: dict[str, Any]) -> tuple[str, int, str]:
+    output_id = str(payload.get("output_id") or payload.get("request_id") or "legacy-output")[:160]
+    try:
+        generation_epoch = max(0, int(payload.get("generation_epoch") or 0))
+    except (TypeError, ValueError):
+        generation_epoch = 0
+    segment_id = str(payload.get("segment_id") or f"{output_id}:segment")[:160]
+    return output_id, generation_epoch, segment_id
+
+
+def _ownership_fields(
+    payload: dict[str, Any],
+    output_id: str,
+    generation_epoch: int,
+    segment_id: str,
+    output_order: Any = None,
+) -> dict[str, Any]:
+    """Expose ownership fields only to item-aware clients, preserving legacy controls."""
+    if not str(payload.get("output_id") or "").strip():
+        return {}
+    return {
+        "output_id": output_id,
+        "generation_epoch": generation_epoch,
+        "segment_id": segment_id,
+        "output_order": output_order,
+    }
+
+
 def _stop_connection(state: ConnectionState, reason: str) -> None:
     if state.stop_event.is_set():
         return
     state.stop_event.set()
+    if state.active_output is not None:
+        state.active_output.stop_event.set()
     if state.active_frames is not None:
         state.active_frames.put_nowait(
             FrameMessage(
@@ -89,21 +131,17 @@ def _stop_connection(state: ConnectionState, reason: str) -> None:
 
 
 async def _receive_messages(websocket: WebSocket, state: ConnectionState) -> None:
-    """Receive requests and cancellation while phrase audio is being produced."""
+    """Receive synthesis, cancellation, diagnostics, and close messages concurrently."""
     try:
         while not state.stop_event.is_set():
             raw_message = await websocket.receive_text()
             try:
                 payload = json.loads(raw_message)
             except json.JSONDecodeError as exc:
-                await websocket.send_json(
-                    {"type": "error", "message": f"Invalid JSON: {exc}"}
-                )
+                await websocket.send_json({"type": "error", "message": f"Invalid JSON: {exc}"})
                 continue
             if not isinstance(payload, dict):
-                await websocket.send_json(
-                    {"type": "error", "message": "TTS message must be an object."}
-                )
+                await websocket.send_json({"type": "error", "message": "TTS message must be an object."})
                 continue
             message_type = payload.get("type")
             if message_type == "close":
@@ -113,13 +151,45 @@ async def _receive_messages(websocket: WebSocket, state: ConnectionState) -> Non
                 stream_id = normalize_stream_id(payload.get("stream_id"))
                 event = str(payload.get("event") or "diagnostic")[:120]
                 details = payload.get("details")
-                normalized_details = details if isinstance(details, dict) else {}
                 stream_log(
                     stream_id,
                     "client",
                     event,
                     persistent_connection=True,
-                    **normalized_details,
+                    **(details if isinstance(details, dict) else {}),
+                )
+                continue
+            if message_type == "cancel":
+                output_id, generation_epoch, segment_id = _output_identity(payload)
+                key = (output_id, generation_epoch)
+                state.cancelled_outputs.add(key)
+                active = state.active_output
+                generated_through_frame = -1
+                if active and (active.output_id, active.generation_epoch) == key:
+                    generated_through_frame = active.sent_frames - 1
+                    active.stop_event.set()
+                    if state.active_frames is not None:
+                        state.active_frames.put_nowait(
+                            FrameMessage(
+                                "cancelled",
+                                None,
+                                DEFAULT_SAMPLE_RATE,
+                                {
+                                    "output_id": output_id,
+                                    "generation_epoch": generation_epoch,
+                                    "segment_id": active.segment_id,
+                                    "reason": str(payload.get("reason") or "cancelled"),
+                                },
+                            )
+                        )
+                await websocket.send_json(
+                    {
+                        "type": "cancel_accepted",
+                        "output_id": output_id,
+                        "generation_epoch": generation_epoch,
+                        "segment_id": segment_id,
+                        "generated_through_frame": generated_through_frame,
+                    }
                 )
                 continue
             if message_type == "synthesize":
@@ -134,7 +204,7 @@ async def _receive_messages(websocket: WebSocket, state: ConnectionState) -> Non
             )
     except WebSocketDisconnect:
         _stop_connection(state, "websocket-disconnected")
-    except Exception as exc:  # pragma: no cover - defensive receiver guard.
+    except Exception as exc:  # pragma: no cover
         _stop_connection(state, f"receiver-failed:{type(exc).__name__}")
 
 
@@ -143,15 +213,45 @@ async def _stream_phrase(
     payload: dict[str, Any],
     state: ConnectionState,
 ) -> None:
-    """Generate and send one phrase without closing the turn websocket."""
+    """Generate and send one output item without closing the session websocket."""
     phrase_index = _phrase_index(payload)
     stream_id = normalize_stream_id(payload.get("diagnostics_stream_id"))
+    output_id, generation_epoch, segment_id = _output_identity(payload)
+    output_order = payload.get("output_order")
+    ownership_fields = _ownership_fields(
+        payload,
+        output_id,
+        generation_epoch,
+        segment_id,
+        output_order,
+    )
     route_started_at = time.perf_counter()
     registered = False
     producer: threading.Thread | None = None
     phrase_stop = threading.Event()
     sent_frames = 0
     sent_samples = 0
+    key = (output_id, generation_epoch)
+
+    if key in state.cancelled_outputs:
+        await websocket.send_json(
+            {
+                "type": "cancelled",
+                "stream_id": stream_id,
+                **ownership_fields,
+                "generated_through_frame": -1,
+            }
+        )
+        return
+
+    active_output = ActiveOutput(
+        output_id=output_id,
+        generation_epoch=generation_epoch,
+        segment_id=segment_id,
+        phrase_index=phrase_index,
+        stop_event=phrase_stop,
+    )
+    state.active_output = active_output
 
     try:
         try:
@@ -162,6 +262,7 @@ async def _stream_phrase(
                 {
                     "type": "error",
                     "stream_id": stream_id,
+                    **ownership_fields,
                     "phrase_index": phrase_index,
                     "message": f"Invalid TTS request: {exc}",
                 }
@@ -180,9 +281,12 @@ async def _stream_phrase(
             sanitized_text=text,
             text_length=len(raw_text),
             sanitized_text_length=len(text),
-            text_sha256=hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
             phrase_index=phrase_index,
             request_id=request.request_id,
+            output_id=output_id,
+            generation_epoch=generation_epoch,
+            segment_id=segment_id,
+            output_order=output_order,
             speaker=request.speaker,
             language=request.language,
             chunk_size=request.chunk_size,
@@ -204,6 +308,7 @@ async def _stream_phrase(
                 {
                     "type": "error",
                     "stream_id": stream_id,
+                    **ownership_fields,
                     "phrase_index": phrase_index,
                     "message": "text_required",
                 }
@@ -212,26 +317,20 @@ async def _stream_phrase(
 
         provider = get_tts_provider()
         if provider is None or not hasattr(provider, "generate_audio_stream"):
-            message = (
-                "tts_provider_unavailable"
-                if provider is None
-                else "tts_provider_streaming_unavailable"
-            )
+            message = "tts_provider_unavailable" if provider is None else "tts_provider_streaming_unavailable"
             stream_log(stream_id, "server", "request_rejected", reason=message)
             await websocket.send_json(
                 {
                     "type": "error",
                     "stream_id": stream_id,
+                    **ownership_fields,
                     "phrase_index": phrase_index,
                     "message": message,
                 }
             )
             return
 
-        performance_application = apply_performance_plan_to_provider(
-            provider,
-            request.delivery_plan,
-        )
+        performance_application = apply_performance_plan_to_provider(provider, request.delivery_plan)
         capability_payload = performance_application.capabilities.model_dump(mode="json")
         applied_controls = list(performance_application.applied_controls)
         ignored_controls = list(performance_application.ignored_controls)
@@ -246,20 +345,19 @@ async def _stream_phrase(
             provider_capabilities=capability_payload,
             performance_controls_applied=applied_controls,
             performance_controls_ignored=ignored_controls,
-            request_to_provider_ms=round(
-                (provider_resolved_at - route_started_at) * 1000,
-                3,
-            ),
+            request_to_provider_ms=round((provider_resolved_at - route_started_at) * 1000, 3),
+            output_id=output_id,
+            generation_epoch=generation_epoch,
         )
         loop = asyncio.get_running_loop()
         frames: asyncio.Queue[FrameMessage] = asyncio.Queue()
         state.active_frames = frames
 
         def stopped() -> bool:
-            return state.stop_event.is_set() or phrase_stop.is_set()
+            return state.stop_event.is_set() or phrase_stop.is_set() or key in state.cancelled_outputs
 
         def emit(message: FrameMessage) -> None:
-            if not stopped():
+            if not stopped() or message.message_type in {"cancelled", "client_disconnect"}:
                 loop.call_soon_threadsafe(frames.put_nowait, message)
 
         def produce() -> None:
@@ -273,10 +371,9 @@ async def _stream_phrase(
                 "provider",
                 "producer_thread_started",
                 phrase_index=phrase_index,
-                request_to_producer_ms=round(
-                    (producer_started_at - route_started_at) * 1000,
-                    3,
-                ),
+                output_id=output_id,
+                generation_epoch=generation_epoch,
+                request_to_producer_ms=round((producer_started_at - route_started_at) * 1000, 3),
             )
             try:
                 stream_kwargs: dict[str, Any] = {
@@ -293,14 +390,6 @@ async def _stream_phrase(
                 if request.parity_mode is not None:
                     stream_kwargs["parity_mode"] = request.parity_mode
                 stream_kwargs.update(performance_application.provider_kwargs)
-                stream_log(
-                    stream_id,
-                    "provider",
-                    "generation_started",
-                    stream_kwargs=stream_kwargs,
-                    performance_controls_applied=applied_controls,
-                    performance_controls_ignored=ignored_controls,
-                )
 
                 def raw_chunks():
                     nonlocal last_raw_chunk_at, produced_samples, raw_chunk_count
@@ -314,51 +403,30 @@ async def _stream_phrase(
                         if stopped():
                             return
                         raw_chunk_ready_at = time.perf_counter()
-                        if raw_chunk_count == 0:
-                            stream_log(
-                                stream_id,
-                                "provider",
-                                "first_raw_chunk_ready",
-                                generation_elapsed_ms=round(
-                                    (raw_chunk_ready_at - producer_started_at) * 1000,
-                                    3,
-                                ),
-                                provider_timing=timing,
-                            )
-                        conversion_started_at = time.perf_counter()
                         pcm_bytes = _audio_chunk_to_pcm16_bytes(audio_chunk)
-                        conversion_finished_at = time.perf_counter()
                         resolved_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
                         sample_count = len(pcm_bytes) // 2
                         raw_chunk_count += 1
                         produced_samples += sample_count
-                        elapsed_ms = (raw_chunk_ready_at - producer_started_at) * 1000
-                        audio_ms = produced_samples * 1000 / max(1, resolved_rate)
-                        stream_log(
-                            stream_id,
-                            "provider",
-                            "raw_chunk_received",
-                            raw_chunk_index=raw_chunk_count - 1,
-                            sample_rate=resolved_rate,
-                            samples=sample_count,
-                            bytes=len(pcm_bytes),
-                            interval_ms=round(
-                                (raw_chunk_ready_at - last_raw_chunk_at) * 1000,
-                                3,
-                            ),
-                            generation_elapsed_ms=round(elapsed_ms, 3),
-                            pcm_conversion_ms=round(
-                                (conversion_finished_at - conversion_started_at) * 1000,
-                                3,
-                            ),
-                            cumulative_audio_ms=round(audio_ms, 3),
-                            generation_rtf=(
-                                round(elapsed_ms / audio_ms, 5) if audio_ms else None
-                            ),
-                            provider_timing=timing,
-                            stop_requested=stopped(),
-                        )
                         last_raw_chunk_at = raw_chunk_ready_at
+                        if raw_chunk_count == 1:
+                            stream_log(
+                                stream_id,
+                                "provider",
+                                "first_raw_chunk_ready",
+                                provider_to_first_raw_ms=round(
+                                    (raw_chunk_ready_at - provider_resolved_at) * 1000,
+                                    3,
+                                ),
+                                route_to_first_raw_ms=round(
+                                    (raw_chunk_ready_at - route_started_at) * 1000,
+                                    3,
+                                ),
+                                raw_chunk_samples=sample_count,
+                                sample_rate=resolved_rate,
+                                output_id=output_id,
+                                generation_epoch=generation_epoch,
+                            )
                         yield pcm_bytes, resolved_rate, timing
 
                 for pcm_bytes, sample_rate, timing in _stream_pcm16_blocks(
@@ -373,10 +441,9 @@ async def _stream_phrase(
                     metadata = {
                         "frame_index": queued_frame_count,
                         "provider_timing": timing,
-                        "producer_elapsed_ms": round(
-                            (queued_at - producer_started_at) * 1000,
-                            3,
-                        ),
+                        "output_id": output_id,
+                        "generation_epoch": generation_epoch,
+                        "segment_id": segment_id,
                     }
                     queued_frame_count += 1
                     emit(
@@ -389,47 +456,24 @@ async def _stream_phrase(
                             sent_ack=first_frame_ack,
                         )
                     )
-                    stream_log(
-                        stream_id,
-                        "provider",
-                        "network_frame_queued",
-                        frame_index=metadata["frame_index"],
-                        sample_rate=sample_rate,
-                        samples=len(pcm_bytes) // 2,
-                        bytes=len(pcm_bytes),
-                        first_frame_handoff_requested=is_first_frame,
-                    )
                     if first_frame_ack is not None:
-                        handoff_started_at = time.perf_counter()
-                        acknowledged = first_frame_ack.wait(
-                            timeout=FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS
-                        )
-                        handoff_finished_at = time.perf_counter()
+                        wait_started_at = time.perf_counter()
+                        first_frame_ack.wait(timeout=FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS)
                         stream_log(
                             stream_id,
                             "provider",
                             "first_frame_handoff_completed",
-                            acknowledged=acknowledged,
-                            wait_ms=round(
-                                (handoff_finished_at - handoff_started_at) * 1000,
-                                3,
-                            ),
-                            timeout_ms=round(
-                                FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS * 1000,
-                                3,
-                            ),
-                            stop_requested=stopped(),
+                            acknowledged=first_frame_ack.is_set(),
+                            wait_ms=round((time.perf_counter() - wait_started_at) * 1000, 3),
+                            output_id=output_id,
+                            generation_epoch=generation_epoch,
                         )
                         if stopped():
                             return
+                if stopped():
+                    return
                 emit(FrameMessage("done", None, DEFAULT_SAMPLE_RATE, {}))
-            except Exception as exc:  # pragma: no cover - surfaced to browser.
-                stream_log(
-                    stream_id,
-                    "provider",
-                    "generation_failed",
-                    error=repr(exc),
-                )
+            except Exception as exc:  # pragma: no cover
                 emit(
                     FrameMessage(
                         "error",
@@ -443,14 +487,14 @@ async def _stream_phrase(
                     stream_id,
                     "provider",
                     "producer_thread_finished",
-                    elapsed_ms=round(
-                        (time.perf_counter() - producer_started_at) * 1000,
-                        3,
-                    ),
+                    elapsed_ms=round((time.perf_counter() - producer_started_at) * 1000, 3),
                     raw_chunk_count=raw_chunk_count,
                     queued_frame_count=queued_frame_count,
                     produced_samples=produced_samples,
+                    last_raw_chunk_age_ms=round((time.perf_counter() - last_raw_chunk_at) * 1000, 3),
                     stop_requested=stopped(),
+                    output_id=output_id,
+                    generation_epoch=generation_epoch,
                 )
 
         producer = threading.Thread(
@@ -459,45 +503,40 @@ async def _stream_phrase(
             daemon=True,
         )
         producer.start()
-        stream_log(
-            stream_id,
-            "server",
-            "producer_thread_launched",
-            producer_thread_name=producer.name,
-        )
 
         started = False
         current_sample_rate = DEFAULT_SAMPLE_RATE
-        last_send_at = route_started_at
         while True:
             message = await frames.get()
             message_type = message.message_type
             pcm_bytes = message.pcm_bytes
             sample_rate = message.sample_rate
             metadata = message.metadata
-            dequeued_at = time.perf_counter()
-            frame_queue_wait_ms = (
-                round((dequeued_at - message.queued_at) * 1000, 3)
-                if message.queued_at is not None
-                else None
-            )
             if message_type == "client_disconnect":
-                stream_log(
-                    stream_id,
-                    "server",
-                    "client_disconnect_observed",
-                    metadata=metadata,
+                return
+            if message_type == "cancelled":
+                await websocket.send_json(
+                    {
+                        "type": "cancelled",
+                        "stream_id": stream_id,
+                        **ownership_fields,
+                        "generated_through_frame": sent_frames - 1,
+                        "reason": metadata.get("reason") or "cancelled",
+                    }
                 )
                 return
             if message_type == "chunk" and pcm_bytes is not None:
                 try:
+                    if stopped():
+                        continue
                     if not started or sample_rate != current_sample_rate:
+                        first_start_control = not started
                         current_sample_rate = sample_rate
-                        control_started_at = time.perf_counter()
                         await websocket.send_json(
                             {
-                                "type": "start" if not started else "format",
+                                "type": "start" if first_start_control else "format",
                                 "stream_id": stream_id,
+                                **ownership_fields,
                                 "phrase_index": phrase_index,
                                 "sample_rate": current_sample_rate,
                                 "sample_format": "pcm_s16le",
@@ -509,72 +548,54 @@ async def _stream_phrase(
                                 "performance_controls_ignored": ignored_controls,
                             }
                         )
-                        control_sent_at = time.perf_counter()
-                        if not started:
+                        if first_start_control:
                             stream_log(
                                 stream_id,
                                 "server",
                                 "first_start_control_sent",
-                                frame_queue_wait_ms=frame_queue_wait_ms,
-                                send_duration_ms=round(
-                                    (control_sent_at - control_started_at) * 1000,
+                                route_to_start_control_ms=round(
+                                    (time.perf_counter() - route_started_at) * 1000,
                                     3,
                                 ),
+                                output_id=output_id,
+                                generation_epoch=generation_epoch,
                             )
                         started = True
-                    send_started_at = time.perf_counter()
+                    first_pcm_frame = sent_frames == 0
                     await websocket.send_bytes(pcm_bytes)
-                    sent_at = time.perf_counter()
+                    if first_pcm_frame:
+                        now = time.perf_counter()
+                        stream_log(
+                            stream_id,
+                            "server",
+                            "first_pcm_frame_sent",
+                            frame_queue_wait_ms=(
+                                round((now - message.queued_at) * 1000, 3)
+                                if message.queued_at is not None
+                                else None
+                            ),
+                            route_to_first_frame_ms=round((now - route_started_at) * 1000, 3),
+                            frame_samples=len(pcm_bytes) // 2,
+                            sample_rate=sample_rate,
+                            output_id=output_id,
+                            generation_epoch=generation_epoch,
+                        )
                 finally:
                     if message.sent_ack is not None:
                         message.sent_ack.set()
                 frame_samples = len(pcm_bytes) // 2
                 sent_frames += 1
+                active_output.sent_frames = sent_frames
                 sent_samples += frame_samples
-                stream_log(
-                    stream_id,
-                    "server",
-                    "network_frame_sent",
-                    frame_index=sent_frames - 1,
-                    bytes=len(pcm_bytes),
-                    samples=frame_samples,
-                    sample_rate=current_sample_rate,
-                    frame_queue_wait_ms=frame_queue_wait_ms,
-                    send_duration_ms=round((sent_at - send_started_at) * 1000, 3),
-                    interval_since_previous_send_ms=round(
-                        (sent_at - last_send_at) * 1000,
-                        3,
-                    ),
-                    cumulative_audio_ms=round(
-                        sent_samples * 1000 / max(1, current_sample_rate),
-                        3,
-                    ),
-                    pending_server_frames=frames.qsize(),
-                    producer_metadata=metadata,
-                )
-                if sent_frames == 1:
-                    stream_log(
-                        stream_id,
-                        "server",
-                        "first_pcm_frame_sent",
-                        request_to_first_frame_ms=round(
-                            (sent_at - route_started_at) * 1000,
-                            3,
-                        ),
-                        frame_queue_wait_ms=frame_queue_wait_ms,
-                        send_duration_ms=round(
-                            (sent_at - send_started_at) * 1000,
-                            3,
-                        ),
-                    )
-                last_send_at = sent_at
                 continue
             if message_type == "done":
                 await websocket.send_json(
                     {
                         "type": "done",
                         "stream_id": stream_id,
+                        **ownership_fields,
                         "phrase_index": phrase_index,
+                        "last_frame_index": sent_frames - 1,
                         "partial": False,
                     }
                 )
@@ -582,23 +603,24 @@ async def _stream_phrase(
                     stream_id,
                     "server",
                     "done_control_sent",
-                    phrase_index=phrase_index,
-                    sent_frames=sent_frames,
-                    sent_samples=sent_samples,
-                    sent_audio_ms=round(
-                        sent_samples * 1000 / max(1, current_sample_rate),
+                    route_to_done_control_ms=round(
+                        (time.perf_counter() - route_started_at) * 1000,
                         3,
                     ),
-                    persistent_connection=True,
+                    sent_frames=sent_frames,
+                    sent_samples=sent_samples,
+                    last_frame_index=sent_frames - 1,
+                    output_id=output_id,
+                    generation_epoch=generation_epoch,
                 )
                 return
-            message_text = metadata.get("message") or "TTS stream failed."
             await websocket.send_json(
                 {
                     "type": "error",
                     "stream_id": stream_id,
+                    **ownership_fields,
                     "phrase_index": phrase_index,
-                    "message": message_text,
+                    "message": metadata.get("message") or "TTS stream failed.",
                 }
             )
             return
@@ -606,6 +628,8 @@ async def _stream_phrase(
         phrase_stop.set()
         if state.active_frames is not None:
             state.active_frames = None
+        if state.active_output is active_output:
+            state.active_output = None
         producer_alive_before_join = bool(producer and producer.is_alive())
         if producer is not None and producer_alive_before_join:
             await asyncio.to_thread(producer.join, 0.25)
@@ -615,10 +639,9 @@ async def _stream_phrase(
             "server",
             "phrase_route_cleanup",
             phrase_index=phrase_index,
-            route_elapsed_ms=round(
-                (time.perf_counter() - route_started_at) * 1000,
-                3,
-            ),
+            output_id=output_id,
+            generation_epoch=generation_epoch,
+            route_elapsed_ms=round((time.perf_counter() - route_started_at) * 1000, 3),
             sent_frames=sent_frames,
             sent_samples=sent_samples,
             producer_alive_before_join=producer_alive_before_join,
@@ -631,11 +654,13 @@ async def _stream_phrase(
                 producer_alive_after_join=producer_alive_after_join,
                 sent_frames=sent_frames,
                 sent_samples=sent_samples,
+                output_id=output_id,
+                generation_epoch=generation_epoch,
             )
 
 
 def register_tts_live_call_websocket(gateway: FastAPI) -> None:
-    """Register one reusable websocket per live-call turn."""
+    """Register one reusable websocket per Live session."""
     if getattr(gateway.state, _ROUTE_SENTINEL, False):
         return
     setattr(gateway.state, _ROUTE_SENTINEL, True)
@@ -653,6 +678,23 @@ def register_tts_live_call_websocket(gateway: FastAPI) -> None:
                 payload = await state.requests.get()
                 if payload is None:
                     return
+                output_id, generation_epoch, segment_id = _output_identity(payload)
+                if (output_id, generation_epoch) in state.cancelled_outputs:
+                    ownership_fields = _ownership_fields(
+                        payload,
+                        output_id,
+                        generation_epoch,
+                        segment_id,
+                        payload.get("output_order"),
+                    )
+                    await websocket.send_json(
+                        {
+                            "type": "cancelled",
+                            **ownership_fields,
+                            "generated_through_frame": -1,
+                        }
+                    )
+                    continue
                 await _stream_phrase(websocket, payload, state)
         finally:
             _stop_connection(state, "route-cleanup")
@@ -664,7 +706,7 @@ def register_tts_live_call_websocket(gateway: FastAPI) -> None:
 
 
 def install_tts_live_call_websocket_hook() -> None:
-    """Install the persistent live-call websocket hook for the local gateway."""
+    """Install the persistent live-session websocket hook for the local gateway."""
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
 

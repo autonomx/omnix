@@ -56,6 +56,33 @@ def test_image_asset_file_is_served_by_asset_id_with_cache_headers(tmp_path, mon
     assert download.headers["content-disposition"].startswith("attachment")
 
 
+def test_image_asset_file_uses_direct_lookup_beyond_list_page(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "older-avatar.png"
+    image_path.write_bytes(b"OLDAVATAR")
+    asset = AssetRecord(
+        id="image:older-avatar",
+        module="characters",
+        type=AssetType.IMAGE,
+        mime_type="image/png",
+        storage_path=str(image_path),
+        created_at="2026-01-01T00:00:00+00:00",
+    )
+
+    class PaginatedStore:
+        def list_assets(self):
+            raise AssertionError("file delivery must not scan the paginated asset list")
+
+        def get_asset(self, asset_id: str):
+            return asset if asset_id == asset.id else None
+
+    monkeypatch.setattr(image_asset_routes, "default_asset_store", PaginatedStore)
+
+    response = TestClient(create_gateway_app()).get("/api/assets/image:older-avatar/file")
+
+    assert response.status_code == 200
+    assert response.content == b"OLDAVATAR"
+
+
 def test_immutable_asset_uses_long_lived_cache_policy(tmp_path, monkeypatch) -> None:
     image_path = tmp_path / "map.png"
     image_path.write_bytes(b"MAP")

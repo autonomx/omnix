@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import wave
 from array import array
 
 import pytest
 
+from app.providers.stt_live_websocket import (
+    MAX_REPLAY_RESULTS,
+    SegmentBuffer,
+    SegmentSessionState,
+)
+from app.providers.stt_segment_scheduler import (
+    ProviderSegmentScheduler,
+    SegmentQueueFullError,
+)
 from app.providers.stt_streaming_audio import (
     DEFAULT_SAMPLE_RATE,
     pcm16_duration_ms,
@@ -62,3 +72,101 @@ def test_write_pcm16_wav_emits_expected_mono_header(tmp_path) -> None:
         assert wav_file.getframerate() == DEFAULT_SAMPLE_RATE
         assert wav_file.getnframes() == 4
         assert wav_file.readframes(4) == pcm
+
+
+def test_segment_buffer_has_exact_primary_sample_accounting() -> None:
+    segment = SegmentBuffer(
+        segment_id="segment-1",
+        sequence=1,
+        capture_start_sample=100,
+        primary_start_sample=120,
+    )
+
+    assert segment.append(100, _pcm([1, 2, 3, 4])) == 104
+    assert segment.append(102, _pcm([3, 4, 5, 6])) == 106
+    assert bytes(segment.audio) == _pcm([1, 2, 3, 4, 5, 6])
+
+    with pytest.raises(ValueError, match="audio_frame_gap"):
+        segment.append(108, _pcm([7]))
+    with pytest.raises(ValueError, match="audio_frame_partial_sample"):
+        segment.append(106, b"\x00")
+
+
+def test_completed_segment_buffers_are_released_and_replay_results_are_bounded() -> None:
+    state = SegmentSessionState(session_id="stt:test")
+
+    for sequence in range(MAX_REPLAY_RESULTS + 5):
+        segment_id = f"segment-{sequence}"
+        state.segments[segment_id] = SegmentBuffer(
+            segment_id=segment_id,
+            sequence=sequence,
+            capture_start_sample=sequence * 100,
+            primary_start_sample=sequence * 100,
+        )
+        state.remember_result(
+            {
+                "type": "result_available",
+                "sequence": sequence,
+                "segmentId": segment_id,
+                "resultId": f"result-{sequence}",
+            }
+        )
+        state.release_segment(segment_id)
+
+    assert state.segments == {}
+    assert state.inflight == {}
+    assert len(state.results) == MAX_REPLAY_RESULTS
+    assert min(state.results) == 5
+    assert max(state.results) == MAX_REPLAY_RESULTS + 4
+
+
+def test_provider_scheduler_serializes_inference_and_bounds_sessions() -> None:
+    async def scenario() -> None:
+        scheduler: ProviderSegmentScheduler[str] = ProviderSegmentScheduler(
+            max_queued_jobs=2,
+            max_session_jobs=1,
+        )
+        release = asyncio.Event()
+        running = 0
+        maximum_running = 0
+        order: list[str] = []
+
+        async def run(name: str) -> str:
+            nonlocal running, maximum_running
+            running += 1
+            maximum_running = max(maximum_running, running)
+            order.append(name)
+            if name == "a":
+                await release.wait()
+            running -= 1
+            return name
+
+        first = await scheduler.submit(
+            session_id="session-a",
+            segment_id="a",
+            sequence=0,
+            run=lambda: run("a"),
+        )
+        await asyncio.sleep(0)
+        second = await scheduler.submit(
+            session_id="session-b",
+            segment_id="b",
+            sequence=0,
+            run=lambda: run("b"),
+        )
+        with pytest.raises(SegmentQueueFullError, match="session_queue_full"):
+            await scheduler.submit(
+                session_id="session-b",
+                segment_id="b2",
+                sequence=1,
+                run=lambda: run("b2"),
+            )
+
+        release.set()
+        assert await first == "a"
+        assert await second == "b"
+        assert order == ["a", "b"]
+        assert maximum_running == 1
+        await scheduler.close()
+
+    asyncio.run(scenario())

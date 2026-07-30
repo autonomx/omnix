@@ -13,6 +13,8 @@ type PendingDiagnosticSummary = {
   text: string;
   turnId: string | null;
   turnKind: 'greeting' | 'response';
+  startedAtMs: number;
+  updatedAtMs: number;
 };
 
 const OBLIGATION_PATTERN = /(?:\?|\b(?:would you like|do you want|can you|could you|will you|should we|shall we|tell me|let me know)\b)/i;
@@ -22,6 +24,9 @@ const STOP_WORDS = new Set([
   'she', 'so', 'that', 'the', 'their', 'them', 'there', 'they', 'this', 'to', 'was', 'we', 'were',
   'what', 'when', 'where', 'which', 'who', 'why', 'will', 'with', 'would', 'you', 'your',
 ]);
+const MAX_PENDING_DIAGNOSTIC_SUMMARIES = 16;
+const MAX_PENDING_TEXT_CHARS = 12_000;
+const PENDING_DIAGNOSTIC_TTL_MS = 60_000;
 const pendingDiagnostics = new Map<string, PendingDiagnosticSummary>();
 
 export function summarizeAssistantTurn(
@@ -47,22 +52,28 @@ export function observeAssistantDiagnostic(
   event: string,
   details: Record<string, unknown>,
 ): void {
+  const now = performance.now();
+  prunePendingDiagnostics(now);
   if (event === 'turn_intercepted') {
     pendingDiagnostics.set(traceId, {
       text: '',
       turnId: null,
       turnKind: details.turn_kind === 'greeting' ? 'greeting' : 'response',
+      startedAtMs: now,
+      updatedAtMs: now,
     });
+    prunePendingDiagnostics(now);
     return;
   }
   const pending = pendingDiagnostics.get(traceId);
   if (!pending) return;
+  pending.updatedAtMs = now;
   if (event === 'assistant_turn_linked' && typeof details.assistant_turn_id === 'string') {
     pending.turnId = details.assistant_turn_id;
     return;
   }
   if (event === 'llm_text_chunk_received' && typeof details.text === 'string') {
-    pending.text = `${pending.text}${details.text}`.slice(-12_000);
+    pending.text = `${pending.text}${details.text}`.slice(-MAX_PENDING_TEXT_CHARS);
     return;
   }
   if (event === 'llm_stream_finished') {
@@ -70,9 +81,28 @@ export function observeAssistantDiagnostic(
     pendingDiagnostics.delete(traceId);
     return;
   }
-  if (event === 'turn_failed' || event === 'turn_stopped') {
+  if (
+    event === 'turn_failed'
+    || event === 'turn_stopped'
+    || event === 'reporter_closed'
+    || event === 'turn_finished'
+  ) {
     pendingDiagnostics.delete(traceId);
   }
+}
+
+export function readCurrentAssistantDiagnosticText(): string {
+  prunePendingDiagnostics(performance.now());
+  let current: PendingDiagnosticSummary | null = null;
+  for (const pending of pendingDiagnostics.values()) {
+    if (!current || pending.updatedAtMs > current.updatedAtMs) current = pending;
+  }
+  return current?.text ?? '';
+}
+
+export function pendingAssistantDiagnosticCount(): number {
+  prunePendingDiagnostics(performance.now());
+  return pendingDiagnostics.size;
 }
 
 export function dispatchAssistantTurnSummary(summary: LiveAssistantTurnSummary): void {
@@ -82,6 +112,17 @@ export function dispatchAssistantTurnSummary(summary: LiveAssistantTurnSummary):
 
 export function resetAssistantDiagnosticSummaries(): void {
   pendingDiagnostics.clear();
+}
+
+function prunePendingDiagnostics(now: number): void {
+  for (const [traceId, pending] of pendingDiagnostics) {
+    if (now - pending.updatedAtMs > PENDING_DIAGNOSTIC_TTL_MS) pendingDiagnostics.delete(traceId);
+  }
+  if (pendingDiagnostics.size <= MAX_PENDING_DIAGNOSTIC_SUMMARIES) return;
+  const oldest = [...pendingDiagnostics.entries()]
+    .sort((left, right) => left[1].updatedAtMs - right[1].updatedAtMs)
+    .slice(0, pendingDiagnostics.size - MAX_PENDING_DIAGNOSTIC_SUMMARIES);
+  oldest.forEach(([traceId]) => pendingDiagnostics.delete(traceId));
 }
 
 function fingerprintTopic(words: string[]): string | null {

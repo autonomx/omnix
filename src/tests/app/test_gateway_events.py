@@ -155,12 +155,26 @@ def test_chat_session_delete_endpoint_removes_session(tmp_path):
 def test_chat_stream_endpoint_emits_sentence_chunks_and_persists_session(monkeypatch, tmp_path):
     from app import shared
 
+    class CompletionOrderingStore(ChatSessionStore):
+        completion_persisted = False
+
+        def stream_provider_reply_chunks(self, *args, **kwargs):
+            yield from super().stream_provider_reply_chunks(*args, **kwargs)
+            assert self.completion_persisted, (
+                "assistant completion must be durable before the provider stream resumes"
+            )
+
+        def complete_streamed_reply(self, *args, **kwargs):
+            completed = super().complete_streamed_reply(*args, **kwargs)
+            self.completion_persisted = True
+            return completed
+
     class FakeChatProvider:
         def chat_completion(self, **_: Any):
             yield ChatResponse(content="Hello there. ", model="fake-model")
             yield ChatResponse(content="I can hear you now.", model="fake-model")
 
-    store = ChatSessionStore(tmp_path / "chat.json")
+    store = CompletionOrderingStore(tmp_path / "chat.json")
     session = store.create_session(
         type(
             "Request",

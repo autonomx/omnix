@@ -7,13 +7,14 @@ from functools import wraps
 from typing import Any, Iterator
 
 from app.chat.compaction import compaction_enabled
+from app.chat.context_budget import PromptBudget, prompt_budget_from_env
 from app.chat.memory_prompt import resolve_prompt_memory
 from app.chat.prompt_assembly import build_prompt_assembly
 from app.chat.prompt_rendering import render_prompt_assembly
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
-from app.chat.context_budget import PromptBudget, prompt_budget_from_env
 from app.providers.lmstudio_provider import LMStudioProvider
 
+from .live_material_context import live_material_context_items
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_live_voice_profile_installed"
@@ -119,11 +120,13 @@ def _build_live_voice_prompt(
     )
     recent_message_limit = _live_voice_recent_message_limit()
     budget = _live_voice_prompt_budget()
+    live_material = live_material_context_items(session.id)
+    merged_context = [*(context_items or []), *live_material]
     assembly = build_prompt_assembly(
         session,
         user_message,
         global_system_prompt=shared.get_global_system_prompt(),
-        context_items=context_items or [],
+        context_items=merged_context,
         approved_memory=approved_memory,
         retrieved_history=[],
         session_summary=summary_record.summary if summary_record is not None else None,
@@ -131,6 +134,10 @@ def _build_live_voice_prompt(
         budget=budget,
     )
     assembly.diagnostics["memory"] = memory_diagnostics
+    assembly.diagnostics["live_material"] = {
+        "included": bool(live_material),
+        "item_count": len(live_material),
+    }
     assembly.diagnostics["compaction"] = (
         {
             "enabled": True,
@@ -173,6 +180,7 @@ def _build_live_voice_prompt(
         estimated_tokens=rendered.diagnostics.estimated_tokens,
         max_input_tokens=budget.max_input_tokens,
         history_recall=False,
+        live_material_item_count=len(live_material),
     )
     return assembly, rendered
 
@@ -207,6 +215,41 @@ def _install_lmstudio_thinking_policy() -> None:
     setattr(LMStudioProvider, _LMSTUDIO_SENTINEL, True)
 
 
+def _stream_with_live_voice_context(
+    stream: Iterator[dict[str, Any]],
+    *,
+    is_live_voice: bool,
+) -> Iterator[dict[str, Any]]:
+    """Advance a stream without carrying ContextVar tokens across yields.
+
+    Starlette may advance a synchronous response iterator in a different copied
+    context for each chunk. A token created before ``yield`` therefore cannot be
+    reset reliably after the caller asks for the next chunk. Keep each token
+    entirely inside the single iterator advance that created it.
+    """
+
+    iterator = iter(stream)
+    try:
+        while True:
+            token = _LIVE_VOICE_TURN.set(is_live_voice)
+            try:
+                try:
+                    item = next(iterator)
+                except StopIteration:
+                    return
+            finally:
+                _LIVE_VOICE_TURN.reset(token)
+            yield item
+    finally:
+        close = getattr(iterator, "close", None)
+        if callable(close):
+            token = _LIVE_VOICE_TURN.set(is_live_voice)
+            try:
+                close()
+            finally:
+                _LIVE_VOICE_TURN.reset(token)
+
+
 def install_live_chat_live_voice_profile_hook() -> None:
     """Install the live-only prompt and provider policy after routing wrappers."""
 
@@ -238,18 +281,17 @@ def install_live_chat_live_voice_profile_hook() -> None:
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        token = _LIVE_VOICE_TURN.set(_is_live_voice_message(user_message))
-        try:
-            yield from original_stream(
+        yield from _stream_with_live_voice_context(
+            original_stream(
                 self,
                 session,
                 user_message,
                 provider_id=provider_id,
                 model_id=model_id,
                 context_items=context_items,
-            )
-        finally:
-            _LIVE_VOICE_TURN.reset(token)
+            ),
+            is_live_voice=_is_live_voice_message(user_message),
+        )
 
     @wraps(original_generate)
     def patched_generate(

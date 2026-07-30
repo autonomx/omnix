@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const session = {
     sampleRate: 48_000,
-    enqueuePhrase: vi.fn(async (
+    enqueuePhrase: vi.fn(async () => undefined),
+    enqueueOutputPhrase: vi.fn(async (
       _text: string,
       _phraseIndex: number,
+      _ownership: { outputId: string; generationEpoch: number; outputOrder: number },
       _options?: { performancePlan?: Record<string, unknown> },
     ) => undefined),
     enqueueSilence: vi.fn(async (
@@ -15,6 +17,10 @@ const mocks = vi.hoisted(() => {
       _minimumFollowingSpeechMs?: number,
     ) => undefined),
     enqueueCue: vi.fn(async (_cueId: string, _variantId: string, _gain?: number) => undefined),
+    cancelSegment: vi.fn(),
+    cancelOutputItem: vi.fn(async () => undefined),
+    cancelAllAfter: vi.fn(),
+    waitForOutputItem: vi.fn(async () => undefined),
     setStartPolicy: vi.fn((_policy: Record<string, number>) => undefined),
     finish: vi.fn(async () => undefined),
     stop: vi.fn(async (_reason?: string) => undefined),
@@ -113,9 +119,11 @@ beforeEach(() => {
     return chatStreamResponse(streamEvents ?? undefined);
   });
   vi.stubGlobal('fetch', fetchMock);
-  mocks.session.enqueuePhrase.mockReset().mockResolvedValue(undefined);
+  mocks.session.enqueueOutputPhrase.mockReset().mockResolvedValue(undefined);
   mocks.session.enqueueSilence.mockReset().mockResolvedValue(undefined);
   mocks.session.enqueueCue.mockReset().mockResolvedValue(undefined);
+  mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);
+  mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);
   mocks.session.setStartPolicy.mockReset();
   mocks.session.finish.mockReset().mockResolvedValue(undefined);
   mocks.session.stop.mockReset().mockResolvedValue(undefined);
@@ -131,9 +139,13 @@ beforeEach(() => {
   cleanup = initializeLiveVoiceUnifiedAudioController();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  const hadSharedSession = mocks.createSession.mock.calls.length > 0;
   cleanup?.();
   cleanup = null;
+  if (hadSharedSession) {
+    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalled());
+  }
   document.body.innerHTML = '';
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -168,8 +180,9 @@ describe('live voice unified audio controller', () => {
       'live-call:s1:test-trace',
       'Jinx',
       mocks.reporter,
+      expect.objectContaining({ sessionScoped: true }),
     );
-    await waitFor(() => expect(mocks.session.enqueuePhrase).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(2));
     expect(mocks.session.setStartPolicy).toHaveBeenCalledTimes(1);
     expect(mocks.session.setStartPolicy).toHaveBeenCalledWith(expect.objectContaining({
       minimumBufferedSpeechMs: 400,
@@ -179,16 +192,18 @@ describe('live voice unified audio controller', () => {
       expect.any(String),
       120,
     );
-    expect(mocks.session.enqueuePhrase).toHaveBeenNthCalledWith(
+    expect(mocks.session.enqueueOutputPhrase).toHaveBeenNthCalledWith(
       1,
       'Hello there. This first phrase is ready for speech.',
       0,
+      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),
       {},
     );
-    expect(mocks.session.enqueuePhrase).toHaveBeenNthCalledWith(
+    expect(mocks.session.enqueueOutputPhrase).toHaveBeenNthCalledWith(
       2,
       'The second phrase should enter the same continuous queue.',
       1,
+      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 1 }),
       {},
     );
     expect(mocks.recordSpy).toHaveBeenCalledWith(
@@ -201,7 +216,7 @@ describe('live voice unified audio controller', () => {
       expect.objectContaining({ sample_rate: 48_000, source: 'fallback' }),
       'controller',
     );
-    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_finished',
       expect.objectContaining({ phrases: 2, text_chunks: 2, assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
@@ -238,8 +253,8 @@ describe('live voice unified audio controller', () => {
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
 
-    await waitFor(() => expect(mocks.session.enqueuePhrase).toHaveBeenCalledTimes(1));
-    const options = mocks.session.enqueuePhrase.mock.calls[0]?.[2];
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(1));
+    const options = mocks.session.enqueueOutputPhrase.mock.calls[0]?.[3];
     expect(options?.performancePlan).toMatchObject({
       speech_act: 'reflection',
       pace: 'slightly_slow',
@@ -272,9 +287,10 @@ describe('live voice unified audio controller', () => {
     await waitFor(() => expect(
       fetchMock.mock.calls.some(([input]) => requestPath(input).endsWith('/live-call/greeting/stream')),
     ).toBe(true));
-    await waitFor(() => expect(mocks.session.enqueuePhrase).toHaveBeenCalledWith(
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(
       'Hey there! How is your day going?',
       0,
+      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),
       {},
     ));
     expect(mocks.recordSpy).toHaveBeenCalledWith(
@@ -293,19 +309,19 @@ describe('live voice unified audio controller', () => {
     await Promise.resolve();
 
     expect(fetchMock.mock.calls.some(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'))).toBe(false);
-    expect(mocks.session.enqueuePhrase).not.toHaveBeenCalled();
+    expect(mocks.session.enqueueOutputPhrase).not.toHaveBeenCalled();
   });
 
   it('aborts greeting generation and playback when the user begins speaking', async () => {
-    let finishResolve: () => void = () => undefined;
-    mocks.session.finish.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
-      finishResolve = () => resolve(undefined);
+    let resolveOutput: () => void = () => undefined;
+    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      resolveOutput = () => resolve(undefined);
     }));
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-start'));
     await window.fetch('/api/chat/sessions/s1/live-call/runtime');
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
 
-    await waitFor(() => expect(mocks.session.enqueuePhrase).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(1));
     const greetingCall = fetchMock.mock.calls.find(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'));
     const signal = greetingCall?.[1]?.signal as AbortSignal;
     expect(signal.aborted).toBe(false);
@@ -314,10 +330,14 @@ describe('live voice unified audio controller', () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-user-speech'));
 
     await waitFor(() => expect(signal.aborted).toBe(true));
-    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('user-spoke-during-greeting'));
+    await waitFor(() => expect(mocks.session.cancelOutputItem).toHaveBeenCalledWith(
+      expect.stringContaining('conversation-'),
+      expect.any(Number),
+      'user-spoke-during-greeting',
+    ));
     expect(document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceOutputKind).toBeUndefined();
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
-    finishResolve();
+    resolveOutput();
   });
 
   it('uses the authoritative live-call voice instead of the chat voice setting', async () => {
@@ -332,6 +352,7 @@ describe('live voice unified audio controller', () => {
       'live-call:s1:test-trace',
       'Maya',
       mocks.reporter,
+      expect.objectContaining({ sessionScoped: true }),
     );
   });
 
@@ -345,7 +366,7 @@ describe('live voice unified audio controller', () => {
     await response.text();
 
     await waitFor(() => expect(states).toContain(true));
-    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalled());
     await waitFor(() => expect(states.at(-1)).toBe(false));
     expect(states).toEqual([true, false]);
   });
@@ -364,7 +385,7 @@ describe('live voice unified audio controller', () => {
       expect.objectContaining({ voice_turn_id: 'voice-turn:12345', turn_kind: 'response' }),
       'controller',
     );
-    expect(mocks.createTraceId).not.toHaveBeenCalled();
+    expect(mocks.createTraceId).toHaveBeenCalledWith('s1:audio-session');
   });
 
   it('skips non-speech-only trailing chunks without stopping the turn', async () => {
@@ -380,10 +401,11 @@ describe('live voice unified audio controller', () => {
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
 
-    await waitFor(() => expect(mocks.session.enqueuePhrase).toHaveBeenCalledTimes(1));
-    expect(mocks.session.enqueuePhrase).toHaveBeenCalledWith(
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(1));
+    expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(
       'Here is a complete spoken answer for the live call.',
       0,
+      expect.objectContaining({ outputOrder: 0 }),
       {},
     );
     expect(mocks.recordSpy).toHaveBeenCalledWith(
@@ -391,7 +413,7 @@ describe('live voice unified audio controller', () => {
       expect.objectContaining({ reason: 'non-speech-only', text: '☀️ ✨' }),
       'controller',
     );
-    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalledTimes(1));
     expect(mocks.session.stop).not.toHaveBeenCalled();
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_finished',
@@ -411,15 +433,14 @@ describe('live voice unified audio controller', () => {
     expect(shouldUseUnifiedLiveVoiceAudio('/api/chat/sessions/s1/messages/stream', { method: 'GET' })).toBe(false);
   });
 
-  it('aborts the active request and stops the persistent session on interruption', async () => {
-    let finishResolve: () => void = () => undefined;
-    mocks.session.finish.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
-      finishResolve = () => resolve(undefined);
+  it('aborts the active request and cancels owned output on interruption', async () => {
+    let resolveOutput: () => void = () => undefined;
+    mocks.session.waitForOutputItem.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      resolveOutput = () => resolve(undefined);
     }));
-
     const response = await window.fetch('/api/chat/sessions/s1/messages/stream', { method: 'POST' });
     await response.text();
-    await waitFor(() => expect(mocks.session.finish).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalled());
     const forwardedInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const signal = forwardedInit.signal as AbortSignal;
     expect(signal.aborted).toBe(false);
@@ -427,13 +448,18 @@ describe('live voice unified audio controller', () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt'));
 
     await waitFor(() => expect(signal.aborted).toBe(true));
-    await waitFor(() => expect(mocks.session.stop).toHaveBeenCalledWith('voice-interrupt'));
+    await waitFor(() => expect(mocks.session.cancelOutputItem).toHaveBeenCalledWith(
+      expect.stringContaining('conversation-'),
+      expect.any(Number),
+      'voice-interrupt',
+    ));
+    expect(mocks.session.stop).not.toHaveBeenCalled();
     expect(mocks.stopButtonStream).toHaveBeenCalled();
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_stopped',
       expect.objectContaining({ reason: 'voice-interrupt', assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
-    finishResolve();
+    resolveOutput();
   });
 });

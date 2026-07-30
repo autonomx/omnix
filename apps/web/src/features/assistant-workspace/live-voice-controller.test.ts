@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { liveConversationStore } from './live-conversation-store';
 import {
   liveVoiceAssistantOwnsFloor,
   liveVoiceSpeechThreshold,
@@ -9,6 +11,7 @@ const SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 afterEach(() => {
   window.localStorage.clear();
   document.body.innerHTML = '';
+  liveConversationStore.reset();
 });
 
 describe('live voice controller sensitivity', () => {
@@ -26,23 +29,37 @@ describe('live voice controller sensitivity', () => {
 });
 
 describe('live voice floor ownership', () => {
-  it('gives immediate user speech priority over a startup greeting', () => {
-    document.body.innerHTML = `
-      <section class="assistant-live-card" data-live-voice-output-kind="greeting">
-        <div class="assistant-voice-orb" data-voice-mode="speaking"></div>
-      </section>`;
-    const card = document.querySelector<HTMLElement>('.assistant-live-card');
-    expect(card).not.toBeNull();
-    expect(liveVoiceAssistantOwnsFloor(card!)).toBe(false);
-  });
-
-  it('keeps overlap classification for a normal assistant response', () => {
+  it('gives immediate user speech priority when the authoritative floor is unclaimed', () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-output-kind="response">
         <div class="assistant-voice-orb" data-voice-mode="speaking"></div>
       </section>`;
-    const card = document.querySelector<HTMLElement>('.assistant-live-card');
-    expect(card).not.toBeNull();
-    expect(liveVoiceAssistantOwnsFloor(card!)).toBe(true);
+    liveConversationStore.dispatch({
+      type: 'conversation',
+      event: { type: 'assistant_turn', value: 'speaking' },
+    });
+    liveConversationStore.dispatch({
+      type: 'conversation',
+      event: { type: 'floor_owner', value: 'unclaimed' },
+    });
+
+    expect(liveVoiceAssistantOwnsFloor()).toBe(false);
+  });
+
+  it('keeps overlap classification for an authoritative assistant-owned response', () => {
+    document.body.innerHTML = `
+      <section class="assistant-live-card" data-live-voice-output-kind="greeting">
+        <div class="assistant-voice-orb" data-voice-mode="listening"></div>
+      </section>`;
+    liveConversationStore.dispatch({
+      type: 'conversation',
+      event: { type: 'assistant_turn', value: 'speaking' },
+    });
+    liveConversationStore.dispatch({
+      type: 'conversation',
+      event: { type: 'floor_owner', value: 'assistant' },
+    });
+
+    expect(liveVoiceAssistantOwnsFloor()).toBe(true);
   });
 });

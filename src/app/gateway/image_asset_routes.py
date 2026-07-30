@@ -68,7 +68,11 @@ def register_image_asset_file_route(gateway: FastAPI) -> None:
 
 
 def _asset_by_id(asset_id: str) -> AssetRecord | None:
-    return next((asset for asset in default_asset_store().list_assets().assets if asset.id == asset_id), None)
+    store = default_asset_store()
+    get_asset = getattr(store, "get_asset", None)
+    if callable(get_asset):
+        return get_asset(asset_id)
+    return next((asset for asset in store.list_assets().assets if asset.id == asset_id), None)
 
 
 def _is_trusted_svg(asset: AssetRecord) -> bool:

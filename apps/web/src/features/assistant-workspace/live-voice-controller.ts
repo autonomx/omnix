@@ -1,3 +1,14 @@
+import { readCurrentAssistantDiagnosticText } from './live-conversation-assistant-summary';
+import type { AcceptedVoiceFinal, LiveFinalRoutingResult } from './live-accepted-final';
+import { acceptedFinalSuppressionReason } from './live-accepted-final-routing';
+import {
+  createLiveCallDiagnosticsReporter,
+  createLiveCallTraceId,
+  type LiveCallDiagnosticsReporter,
+} from './live-call-diagnostics-client';
+import { liveConversationStore } from './live-conversation-store';
+import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
+import { liveSessionCoordinator } from './live-session-coordinator';
 import {
   type ConversationPace,
   type UserFloorState,
@@ -5,6 +16,7 @@ import {
   reduceUserFloor,
   semanticFinalizeDelay,
 } from './live-voice-floor-manager';
+import { FinalizationAudioBuffer } from './live-voice-finalization-buffer';
 import {
   type OverlapIntent,
   classifyOverlap,
@@ -35,6 +47,8 @@ type LiveVoiceSession = {
   source: MediaStreamAudioSourceNode;
   audioPipeline: LiveVoiceAudioPipeline;
   client: StreamingSttWebSocketClient;
+  finalizationBuffer: FinalizationAudioBuffer;
+  reporter: LiveCallDiagnosticsReporter;
   speechDetected: boolean;
   finalRequested: boolean;
   silenceTimer: ReturnType<typeof setTimeout> | null;
@@ -52,12 +66,14 @@ type LiveVoiceSession = {
 type PendingStart = { card: HTMLElement; token: number };
 
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
+const LIVE_TASK_INSTRUCTION_STORAGE_KEY = 'omnix.live.taskInstruction';
 const DEFAULT_LIVE_VOICE_SENSITIVITY = 55;
 const DEFAULT_CONVERSATION_PACE: ConversationPace = 'balanced';
 const MIN_SPEECH_RMS_THRESHOLD = 0.012;
 const MAX_SPEECH_RMS_THRESHOLD = 0.06;
 const INTERRUPT_CONFIRMATION_FRAMES = 3;
 const FINAL_RESPONSE_TIMEOUT_MS = 8_000;
+const FINALIZATION_BUFFER_MS = FINAL_RESPONSE_TIMEOUT_MS;
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
@@ -75,8 +91,10 @@ const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
 
 export function initializeLiveVoiceController(root: ParentNode = document): void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
+  const liveWindow = window as LiveVoiceWindow;
+  if (liveWindow.__omnixLiveVoiceControllerInstalled) return;
   initialized = true;
-  (window as LiveVoiceWindow).__omnixLiveVoiceControllerInstalled = true;
+  liveWindow.__omnixLiveVoiceControllerInstalled = true;
   prepareCards(root);
   document.addEventListener('click', handleDocumentClick, true);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
@@ -100,6 +118,7 @@ function prepareCards(root: ParentNode): void {
         event.preventDefault();
         if (!isCardStartingOrActive(card)) void startLiveVoice(card);
       });
+      ensureLiveTaskPreset(card);
       panelStatuses.set(card, 'idle');
     }
     renderPanelStatus(card, panelStatuses.get(card) ?? 'idle');
@@ -151,10 +170,33 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     timestamp: new Date().toISOString(),
   });
   let audioContext: AudioContext | null = null;
+  let sessionReporter: LiveCallDiagnosticsReporter | null = null;
   let stream: MediaStream | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
   let audioPipeline: LiveVoiceAudioPipeline | null = null;
   try {
+    const sessionId = liveConversationStore.getState().sessionId;
+    if (!sessionId) throw new Error('Select or create a chat session before starting Live voice.');
+    const reporter = createLiveCallDiagnosticsReporter(createLiveCallTraceId(`${sessionId}:capture`));
+    sessionReporter = reporter;
+    const provenance = currentLiveRuntimeProvenance();
+    reporter.record('live_runtime_provenance', provenance, 'live_voice_controller');
+    const taskInstruction = readLiveTaskInstruction(card);
+    await liveSessionCoordinator.prepareTaskContract(sessionId, taskInstruction);
+    const coordination = liveConversationStore.getState().coordination;
+    reporter.record('live_task_contract_acknowledged', {
+      ...provenance,
+      task_instruction_configured: Boolean(taskInstruction),
+      task_contract_id: coordination.taskContract.taskContractId,
+      task_contract_version: coordination.taskContract.version,
+      context_version: coordination.contextVersion,
+    }, 'live_voice_controller');
+    dispatchLiveVoicePerfEvent({
+      stage: 'live_task_contract_acknowledged',
+      timestamp: new Date().toISOString(),
+      taskInstructionConfigured: Boolean(taskInstruction),
+      ...provenance,
+    });
     const liveWindow = window as LiveVoiceWindow;
     const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
     const WebSocketCtor = liveWindow.WebSocket as unknown as StreamingSttWebSocketCtor | undefined;
@@ -175,12 +217,34 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     const client = new StreamingSttWebSocketClient({
       url: getDefaultStreamingSttWebSocketUrl(window.location, runtimeConfig.sttServiceUrl),
       webSocketCtor: WebSocketCtor,
+      chatSessionId: sessionId,
       onStatusChange: (status) => {
         if (activeSession?.card === card || pendingStart?.card === card) setPanelStatus(card, status);
       },
       onPartialTranscript: (text) => handlePartialTranscript(card, text),
-      onFinalTranscript: (text) => handleFinalTranscript(card, text),
+      onAcceptedFinal: (final) => handleAcceptedFinal(card, final),
+      onFinalRejected: (reason, identity) => {
+        reporter.record('stt_final_rejected', {
+reason,
+segment_id: identity.segmentId,
+result_id: identity.resultId,
+finalize_request_id: identity.finalizeRequestId,
+source_sequence: identity.sourceSequence,
+capture_epoch: identity.captureEpoch,
+        }, 'live_voice_controller');
+        dispatchLiveVoicePerfEvent({ stage: 'stt_final_rejected', timestamp: new Date().toISOString(), reason, segmentId: identity.segmentId, sourceSequence: identity.sourceSequence });
+        setPanelStatus(card, 'error');
+      },
       onError: (message) => showLiveVoiceError(card, message),
+      onSegmentStateChange: (state) => dispatchLiveVoicePerfEvent({
+        stage: 'stt_segment_state',
+        timestamp: new Date().toISOString(),
+        protocol: state.protocol,
+        activeSequence: state.activeSequence,
+        pendingSegments: state.pendingSegments,
+        queuedSegments: state.queuedSegments,
+        absoluteSample: state.absoluteSample,
+      }),
     });
     const shell = {
       card,
@@ -188,6 +252,10 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       audioContext,
       source,
       client,
+      finalizationBuffer: new FinalizationAudioBuffer(
+        Math.max(1, Math.round(audioContext.sampleRate * FINALIZATION_BUFFER_MS / 1_000)),
+      ),
+      reporter,
       speechDetected: false,
       finalRequested: false,
       silenceTimer: null,
@@ -227,6 +295,11 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       cleanupSession(session);
     } else closePendingResources(stream, audioContext, source, audioPipeline);
     if (pendingStart?.token === token) pendingStart = null;
+    if (sessionReporter) {
+      void sessionReporter.close('live_capture_start_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     showLiveVoiceError(card, error instanceof Error ? error.message : 'Could not start live voice.');
   }
 }
@@ -302,11 +375,19 @@ registerProcessor('omnix-live-voice-processor', OmnixLiveVoiceProcessor);
 }
 
 function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void {
-  const assistantOwnsFloor = liveVoiceAssistantOwnsFloor(session.card);
-  const assistantSpeaking = assistantIsSpeaking(session.card);
+  const assistantOwnsFloor = liveVoiceAssistantOwnsFloor();
+  const assistantSpeaking = liveVoiceAssistantIsSpeaking();
   const rms = calculateRms(audio);
   updateVoiceVisualizer(session, rms);
-  if (session.finalRequested) return;
+  if (session.finalRequested) {
+    if (session.client.segmentedProtocolActive) {
+      session.client.sendAudio(audio, session.audioContext.sampleRate);
+      return;
+    }
+    const buffered = session.finalizationBuffer.push(audio);
+    if (!buffered.accepted) handleFinalizationBufferOverflow(session, buffered.bufferedSamples, buffered.maxSamples);
+    return;
+  }
   const speechStarted = rms >= liveVoiceSpeechThreshold();
   session.speechFrameCount = speechStarted ? session.speechFrameCount + 1 : 0;
   const confirmedSpeech = session.speechFrameCount >= INTERRUPT_CONFIRMATION_FRAMES;
@@ -352,11 +433,28 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
   session.client.sendAudio(audio, session.audioContext.sampleRate);
 }
 
+function handleFinalizationBufferOverflow(session: LiveVoiceSession, bufferedSamples: number, maxSamples: number): void {
+  dispatchLiveVoicePerfEvent({
+    stage: 'stt_finalization_buffer_overflow',
+    timestamp: new Date().toISOString(),
+    bufferedSamples,
+    maxSamples,
+    sampleRate: session.audioContext.sampleRate,
+  });
+  stopLiveVoice(session.card, 'error');
+  renderTranscript(
+    session.card,
+    'Omnix',
+    'Live voice paused because transcription fell behind. Restart the call to continue; no buffered audio was silently discarded.',
+    'final',
+  );
+}
+
 function handlePartialTranscript(card: HTMLElement, text: string): void {
   const session = activeSession;
   if (session?.card === card) {
     session.partialTranscript = text.trim();
-    if (session.floorState === 'overlap_candidate' && assistantIsSpeaking(card)) {
+    if (session.floorState === 'overlap_candidate' && liveVoiceAssistantIsSpeaking()) {
       assessOverlapCandidate(session);
     }
   }
@@ -439,8 +537,10 @@ function requestFinalTranscript(session: LiveVoiceSession): void {
   session.client.sendFinal();
   session.finalResponseTimer = setTimeout(() => {
     if (activeSession !== session) return;
+    const continuation = session.finalizationBuffer.drain();
     resetTurnState(session);
     setPanelStatus(session.card, 'connected');
+    replayFinalizationBuffer(session, continuation);
   }, FINAL_RESPONSE_TIMEOUT_MS);
 }
 
@@ -458,37 +558,171 @@ function updateVoiceVisualizer(session: LiveVoiceSession, rms: number): void {
   if (orb?.dataset.voiceMode !== 'speaking') orb?.setAttribute('data-voice-mode', 'listening');
 }
 
-function handleFinalTranscript(card: HTMLElement, text: string): void {
+async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal): Promise<LiveFinalRoutingResult> {
   const session = activeSession;
-  if (!session || session.card !== card) return;
+  if (!session || session.card !== card) {
+    return failedRoutingResult(final, 'live_capture_session_inactive');
+  }
   const receivedAt = performance.now();
-  const transcript = text.trim();
-  const overlapIntent = session.overlapIntent;
+  const partialOverlapIntent = session.overlapIntent;
+  const finalOverlapAssessment = partialOverlapIntent === 'uncertain'
+    ? classifyOverlap(final.text, currentAssistantSpeechText())
+    : null;
+  const overlapIntent = finalOverlapAssessment?.intent ?? partialOverlapIntent;
   const interruptionDispatched = session.interruptionDispatched;
-  if (transcript) {
-    dispatchLiveVoicePerfEvent({
-      stage: 'stt_final_received',
-      turnId: session.perfTurnId ?? `voice-turn:${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      transcriptChars: transcript.length,
-      sttFinalizeMs: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
-    });
-  }
-  const suppressTurn = Boolean(
-    overlapIntent === 'hard_stop'
-    || overlapIntent === 'backchannel'
-    || overlapIntent === 'noise'
-    || (overlapIntent === 'uncertain' && !interruptionDispatched),
-  );
+  const suppressionReason = acceptedFinalSuppressionReason(final.text, overlapIntent);
+  const continuation = session.finalizationBuffer.drain();
+  dispatchLiveVoicePerfEvent({
+    stage: 'stt_final_received',
+    turnId: session.perfTurnId ?? `voice-turn:${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    transcriptChars: final.text.trim().length,
+    sttFinalizeMs: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
+    segmentId: final.segmentId,
+    sourceSequence: final.sourceSequence,
+    captureEpoch: final.captureEpoch,
+  });
+  session.reporter.record('stt_final_received', {
+    ...currentLiveRuntimeProvenance(),
+    chat_session_id: final.chatSessionId,
+    stt_session_id: final.sttSessionId,
+    capture_epoch: final.captureEpoch,
+    segment_id: final.segmentId,
+    result_id: final.resultId,
+    finalize_request_id: final.finalizeRequestId,
+    source_sequence: final.sourceSequence,
+    start_sample: final.startSample,
+    end_sample: final.endSample,
+    protocol: final.protocol,
+    transcript_chars: final.text.trim().length,
+    stt_finalize_ms: session.sttFinalRequestedAt === null ? undefined : Math.round(receivedAt - session.sttFinalRequestedAt),
+    overlap_intent: overlapIntent,
+    overlap_confidence: finalOverlapAssessment?.confidence,
+    overlap_reason: finalOverlapAssessment?.reason,
+    interruption_dispatched: interruptionDispatched,
+  }, 'live_voice_controller');
   resetTurnState(session);
-  if (!transcript || suppressTurn) {
-    setPanelStatus(card, 'connected');
-    return;
+  try {
+    if (suppressionReason) {
+      const result = ignoredRoutingResult(final);
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        suppression_reason: suppressionReason,
+        overlap_intent: overlapIntent,
+        overlap_confidence: finalOverlapAssessment?.confidence,
+        overlap_reason: finalOverlapAssessment?.reason,
+      }, 'live_voice_controller');
+      return result;
+    }
+    renderTranscript(card, 'You', final.text, 'final');
+    session.reporter.record('coordination_started', {
+      segment_id: final.segmentId,
+      result_id: final.resultId,
+      finalize_request_id: final.finalizeRequestId,
+      source_sequence: final.sourceSequence,
+      capture_epoch: final.captureEpoch,
+      overlap_intent: overlapIntent,
+      overlap_confidence: finalOverlapAssessment?.confidence,
+      overlap_reason: finalOverlapAssessment?.reason,
+      interruption_dispatched: interruptionDispatched,
+    }, 'live_voice_controller');
+    dispatchLiveVoicePerfEvent({
+      stage: 'coordination_started',
+      timestamp: new Date().toISOString(),
+      segmentId: final.segmentId,
+      sourceSequence: final.sourceSequence,
+      captureEpoch: final.captureEpoch,
+    });
+    try {
+      const result = await liveSessionCoordinator.routeAcceptedFinal(final);
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        task_contract_id: result.taskContractId,
+        task_contract_version: result.taskContractVersion,
+        error_code: result.errorCode,
+      }, 'live_voice_controller');
+      dispatchLiveVoicePerfEvent({
+        stage: 'coordination_completed',
+        timestamp: new Date().toISOString(),
+        segmentId: final.segmentId,
+        sourceSequence: final.sourceSequence,
+        outcome: result.outcome,
+        errorCode: result.errorCode,
+      });
+      if (result.outcome === 'failed') setPanelStatus(card, 'error');
+      else setPanelStatus(card, 'connected');
+      return result;
+    } catch (error) {
+      const result = failedRoutingResult(final, 'live_coordination_failed');
+      session.reporter.record('coordination_completed', {
+        segment_id: final.segmentId,
+        result_id: final.resultId,
+        source_sequence: final.sourceSequence,
+        outcome: result.outcome,
+        error_code: result.errorCode,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'live_voice_controller');
+      setPanelStatus(card, 'error');
+      return result;
+    }
+  } finally {
+    replayFinalizationBuffer(session, continuation);
   }
-  renderTranscript(card, 'You', transcript, 'final');
-  populateComposer(transcript);
-  submitComposer();
-  setPanelStatus(card, 'connected');
+}
+
+function ignoredRoutingResult(final: AcceptedVoiceFinal): LiveFinalRoutingResult {
+  const task = liveConversationStore.getState().coordination.taskContract;
+  return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: task.taskContractId, taskContractVersion: task.version };
+}
+
+function failedRoutingResult(final: AcceptedVoiceFinal, errorCode: string): LiveFinalRoutingResult {
+  const task = liveConversationStore.getState().coordination.taskContract;
+  return { outcome: 'failed', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: task.taskContractId, taskContractVersion: task.version, errorCode };
+}
+
+function ensureLiveTaskPreset(card: HTMLElement): void {
+  if (card.querySelector('[data-live-task-instruction]')) return;
+  const select = document.createElement('select');
+  select.dataset.liveTaskInstruction = 'true';
+  select.setAttribute('aria-label', 'Live task');
+  for (const [label, value] of [
+    ['Conversation', ''],
+    ['Translate Japanese to English', 'Translate Japanese speech into concise English continuously. Keep listening while speaking.'],
+    ['Live grammar correction', 'Correct my grammar continuously while I speak.'],
+  ] as const) {
+    const option = document.createElement('option');
+    option.textContent = label;
+    option.value = value;
+    select.append(option);
+  }
+  select.value = window.localStorage.getItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY) ?? '';
+  select.addEventListener('change', () => window.localStorage.setItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY, select.value));
+  card.querySelector('header')?.append(select);
+}
+
+function readLiveTaskInstruction(card: HTMLElement): string | undefined {
+  const selected = card.querySelector<HTMLSelectElement>('[data-live-task-instruction]')?.value.trim();
+  const stored = window.localStorage.getItem(LIVE_TASK_INSTRUCTION_STORAGE_KEY)?.trim();
+  return selected || stored || undefined;
+}
+
+function replayFinalizationBuffer(session: LiveVoiceSession, frames: Float32Array[]): void {
+  if (activeSession !== session || frames.length === 0) return;
+  const samples = frames.reduce((total, frame) => total + frame.length, 0);
+  dispatchLiveVoicePerfEvent({
+    stage: 'stt_finalization_buffer_replayed',
+    timestamp: new Date().toISOString(),
+    frames: frames.length,
+    samples,
+    sampleRate: session.audioContext.sampleRate,
+  });
+  frames.forEach((frame) => processAudioFrame(session, frame));
 }
 
 function resetTurnState(session: LiveVoiceSession): void {
@@ -535,16 +769,17 @@ function readConversationPace(): ConversationPace {
   return value === 'quick' || value === 'reflective' ? value : DEFAULT_CONVERSATION_PACE;
 }
 
-function assistantIsSpeaking(card: HTMLElement): boolean {
-  return card.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode === 'speaking';
+function liveVoiceAssistantIsSpeaking(): boolean {
+  return liveConversationStore.getState().conversation.assistantTurn === 'speaking';
 }
 
-export function liveVoiceAssistantOwnsFloor(card: HTMLElement): boolean {
-  return assistantIsSpeaking(card) && card.dataset.liveVoiceOutputKind !== 'greeting';
+export function liveVoiceAssistantOwnsFloor(_card?: HTMLElement): boolean {
+  const conversation = liveConversationStore.getState().conversation;
+  return conversation.assistantTurn === 'speaking' && conversation.floorOwner === 'assistant';
 }
 
 function currentAssistantSpeechText(): string {
-  return document.querySelector<HTMLElement>('[data-omnix-live-delivery]')?.textContent ?? '';
+  return readCurrentAssistantDiagnosticText();
 }
 
 function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnectionStatus): void {
@@ -560,12 +795,16 @@ function stopLiveVoice(card: HTMLElement, nextStatus: StreamingSttConnectionStat
 }
 
 function cleanupSession(session: LiveVoiceSession): void {
+  session.finalizationBuffer.clear();
   resetTurnState(session);
   session.audioPipeline.cleanup();
   session.source.disconnect();
   session.stream.getTracks().forEach((track) => track.stop());
   session.client.disconnect();
   void session.audioContext.close().catch(() => undefined);
+  void session.reporter.close('live_capture_session_closed', {
+    session_id: liveConversationStore.getState().sessionId,
+  });
 }
 
 function closePendingResources(
@@ -662,20 +901,6 @@ function showLiveVoiceError(card: HTMLElement, message: string): void {
   setPanelStatus(card, 'error');
 }
 
-function populateComposer(text: string): void {
-  const textarea = document.querySelector<HTMLTextAreaElement>('.assistant-message-input textarea');
-  if (!textarea) return;
-  textarea.value = text;
-  textarea.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-function submitComposer(): void {
-  const form = document.querySelector<HTMLFormElement>('.assistant-composer');
-  if (!form) return;
-  if (typeof form.requestSubmit === 'function') form.requestSubmit();
-  else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-}
-
 function dispatchLiveVoiceLifecycleEvent(type: string, detail: Record<string, unknown>): void {
   window.dispatchEvent(new CustomEvent(type, { detail }));
 }
@@ -691,10 +916,4 @@ function setText(element: Element | null, value: string): void {
 
 function setDataAttribute(element: HTMLElement, key: string, value: string): void {
   if (element.dataset[key] !== value) element.dataset[key] = value;
-}
-
-if (typeof window !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => initializeLiveVoiceController(), { once: true });
-  } else initializeLiveVoiceController();
 }

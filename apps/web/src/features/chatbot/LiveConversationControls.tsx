@@ -20,6 +20,10 @@ import {
   migrateLegacyConversationSettingsOnce,
   mirrorProfileForLegacyRuntime,
 } from './liveConversationProfileClient';
+import {
+  LIVE_CONVERSATION_MODE_PROFILES,
+  matchLiveConversationModeProfile,
+} from './liveConversationModeProfiles';
 
 export type LiveConversationControlsProps = { sessionId: string | null };
 
@@ -128,6 +132,34 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
       </header>
 
       {!profile ? <p role="status">{status ?? 'Loading Live Chat profile…'}</p> : <>
+        <div className="live-chat-mode-profiles" aria-label="Conversation profiles">
+          <div className="live-chat-mode-profile-heading">
+            <div>
+              <strong>Conversation profile</strong>
+              <span>Apply a complete, compatible set of presence and turn-taking options.</span>
+              <small>{matchLiveConversationModeProfile(profile) ? 'Preset active' : 'Custom configuration'}</small>
+            </div>
+          </div>
+          <div className="live-chat-mode-profile-grid">
+            {LIVE_CONVERSATION_MODE_PROFILES.map((modeProfile) => {
+              const active = matchLiveConversationModeProfile(profile) === modeProfile.id;
+              return (
+                <button
+                  className="live-chat-mode-profile"
+                  type="button"
+                  key={modeProfile.id}
+                  aria-pressed={active}
+                  disabled={saving}
+                  onClick={() => void update({ ...modeProfile.settings })}
+                >
+                  <strong>{modeProfile.label}</strong>
+                  <span>{modeProfile.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="live-chat-control-grid">
           <SelectControl label="Presence" value={profile.presence_preset} disabled={saving} onChange={(value) => void update({ presence_preset: value as PresencePreset })} options={[
             ['quiet', 'Quiet'], ['natural', 'Natural'], ['engaged', 'Engaged'], ['listener', 'Listener'],

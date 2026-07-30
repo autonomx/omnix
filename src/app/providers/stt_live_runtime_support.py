@@ -11,8 +11,6 @@ from array import array
 from pathlib import Path
 from typing import Any
 
-import torch
-
 from app.providers.stt_streaming_audio import DEFAULT_SAMPLE_RATE, write_pcm16_wav
 
 _TRANSCRIBE_LOCK = threading.Lock()
@@ -67,6 +65,10 @@ def extract_text(output: Any) -> str:
 def transcribe_path(model: Any, audio_path: Path) -> tuple[str, float]:
     if model is None:
         raise RuntimeError("ASR model not loaded")
+    try:
+        import torch
+    except ImportError as exc:  # pragma: no cover - production dependency guard.
+        raise RuntimeError("PyTorch is required for Parakeet inference") from exc
     started_at = time.perf_counter()
     with _TRANSCRIBE_LOCK, torch.inference_mode():
         try:

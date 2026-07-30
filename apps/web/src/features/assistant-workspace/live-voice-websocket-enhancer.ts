@@ -210,7 +210,10 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       webSocketCtor: WebSocketCtor,
       onStatusChange: (status) => setPanelStatus(card, status),
       onPartialTranscript: (text) => renderTranscript(card, 'You', text, 'draft'),
-      onFinalTranscript: (text) => handleFinalTranscript(card, text),
+      onAcceptedFinal: async (final) => {
+        handleFinalTranscript(card, final.text);
+        return { outcome: 'conversation_submitted', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: 'legacy-enhancer', taskContractVersion: 1 };
+      },
       onError: (message) => showLiveVoiceError(card, message),
     });
 

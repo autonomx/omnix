@@ -35,6 +35,14 @@ class PostgresSharedAssetStoreAdapter:
             work.rollback()
         return AssetListResponse(assets=[self._asset(record) for record in records])
 
+    def get_asset(self, asset_id: str) -> AssetRecord | None:
+        with unit_of_work(self.database) as work:
+            record = work.assets.get_asset(self.context, str(asset_id))
+            work.rollback()
+        if record is None or record["lifecycle_status"] == "deleted":
+            return None
+        return self._asset(record)
+
     def upsert_asset(self, asset: AssetRecord) -> AssetRecord:
         with unit_of_work(self.database) as work:
             existing = work.assets.get_asset(self.context, asset.id)

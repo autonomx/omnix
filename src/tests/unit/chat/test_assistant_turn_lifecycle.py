@@ -111,6 +111,90 @@ def test_streamed_turn_ids_are_idempotent_and_interruption_blocks_completion(mon
     assert coordinator.get(assistant_turn_id).lifecycle == "interrupted"
 
 
+def test_completed_audio_turn_still_persists_assistant_transcript(monkeypatch, tmp_path) -> None:
+    coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
+    monkeypatch.setattr(
+        "app.chat.character_store.default_assistant_turn_coordinator",
+        lambda: coordinator,
+    )
+
+    store = ChatSessionStore(tmp_path / "chat.json")
+    session = store.create_session(CreateChatSessionRequest(title="New chat"))
+    started, user_message = store.begin_user_message(
+        session.id,
+        SendChatMessageRequest(
+            content="hello",
+            user_turn_id="voice-user-turn:completed-audio",
+            speech_segment_id="voice-segment:completed-audio",
+        ),
+    )
+    assistant_turn_id = str(user_message.metadata["assistant_turn_id"])
+    coordinator.mark_streaming(assistant_turn_id)
+    assert coordinator.try_complete(assistant_turn_id) is True
+
+    persisted = store.complete_streamed_reply(
+        started.id,
+        user_message.id,
+        "The answer was already spoken.",
+        {
+            "generation_status": "completed",
+            "assistant_turn_id": assistant_turn_id,
+        },
+    )
+
+    assert persisted is not None
+    assistants = [message for message in persisted.messages if message.role == "assistant"]
+    assert len(assistants) == 1
+    assert assistants[0].content == "The answer was already spoken."
+    assert assistants[0].metadata["assistant_turn_id"] == assistant_turn_id
+
+
+def test_client_disconnect_persists_generated_interrupted_transcript(monkeypatch, tmp_path) -> None:
+    provider = StreamingProvider()
+    coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
+    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(
+        "app.chat.character_store.default_assistant_turn_coordinator",
+        lambda: coordinator,
+    )
+
+    store = ChatSessionStore(tmp_path / "chat.json")
+    session = store.create_session(CreateChatSessionRequest(title="New chat"))
+    started, user_message = store.begin_user_message(
+        session.id,
+        SendChatMessageRequest(
+            content="hello",
+            provider_id="lmstudio",
+            model_id="test-model",
+            user_turn_id="voice-user-turn:disconnect",
+            speech_segment_id="voice-segment:disconnect",
+        ),
+    )
+    assistant_turn_id = str(user_message.metadata["assistant_turn_id"])
+    events = store.stream_provider_reply_chunks(
+        started,
+        user_message,
+        provider_id="lmstudio",
+        model_id="test-model",
+    )
+
+    first = next(events)
+    assert first["type"] == "text_chunk"
+    generated_before_disconnect = str(first["text"]).strip()
+    events.close()
+
+    persisted = store.get_session(session.id)
+    assert persisted is not None
+    saved_user = next(message for message in persisted.messages if message.id == user_message.id)
+    assistants = [message for message in persisted.messages if message.role == "assistant"]
+    assert saved_user.metadata["generation_status"] == "interrupted"
+    assert len(assistants) == 1
+    assert assistants[0].content == generated_before_disconnect
+    assert assistants[0].metadata["generation_status"] == "interrupted"
+    assert assistants[0].metadata["assistant_turn_id"] == assistant_turn_id
+
+
 def test_projection_preserves_audit_text_but_hides_unheard_suffix() -> None:
     text = "Delivered phrase. Unheard phrase."
     delivered_end = len("Delivered phrase.")

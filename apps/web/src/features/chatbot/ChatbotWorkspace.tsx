@@ -34,6 +34,7 @@ import {
   createLiveCallDiagnosticsReporter,
   type LiveCallDiagnosticsReporter,
 } from '../assistant-workspace/live-call-diagnostics-client';
+import { liveChatSubmissionGateway } from '../assistant-workspace/live-chat-submission-gateway';
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
@@ -519,7 +520,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       if (!voiceTurnDiagnosticsRef.current) {
         voiceTurnDiagnosticsRef.current = createLiveCallDiagnosticsReporter(`live-call:${detail.turnId}`);
       }
-      stopAssistantResponseAudio(undefined);
       voiceTurnPerformanceRef.current = {
         turnId: detail.turnId,
         sttFinalReceivedAt: performance.now(),
@@ -901,6 +901,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     sendMutation.mutate({ content: trimmed, providerId: selectedProviderId, modelId: selectedModelId });
   }
 
+  useEffect(() => liveChatSubmissionGateway.register(async (input) => {
+    if (input.sessionId !== selectedSessionId) throw new Error('live_chat_session_mismatch');
+    await sendStreamingVoiceTranscript(input.text);
+  }), [selectedSessionId, selectedProviderId, selectedModelId, assistantSettings, autoSpeakResponses]);
+
   function scheduleLiveVoiceAutoSend(content: string): void {
     if (!liveVoiceActiveRef.current) return;
     clearLiveVoiceAutoSendTimer();
@@ -1004,6 +1009,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     } catch (error) {
       recordVoiceTurnDiagnostic('chat_stream_failed', {
         error_name: error instanceof Error ? error.name : 'unknown',
+        error_code: error instanceof Error && error.message.trim()
+          ? error.message.trim().slice(0, 240)
+          : 'live_chat_stream_failed',
       });
       setAudioStatus(error instanceof Error ? error.message : 'Voice text stream failed.');
     } finally {
@@ -1694,10 +1702,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             <section className="assistant-live-card" data-live-voice-id={currentLiveCallVoiceId()}>
               <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>
               <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>
-              <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
-                <div className="assistant-voice-meter assistant-voice-meter-left">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`left-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
-                <div className="assistant-voice-core"><span className="assistant-voice-pulse" /><span className="assistant-voice-mic" /></div>
-                <div className="assistant-voice-meter assistant-voice-meter-right">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`right-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
+              <div className="assistant-live-visual-stage" aria-label="Live character visual">
+                <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
+                  <div className="assistant-voice-meter assistant-voice-meter-left">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`left-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
+                  <div className="assistant-voice-core"><span className="assistant-voice-pulse" /><span className="assistant-voice-mic" /></div>
+                  <div className="assistant-voice-meter assistant-voice-meter-right">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`right-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
+                </div>
               </div>
               <div className="assistant-voice-input-indicator" aria-live="polite">
                 <span>Mic input</span>

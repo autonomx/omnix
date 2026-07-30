@@ -203,6 +203,19 @@ class _CharacterSessionMixin:
             if assistant_turn_id:
                 coordinator.request_cancel(assistant_turn_id, "client_disconnected")
                 coordinator.mark_provider_cancelled(assistant_turn_id)
+                interrupted_content = " ".join(
+                    part.strip() for part in generated_parts if part.strip()
+                ).strip()
+                self.complete_streamed_reply(
+                    session.id,
+                    user_message.id,
+                    interrupted_content,
+                    {
+                        "generation_status": "interrupted",
+                        "delivery_status": "interrupted",
+                        "assistant_turn_id": assistant_turn_id,
+                    },
+                )
             raise
         except Exception:
             if assistant_turn_id:
@@ -245,8 +258,15 @@ class _CharacterSessionMixin:
                 content=content,
                 metadata={**metadata, "segment_id": segment_id},
             )
-        if assistant_turn_id and not coordinator.try_complete(assistant_turn_id):
-            return self.get_session(session_id)
+        # Audio delivery can make the assistant turn terminal before the chat
+        # stream reaches its persistence footer. A terminal turn must not cause
+        # the generated assistant transcript to be discarded; interruption is
+        # handled explicitly above and completed/failed turns still need their
+        # durable message record.
+        if assistant_turn_id:
+            turn = coordinator.get(assistant_turn_id)
+            if turn is not None and not turn.terminal:
+                coordinator.try_complete(assistant_turn_id)
         session = super().complete_streamed_reply(
             session_id,
             user_message_id,

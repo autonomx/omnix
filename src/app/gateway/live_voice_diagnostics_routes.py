@@ -7,6 +7,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 
+from .content_free_diagnostics import sanitize_content_free_details
 from .live_chat_evaluation_routes import register_live_chat_evaluation_routes
 from .live_chat_release_gate import (
     LiveChatReleaseGateEvaluationRequest,
@@ -25,6 +26,17 @@ from .live_voice_stream_diagnostics import diagnostics_log_path, live_voice_log,
 _ROUTE_SENTINEL = "_omnix_live_voice_diagnostics_registered"
 _HOOK_SENTINEL = "_omnix_live_voice_diagnostics_hook_installed"
 LIVE_VOICE_DIAGNOSTICS_PATH = "/api/tts/live-call/diagnostics"
+_LOG_ENVELOPE_FIELDS = {
+    "event",
+    "monotonic_ms",
+    "process_id",
+    "sequence",
+    "source",
+    "thread_id",
+    "thread_name",
+    "timestamp_utc",
+    "trace_id",
+}
 
 
 class LiveVoiceDiagnosticEvent(BaseModel):
@@ -53,7 +65,13 @@ def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
     async def ingest_live_voice_diagnostics(batch: LiveVoiceDiagnosticBatch) -> dict[str, Any]:
         trace_id = normalize_trace_id(batch.trace_id)
         for item in batch.events:
-            live_voice_log(trace_id, item.source, item.event, **item.details)
+            details = sanitize_content_free_details(item.details)
+            live_voice_log(
+                trace_id,
+                item.source,
+                item.event,
+                **{key: value for key, value in details.items() if key not in _LOG_ENVELOPE_FIELDS},
+            )
         return {
             "accepted": len(batch.events),
             "trace_id": trace_id,
