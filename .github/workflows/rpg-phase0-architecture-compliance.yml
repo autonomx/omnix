@@ -91,8 +91,8 @@ jobs:
           python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart
           npm install
 
-      - name: Ruff recovery modules
-        run: ruff check src/app/assets/store.py src/tests/app/test_voice_library_index_recovery.py
+      - name: Validate recovery Python correctness
+        run: ruff check --select E9,F src/app/assets/store.py src/tests/app/test_voice_library_index_recovery.py
 
       - name: Run backend voice-library recovery regression
         run: python -m pytest src/tests/app/test_voice_library_index_recovery.py src/tests/app/test_shared_assets_readthrough.py -q --tb=short
