@@ -30,13 +30,13 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import textwrap
 
           workflow = Path('.github/workflows/apply-voice-library-recovery.yml')
           lines = workflow.read_text(encoding='utf-8').splitlines()
           start = next(index for index, line in enumerate(lines) if line.strip() == "python - <<'PY'") + 1
           end = next(index for index in range(start, len(lines)) if lines[index].strip() == 'PY')
-          script = textwrap.dedent('\n'.join(lines[start:end]))
+          script_lines = [line[10:] if line.startswith('          ') else line for line in lines[start:end]]
+          script = '\n'.join(script_lines)
           exec(compile(script, str(workflow), 'exec'))
           PY
           git diff --check
