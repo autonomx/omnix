@@ -1,0 +1,435 @@
+name: Apply voice library recovery
+
+on:
+  push:
+    branches:
+      - fix/voice-library-reindex
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: src
+    steps:
+      - name: Check out recovery branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/voice-library-reindex
+          fetch-depth: 0
+
+      - name: Apply voice library recovery and tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          store_path = Path('src/app/assets/store.py')
+          store = store_path.read_text(encoding='utf-8')
+
+          legacy_start = store.index('    def _legacy_voice_clone_assets(self) -> list[AssetRecord]:')
+          legacy_end = store.index('\n    def _legacy_audio_assets(self) -> list[AssetRecord]:', legacy_start)
+          legacy_replacement = '''    def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
+              """Expose voice clone profiles from metadata or recover them from audio files."""
+              try:
+                  import app.shared as shared
+              except Exception:
+                  return []
+
+              manifest_path = Path(getattr(shared, "VOICE_CLONES_FILE", ""))
+              clones_dir = Path(getattr(shared, "VOICE_CLONES_DIR", manifest_path.parent))
+              raw: Any = {}
+              if manifest_path.is_file():
+                  try:
+                      raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+                  except Exception:
+                      raw = {}
+
+              for wrapper_key in ("voices", "voice_clones", "profiles"):
+                  if isinstance(raw, dict) and isinstance(raw.get(wrapper_key), (dict, list)):
+                      raw = raw[wrapper_key]
+                      break
+
+              manifest_entries: dict[str, dict[str, Any]] = {}
+              if isinstance(raw, list):
+                  for index, payload in enumerate(raw):
+                      if not isinstance(payload, dict):
+                          continue
+                      name = str(
+                          payload.get("profile_name")
+                          or payload.get("voice_id")
+                          or payload.get("voice_clone_id")
+                          or f"voice-{index + 1}"
+                      )
+                      manifest_entries[name] = dict(payload)
+              elif isinstance(raw, dict):
+                  for voice_id, payload in raw.items():
+                      if isinstance(payload, dict):
+                          manifest_entries[str(voice_id)] = dict(payload)
+
+              def resolve_audio_path(clone_id: str, data: dict[str, Any]) -> Path | None:
+                  candidates: list[Path] = []
+                  for key in ("source_path", "audio_path", "storage_path"):
+                      value = str(data.get(key) or "").strip()
+                      if not value:
+                          continue
+                      path = Path(value)
+                      candidates.append(path)
+                      if not path.is_absolute():
+                          candidates.append(clones_dir / path)
+                  clone_name = Path(clone_id).name
+                  if clone_name:
+                      direct = clones_dir / clone_name
+                      candidates.append(direct)
+                      stem = Path(clone_name).stem
+                      candidates.extend(clones_dir / f"{stem}{suffix}" for suffix in _AUDIO_MIME_TYPES)
+                  for candidate in candidates:
+                      if candidate.is_file() and candidate.suffix.lower() in _AUDIO_MIME_TYPES:
+                          return candidate
+                  return None
+
+              records: dict[str, AssetRecord] = {}
+              referenced_audio_paths: set[Path] = set()
+              for legacy_name, data in sorted(manifest_entries.items()):
+                  profile_name = str(data.get("profile_name") or legacy_name)
+                  voice_id = str(data.get("voice_id") or legacy_name)
+                  clone_id = str(data.get("voice_clone_id") or voice_id)
+                  audio_path = resolve_audio_path(clone_id, data)
+                  if audio_path is not None:
+                      try:
+                          referenced_audio_paths.add(audio_path.resolve())
+                      except OSError:
+                          referenced_audio_paths.add(audio_path)
+                  storage_path = str(audio_path or manifest_path)
+                  mime_type = _AUDIO_MIME_TYPES.get(audio_path.suffix.lower(), "application/octet-stream") if audio_path else "application/json"
+                  asset = AssetRecord(
+                      id=_safe_voice_asset_id(profile_name),
+                      module="voice-cloning",
+                      type=AssetType.VOICE_PROFILE,
+                      mime_type=mime_type,
+                      storage_path=storage_path,
+                      metadata={
+                          "profile_name": profile_name,
+                          "voice_id": voice_id,
+                          "voice_clone_id": clone_id,
+                          "speaker": data.get("speaker") or profile_name,
+                          "language": data.get("language") or "",
+                          "gender": data.get("gender") or "neutral",
+                          "has_audio": audio_path is not None or bool(data.get("has_audio")),
+                          "is_preloaded": bool(data.get("is_preloaded")),
+                          "source_path": str(data.get("source_path") or ""),
+                      },
+                      created_at=_mtime_iso(audio_path or manifest_path),
+                      compat={
+                          "legacy_system": "app.shared.VOICE_CLONES_FILE",
+                          "legacy_manifest": str(manifest_path),
+                          "legacy_voice_id": legacy_name,
+                      },
+                  )
+                  records[asset.id] = asset
+
+              if clones_dir.is_dir():
+                  audio_files = sorted(
+                      path
+                      for path in clones_dir.iterdir()
+                      if path.is_file() and path.suffix.lower() in _AUDIO_MIME_TYPES
+                  )
+                  for audio_path in audio_files:
+                      try:
+                          resolved_audio_path = audio_path.resolve()
+                      except OSError:
+                          resolved_audio_path = audio_path
+                      if resolved_audio_path in referenced_audio_paths:
+                          continue
+                      sidecar_data: dict[str, Any] = {}
+                      sidecar_path = audio_path.with_suffix(".json")
+                      if sidecar_path.is_file():
+                          try:
+                              sidecar_raw = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                              if isinstance(sidecar_raw, dict):
+                                  sidecar_data = sidecar_raw
+                          except Exception:
+                              sidecar_data = {}
+                      profile_name = str(sidecar_data.get("profile_name") or audio_path.stem)
+                      voice_id = str(sidecar_data.get("voice_id") or audio_path.stem)
+                      asset = AssetRecord(
+                          id=_safe_voice_asset_id(profile_name),
+                          module="voice-cloning",
+                          type=AssetType.VOICE_PROFILE,
+                          mime_type=_AUDIO_MIME_TYPES.get(audio_path.suffix.lower(), "application/octet-stream"),
+                          storage_path=str(audio_path),
+                          metadata={
+                              "profile_name": profile_name,
+                              "voice_id": voice_id,
+                              "voice_clone_id": voice_id,
+                              "speaker": sidecar_data.get("speaker") or profile_name,
+                              "language": sidecar_data.get("language") or "",
+                              "gender": sidecar_data.get("gender") or "neutral",
+                              "has_audio": True,
+                              "is_preloaded": bool(sidecar_data.get("is_preloaded")),
+                              "recovered_from_file": True,
+                          },
+                          created_at=_mtime_iso(audio_path),
+                          compat={
+                              "legacy_system": "resources/voice_clones directory scan",
+                              "legacy_voice_id": voice_id,
+                              "metadata_sidecar": str(sidecar_path) if sidecar_path.is_file() else "",
+                          },
+                      )
+                      records.setdefault(asset.id, asset)
+
+              return [records[asset_id] for asset_id in sorted(records)]
+'''
+          store = store[:legacy_start] + legacy_replacement + store[legacy_end:]
+
+          load_start = store.index('    def _load_manifest(self) -> dict[str, AssetRecord]:')
+          load_end = store.index('\n    def _save_manifest(self, assets: dict[str, AssetRecord]) -> None:', load_start)
+          load_replacement = '''    def _load_manifest(self) -> dict[str, AssetRecord]:
+              if not self.manifest_path.is_file():
+                  return {}
+              try:
+                  raw = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+              except Exception:
+                  return {}
+              raw_assets = raw.get("assets") if isinstance(raw, dict) else None
+              if not isinstance(raw_assets, dict):
+                  return {}
+              assets: dict[str, AssetRecord] = {}
+              for asset_id, payload in raw_assets.items():
+                  if not isinstance(payload, dict):
+                      continue
+                  try:
+                      assets[str(asset_id)] = AssetRecord(**payload)
+                  except Exception:
+                      continue
+              return assets
+'''
+          store = store[:load_start] + load_replacement + store[load_end:]
+          store_path.write_text(store, encoding='utf-8')
+
+          workspace_path = Path('apps/web/src/features/voice/VoiceWorkspace.tsx')
+          workspace = workspace_path.read_text(encoding='utf-8')
+
+          old_header = '''              <Group justify="space-between"><div><Title order={4}>Voice Library</Title><Text size="sm">Your cloned voices stored in Omnix resources.</Text></div><Button size="xs" variant="subtle">Filter ⟳</Button></Group>'''
+          new_header = '''              <Group justify="space-between"><div><Title order={4}>Voice Library</Title><Text size="sm">Your cloned voices stored in Omnix resources.</Text></div><Button aria-label="Refresh voice library" size="xs" variant="subtle" loading={assetsQuery.isFetching} onClick={() => void assetsQuery.refetch()}>Refresh ⟳</Button></Group>'''
+          if workspace.count(old_header) != 1:
+              raise SystemExit('Voice Library header target was not unique')
+          workspace = workspace.replace(old_header, new_header, 1)
+
+          old_rows = '''                {visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} deleting={Boolean(deleteVoiceMutation.isPending && deleteVoiceMutation.variables && voiceAssetId(deleteVoiceMutation.variables) === voiceAssetId(asset))} key={voiceAssetId(asset)} onDelete={() => requestVoiceDelete(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />)}'''
+          new_rows = '''                {assetsQuery.isLoading ? <div className="platform-empty" role="status">Loading cloned voices…</div> : assetsQuery.isError ? <div className="platform-empty" role="alert">Voice Library failed to load. The local asset index may be unavailable.<Button aria-label="Retry voice library" size="xs" variant="subtle" onClick={() => void assetsQuery.refetch()}>Retry</Button></div> : visibleProfileAssets.length ? visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} deleting={Boolean(deleteVoiceMutation.isPending && deleteVoiceMutation.variables && voiceAssetId(deleteVoiceMutation.variables) === voiceAssetId(asset))} key={voiceAssetId(asset)} onDelete={() => requestVoiceDelete(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />) : <div className="platform-empty" role="status">No cloned voices were indexed. Create a clone or refresh the library to rescan local voice files.</div>}'''
+          if workspace.count(old_rows) != 1:
+              raise SystemExit('Voice Library row target was not unique')
+          workspace = workspace.replace(old_rows, new_rows, 1)
+          workspace_path.write_text(workspace, encoding='utf-8')
+
+          backend_test = Path('src/tests/app/test_voice_library_index_recovery.py')
+          backend_test.write_text(r'''from __future__ import annotations
+
+import json
+
+from app.assets import AssetType, SharedAssetStore
+
+
+def _configure_voice_paths(tmp_path, monkeypatch):
+    import app.shared as shared
+
+    voice_dir = tmp_path / "voice_clones"
+    voice_dir.mkdir()
+    voice_manifest = voice_dir / "voice_clones.json"
+    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(voice_dir))
+    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(voice_manifest))
+    return voice_dir, voice_manifest
+
+
+def test_voice_library_recovers_audio_files_when_manifests_are_missing_or_invalid(tmp_path, monkeypatch) -> None:
+    voice_dir, voice_manifest = _configure_voice_paths(tmp_path, monkeypatch)
+    voice_manifest.write_text("{not-valid-json", encoding="utf-8")
+    (voice_dir / "maya.webm").write_bytes(b"voice-audio")
+    (voice_dir / "maya.json").write_text(
+        json.dumps({"profile_name": "Maya Recovery", "voice_id": "maya", "language": "English"}),
+        encoding="utf-8",
+    )
+    shared_manifest = tmp_path / "assets" / "manifest.json"
+    shared_manifest.parent.mkdir()
+    shared_manifest.write_text(
+        json.dumps({"assets": {"broken": {"id": "broken", "type": "not-an-asset"}}}),
+        encoding="utf-8",
+    )
+
+    assets = SharedAssetStore(shared_manifest).list_assets().assets
+    voice_assets = [asset for asset in assets if asset.type == AssetType.VOICE_PROFILE]
+
+    assert len(voice_assets) == 1
+    asset = voice_assets[0]
+    assert asset.id == "voice-cloning:Maya-Recovery"
+    assert asset.storage_path.endswith("maya.webm")
+    assert asset.mime_type == "audio/webm"
+    assert asset.metadata["profile_name"] == "Maya Recovery"
+    assert asset.metadata["recovered_from_file"] is True
+
+
+def test_voice_library_reads_wrapped_list_manifest_and_non_wav_clone(tmp_path, monkeypatch) -> None:
+    voice_dir, voice_manifest = _configure_voice_paths(tmp_path, monkeypatch)
+    clone_path = voice_dir / "narrator.ogg"
+    clone_path.write_bytes(b"voice-audio")
+    voice_manifest.write_text(
+        json.dumps({
+            "schema_version": 2,
+            "voices": [{
+                "profile_name": "Narrator Prime",
+                "voice_id": "narrator",
+                "voice_clone_id": "narrator",
+                "source_path": str(clone_path),
+                "language": "English",
+            }],
+        }),
+        encoding="utf-8",
+    )
+
+    assets = SharedAssetStore(tmp_path / "assets" / "manifest.json").list_assets().assets
+    voice_assets = [asset for asset in assets if asset.type == AssetType.VOICE_PROFILE]
+
+    assert len(voice_assets) == 1
+    asset = voice_assets[0]
+    assert asset.id == "voice-cloning:Narrator-Prime"
+    assert asset.storage_path == str(clone_path)
+    assert asset.mime_type == "audio/ogg"
+    assert asset.metadata["voice_id"] == "narrator"
+''', encoding='utf-8')
+
+          frontend_test = Path('apps/web/src/features/voice/VoiceWorkspace.library-recovery.test.tsx')
+          frontend_test.write_text(r'''import { MantineProvider } from '@mantine/core';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { omnixModules } from '../../app/modules';
+import { omnixTheme } from '../../design/theme';
+import { VoiceWorkspace } from './VoiceWorkspace';
+
+function renderVoice() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  const module = omnixModules.find((entry) => entry.id === 'voice');
+  if (!module) throw new Error('Voice module is missing');
+  return render(
+    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+      <QueryClientProvider client={queryClient}>
+        <VoiceWorkspace module={module} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+}
+
+function requestPath(input: RequestInfo | URL): string {
+  return typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
+}
+
+afterEach(() => {
+  window.localStorage.clear();
+  vi.unstubAllGlobals();
+});
+
+describe('VoiceWorkspace library recovery', () => {
+  it('shows an asset-index failure and restores voices after retry', async () => {
+    let assetRequests = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/settings') return Response.json({
+        success: true,
+        provider: 'lmstudio',
+        audio_provider_tts: 'faster-qwen3-tts',
+        audio_provider_stt: 'parakeet',
+        settings: {
+          settings_control_center: {
+            revision: 'voice-library-recovery-r1',
+            global: { providers: { tts: 'faster-qwen3-tts', voiceCloning: 'faster-qwen3-tts' } },
+            voice: {},
+          },
+        },
+      });
+      if (path === '/api/providers') return Response.json({ providers: [], models: [] });
+      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path === '/api/assets') {
+        assetRequests += 1;
+        if (assetRequests === 1) return new Response('asset index unavailable', { status: 500 });
+        return Response.json({
+          assets: [{
+            id: 'voice-cloning:Maya-Recovery',
+            module: 'voice-cloning',
+            type: 'voice_profile',
+            mime_type: 'audio/webm',
+            storage_path: 'resources/voice_clones/maya.webm',
+            metadata: { profile_name: 'Maya Recovery', voice_id: 'maya' },
+            created_at: '2026-07-30T22:00:00Z',
+          }],
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderVoice();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Voice Library failed to load');
+    expect(screen.getByRole('button', { name: 'Refresh voice library' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry voice library' }));
+
+    expect(await screen.findByText('Maya Recovery')).toBeInTheDocument();
+    await waitFor(() => expect(assetRequests).toBe(2));
+  });
+});
+''', encoding='utf-8')
+          PY
+
+          git diff --check
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart
+          npm install
+
+      - name: Ruff recovery modules
+        run: ruff check src/app/assets/store.py src/tests/app/test_voice_library_index_recovery.py
+
+      - name: Run backend voice-library recovery regression
+        run: python -m pytest src/tests/app/test_voice_library_index_recovery.py src/tests/app/test_shared_assets_readthrough.py -q --tb=short
+
+      - name: Run frontend voice-library recovery regression
+        run: npm --workspace @omnix/web run test -- --run src/features/voice/VoiceWorkspace.library-recovery.test.tsx src/features/voice/VoiceWorkspace.test.tsx
+
+      - name: Run web typecheck
+        run: npm --workspace @omnix/web run typecheck
+
+      - name: Commit verified recovery and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/apply-voice-library-recovery.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/assets/store.py \
+            src/tests/app/test_voice_library_index_recovery.py \
+            apps/web/src/features/voice/VoiceWorkspace.tsx \
+            apps/web/src/features/voice/VoiceWorkspace.library-recovery.test.tsx \
+            .github/workflows/apply-voice-library-recovery.yml
+          git commit -m "fix(voice): recover local voice library index"
+          git push origin HEAD:fix/voice-library-reindex
