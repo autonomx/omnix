@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/live-character-runtime-sync
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
