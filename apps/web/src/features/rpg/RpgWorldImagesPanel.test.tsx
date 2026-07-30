@@ -96,6 +96,10 @@ describe('RpgWorldImagesPanel', () => {
     renderPanel();
 
     expect(await screen.findByText('Aurelia cover')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: '0 of 1 images ready' })).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByText('1 awaiting generation')).toBeInTheDocument();
+    expect(screen.getByLabelText('Image category')).toHaveValue('all');
+    expect(screen.getByRole('option', { name: 'World' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Select Missing & Stale' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate Selected (1)' })).toBeEnabled());
     fireEvent.click(screen.getByText('Advanced generation settings'));

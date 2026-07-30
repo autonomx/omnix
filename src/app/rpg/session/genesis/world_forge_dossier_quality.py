@@ -33,6 +33,10 @@ def content_target(topic_id: str) -> tuple[int, int]:
 
     if topic_id in _MINOR_TOPICS:
         return 150, 3
+    # The authored cultures contract has four fixed, required section keys.
+    # Preserve its major-topic depth without demanding an impossible fifth key.
+    if topic_id == "cultures":
+        return 700, 4
     if topic_id in _MAJOR_TOPICS:
         return 700, 5
     return 350, 4

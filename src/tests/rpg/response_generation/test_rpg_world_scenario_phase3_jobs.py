@@ -114,6 +114,23 @@ def test_only_dependency_ready_topics_receive_generic_jobs() -> None:
         "provenance": {
             "generation_fingerprint": root_plans[0].fingerprint,
             "directive_hash": root_plans[0].directive_hash,
+            "contract_descriptor": root_plans[0].job_payload["input_payload"][
+                "contract_descriptor"
+            ],
+        },
+        "content": {
+            "topic_id": "realm",
+            "documents": [],
+            "entities": [],
+            "facts": [],
+            "relationships": [],
+            "knowledge_rules": [],
+            "story_threads": [],
+            "provenance": {
+                "contract_descriptor": root_plans[0].job_payload["input_payload"][
+                    "contract_descriptor"
+                ]
+            },
         },
     }
     reusable = reusable_completed_topics(

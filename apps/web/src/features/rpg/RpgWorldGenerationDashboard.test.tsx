@@ -236,6 +236,58 @@ describe('RpgWorldGenerationDashboard', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument();
   });
 
+  it('selects and clears every retryable topic from the table header', async () => {
+    const places = { ...section, id: 'places', label: 'Places and Points of Interest' };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/genre-profile')) {
+        return new Response(JSON.stringify(approvedProfileResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        run_id: previousRun.run_id,
+        topic_results: [section, places].map((topic) => ({
+          run_id: previousRun.run_id,
+          world_id: previousRun.world_id,
+          draft_revision: previousRun.draft_revision,
+          topic_id: topic.id,
+          status: 'blocked',
+          candidate: null,
+          candidate_hash: '',
+          validation: { status: 'blocked', blocking: true, reason_codes: ['dependency_no_candidate'], issues: [] },
+          provider: {},
+          dependency_hashes: {},
+          dependency_trust: {},
+          job_id: '',
+          created_at: previousRun.created_at,
+          updated_at: previousRun.updated_at,
+        })),
+        analytics: { status: {}, by_code: {}, by_field: {}, by_topic: {}, by_domain: {}, by_model: {}, by_prompt_version: {}, by_provider: {} },
+        review_decisions: {},
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RpgWorldGenerationDashboard generation={previousRun} sections={[section, places]} worldId="world:aurelia" />
+      </QueryClientProvider>,
+    );
+
+    const selectAll = await screen.findByRole('checkbox', { name: 'Select all retryable topics' });
+    fireEvent.click(selectAll);
+    expect(selectAll).toBeChecked();
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+
+    fireEvent.click(selectAll);
+    expect(selectAll).not.toBeChecked();
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
+  });
+
   it('bulk-generates and accepts every missing dossier after all topics are accepted', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -284,6 +336,58 @@ describe('RpgWorldGenerationDashboard', () => {
     await waitFor(() => expect(requests.some((request) => request.url.endsWith('/enrich-dossiers'))).toBe(true));
     const request = requests.find((entry) => entry.url.endsWith('/enrich-dossiers'));
     expect(JSON.parse(String(request?.init?.body))).toMatchObject({ all_candidates: true, dry_run: false });
+  });
+
+  it('reattaches to shared dossier repair progress after the dashboard remounts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/genre-profile')) {
+        return new Response(JSON.stringify(approvedProfileResponse), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/results')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          topic_results: [{
+            run_id: previousRun.run_id,
+            world_id: previousRun.world_id,
+            draft_revision: previousRun.draft_revision,
+            topic_id: section.id,
+            status: 'accepted',
+            candidate: { topic_id: section.id },
+            candidate_hash: 'sha256:accepted',
+            validation: { status: 'accepted', blocking: false, reason_codes: [], issues: [] },
+            provider: {}, dependency_hashes: {}, dependency_trust: {}, job_id: '',
+            created_at: previousRun.created_at, updated_at: previousRun.updated_at,
+          }],
+          analytics: { by_code: {}, by_field: {}, by_topic: {}, by_domain: {}, by_model: {}, by_prompt_version: {} },
+          review_decisions: {},
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/dossier-quality')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          enrichment_candidates: [{ topic_id: section.id, entity_id: 'region:one', title: 'One', word_count: 0, generated_from_legacy: true, issues: ['dossier_sections_required'] }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(
+      ['feature', 'rpg', 'world-dossier-repair-progress', 'world:aurelia'],
+      { completed: 7, failed: 2, currentTitle: 'The Net-Ghost Collective', total: 50 },
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RpgWorldGenerationDashboard generation={previousRun} sections={[section]} worldId="world:aurelia" />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('progressbar')).toHaveAttribute('aria-valuenow', '9');
+    expect(screen.getByText(/The Net-Ghost Collective/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Repairing Dossiers & Headings (1)…' })).toBeDisabled();
   });
 
   it('shows provider-reported and estimated world-generation token usage', async () => {

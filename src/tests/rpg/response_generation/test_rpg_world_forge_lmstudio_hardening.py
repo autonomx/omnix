@@ -10,9 +10,12 @@ from app.providers.base import BaseProvider, ChatMessage, ChatResponse, ModelInf
 from app.providers.structured import UnsupportedStructuredMode
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.rpg.worlds.generation_first_pass_provider import _strict_registry_contract
 from app.rpg_world_forge_provider import (
     ProviderWorldForgeTopicGenerator,
+    WorldForgeEntityRegistryItem,
     WorldForgeProviderConfig,
+    WorldForgeTopicResponse,
     _payload as build_world_forge_payload,
 )
 
@@ -255,7 +258,144 @@ def test_lmstudio_call_has_bounded_completion_tokens() -> None:
 
     assert provider.calls[0]["kwargs"]["max_tokens"] == 6144
     assert provider.calls[0]["kwargs"]["response_format"]["type"] == "json_schema"
+    schema = provider.calls[0]["kwargs"]["response_format"]["json_schema"]["schema"]
+    assert schema["properties"]["provenance"] == {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+    assert "Set provenance to exactly {}" in (
+        provider.calls[0]["messages"][0].content
+    )
     assert provider.calls[0]["kwargs"]["request_timeout_seconds"] <= 180
+
+
+def test_final_merge_rejects_registry_count_mismatch() -> None:
+    values = [
+        WorldForgeTopicResponse.model_validate(
+            {
+                "topic_id": "regions",
+                "documents": [],
+                "entities": [
+                    {"id": "ent:region:001", "name": "Provider label"},
+                    {"entity_id": "ent:region:002", "name": "Another label"},
+                ],
+                "facts": [],
+                "relationships": [],
+                "knowledge_rules": [],
+                "story_threads": [],
+                "provenance": {},
+            }
+        )
+    ]
+    registry = [
+        WorldForgeEntityRegistryItem(
+            id="ent:region:001",
+            name="Ashlands",
+            role="wasteland",
+            distinction="glass dunes",
+        ),
+        WorldForgeEntityRegistryItem(
+            id="ent:region:002",
+            name="Glass Coast",
+            role="coast",
+            distinction="crystalline shore",
+        ),
+        WorldForgeEntityRegistryItem(
+            id="ent:region:003",
+            name="Storm Range",
+            role="mountains",
+            distinction="perpetual thunder",
+        ),
+    ]
+
+    with pytest.raises(RuntimeError, match="does not match the entity registry"):
+        ProviderWorldForgeTopicGenerator._validate_registry_alignment(values, registry)
+
+
+def test_missing_registry_slot_blocks_batch_before_provider_call() -> None:
+    provider = _Provider([
+        _payload(
+            topic_id="regions",
+            entities=[{"entity_id": "ent:region:001", "name": "Ashlands"}],
+        )
+    ])
+    generator = ProviderWorldForgeTopicGenerator(
+        provider,
+        WorldForgeProviderConfig(
+            mode="live",
+            provider="lmstudio",
+            model="local-model",
+            max_retries=0,
+        ),
+    )
+    node = CampaignTopicNode(
+        topic_id="regions",
+        title="Regions",
+        category="regions",
+        target_count=1,
+    )
+
+    with pytest.raises(KeyError, match="ent:region:001"):
+        generator._generate_entity_batch(
+            node,
+            batch_index=0,
+            batch_count=1,
+            seed=8,
+            campaign_context={},
+            dependency_topics={},
+            existing_entities=(),
+            registry_slots={},
+        )
+
+
+def test_out_of_slot_entity_is_rejected() -> None:
+    value = WorldForgeTopicResponse.model_validate(
+        {
+            "topic_id": "regions",
+            "documents": [],
+            "entities": [{"id": "ent:region:002", "name": "Glass Coast"}],
+            "facts": [],
+            "relationships": [],
+            "knowledge_rules": [],
+            "story_threads": [],
+            "provenance": {},
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="outside its registry slot"):
+        ProviderWorldForgeTopicGenerator._apply_registry_slots(
+            value,
+            (
+                {
+                    "id": "ent:region:001",
+                    "name": "Ashlands",
+                    "role": "wasteland",
+                    "distinction": "glass dunes",
+                },
+            ),
+        )
+
+
+def test_concurrent_duplicate_is_terminal() -> None:
+    duplicate = WorldForgeTopicResponse.model_validate(
+        {
+            "topic_id": "regions",
+            "documents": [],
+            "entities": [{"id": "ent:region:001", "name": "Ashlands"}],
+            "facts": [],
+            "relationships": [],
+            "knowledge_rules": [],
+            "story_threads": [],
+            "provenance": {},
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="duplicate entity"):
+        ProviderWorldForgeTopicGenerator._validate_distinct_batch_entities(
+            (duplicate, duplicate),
+            existing_entities=(),
+        )
 
 
 def test_entity_topics_are_generated_in_separate_bounded_batches() -> None:
@@ -343,6 +483,21 @@ def test_entity_topics_are_generated_in_separate_bounded_batches() -> None:
     ]
     assert checkpoints[-1]["token_usage"]["total_tokens"] > 0
     assert checkpoints[-1]["token_usage"]["source"] == "estimated"
+
+
+def test_strict_registry_schema_pins_the_exact_entity_count() -> None:
+    contract = _strict_registry_contract(
+        "groups",
+        expected_entity_ids=(
+            "ent:groups:001",
+            "ent:groups:002",
+            "ent:groups:003",
+        ),
+    )
+
+    entities_schema = contract.output_model.model_json_schema()["properties"]["entities"]
+    assert entities_schema["minItems"] == 3
+    assert entities_schema["maxItems"] == 3
 
 
 def test_entity_batches_use_two_concurrent_lmstudio_calls_and_share_prior_waves() -> None:

@@ -8,14 +8,14 @@ from app.providers.base import ChatMessage
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.worlds.generation_first_pass_provider import (
+    _authored_registry_system_prompt,
     _identity_contract,
-    _identity_instruction,
     _strict_registry_contract,
 )
 from app.rpg_world_forge_provider import (
+    WorldForgeEntityRegistryItem,
     WorldForgeEntityRegistryResponse,
     _entity_registry_payload,
-    _entity_registry_system_prompt,
     _token_estimate,
 )
 
@@ -43,11 +43,11 @@ class StructuredRegistryRecoveryMixin:
             node.topic_id,
             ids,
         )
+        request["required_output"].pop("provenance", None)
         messages = [
             ChatMessage(
                 role="system",
-                content=_entity_registry_system_prompt(node)
-                + _identity_instruction(node.topic_id, ids),
+                content=_authored_registry_system_prompt(node, ids),
             ),
             ChatMessage(
                 role="user",
@@ -80,14 +80,24 @@ class StructuredRegistryRecoveryMixin:
                 original_messages=messages,
                 expected_topic_id=node.topic_id,
                 allocated_entity_ids=ids,
+                allowed_reference_ids=frozenset(ids),
                 expected_entity_kind="",
                 field_definitions=(),
                 max_tokens=max_tokens,
                 retain_invalid_kind="registry",
             )
-        assert isinstance(recovered.value, WorldForgeEntityRegistryResponse)
+        canonical = WorldForgeEntityRegistryResponse(
+            topic_id=node.topic_id,
+            entities=[
+                WorldForgeEntityRegistryItem.model_validate(
+                    row.model_dump(mode="python")
+                )
+                for row in recovered.value.entities
+            ],
+            provenance={"materialized_by": "omnix_entity_registry_v2"},
+        )
         return (
-            recovered.value,
+            canonical,
             recovered.diagnostics,
             recovered.prompt_tokens,
             recovered.completion_tokens,

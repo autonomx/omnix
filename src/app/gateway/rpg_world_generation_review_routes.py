@@ -13,6 +13,7 @@ from app.rpg.worlds.generation_acceptance import (
     accept_world_generation_candidate,
     accept_world_generation_candidates,
 )
+from app.rpg.worlds.generation_repair_evaluation import require_retry_budget
 from app.rpg.worlds.generation_retry import (
     decide_world_generation_retry,
     retry_failed_world_generation,
@@ -20,9 +21,12 @@ from app.rpg.worlds.generation_retry import (
 from app.rpg.worlds.generation_review_analytics import (
     world_generation_review_analytics,
 )
+from app.rpg.worlds.generation_review_state import review_state
+from app.rpg.worlds.generation_worker import kick_world_generation_worker
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_generation_review_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_generation_review_hook_installed"
+_MAX_RETRY_LINEAGE = 6
 
 
 def _body(value: object) -> Mapping[str, Any]:
@@ -63,10 +67,23 @@ def _decisions(run: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     }
 
 
+def _previous_result_chain(
+    topic_id: str,
+    parent_results: list[dict[str, dict[str, Any]]],
+) -> dict[str, Any] | None:
+    chain: dict[str, Any] | None = None
+    for by_topic in reversed(parent_results):
+        row = by_topic.get(topic_id)
+        if row is not None:
+            chain = {**row, "previous_result": chain}
+    return chain
+
+
 def _run_with_results(
     run_id: str,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     context = bootstrap_local_tenant(None)
+    parent_result_maps: list[dict[str, dict[str, Any]]] = []
     with unit_of_work(None) as work:
         run = work.world_generation.get(context, run_id)
         if run is None:
@@ -74,24 +91,48 @@ def _run_with_results(
             raise KeyError(f"world_generation_run_not_found:{run_id}")
         results = work.world_generation.list_topic_results(context, run_id=run_id)
         parent_run_id = str(run.get("parent_run_id") or "")
-        parent_results = (
-            work.world_generation.list_topic_results(context, run_id=parent_run_id)
-            if parent_run_id
-            else []
-        )
+        visited = {run_id}
+        while parent_run_id and len(parent_result_maps) < _MAX_RETRY_LINEAGE:
+            if parent_run_id in visited:
+                break
+            visited.add(parent_run_id)
+            parent_run = work.world_generation.get(context, parent_run_id)
+            if parent_run is None:
+                break
+            parent_rows = work.world_generation.list_topic_results(
+                context,
+                run_id=parent_run_id,
+            )
+            parent_result_maps.append(
+                {
+                    str(row.get("topic_id") or ""): dict(row)
+                    for row in parent_rows
+                    if str(row.get("topic_id") or "")
+                }
+            )
+            parent_run_id = str(parent_run.get("parent_run_id") or "")
         work.rollback()
-    parent_by_topic = {
-        str(row.get("topic_id") or ""): row for row in parent_results
-    }
+    if str(run.get("status") or "") in {"planned", "running"}:
+        settings = dict(run.get("settings") or {})
+        kick_world_generation_worker(
+            database=None,
+            provider_route=str(settings.get("provider_route") or ""),
+        )
     decisions = _decisions(run)
-    augmented = [
-        {
+    augmented = []
+    for row in results:
+        topic_id = str(row.get("topic_id") or "")
+        value = {
             **row,
-            "previous_result": parent_by_topic.get(str(row.get("topic_id") or "")),
-            "decision": decisions.get(str(row.get("topic_id") or "")),
+            "previous_result": _previous_result_chain(topic_id, parent_result_maps),
+            "decision": decisions.get(topic_id),
+            "failure_artifact": dict(
+                dict(row.get("provider") or {}).get("failure_artifact") or {}
+            )
+            or None,
         }
-        for row in results
-    ]
+        value["review_state"] = review_state(value)
+        augmented.append(value)
     return run, augmented, world_generation_review_analytics(augmented, run)
 
 
@@ -103,6 +144,22 @@ def _topic_ids(payload: Mapping[str, Any]) -> tuple[str, ...]:
             detail={"ok": False, "error": "topic_ids_must_be_array"},
         )
     return tuple(str(value) for value in values if str(value))
+
+
+def _waiver_reasons(payload: Mapping[str, Any]) -> dict[str, str]:
+    value = payload.get("waiver_reasons")
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise HTTPException(
+            status_code=422,
+            detail={"ok": False, "error": "waiver_reasons_must_be_object"},
+        )
+    return {
+        str(key): str(reason)
+        for key, reason in value.items()
+        if str(key) and str(reason).strip()
+    }
 
 
 def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
@@ -177,6 +234,7 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
             )
         diagnostic_id = new_rpg_trace_id("world-generation-manual-retry")
         try:
+            require_retry_budget(run_id, topic_ids)
             return retry_failed_world_generation(
                 run_id,
                 selected_topic_ids=topic_ids,
@@ -210,6 +268,7 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
                 topic_id,
                 candidate=candidate if isinstance(candidate, Mapping) else None,
                 expected_candidate_hash=str(payload.get("expected_candidate_hash") or ""),
+                waiver_reason=str(payload.get("waiver_reason") or ""),
             )
         except Exception as exc:
             raise _error(exc) from exc
@@ -227,6 +286,8 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
             return accept_world_generation_candidates(
                 run_id,
                 topic_ids=_topic_ids(payload),
+                waiver_reasons=_waiver_reasons(payload),
+                default_waiver_reason=str(payload.get("waiver_reason") or ""),
             )
         except Exception as exc:
             raise _error(exc) from exc

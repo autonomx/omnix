@@ -51,6 +51,7 @@ LINE_DEBT_LIMITS = {
     "src/app/rpg/presentation/dialogue_quality.py": 1223,
     "src/app/rpg/response_generation/production_pipeline.py": 1182,
     "src/app/rpg/session/genesis/campaign_lore_store.py": 1093,
+    "src/app/rpg/worlds/world_images.py": 1013,
     # Single-pass generation landed as one safety-coherent cutover. Keep this
     # ceiling tight so follow-up extraction can only reduce the coordinator.
     "src/app/rpg/worlds/generation_coordinator.py": 1100,

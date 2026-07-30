@@ -101,6 +101,8 @@ describe('ImageJobList interactions', () => {
         resource_class: 'gpu:image',
         priority: 0,
         created_at: '2026-06-14T00:00:00Z',
+        started_at: '2026-06-14T00:00:05Z',
+        completed_at: '2026-06-14T00:01:28Z',
         updated_at: '2026-06-14T00:00:00Z',
         input_payload: { prompt: 'Completed image' },
         output_refs: [{ type: 'image', asset_id: 'asset-one' }],
@@ -157,6 +159,7 @@ describe('ImageJobList interactions', () => {
 
     expect(screen.queryByText('Fifth image')).not.toBeInTheDocument();
     expect(screen.getByText('Generating image...')).toBeInTheDocument();
+    expect(screen.getByText('Generated in 1m 23s')).toBeInTheDocument();
     expect(screen.queryByText(/0%/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Show all 5' }));
     expect(screen.getByText('Fifth image')).toBeInTheDocument();

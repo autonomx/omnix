@@ -88,17 +88,22 @@ class EvidenceBackedRecoveringWorldForgeTopicGenerator(
         original_messages: list[Any],
         expected_topic_id: str,
         allocated_entity_ids: tuple[str, ...],
+        allowed_reference_ids: frozenset[str],
         expected_entity_kind: str,
         field_definitions: Sequence[Mapping[str, Any]],
         max_tokens: int,
         retain_invalid_kind: str,
     ):
         decoded = decode_candidate(raw_text)
+        include_provenance = "provenance" in contract.output_model.model_fields
         repaired = deterministic_repair(
             decoded,
             expected_topic_id=expected_topic_id,
             allocated_entity_ids=allocated_entity_ids,
             expected_entity_kind=expected_entity_kind,
+            include_provenance=include_provenance,
+            allowed_root_fields=frozenset(contract.output_model.model_fields),
+            allowed_reference_ids=allowed_reference_ids,
         )
         proof = None
         if decoded is not None and repaired.payload is not None:
@@ -111,6 +116,7 @@ class EvidenceBackedRecoveringWorldForgeTopicGenerator(
             original_messages=original_messages,
             expected_topic_id=expected_topic_id,
             allocated_entity_ids=allocated_entity_ids,
+            allowed_reference_ids=allowed_reference_ids,
             expected_entity_kind=expected_entity_kind,
             field_definitions=field_definitions,
             max_tokens=max_tokens,
@@ -124,16 +130,12 @@ class EvidenceBackedRecoveringWorldForgeTopicGenerator(
             recovery["deterministic_non_authoring_proof"] = proof
         if method in {
             "deterministic_normalisation",
-            "retained_invalid_registry",
-            "retained_invalid_candidate",
         }:
             original_hash = _text_hash(raw_text)
             if original_hash:
                 diagnostics["raw_response_hash"] = original_hash
                 diagnostics["raw_response_hash_kind"] = (
-                    "retained_original_provider_response"
-                    if method.startswith("retained_invalid")
-                    else "provider_response"
+                    "provider_response"
                 )
                 recovery["accepted_response_hash"] = original_hash
         elif diagnostics.get("raw_response_hash"):

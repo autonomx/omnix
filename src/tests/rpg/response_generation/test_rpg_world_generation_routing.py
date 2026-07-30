@@ -44,17 +44,41 @@ def _node() -> CampaignTopicNode:
     )
 
 
-def test_configured_route_resolves_once_from_settings(monkeypatch) -> None:
+def test_configured_lmstudio_route_uses_currently_loaded_model(monkeypatch) -> None:
     monkeypatch.setattr(
         generation_routing,
         "_settings_route",
         lambda: ("lmstudio", "qwen-world-forge"),
+    )
+    monkeypatch.setattr(
+        generation_routing,
+        "_auto_detect_lmstudio_route",
+        lambda: ("lmstudio", "google/gemma-4-e4b"),
     )
     route = generation_routing.resolve_world_forge_route(
         "configured",
         "configured",
         environ={},
     )
+    assert route.provider == "lmstudio"
+    assert route.model == "google/gemma-4-e4b"
+    assert route.source == "lmstudio_loaded_default"
+
+
+def test_configured_lmstudio_route_falls_back_to_saved_model(monkeypatch) -> None:
+    monkeypatch.setattr(
+        generation_routing,
+        "_settings_route",
+        lambda: ("lmstudio", "qwen-world-forge"),
+    )
+    monkeypatch.setattr(generation_routing, "_auto_detect_lmstudio_route", lambda: ("", ""))
+
+    route = generation_routing.resolve_world_forge_route(
+        "configured",
+        "configured",
+        environ={},
+    )
+
     assert route.provider == "lmstudio"
     assert route.model == "qwen-world-forge"
     assert route.source == "settings_control_center"

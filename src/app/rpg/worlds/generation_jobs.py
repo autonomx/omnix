@@ -12,6 +12,10 @@ from app.rpg.session.genesis.world_forge_contract import (
     CampaignTopicGraph,
     CampaignTopicNode,
 )
+from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+
+from .generation_contract_bundle import build_topic_contract_bundle
+from .generation_entity_manifest import build_entity_manifest, topic_manifest_slots
 
 WORLD_TOPIC_JOB_TYPE = "rpg.world.topic.generate"
 WORLD_TOPIC_RESOURCE_CLASS = ResourceClass.RPG_WORLD_GENERATION.value
@@ -127,6 +131,7 @@ def topic_generation_fingerprint(
     directives: Mapping[str, Any],
     entity_manifest_hash: str,
     settings: WorldTopicGenerationSettings,
+    contract_descriptor: Mapping[str, Any] | None = None,
 ) -> tuple[str, str, str]:
     topic_input = {
         "node": node.as_dict(),
@@ -140,6 +145,7 @@ def topic_generation_fingerprint(
         "dependency_hashes": dict(sorted(dependency_hashes.items())),
         "directive_hash": directive_hash,
         "entity_manifest_hash": entity_manifest_hash,
+        "contract_descriptor": dict(contract_descriptor or {}),
         **settings.as_dict(),
     }
     return canonical_hash(fingerprint_payload), input_hash, directive_hash
@@ -200,6 +206,8 @@ def plan_ready_topic_jobs(
         for topic_id, row in completed_topics.items()
         if str(row.get("status") or "") == "ready" and row.get("content_hash")
     }
+    authoritative_manifest = build_entity_manifest(graph)
+    authoritative_manifest_hash = str(authoritative_manifest["content_hash"])
     plans: list[WorldTopicJobPlan] = []
     for node in graph.topological_order():
         if node.category in _NON_GENERATION_CATEGORIES or node.topic_id not in targets:
@@ -218,6 +226,21 @@ def plan_ready_topic_jobs(
             )
             for dependency_id in node.dependencies
         }
+        topic_slots = list(topic_manifest_slots(authoritative_manifest, node.topic_id))
+        dependencies: dict[str, GeneratedTopic] = {}
+        for dependency_id in node.dependencies:
+            completed = dict(completed_topics.get(dependency_id) or {})
+            candidate = completed.get("content") or completed.get("candidate")
+            if isinstance(candidate, Mapping):
+                dependencies[dependency_id] = GeneratedTopic.from_dict(dict(candidate))
+        bundle = build_topic_contract_bundle(
+            node,
+            allocated_entity_ids=tuple(
+                str(slot["entity_id"]) for slot in topic_slots
+            ),
+            dependencies=dependencies,
+        )
+        contract_descriptor = bundle.descriptor()
         directives = dict(topic_directives.get(node.topic_id) or {})
         canonical_directives = canonical_generation_directives(directives)
         fingerprint, input_hash, directive_hash = topic_generation_fingerprint(
@@ -232,6 +255,7 @@ def plan_ready_topic_jobs(
             directives=directives,
             entity_manifest_hash=entity_manifest_hash,
             settings=settings,
+            contract_descriptor=contract_descriptor,
         )
         job_id = world_topic_job_id(
             world_id=world_id,
@@ -243,12 +267,22 @@ def plan_ready_topic_jobs(
         )
         if job_id in existing:
             continue
+        topic_payload = node.as_dict()
+        topic_payload["metadata"] = {
+            **dict(node.metadata),
+            "authoritative_entity_ids": [
+                str(slot["entity_id"]) for slot in topic_slots
+            ],
+            "entity_manifest_slots": topic_slots,
+            "contract_descriptor": contract_descriptor,
+            "entity_manifest_hash": authoritative_manifest_hash,
+        }
         input_payload = {
             "contract_version": WORLD_TOPIC_JOB_CONTRACT,
             "run_id": run_id,
             "world_id": world_id,
             "draft_revision": int(draft_revision),
-            "topic": node.as_dict(),
+            "topic": topic_payload,
             "generation_context": dict(generation_context),
             "directives": directives,
             "canonical_directives": canonical_directives,
@@ -257,7 +291,11 @@ def plan_ready_topic_jobs(
             "fingerprint": fingerprint,
             "input_hash": input_hash,
             "directive_hash": directive_hash,
-            "entity_manifest_hash": entity_manifest_hash,
+            "entity_manifest_hash": authoritative_manifest_hash,
+            "requested_entity_manifest_hash": entity_manifest_hash,
+            "entity_manifest": authoritative_manifest,
+            "entity_manifest_slots": topic_slots,
+            "contract_descriptor": contract_descriptor,
             "settings": settings.as_dict(),
             "recovery_pass": int(recovery_pass),
         }
@@ -278,6 +316,8 @@ def plan_ready_topic_jobs(
                 "fingerprint": fingerprint,
                 "dependency_ids": list(node.dependencies),
                 "dependency_trust": dependency_trust,
+                "entity_manifest_hash": authoritative_manifest_hash,
+                "entity_manifest_slot_count": len(topic_slots),
                 "recovery_pass": int(recovery_pass),
             },
         }

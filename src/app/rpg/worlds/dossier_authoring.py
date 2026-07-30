@@ -46,6 +46,34 @@ from .topic_authoring import (
 )
 
 
+def _preserve_canonical_related_entity_ids(
+    before: Mapping[str, Any],
+    replacement: Mapping[str, Any],
+    *,
+    topic_id: str,
+    entity_id: str,
+    content: Mapping[str, Any],
+    known_ids: set[str],
+) -> dict[str, Any]:
+    """Keep dossier regeneration editorial-only at the reference boundary."""
+
+    _summary, prior_dossier = project_entity_dossier(
+        before,
+        card_type=topic_id,
+        content=content,
+        entity_id=entity_id,
+    )
+    preserved = [
+        str(reference)
+        for reference in prior_dossier.get("related_entity_ids") or ()
+        if str(reference) in known_ids
+    ]
+    return {
+        **dict(replacement),
+        "related_entity_ids": list(dict.fromkeys(preserved)),
+    }
+
+
 def _store_editorial_replacement(
     world_id: str,
     topic_id: str,
@@ -76,20 +104,29 @@ def _store_editorial_replacement(
         )
         prior_payload = _record(current.get("content"))
         before = _entity(prior_payload, entity_id)
-        after = {
-            **before,
-            "id": entity_id,
-            "short_summary": summary,
-            "dossier": dict(dossier),
-        }
         topic_rows = work.world_generation.list_topics(
             context,
             world_id=world_id,
             draft_revision=int(world["draft_revision"]),
         )
+        known_ids = _known_ids(topic_rows, world_id).union({entity_id})
+        replacement_dossier = _preserve_canonical_related_entity_ids(
+            before,
+            dossier,
+            topic_id=topic_id,
+            entity_id=entity_id,
+            content=prior_payload,
+            known_ids=known_ids,
+        )
+        after = {
+            **before,
+            "id": entity_id,
+            "short_summary": summary,
+            "dossier": replacement_dossier,
+        }
         validate_entity_references(
             after,
-            _known_ids(topic_rows, world_id).union({entity_id}),
+            known_ids,
         )
         payload = replace_entity_content(
             prior_payload,

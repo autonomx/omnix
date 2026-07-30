@@ -286,6 +286,7 @@
   background-size: 200% 100%;
 }
 .image-job-details p { color: #8d98b1; }
+.image-job-details .image-job-duration { color: #bca8ff; font-variant-numeric: tabular-nums; }
 .image-job-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .image-job-actions .mantine-Button-root { font-size: 0.63rem; }
 .image-job-footer { color: #77829d; display: flex; font-size: 0.64rem; justify-content: space-between; }

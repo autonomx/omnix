@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Iterable
 
+from .world_forge_profile_extensions import extension_fields
 from .world_forge_profiles import (
     DomainDefinition,
     DomainTargetRange,
@@ -124,6 +125,26 @@ def _causal_fields(domain_id: str) -> tuple[FieldDefinition, ...]:
             _field("founding_purpose", required=True),
             _field("economic_functions", "structured_object", required=True),
             _field("strategic_functions", "structured_object", required=True),
+            _field(
+                "local_market_signature",
+                "structured_object",
+                required=True,
+                semantic_role="local_market_signature",
+                description=(
+                    "Bounded place-local demand, supply, price, credit, informal trade, "
+                    "enforcement, shock sensitivity, and recovery state."
+                ),
+            ),
+            _field(
+                "route_effects",
+                "structured_object",
+                required=True,
+                semantic_role="route_effects",
+                description=(
+                    "Endpoint-keyed travel cost, variance, hazard, supply, price, "
+                    "information-delay, and closure-recovery effects for connected places."
+                ),
+            ),
         )
     if domain_id == "groups":
         return (
@@ -135,6 +156,21 @@ def _causal_fields(domain_id: str) -> tuple[FieldDefinition, ...]:
             ),
             _field("inherited_claims", "structured_object", required=True),
             _field("historical_grievances", "structured_object", required=True),
+            _field(
+                "constrained_by_group_ids",
+                "entity_ref_list",
+                required=True,
+                targets=("groups",),
+                semantic_role="countervailing_constraint",
+                description="Canonical groups that can materially constrain this group's power.",
+            ),
+            _field(
+                "countervailing_power_signature",
+                "structured_object",
+                required=True,
+                semantic_role="countervailing_power_signature",
+                description="Bounded authority, leverage, accountability, reach, vulnerability, and failure profile.",
+            ),
         )
     if domain_id == "cultures":
         return (
@@ -253,7 +289,8 @@ def augment_profile_with_causal_traceability(profile: GenreProfile) -> GenreProf
     domains: list[DomainDefinition] = []
     inserted = False
     for domain in profile.domains:
-        domains.append(_append_fields(domain, _causal_fields(domain.domain_id)))
+        additions = (*_causal_fields(domain.domain_id), *extension_fields(domain.domain_id))
+        domains.append(_append_fields(domain, additions))
         if domain.domain_id == "actors":
             domains.append(_causal_links_domain())
             inserted = True

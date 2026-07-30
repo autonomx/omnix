@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+import app.rpg.worlds.generation_retry as generation_retry_module
 from app.gateway.rpg_world_library_routes import _raise_generation_error
 from app.persistence.config import DatabaseConfigurationError
 from app.persistence.database import DatabaseUnavailableError
@@ -450,6 +451,86 @@ def test_continue_generation_restores_a_partial_review_run_and_reuses_completed_
     assert captured["tenant_context"].workspace_id == "workspace:test"
     assert captured["scope"]["mode"] == "continue"
     assert captured["scope"]["remaining_topic_ids"] == ["classes", "factions"]
+
+
+def test_continue_resumes_an_existing_running_run_without_creating_a_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    running = {
+        "run_id": "run:running",
+        "world_id": "world:aurelia",
+        "status": "running",
+        "settings": WorldTopicGenerationSettings(
+            generator_version="world-generator-v1",
+            prompt_version="world-prompt-v1",
+            provider_route="lmstudio",
+            model="google/gemma-4-e4b",
+            seed=1,
+        ).as_dict(),
+        "plan": {"new_job_ids": ["job:history"]},
+        "progress": {
+            "generation_complete": False,
+            "active_topic_ids": ["history"],
+            "flagged_topic_ids": ["rules"],
+            "failed_topic_ids": [],
+            "blocked_topic_ids": [],
+            "stale_topic_ids": [],
+        },
+    }
+
+    class FakeWork:
+        world_generation = SimpleNamespace(
+            get=lambda context, run_id: running,
+        )
+
+        def rollback(self) -> None:
+            return None
+
+    class FakeUnitOfWork:
+        def __enter__(self):
+            return FakeWork()
+
+        def __exit__(self, exc_type, exc, traceback) -> None:
+            return None
+
+    kicked: list[dict] = []
+    monkeypatch.setattr(
+        generation_retry_module,
+        "bootstrap_local_tenant",
+        lambda database=None: object(),
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "unit_of_work",
+        lambda database=None: FakeUnitOfWork(),
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "reconcile_world_generation",
+        lambda run_id, database=None: running,
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "kick_world_generation_worker",
+        lambda **kwargs: kicked.append(kwargs) or True,
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "retry_failed_world_generation",
+        lambda *args, **kwargs: pytest.fail("must not create a child retry"),
+    )
+    monkeypatch.setattr(
+        generation_retry_module,
+        "log_world_generation_event",
+        lambda *args, **kwargs: {},
+    )
+
+    result = continue_world_generation("run:running")
+
+    assert result["continue_of_run_id"] == "run:running"
+    assert result["worker_started"] is True
+    assert result["resolved_route"]["source"] == "existing_running_run"
+    assert kicked == [{"database": None, "provider_route": "lmstudio"}]
 
 
 def test_retry_rejects_profile_drift(monkeypatch: pytest.MonkeyPatch) -> None:

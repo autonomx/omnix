@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { AssetListResponse } from '../../api/client';
 import { ImageLatestResult } from './ImageLatestResult';
@@ -50,7 +50,7 @@ describe('ImageLatestResult', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Enlarged Night harbor' });
     expect(dialog).toBeInTheDocument();
-    expect(screen.getAllByRole('img', { name: 'Night harbor' })[1]).toHaveAttribute(
+    expect(within(dialog).getByTestId('image-preview-loader')).toHaveAttribute(
       'src',
       '/api/assets/image%3Anight/file',
     );

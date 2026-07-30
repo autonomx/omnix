@@ -9,6 +9,7 @@ from app.rpg.session.genesis.world_forge_contract import (
     CampaignTopicNode,
 )
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.rpg.worlds import generation_acceptance
 from app.rpg.worlds.generation_authorship_policy_signing import (
     bind_signed_authorship_policy,
@@ -17,8 +18,13 @@ from app.rpg.worlds.generation_authorship_runtime import build_generation_artifa
 from app.rpg.worlds.generation_authorship_signing import (
     attach_signed_llm_authorship,
     harden_and_sign_generation_artifact,
+    sign_record,
 )
 from app.rpg.worlds.generation_jobs import WorldTopicGenerationSettings, canonical_hash
+from app.rpg.worlds.generation_contract_receipt import (
+    RECEIPT_SCHEMA_VERSION,
+    canonical_candidate_content_hash,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +36,9 @@ def signing_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _candidate(topic_id: str, entity_id: str, name: str) -> dict:
+    dossier_sections = (
+        dossier_prompt_contract(topic_id)["entity_fields"]["dossier"]["sections"]
+    )
     candidate = GeneratedTopic(
         topic_id=topic_id,
         entities=(
@@ -43,10 +52,11 @@ def _candidate(topic_id: str, entity_id: str, name: str) -> dict:
                     "schema_version": "rpg_world_entity_dossier_v1",
                     "sections": [
                         {
-                            "id": "overview",
-                            "title": "Overview",
+                            "id": section["id"],
+                            "title": section["title"],
                             "paragraphs": [f"Long-form lore for {name}."],
                         }
+                        for section in dossier_sections
                     ],
                 },
             },
@@ -64,6 +74,17 @@ def _candidate(topic_id: str, entity_id: str, name: str) -> dict:
             },
         },
     ).as_dict()
+    candidate["provenance"]["authoritative_contract_receipt"] = {
+        "schema_version": RECEIPT_SCHEMA_VERSION,
+        "topic_id": topic_id,
+        "contract_id": f"rpg.world_forge.{topic_id}",
+        "contract_version": "test-contract-v1",
+        "canonical_contract_hash": "sha256:" + "b" * 64,
+        "authored_draft_hash": "sha256:" + "c" * 64,
+        "canonical_content_hash": canonical_candidate_content_hash(candidate),
+        "materializer_version": "test-materializer-v1",
+        "materialized": True,
+    }
     unsigned = build_generation_artifact(
         candidate,
         run_id="run:review",
@@ -74,7 +95,13 @@ def _candidate(topic_id: str, entity_id: str, name: str) -> dict:
     )
     artifact = harden_and_sign_generation_artifact(candidate, unsigned)
     authored = attach_signed_llm_authorship(candidate, artifact)
-    return bind_signed_authorship_policy(authored, {})
+    authored = bind_signed_authorship_policy(authored, {})
+    provenance = dict(authored["provenance"])
+    provenance["authoritative_contract_receipt"] = sign_record(
+        candidate["provenance"]["authoritative_contract_receipt"]
+    )
+    authored["provenance"] = provenance
+    return authored
 
 
 def _run() -> dict:
@@ -343,7 +370,7 @@ def test_accept_allows_dossiers_with_repairable_blank_section_titles(
     dossier = dict(entity["dossier"])
     section = dict(dossier["sections"][0])
     section["title"] = ""
-    dossier["sections"] = [section]
+    dossier["sections"] = [section, *dossier["sections"][1:]]
     entity["dossier"] = dossier
     candidate["entities"] = [entity]
 

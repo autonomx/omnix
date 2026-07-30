@@ -10,6 +10,28 @@
   gap: 10px;
 }
 
+.rpg-world-images-category-filter {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.rpg-world-images-category-filter > span {
+  color: var(--text-muted, #94a3b8);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.rpg-world-images-category-filter select {
+  background: rgba(15, 23, 42, .72);
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 9px;
+  color: inherit;
+  font: inherit;
+  padding: 8px 28px 8px 10px;
+}
+
 .rpg-world-images-advanced {
   background: rgba(15, 23, 42, .45);
   border: 1px solid rgba(148, 163, 184, .18);
@@ -52,6 +74,72 @@
   color: inherit;
   font: inherit;
   padding: 10px 12px;
+}
+
+.rpg-world-images-progress {
+  background: rgba(8, 47, 73, .42);
+  border: 1px solid rgba(45, 212, 191, .2);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  padding: 15px 16px;
+}
+
+.rpg-world-images-progress-heading {
+  align-items: end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.rpg-world-images-progress-heading .eyebrow {
+  margin: 0 0 3px;
+}
+
+.rpg-world-images-progress-heading strong {
+  font-size: 17px;
+}
+
+.rpg-world-images-progress-heading > span {
+  color: #99f6e4;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.rpg-world-images-progress-track {
+  background: rgba(15, 23, 42, .76);
+  border-radius: 999px;
+  height: 9px;
+  overflow: hidden;
+}
+
+.rpg-world-images-progress-track > span {
+  background: linear-gradient(90deg, #2dd4bf, #a78bfa);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 0;
+  transition: width .3s ease;
+}
+
+.rpg-world-images-progress-summary {
+  color: var(--text-muted, #94a3b8);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 8px 16px;
+}
+
+.rpg-world-images-progress-summary .is-generating {
+  color: #c4b5fd;
+}
+
+.rpg-world-images-progress-summary .is-failed {
+  color: #fca5a5;
+}
+
+.rpg-world-images-progress-summary .is-complete {
+  color: #99f6e4;
 }
 
 .rpg-world-image-grid {

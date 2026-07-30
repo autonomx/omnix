@@ -162,6 +162,20 @@ def resolve_world_forge_route(
         )
 
     if settings_provider and settings_model:
+        # A configured LM Studio route is intentionally model-agnostic: the
+        # local server's loaded instance is its effective default.  Retain the
+        # saved model as a fallback for an unavailable/older LM Studio server,
+        # but do not cause it to unload the model the user selected locally.
+        if settings_provider == "lmstudio" and not explicit_model:
+            detected_provider, detected_model = _auto_detect_lmstudio_route()
+            if detected_provider and detected_model:
+                return ResolvedWorldForgeRoute(
+                    detected_provider,
+                    detected_model,
+                    "lmstudio_loaded_default",
+                    requested_provider,
+                    requested_model,
+                )
         return ResolvedWorldForgeRoute(
             settings_provider,
             requested_model if explicit_model else settings_model,
@@ -217,6 +231,7 @@ def build_world_forge_generator_from_settings(
         mode="live",
         provider=provider_id,
         model=model_id,
+        prompt_version=str(settings.get("prompt_version") or "world-prompt-v1"),
         max_retries=0,
         lmstudio_schema_fallback=False,
     )

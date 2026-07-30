@@ -36,12 +36,18 @@ from .errors import (
     StructuredDecodeError,
     StructuredOutputError,
     StructuredOutputExhausted,
+    StructuredResourceError,
     StructuredSchemaError,
     StructuredSemanticError,
     StructuredValidationIssue,
     UnsupportedStructuredMode,
 )
-from .parsing import canonical_structured_text, decode_json_object
+from .parsing import (
+    canonical_structured_text,
+    decode_exact_json_object,
+    decode_json_object,
+    validate_json_resources,
+)
 from .schema_projection import project_provider_schema
 
 T = TypeVar("T", bound=BaseModel)
@@ -340,6 +346,7 @@ class StructuredOutputGateway(Generic[T]):
             separators=(",", ":"),
         )
         schema_hash = hashlib.sha256(schema_text.encode("utf-8")).hexdigest()
+        provider_schema_hash = ""
         cache_scope = f"{contract.schema_profile}:{schema_hash}"
         identity = _provider_identity(self.provider, resolved_model, cache_scope)
         capabilities = _provider_capabilities(self.provider, resolved_model)
@@ -371,6 +378,7 @@ class StructuredOutputGateway(Generic[T]):
                 schema_hash=schema_hash,
                 provider=provider_name,
                 model=resolved_model,
+                provider_schema_hash=provider_schema_hash,
                 selected_mode=selected_mode,
                 attempted_modes=tuple(attempted_modes),
                 provider_calls=provider_calls,
@@ -397,6 +405,20 @@ class StructuredOutputGateway(Generic[T]):
             options.setdefault("temperature", contract.temperature)
             if contract.max_tokens is not None:
                 options.setdefault("max_tokens", contract.max_tokens)
+            projected_schema = project_provider_schema(
+                contract.output_model.model_json_schema(),
+                mode=mode,
+                provider_name=provider_name,
+                schema_profile=contract.schema_profile,
+            )
+            provider_schema_hash = hashlib.sha256(
+                json.dumps(
+                    projected_schema,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
             options.update(
                 _response_options(
                     contract,
@@ -430,9 +452,27 @@ class StructuredOutputGateway(Generic[T]):
                         f"structured provider truncated {contract.qualified_id}"
                     )
                 raw_text = canonical_structured_text(response)
+                if (
+                    contract.max_raw_bytes is not None
+                    and len(raw_text.encode("utf-8")) > contract.max_raw_bytes
+                ):
+                    raise StructuredResourceError(
+                        f"structured provider response exceeds {contract.max_raw_bytes} bytes"
+                    )
                 raw_length = len(raw_text)
                 raw_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
-                payload = decode_json_object(raw_text)
+                payload = (
+                    decode_exact_json_object(raw_text)
+                    if contract.exact_json_object
+                    else decode_json_object(raw_text)
+                )
+                validate_json_resources(
+                    payload,
+                    max_depth=contract.max_json_depth,
+                    max_nodes=contract.max_json_nodes,
+                    max_string_length=contract.max_json_string_length,
+                    max_array_length=contract.max_json_array_length,
+                )
                 try:
                     value = contract.output_model.model_validate(payload)
                 except ValidationError as exc:
@@ -455,9 +495,9 @@ class StructuredOutputGateway(Generic[T]):
             except BaseException as raw_error:
                 if not isinstance(raw_error, Exception):
                     raise
-                exc = _normalize_provider_error(raw_error)
-                last_error = exc
-                if _unsupported_mode_error(exc):
+                normalized_error = _normalize_provider_error(raw_error)
+                last_error = normalized_error
+                if _unsupported_mode_error(normalized_error):
                     _NEGATIVE_CAPABILITIES.mark_unsupported(identity, mode)
                     if (
                         format_downgrades < budget.max_format_downgrades
@@ -466,16 +506,22 @@ class StructuredOutputGateway(Generic[T]):
                         format_downgrades += 1
                         mode_index += 1
                         continue
-                if isinstance(exc, (StructuredDecodeError, StructuredSchemaError)) or (
-                    isinstance(exc, StructuredSemanticError)
+                if isinstance(
+                    normalized_error,
+                    (StructuredDecodeError, StructuredSchemaError),
+                ) or (
+                    isinstance(normalized_error, StructuredSemanticError)
                     and contract.regenerate_on_semantic_failure
                 ):
                     if validation_regenerations < budget.max_validation_regenerations:
                         validation_regenerations += 1
-                        working_messages = [*messages, _correction_message(contract, exc)]
+                        working_messages = [
+                            *messages,
+                            _correction_message(contract, normalized_error),
+                        ]
                         continue
                 if isinstance(
-                    exc,
+                    normalized_error,
                     (
                         ProviderTransportError,
                         ProviderEmptyResponse,

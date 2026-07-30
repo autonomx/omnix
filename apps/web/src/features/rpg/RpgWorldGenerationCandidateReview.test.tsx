@@ -77,7 +77,7 @@ const result: RpgWorldGenerationTopicResult = {
   updated_at: '2026-07-25T00:00:00Z',
 };
 
-function renderReview(onAccepted = vi.fn()) {
+function renderReview(onAccepted = vi.fn(), reviewEnabled = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -87,6 +87,7 @@ function renderReview(onAccepted = vi.fn()) {
         onAccepted={onAccepted}
         onClose={vi.fn()}
         onRetryStarted={vi.fn()}
+        reviewEnabled={reviewEnabled}
         result={result}
         runId="run:review"
         section={section}
@@ -156,6 +157,7 @@ describe('RpgWorldGenerationCandidateReview', () => {
           onAccepted={vi.fn()}
           onClose={vi.fn()}
           onRetryStarted={vi.fn()}
+          reviewEnabled
           result={providerFailure}
           runId="run:review"
           section={section}
@@ -166,6 +168,15 @@ describe('RpgWorldGenerationCandidateReview', () => {
 
     expect(screen.getByText(/Generation completed with validation issues/)).toBeInTheDocument();
     expect(screen.queryByText(/world_forge_integrity_failed/)).not.toBeInTheDocument();
+  });
+
+  it('keeps review decisions locked while the rest of the world is generating', () => {
+    renderReview(vi.fn(), false);
+
+    expect(screen.getByText('Provisional candidate — Generation continuing')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit Candidate' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Retry Generation' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Accept Candidate' })).toBeDisabled();
   });
 
   it('opens each generated dossier for full review before acceptance', () => {

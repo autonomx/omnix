@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
@@ -98,6 +98,7 @@ export function RpgWorldEditorShell({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLElement>(null);
   const [sectionId, setSectionId] = useState(
     initialRoute?.worldId === worldId ? initialRoute.sectionId : 'overview',
   );
@@ -160,6 +161,24 @@ export function RpgWorldEditorShell({
       window.removeEventListener('hashchange', syncRoute);
     };
   }, [worldId]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return undefined;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNotificationsOpen(false);
+    };
+    const dismissOutside = (event: PointerEvent) => {
+      if (!notificationsRef.current?.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', dismiss);
+    window.addEventListener('pointerdown', dismissOutside);
+    return () => {
+      window.removeEventListener('keydown', dismiss);
+      window.removeEventListener('pointerdown', dismissOutside);
+    };
+  }, [notificationsOpen]);
 
   useEffect(() => {
     if (sections.length && !sections.some((section) => section.id === sectionId)) {
@@ -287,8 +306,8 @@ export function RpgWorldEditorShell({
           ) : null}
 
           {notificationsOpen ? (
-            <aside className="rpg-world-command-popover is-notifications" aria-label="World notifications">
-              <header><strong>World activity</strong><span>{notificationCount || 'All clear'}</span></header>
+            <aside className="rpg-world-command-popover is-notifications" aria-label="World notifications" ref={notificationsRef}>
+              <header><strong>World activity</strong><span>{notificationCount || 'All clear'}</span><button aria-label="Close world activity" className="rpg-world-popover-close" type="button" onClick={() => setNotificationsOpen(false)}>×</button></header>
               {generationRun ? <button type="button" onClick={() => navigate('generation')}><span>⚙</span><strong>Generation {statusLabel(generationRun.status)}</strong><small>Open run diagnostics and activity.</small></button> : null}
               {attentionSections.map((candidate) => <button key={candidate.id} type="button" onClick={() => navigate(candidate.id)}><span>{icon(candidate.id)}</span><strong>{candidate.label}</strong><small>{statusLabel(candidate.operational_status)} · {statusLabel(candidate.editorial_status)}</small></button>)}
               {!generationRun && !attentionSections.length ? <p>No generation failures, stale sections, or pending reviews.</p> : null}

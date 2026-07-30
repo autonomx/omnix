@@ -42,6 +42,29 @@ describe('RpgWorldDocumentBlock', () => {
     expect(within(section as HTMLElement).queryByText(/"fact_id"/)).not.toBeInTheDocument();
   });
 
+  it('unwraps legacy JSON-serialized structured facts into readable prose', () => {
+    render(<RpgWorldDocumentBlock block={{
+      kind: 'facts',
+      items: [{
+        label: 'Consequences',
+        statement: JSON.stringify({
+          entity_refs: ['ent:history_timeline:001'],
+          object: {
+            economic_effects: 'Mega-Corp fiat currency controls the global market.',
+            social_structure: 'Citizens depend on corporate employment for survival.',
+          },
+          predicate: 'consequences',
+          topic_id: 'history_timeline',
+        }),
+      }],
+    }} />);
+
+    expect(screen.getByText(/Economic Effects: Mega-Corp fiat currency/)).toBeInTheDocument();
+    expect(screen.getByText(/Social Structure: Citizens depend/)).toBeInTheDocument();
+    expect(screen.getByText('History Timeline:001')).toBeInTheDocument();
+    expect(screen.queryByText(/"entity_refs"/)).not.toBeInTheDocument();
+  });
+
   it('renders prose sections as article text', () => {
     render(<RpgWorldDocumentBlock block={{
       kind: 'section',

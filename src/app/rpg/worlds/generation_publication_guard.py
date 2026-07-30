@@ -9,7 +9,7 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_authorship_signing import validate_signed_authorship
-from .generation_publication import publish_world_generation as _publish_legacy
+from .generation_certified_publication import publish_certified_world_generation as _publish_certified
 from .generation_test_mode import deterministic_world_forge_test_mode
 
 _NON_GENERATION_CATEGORIES = {"compiler", "audit", "index", "bootstrap"}
@@ -280,7 +280,7 @@ def publish_world_generation(
     report = publication_review_report(run_id, database=database)
     if not report["publishable"]:
         raise WorldGenerationRequiresReviewError(report)
-    return _publish_legacy(run_id, database=database)
+    return _publish_certified(run_id, database=database)
 
 
 __all__ = [

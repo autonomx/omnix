@@ -20,6 +20,11 @@ dependency_hashes_jsonb, dependency_trust_jsonb, job_id,
 created_at, updated_at
 """
 
+_PERSISTENT_PROGRESS_KEYS = {
+    "stale_topic_ids",
+    "stale_topics",
+}
+
 
 def _run_row(row: Any) -> dict[str, Any]:
     return {
@@ -60,6 +65,22 @@ def _result_row(row: Any) -> dict[str, Any]:
         "created_at": row[13].isoformat(),
         "updated_at": row[14].isoformat(),
     }
+
+
+def _merge_persistent_progress(
+    current: Mapping[str, Any] | None,
+    replacement: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Keep unresolved staleness unless a caller explicitly clears it."""
+
+    merged = dict(replacement)
+    prior = dict(current or {})
+    for key in _PERSISTENT_PROGRESS_KEYS:
+        if key not in merged and key in prior:
+            merged[key] = prior[key]
+    if merged.get("stale_topic_ids"):
+        merged["publication_blocked"] = True
+    return merged
 
 
 class PostgresRpgWorldGenerationRepository:
@@ -172,6 +193,15 @@ class PostgresRpgWorldGenerationRepository:
         progress: Mapping[str, Any] | None = None,
         error: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        resolved_progress: dict[str, Any] | None = None
+        if progress is not None:
+            current = self.get(context, run_id)
+            if current is None:
+                raise EntityNotFound(run_id)
+            resolved_progress = _merge_persistent_progress(
+                current.get("progress"),
+                progress,
+            )
         row = self.connection.execute(
             f"""
             UPDATE omnix_rpg_world_generation_runs
@@ -191,7 +221,7 @@ class PostgresRpgWorldGenerationRepository:
             (
                 status,
                 canonical_json(dict(plan)) if plan is not None else None,
-                canonical_json(dict(progress)) if progress is not None else None,
+                canonical_json(resolved_progress) if resolved_progress is not None else None,
                 canonical_json(dict(error)) if error is not None else None,
                 status,
                 context.workspace_id,

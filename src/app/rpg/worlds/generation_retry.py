@@ -15,12 +15,17 @@ from .generation_coordinator import (
     reconcile_world_generation,
     start_world_generation,
 )
+from .generation_dependency_invalidation import (
+    apply_stale_progress,
+    build_retry_invalidation_records,
+)
 from .generation_diagnostics import log_world_generation_event
 from .generation_jobs import (
     canonical_generation_directives,
     canonical_hash,
     topic_generation_fingerprint,
 )
+from .generation_contract_receipt import contract_descriptor_from_candidate
 from .generation_worker import kick_world_generation_worker
 from .lifecycle_service import require_world_writable
 from .profile_authoring import require_approved_profile
@@ -43,6 +48,7 @@ def _execution_summary(run: Mapping[str, Any]) -> dict[str, Any]:
         "flagged_count": len(progress.get("flagged_topic_ids") or ()),
         "failed_count": len(progress.get("failed_topic_ids") or ()),
         "blocked_count": len(progress.get("blocked_topic_ids") or ()),
+        "stale_count": len(progress.get("stale_topic_ids") or ()),
     }
 
 
@@ -96,11 +102,9 @@ def _retry_closure(
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Return selected retry topics and only the dependencies they require.
 
-    A manual retry is an explicit editorial action.  It must not requeue every
-    downstream topic merely because it consumes the selected topic; those
-    topics can remain in review until the editor chooses to regenerate them.
-    Dependencies are retained in the target set so a missing prerequisite can
-    still be produced, while already-complete prerequisites are reused.
+    Downstream consumers are not silently regenerated. They are recorded as
+    potentially stale and must be revalidated, invalidated, or explicitly
+    regenerated according to the changed contract.
     """
 
     node_map = graph.node_map()
@@ -140,17 +144,36 @@ def _authoring_locked(row: Mapping[str, Any]) -> bool:
 def _previous_result_rows(
     result_rows: Sequence[Mapping[str, Any]],
     topic_rows: Sequence[Mapping[str, Any]],
+    fallback_result_rows: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Mapping[str, Any]]:
     previous = {str(row.get("topic_id") or ""): row for row in result_rows}
+    for row in fallback_result_rows:
+        topic_id = str(row.get("topic_id") or "")
+        candidate = row.get("candidate")
+        current_candidate = previous.get(topic_id, {}).get("candidate")
+        if (
+            topic_id
+            and isinstance(candidate, Mapping)
+            and not isinstance(current_candidate, Mapping)
+            and str(row.get("status") or "") in {"accepted", "needs_review"}
+        ):
+            previous[topic_id] = row
     for row in topic_rows:
         topic_id = str(row.get("topic_id") or "")
-        if not topic_id or topic_id in previous:
-            continue
         content = row.get("content")
+        if (
+            not topic_id
+            or str(row.get("status") or "") != "ready"
+            or not isinstance(content, Mapping)
+        ):
+            continue
+        # Durable authoring canon is newer and more authoritative than the
+        # result that originally produced it. In particular, a Game Master may
+        # have accepted a candidate after that result was recorded.
         previous[topic_id] = {
             "topic_id": topic_id,
             "status": "accepted",
-            "candidate": dict(content) if isinstance(content, Mapping) else None,
+            "candidate": dict(content),
             "candidate_hash": str(row.get("content_hash") or ""),
             "validation": {"reason_codes": [], "issues": []},
         }
@@ -246,6 +269,28 @@ def _pin_parent_run(
         work.commit()
 
 
+def _record_stale_dependants(
+    child_run_id: str,
+    records: Mapping[str, Mapping[str, Any]],
+    *,
+    database: Any | None,
+) -> dict[str, Any]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        child = work.world_generation.get(context, child_run_id)
+        if child is None:
+            work.rollback()
+            raise KeyError(f"world_generation_run_not_found:{child_run_id}")
+        progress = apply_stale_progress(child.get("progress"), records)
+        work.world_generation.update(
+            context,
+            run_id=child_run_id,
+            progress=progress,
+        )
+        work.commit()
+    return progress
+
+
 def retry_failed_world_generation(
     run_id: str,
     *,
@@ -255,7 +300,7 @@ def retry_failed_world_generation(
     kick_worker: bool = True,
     diagnostic_id: str | None = None,
 ) -> dict[str, Any]:
-    """Retry selected review outcomes plus every transitive dependent."""
+    """Retry selected review outcomes plus required upstream dependencies."""
 
     context = bootstrap_local_tenant(database)
     with unit_of_work(database) as work:
@@ -267,6 +312,13 @@ def retry_failed_world_generation(
         world = require_world_writable(work, context, world_id)
         topics = work.world_library.list_topics(context, world_id)
         result_rows = work.world_generation.list_topic_results(context, run_id=run_id)
+        ancestor_result_rows: list[Mapping[str, Any]] = []
+        ancestor_run_id = str(parent_run.get("parent_run_id") or "")
+        if ancestor_run_id:
+            ancestor_result_rows = work.world_generation.list_topic_results(
+                context,
+                run_id=ancestor_run_id,
+            )
         work.rollback()
 
     if str(parent_run.get("status") or "") not in {"review", "failed"}:
@@ -298,6 +350,16 @@ def retry_failed_world_generation(
         profile_approval,
     )
     affected, targets = _retry_closure(graph, selected)
+    resolved_scopes = {
+        str(key): dict(value)
+        for key, value in dict(retry_scopes or {}).items()
+        if isinstance(value, Mapping)
+    }
+    stale_dependants = build_retry_invalidation_records(
+        graph,
+        affected,
+        resolved_scopes,
+    )
     topic_map = {str(row.get("topic_id") or ""): row for row in topics}
     locked = sorted(topic_id for topic_id in affected if _authoring_locked(topic_map.get(topic_id, {})))
     if locked:
@@ -308,10 +370,16 @@ def retry_failed_world_generation(
         "affected_topic_ids": list(affected),
         "resolved_topic_ids": list(targets),
         "include_dependencies": True,
-        "include_dependents": True,
+        "include_dependents": False,
+        "stale_topic_ids": sorted(stale_dependants),
+        "stale_topics": stale_dependants,
         "replace_locked": False,
     }
-    previous_results = _previous_result_rows(result_rows, topics)
+    previous_results = _previous_result_rows(
+        result_rows,
+        topics,
+        ancestor_result_rows,
+    )
     run_context = dict(parent_run.get("context") or {})
     topic_directives = _manual_retry_directives(
         {
@@ -322,7 +390,7 @@ def retry_failed_world_generation(
         selected_topic_ids=affected,
         requested_topic_ids=selected,
         previous_results=previous_results,
-        retry_scopes=dict(retry_scopes or {}),
+        retry_scopes=resolved_scopes,
         parent_run_id=run_id,
     )
     settings = _settings_from_payload(dict(parent_run.get("settings") or {}))
@@ -351,6 +419,7 @@ def retry_failed_world_generation(
             "selected_topic_ids": selected,
             "affected_topic_ids": affected,
             "resolved_topic_ids": targets,
+            "stale_topic_ids": tuple(sorted(stale_dependants)),
             "provider_route": settings.provider_route,
             "model": settings.model,
             "approved_profile_hash": profile_approval["approved_profile_hash"],
@@ -366,12 +435,22 @@ def retry_failed_world_generation(
         settings=settings,
         target_topic_ids=targets,
         forced_topic_ids=affected,
+        pinned_topic_ids=tuple(
+            topic_id for topic_id in targets if topic_id not in set(affected)
+        ),
         scope=retry_scope,
         strategy="force",
         database=database,
         tenant_context=context,
     )
-    _pin_parent_run(str(child_run["run_id"]), parent_run, database=database)
+    child_run_id = str(child_run["run_id"])
+    _pin_parent_run(child_run_id, parent_run, database=database)
+    stale_progress = _record_stale_dependants(
+        child_run_id,
+        stale_dependants,
+        database=database,
+    )
+    child_run = {**dict(child_run), "progress": stale_progress}
     worker_started = (
         kick_world_generation_worker(database=database, provider_route=settings.provider_route)
         if kick_worker
@@ -421,6 +500,9 @@ def decide_world_generation_retry(
         if run is None:
             work.rollback()
             raise KeyError(f"world_generation_run_not_found:{run_id}")
+        if str(run.get("status") or "") not in {"review", "failed"}:
+            work.rollback()
+            raise ValueError("world_generation_decision_requires_completed_review")
         scope = dict(dict(run.get("context") or {}).get("scope") or {})
         if not scope.get("retry_of_run_id"):
             work.rollback()
@@ -475,6 +557,7 @@ def decide_world_generation_retry(
                 directives=directives,
                 entity_manifest_hash=str(run_context.get("entity_manifest_hash") or ""),
                 settings=settings,
+                contract_descriptor=contract_descriptor_from_candidate(candidate_value),
             )
             candidate = _clean_promoted_candidate(candidate_value, decision=decision)
             GeneratedTopic.from_dict(candidate)
@@ -523,6 +606,7 @@ def decide_world_generation_retry(
         progress["publication_blocked"] = bool(
             pending
             or kept
+            or progress.get("stale_topic_ids")
             or progress.get("failed_topic_ids")
             or progress.get("blocked_topic_ids")
             or [
@@ -556,6 +640,50 @@ def continue_world_generation(
     kick_worker: bool = True,
     diagnostic_id: str | None = None,
 ) -> dict[str, Any]:
+    context = bootstrap_local_tenant(database)
+    with unit_of_work(database) as work:
+        existing = work.world_generation.get(context, run_id)
+        if existing is None:
+            work.rollback()
+            raise KeyError(f"world_generation_run_not_found:{run_id}")
+        work.rollback()
+    if str(existing.get("status") or "") == "running":
+        reconciled = reconcile_world_generation(run_id, database=database)
+        progress = dict(reconciled.get("progress") or {})
+        settings = _settings_from_payload(dict(reconciled.get("settings") or {}))
+        worker_started = bool(
+            kick_worker
+            and not progress.get("generation_complete")
+            and kick_world_generation_worker(
+                database=database,
+                provider_route=settings.provider_route,
+            )
+        )
+        log_world_generation_event(
+            "world_generation.running_run_resumed",
+            diagnostic_id=diagnostic_id,
+            world_id=str(reconciled.get("world_id") or ""),
+            run_id=run_id,
+            fields={
+                "provider_route": settings.provider_route,
+                "model": settings.model,
+                "worker_started": worker_started,
+                "active_topic_ids": tuple(progress.get("active_topic_ids") or ()),
+                "flagged_topic_ids": tuple(progress.get("flagged_topic_ids") or ()),
+            },
+        )
+        return {
+            "ok": True,
+            "run": reconciled,
+            "worker_started": worker_started,
+            "continue_of_run_id": run_id,
+            "execution_summary": _execution_summary(reconciled),
+            "resolved_route": {
+                "provider": settings.provider_route,
+                "model": settings.model,
+                "source": "existing_running_run",
+            },
+        }
     result = retry_failed_world_generation(
         run_id,
         database=database,

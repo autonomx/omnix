@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import logging
 from typing import Any, Mapping
 
 from app.persistence.identity_service import bootstrap_local_tenant
@@ -18,6 +19,8 @@ from app.rpg.session.genesis.world_forge_dossiers import (
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
 
 from .dossier_authoring import regenerate_world_entity_dossier
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _rows(value: Any) -> list[Mapping[str, Any]]:
@@ -235,6 +238,13 @@ def enrich_world_dossiers(
                 }
             )
         except Exception as exc:
+            _LOGGER.warning(
+                "World dossier enrichment failed for %s/%s: %s",
+                topic_id,
+                entity_id,
+                exc,
+                exc_info=True,
+            )
             failed.append(
                 {
                     "topic_id": topic_id,

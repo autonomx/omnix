@@ -10,32 +10,33 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import replace
+import math
 from typing import Any, Mapping
 
-from pydantic import create_model
+from pydantic import ConfigDict, Field, create_model
 
 from app.providers.base import ChatMessage
 from app.providers.structured import StructuredContract, StructuredOutputGateway
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.rpg.session.genesis.world_forge_dossier_quality import content_target
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
+from app.rpg.worlds.generation_contract_bundle import (
+    TopicContractBundle,
+    build_topic_contract_bundle,
+)
+from app.rpg.worlds.generation_strategy import world_forge_strategy_identity
+from app.rpg.worlds.generation_failure_artifact import build_failure_artifact
 from app.rpg_world_forge_provider import (
     WorldForgeEntityRegistryItem,
     WorldForgeEntityRegistryResponse,
     WorldForgeTopicResponse,
-    _entity_registry_contract as _legacy_entity_registry_contract,
     _entity_registry_payload,
-    _entity_registry_system_prompt,
-    _model_rows,
     _payload,
-    _system_prompt,
     _token_estimate,
-    _topic_contract as _legacy_topic_contract,
 )
 from app.rpg_world_forge_single_pass_provider import (
     SinglePassProviderWorldForgeTopicGenerator,
     SinglePassWorldForgeProviderError,
-    _definitions,
-    _entity_model,
     _field_contract,
     _literal,
     _one_call_budget,
@@ -48,84 +49,117 @@ def _safe_name(value: str) -> str:
     return _SAFE_MODEL.sub("_", value).strip("_") or "topic"
 
 
-def _strict_profile_contract(
-    node: CampaignTopicNode,
-    *,
-    expected_count: int,
-    expected_ids: tuple[str, ...],
-    expected_names: tuple[str, ...],
-    dependencies: Mapping[str, GeneratedTopic],
-) -> StructuredContract[Any]:
-    safe = _safe_name(node.topic_id)
-    entity_model = _entity_model(
-        node,
-        allocated_ids=expected_ids,
-        dependencies=dependencies,
-    )
-    response_model = create_model(
-        f"WorldForgeStrictProfileTopicResponse_{safe}",
-        __base__=WorldForgeTopicResponse,
-        topic_id=(_literal((node.topic_id,)), ...),
-        entities=(list[entity_model], ...),
-    )
-
-    def validate(value: Any) -> None:
-        # These checks remain as defence in depth for providers that ignore
-        # response_format. Guided decoders receive the same rules as constants.
-        if value.topic_id != node.topic_id:
-            raise ValueError(f"topic_id_mismatch:{value.topic_id}:{node.topic_id}")
-        if len(value.entities) != expected_count:
-            raise ValueError(
-                f"entity_count_mismatch:{len(value.entities)}:{expected_count}"
-            )
-        rows = _model_rows(value.entities)
-        actual_ids = tuple(str(row.get("id") or "") for row in rows)
-        if set(actual_ids) != set(expected_ids) or len(actual_ids) != len(set(actual_ids)):
-            raise ValueError(f"entity_id_set_mismatch:{actual_ids}:{expected_ids}")
-        if expected_names:
-            actual_names = tuple(str(row.get("name") or "").strip() for row in rows)
-            if actual_names != expected_names:
-                raise ValueError(
-                    f"entity_name_set_mismatch:{actual_names}:{expected_names}"
-                )
-
+def _authored_contract(bundle: TopicContractBundle) -> StructuredContract[Any]:
     return StructuredContract(
-        contract_id=f"rpg.world_forge.topic.{node.topic_id}",
-        version=5,
-        output_model=response_model,
-        semantic_validator=validate,
+        contract_id=bundle.contract_id,
+        version=6,
+        output_model=bundle.authored_draft_model,
+        semantic_validator=bundle.semantic_validator,
         schema_profile="canon_strict",
-        schema_name=f"rpg_world_forge_strict_{safe}",
+        schema_name=f"rpg_world_forge_authored_{_safe_name(bundle.contract_id)}",
         regenerate_on_semantic_failure=False,
+        exact_json_object=True,
+        max_raw_bytes=bundle.limits.max_raw_bytes,
+        max_json_depth=bundle.limits.max_depth,
+        max_json_nodes=bundle.limits.max_nodes,
+        max_json_string_length=bundle.limits.max_string_length,
+        max_json_array_length=bundle.limits.max_collection_rows,
     )
 
 
-def _strict_topic_contract(
-    expected_topic_id: str,
+def _authored_system_prompt(
+    node: CampaignTopicNode,
+    bundle: TopicContractBundle,
     *,
-    expected_entity_count: int | None,
-    expected_entity_ids: tuple[str, ...],
-    expected_entity_names: tuple[str, ...],
-) -> StructuredContract[Any]:
-    base = _legacy_topic_contract(
-        expected_topic_id,
-        expected_entity_count=expected_entity_count,
-        expected_entity_ids=expected_entity_ids,
-        expected_entity_names=expected_entity_names,
+    batch_index: int,
+    batch_count: int,
+    existing_entities: tuple[Mapping[str, str], ...],
+    assigned_entity_ids: tuple[str, ...],
+    assigned_entities: tuple[Mapping[str, str], ...],
+) -> str:
+    section_keys = tuple(
+        section_id for section_id, _title in bundle.dossier_template
     )
-    safe = _safe_name(expected_topic_id)
-    response_model = create_model(
-        f"WorldForgeStrictTopicResponse_{safe}",
-        __base__=WorldForgeTopicResponse,
-        topic_id=(_literal((expected_topic_id,)), ...),
+    sections_fragment = {
+        section_id: {"paragraphs": ["Write 1-3 substantive paragraphs."]}
+        for section_id in section_keys
+    }
+    assigned_slot_text = "; ".join(
+        f"{row['id']} = {row['name']} ({row['role']}; {row['distinction']})"
+        for row in assigned_entities
     )
-    return replace(
-        base,
-        contract_id=f"rpg.world_forge.topic.{expected_topic_id}",
-        version=4,
-        output_model=response_model,
-        schema_name=f"rpg_world_forge_strict_{safe}",
-        regenerate_on_semantic_failure=False,
+    exclusions = ", ".join(
+        f"{row.get('id') or '<unknown>'} ({row.get('name') or 'unnamed'})"
+        for row in existing_entities
+    )
+    targeted = node.metadata.get("entity_dossier_regeneration")
+    targeted_instruction = ""
+    if isinstance(targeted, Mapping):
+        target_id = str(targeted.get("entity_id") or "")
+        target_name = str(targeted.get("entity_name") or "")
+        minimum_words, minimum_sections = content_target(node.topic_id)
+        requested_words = math.ceil(minimum_words * 1.25)
+        targeted_instruction = (
+            " This is a dossier-only regeneration for the existing canonical entity "
+            f"{target_id!r} named {target_name!r}. Return exactly that entity and preserve "
+            "its ID, name, structured facts, references, mechanics, and all schema-required "
+            "profile fields from campaign_context.entity_dossier_regeneration."
+            " Author new prose only for short_summary and dossier. The dossier must contain "
+            f"at least {requested_words} words across all required sections (the validator "
+            f"requires {minimum_words}, and this safety margin is intentional), use at least "
+            f"{minimum_sections} substantive sections, give every paragraph at least 24 "
+            "words, and never repeat a paragraph. Keep each section distinct and grounded "
+            "in the supplied canonical entity and quality issues."
+        )
+    return (
+        "You are the Omnix Campaign World Forge. Author rich, internally consistent "
+        "campaign canon for exactly one topic, not player-facing turn narration. The "
+        "campaign_context.world_brief and supplied dependencies are authoritative. "
+        "Ground every name, institution, conflict, technology, culture, creature, and "
+        "location in that brief. Do not fall back to generic genre conventions unless "
+        "the brief supports them. Return exactly one bare JSON object: no markdown "
+        "fences, commentary, or reasoning. The JSON Schema at "
+        "required_output.authored_draft_schema is the sole output contract; unknown "
+        "fields are forbidden. The root keys must be exactly topic_id, documents, "
+        "entities, relationships, knowledge_rules, and story_threads. Include every "
+        "root key even when its array is empty. Never return provenance or facts. "
+        "Omnix materializes canonical IDs, facts, authority, visibility, provenance, "
+        "and dossier display metadata after validation. Use the exact root topic_id "
+        f"{node.topic_id!r}. Never place an entity ID in root topic_id. Use each "
+        "allocated entity ID exactly once and only at "
+        f"entities[].id: {', '.join(assigned_entity_ids) or 'none'}. Every entity must "
+        "include the schema-required profile fields, short_summary, and dossier. The "
+        "dossier object must contain subtitle, quote, quick_facts, sections, and "
+        "related_entity_ids. Dossier section keys must be nested under "
+        "entities[].dossier.sections, never directly under dossier. The exact dossier "
+        "sections fragment is "
+        f"{json.dumps(sections_fragment, ensure_ascii=False, sort_keys=True)}. "
+        "Each section object contains only paragraphs; never return section id or title "
+        "fields. Use short_summary for cards and substantive dossier paragraphs for "
+        "lore. Put mechanics and references in their schema-defined fields. Never "
+        "invent an unresolved dependency ID. "
+        f"This is entity batch {batch_index + 1} of {batch_count}. Earlier entities "
+        f"that must not be duplicated: {exclusions or 'none'}. Preserve assigned "
+        f"registry names, roles, and distinctions: {assigned_slot_text or 'none'}."
+        + targeted_instruction
+    )
+
+
+def _authored_registry_system_prompt(
+    node: CampaignTopicNode,
+    entity_ids: tuple[str, ...],
+) -> str:
+    return (
+        "You are the Omnix Campaign World Forge planner. Return exactly one bare JSON "
+        "object with no markdown, commentary, or reasoning. The root keys are exactly "
+        "topic_id and entities; never return provenance. Set root topic_id to "
+        f"{node.topic_id!r}. Create exactly {len(entity_ids)} compact registry "
+        "entries, one for every allocated ID, "
+        "using each exactly once: "
+        f"{', '.join(entity_ids) or 'none'}. Each entity contains exactly id, name, "
+        "role, and distinction. Names and distinctions must be unique, substantive, "
+        "and grounded in the world brief and dependencies. Do not return dossiers, "
+        "facts, documents, or authorship metadata."
     )
 
 
@@ -134,10 +168,6 @@ def _strict_registry_contract(
     *,
     expected_entity_ids: tuple[str, ...],
 ) -> StructuredContract[Any]:
-    base = _legacy_entity_registry_contract(
-        expected_topic_id,
-        expected_entity_ids=expected_entity_ids,
-    )
     safe = _safe_name(expected_topic_id)
     item_model = create_model(
         f"WorldForgeStrictRegistryItem_{safe}",
@@ -146,17 +176,39 @@ def _strict_registry_contract(
     )
     response_model = create_model(
         f"WorldForgeStrictRegistryResponse_{safe}",
-        __base__=WorldForgeEntityRegistryResponse,
+        __config__=ConfigDict(extra="forbid"),
         topic_id=(_literal((expected_topic_id,)), ...),
-        entities=(list[item_model], ...),
+        entities=(
+            list[item_model],
+            Field(
+                min_length=len(expected_entity_ids),
+                max_length=len(expected_entity_ids),
+            ),
+        ),
     )
-    return replace(
-        base,
+    def validate_registry(value: Any) -> None:
+        actual_ids = tuple(str(row.id) for row in value.entities)
+        if len(actual_ids) != len(expected_entity_ids):
+            raise ValueError("world_forge_registry_entity_count_mismatch")
+        if set(actual_ids) != set(expected_entity_ids) or len(actual_ids) != len(
+            set(actual_ids)
+        ):
+            raise ValueError("world_forge_registry_entity_id_set_mismatch")
+
+    return StructuredContract(
         contract_id=f"rpg.world_forge.entity_registry.{expected_topic_id}",
         version=2,
         output_model=response_model,
+        semantic_validator=validate_registry,
+        schema_profile="canon_strict",
         schema_name=f"rpg_world_forge_registry_strict_{safe}",
         regenerate_on_semantic_failure=False,
+        exact_json_object=True,
+        max_raw_bytes=65_536,
+        max_json_depth=8,
+        max_json_nodes=1_024,
+        max_json_string_length=4_096,
+        max_json_array_length=max(1, len(expected_entity_ids)),
     )
 
 
@@ -167,15 +219,6 @@ def _identity_contract(topic_id: str, entity_ids: tuple[str, ...]) -> dict[str, 
         "allocated_entity_ids": list(entity_ids),
         "root_topic_id_must_not_be_an_entity_id": True,
     }
-
-
-def _identity_instruction(topic_id: str, entity_ids: tuple[str, ...]) -> str:
-    allocated = ", ".join(entity_ids) or "none"
-    return (
-        f" ROOT_IDENTITY_CONTRACT: the root topic_id must be exactly {topic_id!r}. "
-        "Never place an entity ID in root topic_id. Entity IDs belong only in "
-        f"entities[].id and must come from this allocation: {allocated}."
-    )
 
 
 class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerator):
@@ -205,18 +248,21 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
         )
         index = batch_index if batch_index is not None else 0
         total = batch_count if batch_count is not None else 1
-        prompt = _system_prompt(
+        bundle = build_topic_contract_bundle(
             node,
+            allocated_entity_ids=ids,
+            dependencies=dependency_topics,
+            expected_entity_count=count,
+        )
+        prompt = _authored_system_prompt(
+            node,
+            bundle,
             batch_index=index,
             batch_count=total,
             existing_entities=existing_entities,
             assigned_entity_ids=ids,
             assigned_entities=assigned_entities,
-        ) + (
-            " PROFILE_FIELD_CONTRACT is authoritative. Use the exact allocated ID "
-            "and entity kind, include all required top-level fields, obey declared "
-            "JSON types, and use only listed reference IDs. Unknown fields are forbidden."
-        ) + _identity_instruction(node.topic_id, ids)
+        )
         request = _payload(
             node,
             seed=seed,
@@ -228,15 +274,15 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
             assigned_entity_ids=ids,
             assigned_entities=assigned_entities,
         )
-        request["required_output"]["identity_contract"] = _identity_contract(
-            node.topic_id,
-            ids,
-        )
-        request["required_output"]["profile_field_contract"] = _field_contract(
-            node,
-            allocated_ids=ids,
-            dependencies=dependency_topics,
-        )
+        request["required_output"] = {
+            **dict(bundle.prompt_contract),
+            "identity_contract": _identity_contract(node.topic_id, ids),
+            "profile_field_contract": _field_contract(
+                node,
+                allocated_ids=ids,
+                dependencies=dependency_topics,
+            ),
+        }
         messages = [
             ChatMessage(role="system", content=prompt),
             ChatMessage(
@@ -244,22 +290,7 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
                 content=json.dumps(request, ensure_ascii=False, sort_keys=True),
             ),
         ]
-        contract = (
-            _strict_profile_contract(
-                node,
-                expected_count=count,
-                expected_ids=ids,
-                expected_names=expected_entity_names,
-                dependencies=dependency_topics,
-            )
-            if _definitions(node)
-            else _strict_topic_contract(
-                node.topic_id,
-                expected_entity_count=count,
-                expected_entity_ids=ids,
-                expected_entity_names=expected_entity_names,
-            )
-        )
+        contract = _authored_contract(bundle)
         gateway = StructuredOutputGateway(self.provider)
         with self._limiter():
             outcome = gateway.try_generate(
@@ -273,14 +304,65 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
                 retry_budget=_one_call_budget(self.config.timeout_seconds),
             )
         if outcome.error is not None:
+            diagnostics = {
+                **bundle.descriptor(),
+                **outcome.diagnostics.as_dict(),
+            }
+            artifact = build_failure_artifact(
+                topic_id=node.topic_id,
+                stage="provider_validation",
+                error=outcome.error,
+                raw_text="",
+                diagnostics=diagnostics,
+            )
+            diagnostics["failure_artifact"] = artifact.model_dump(mode="json")
             raise SinglePassWorldForgeProviderError(
                 node.topic_id,
                 outcome.error,
-                outcome.diagnostics.as_dict(),
+                diagnostics,
                 unit="topic",
             ) from outcome.error
         assert outcome.value is not None
-        value = self._apply_registry_slots(outcome.value, assigned_entities)
+        outcome_diagnostics = outcome.diagnostics.as_dict()
+        try:
+            value = bundle.materializer(outcome.value)
+        except Exception as exc:
+            diagnostics = {**bundle.descriptor(), **outcome_diagnostics}
+            artifact = build_failure_artifact(
+                topic_id=node.topic_id,
+                stage="materialization",
+                error=exc,
+                raw_text="",
+                diagnostics=diagnostics,
+            )
+            diagnostics["failure_artifact"] = artifact.model_dump(mode="json")
+            raise SinglePassWorldForgeProviderError(
+                node.topic_id,
+                exc,
+                diagnostics,
+                unit="topic",
+            ) from exc
+        strategy_identity = world_forge_strategy_identity(
+            provider=str(outcome_diagnostics.get("provider") or self.config.provider),
+            model=str(outcome_diagnostics.get("model") or self.config.model),
+            selected_mode=str(outcome_diagnostics.get("selected_mode") or ""),
+            prompt_version=self.config.prompt_version,
+            contract_descriptor=bundle.descriptor(),
+        )
+        provenance = dict(value.provenance)
+        receipt = dict(provenance.get("authoritative_contract_receipt") or {})
+        receipt["provider_wire_schema_hash"] = str(
+            outcome_diagnostics.get("provider_schema_hash") or ""
+        )
+        receipt["strategy_identity"] = strategy_identity
+        provenance.update(
+            {
+                "authoritative_contract_receipt": receipt,
+                "strategy_identity": strategy_identity,
+            }
+        )
+        value = value.model_copy(update={"provenance": provenance})
+        value = self._apply_registry_slots(value, assigned_entities)
         rendered = json.dumps(
             value.model_dump(mode="python"),
             ensure_ascii=False,
@@ -288,7 +370,11 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
         )
         return (
             value,
-            outcome.diagnostics.as_dict(),
+            {
+                **bundle.descriptor(),
+                **outcome_diagnostics,
+                "strategy_identity": strategy_identity,
+            },
             sum(_token_estimate(message.content) for message in messages),
             _token_estimate(rendered),
         )
@@ -313,11 +399,11 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
             node.topic_id,
             ids,
         )
+        request["required_output"].pop("provenance", None)
         messages = [
             ChatMessage(
                 role="system",
-                content=_entity_registry_system_prompt(node)
-                + _identity_instruction(node.topic_id, ids),
+                content=_authored_registry_system_prompt(node, ids),
             ),
             ChatMessage(
                 role="user",
@@ -340,20 +426,39 @@ class FirstPassWorldForgeTopicGenerator(SinglePassProviderWorldForgeTopicGenerat
                 retry_budget=_one_call_budget(self.config.timeout_seconds),
             )
         if outcome.error is not None:
+            diagnostics = outcome.diagnostics.as_dict()
+            artifact = build_failure_artifact(
+                topic_id=node.topic_id,
+                stage="provider_validation",
+                error=outcome.error,
+                raw_text="",
+                diagnostics=diagnostics,
+            )
+            diagnostics["failure_artifact"] = artifact.model_dump(mode="json")
             raise SinglePassWorldForgeProviderError(
                 node.topic_id,
                 outcome.error,
-                outcome.diagnostics.as_dict(),
+                diagnostics,
                 unit="registry",
             ) from outcome.error
         assert outcome.value is not None
+        canonical_registry = WorldForgeEntityRegistryResponse(
+            topic_id=node.topic_id,
+            entities=[
+                WorldForgeEntityRegistryItem.model_validate(
+                    row.model_dump(mode="python")
+                )
+                for row in outcome.value.entities
+            ],
+            provenance={"materialized_by": "omnix_entity_registry_v2"},
+        )
         rendered = json.dumps(
-            outcome.value.model_dump(mode="python"),
+            canonical_registry.model_dump(mode="python"),
             ensure_ascii=False,
             sort_keys=True,
         )
         return (
-            outcome.value,
+            canonical_registry,
             outcome.diagnostics.as_dict(),
             sum(_token_estimate(message.content) for message in messages),
             _token_estimate(rendered),
