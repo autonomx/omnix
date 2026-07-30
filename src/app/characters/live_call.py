@@ -14,7 +14,7 @@ from .avatar_models import CharacterAvatarPack
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
 from .interaction import resolve_system_session_identity
 from .models import SYSTEM_ASSISTANT_NAME, CharacterProfileSnapshot
-from .service import CharacterService, default_character_service
+from .service import CharacterService, CharacterVoiceAssetError, default_character_service
 
 
 def _utcnow() -> str:
@@ -57,6 +57,7 @@ class LiveCallPreloadState(BaseModel):
 
     profile_loaded: bool
     voice_resolved: bool
+    voice_error: str | None = None
     avatar_pack_loaded: bool = False
     memory_snapshot_loaded: bool
     memory_record_count: int = Field(default=0, ge=0)
@@ -126,8 +127,16 @@ def resolve_live_call_runtime(
         if character and character.default_voice_asset_id
         else interaction.voice_asset_id
     )
+    voice_error: str | None = None
     if character is not None and voice_asset_id:
-        character_service.validate_voice_for_use(voice_asset_id, "live_call")
+        try:
+            character_service.validate_voice_for_use(voice_asset_id, "live_call")
+        except CharacterVoiceAssetError as exc:
+            # Voice availability must not erase a valid Character Mode identity.
+            # Keep the character active and let the caller fall back to its default
+            # system voice while surfacing the exact asset problem for diagnostics.
+            voice_error = str(exc)
+            voice_asset_id = None
     # Live-call greetings are generated ephemerally by the active LLM. Keep the
     # legacy field empty so old browser playback code cannot race that stream.
     greeting = ""
@@ -153,6 +162,7 @@ def resolve_live_call_runtime(
         preload=LiveCallPreloadState(
             profile_loaded=character is not None,
             voice_resolved=bool(voice_asset_id),
+            voice_error=voice_error,
             avatar_pack_loaded=avatar_pack is not None,
             memory_snapshot_loaded=memory_loaded,
             memory_record_count=session.memory_record_count if memory_loaded else 0,
