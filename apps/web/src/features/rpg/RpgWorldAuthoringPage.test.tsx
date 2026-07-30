@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   RpgAuthoringCollectionPage,
@@ -156,5 +156,27 @@ describe('RpgWorldAuthoringPage collections', () => {
 
     expect(screen.getByRole('main', { name: 'Ward Runner details' })).toBeInTheDocument();
     expect(screen.getByText('Cross active wards')).toBeInTheDocument();
+  });
+
+  it('keeps the last active entity artwork visible while a replacement is pending', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      world,
+      targets: [{
+        target_id: 'entity:class:ward_runner:illustration',
+        entity_id: 'class:ward_runner',
+        role: 'illustration',
+        status: 'stale',
+        review_state: 'pending',
+        active_asset_id: 'image:ward-runner-prior',
+      }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    renderPage();
+
+    const card = screen.getByRole('heading', { name: 'Ward Runner' }).closest('article');
+    const artwork = card?.querySelector('.rpg-authoring-entity-placeholder');
+    await waitFor(() => expect(artwork).toHaveClass('has-image'));
+    expect(artwork).toHaveStyle({ backgroundImage: expect.stringContaining('image%3Award-runner-prior') });
   });
 });

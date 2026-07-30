@@ -48,7 +48,7 @@ describe('RpgWorldVisualMapPanel', () => {
 
     const regenerate = await screen.findByRole('button', { name: 'Regenerate Map Artwork' });
     expect(container.querySelector('.rpg-atlas-world')).toHaveStyle({ backgroundImage: expect.stringContaining('image%3Aaurelia-map') });
-    expect(screen.getByRole('button', { name: 'Open Moon Market (location:moon_market)' })).toHaveClass('has-artwork');
+    expect(screen.getByRole('button', { name: 'Open Moon Market' })).toHaveClass('has-artwork');
     expect(screen.getByRole('button', { name: 'Enter full screen map' })).toBeInTheDocument();
     expect(screen.getByText('All area artwork ready (1)')).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Area artwork generation progress' })).toHaveAttribute('aria-valuenow', '1');
@@ -64,11 +64,11 @@ describe('RpgWorldVisualMapPanel', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
-    const marker = await screen.findByRole('button', { name: 'Open Moon Market (location:moon_market)' });
+    const marker = await screen.findByRole('button', { name: 'Open Moon Market' });
     fireEvent.click(marker);
     fireEvent.wheel(screen.getByRole('application'), { deltaY: -200 });
 
-    expect(screen.getByRole('heading', { name: 'Moon Market (location:moon_market)' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Moon Market' })).toBeInTheDocument();
     expect(screen.getByText(/generated semantic baseline/i)).toBeInTheDocument();
     expect(screen.getByText(/130%/)).toBeInTheDocument();
   });
@@ -136,12 +136,12 @@ describe('RpgWorldVisualMapPanel', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
-    expect(await screen.findByRole('button', { name: 'Open OmniCorp Spire (ent:places:001)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Neo-Kyoto Arcology (ent:region:001)' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open OmniCorp Spire' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Neo-Kyoto Arcology' })).toBeInTheDocument();
     expect(screen.getByText('Detailed maps ready (2)')).toBeInTheDocument();
     expect(screen.queryByText('No mapped areas yet')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open OmniCorp Spire (ent:places:001)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open OmniCorp Spire' }));
     expect(screen.getByText('A corporate citadel rising above the polluted city.')).toBeInTheDocument();
   });
 
@@ -178,7 +178,7 @@ describe('RpgWorldVisualMapPanel', () => {
     const { container } = render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
     expect(await screen.findByRole('button', { name: 'Regenerate All Detailed Maps (1)' })).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Moon Market (location:moon_market)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Moon Market' }));
     fireEvent.click(screen.getByRole('button', { name: 'Enter Moon Market Map' }));
 
     const atlas = container.querySelector('.rpg-atlas-world');
@@ -215,7 +215,7 @@ describe('RpgWorldVisualMapPanel', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     render(<QueryClientProvider client={client}><RpgWorldVisualMapPanel worldId={worldId} /></QueryClientProvider>);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Moon Market (location:moon_market)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Moon Market' }));
 
     expect(screen.getByText('Lantern-lit stalls crowd a market that opens only beneath a new moon.')).toBeInTheDocument();
     expect(screen.queryByText(/generated semantic baseline/i)).not.toBeInTheDocument();

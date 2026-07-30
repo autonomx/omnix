@@ -115,3 +115,30 @@ def test_session_summary_preserves_environment_snapshot_fields():
     snapshot = row["state"]["environment_snapshot"]
     assert snapshot["weather"]["condition"] == "rain"
     assert row["state"]["environment_narration_contract"]["mode"] == "read_only"
+
+
+def test_published_opening_summary_keeps_its_canonical_location():
+    session = {
+        "manifest": {"id": "session:published", "session_id": "session:published"},
+        "state": {
+            "current_location_name": "Tidebreak Docks",
+            "published_world": {"world_id": "world:vesper-9"},
+            "environment_snapshot": {
+                "schema_version": "rpg_published_opening_environment_v1",
+                "context": {"location_label": "Tidebreak Docks"},
+            },
+            "world": {"environment": {"absolute_minutes": 480}},
+            "scene": {
+                "environment_context": {"location_label": "Rusty Flagon Tavern"}
+            },
+        },
+    }
+
+    row = _attach_environment_snapshot_to_session(
+        list_summaries.session_list_summary(session)
+    )
+
+    assert row["state"]["current_location_name"] == "Tidebreak Docks"
+    assert row["state"]["environment_snapshot"]["context"]["location_label"] == (
+        "Tidebreak Docks"
+    )

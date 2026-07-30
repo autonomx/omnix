@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { omnixApiClient } from '../../api/client';
 import {
   rpgWorldLibraryClient,
@@ -11,6 +11,7 @@ import './RpgWorldCampaignSetup.css';
 interface RpgWorldCampaignSetupProps {
   onBack: () => void;
   onEditWorld: () => void;
+  onReviewGeneration?: () => void;
   onSessionLaunched: (sessionId: string) => void;
   worldId: string;
 }
@@ -27,6 +28,10 @@ function text(value: unknown, fallback = ''): string {
 
 function number(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 function humanize(value: string): string {
@@ -60,9 +65,11 @@ function protagonistOptionLabel(option: Record<string, unknown>, index: number):
 export function RpgWorldCampaignSetup({
   onBack,
   onEditWorld,
+  onReviewGeneration = onEditWorld,
   onSessionLaunched,
   worldId,
 }: RpgWorldCampaignSetupProps) {
+  const queryClient = useQueryClient();
   const [scenarioId, setScenarioId] = useState('');
   const [protagonistOption, setProtagonistOption] = useState('custom');
   const [playerName, setPlayerName] = useState('Alyndra');
@@ -85,6 +92,7 @@ export function RpgWorldCampaignSetup({
     stt: false,
   });
   const [feedback, setFeedback] = useState('');
+  const autoPreparedRunId = useRef('');
 
   const libraryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'world-library', 'campaign-setup'],
@@ -94,6 +102,9 @@ export function RpgWorldCampaignSetup({
     queryKey: ['feature', 'rpg', 'world-library', 'campaign-setup', worldId],
     queryFn: () => rpgWorldLibraryClient.detail(worldId),
     enabled: Boolean(worldId),
+    refetchInterval: (query) => ['planned', 'running'].includes(
+      text(query.state.data?.generation_runs?.[0]?.status),
+    ) ? 2_000 : false,
   });
   const world = detailQuery.data?.world
     ?? libraryQuery.data?.worlds.find((candidate) => candidate.id === worldId);
@@ -110,6 +121,35 @@ export function RpgWorldCampaignSetup({
     )),
     [detailQuery.data],
   );
+  const availableOpeningCount = useMemo(() => (
+    detailQuery.data?.topics
+      .filter((topic) => topic.topic_id === 'opening_scenarios')
+      .flatMap((topic) => Array.isArray(topic.content.entities) ? topic.content.entities : [])
+      .length ?? 0
+  ), [detailQuery.data]);
+  const generationInProgress = ['planned', 'running'].includes(
+    text(detailQuery.data?.generation_runs?.[0]?.status),
+  );
+  const generationRun = detailQuery.data?.generation_runs?.[0];
+  const generationProgress = record(generationRun?.progress);
+  const generationTargets = stringList(
+    generationProgress.target_topic_ids ?? record(generationRun?.plan).topic_ids,
+  );
+  const completedTopics = stringList(generationProgress.accepted_topic_ids);
+  const reviewTopics = stringList(generationProgress.flagged_topic_ids);
+  const failedTopics = stringList(generationProgress.failed_topic_ids);
+  const blockedTopics = stringList(generationProgress.blocked_topic_ids);
+  const activeTopics = stringList(generationProgress.active_topic_ids);
+  const explicitPercent = number(generationProgress.percent, -1);
+  const generationPercent = text(generationRun?.status) === 'ready' ? 100 : Math.max(0, Math.min(100, explicitPercent >= 0
+    ? explicitPercent
+    : generationTargets.length ? Math.round((completedTopics.length / generationTargets.length) * 100) : 0));
+  const importedWorld = world?.source_mode === 'imported';
+  const reviewRequired = text(generationRun?.status) === 'review' && !importedWorld;
+  const generationMessage = reviewRequired
+    ? `${reviewTopics.length} topic${reviewTopics.length === 1 ? '' : 's'} need review before this world can be published.`
+    : text(generationProgress.message)
+    || (activeTopics.length ? `Generating ${activeTopics.join(', ')}` : 'Waiting for the next World Forge task');
 
   useEffect(() => {
     if (!scenarios.some((scenario) => scenario.id === scenarioId)) {
@@ -151,6 +191,37 @@ export function RpgWorldCampaignSetup({
     },
     onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Campaign could not be continued.'),
   });
+
+  const prepareOpenings = useMutation({
+    mutationFn: () => rpgWorldLibraryClient.prepareOpeningScenariosForLaunch(worldId),
+    onSuccess: async (result) => {
+      setFeedback(result.status === 'generating'
+        ? 'World Forge is preparing this imported world for launch. This page will update when it is ready.'
+        : result.status === 'review_required'
+          ? 'World Forge has finished generation and needs review before the world can be published.'
+        : `Prepared ${result.prepared.length} opening scenario${result.prepared.length === 1 ? '' : 's'} for launch.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-library', 'campaign-setup'] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'world-library', 'campaign-setup', worldId] }),
+      ]);
+    },
+    onError: (cause) => setFeedback(cause instanceof Error ? cause.message : 'Opening scenarios could not be prepared for launch.'),
+  });
+
+  useEffect(() => {
+    const run = detailQuery.data?.generation_runs?.[0];
+    const runId = text(run?.run_id);
+    if (
+      !runId
+      || (text(run?.status) !== 'ready' && !importedWorld)
+      || !availableOpeningCount
+      || scenarios.length
+      || prepareOpenings.isPending
+      || autoPreparedRunId.current === runId
+    ) return;
+    autoPreparedRunId.current = runId;
+    prepareOpenings.mutate();
+  }, [availableOpeningCount, detailQuery.data?.generation_runs, importedWorld, prepareOpenings, scenarios.length]);
 
   const launch = useMutation({
     mutationFn: async () => {
@@ -237,8 +308,15 @@ export function RpgWorldCampaignSetup({
           {!scenarios.length ? (
             <div className="rpg-authoring-empty">
               <h3>No published opening</h3>
-              <p>Publish a launch-ready scenario before starting a campaign.</p>
-              <button type="button" onClick={onEditWorld}>Review World Setup</button>
+              {generationRun ? (
+                <section className="rpg-campaign-generation-progress" aria-label="World Forge progress">
+                  <div><strong>{reviewRequired ? 'World Forge generation complete' : `World Forge: ${generationPercent}%`}</strong><span>{text(generationRun.status, 'pending')}</span></div>
+                  <progress value={generationPercent} max="100">{generationPercent}%</progress>
+                  <p>{generationTargets.length ? `${completedTopics.length} accepted, ${reviewTopics.length} awaiting review, ${failedTopics.length + blockedTopics.length} failed or blocked. ` : ''}{generationMessage}</p>
+                </section>
+              ) : null}
+              <p>{availableOpeningCount ? `${availableOpeningCount} authored opening scenario${availableOpeningCount === 1 ? ' is' : 's are'} available and ready to prepare for launch.` : 'Publish a launch-ready scenario before starting a campaign.'}</p>
+              {reviewRequired ? <button type="button" onClick={onReviewGeneration}>Review World Forge Results</button> : availableOpeningCount ? <button type="button" disabled={prepareOpenings.isPending || generationInProgress} onClick={() => prepareOpenings.mutate()}>{prepareOpenings.isPending || generationInProgress ? 'Preparing world…' : `Prepare ${availableOpeningCount} Opening Scenario${availableOpeningCount === 1 ? '' : 's'}`}</button> : <button type="button" onClick={onEditWorld}>Review World Setup</button>}
             </div>
           ) : (
             <form onSubmit={(event) => { event.preventDefault(); launch.mutate(); }}>

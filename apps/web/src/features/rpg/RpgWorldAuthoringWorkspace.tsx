@@ -61,9 +61,9 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
     refetchInterval: 5000,
   });
 
-  const openEditor = (worldId: string, replace = false) => {
+  const openEditor = (worldId: string, replace = false, sectionId = 'overview') => {
     setView({ kind: 'editor', worldId });
-    pushWorldEditorRoute({ worldId, sectionId: 'overview' }, replace);
+    pushWorldEditorRoute({ worldId, sectionId }, replace);
   };
   const openLibrary = (replace = false) => {
     setView({ kind: 'library' });
@@ -192,6 +192,7 @@ export function RpgWorldAuthoringWorkspace({ onBack, onSessionLaunched }: RpgWor
       <RpgWorldCampaignSetup
         onBack={() => openLibrary()}
         onEditWorld={() => openEditor(view.worldId)}
+        onReviewGeneration={() => openEditor(view.worldId, false, 'generation')}
         onSessionLaunched={onSessionLaunched}
         worldId={view.worldId}
       />

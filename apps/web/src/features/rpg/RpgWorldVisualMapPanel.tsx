@@ -22,6 +22,13 @@ const LOCATION_MAP_ZOOM = 1.7;
 interface AtlasPoint { x: number; y: number; }
 interface LocalMapOverlay { id: string; label: string; kind: string; x: number; y: number; }
 
+function mapLabel(location: { id: string; label: string }): string {
+  const identifierSuffix = ` (${location.id})`;
+  return location.label.endsWith(identifierSuffix)
+    ? location.label.slice(0, -identifierSuffix.length)
+    : location.label;
+}
+
 function numeric(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
@@ -179,6 +186,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
     point: mapPosition(entitiesByLocation.get(location.id) ?? {}, location.id, index, locations.length),
   })), [entitiesByLocation, locations]);
   const selected = atlasLocations.find((location) => location.id === selectedLocationId) ?? atlasLocations[0];
+  const selectedLabel = selected ? mapLabel(selected) : '';
   const blueprints = detail?.map_blueprints ?? [];
   const selectedBlueprint = blueprints.find((blueprint) => text(record(blueprint.document).location_id) === selected?.id);
   const mapTarget = imagesQuery.data?.targets.find((target) => target.target_id === 'world:map');
@@ -379,13 +387,13 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
                 data-map-level={isLocationMap ? 'location' : 'world'}
                 style={{ ...canvasStyle, transform: `translate(${pan.x}px, ${pan.y}px) scale(${displayZoom})` }}
               >
-                <div className="rpg-atlas-world-title"><strong>{isLocationMap ? selected?.label : detail?.world.title}</strong><small>{isLocationMap ? 'Local detail map' : 'World atlas'}</small></div>
+                <div className="rpg-atlas-world-title"><strong>{isLocationMap ? selectedLabel : detail?.world.title}</strong><small>{isLocationMap ? 'Local detail map' : 'World atlas'}</small></div>
                 {!isLocationMap && atlasLocations.map((location) => {
                   const blueprint = blueprints.find((row) => text(record(row.document).location_id) === location.id);
                   const locationAssetId = locationArtwork.get(location.id);
                   return (
                     <button
-                      aria-label={`Open ${location.label}`}
+                      aria-label={`Open ${mapLabel(location)}`}
                       aria-pressed={selected?.id === location.id}
                       className={`rpg-atlas-marker${selected?.id === location.id ? ' is-active' : ''}${locationAssetId ? ' has-artwork' : ''}${zoom >= 0.85 ? ' show-label' : ''}`}
                       key={location.id}
@@ -397,8 +405,8 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
                       type="button"
                       onClick={() => setSelectedLocationId(location.id)}
                     >
-                      <span aria-hidden="true">{location.label.slice(0, 1).toUpperCase()}</span>
-                      <strong>{location.label}</strong>
+                      <span aria-hidden="true">{mapLabel(location).slice(0, 1).toUpperCase()}</span>
+                      <strong>{mapLabel(location)}</strong>
                       <small>{blueprint?.status ?? 'No blueprint'}</small>
                     </button>
                   );
@@ -410,7 +418,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
                     key={overlay.id}
                     style={{ left: `${overlay.x}%`, top: `${overlay.y}%` }}
                     type="button"
-                    onClick={() => setFeedback(`${overlay.label} selected on ${selected?.label ?? 'the local map'}.`)}
+                    onClick={() => setFeedback(`${overlay.label} selected on ${selectedLabel || 'the local map'}.`)}
                   >
                     <span>{overlay.kind}</span><strong>{overlay.label.split(': ')[1]}</strong>
                   </button>
@@ -419,10 +427,10 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
             </div>
             <aside className="rpg-visual-map-inspector">
               <p className="eyebrow">Selected area</p>
-              <h3>{selected?.label}</h3>
+              <h3>{selectedLabel}</h3>
               {selected && locationArtwork.get(selected.id) ? <img alt="" src={assetUrl(locationArtwork.get(selected.id) ?? '')} /> : null}
               <p className="rpg-atlas-location-description">{selectedDescription}</p>
-              {selected ? <div className="rpg-atlas-map-entry">{isLocationMap ? <button type="button" onClick={returnToWorldMap}>Return to World Map</button> : locationMapArtwork.has(selected.id) ? <button type="button" onClick={enterLocationMap}>Enter {selected.label.split(' (')[0]} Map</button> : <p>Generate this location's detailed map to open its local view.</p>}</div> : null}
+              {selected ? <div className="rpg-atlas-map-entry">{isLocationMap ? <button type="button" onClick={returnToWorldMap}>Return to World Map</button> : locationMapArtwork.has(selected.id) ? <button type="button" onClick={enterLocationMap}>Enter {selectedLabel} Map</button> : <p>Generate this location's detailed map to open its local view.</p>}</div> : null}
               {selected ? <p className="rpg-atlas-zoom-hint">{locationMapArtwork.has(selected.id) ? `Zoom past ${Math.round(LOCATION_MAP_ZOOM * 100)}% to inspect this location in detail.` : 'Generate this location’s detailed map to enable deep zoom.'}</p> : null}
               <dl>
                 <div><dt>Area ID</dt><dd>{selected?.id}</dd></div>

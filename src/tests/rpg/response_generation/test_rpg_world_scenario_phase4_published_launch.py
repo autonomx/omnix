@@ -257,6 +257,11 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
     assert result["session"]["state"]["current_map_instance_id"] == (
         "campaign:published:map:map:rusty_flagon:1"
     )
+    assert result["session"]["state"]["environment_snapshot"]["context"] == {
+        "location_label": "rusty_flagon_tavern",
+        "label": "rusty_flagon_tavern",
+    }
+    assert result["session"]["simulation_state"]["current_location_id"] == "rusty_flagon_tavern"
     snapshot = captured["map_instance"]["snapshot"]
     assert snapshot["actors"][0]["actor_id"] == "player:campaign:published"
     assert snapshot["actors"][0]["cell"] == [1, 1]

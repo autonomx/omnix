@@ -369,6 +369,21 @@ export const rpgWorldLibraryClient = {
     );
   },
 
+  prepareOpeningScenariosForLaunch(
+    worldId: string,
+  ): Promise<{
+    ok: boolean;
+    world_id: string;
+    status?: 'generating' | 'ready' | 'review_required';
+    generation_run_id?: string;
+    prepared: Array<{ scenario_id: string; title: string }>;
+  }> {
+    return request(
+      `/api/rpg/worlds/${encodeURIComponent(worldId)}/prepare-openings-for-launch`,
+      jsonInit({}),
+    );
+  },
+
   materializeDeferredLocation(
     worldId: string,
     locationId: string,

@@ -82,4 +82,34 @@ describe('RpgWorldBundleTransfer', () => {
     expect(await screen.findByText('World imported: world:clone • 2 maps • 2 images')).toBeInTheDocument();
     await waitFor(() => expect(onImported).toHaveBeenCalledWith('world:clone'));
   });
+
+  it('reports automatic launch preparation for an authoring-only import', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.pathname === '/api/rpg/world-library') {
+        return Response.json({ ok: true, worlds: [], scenarios: [], campaigns: [], generation_runs: [] });
+      }
+      return Response.json({
+        ok: true,
+        status: 'imported',
+        world_id: 'world:authoring',
+        source_world_id: 'world:source',
+        bundle_sha256: 'a'.repeat(64),
+        counts: {},
+        identifier_map: {},
+        warnings: [],
+        launch_preparation: { status: 'generating' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RpgWorldBundleTransfer />);
+
+    const file = new File(['bundle'], 'authoring.omnix-world.zip', { type: 'application/zip' });
+    fireEvent.change(screen.getByLabelText('World bundle file'), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Import world bundle' }));
+
+    expect(await screen.findByText('World imported: world:authoring. Launch preparation has started.')).toBeInTheDocument();
+  });
 });

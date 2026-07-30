@@ -166,4 +166,57 @@ describe('RpgWorldCampaignSetup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review World Setup' }));
     expect(onEditWorld).toHaveBeenCalledTimes(1);
   });
+
+  it('shows live World Forge progress while imported openings are prepared', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/library') && url.includes('/worlds/')) {
+        return jsonResponse({
+          ...detail,
+          topics: [{ topic_id: 'opening_scenarios', content: { entities: [{}] } }],
+          scenarios: [],
+          scenario_revisions: {},
+          generation_runs: [{
+            run_id: 'run:import', world_id: world.id, draft_revision: 1, status: 'running',
+            graph: {}, context: {}, settings: {}, plan: { topic_ids: ['places', 'actors', 'opening_scenarios'] },
+            progress: { percent: 67, accepted_topic_ids: ['places', 'actors'], active_topic_ids: ['opening_scenarios'] },
+            error: {}, created_at: '', updated_at: '',
+          }],
+        });
+      }
+      return jsonResponse({ ok: true, worlds: [world], scenarios: [], campaigns: [], generation_runs: [] });
+    }));
+    renderSetup();
+
+    expect(await screen.findByRole('region', { name: 'World Forge progress' })).toHaveTextContent('World Forge: 67%');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '67');
+    expect(screen.getByText('2 accepted, 0 awaiting review, 0 failed or blocked. Generating opening_scenarios')).toBeInTheDocument();
+  });
+
+  it('explains review status and opens World Forge results instead of preparing scenarios', async () => {
+    const onEditWorld = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/library') && url.includes('/worlds/')) {
+        return jsonResponse({
+          ...detail,
+          topics: [{ topic_id: 'opening_scenarios', content: { entities: [{}] } }],
+          scenarios: [],
+          scenario_revisions: {},
+          generation_runs: [{
+            run_id: 'run:review', world_id: world.id, draft_revision: 1, status: 'review',
+            graph: {}, context: {}, settings: {}, plan: { topic_ids: ['places', 'actors'] },
+            progress: { percent: 100, accepted_topic_ids: [], flagged_topic_ids: ['places', 'actors'] },
+            error: {}, created_at: '', updated_at: '',
+          }],
+        });
+      }
+      return jsonResponse({ ok: true, worlds: [world], scenarios: [], campaigns: [], generation_runs: [] });
+    }));
+    renderSetup(vi.fn(), onEditWorld);
+
+    expect(await screen.findByText(/2 topics need review before this world can be published/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review World Forge Results' }));
+    expect(onEditWorld).toHaveBeenCalledTimes(1);
+  });
 });

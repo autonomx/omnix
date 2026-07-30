@@ -88,9 +88,17 @@ export function RpgWorldBundleTransfer({
     try {
       const result = await rpgWorldBundleClient.importWorld(importFile, targetWorldId);
       const imageCount = (result.counts.images_created ?? 0) + (result.counts.images_reused ?? 0);
+      const launchStatus = result.launch_preparation?.status;
       setFeedback(
         `World imported: ${result.world_id} • ${result.counts.map_definitions ?? 0} maps • ${imageCount} images`,
       );
+      if (launchStatus === 'generating') {
+        setFeedback(`World imported: ${result.world_id}. Launch preparation has started.`);
+      } else if (launchStatus === 'ready') {
+        setFeedback(`World imported: ${result.world_id}. Opening scenarios are ready to play.`);
+      } else if (launchStatus === 'recovery_required') {
+        setFeedback(`World imported: ${result.world_id}. Open Campaign Setup to finish launch recovery.`);
+      }
       setError(undefined);
       setExportWorldId(result.world_id);
       setWorldOptions((current) => current.some((world) => world.id === result.world_id)

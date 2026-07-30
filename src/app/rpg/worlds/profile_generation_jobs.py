@@ -265,7 +265,7 @@ def profile_resolution_from_world(
     if not binding:
         return None if allow_legacy_missing else _raise_not_ready("unresolved")
     status = str(binding.get("status") or "unresolved")
-    if status != "ready":
+    if status not in {"ready", "approved"}:
         return _raise_not_ready(status)
     profile = genre_profile_from_dict(dict(binding.get("profile") or {})).require_valid()
     if str(binding.get("profile_hash") or "") != profile.content_hash:
@@ -291,7 +291,7 @@ def profile_manifest_run(world: Mapping[str, Any]) -> dict[str, Any] | None:
     if not binding:
         return None
     status = str(binding.get("status") or "unresolved")
-    if status == "ready":
+    if status in {"ready", "approved"}:
         resolution = profile_resolution_from_world(world, allow_legacy_missing=False)
         assert resolution is not None
         graph = build_profile_topic_graph(

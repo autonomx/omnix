@@ -84,6 +84,22 @@ def _state_environment_summary(state: Mapping[str, Any]) -> Dict[str, Any]:
         summary["world"]["regions"] = regions
     if environment_context:
         summary["scene"]["environment_context"] = environment_context
+
+    # Published campaigns need their canonical opening projection in the list
+    # response: the RPG shell is rendered from this bounded row before a full
+    # session is requested.  Keeping these small fields prevents the generic
+    # new-game template environment from leaking into a published world.
+    for key in (
+        "location",
+        "current_location",
+        "current_location_id",
+        "current_location_name",
+        "published_world",
+        "environment_snapshot",
+    ):
+        value = state.get(key)
+        if isinstance(value, (str, int, float, bool, dict)):
+            summary[key] = value
     return summary
 
 

@@ -191,13 +191,16 @@ export function RpgWorldAuthoringPage({
     enabled: Boolean(page) && section.id !== 'images',
     staleTime: 10_000,
   });
-  const approvedTargets = (imagesQuery.data?.targets ?? [])
-    .filter((target) => target.review_state === 'approved' && target.active_asset_id);
-  const approvedAssets = useMemo(() => new Map(
-    approvedTargets.map((target) => [target.entity_id, String(target.active_asset_id)]),
-  ), [approvedTargets]);
-  const bannerAssetId = approvedTargets.find((target) => target.role === 'banner')?.active_asset_id
-    ?? approvedTargets.find((target) => target.role === 'cover')?.active_asset_id
+  // Prompt or canon edits can make a target stale while its replacement is
+  // pending. Preserve the last active artwork throughout that review gap;
+  // only an explicit rejection should remove it from the world presentation.
+  const displayableTargets = (imagesQuery.data?.targets ?? [])
+    .filter((target) => target.review_state !== 'rejected' && target.active_asset_id);
+  const displayableAssets = useMemo(() => new Map(
+    displayableTargets.map((target) => [target.entity_id, String(target.active_asset_id)]),
+  ), [displayableTargets]);
+  const bannerAssetId = displayableTargets.find((target) => target.role === 'banner')?.active_asset_id
+    ?? displayableTargets.find((target) => target.role === 'cover')?.active_asset_id
     ?? undefined;
   const collectionEntities = page?.page_kind === 'collection' ? page.entities : [];
   const documentEntities = page?.page_kind === 'document' ? relatedEntityCards(page) : [];
@@ -297,7 +300,7 @@ export function RpgWorldAuthoringPage({
     return (
       <RpgWorldEntityDetail
         entity={selectedEntity}
-        imageAssetId={approvedAssets.get(selectedEntity.id)}
+        imageAssetId={displayableAssets.get(selectedEntity.id)}
         onClose={() => setSelectedEntityId(null)}
         onOpenRelated={openRelatedEntity}
         topic={page.topic}
@@ -347,7 +350,7 @@ export function RpgWorldAuthoringPage({
           {visibleEntities.map((entity) => (
             <RpgWorldEntityCard
               entity={entity}
-              imageAssetId={approvedAssets.get(entity.id)}
+              imageAssetId={displayableAssets.get(entity.id)}
               key={entity.id}
               onOpen={() => setSelectedEntityId(entity.id)}
               topic={page.topic}
@@ -383,7 +386,7 @@ export function RpgWorldAuthoringPage({
               {documentEntities.map((entity) => (
                 <RpgWorldEntityCard
                   entity={entity}
-                  imageAssetId={approvedAssets.get(entity.id)}
+                  imageAssetId={displayableAssets.get(entity.id)}
                   key={entity.id}
                   onOpen={() => setSelectedEntityId(entity.id)}
                   topic={page.topic}

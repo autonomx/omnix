@@ -102,6 +102,128 @@ def _attach_published_canon(
     return session, bible, digest
 
 
+def _apply_published_opening_state(
+    session: dict[str, Any],
+    *,
+    canon: Mapping[str, Any],
+    scenario: Any,
+) -> None:
+    """Replace new-game demo defaults with the selected published opening."""
+
+    location_id = str(scenario.starting_location_id)
+    entities = _record(canon.get("entities"))
+    location = _record(entities.get(location_id))
+    location_name = str(location.get("name") or location_id)
+    description = str(
+        location.get("description")
+        or location.get("short_summary")
+        or f"You arrive at {location_name}."
+    )
+    epoch = str(scenario.starting_epoch or "Day 1")
+    state = _record(session.get("state"))
+    player = _record(state.get("player"))
+    state.update(
+        {
+            "title": f"{player.get('name') or 'Player'} — {location_name}",
+            "location": location_name,
+            "current_location": location_name,
+            "current_location_id": location_id,
+            "current_location_name": location_name,
+            "summary": description,
+            "quests": [],
+            "relationships": [],
+            "party": [],
+            "quick_actions": [
+                f"Survey {location_name}",
+                "Follow the immediate lead",
+                "Talk to someone nearby",
+                "Check local routes",
+            ],
+            "timeline": [
+                {
+                    "turn": 0,
+                    "time": epoch,
+                    "title": f"Arrived at {location_name}",
+                    "detail": description,
+                    "kind": "published_opening",
+                }
+            ],
+            "journal": {
+                "entries": [
+                    {
+                        "turn": 0,
+                        "time": epoch,
+                        "title": f"Arrived at {location_name}",
+                        "detail": description,
+                        "kind": "published_opening",
+                    }
+                ]
+            },
+        }
+    )
+    state["world"] = {
+        **_record(state.get("world")),
+        "time": epoch,
+        "weather": "Unknown",
+        "temperature": None,
+        "region": str(location.get("region") or location.get("district") or "Vesper-9"),
+        "current_location_id": location_id,
+        "current_location_name": location_name,
+    }
+    environment_snapshot = {
+        "schema_version": "rpg_published_opening_environment_v1",
+        "region_id": str(location.get("region") or location.get("district") or "vesper-9"),
+        "time_label": epoch,
+        "weather": {"condition": "Unknown"},
+        "context": {"location_label": location_name, "label": location_name},
+        "display": {
+            "day_time": epoch,
+            "weather": "Unknown",
+            "context": location_name,
+        },
+    }
+    state["environment_snapshot"] = environment_snapshot
+    state["narrative_affordances"] = {
+        **_record(state.get("narrative_affordances")),
+        "opening_story": {
+            "title": f"Arrival at {location_name}",
+            "summary": description,
+            "source": "published_scenario",
+        },
+    }
+    metadata = _record(state.get("metadata"))
+    state["metadata"] = {
+        **metadata,
+        "starting_location_id": location_id,
+        "starting_location_name": location_name,
+        "opening_source": "published_scenario",
+    }
+    session["state"] = state
+    runtime = _record(session.get("runtime_state"))
+    runtime.update(
+        {"current_location_id": location_id, "current_location_name": location_name}
+    )
+    session["runtime_state"] = runtime
+    simulation = _record(session.get("simulation_state"))
+    simulation.update(
+        {
+            "current_location_id": location_id,
+            "location_name": location_name,
+            "travel_state": {
+                **_record(simulation.get("travel_state")),
+                "current_location_id": location_id,
+            },
+            "location_state": {
+                **_record(simulation.get("location_state")),
+                "current_location_id": location_id,
+                "location_name": location_name,
+            },
+        }
+    )
+    session["simulation_state"] = simulation
+    session["environment_snapshot"] = environment_snapshot
+
+
 def launch_published_scenario(
     *,
     world_id: str,
@@ -204,6 +326,8 @@ def launch_published_scenario(
         definition=starting_definition,
     )
 
+    _apply_published_opening_state(session, canon=canon, scenario=scenario)
+
     state = _record(session.get("state"))
     manifest = _record(session.get("manifest"))
     runtime = _record(session.get("runtime_state"))
@@ -228,6 +352,7 @@ def launch_published_scenario(
     manifest["world_release"] = release.release
     manifest["scenario_id"] = scenario.scenario_id
     manifest["scenario_revision"] = scenario.revision
+    manifest["title"] = str(state.get("title") or revision.title)
     manifest["creation_status"] = "completed"
     manifest["created_from"] = "published_scenario"
     runtime["campaign_launch_gate"] = {

@@ -100,6 +100,18 @@ def _ability_coverage_payload(state: dict[str, Any]) -> dict[str, Any]:
 def _environment_snapshot_from_state(
     state: dict[str, Any],
 ) -> dict[str, Any] | None:
+    # A published scenario supplies its own canonical opening environment.  Do
+    # not derive a replacement from the new-game template that was used only to
+    # bootstrap the player sheet (for example, Rusty Flagon Tavern).
+    published_world = state.get("published_world")
+    published_snapshot = state.get("environment_snapshot")
+    if (
+        isinstance(published_world, dict)
+        and isinstance(published_snapshot, dict)
+        and published_snapshot.get("schema_version")
+        == "rpg_published_opening_environment_v1"
+    ):
+        return dict(published_snapshot)
     world_value = state.get("world")
     world = world_value if isinstance(world_value, dict) else {}
     environment_value = world.get("environment")

@@ -17,7 +17,10 @@ from app.rpg.worlds.generation_retry import (
     continue_world_generation,
     retry_failed_world_generation,
 )
-from app.rpg.worlds.launch_repair_service import repair_world_for_launch
+from app.rpg.worlds.launch_repair_service import (
+    prepare_opening_scenarios_for_launch,
+    repair_world_for_launch,
+)
 from app.rpg.worlds.library_service import (
     publish_world_library_generation,
     read_world_detail,
@@ -449,6 +452,17 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
                 scenario_id=str(payload.get("scenario_id") or ""),
                 starting_location_id=str(payload.get("starting_location_id") or ""),
             )
+        except Exception as exc:
+            _raise_domain_error(exc)
+            raise
+
+    @app.post(
+        "/api/rpg/worlds/{world_id}/prepare-openings-for-launch",
+        include_in_schema=False,
+    )
+    async def rpg_world_prepare_openings_for_launch(world_id: str) -> dict[str, Any]:
+        try:
+            return prepare_opening_scenarios_for_launch(world_id)
         except Exception as exc:
             _raise_domain_error(exc)
             raise

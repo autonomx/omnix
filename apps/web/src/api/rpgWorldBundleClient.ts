@@ -7,6 +7,11 @@ export interface RpgWorldBundleImportResponse {
   counts: Record<string, number>;
   identifier_map: Record<string, string>;
   warnings: string[];
+  launch_preparation?: {
+    status?: 'generating' | 'ready' | 'not_required' | 'recovery_required';
+    prepared?: Array<{ scenario_id: string; title: string }>;
+    error?: string;
+  };
 }
 
 export interface RpgWorldBundleDownload {

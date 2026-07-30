@@ -195,9 +195,29 @@ def build_interpretive_adjudication_result(
         runtime_state=_d(runtime_state),
         grounding_packet=packet,
     )
-    line = _line_for_intent(intent=intent, speaker=speaker, profile=profile, player_input=player_input)
-    narration = _narration_for_intent(intent=intent, speaker=speaker, player_input=player_input)
-    visible_response = {"narration": narration, "npc": {"speaker": speaker, "line": line}}
+    if family == "observation":
+        narration = _observation_narration(
+            session=_d(session),
+            simulation_state=_d(simulation_state),
+            grounding_packet=packet,
+        )
+        visible_npc: dict[str, Any] = {}
+    else:
+        narration = _narration_for_intent(
+            intent=intent,
+            speaker=speaker,
+            player_input=player_input,
+        )
+        visible_npc = {
+            "speaker": speaker,
+            "line": _line_for_intent(
+                intent=intent,
+                speaker=speaker,
+                profile=profile,
+                player_input=player_input,
+            ),
+        }
+    visible_response = {"narration": narration, "npc": visible_npc}
     grounding_validation = {
         "ok": True,
         "selected_candidate": "interpretive_adjudication",
@@ -220,7 +240,7 @@ def build_interpretive_adjudication_result(
         "ok": True,
         "action_type": "interpretive_adjudication",
         "semantic_action_type": "interpretive_adjudication",
-        "semantic_family": "social",
+        "semantic_family": family,
         "interpretive_intent": intent,
         "interpretive_intent_family": family,
         "interpretive_fact_constraints": deepcopy(fact_constraints),
@@ -230,7 +250,7 @@ def build_interpretive_adjudication_result(
         "visible_interaction_reason": "world_grounded_interpretive_adjudication",
         "outcome": "interpretive_adjudication",
         "summary": narration,
-        "npc": deepcopy(visible_response["npc"]),
+        "npc": deepcopy(visible_npc),
         "visible_response": deepcopy(visible_response),
         "first_call_visible_response_selection": deepcopy(selection),
         "first_call_grounding_diagnostics": deepcopy(diagnostics),
@@ -245,7 +265,7 @@ def build_interpretive_adjudication_result(
         "narration": narration,
         "final_narration": narration,
         "summary": narration,
-        "npc": deepcopy(visible_response["npc"]),
+        "npc": deepcopy(visible_npc),
         "visible_response": deepcopy(visible_response),
         "first_call_visible_response_selection": deepcopy(selection),
         "first_call_action_advisory": deepcopy(action_advisory),
@@ -426,6 +446,38 @@ def _narration_for_intent(*, intent: str, speaker: str, player_input: str) -> st
     if intent == "unsupported_mechanic_request":
         return f"{speaker} treats the request as a constraint to answer in-world, not a completed mechanic."
     return f"{speaker} keeps the answer grounded in what can be known here."
+
+
+def _observation_narration(
+    *,
+    session: dict[str, Any],
+    simulation_state: dict[str, Any],
+    grounding_packet: dict[str, Any],
+) -> str:
+    """Describe the current published scene without inventing an NPC speaker."""
+
+    state = _d(session.get("state"))
+    location_name = _s(
+        state.get("current_location_name")
+        or state.get("current_location")
+        or state.get("location")
+        or _d(simulation_state.get("location_state")).get("location_name")
+        or _d(_d(grounding_packet).get("authoritative_state")).get("location")
+    ).strip()
+    opening_story = _d(_d(state.get("narrative_affordances")).get("opening_story"))
+    description = _s(
+        opening_story.get("summary")
+        or state.get("summary")
+        or _d(simulation_state.get("scene")).get("description")
+    ).strip()
+    if description:
+        return description
+    if location_name:
+        return (
+            f"You take in {location_name}, noting its immediate paths, occupants, "
+            "and anything that stands out."
+        )
+    return "You take in the immediate scene, noting its paths, occupants, and visible details."
 
 
 def _first_person(speaker: str) -> str:
