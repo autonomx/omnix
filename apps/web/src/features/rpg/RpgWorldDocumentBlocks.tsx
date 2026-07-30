@@ -85,6 +85,42 @@ function recordValue(item: Record<string, unknown>): unknown {
     ?? 'No description was provided.';
 }
 
+function jsonRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'string') return undefined;
+  const candidate = value.trim();
+  if (!candidate.startsWith('{') || !candidate.endsWith('}')) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(candidate);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Older structured-canon generations persisted a complete fact as a JSON
+ * string.  Treat that payload as the fact itself for presentation, while
+ * retaining outer values such as the card label and authority.
+ */
+function presentationRecord(item: Record<string, unknown>): Record<string, unknown> {
+  const embedded = [item.value, item.statement, item.content, item.fact, item.object]
+    .map(jsonRecord)
+    .find((value): value is Record<string, unknown> => value !== undefined);
+  if (!embedded) return item;
+
+  const embeddedObject = embedded.object;
+  return {
+    ...item,
+    ...embedded,
+    // The structured object's individual fields make much better reading than
+    // the complete JSON envelope that was stored in the legacy value.
+    object: embeddedObject ?? item.object,
+    value: embeddedObject ?? embedded.content ?? embedded.statement ?? item.value,
+  };
+}
+
 function visibleBadge(value: unknown): unknown | undefined {
   if (!meaningful(value)) return undefined;
   if (typeof value === 'string' && value.includes(':')) return undefined;
@@ -144,7 +180,20 @@ function detailRows(
 }
 
 function readableRecordValue(value: unknown): string {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => meaningful(item))
+      .map(([key, item]) => `${humanize(key)}: ${readableStructuredValue(item)}`)
+      .join(' · ');
+  }
   return typeof value === 'string' ? value : formatAuthoringValue(value);
+}
+
+function readableStructuredValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(readableStructuredValue).join(', ');
+  if (value && typeof value === 'object') return readableRecordValue(value);
+  return formatAuthoringValue(value);
 }
 
 function proseParagraphs(value: unknown): string[] {
@@ -212,16 +261,17 @@ function StructuredRecord({
   item: Record<string, unknown>;
   timeline?: boolean;
 }) {
-  const references = referenceRows(item.references ?? item.entity_refs ?? item.entities);
-  const details = detailRows(item, timeline);
+  const presentation = presentationRecord(item);
+  const references = referenceRows(presentation.references ?? presentation.entity_refs ?? presentation.entities);
+  const details = detailRows(presentation, timeline);
   return (
     <article className="rpg-authoring-record-card">
       <header>
-        <p className="rpg-authoring-card-eyebrow">{recordLabel(item, index, fallback)}</p>
-        <MetaChips values={recordBadges(item, timeline)} />
+        <p className="rpg-authoring-card-eyebrow">{recordLabel(presentation, index, fallback)}</p>
+        <MetaChips values={recordBadges(presentation, timeline)} />
       </header>
-      <Prose className="rpg-authoring-record-statement" value={recordValue(item)} />
-      <ExpandableLore item={item} />
+      <Prose className="rpg-authoring-record-statement" value={recordValue(presentation)} />
+      <ExpandableLore item={presentation} />
       {references.length ? (
         <section className="rpg-authoring-record-references">
           <h4>References</h4>

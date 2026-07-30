@@ -7,8 +7,14 @@ from typing import Any, Mapping, Sequence
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
-from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
-from app.rpg.session.genesis.world_forge_dossiers import validate_entity_dossier
+from app.rpg.session.genesis.world_forge_generation import (
+    GeneratedTopic,
+    validate_generated_topic_for_publication,
+)
+from app.rpg.session.genesis.world_forge_dossiers import (
+    dossier_prompt_contract,
+    validate_entity_dossier,
+)
 
 from .generation_authorship_policy_signing import (
     bind_signed_authorship_policy,
@@ -16,7 +22,7 @@ from .generation_authorship_policy_signing import (
     signed_authorship_policy,
 )
 from .generation_authorship_runtime import generation_artifact
-from .generation_authorship_signing import attach_signed_human_authorship
+from .generation_authorship_signing import attach_signed_human_authorship, sign_record
 from .generation_coordinator import (
     _graph_from_payload,
     _settings_from_payload,
@@ -28,6 +34,11 @@ from .generation_jobs import (
     topic_generation_fingerprint,
 )
 from .generation_review_state import accepted_review_report
+from .generation_contract_receipt import (
+    canonical_candidate_content_hash,
+    contract_descriptor_from_candidate,
+    require_authoritative_contract_receipt,
+)
 from .lifecycle_service import require_world_writable
 
 _ACCEPTED_DECISIONS = {"accept", "replace"}
@@ -38,10 +49,21 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 
 def _require_reviewable_entity_dossiers(
-    candidate: Mapping[str, Any],
+    candidate: dict[str, Any],
     *,
     topic_id: str,
 ) -> None:
+    dossier_contract = dict(
+        dict(dossier_prompt_contract(topic_id).get("entity_fields") or {}).get(
+            "dossier"
+        )
+        or {}
+    )
+    expected_section_ids = tuple(
+        str(section.get("id") or "")
+        for section in dossier_contract.get("sections") or ()
+        if isinstance(section, Mapping) and str(section.get("id") or "")
+    )
     entities = candidate.get("entities")
     if not isinstance(entities, Sequence) or isinstance(entities, (str, bytes)):
         return
@@ -60,6 +82,17 @@ def _require_reviewable_entity_dossiers(
             if issue.startswith("section_title_required:"):
                 continue
             issues.append(f"{entity_id}:{issue}")
+        dossier = _mapping(value.get("dossier"))
+        actual_section_ids = tuple(
+            str(section.get("id") or "")
+            for section in dossier.get("sections") or ()
+            if isinstance(section, Mapping)
+        )
+        if actual_section_ids != expected_section_ids:
+            issues.append(
+                f"{entity_id}:dossier_section_contract_mismatch:"
+                + ",".join(actual_section_ids)
+            )
     if issues:
         raise ValueError(
             f"world_generation_accept_dossiers_required:{topic_id}:"
@@ -82,8 +115,22 @@ def _accepted_candidate(
         raise ValueError(
             f"world_generation_accept_topic_mismatch:{payload.get('topic_id')}:{topic_id}"
         )
-    GeneratedTopic.from_dict(payload)
+    validate_generated_topic_for_publication(
+        GeneratedTopic.from_dict(payload),
+        expected_topic_id=topic_id,
+    )
     _require_reviewable_entity_dossiers(payload, topic_id=topic_id)
+    require_authoritative_contract_receipt(
+        original_candidate,
+        expected_topic_id=topic_id,
+        require_signature=True,
+    )
+    if not edited:
+        require_authoritative_contract_receipt(
+            payload,
+            expected_topic_id=topic_id,
+            require_signature=True,
+        )
 
     policy = signed_authorship_policy(original_candidate)
     artifact = generation_artifact(original_candidate)
@@ -97,6 +144,21 @@ def _accepted_candidate(
             policy=policy,
         )
         payload = bind_signed_authorship_policy(payload, policy)
+        edited_receipt = sign_record(
+            {
+                **require_authoritative_contract_receipt(
+                    original_candidate,
+                    expected_topic_id=topic_id,
+                    require_signature=True,
+                ),
+                "canonical_content_hash": canonical_candidate_content_hash(payload),
+                "human_edited": True,
+                "human_edit_event_id": event_id,
+            }
+        )
+        edited_provenance = _mapping(payload.get("provenance"))
+        edited_provenance["authoritative_contract_receipt"] = edited_receipt
+        payload["provenance"] = edited_provenance
         source = "manual"
     else:
         require_policy_bound_authorship(payload, policy=policy)
@@ -139,7 +201,7 @@ def _promotion_inputs(
     result: Mapping[str, Any],
     *,
     topic_id: str,
-    candidate: Mapping[str, Any],
+    candidate: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], str, str, str]:
     graph = _graph_from_payload(_mapping(run.get("graph")))
     node = graph.node_map().get(topic_id)
@@ -168,6 +230,7 @@ def _promotion_inputs(
         directives=directives,
         entity_manifest_hash=str(run_context.get("entity_manifest_hash") or ""),
         settings=settings,
+        contract_descriptor=contract_descriptor_from_candidate(candidate),
     )
     provenance = _mapping(candidate.get("provenance"))
     provenance.update(

@@ -129,6 +129,25 @@
   font-weight: 800;
 }
 
+.rpg-world-command-popover header .rpg-world-popover-close {
+  display: grid;
+  grid-template-columns: none;
+  width: 1.85rem;
+  min-width: 1.85rem;
+  height: 1.85rem;
+  min-height: 1.85rem;
+  margin-left: 0.2rem;
+  padding: 0;
+  place-items: center;
+  border-color: rgba(168, 139, 250, 0.2);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.64);
+  color: #f8fafc;
+  font-size: 1.25rem;
+  line-height: 1;
+  text-align: center;
+}
+
 .rpg-world-command-popover > p {
   margin: 0;
   color: rgba(203, 213, 225, 0.76);

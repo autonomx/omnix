@@ -14,6 +14,17 @@ DOSSIER_SCHEMA_VERSION = "rpg_world_entity_dossier_v1"
 SectionSpec = tuple[str, str, tuple[str, ...]]
 
 _SECTION_TEMPLATES: Mapping[str, tuple[SectionSpec, ...]] = {
+    "setting_rules": (
+        ("overview", "Overview", ("description", "summary", "rule")),
+        ("foundations", "Foundations", ("foundations", "origins", "principles")),
+        (
+            "lived_experience",
+            "Lived Experience",
+            ("observable_consequences", "daily_life", "social_effects"),
+        ),
+        ("boundaries", "Boundaries and Constraints", ("boundaries", "limits", "exceptions")),
+        ("consequences", "Consequences", ("consequences", "conflicts", "pressures")),
+    ),
     "regions": (
         ("overview", "Overview", ("description", "summary")),
         ("geography", "Geography", ("geography", "terrain", "climate")),

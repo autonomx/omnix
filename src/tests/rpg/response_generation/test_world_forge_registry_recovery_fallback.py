@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import pytest
+
 from app.providers.base import (
     BaseProvider,
     ChatMessage,
@@ -15,6 +17,7 @@ from app.rpg.worlds.generation_recovering_provider import (
     RecoveringFirstPassWorldForgeTopicGenerator,
 )
 from app.rpg_world_forge_provider import WorldForgeProviderConfig
+from app.rpg_world_forge_single_pass_provider import SinglePassWorldForgeProviderError
 
 
 class _Provider(BaseProvider):
@@ -43,7 +46,7 @@ class _Provider(BaseProvider):
         return True
 
 
-def test_failed_registry_extraction_retains_allocated_identity_and_visible_lore() -> None:
+def test_failed_registry_extraction_is_non_acceptable_failure_evidence() -> None:
     malformed = {
         "topic_id": "groups",
         "items": [
@@ -81,22 +84,16 @@ def test_failed_registry_extraction_retains_allocated_identity_and_visible_lore(
         metadata={},
     )
 
-    registry, diagnostics, _, _ = generator._generate_entity_registry(
-        node,
-        seed=10,
-        campaign_context={},
-        dependency_topics={},
-    )
+    with pytest.raises(SinglePassWorldForgeProviderError) as captured:
+        generator._generate_entity_registry(
+            node,
+            seed=10,
+            campaign_context={},
+            dependency_topics={},
+        )
 
     assert len(provider.calls) == 2
-    assert diagnostics["structured_recovery"]["method"] == (
-        "retained_invalid_registry"
-    )
-    assert [row.id for row in registry.entities] == [
-        "ent:groups:001",
-        "ent:groups:002",
-    ]
-    assert [row.name for row in registry.entities] == ["Neon Wardens", "Ash Cartel"]
-    assert registry.provenance["structured_recovery_retained_registry"][
-        "decoded_candidate"
-    ]["items"][0]["title"] == "Neon Wardens"
+    artifact = captured.value.diagnostics["failure_artifact"]
+    assert artifact["stage"] == "recovery_exhausted"
+    assert artifact["correction_attempted"] is True
+    assert artifact["raw_response_hash"]

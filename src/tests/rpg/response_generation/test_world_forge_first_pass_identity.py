@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -13,6 +14,7 @@ from app.providers.base import (
     ProviderConfig,
 )
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
+from app.rpg.session.genesis.world_forge_dossiers import dossier_prompt_contract
 from app.rpg.worlds.generation_first_pass_provider import (
     FirstPassWorldForgeTopicGenerator,
 )
@@ -99,32 +101,38 @@ def _history_node() -> CampaignTopicNode:
 
 
 def _topic_payload(topic_id: str, entity: dict[str, Any]) -> str:
+    canonical_topic_id = (
+        topic_id
+        if not topic_id.startswith("ent:")
+        else topic_id.split(":", 2)[1]
+    )
+    sections = dossier_prompt_contract(canonical_topic_id)["entity_fields"][
+        "dossier"
+    ]["sections"]
     entity = {
         **entity,
+        "kind": entity.get("kind") or canonical_topic_id,
         "short_summary": entity.get("short_summary")
         or "A provider-authored historical summary.",
         "dossier": entity.get("dossier")
         or {
-            "schema_version": "rpg_world_entity_dossier_v1",
-            "sections": [
-                {
-                    "id": "overview",
-                    "title": "Overview",
-                    "paragraphs": ["Provider-authored long-form historical lore."],
+            "sections": {
+                section["id"]: {
+                    "paragraphs": ["Provider-authored long-form historical lore."]
                 }
-            ],
+                for section in sections
+            },
         },
+        **({"attributes": {}} if canonical_topic_id == "threats" else {}),
     }
     return json.dumps(
         {
             "topic_id": topic_id,
             "documents": [],
             "entities": [entity],
-            "facts": [],
             "relationships": [],
             "knowledge_rules": [],
             "story_threads": [],
-            "provenance": {},
         }
     )
 
@@ -183,6 +191,59 @@ def test_history_timeline_root_identity_is_schema_pinned_on_first_call() -> None
     identity = request["required_output"]["identity_contract"]
     assert identity["root_topic_id"] == "history_timeline"
     assert identity["allocated_entity_ids"] == ["ent:history_timeline:001"]
+
+
+def test_dossier_regeneration_pins_requested_entity_and_quality_target() -> None:
+    node = replace(
+        _history_node(),
+        metadata={
+            **dict(_history_node().metadata),
+            "entity_dossier_regeneration": {
+                "entity_id": "ent:history_timeline:007",
+                "entity_name": "The Seventh Accord",
+                "editorial_only": True,
+            },
+        },
+    )
+    provider = _Provider(
+        [
+            _topic_payload(
+                "history_timeline",
+                {
+                    "id": "ent:history_timeline:007",
+                    "kind": "historical_event",
+                    "name": "The Seventh Accord",
+                    "year": 2097,
+                    "event": "The seventh utility compact divided the remaining grid.",
+                },
+            )
+        ]
+    )
+
+    topic = _generator(provider).generate(
+        node,
+        seed=8,
+        campaign_context={
+            "entity_dossier_regeneration": {
+                "entity_id": "ent:history_timeline:007",
+                "current_canonical_entity": {
+                    "id": "ent:history_timeline:007",
+                    "name": "The Seventh Accord",
+                },
+            }
+        },
+        dependency_topics={},
+    )
+
+    assert topic.entities[0]["id"] == "ent:history_timeline:007"
+    schema = _schema(provider.calls[0])
+    entity_schema = _resolve(schema, schema["properties"]["entities"]["items"])
+    assert entity_schema["properties"]["id"]["const"] == "ent:history_timeline:007"
+    prompt = provider.calls[0]["messages"][0].content
+    assert "dossier-only regeneration" in prompt
+    assert "at least 438 words" in prompt
+    assert "validator requires 350" in prompt
+    assert "every paragraph at least 24 words" in prompt
 
 
 def test_logged_entity_id_in_root_topic_id_is_rejected_by_schema() -> None:
@@ -273,7 +334,6 @@ def test_registry_root_and_allocated_ids_are_schema_pinned() -> None:
                             "distinction": "controls dead-grid hardware",
                         },
                     ],
-                    "provenance": {},
                 }
             )
         ]

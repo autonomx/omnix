@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.rpg.worlds.generation_contract_bundle import CONTRACT_VERSION
 from app.rpg.worlds.generation_attempt_history import with_validation_attempt
 from app.rpg.worlds.generation_review_state import (
     accepted_review_report,
@@ -41,7 +42,12 @@ def _result(
         "status": "needs_review",
         "candidate_hash": candidate_hash,
         "validation": validation or _failed_validation(),
-        "provider": {"provider": "lmstudio", "model": "test", "attempt_count": 1},
+        "provider": {
+            "provider": "lmstudio",
+            "model": "test",
+            "attempt_count": 1,
+            "contract_descriptor": {"contract_version": CONTRACT_VERSION},
+        },
         "job_id": f"job:{run_id}",
         "previous_result": previous_result,
     }
@@ -178,6 +184,38 @@ def test_review_state_combines_parent_and_manual_retry_attempts() -> None:
         "sha256:first",
         "sha256:second",
     ]
+
+
+def test_changed_generation_strategy_resets_no_op_lineage() -> None:
+    parent = _result(run_id="run:1", candidate_hash="sha256:same")
+    parent["provider"]["strategy_identity"] = "sha256:qwen"
+    child = _result(
+        run_id="run:2",
+        candidate_hash="sha256:same",
+        previous_result=parent,
+    )
+    child["provider"]["strategy_identity"] = "sha256:gemma"
+
+    state = review_state(child)
+
+    assert state["repair_evaluation"]["outcome"] == "no_op"
+    assert state["consecutive_no_op_count"] == 0
+    assert state["retry_budget_exhausted"] is False
+
+
+def test_unknown_legacy_strategy_does_not_match_unknown_legacy_strategy() -> None:
+    parent = _result(run_id="run:1", candidate_hash="sha256:same")
+    child = _result(
+        run_id="run:2",
+        candidate_hash="sha256:same",
+        previous_result=parent,
+    )
+
+    state = review_state(child)
+
+    assert state["repair_evaluation"]["outcome"] == "no_op"
+    assert state["consecutive_no_op_count"] == 0
+    assert state["retry_budget_exhausted"] is False
 
 
 def test_acceptance_preserves_materialised_attempt_ledger() -> None:

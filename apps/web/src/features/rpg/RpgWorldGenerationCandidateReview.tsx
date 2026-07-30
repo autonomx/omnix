@@ -19,6 +19,7 @@ interface Props {
   onAccepted: () => Promise<void> | void;
   onClose: () => void;
   onRetryStarted: () => Promise<void> | void;
+  reviewEnabled: boolean;
   result: RpgWorldGenerationTopicResult;
   runId: string;
   section: RpgAuthoringSection;
@@ -169,6 +170,7 @@ export function RpgWorldGenerationCandidateReview({
   onAccepted,
   onClose,
   onRetryStarted,
+  reviewEnabled,
   result,
   runId,
   section,
@@ -196,10 +198,13 @@ export function RpgWorldGenerationCandidateReview({
   const toc = useMemo(() => documentAnchors(blocks), [blocks]);
 
   const acceptMutation = useMutation({
-    mutationFn: () => rpgWorldGenerationReviewClient.accept(runId, result.topic_id, {
-      candidate: preview,
-      expected_candidate_hash: result.candidate_hash,
-    }),
+    mutationFn: () => {
+      if (!reviewEnabled) throw new Error('Review opens after world generation finishes.');
+      return rpgWorldGenerationReviewClient.accept(runId, result.topic_id, {
+        candidate: preview,
+        expected_candidate_hash: result.candidate_hash,
+      });
+    },
     onSuccess: async () => {
       setFeedback('Candidate accepted and promoted to editable authoring canon.');
       await onAccepted();
@@ -210,9 +215,12 @@ export function RpgWorldGenerationCandidateReview({
   });
 
   const retryMutation = useMutation({
-    mutationFn: () => rpgWorldGenerationReviewClient.retry(runId, {
-      topic_ids: [result.topic_id],
-    }),
+    mutationFn: () => {
+      if (!reviewEnabled) throw new Error('Review opens after world generation finishes.');
+      return rpgWorldGenerationReviewClient.retry(runId, {
+        topic_ids: [result.topic_id],
+      });
+    },
     onSuccess: async () => {
       setFeedback('A targeted retry run was started. The retained candidate remains available.');
       await onRetryStarted();
@@ -239,20 +247,26 @@ export function RpgWorldGenerationCandidateReview({
     <section className="rpg-generation-candidate-review" aria-label="Recovered lore review page">
       <header className="rpg-generation-candidate-review-banner">
         <div>
-          <p className="eyebrow">Recovered — Needs Review</p>
+          <p className="eyebrow">
+            {reviewEnabled ? 'Recovered — Needs Review' : 'Provisional candidate — Generation continuing'}
+          </p>
           <h2>{candidateTitle(preview, section)}</h2>
-          <p>{reviewSummary(result)}</p>
+          <p>
+            {reviewEnabled
+              ? reviewSummary(result)
+              : 'This candidate is feeding dependent topics provisionally. Review actions unlock after every topic finishes.'}
+          </p>
         </div>
         <div>
-          <button type="button" onClick={() => setEditing((value) => !value)}>
+          <button type="button" disabled={!reviewEnabled} onClick={() => setEditing((value) => !value)}>
             {editing ? 'Close Editor' : 'Edit Candidate'}
           </button>
-          <button type="button" disabled={retryMutation.isPending} onClick={() => retryMutation.mutate()}>
+          <button type="button" disabled={!reviewEnabled || retryMutation.isPending} onClick={() => retryMutation.mutate()}>
             {retryMutation.isPending ? 'Starting Retry…' : 'Retry Generation'}
           </button>
           <button
             type="button"
-            disabled={acceptMutation.isPending || !result.candidate}
+            disabled={!reviewEnabled || acceptMutation.isPending || !result.candidate}
             onClick={() => acceptMutation.mutate()}
           >
             {acceptMutation.isPending ? 'Accepting…' : 'Accept Candidate'}

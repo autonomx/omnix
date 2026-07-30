@@ -47,6 +47,12 @@ class StructuredContract(Generic[T]):
     temperature: float = 0.0
     max_tokens: int | None = None
     regenerate_on_semantic_failure: bool = True
+    exact_json_object: bool = False
+    max_raw_bytes: int | None = None
+    max_json_depth: int | None = None
+    max_json_nodes: int | None = None
+    max_json_string_length: int | None = None
+    max_json_array_length: int | None = None
 
     @property
     def qualified_id(self) -> str:
@@ -88,6 +94,7 @@ class StructuredDiagnostics:
     schema_hash: str
     provider: str
     model: str
+    provider_schema_hash: str = ""
     selected_mode: StructuredMode | None = None
     attempted_modes: tuple[StructuredMode, ...] = ()
     provider_calls: int = 0
@@ -105,6 +112,7 @@ class StructuredDiagnostics:
             "contract_id": self.contract_id,
             "contract_version": self.contract_version,
             "schema_hash": self.schema_hash,
+            "provider_schema_hash": self.provider_schema_hash,
             "provider": self.provider,
             "model": self.model,
             "selected_mode": self.selected_mode.value if self.selected_mode else "",

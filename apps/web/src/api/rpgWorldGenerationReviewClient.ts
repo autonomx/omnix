@@ -115,6 +115,30 @@ export interface RpgWorldGenerationReviewDecision {
   outstanding_finding_count?: number;
 }
 
+export interface RpgWorldGenerationFailureArtifact {
+  schema_version: 'rpg_world_forge_failure_artifact_v1' | string;
+  artifact_id: string;
+  run_id: string;
+  job_id: string;
+  topic_id: string;
+  attempt: number;
+  stage: string;
+  provider: string;
+  model: string;
+  structured_mode: string;
+  strategy_identity: string;
+  provider_schema_hash: string;
+  canonical_contract_hash: string;
+  raw_response_hash: string;
+  raw_response_bytes: number;
+  sanitized_excerpt: string;
+  issues: Array<{ stage: string; path: string; code: string; message: string }>;
+  deterministic_repairs: string[];
+  correction_attempted: boolean;
+  correction_result: string;
+  created_at: string;
+}
+
 export interface RpgWorldGenerationTopicResult {
   run_id: string;
   world_id: string;
@@ -126,6 +150,7 @@ export interface RpgWorldGenerationTopicResult {
   validation: RpgWorldGenerationReviewReport;
   review_state?: RpgWorldGenerationReviewState;
   provider: Record<string, unknown>;
+  failure_artifact?: RpgWorldGenerationFailureArtifact | null;
   dependency_hashes: Record<string, string>;
   dependency_trust: Record<string, string>;
   job_id: string;

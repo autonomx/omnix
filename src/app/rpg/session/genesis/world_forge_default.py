@@ -91,7 +91,7 @@ class ReferenceSafeWorldForgeGenerator:
         campaign_context: Mapping[str, Any],
     ) -> GeneratedTopic:
         retry = cls._manual_retry_config(campaign_context)
-        if retry is None:
+        if retry is None or not isinstance(retry.get("prior_candidate"), Mapping):
             return topic
         return replace(
             topic,

@@ -39,6 +39,7 @@ def _run() -> dict:
         "run_id": "run:child",
         "world_id": "world:1",
         "draft_revision": 1,
+        "status": "review",
         "graph": graph.as_dict(),
         "context": {
             "scope": {
@@ -160,6 +161,28 @@ def test_keep_decision_does_not_promote_candidate(monkeypatch: pytest.MonkeyPatc
     assert work.world_generation.updated["plan"]["review_decisions"]["rules"]["decision"] == "keep"
 
 
+def test_decision_is_rejected_until_generation_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    work = _Work()
+    work.world_generation.run["status"] = "running"
+    monkeypatch.setattr(generation_retry, "bootstrap_local_tenant", lambda database: object())
+    monkeypatch.setattr(generation_retry, "unit_of_work", lambda database: work)
+
+    with pytest.raises(
+        ValueError,
+        match="world_generation_decision_requires_completed_review",
+    ):
+        generation_retry.decide_world_generation_retry(
+            "run:child",
+            "rules",
+            decision="keep",
+        )
+
+    assert work.world_generation.updated is None
+    assert work.world_scenarios.promotions == []
+
+
 def test_replace_decision_promotes_only_after_explicit_action(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -225,6 +248,9 @@ def test_spooled_persistence_replay_extends_queue_attempt_budget(
     )
     assert retryable is True
     params = work.connection.calls[0][1]
+    sql = work.connection.calls[0][0]
+    assert "'code', %s::text" in sql
+    assert "'resume_policy', %s::text" in sql
     assert params[0] == "retrying"
     assert params[1] == 3
     assert params[4] == "persist_existing_spool"

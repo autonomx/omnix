@@ -19,13 +19,45 @@ from .generation_authorship_signing import (
     attach_signed_llm_authorship,
     harden_and_sign_generation_artifact,
     sanitize_untrusted_candidate,
+    sign_record,
 )
 from .generation_manifest_binding import (
     bind_generated_topic_to_manifest,
     dependency_manifest_aliases,
     manifest_slots_from_node,
 )
+from .generation_contract_receipt import (
+    canonical_candidate_content_hash,
+    require_authoritative_contract_receipt,
+)
 from .generation_test_mode import deterministic_world_forge_test_mode
+from .generation_failure_artifact import FailureStage, build_failure_artifact
+
+
+class WorldForgePublicationBoundaryError(RuntimeError):
+    def __init__(
+        self,
+        node: CampaignTopicNode,
+        error: Exception,
+        *,
+        stage: FailureStage,
+        diagnostics: Mapping[str, Any] | None = None,
+    ) -> None:
+        rows = dict(diagnostics or {})
+        artifact = build_failure_artifact(
+            topic_id=node.topic_id,
+            stage=stage,
+            error=error,
+            raw_text="",
+            diagnostics=rows,
+        )
+        rows["failure_artifact"] = artifact.model_dump(mode="json")
+        self.diagnostics = rows
+        self.error = error
+        super().__init__(
+            f"world_forge_publication_boundary_failed:{node.topic_id}:"
+            f"{type(error).__name__}:{error}"
+        )
 
 
 def _generator_context(generator: Any) -> dict[str, Any]:
@@ -41,6 +73,9 @@ def _generator_context(generator: Any) -> dict[str, Any]:
             for key in ("run_id", "job_id", "topic_id", "world_id", "draft_revision"):
                 if payload.get(key) not in (None, ""):
                     context.setdefault(key, payload.get(key))
+            descriptor = payload.get("contract_descriptor")
+            if isinstance(descriptor, Mapping):
+                context.setdefault("contract_descriptor", dict(descriptor))
         for key in ("run_id", "job_id", "topic_id", "world_id", "draft_revision"):
             value = getattr(current, key, None)
             if value not in (None, ""):
@@ -66,40 +101,6 @@ def _reference_field_ids(metadata: Mapping[str, Any]) -> tuple[str, ...]:
     )
 
 
-def _review_blocked(
-    topic: GeneratedTopic,
-    *,
-    node: CampaignTopicNode,
-    code: str,
-    message: str,
-) -> GeneratedTopic:
-    return replace(
-        topic,
-        provenance={
-            **dict(topic.provenance),
-            "used_llm": False,
-            "generation_status": "needs_review",
-            "generation_review": {
-                "schema_version": "rpg_world_generation_review_v1",
-                "status": "needs_review",
-                "blocking": True,
-                "error_type": "UntrustedGenerationAuthorship",
-                "reason_codes": [code],
-                "issues": [
-                    {
-                        "code": code,
-                        "topic_id": node.topic_id,
-                        "entity_id": "",
-                        "field_id": "provenance",
-                        "message": message,
-                    }
-                ],
-                "summary": message,
-            },
-        },
-    )
-
-
 class PublicationValidatedWorldForgeGenerator:
     """Validate provider output and replace all incoming authorship with signed evidence."""
 
@@ -114,32 +115,90 @@ class PublicationValidatedWorldForgeGenerator:
         campaign_context: Mapping[str, Any],
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
-        generated = self.generator.generate(
-            node,
-            seed=seed,
-            campaign_context=campaign_context,
-            dependency_topics=dependency_topics,
-        )
-        validated = validate_generated_topic_for_publication(
-            generated,
-            expected_topic_id=node.topic_id,
-        )
+        try:
+            generated = self.generator.generate(
+                node,
+                seed=seed,
+                campaign_context=campaign_context,
+                dependency_topics=dependency_topics,
+            )
+        except Exception as exc:
+            if getattr(exc, "diagnostics", None):
+                raise
+            raise WorldForgePublicationBoundaryError(
+                node,
+                exc,
+                stage="topic_audit",
+            ) from exc
+        context = _generator_context(self.generator)
+        authoritative_receipt: dict[str, Any] = {}
+        try:
+            authoritative_receipt = require_authoritative_contract_receipt(
+                generated,
+                expected_topic_id=node.topic_id,
+                verify_content_hash=False,
+            )
+        except ValueError:
+            if not deterministic_world_forge_test_mode():
+                error = ValueError(
+                    "world_forge_authoritative_contract_receipt_required"
+                )
+                raise WorldForgePublicationBoundaryError(
+                    node,
+                    error,
+                    stage="contract_mismatch",
+                    diagnostics=dict(generated.provenance),
+                ) from error
+        try:
+            validated = validate_generated_topic_for_publication(
+                generated,
+                expected_topic_id=node.topic_id,
+            )
+        except Exception as exc:
+            raise WorldForgePublicationBoundaryError(
+                node,
+                exc,
+                stage="canonical_validation",
+                diagnostics=dict(generated.provenance),
+            ) from exc
         metadata = dict(node.metadata) if isinstance(node.metadata, Mapping) else {}
-        bound = bind_generated_topic_to_manifest(
-            validated.topic,
-            manifest_slots_from_node(metadata),
-            manifest_hash=str(metadata.get("entity_manifest_hash") or ""),
-            reference_aliases=dependency_manifest_aliases(dependency_topics),
-            reference_field_ids=_reference_field_ids(metadata),
-        )
+        try:
+            bound = bind_generated_topic_to_manifest(
+                validated.topic,
+                manifest_slots_from_node(metadata),
+                manifest_hash=str(metadata.get("entity_manifest_hash") or ""),
+                reference_aliases=dependency_manifest_aliases(dependency_topics),
+                reference_field_ids=_reference_field_ids(metadata),
+            )
+        except Exception as exc:
+            raise WorldForgePublicationBoundaryError(
+                node,
+                exc,
+                stage="canonical_validation",
+                diagnostics=dict(generated.provenance),
+            ) from exc
+        if authoritative_receipt:
+            planned_descriptor = context.get("contract_descriptor")
+            if isinstance(planned_descriptor, Mapping):
+                authoritative_receipt.update(dict(planned_descriptor))
+            authoritative_receipt = sign_record(
+                {
+                    **authoritative_receipt,
+                    "canonical_content_hash": canonical_candidate_content_hash(bound),
+                    "publication_boundary": "publication_validated_world_forge_v2",
+                }
+            )
         receipt = validated.receipt.as_dict()
         sanitized = sanitize_untrusted_candidate(bound.as_dict())
         sanitized_provenance = dict(sanitized.get("provenance") or {})
+        if authoritative_receipt:
+            sanitized_provenance["authoritative_contract_receipt"] = (
+                authoritative_receipt
+            )
         sanitized_provenance["validation_receipt"] = receipt
         sanitized["provenance"] = sanitized_provenance
         topic = GeneratedTopic.from_dict(sanitized)
 
-        context = _generator_context(self.generator)
         provenance = dict(topic.provenance)
         provider = str(provenance.get("provider") or context.get("provider") or "")
         model = str(provenance.get("model") or context.get("model") or "")
@@ -157,15 +216,13 @@ class PublicationValidatedWorldForgeGenerator:
                         "generation_status": "accepted",
                     },
                 )
-            return _review_blocked(
-                topic,
-                node=node,
-                code="production_generation_artifact_untrusted",
-                message=(
-                    "Production lore requires a configured LLM provider and model. "
-                    "Deterministic and unknown generators are test-only."
-                ),
-            )
+            error = ValueError("production_generation_artifact_untrusted")
+            raise WorldForgePublicationBoundaryError(
+                node,
+                error,
+                stage="canonical_validation",
+                diagnostics=provenance,
+            ) from error
 
         provider_metadata = {**provenance, "provider": provider, "model": model}
         policy = (
@@ -197,14 +254,22 @@ class PublicationValidatedWorldForgeGenerator:
                 policy=policy,
             )
             authored = bind_signed_authorship_policy(authored, policy)
-        except (AuthorshipValidationError, AuthorshipSigningKeyUnavailable) as exc:
-            return _review_blocked(
-                topic,
-                node=node,
-                code="production_generation_evidence_invalid",
-                message=str(exc),
+            authored_provenance = dict(authored.get("provenance") or {})
+            authored_provenance["authoritative_contract_receipt"] = (
+                authoritative_receipt
             )
+            authored["provenance"] = authored_provenance
+        except (AuthorshipValidationError, AuthorshipSigningKeyUnavailable) as exc:
+            raise WorldForgePublicationBoundaryError(
+                node,
+                exc,
+                stage="canonical_validation",
+                diagnostics=provenance,
+            ) from exc
         return GeneratedTopic.from_dict(authored)
 
 
-__all__ = ["PublicationValidatedWorldForgeGenerator"]
+__all__ = [
+    "PublicationValidatedWorldForgeGenerator",
+    "WorldForgePublicationBoundaryError",
+]

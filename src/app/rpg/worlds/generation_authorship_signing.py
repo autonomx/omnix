@@ -294,6 +294,7 @@ def sanitize_untrusted_candidate(candidate: Mapping[str, Any]) -> dict[str, Any]
             "test_authorship_exemption",
             "authorship_validation",
             "validation_receipt",
+            "authoritative_contract_receipt",
         ):
             row.pop(key, None)
         payload["provenance"] = row

@@ -22,6 +22,7 @@ from app.rpg.worlds.generation_review_analytics import (
     world_generation_review_analytics,
 )
 from app.rpg.worlds.generation_review_state import review_state
+from app.rpg.worlds.generation_worker import kick_world_generation_worker
 
 _ROUTE_SENTINEL = "_omnix_rpg_world_generation_review_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_generation_review_hook_installed"
@@ -111,6 +112,12 @@ def _run_with_results(
             )
             parent_run_id = str(parent_run.get("parent_run_id") or "")
         work.rollback()
+    if str(run.get("status") or "") in {"planned", "running"}:
+        settings = dict(run.get("settings") or {})
+        kick_world_generation_worker(
+            database=None,
+            provider_route=str(settings.get("provider_route") or ""),
+        )
     decisions = _decisions(run)
     augmented = []
     for row in results:
@@ -119,6 +126,10 @@ def _run_with_results(
             **row,
             "previous_result": _previous_result_chain(topic_id, parent_result_maps),
             "decision": decisions.get(topic_id),
+            "failure_artifact": dict(
+                dict(row.get("provider") or {}).get("failure_artifact") or {}
+            )
+            or None,
         }
         value["review_state"] = review_state(value)
         augmented.append(value)

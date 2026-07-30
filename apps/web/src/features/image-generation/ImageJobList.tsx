@@ -33,6 +33,7 @@ export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, on
           const assetId = firstImageAssetId(job);
           const prompt = imageJobPrompt(job);
           const progress = imageJobProgressPresentation(job);
+          const duration = imageJobDurationLabel(job);
           return (
             <article className="image-job-card" key={job.id} aria-label={`Image job ${prompt || job.id}`}>
               <div className="image-job-header">
@@ -57,6 +58,7 @@ export function ImageJobList({ jobs, cancelingJobId, retryingJobId, onCancel, on
                 <div className="image-job-details">
                   <Progress className={progress.indeterminate ? 'image-job-progress indeterminate' : 'image-job-progress'} value={progress.value} aria-label={`${job.type} progress`} />
                   <Text size="xs">{progress.label}</Text>
+                  {duration ? <Text className="image-job-duration" size="xs">{duration}</Text> : null}
                   {job.error ? <Text c="red" size="xs" role="alert">{job.error.message} ({job.error.code})</Text> : null}
                   <div className="image-job-actions">
                     {assetId ? (
@@ -148,5 +150,33 @@ function imageJobProgressPresentation(job: JobRecord): ImageJobProgressPresentat
 function progressPercent(progress: { current: number; total: number } | undefined): number {
   if (!progress || progress.total <= 0) return 0;
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
+}
+
+export function imageJobDurationLabel(job: JobRecord, now = Date.now()): string | undefined {
+  const startedAt = timestamp(job.started_at);
+  if (!startedAt) return undefined;
+
+  if (job.status === 'completed') {
+    const completedAt = timestamp(job.completed_at) ?? timestamp(job.updated_at);
+    return completedAt ? `Generated in ${formatDuration(completedAt - startedAt)}` : undefined;
+  }
+
+  return ACTIVE_STATUSES.has(job.status) ? `Generating for ${formatDuration(now - startedAt)}` : undefined;
+}
+
+function timestamp(value: string | null | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function formatDuration(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1_000));
+  const hours = Math.floor(seconds / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const remainingSeconds = seconds % 60;
+  if (hours) return `${hours}h ${minutes}m`;
+  if (minutes) return `${minutes}m ${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
 }
 

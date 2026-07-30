@@ -102,4 +102,16 @@ def project_provider_schema(
     )
     if not isinstance(projected, dict):
         raise TypeError("projected structured schema must be an object")
+    if schema_profile == "canon_strict":
+        # Canon provenance is server-authored after validation. Leaving this
+        # provider field open-ended lets a local guided decoder legally emit
+        # the complete authorship ledger and exhaust its completion budget.
+        # Keep the required transport field, but constrain it to a placeholder.
+        properties = projected.get("properties")
+        if isinstance(properties, dict) and "provenance" in properties:
+            properties["provenance"] = {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            }
     return projected

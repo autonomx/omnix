@@ -35,6 +35,10 @@ class StructuredDecodeError(StructuredOutputError):
     """Provider content could not be decoded as one JSON object."""
 
 
+class StructuredResourceError(StructuredOutputError):
+    """Provider content exceeded a configured structured-payload limit."""
+
+
 @dataclass(frozen=True)
 class StructuredValidationIssue:
     path: tuple[str | int, ...]

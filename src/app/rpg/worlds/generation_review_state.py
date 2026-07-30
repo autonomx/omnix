@@ -4,7 +4,10 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .generation_attempt_history import preserve_attempt_history, with_validation_attempt
-from .generation_repair_evaluation import evaluate_retry_repair
+from .generation_repair_evaluation import (
+    evaluate_retry_repair,
+    same_current_retry_strategy,
+)
 
 _FAILED_VALIDATION_STATUSES = {"blocked", "failed", "needs_review", "rejected"}
 
@@ -156,6 +159,7 @@ def review_state(result: Mapping[str, Any] | None) -> dict[str, Any]:
         consecutive_no_ops = (
             int(previous_state.get("consecutive_no_op_count") or 0) + 1
             if repair_evaluation["outcome"] == "no_op"
+            and same_current_retry_strategy(row, previous_result)
             else 0
         )
     by_id: dict[str, dict[str, Any]] = {}

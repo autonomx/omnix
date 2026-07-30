@@ -27,6 +27,7 @@ from .structured.transport import (
 
 _NATIVE_CHAT_COMPLETIONS_ENDPOINT = "/api/v0/chat/completions"
 _OPENAI_CHAT_COMPLETIONS_ENDPOINT = "/v1/chat/completions"
+_DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
 class LMStudioProvider(BaseProvider):
@@ -198,6 +199,27 @@ class LMStudioProvider(BaseProvider):
             include_metrics=include_metrics,
             timeout=timeout,
         )
+        max_response_bytes = max(
+            1,
+            int(
+                self.config.extra_params.get("max_response_bytes")
+                or _DEFAULT_MAX_RESPONSE_BYTES
+            ),
+        )
+        try:
+            declared_length = int(response.headers.get("content-length") or 0)
+        except (TypeError, ValueError):
+            declared_length = 0
+        if declared_length > max_response_bytes:
+            raise ConnectionError(
+                "LM Studio response exceeds configured byte limit: "
+                f"{declared_length}>{max_response_bytes}"
+            )
+        if len(response.content) > max_response_bytes:
+            raise ConnectionError(
+                "LM Studio response exceeds configured byte limit: "
+                f"{len(response.content)}>{max_response_bytes}"
+            )
         try:
             data = response.json()
         except ValueError as exc:

@@ -122,7 +122,28 @@
   border-radius: 5px;
   background: rgba(10, 14, 34, 0.82);
   color: rgba(241, 245, 249, 0.9);
+  cursor: pointer;
   font-size: 0.72rem;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, color 140ms ease, transform 100ms ease;
+}
+
+.rpg-generation-primary-actions button:not(:disabled):hover {
+  border-color: rgba(240, 210, 126, 0.78);
+  background: rgba(38, 31, 49, 0.94);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(227, 189, 104, 0.1);
+  color: #fff8e7;
+  transform: translateY(-1px);
+}
+
+.rpg-generation-primary-actions button:not(:disabled):active {
+  box-shadow: inset 0 2px 5px rgba(35, 25, 10, 0.26);
+  transform: translateY(1px);
+}
+
+.rpg-generation-primary-actions button:focus-visible {
+  outline: none;
+  border-color: #f0d27e;
+  box-shadow: 0 0 0 3px rgba(240, 210, 126, 0.3);
 }
 
 .rpg-generation-primary-actions button:first-child {
@@ -130,6 +151,13 @@
   background: linear-gradient(180deg, #ecd27f, #d8aa51);
   color: #23190a;
   font-weight: 800;
+}
+
+.rpg-generation-primary-actions button:first-child:not(:disabled):hover {
+  border-color: #fff0ba;
+  background: linear-gradient(180deg, #f8df91, #e0b35b);
+  box-shadow: 0 6px 18px rgba(215, 174, 89, 0.24), 0 0 0 1px rgba(255, 241, 190, 0.28);
+  color: #171004;
 }
 
 .rpg-generation-primary-actions button.is-active,
@@ -145,7 +173,30 @@
 }
 
 .rpg-generation-primary-actions button:disabled {
+  cursor: not-allowed;
   opacity: 0.42;
+}
+
+.rpg-generation-primary-actions label {
+  transition: color 140ms ease;
+}
+
+.rpg-generation-primary-actions label:focus-within {
+  color: #f8df91;
+}
+
+.rpg-generation-primary-actions label input {
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.rpg-generation-primary-actions label input:hover {
+  border-color: rgba(240, 210, 126, 0.56);
+}
+
+.rpg-generation-primary-actions label input:focus-visible {
+  border-color: #f0d27e;
+  box-shadow: 0 0 0 3px rgba(240, 210, 126, 0.22);
+  outline: none;
 }
 
 .rpg-generation-primary-action-feedback {
@@ -346,6 +397,18 @@
   padding: 0.25rem 0.4rem;
   border-radius: 4px;
   background: rgba(148, 163, 184, 0.08);
+}
+
+.rpg-generation-topic-details {
+  display: grid;
+  gap: 0.22rem;
+  line-height: 1.35;
+}
+
+.rpg-generation-topic-details > small {
+  color: rgba(203, 213, 225, 0.6);
+  font-size: 0.58rem;
+  line-height: 1.45;
 }
 
 .is-complete .rpg-generation-topic-status {

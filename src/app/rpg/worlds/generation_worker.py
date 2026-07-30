@@ -36,10 +36,12 @@ from .profile_generation_jobs import (
 )
 
 _DEFAULT_LEASE_SECONDS = 3600
-_DEFAULT_MAX_WORLD_GENERATION_WORKERS = 4
-_LMSTUDIO_MAX_WORLD_GENERATION_WORKERS = 4
+_DEFAULT_MAX_WORLD_GENERATION_WORKERS = 2
+_LMSTUDIO_MAX_WORLD_GENERATION_WORKERS = 2
 _RETRY_POLL_SECONDS = 1.1
 _DATABASE_RECOVERY_POLL_SECONDS = 5.0
+_DAG_IDLE_POLL_SECONDS = 0.25
+_DAG_IDLE_POLLS_BEFORE_STOP = 4
 _LOGGER = logging.getLogger(__name__)
 _worker_lock = threading.Lock()
 _worker_active = False
@@ -175,7 +177,9 @@ def _release_interrupted_job(
     work.connection.execute(
         "UPDATE omnix_jobs SET status = %s, max_attempts = %s, "
         "available_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE available_at END, "
-        "error = jsonb_build_object('code', %s, 'resume_policy', %s), "
+        "error = jsonb_build_object("
+        "'code', %s::text, 'resume_policy', %s::text"
+        "), "
         "lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, "
         "completed_at = CASE WHEN %s THEN NULL ELSE CURRENT_TIMESTAMP END, "
         "updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s",
@@ -479,6 +483,7 @@ def run_world_generation_worker_once(
 def _worker_loop(slot: int, database: Any | None, state: _WorkerPoolState) -> None:
     worker_id = f"rpg-world-generation:local:{slot}"
     database_recovery_pending = False
+    consecutive_empty_polls = 0
     while True:
         with state.condition:
             if state.stop:
@@ -514,27 +519,38 @@ def _worker_loop(slot: int, database: Any | None, state: _WorkerPoolState) -> No
             )
             result = None
         if result is not None:
+            consecutive_empty_polls = 0
             result_status = str(result.get("status") or "")
             if result_status == "retrying":
                 time.sleep(_RETRY_POLL_SECONDS)
             elif result_status == "database_unavailable":
                 time.sleep(_DATABASE_RECOVERY_POLL_SECONDS)
+        else:
+            consecutive_empty_polls += 1
+        retry_after_idle_poll = False
         with state.condition:
             state.calls_in_progress -= 1
             if result is not None:
                 state.completion_generation += 1
                 state.condition.notify_all()
                 continue
-            observed_generation = state.completion_generation
-            if state.calls_in_progress == 0:
+            if consecutive_empty_polls < _DAG_IDLE_POLLS_BEFORE_STOP:
+                retry_after_idle_poll = True
+            elif state.calls_in_progress == 0:
                 state.stop = True
                 state.condition.notify_all()
                 return
-            state.condition.wait_for(
-                lambda: state.stop or state.completion_generation != observed_generation
-            )
-            if state.stop:
-                return
+            else:
+                observed_generation = state.completion_generation
+                state.condition.wait_for(
+                    lambda: state.stop
+                    or state.completion_generation != observed_generation
+                )
+                if state.stop:
+                    return
+                consecutive_empty_polls = 0
+        if retry_after_idle_poll:
+            time.sleep(_DAG_IDLE_POLL_SECONDS)
 
 
 def _worker_pool_loop(database: Any | None, provider_route: str) -> None:

@@ -1,6 +1,7 @@
 """Production provider adapter for typed Campaign World Forge topics."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -213,6 +214,7 @@ class WorldForgeProviderConfig:
     mode: str = "auto"
     provider: str = ""
     model: str = ""
+    prompt_version: str = "world-prompt-v1"
     api_key: str | None = None
     base_url: str | None = None
     timeout_seconds: int = 180
@@ -239,6 +241,10 @@ class WorldForgeProviderConfig:
             .casefold(),
             provider=str(env.get("OMNIX_RPG_WORLD_FORGE_PROVIDER") or "").strip(),
             model=str(env.get("OMNIX_RPG_WORLD_FORGE_MODEL") or "").strip(),
+            prompt_version=str(
+                env.get("OMNIX_RPG_WORLD_FORGE_PROMPT_VERSION")
+                or "world-prompt-v1"
+            ).strip(),
             api_key=(
                 str(env.get("OMNIX_RPG_WORLD_FORGE_API_KEY") or "").strip() or None
             ),
@@ -353,7 +359,10 @@ def _system_prompt(
         "pad output with numbered topic names or generic placeholder canon. Respect "
         "dependency entities and IDs. "
         "Return topic_id plus arrays named documents, entities, facts, relationships, "
-        "knowledge_rules, and story_threads, and a provenance object. Every generated "
+        "knowledge_rules, and story_threads, and a provenance object. Set provenance "
+        "to exactly {}; Omnix adds trusted provider, authorship, usage, and validation "
+        "provenance after accepting the response. Never copy dependency provenance or "
+        "authorship ledgers into the response. Every generated "
         "entity must include short_summary plus a dossier object matching the supplied "
         "rpg_world_entity_dossier_v1 contract. Dossier sections use stable IDs, titled "
         "sections, and one to three substantial paragraphs per substantive section. "
@@ -457,6 +466,7 @@ def _payload(
             "topic_id": node.topic_id,
             "collections": list(_COLLECTIONS),
             "entity_dossier": dossier_prompt_contract(node.topic_id),
+            "provenance": {},
         },
     }
     if batch_index is not None and batch_count is not None:
@@ -478,7 +488,8 @@ def _entity_registry_system_prompt(node: CampaignTopicNode) -> str:
         "setting-grounded name, role, and distinction so later parallel writers can "
         "expand different canon rather than inventing overlapping entities. Return "
         "only topic_id, entities, and provenance. Each entity must contain id, name, "
-        "role, and distinction; do not write dossiers, facts, or documents. The "
+        "role, and distinction; set provenance to exactly {}; do not write dossiers, "
+        "facts, documents, dependency provenance, or authorship ledgers. The "
         f"requested domain is {node.topic_id}."
     )
 
@@ -507,6 +518,7 @@ def _entity_registry_payload(
         "required_output": {
             "topic_id": node.topic_id,
             "entity_fields": ["id", "name", "role", "distinction"],
+            "provenance": {},
         },
     }
 
@@ -855,6 +867,11 @@ class ProviderWorldForgeTopicGenerator:
         batch_index: int,
         requested_count: int,
     ) -> tuple[str, ...]:
+        targeted = node.metadata.get("entity_dossier_regeneration")
+        if isinstance(targeted, Mapping) and requested_count == 1:
+            target_id = str(targeted.get("entity_id") or "").strip()
+            if target_id:
+                return (target_id,)
         prefix = _ENTITY_ID_PREFIXES.get(node.topic_id, node.topic_id)
         first_index = batch_index * self.config.entity_batch_size + 1
         return tuple(
@@ -1115,6 +1132,26 @@ class ProviderWorldForgeTopicGenerator:
         provider_provenance = dict(values[0].provenance)
         batch_count = len(values)
         if batch_count > 1:
+            batch_receipts = [
+                dict(value.provenance).get("authoritative_contract_receipt")
+                for value in values
+            ]
+            receipt = dict(
+                provider_provenance.get("authoritative_contract_receipt") or {}
+            )
+            receipt["authored_draft_hash"] = "sha256:" + hashlib.sha256(
+                json.dumps(
+                    [
+                        dict(row).get("authored_draft_hash")
+                        for row in batch_receipts
+                        if isinstance(row, Mapping)
+                    ],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            receipt["materialized_batch_count"] = batch_count
+            provider_provenance["authoritative_contract_receipt"] = receipt
             provider_provenance["entity_batches"] = {
                 "strategy": "sequential_entity_batches",
                 "batch_count": batch_count,
@@ -1171,7 +1208,15 @@ class ProviderWorldForgeTopicGenerator:
                 "entity_dossier_schema": "rpg_world_entity_dossier_v1",
                 "response_format": str(trusted.get("selected_mode") or ""),
                 "structured_contract": "rpg.world_forge.topic.v3",
+                "prompt_version": self.config.prompt_version,
                 "schema_hash": str(trusted.get("schema_hash") or ""),
+                "provider_schema_hash": str(
+                    trusted.get("provider_schema_hash") or ""
+                ),
+                "canonical_contract_hash": str(
+                    trusted.get("canonical_contract_hash") or ""
+                ),
+                "strategy_identity": str(trusted.get("strategy_identity") or ""),
                 "max_tokens": self.config.max_tokens,
             },
         )

@@ -6,6 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
+from app.rpg.worlds.generation_contract_bundle import CONTRACT_VERSION
 
 _MAX_CONSECUTIVE_NO_OPS = 2
 _REVIEWABLE_PROGRESS_KEYS = (
@@ -17,6 +18,33 @@ _REVIEWABLE_PROGRESS_KEYS = (
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def same_current_retry_strategy(
+    current_result: Mapping[str, Any],
+    previous_result: Mapping[str, Any],
+) -> bool:
+    """Return true only for two attempts made under the active known strategy."""
+
+    current_provider = _mapping(current_result.get("provider"))
+    previous_provider = _mapping(previous_result.get("provider"))
+    current_strategy = str(current_provider.get("strategy_identity") or "")
+    previous_strategy = str(previous_provider.get("strategy_identity") or "")
+    current_contract = str(
+        _mapping(current_provider.get("contract_descriptor")).get("contract_version")
+        or ""
+    )
+    previous_contract = str(
+        _mapping(previous_provider.get("contract_descriptor")).get("contract_version")
+        or ""
+    )
+    return (
+        bool(current_strategy)
+        and bool(previous_strategy)
+        and current_strategy == previous_strategy
+        and current_contract == CONTRACT_VERSION
+        and previous_contract == CONTRACT_VERSION
+    )
 
 
 def _findings(result: Mapping[str, Any] | None) -> list[dict[str, Any]]:
@@ -163,6 +191,10 @@ def consecutive_no_op_count(
     chain = _result_chain(run_id, topic_id, database=database)
     count = 0
     for current, previous in zip(chain, chain[1:]):
+        # Unknown or pre-current contract identities are incomparable. This
+        # grants a clean budget after a model, prompt, or contract deployment.
+        if not same_current_retry_strategy(current, previous):
+            break
         if evaluate_retry_repair(previous, current)["outcome"] != "no_op":
             break
         count += 1
@@ -230,4 +262,5 @@ __all__ = [
     "evaluate_retry_repair",
     "finding_fingerprint",
     "require_retry_budget",
+    "same_current_retry_strategy",
 ]

@@ -8,6 +8,7 @@ from app.rpg.session.genesis.world_forge_dossiers import (
     validate_entity_dossier,
 )
 from app.rpg.worlds.authoring_presentations import entity_card
+from app.rpg.worlds.dossier_authoring import _preserve_canonical_related_entity_ids
 
 
 def test_legacy_race_projects_to_multi_section_dossier_without_migration() -> None:
@@ -98,6 +99,35 @@ def test_explicit_dossier_preserves_editorial_sections_and_quote() -> None:
     assert len(dossier["sections"][0]["paragraphs"]) == 2
     assert dossier["related_entity_ids"] == ["faction:aether_conclave"]
     assert validate_entity_dossier(dossier) == ()
+
+
+def test_dossier_regeneration_preserves_only_canonical_related_ids() -> None:
+    replacement = _preserve_canonical_related_entity_ids(
+        {
+            "id": "ent:actors:002",
+            "name": "Vexia Nova",
+            "dossier": {
+                "sections": [],
+                "related_entity_ids": [
+                    "ent:groups:001",
+                    "slot:actors:002",
+                ],
+            },
+        },
+        {
+            "sections": [],
+            "related_entity_ids": [
+                "slot:actors:002",
+                "ent:groups:999",
+            ],
+        },
+        topic_id="actors",
+        entity_id="ent:actors:002",
+        content={},
+        known_ids={"ent:actors:002", "ent:groups:001"},
+    )
+
+    assert replacement["related_entity_ids"] == ["ent:groups:001"]
 
 
 def test_numbered_placeholder_sections_use_topic_specific_headings() -> None:

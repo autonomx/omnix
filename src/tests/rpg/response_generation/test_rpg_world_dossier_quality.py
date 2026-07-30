@@ -91,3 +91,7 @@ def test_explicit_shallow_live_dossier_is_enriched_before_validation() -> None:
     dossier = topic.entities[0]["dossier"]
     assert dossier["quality_enriched"] is True
     assert validate_dossier_quality(dossier, topic_id="factions") == ()
+
+
+def test_culture_quality_target_matches_fixed_four_section_contract() -> None:
+    assert content_target("cultures") == (700, 4)

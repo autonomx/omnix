@@ -22,6 +22,29 @@ function label(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function imageGenerationProgress(targets: RpgWorldImageTarget[]) {
+  const counts = targets.reduce<Record<string, number>>((current, target) => {
+    current[target.status] = (current[target.status] ?? 0) + 1;
+    return current;
+  }, {});
+  const total = targets.length;
+  const ready = counts.ready ?? 0;
+  const queued = counts.queued ?? 0;
+  const generating = counts.generating ?? 0;
+  const failed = counts.failed ?? 0;
+  const outstanding = total - ready - failed;
+
+  return {
+    total,
+    ready,
+    queued,
+    generating,
+    failed,
+    outstanding,
+    percent: total ? Math.round((ready / total) * 100) : 0,
+  };
+}
+
 export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
@@ -30,6 +53,7 @@ export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
   const [style, setStyle] = useState('concept art');
   const [width, setWidth] = useState(768);
   const [height, setHeight] = useState(768);
+  const [category, setCategory] = useState('all');
   const [feedback, setFeedback] = useState('');
   const query = useQuery({
     queryKey: ['feature', 'rpg', 'world-image-targets', worldId],
@@ -41,6 +65,15 @@ export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
     ),
   });
   const targets = query.data?.targets ?? [];
+  const progress = imageGenerationProgress(targets);
+  const categories = useMemo(
+    () => Array.from(new Set(targets.map((target) => target.target_type))).sort(),
+    [targets],
+  );
+  const visibleTargets = useMemo(
+    () => (category === 'all' ? targets : targets.filter((target) => target.target_type === category)),
+    [category, targets],
+  );
   const selectedTargets = useMemo(
     () => targets.filter((target) => selected.includes(target.target_id)),
     [selected, targets],
@@ -160,7 +193,14 @@ export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
         <button type="button" disabled={!selected.length || generate.isPending} onClick={() => generate.mutate()}>{generate.isPending ? 'Queuing…' : `Generate Selected (${selected.length})`}</button>
         <button className="rpg-secondary-button" type="button" disabled={!selected.length || regeneratePrompts.isPending} onClick={() => regeneratePrompts.mutate(selected)}>{regeneratePrompts.isPending ? 'Regenerating promptsâ€¦' : `Regenerate Selected Prompts (${selected.length})`}</button>
         <button className="rpg-secondary-button" type="button" disabled={!targets.length || regeneratePrompts.isPending} onClick={() => regeneratePrompts.mutate(targets.map((target) => target.target_id))}>Regenerate All Prompts</button>
-        <button className="rpg-secondary-button" type="button" onClick={() => setSelected(targets.filter((target) => ['missing', 'stale', 'failed'].includes(target.status)).map((target) => target.target_id))}>Select Missing &amp; Stale</button>
+        <label className="rpg-world-images-category-filter">
+          <span>Category</span>
+          <select aria-label="Image category" value={category} onChange={(event) => setCategory(event.currentTarget.value)}>
+            <option value="all">All categories ({targets.length})</option>
+            {categories.map((targetType) => <option key={targetType} value={targetType}>{label(targetType)}</option>)}
+          </select>
+        </label>
+        <button className="rpg-secondary-button" type="button" onClick={() => setSelected(visibleTargets.filter((target) => ['missing', 'stale', 'failed'].includes(target.status)).map((target) => target.target_id))}>Select Missing &amp; Stale</button>
         <button className="rpg-secondary-button" type="button" disabled={!selected.length} onClick={() => setSelected([])}>Clear Selection</button>
       </div>
       <details className="rpg-world-images-advanced">
@@ -172,12 +212,40 @@ export function RpgWorldImagesPanel({ worldId }: RpgWorldImagesPanelProps) {
           <label><span>Height</span><input aria-label="Image height" type="number" min={128} max={4096} step={64} value={height} onChange={(event) => setHeight(Number(event.currentTarget.value) || 768)} /></label>
         </div>
       </details>
+      {progress.total ? (
+        <section className="rpg-world-images-progress" aria-label="Image generation progress">
+          <div className="rpg-world-images-progress-heading">
+            <div>
+              <p className="eyebrow">Generation progress</p>
+              <strong>{progress.ready} of {progress.total} image{progress.total === 1 ? '' : 's'} ready</strong>
+            </div>
+            <span>{progress.percent}%</span>
+          </div>
+          <div
+            className="rpg-world-images-progress-track"
+            aria-label={`${progress.ready} of ${progress.total} images ready`}
+            aria-valuemax={progress.total}
+            aria-valuemin={0}
+            aria-valuenow={progress.ready}
+            role="progressbar"
+          >
+            <span style={{ width: `${progress.percent}%` }} />
+          </div>
+          <div className="rpg-world-images-progress-summary" aria-live="polite">
+            {progress.generating ? <span className="is-generating">{progress.generating} generating</span> : null}
+            {progress.queued ? <span>{progress.queued} queued</span> : null}
+            {progress.outstanding && !progress.generating && !progress.queued ? <span>{progress.outstanding} awaiting generation</span> : null}
+            {progress.failed ? <span className="is-failed">{progress.failed} failed</span> : null}
+            {!progress.outstanding && !progress.failed ? <span className="is-complete">All images ready</span> : null}
+          </div>
+        </section>
+      ) : null}
       {feedback ? <p className="rpg-authoring-feedback" aria-live="polite">{feedback}</p> : null}
       {query.isPending ? <p>Discovering image targets…</p> : null}
       {query.isError ? <p className="rpg-world-catalog-error">Unable to load image targets.</p> : null}
       {!query.isPending && !query.isError && !targets.length ? <p>No image targets are available yet. Generate world canon first.</p> : null}
       <div className="rpg-world-image-grid">
-        {targets.map((target) => {
+        {visibleTargets.map((target) => {
           const generatedAsset = latestAsset(target);
           const visibleAsset = target.active_asset_id ?? generatedAsset;
           const preview = imageUrl(visibleAsset);

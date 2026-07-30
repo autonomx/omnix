@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import app.rpg.worlds.generation_repair_evaluation as repair_evaluation
+from app.rpg.worlds.generation_contract_bundle import CONTRACT_VERSION
 from app.rpg.worlds.generation_repair_evaluation import (
+    consecutive_no_op_count,
     evaluate_retry_repair,
     finding_fingerprint,
 )
@@ -40,7 +43,11 @@ def _result(
             "reason_codes": sorted({str(issue["code"]) for issue in issues}),
             "issues": issues,
         },
-        "provider": {"attempt_count": 1},
+        "provider": {
+            "attempt_count": 1,
+            "strategy_identity": "sha256:current-strategy",
+            "contract_descriptor": {"contract_version": CONTRACT_VERSION},
+        },
         "job_id": f"job:{run_id}",
         "previous_result": previous_result,
     }
@@ -130,3 +137,62 @@ def test_successful_repair_resets_consecutive_no_op_count() -> None:
     assert state["repair_evaluation"]["outcome"] == "repaired"
     assert state["consecutive_no_op_count"] == 0
     assert state["retry_budget_exhausted"] is False
+
+
+def test_legacy_attempts_without_strategy_identity_do_not_consume_retry_budget() -> None:
+    first = _result("run:1", "sha256:first", [_issue()])
+    second = _result("run:2", "sha256:second", [_issue()], first)
+    third = _result("run:3", "sha256:third", [_issue()], second)
+    for result in (first, second, third):
+        result["provider"].pop("strategy_identity")
+
+    state = review_state(third)
+
+    assert state["repair_evaluation"]["outcome"] == "no_op"
+    assert state["consecutive_no_op_count"] == 0
+    assert state["retry_budget_exhausted"] is False
+
+
+def test_retry_gate_does_not_count_incomparable_legacy_lineage(monkeypatch) -> None:
+    first = _result("run:1", "sha256:first", [_issue()])
+    second = _result("run:2", "sha256:second", [_issue()], first)
+    third = _result("run:3", "sha256:third", [_issue()], second)
+    for result in (first, second, third):
+        result["provider"].pop("strategy_identity")
+    monkeypatch.setattr(
+        repair_evaluation,
+        "_result_chain",
+        lambda *_args, **_kwargs: [third, second, first],
+    )
+
+    assert consecutive_no_op_count("run:3", "actors") == 0
+
+
+def test_retry_gate_counts_only_matching_known_strategy(monkeypatch) -> None:
+    first = _result("run:1", "sha256:first", [_issue()])
+    second = _result("run:2", "sha256:second", [_issue()], first)
+    third = _result("run:3", "sha256:third", [_issue()], second)
+    monkeypatch.setattr(
+        repair_evaluation,
+        "_result_chain",
+        lambda *_args, **_kwargs: [third, second, first],
+    )
+
+    assert consecutive_no_op_count("run:3", "actors") == 2
+
+
+def test_retry_gate_resets_pre_current_contract_lineage(monkeypatch) -> None:
+    first = _result("run:1", "sha256:first", [_issue()])
+    second = _result("run:2", "sha256:second", [_issue()], first)
+    third = _result("run:3", "sha256:third", [_issue()], second)
+    for result in (first, second, third):
+        result["provider"]["contract_descriptor"]["contract_version"] = (
+            "world-topic-authored-draft-v1"
+        )
+    monkeypatch.setattr(
+        repair_evaluation,
+        "_result_chain",
+        lambda *_args, **_kwargs: [third, second, first],
+    )
+
+    assert consecutive_no_op_count("run:3", "actors") == 0
