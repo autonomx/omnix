@@ -11,6 +11,52 @@ permissions:
   contents: read
 
 jobs:
+  apply-live-character-runtime-fix:
+    if: github.head_ref == 'fix/live-character-runtime-sync' || github.ref == 'refs/heads/fix/live-character-runtime-sync'
+    name: Apply live character runtime fix
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out fix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/live-character-runtime-sync
+          fetch-depth: 0
+
+      - name: Apply prepared source and regression patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/apply-live-character-runtime-fix.yml')
+          lines = workflow.read_text(encoding='utf-8').splitlines()
+          start = next(index for index, line in enumerate(lines) if line.strip() == "python - <<'PY'")
+          end = next(index for index in range(start + 1, len(lines)) if lines[index].strip() == 'PY')
+          script_lines = lines[start + 1:end]
+          nonempty_indents = [len(line) - len(line.lstrip()) for line in script_lines if line.strip()]
+          indent = min(nonempty_indents)
+          script = '\n'.join(line[indent:] if line.strip() else '' for line in script_lines)
+          exec(compile(script, str(workflow), 'exec'))
+          PY
+          git diff --check
+
+      - name: Commit clean fix branch
+        shell: bash
+        run: |
+          rm .github/workflows/apply-live-character-runtime-fix.yml
+          git checkout origin/main -- .github/workflows/rpg-phase0-architecture-compliance.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/features/chatbot/ChatbotWorkspace.tsx \
+            apps/web/src/features/chatbot/ChatbotWorkspace.character-runtime.test.tsx \
+            .github/workflows/apply-live-character-runtime-fix.yml \
+            .github/workflows/rpg-phase0-architecture-compliance.yml
+          git commit -m "fix(chatbot): keep active character in live voice"
+          git push origin HEAD:fix/live-character-runtime-sync
+
   phase0-architecture-compliance:
     name: Phase 0 architecture compliance
     runs-on: ubuntu-latest
