@@ -4,36 +4,13 @@ on:
   pull_request:
     branches: [main, rpg]
   push:
-    branches: [main, rpg, verify/live-character-runtime-sync]
+    branches: [main, rpg]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  verify-live-character-runtime:
-    if: github.head_ref == 'verify/live-character-runtime-sync' || github.ref == 'refs/heads/verify/live-character-runtime-sync'
-    name: Verify live character runtime
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install web dependencies
-        run: npm install
-
-      - name: Run active-character regression
-        run: npm --workspace @omnix/web run test -- --run src/features/chatbot/ChatbotWorkspace.character-runtime.test.tsx
-
-      - name: Run web typecheck
-        run: npm --workspace @omnix/web run typecheck
-
   phase0-architecture-compliance:
     name: Phase 0 architecture compliance
     runs-on: ubuntu-latest
