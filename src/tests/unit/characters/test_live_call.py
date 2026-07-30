@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
@@ -101,6 +102,7 @@ def test_character_live_call_runtime_resolves_profile_voice_and_delivery(tmp_pat
     assert runtime.speech_style.interruption_style == "patient"
     assert runtime.preload.profile_loaded is True
     assert runtime.preload.voice_resolved is True
+    assert runtime.preload.voice_error is None
     assert runtime.preload.preload_ms >= 0
 
 
@@ -124,6 +126,35 @@ def test_character_default_voice_overrides_stale_session_voice_for_live_call(tmp
     assert runtime.display_name == "Maya"
     assert runtime.voice_asset_id == "voice-cloning:maya"
     assert runtime.character_profile_version == 1
+
+
+def test_character_runtime_keeps_identity_when_linked_voice_is_missing(tmp_path: Path, monkeypatch) -> None:
+    _configure(tmp_path, monkeypatch)
+    assets = SharedAssetStore(Path(os.environ["OMNIX_ASSETS_MANIFEST_PATH"]))
+    result = assets.delete_asset("voice-cloning:maya", delete_file=False)
+    assert result["deleted"] is True
+
+    store = default_chat_store()
+    session = store.create_session(CreateChatSessionRequest(title="Maya without voice"))
+    session = store.set_session_interaction(
+        session.id,
+        SetSessionInteractionRequest(
+            interaction_mode="character",
+            character_id="maya",
+        ),
+    )
+    assert session is not None
+
+    runtime = resolve_live_call_runtime(session)
+
+    assert runtime.interaction_mode == "character"
+    assert runtime.character_id == "maya"
+    assert runtime.display_name == "Maya"
+    assert runtime.voice_asset_id is None
+    assert runtime.preload.profile_loaded is True
+    assert runtime.preload.voice_resolved is False
+    assert runtime.preload.voice_error is not None
+    assert "voice asset not found" in runtime.preload.voice_error
 
 
 def test_system_live_call_runtime_stays_identity_neutral(tmp_path: Path, monkeypatch) -> None:
