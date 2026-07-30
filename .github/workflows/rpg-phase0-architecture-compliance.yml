@@ -36,9 +36,10 @@ jobs:
           start = next(index for index, line in enumerate(lines) if line.strip() == "python - <<'PY'")
           end = next(index for index in range(start + 1, len(lines)) if lines[index].strip() == 'PY')
           script_lines = lines[start + 1:end]
-          nonempty_indents = [len(line) - len(line.lstrip()) for line in script_lines if line.strip()]
-          indent = min(nonempty_indents)
-          script = '\n'.join(line[indent:] if line.strip() else '' for line in script_lines)
+          first_nonempty = next(line for line in script_lines if line.strip())
+          indent = len(first_nonempty) - len(first_nonempty.lstrip())
+          prefix = ' ' * indent
+          script = '\n'.join(line[indent:] if line.startswith(prefix) else line for line in script_lines)
           exec(compile(script, str(workflow), 'exec'))
           PY
           git diff --check
