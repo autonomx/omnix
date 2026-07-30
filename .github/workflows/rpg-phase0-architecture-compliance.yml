@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   verify-live-character-runtime:
-    if: github.head_ref == 'fix/live-character-runtime-sync-v2' || github.ref == 'refs/heads/fix/live-character-runtime-sync-v2'
+    if: github.head_ref == 'verify/live-character-runtime-sync' || github.ref == 'refs/heads/verify/live-character-runtime-sync'
     name: Verify live character runtime
     runs-on: ubuntu-latest
     timeout-minutes: 15
