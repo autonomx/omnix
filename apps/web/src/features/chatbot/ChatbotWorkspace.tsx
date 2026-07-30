@@ -423,16 +423,20 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
   const enabledToolCount = runtimeConfig.features.toolExecution ? Math.max(toolExecutionRows.length, 3) : 0;
   const liveVoiceActive = callStartedAt !== null;
+  const effectiveLiveCallRuntime = liveVoiceActive
+    ? liveCallRuntime
+    : liveCallRuntimeQuery.data ?? liveCallRuntime;
+  const activeAssistantDisplayName = effectiveLiveCallRuntime?.display_name || 'Omnix Assistant';
   const liveVoiceState = liveVoiceActive ? voiceCaptureLabel(voiceCaptureMode) : voiceCaptureMode === 'error' ? 'Error' : 'Idle';
   const liveConnectionLabel = liveVoiceActive ? 'Connected' : 'Disconnected';
-  const liveIdentityLabel = liveCallRuntime?.interaction_mode === 'character'
-    ? `Character Mode · ${liveCallRuntime.display_name}`
+  const liveIdentityLabel = effectiveLiveCallRuntime?.interaction_mode === 'character'
+    ? `Character Mode · ${activeAssistantDisplayName}`
     : 'System Assistant';
   const liveVoiceVisualMode = isAssistantSpeaking ? 'speaking' : liveVoiceActive ? 'listening' : voiceCaptureMode === 'error' ? 'error' : 'idle';
   const liveCallTimerLabel = formatCallDuration(callElapsedMs);
   const liveDraftText = [liveTranscript, liveInterimTranscript].filter(Boolean).join(' ').trim();
   const configuredVoiceId = assistantSettings.voiceId || runtimeConfig.ttsVoice || '';
-  const activeVoiceId = liveCallRuntime?.voice_asset_id || configuredVoiceId;
+  const activeVoiceId = effectiveLiveCallRuntime?.voice_asset_id || configuredVoiceId;
   const activeVoiceLabel = voiceLabelForId(activeVoiceId, voiceProfiles);
   const selectedPersonalityLabel = personalityLabel(assistantSettings.personalityId);
   const speechInputLabel = runtimeConfig.sttServiceUrl ? 'STT service recording' : getSpeechRecognitionConstructor() ? 'Browser speech-to-text' : 'No STT input configured';
@@ -579,6 +583,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setSettingsStatus('Assistant settings reset to defaults.');
   }
 
+  function restoreIdleLiveCallRuntime(): void {
+    const runtime = liveCallRuntimeQuery.data ?? null;
+    liveCallRuntimeRef.current = runtime;
+    setLiveCallRuntime(runtime);
+  }
+
   function currentLiveCallVoiceId(): string {
     const runtimeVoiceAssetId = liveCallRuntimeRef.current?.voice_asset_id;
     if (runtimeVoiceAssetId) {
@@ -682,8 +692,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       }
     } catch (error) {
       liveVoiceActiveRef.current = false;
-      liveCallRuntimeRef.current = null;
-      setLiveCallRuntime(null);
+      restoreIdleLiveCallRuntime();
       setCallStartedAt(null);
       setCallElapsedMs(0);
       setAudioStatus(error instanceof Error ? error.message : 'Live-call preload failed.');
@@ -698,8 +707,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     stopAssistantResponseAudio();
     setCallStartedAt(null);
     setCallElapsedMs(0);
-    liveCallRuntimeRef.current = null;
-    setLiveCallRuntime(null);
+    restoreIdleLiveCallRuntime();
     setAudioStatus('Live voice call ended.');
   }
 
@@ -1622,7 +1630,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <div className="assistant-chat-header-actions assistant-chat-integrated-actions">
                   <label className="assistant-header-voice-select">
                     <span>Voice</span>
-                    <select aria-label="Cloned voice" value={liveCallRuntime?.interaction_mode === 'character' ? currentLiveCallVoiceId() : assistantSettings.voiceId} disabled={liveCallRuntime?.interaction_mode === 'character'} onChange={(event) => updateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}>
+                    <select aria-label="Cloned voice" value={effectiveLiveCallRuntime?.interaction_mode === 'character' ? currentLiveCallVoiceId() : assistantSettings.voiceId} disabled={effectiveLiveCallRuntime?.interaction_mode === 'character'} onChange={(event) => updateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}>
                       <option value="">{runtimeConfig.ttsVoice ? `Default (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>
                       {voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}
                     </select>
@@ -1635,7 +1643,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <article key={message.id} className={`assistant-chat-message ${message.role}`}>
                     {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
                     <div className="assistant-chat-bubble">
-                      <header><strong>{message.role === 'assistant' ? 'Omnix Assistant' : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
+                      <header><strong>{message.role === 'assistant' ? activeAssistantDisplayName : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
                       <p>{message.content}</p>
                       {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={activeSession.id} onOpenTools={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }} />)}
                       {message.role === 'assistant' ? <div className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
@@ -1657,7 +1665,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <button type="button" className="assistant-composer-chip" onClick={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }}><span>Tools</span><strong>{runtimeConfig.features.toolExecution ? `${enabledToolCount} Active` : 'Off'}</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={refreshActivityPanel}><span>Context</span><strong>{activeMessageCount > 0 ? 'Project Brief' : 'Ready'}</strong></button>
                 </div>
-                <label className="assistant-message-input"><span>Message</span><textarea rows={3} aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" onKeyDown={handleComposerTextareaKeyDown} {...register('content', { required: true })} /></label>
+                <label className="assistant-message-input"><span>Message</span><textarea rows={3} aria-invalid={Boolean(errors.content)} placeholder={`Message ${activeAssistantDisplayName}, or use the microphone…`} onKeyDown={handleComposerTextareaKeyDown} {...register('content', { required: true })} /></label>
                 <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Generating response' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Generating response…' : 'Send message'}</button></div>
               </form>
             </>
@@ -1700,7 +1708,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel"><button type="button" className={activeUtilityPanel === 'voice' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button><button type="button" className={activeUtilityPanel === 'tools' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('tools')}>Tools</button></div>
           <div className="assistant-live-tools-grid" data-active-panel={activeUtilityPanel}>
             <section className="assistant-live-card" data-live-voice-id={currentLiveCallVoiceId()}>
-              <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>
+              <header><div><p className="eyebrow">Live Voice</p><span className={effectiveLiveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>
               <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>
               <div className="assistant-live-visual-stage" aria-label="Live character visual">
                 <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
@@ -1718,7 +1726,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveVoiceActive ? 'danger' : undefined} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
-              <div className="assistant-voice-transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.length ? visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>) : <p className="muted">Voice transcript will appear here during live calls.</p>}</div>
+              <div className="assistant-voice-transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.length ? visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? activeAssistantDisplayName : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>) : <p className="muted">Voice transcript will appear here during live calls.</p>}</div>
               <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div></div>
               <footer className="assistant-voice-status"><span>Voice Status</span><strong>{liveVoiceState}</strong></footer>
             </section>
