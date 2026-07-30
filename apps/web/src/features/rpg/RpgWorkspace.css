@@ -939,19 +939,35 @@
 .rpg-quick-actions {
   display: grid;
   gap: 0.55rem;
-  grid-template-columns: repeat(auto-fit, minmax(4.75rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
 }
 
 .rpg-quick-actions button {
-  align-items: center;
+  align-items: flex-start;
   background: rgba(255, 255, 255, 0.04);
-  display: inline-flex;
+  display: flex;
   font-size: 0.78rem;
-  gap: 0.35rem;
-  justify-content: center;
-  min-height: 3rem;
+  gap: 0.5rem;
+  justify-content: flex-start;
+  line-height: 1.3;
+  min-height: 3.5rem;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  text-align: left;
   font-weight: 800;
-  white-space: nowrap;
+  white-space: normal;
+}
+
+.rpg-quick-action-icon {
+  flex: 0 0 auto;
+  line-height: 1.3;
+  margin-top: 0.05rem;
+}
+
+.rpg-quick-action-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .rpg-quick-actions button:hover,

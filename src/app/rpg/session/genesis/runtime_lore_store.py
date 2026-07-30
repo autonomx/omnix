@@ -20,7 +20,11 @@ from .campaign_lore_store import (
     _save_portable_projection,
     _text,
 )
-from .runtime_lore_materialization import materialize_scene_lore, scene_lore_targets
+from .runtime_lore_materialization import (
+    materialize_scene_lore,
+    scene_lore_entity_is_rich,
+    scene_lore_targets,
+)
 
 
 def _campaign_exists(
@@ -75,16 +79,7 @@ def _has_dossier_and_document(
     entity_id: str,
 ) -> bool:
     entity = _mapping(_mapping(bible.get("entities")).get(entity_id))
-    rich = bool(
-        _text(entity.get("name") or entity.get("title"))
-        and _text(
-            entity.get("description")
-            or entity.get("public_bio")
-            or entity.get("sensory_profile")
-            or entity.get("appearance")
-            or entity.get("behavior")
-        )
-    )
+    rich = scene_lore_entity_is_rich(entity)
     target = entity_id.casefold()
     documented = any(
         target

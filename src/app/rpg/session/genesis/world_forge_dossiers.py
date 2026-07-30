@@ -415,7 +415,7 @@ def _fallback_sections(
     entity_id: str,
     short_summary: str,
 ) -> list[dict[str, Any]]:
-    template = _SECTION_TEMPLATES.get(card_type, _GENERIC_TEMPLATE)
+    template = _section_template(card_type)
     document = _linked_document(content, entity_id)
     sections: list[dict[str, Any]] = []
     consumed: set[str] = set()

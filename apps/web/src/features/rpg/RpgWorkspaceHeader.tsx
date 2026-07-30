@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
 import type { OmnixModuleDefinition } from '../../app/modules';
+import { rpgCampaignLoreClient } from '../../api/rpgCampaignLoreClient';
+import { rpgWorldLibraryClient } from '../../api/rpgWorldLibraryClient';
 import { RpgLorePanel } from './RpgLorePanel';
 import { RpgStarterBubblePromotionPanel } from './RpgStarterBubblePromotionPanel';
 import { RpgWorldAuthoringWorkspace } from './RpgWorldAuthoringWorkspace';
 import { RpgWorldBundleTransfer } from './RpgWorldBundleTransfer';
+import { pushWorldEditorRoute } from './RpgWorldCompletionModels';
+import { RpgWorldEditorShell } from './RpgWorldEditorShell';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgLoreOverlay.css';
 import './RpgPlayFocus.css';
@@ -45,6 +50,27 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
   const [worldLibraryRequested, setWorldLibraryRequested] = useState(false);
   const [campaignLauncherHomeGrid, setCampaignLauncherHomeGrid] = useState<HTMLElement | null>(null);
   const [campaignLauncherDialog, setCampaignLauncherDialog] = useState<HTMLElement | null>(null);
+  const worldLoreQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'world-lore', selectedSessionSummary.worldId],
+    queryFn: () => rpgWorldLibraryClient.list(),
+    enabled: isLoreOpen && Boolean(selectedSessionSummary.worldId),
+    staleTime: 30_000,
+  });
+  const publishedWorld = worldLoreQuery.data?.worlds.find(
+    (world) => world.id === selectedSessionSummary.worldId,
+  );
+  const campaignLoreQuery = useQuery({
+    queryKey: ['feature', 'rpg', 'campaign-world-lore', selectedSessionSummary.id],
+    queryFn: () => rpgCampaignLoreClient.read(selectedSessionSummary.id),
+    enabled: isLoreOpen
+      && Boolean(selectedSessionSummary.worldId)
+      && Boolean(selectedSessionSummary.id),
+    refetchInterval: isLoreOpen ? 5000 : false,
+    staleTime: 2000,
+  });
+  const runtimeLoreCards = Object.values(
+    campaignLoreQuery.data?.topic_cards ?? {},
+  ).flat().filter((card) => card.metadata.lore_origin === 'gameplay');
 
   useEffect(() => {
     document.documentElement.classList.toggle(RPG_PLAY_FOCUS_CLASS, isHidden);
@@ -111,6 +137,10 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
     }
     setIsWorldLibraryOpen(false);
     window.location.reload();
+  };
+  const closeWorldLore = () => {
+    pushWorldEditorRoute(null, true);
+    setIsLoreOpen(false);
   };
 
   return (
@@ -188,24 +218,52 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
 
       {isLoreOpen && typeof document !== 'undefined' ? createPortal(
         <div className="rpg-lore-overlay" role="dialog" aria-modal="true" aria-labelledby="rpg-lore-overlay-title">
-          <div className="rpg-lore-overlay-shell">
-            <header className="rpg-lore-overlay-heading">
+          <div className={`rpg-lore-overlay-shell${publishedWorld ? ' is-world-catalog' : ''}`}>
+            {publishedWorld ? (
+              <>
+                <h2 className="rpg-visually-hidden" id="rpg-lore-overlay-title">
+                  {publishedWorld.title} world lore
+                </h2>
+                <RpgWorldEditorShell
+                  backLabel="Back to Play"
+                  onBack={closeWorldLore}
+                  onPlay={closeWorldLore}
+                  runtimeLoreCards={runtimeLoreCards}
+                  world={publishedWorld}
+                  worldId={publishedWorld.id}
+                />
+              </>
+            ) : (
+              <>
+                <header className="rpg-lore-overlay-heading">
               <div>
                 <p className="eyebrow">Campaign bible</p>
                 <h2 id="rpg-lore-overlay-title">{selectedSessionSummary.title}</h2>
                 <p>{selectedSessionSummary.location} · known world lore and discovered dossiers</p>
               </div>
-              <button className="rpg-secondary-button" type="button" onClick={() => setIsLoreOpen(false)}>
+              <button className="rpg-secondary-button" type="button" onClick={closeWorldLore}>
                 Back to Play
               </button>
             </header>
-            <div className="rpg-lore-overlay-content">
+                <div className="rpg-lore-overlay-content">
+              {worldLoreQuery.isPending && selectedSessionSummary.worldId ? (
+                <div className="rpg-world-lore-loading" role="status">
+                  Loading published world lore…
+                </div>
+              ) : null}
+              {worldLoreQuery.isError && selectedSessionSummary.worldId ? (
+                <div className="rpg-world-catalog-error" role="alert">
+                  Published world lore could not be loaded. Showing discovered Campaign Bible pages.
+                </div>
+              ) : null}
               <RpgLorePanel
                 labelledById="rpg-lore-overlay-title"
                 panelId="rpg-lore-overlay-panel"
                 role="region"
               />
-            </div>
+                </div>
+              </>
+            )}
           </div>
         </div>,
         document.body,

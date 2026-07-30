@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 from dataclasses import replace
-from typing import Any
+from typing import Any, Mapping
 
 from .visible_response import build_visible_response
 
@@ -133,7 +133,8 @@ def enforce_dialogue_quality(
         session=session,
         recent_interactions=recent,
     )
-    if not assessment["acceptable"] or content_repair_reason:
+    provider_authored = _result_used_llm(result)
+    if (not assessment["acceptable"] or content_repair_reason) and not provider_authored:
         visible = build_profile_aware_dialogue_fallback(
             player_input=player_input,
             profile=profile,
@@ -151,11 +152,26 @@ def enforce_dialogue_quality(
 
     output = deepcopy(result)
     _apply_visible_response(output, visible)
+    quality_requires_retry = bool(
+        provider_authored
+        and (not assessment["acceptable"] or content_repair_reason)
+    )
     diagnostics = {
         **assessment,
         "format_version": DIALOGUE_QUALITY_VERSION,
         "repaired": repaired,
-        "repair_source": "profile_aware_deterministic_fallback_v2" if repaired else "provider_visible_response",
+        "repair_source": (
+            "profile_aware_deterministic_fallback_v2"
+            if repaired
+            else (
+                "provider_visible_response_preserved_llm_only_policy_v1"
+                if provider_authored
+                else "provider_visible_response"
+            )
+        ),
+        "provider_authored": provider_authored,
+        "quality_requires_provider_retry": quality_requires_retry,
+        "deterministic_replacement_forbidden": provider_authored,
         "content_repair_reason": content_repair_reason or None,
         "target_word_range": [TARGET_MIN_WORDS, TARGET_MAX_WORDS],
     }
@@ -164,6 +180,18 @@ def enforce_dialogue_quality(
     if isinstance(nested, dict):
         nested["dialogue_quality"] = deepcopy(diagnostics)
     return output
+
+
+def _result_used_llm(result: Mapping[str, Any]) -> bool:
+    if result.get("llm_called") is True:
+        return True
+    for key in ("result", "resolved_result"):
+        nested = result.get(key)
+        if isinstance(nested, Mapping) and nested.get("llm_called") is True:
+            return True
+    canonical = _dict(result.get("canonical_narrative_response"))
+    generation = _dict(canonical.get("generation"))
+    return _text(generation.get("source")) == "structured_provider"
 
 
 def assess_dialogue_quality(

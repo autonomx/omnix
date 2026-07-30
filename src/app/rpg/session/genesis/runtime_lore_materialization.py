@@ -11,20 +11,65 @@ from typing import Any, Mapping, Sequence
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 
 from .campaign_lore_store import _mapping, _rows, _text, current_location_identity
+from .world_forge_dossiers import (
+    dossier_prompt_contract,
+    project_entity_dossier,
+    validate_entity_dossier,
+)
 
 _VISIBLE = {"public", "player_known", "learned", "partially_known", "disputed"}
 _KIND_PREFIXES = {
     "npc": "npc",
     "character": "npc",
+    "actor": "npc",
     "creature": "creature",
     "monster": "monster",
     "beast": "creature",
     "location": "location",
+    "place": "location",
+    "point_of_interest": "point_of_interest",
+    "poi": "point_of_interest",
     "settlement": "location",
     "town": "location",
     "city": "location",
     "region": "region",
     "faction": "faction",
+    "organization": "faction",
+    "organisation": "faction",
+    "institution": "faction",
+    "item": "item",
+    "equipment": "item",
+    "weapon": "item",
+    "vehicle": "vehicle",
+    "technology": "technology",
+    "augmentation": "technology",
+    "network": "network",
+    "ai": "network",
+    "quest": "quest",
+    "job": "quest",
+    "contract": "quest",
+    "culture": "culture",
+    "subculture": "culture",
+    "role": "role",
+    "archetype": "role",
+    "threat": "threat",
+}
+_TOPIC_BY_KIND = {
+    "npc": "actors",
+    "location": "places",
+    "point_of_interest": "points_of_interest",
+    "region": "regions",
+    "faction": "groups",
+    "item": "equipment_vehicles",
+    "vehicle": "equipment_vehicles",
+    "technology": "technology_augmentations",
+    "network": "networks",
+    "quest": "quests",
+    "culture": "cultures",
+    "role": "roles_archetypes",
+    "monster": "threats",
+    "creature": "threats",
+    "threat": "threats",
 }
 _SCENE_LIST_KEYS = (
     "present_npcs",
@@ -38,6 +83,31 @@ _SCENE_LIST_KEYS = (
     "monsters",
     "entities",
     "actors",
+    "items",
+    "equipment",
+    "weapons",
+    "vehicles",
+    "locations",
+    "places",
+    "points_of_interest",
+    "regions",
+    "factions",
+    "organizations",
+    "organisations",
+    "institutions",
+    "quests",
+    "jobs",
+    "contracts",
+    "cultures",
+    "technologies",
+    "augmentations",
+    "networks",
+    "introduced_entities",
+    "discovered_entities",
+    "created_entities",
+    "revealed_entities",
+    "new_entities",
+    "lore_additions",
 )
 _SCENE_ID_KEYS = (
     "present_npc_ids",
@@ -48,6 +118,29 @@ _SCENE_ID_KEYS = (
     "nearby_monster_ids",
     "entity_ids",
     "actor_ids",
+    "item_ids",
+    "equipment_ids",
+    "weapon_ids",
+    "vehicle_ids",
+    "location_ids",
+    "place_ids",
+    "point_of_interest_ids",
+    "region_ids",
+    "faction_ids",
+    "organization_ids",
+    "institution_ids",
+    "quest_ids",
+    "job_ids",
+    "contract_ids",
+    "culture_ids",
+    "technology_ids",
+    "augmentation_ids",
+    "network_ids",
+    "introduced_entity_ids",
+    "discovered_entity_ids",
+    "created_entity_ids",
+    "revealed_entity_ids",
+    "new_entity_ids",
 )
 
 
@@ -89,6 +182,42 @@ def _kind(entity_id: str, value: Mapping[str, Any] | None = None) -> str:
     return _KIND_PREFIXES.get(prefix, "entity")
 
 
+def canonical_lore_topic_id(kind: str) -> str:
+    normalized = _KIND_PREFIXES.get(_text(kind).casefold(), _text(kind).casefold())
+    return _TOPIC_BY_KIND.get(normalized, f"{normalized or 'entity'}s")
+
+
+def _kind_hint(key: str) -> str:
+    singular = key.removesuffix("_ids").removesuffix("s")
+    for token in (
+        "point_of_interest",
+        "organization",
+        "organisation",
+        "institution",
+        "augmentation",
+        "technology",
+        "equipment",
+        "weapon",
+        "vehicle",
+        "location",
+        "place",
+        "region",
+        "faction",
+        "quest",
+        "contract",
+        "culture",
+        "network",
+        "item",
+        "npc",
+        "creature",
+        "monster",
+        "threat",
+    ):
+        if token in singular:
+            return _KIND_PREFIXES[token]
+    return ""
+
+
 def _target(
     value: Any,
     *,
@@ -104,6 +233,23 @@ def _target(
             or value.get("speaker_id")
             or value.get("actor_id")
             or value.get("location_id")
+            or value.get("item_id")
+            or value.get("equipment_id")
+            or value.get("weapon_id")
+            or value.get("vehicle_id")
+            or value.get("place_id")
+            or value.get("point_of_interest_id")
+            or value.get("region_id")
+            or value.get("faction_id")
+            or value.get("organization_id")
+            or value.get("institution_id")
+            or value.get("quest_id")
+            or value.get("job_id")
+            or value.get("contract_id")
+            or value.get("culture_id")
+            or value.get("technology_id")
+            or value.get("augmentation_id")
+            or value.get("network_id")
             or value.get("id")
         )
         name = _text(
@@ -195,27 +341,11 @@ def scene_lore_targets(
         add(_target(entity_id, location_id=location_id))
     for container in _scene_containers(result, session):
         for key in _SCENE_ID_KEYS:
-            hint = (
-                "npc"
-                if "npc" in key
-                else "creature"
-                if "creature" in key
-                else "monster"
-                if "monster" in key
-                else ""
-            )
+            hint = _kind_hint(key)
             for entity_id in container.get(key) or ():
                 add(_target(entity_id, location_id=location_id, kind_hint=hint))
         for key in _SCENE_LIST_KEYS:
-            hint = (
-                "npc"
-                if "npc" in key
-                else "creature"
-                if "creature" in key
-                else "monster"
-                if "monster" in key
-                else ""
-            )
+            hint = _kind_hint(key)
             for row in container.get(key) or ():
                 add(_target(row, location_id=location_id, kind_hint=hint))
     npc = _mapping(result.get("npc"))
@@ -241,10 +371,33 @@ def _document_for_entity(
     )
 
 
-def _rich_entity(entity: Mapping[str, Any]) -> bool:
+def scene_lore_entity_is_rich(entity: Mapping[str, Any]) -> bool:
+    """Require a full character dossier, not merely an encountered-NPC stub."""
+
+    if not _text(entity.get("name") or entity.get("title")):
+        return False
+    kind = _text(entity.get("kind")).casefold()
+    if kind == "npc":
+        dossier = _mapping(entity.get("dossier"))
+        sections = dossier.get("sections")
+        valid_dossier = (
+            not validate_entity_dossier(dossier)
+            and isinstance(sections, list)
+            and len(sections) >= 4
+        )
+        rich_fields = all(
+            bool(_text(entity.get(field)))
+            for field in (
+                "description",
+                "appearance",
+                "personality",
+                "backstory",
+                "speech_style",
+            )
+        ) and bool(entity.get("goals")) and bool(entity.get("motives"))
+        return valid_dossier or rich_fields
     return bool(
-        _text(entity.get("name") or entity.get("title"))
-        and _text(
+        _text(
             entity.get("description")
             or entity.get("public_bio")
             or entity.get("sensory_profile")
@@ -252,6 +405,10 @@ def _rich_entity(entity: Mapping[str, Any]) -> bool:
             or entity.get("behavior")
         )
     )
+
+
+def _rich_entity(entity: Mapping[str, Any]) -> bool:
+    return scene_lore_entity_is_rich(entity)
 
 
 def _context(bible: Mapping[str, Any], target: SceneLoreTarget) -> dict[str, Any]:
@@ -484,12 +641,65 @@ def _fallback_entity_bundle(target: SceneLoreTarget) -> dict[str, Any]:
                 "habitat": target.location_id,
             }
         )
+    elif kind == "npc":
+        entity.update(
+            {
+                "appearance": (
+                    "Their clothing, posture, and working gear reflect their place "
+                    "in the surrounding community."
+                ),
+                "personality": (
+                    "Observant and guarded with strangers, but responsive to direct "
+                    "questions and changes in the local situation."
+                ),
+                "backstory": (
+                    f"{target.name} has established ties to the people and routines "
+                    f"around {_name_from_id(target.location_id) if target.location_id else 'this region'}."
+                ),
+                "speech_style": (
+                    "Speaks naturally and specifically, using local knowledge and "
+                    "avoiding claims beyond what they know."
+                ),
+                "goals": ["Protect their livelihood and standing in the community."],
+                "motives": ["Respond to immediate pressures without exposing private knowledge."],
+                "relationships": [],
+                "known_facts": [],
+                "current_situation": (
+                    f"Currently encountered at {_name_from_id(target.location_id)}."
+                    if target.location_id
+                    else "Currently present in the active scene."
+                ),
+                "dossier_status": "complete",
+            }
+        )
+        short_summary, dossier = project_entity_dossier(
+            entity,
+            card_type="npcs",
+            entity_id=target.entity_id,
+        )
+        entity["short_summary"] = short_summary
+        entity["dossier"] = dossier
+    elif kind not in {"monster", "creature"}:
+        entity.update(
+            {
+                "summary": description,
+                "current_situation": "Known through the active campaign.",
+            }
+        )
+    short_summary, dossier = project_entity_dossier(
+        entity,
+        card_type=canonical_lore_topic_id(kind),
+        entity_id=target.entity_id,
+    )
+    entity["short_summary"] = _text(entity.get("short_summary")) or short_summary
+    if validate_entity_dossier(entity.get("dossier")):
+        entity["dossier"] = dossier
     return {
         "entities": [entity],
         "documents": [
             {
                 "title": target.name,
-                "topic_id": f"{kind}s",
+                "topic_id": canonical_lore_topic_id(kind),
                 "full_text": description,
                 "entity_refs": [target.entity_id],
             }
@@ -540,13 +750,22 @@ def _generate_bundle(
         "player could not know. For a location, include a rich location dossier, "
         "two to four local NPC dossiers, overview and history documents, public "
         "facts, and explicit relationships. For an NPC, creature, or monster, "
-        "include one consistent dossier and lore document. Required top-level "
+        "include one consistent dossier and lore document. Every entity must include "
+        "short_summary and a dossier matching the supplied dossier contract. NPC "
+        "entities must additionally include "
+        "description, appearance, personality, backstory, speech_style, goals, motives, "
+        "relationships, known_facts, and current_situation. Required top-level "
         "arrays: entities, documents, facts, relationships. Return JSON only."
     )
     try:
         raw = gateway.generate(
             prompt,
-            context=_context(bible, target),
+            context={
+                **_context(bible, target),
+                "entity_dossier_contract": dossier_prompt_contract(
+                    canonical_lore_topic_id(target.kind)
+                ),
+            },
             timeout_s=30.0,
             provider_options={
                 "temperature": 0.35,
@@ -625,6 +844,15 @@ def _merge_bundle(
                 },
             }
         )
+        short_summary, dossier = project_entity_dossier(
+            row,
+            card_type=canonical_lore_topic_id(str(row["kind"])),
+            content=bible,
+            entity_id=entity_id,
+        )
+        row["short_summary"] = _text(row.get("short_summary")) or short_summary
+        if validate_entity_dossier(row.get("dossier")):
+            row["dossier"] = dossier
         existing = deepcopy(_mapping(entities.get(entity_id)))
         if not _rich_entity(existing):
             entities[entity_id] = {

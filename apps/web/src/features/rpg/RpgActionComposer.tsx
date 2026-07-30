@@ -723,8 +723,8 @@ export function RpgActionComposer({
       <div className="rpg-quick-actions" aria-label="Quick RPG actions">
         {quickActions.map((action) => (
           <button key={`${action.label}:${action.command}`} type="button" onClick={() => onQuickAction(action.command)}>
-            <span aria-hidden="true">{action.icon}</span>
-            {action.label}
+            <span className="rpg-quick-action-icon" aria-hidden="true">{action.icon}</span>
+            <span className="rpg-quick-action-label">{action.label}</span>
           </button>
         ))}
       </div>

@@ -3,7 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ApiTimeoutError, omnixApiClient, type JobRecord, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
 import { getHermesRpgExecutionLedger, type HermesRpgApprovedFlowResponse } from '../../api/hermesRpgApprovedFlowClient';
-import { getHermesRouteDecision, getHermesRpgSuggestions, readHermesRpgTurn } from '../../api/hermesClient';
+import {
+  getHermesRouteDecision,
+  getHermesRpgSuggestions,
+  readHermesRpgTurn,
+  type HermesRpgSuggestion,
+} from '../../api/hermesClient';
 import { checkHermesRpgSequence } from '../../api/hermesRpgSequenceClient';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
@@ -27,7 +32,11 @@ import { rpgAssistStateFromItems } from './rpgAssistState';
 import { hermesSequencePreviewModel } from './hermesSequencePreviewModel';
 import { buildHermesSequenceReviewRequest } from './hermesSequenceReviewRequest';
 import { createRpgTurnReadoutPreview } from './rpgTurnReadoutState';
-import { createRpgWorkspaceState, type RpgStoryMessagePreview } from './rpgUiState';
+import {
+  createRpgWorkspaceState,
+  type RpgQuickActionPreview,
+  type RpgStoryMessagePreview,
+} from './rpgUiState';
 import './RpgWorkspace.css';
 import './RpgResponsivePolish.css';
 
@@ -137,6 +146,29 @@ function submittedTurnSessionId(job: JobRecord | undefined): string | null {
 function inferSubmittedResponseSpeaker(response: string): string {
   const match = response.match(/^\s*([A-Z][A-Za-z0-9 _'-]{0,40}):/);
   return match?.[1]?.trim() || 'Omnix';
+}
+
+export function quickActionsFromHermesSuggestions(
+  suggestions: HermesRpgSuggestion[],
+): RpgQuickActionPreview[] {
+  const icons: Record<string, string> = {
+    combat: '⚔',
+    dialogue: '☯',
+    inventory: '▣',
+    journal: '◇',
+    objective: '◆',
+    progression: '✦',
+    travel: '⌖',
+  };
+  return suggestions.flatMap((suggestion) => {
+    const command = suggestion.command?.trim();
+    if (!command) return [];
+    return [{
+      command,
+      icon: icons[suggestion.kind ?? ''] ?? '◇',
+      label: suggestion.label?.trim() || command,
+    }];
+  }).slice(0, 6);
 }
 
 function isRpgTurnJobType(type: string): boolean {
@@ -317,9 +349,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     enabled: Boolean(selectedLiveSessionId),
   });
   const hermesSuggestions = hermesSuggestionsQuery.data?.suggestions ?? [];
+  const dynamicQuickActions = quickActionsFromHermesSuggestions(hermesSuggestions);
+  const responseOptions = dynamicQuickActions.length ? dynamicQuickActions : quickActions;
   const hermesSequenceReviewRequest = buildHermesSequenceReviewRequest({
     assistMode: hermesAssistMode,
-    quickActions,
+    quickActions: responseOptions,
     selectedSessionSummary,
     suggestions: hermesSuggestions,
   });
@@ -822,7 +856,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 return checkpoint.checkpoint_id;
               }}
               onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
-              quickActions={quickActions}
+              quickActions={responseOptions}
               renderNewCampaign={(closeLauncher) => (
                 <RpgCreateCampaignWizard
                   onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)}

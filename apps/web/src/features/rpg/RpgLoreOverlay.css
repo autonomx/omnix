@@ -27,6 +27,36 @@
   width: 100%;
 }
 
+.rpg-lore-overlay-shell.is-world-catalog {
+  display: block;
+  height: calc(100vh - clamp(1.5rem, 4vw, 3rem));
+  max-width: 1800px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.rpg-lore-overlay-shell.is-world-catalog .rpg-authoring-editor,
+.rpg-lore-overlay-shell.is-world-catalog .rpg-world-shell-layout {
+  height: 100%;
+  min-height: 0;
+}
+
+.rpg-world-lore-loading {
+  color: #c4b5fd;
+  padding: 0.75rem 0;
+}
+
+.rpg-visually-hidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
 .rpg-lore-overlay-heading {
   align-items: center;
   display: flex;

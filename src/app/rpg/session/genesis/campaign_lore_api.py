@@ -3,6 +3,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from app.rpg.worlds.authoring_presentations import entity_card
+
+from .runtime_lore_materialization import canonical_lore_topic_id
+
 
 _PLAYER_VISIBLE_STATUSES = {
     "public_at_campaign_start",
@@ -111,11 +115,117 @@ def _safe_dossier(entity: Mapping[str, Any], *, status: str) -> dict[str, Any]:
         "status": status,
         "visibility": str(entity.get("visibility") or ""),
     }
+    provenance = _mapping(entity.get("provenance"))
+    source = str(
+        provenance.get("source")
+        or provenance.get("last_source")
+        or ""
+    )
+    if source in {
+        "runtime_scene_materialization_v1",
+        "encountered_npc_profile_sync_v1",
+    }:
+        result["lore_origin"] = "gameplay"
     safe_fields = {
-        "npc": ("appearance", "personality", "speech_style", "role", "location_id", "faction_ids"),
+        "npc": (
+            "short_summary",
+            "description",
+            "appearance",
+            "personality",
+            "backstory",
+            "speech_style",
+            "role",
+            "location_id",
+            "faction_ids",
+            "goals",
+            "motives",
+            "relationships",
+            "known_facts",
+            "current_situation",
+            "mobility_status",
+            "dossier_status",
+        ),
         "location": ("region_id", "sensory_profile", "description", "services"),
         "faction": ("values", "public_goal", "goals", "description"),
-    }.get(kind, ("description",))
+        "item": (
+            "short_summary",
+            "description",
+            "appearance",
+            "materials",
+            "origin",
+            "properties",
+            "effects",
+            "uses",
+            "limitations",
+            "rarity",
+            "current_situation",
+        ),
+        "vehicle": (
+            "short_summary",
+            "description",
+            "appearance",
+            "function",
+            "capabilities",
+            "limitations",
+            "current_situation",
+        ),
+        "technology": (
+            "short_summary",
+            "description",
+            "appearance",
+            "capability",
+            "failure_mode",
+            "limitations",
+            "current_situation",
+        ),
+        "quest": (
+            "short_summary",
+            "description",
+            "premise",
+            "stakes",
+            "objectives",
+            "giver_id",
+            "location_ids",
+            "faction_ids",
+            "complications",
+            "rewards",
+            "current_situation",
+        ),
+        "monster": (
+            "short_summary",
+            "description",
+            "appearance",
+            "habitat",
+            "behavior",
+            "behaviour",
+            "abilities",
+            "current_situation",
+        ),
+        "creature": (
+            "short_summary",
+            "description",
+            "appearance",
+            "habitat",
+            "behavior",
+            "behaviour",
+            "abilities",
+            "current_situation",
+        ),
+    }.get(
+        kind,
+        (
+            "short_summary",
+            "description",
+            "appearance",
+            "summary",
+            "history",
+            "origin",
+            "values",
+            "goals",
+            "relationships",
+            "current_situation",
+        ),
+    )
     for field in safe_fields:
         value = entity.get(field)
         if value not in (None, "", [], {}):
@@ -135,15 +245,21 @@ def _category(document: Mapping[str, Any]) -> str:
         "pantheon": "World Lore",
         "cultures": "World Lore",
         "regions": "Regions",
+        "places": "Locations",
+        "points_of_interest": "Locations",
         "factions": "Factions",
+        "groups": "Factions",
         "institutions": "Institutions",
         "npcs": "Characters",
+        "actors": "Characters",
         "locations": "Locations",
         "current_conflicts": "Conflicts",
         "opening_threads": "Discoveries",
         "economy": "World Lore",
         "monsters": "Monsters",
         "items": "Items",
+        "equipment_vehicles": "Items",
+        "technology_augmentations": "Items",
         "spells": "Spells",
         "feats": "Feats",
         "quests": "Quests",
@@ -249,17 +365,45 @@ def campaign_lore_payload(session: Mapping[str, Any]) -> dict[str, Any]:
         "locations": [],
         "factions": [],
     }
+    dossier_cards: dict[str, list[dict[str, Any]]] = {
+        "characters": [],
+        "locations": [],
+        "factions": [],
+    }
+    topic_cards: dict[str, list[dict[str, Any]]] = {}
     dossier_key = {"npc": "characters", "location": "locations", "faction": "factions"}
-    for entity in _entities(session):
-        key = dossier_key.get(str(entity.get("kind") or ""))
-        if key is None:
-            continue
+    visible_documents = [
+        document
+        for document in _documents(session)
+        if _status(document, discovery) in _PLAYER_VISIBLE_STATUSES
+        and str(document.get("visibility") or "") in _PLAYER_VISIBLE_VISIBILITY
+    ]
+    for index, entity in enumerate(_entities(session)):
+        kind = str(entity.get("kind") or "entity")
+        key = dossier_key.get(kind)
         status = _entity_status(entity, discovery)
         if status not in _PLAYER_VISIBLE_STATUSES:
             continue
-        dossiers[key].append(_safe_dossier(entity, status=status))
+        safe = _safe_dossier(entity, status=status)
+        topic_id = canonical_lore_topic_id(kind)
+        safe["lore_topic_id"] = topic_id
+        card = entity_card(
+            safe,
+            card_type=topic_id,
+            kind=kind,
+            index=index,
+            content={"documents": visible_documents},
+        )
+        topic_cards.setdefault(topic_id, []).append(card)
+        if key is not None:
+            dossiers[key].append(safe)
+            dossier_cards[key].append(card)
     for rows in dossiers.values():
         rows.sort(key=lambda row: str(row.get("name") or ""))
+    for rows in dossier_cards.values():
+        rows.sort(key=lambda row: str(row.get("title") or ""))
+    for rows in topic_cards.values():
+        rows.sort(key=lambda row: str(row.get("title") or ""))
     return {
         "ok": True,
         "canon_revision": int(bible.get("canon_revision") or 0),
@@ -272,6 +416,8 @@ def campaign_lore_payload(session: Mapping[str, Any]) -> dict[str, Any]:
         "visible_count": len(visible),
         "hidden_count": hidden_count,
         "dossiers": dossiers,
+        "dossier_cards": dossier_cards,
+        "topic_cards": topic_cards,
         "discoveries": list(discovery.get("discoveries") or ()),
         "generation": campaign_genesis_progress_payload(session),
     }

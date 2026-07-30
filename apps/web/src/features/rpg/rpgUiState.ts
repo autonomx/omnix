@@ -120,6 +120,7 @@ export interface RpgJobCardPreview {
 
 export interface RpgSessionSummaryPreview {
   id: string;
+  worldId?: string;
   title: string;
   location: string;
   summary: string;
@@ -465,6 +466,7 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
   const manifest = recordValue(session.manifest);
   const metadata = recordValue(session.metadata);
   const state = recordValue(session.state);
+  const publishedWorld = recordValue(state?.published_world);
   const payload = recordValue(session.payload);
   const latestTimeline = buildTimelineEvents(session)[0];
   const snapshot = getEnvironmentSnapshot(session);
@@ -499,6 +501,13 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
 
   return {
     id,
+    worldId: firstString(
+      session.world_id,
+      metadata?.world_id,
+      state?.world_id,
+      publishedWorld?.world_id,
+      payload?.world_id,
+    ),
     title,
     location,
     summary,

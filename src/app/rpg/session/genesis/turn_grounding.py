@@ -8,7 +8,6 @@ from typing import Any, Mapping, Sequence
 from app.rpg.narrative_engine import (
     CampaignBibleSnapshot,
     EvidenceRecord,
-    campaign_bible_evidence,
 )
 from app.rpg.narrative_engine.shadow import runtime_evidence
 
@@ -253,22 +252,40 @@ def build_turn_grounding_packet(
             session=session,
             prefer_postgresql=prefer_postgresql,
         )
-    snapshot, bible_evidence, missing_materialized = (
-        (None, (), ())
-        if runtime_only
-        else select_complete_turn_snapshot(
+    snapshot, complete_bible_evidence, missing_materialized = (
+        select_complete_turn_snapshot(
             loaded_snapshot,
             portable_snapshot,
             target_entity_ids,
         )
     )
-    if target_entity_ids and not runtime_only and (
-        snapshot is None or missing_materialized
-    ):
+    if target_entity_ids and (snapshot is None or missing_materialized):
         missing = ",".join(missing_materialized or target_entity_ids)
         raise RuntimeError(f"turn_lore_source_of_truth_unavailable:{missing}")
+    if runtime_only:
+        focused_entity_ids = {
+            str(value).strip().casefold()
+            for value in (*actor_ids, speaker_id or "", *target_entity_ids)
+            if str(value).strip()
+        }
+        bible_evidence = tuple(
+            record
+            for record in complete_bible_evidence
+            if focused_entity_ids.intersection(
+                str(value).casefold() for value in record.entity_refs
+            )
+        )
+    else:
+        bible_evidence = complete_bible_evidence
 
-    entity_ids = _entity_ids(result, session, speaker_id, actor_ids)
+    entity_ids = tuple(
+        dict.fromkeys(
+            (
+                *_entity_ids(result, session, speaker_id, actor_ids),
+                *target_entity_ids,
+            )
+        )
+    )
     factions = _faction_ids(session, speaker_id)
     research = (
         None

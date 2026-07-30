@@ -5,15 +5,22 @@ from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
 from app.rpg.narrative_engine import (
+    BeatKind,
+    BeatPurpose,
+    CanonicalNarrativeResponse,
+    DeliveryMetadata,
     DeliveryMode,
     EvidenceBroker,
     EvidenceRecord,
+    GenerationMetadata,
     InMemoryEvidenceSource,
+    NarrativeBlock,
     NarrativeEngineService,
     NarrativeSignificance,
     PresentationProfile,
     SceneChange,
     TurnPresentationRequest,
+    ValidationReport,
     legacy_response_projection,
 )
 from app.rpg.narrative_engine.serialization import canonical_response_from_dict
@@ -358,6 +365,13 @@ def canonicalize_direct_dialogue_result(
         return result
     if isinstance(result.get("canonical_narrative_response"), dict):
         return result
+    compact_provider = _compact_provider_visible_response(result)
+    if compact_provider:
+        return _adopt_compact_provider_dialogue(
+            result,
+            session_id=session_id,
+            visible=compact_provider,
+        )
     speaker_id, _ = _npc_identity(result)
     quality_context = _dialogue_quality_context(
         result,
@@ -398,6 +412,146 @@ def canonicalize_direct_dialogue_result(
         "narrative_engine_direct_dialogue_v2",
         grounding,
     )
+
+
+def _compact_provider_visible_response(
+    result: Mapping[str, Any],
+) -> dict[str, Any]:
+    advisory = _mapping(result.get("first_call_semantic_advisory"))
+    diagnostics = _mapping(advisory.get("first_call_grounding_diagnostics"))
+    if (
+        _text(advisory.get("source")) != "compact_grounded_dialogue_v1"
+        or diagnostics.get("provider_called") is not True
+    ):
+        return {}
+    visible = _mapping(advisory.get("visible_response"))
+    npc = _mapping(visible.get("npc"))
+    if not _text(npc.get("line")):
+        return {}
+    return visible
+
+
+def _adopt_compact_provider_dialogue(
+    result: dict[str, Any],
+    *,
+    session_id: str,
+    visible: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Publish the already-generated compact LLM line as canonical prose."""
+
+    npc = _mapping(visible.get("npc"))
+    speaker = _text(npc.get("speaker")) or "NPC"
+    line = _text(npc.get("line"))
+    resolved = _mapping(result.get("resolved_result") or result.get("result"))
+    speaker_id = _text(
+        npc.get("speaker_id")
+        or resolved.get("target_id")
+        or f"npc:{speaker.casefold().replace(' ', '_')}"
+    )
+    turn_id = _text(result.get("turn_id")) or "turn:0"
+    request_id = f"dialogue:{session_id}:{turn_id}"
+    block_id = f"{request_id}:provider-line"
+    response = CanonicalNarrativeResponse(
+        response_id=f"narrative:{session_id}:{turn_id}:1",
+        request_id=request_id,
+        turn_id=turn_id,
+        campaign_id=session_id,
+        revision=1,
+        blocks=(
+            NarrativeBlock(
+                block_id=block_id,
+                beat_id=f"{request_id}:direct-answer",
+                sequence=0,
+                kind=BeatKind.DIALOGUE,
+                purpose=BeatPurpose.DIRECT_ANSWER,
+                speaker_id=speaker_id,
+                text=line,
+                metadata={"source": "compact_grounded_dialogue_v1"},
+            ),
+        ),
+        evidence_used=(),
+        validation=ValidationReport(
+            passed=True,
+            metadata={"provider_visible_response_adopted": True},
+        ),
+        generation=GenerationMetadata(
+            source="compact_dialogue_provider",
+            beat_count=1,
+            metadata={
+                "provider_visible_response_adopted": True,
+                "deterministic_fallback_used": False,
+            },
+        ),
+        delivery=DeliveryMetadata(
+            mode=DeliveryMode.BLOCKING,
+            delivered_block_ids=(block_id,),
+        ),
+        metadata={"llm_prose_required": True},
+    ).with_content_hash()
+    projection = legacy_response_projection(response)
+    projected_visible = _mapping(projection.get("visible_response"))
+    messages = [
+        {
+            "kind": "npc_dialogue",
+            "speaker": speaker,
+            "speaker_id": speaker_id,
+            "text": line,
+            "block_id": block_id,
+            "sequence": 0,
+        }
+    ]
+    projected_visible.update(
+        {
+            "messages": messages,
+            "narration": _text(visible.get("narration")),
+            "plain_text": (
+                f"{_text(visible.get('narration'))}\n\n" if _text(visible.get("narration")) else ""
+            )
+            + f'{speaker}: "{line}"',
+        }
+    )
+    result.update(projection)
+    result["visible_response"] = projected_visible
+    result["npc"] = {
+        "speaker": speaker,
+        "speaker_id": speaker_id,
+        "line": line,
+    }
+    result["summary"] = projected_visible["plain_text"]
+    result["narration"] = _text(visible.get("narration"))
+    result["final_narration"] = _text(visible.get("narration"))
+    result["canonical_visible_response"] = dict(projected_visible)
+    result["canonical_narrative_response"] = response.as_dict()
+    result["canonical_narrative_source"] = "compact_grounded_dialogue_v1"
+    result["source"] = "compact_dialogue_provider_canonical_v1"
+    result["llm_called"] = True
+    result["llm_purpose"] = "compact_dialogue_generation"
+    result["legacy_visible_prose_consumed"] = False
+    result["provider_visible_prose_adopted"] = True
+    result["deterministic_fallback_used"] = False
+    for nested_key in ("result", "resolved_result"):
+        nested = _mapping(result.get(nested_key))
+        if not nested:
+            continue
+        nested.update(
+            {
+                "visible_response": dict(projected_visible),
+                "npc": dict(result["npc"]),
+                "summary": projected_visible["plain_text"],
+                "narration": _text(visible.get("narration")),
+                "final_narration": _text(visible.get("narration")),
+                "canonical_visible_response": dict(projected_visible),
+                "canonical_narrative_response": response.as_dict(),
+                "canonical_narrative_source": "compact_grounded_dialogue_v1",
+                "llm_called": True,
+                "llm_purpose": "compact_dialogue_generation",
+                "legacy_visible_prose_consumed": False,
+                "provider_visible_prose_adopted": True,
+                "deterministic_fallback_used": False,
+            }
+        )
+        result[nested_key] = nested
+    return result
 
 
 def canonicalize_scene_turn_result(

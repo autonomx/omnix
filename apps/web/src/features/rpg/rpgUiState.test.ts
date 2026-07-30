@@ -71,6 +71,28 @@ describe('rpg UI state', () => {
     expect(state.jobCards[0]).toMatchObject({ id: 'job:rpg', progress: 25, source: 'live', title: 'rpg.turn' });
   });
 
+  it('binds a live session to its published World Forge world', () => {
+    const state = createRpgWorkspaceState({
+      inventory: {
+        sessions: [{
+          session_id: 'session:vesper',
+          title: 'Alyndra — Tidebreak Docks',
+          state: {
+            published_world: {
+              world_id: 'world:vesper-9-city-of-borrowed-minds',
+              world_release: 1,
+            },
+          },
+        }],
+      },
+      selectedSessionId: 'session:vesper',
+    });
+
+    expect(state.selectedSessionSummary.worldId).toBe(
+      'world:vesper-9-city-of-borrowed-minds',
+    );
+  });
+
   it('projects failed job reasons into RPG job cards', () => {
     const jobs = {
       jobs: [

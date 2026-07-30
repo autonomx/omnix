@@ -19,6 +19,9 @@ from app.rpg.session.environment import ensure_session_environment_seed_state
 from app.rpg.session.list_summaries import list_session_summaries_from_disk
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.package_bridge import package_to_session, session_to_package
+from app.rpg.session.published_opening_progress import (
+    ensure_published_opening_progress,
+)
 from app.rpg.session.survival_persistence import normalize_session_survival_for_persistence
 from app.rpg.validation.integrity import (
     assert_package_integrity,
@@ -46,7 +49,7 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = ensure_ambient_runtime_state(runtime_state)
     runtime_state = normalize_ambient_state(runtime_state)
     session["runtime_state"] = runtime_state
-    return session
+    return ensure_published_opening_progress(session)
 
 
 def save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:

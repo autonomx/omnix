@@ -303,7 +303,7 @@ export function RpgWorldAuthoringPage({
         imageAssetId={displayableAssets.get(selectedEntity.id)}
         onClose={() => setSelectedEntityId(null)}
         onOpenRelated={openRelatedEntity}
-        topic={page.topic}
+        topic={selectedEntity.metadata.lore_origin === 'gameplay' ? undefined : page.topic}
         worldId={worldId}
       />
     );

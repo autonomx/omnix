@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   rpgWorldAuthoringClient,
+  type RpgAuthoringEntityCard,
   type RpgAuthoringGroup,
+  type RpgAuthoringPage,
   type RpgAuthoringSection,
 } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
@@ -23,8 +25,10 @@ import './RpgWorldShellDesign.css';
 import './RpgWorldShellInteractions.css';
 
 interface RpgWorldEditorShellProps {
+  backLabel?: string;
   onBack: () => void;
   onPlay: () => void;
+  runtimeLoreCards?: RpgAuthoringEntityCard[];
   world: RpgWorldSummary;
   worldId: string;
 }
@@ -86,9 +90,54 @@ function icon(sectionId: string): string {
   return SECTION_ICONS[sectionId] ?? SECTION_ICONS[sectionId.replace(/s$/, '')] ?? '✦';
 }
 
+const RUNTIME_TOPIC_SECTION_ALIASES: Record<string, string[]> = {
+  actors: ['actors', 'npcs', 'characters'],
+  equipment_vehicles: ['equipment_vehicles', 'items'],
+  groups: ['groups', 'factions', 'institutions'],
+  places: ['places', 'locations'],
+  roles_archetypes: ['roles_archetypes', 'classes'],
+  technology_augmentations: ['technology_augmentations', 'items'],
+  threats: ['threats', 'monsters'],
+  networks: ['networks'],
+  quests: ['quests'],
+  regions: ['regions'],
+  cultures: ['cultures'],
+};
+
+function sectionAcceptsRuntimeCard(
+  section: RpgAuthoringSection,
+  card: RpgAuthoringEntityCard,
+): boolean {
+  const topicId = String(card.metadata.lore_topic_id ?? card.card_type);
+  const aliases = RUNTIME_TOPIC_SECTION_ALIASES[topicId] ?? [topicId];
+  const sectionIds = new Set([section.id, ...section.topic_ids]);
+  if (aliases.some((candidate) => sectionIds.has(candidate))) return true;
+  const entityKind = section.entity_kind?.toLowerCase();
+  return Boolean(entityKind) && [card.kind, card.card_type]
+    .some((candidate) => candidate.toLowerCase() === entityKind);
+}
+
+export function mergeRuntimeLoreCards(
+  page: RpgAuthoringPage | undefined,
+  section: RpgAuthoringSection,
+  runtimeCards: RpgAuthoringEntityCard[],
+): RpgAuthoringPage | undefined {
+  if (!page || page.page_kind !== 'collection') return page;
+  const cards = new Map(page.entities.map((card) => [card.id.toLowerCase(), card]));
+  for (const card of runtimeCards.filter((candidate) => (
+    sectionAcceptsRuntimeCard(section, candidate)
+  ))) {
+    const key = card.id.toLowerCase();
+    if (!cards.has(key)) cards.set(key, card);
+  }
+  return { ...page, entities: Array.from(cards.values()) };
+}
+
 export function RpgWorldEditorShell({
+  backLabel = 'Back to Worlds',
   onBack,
   onPlay,
+  runtimeLoreCards = [],
   world,
   worldId,
 }: RpgWorldEditorShellProps) {
@@ -138,6 +187,14 @@ export function RpgWorldEditorShell({
       && rawSectionIds.has(selectedSection.id),
     refetchInterval: selectedSection.operational_status === 'generating' ? 3000 : false,
   });
+  const page = useMemo(
+    () => mergeRuntimeLoreCards(
+      pageQuery.data,
+      selectedSection,
+      runtimeLoreCards,
+    ),
+    [pageQuery.data, runtimeLoreCards, selectedSection],
+  );
 
   const navigate = (nextSectionId: string, nextEntityId: string | null = null, replace = false) => {
     setSectionId(nextSectionId);
@@ -275,7 +332,7 @@ export function RpgWorldEditorShell({
         <div className="rpg-world-main-shell">
           <header className="rpg-authoring-editor-header rpg-world-topbar">
             <nav className="rpg-world-breadcrumbs" aria-label="Breadcrumb">
-              <button type="button" onClick={onBack}>← Back to Worlds</button>
+              <button type="button" onClick={onBack}>← {backLabel}</button>
               <span>›</span>
               <button type="button" onClick={() => navigate('overview')}>{currentWorld.title}</button>
               <span>›</span>
@@ -341,7 +398,7 @@ export function RpgWorldEditorShell({
                 onOpenSection={(nextSectionId) => navigate(nextSectionId)}
                 onSaveWorld={(changes) => updateWorld.mutate(changes)}
                 onSelectEntity={(nextEntityId) => navigate(selectedSection.id, nextEntityId)}
-                page={pageQuery.data}
+                page={page}
                 section={selectedSection}
                 sections={sections}
                 selectedEntityId={entityId}

@@ -39,7 +39,12 @@ def _name_from_item(value: Any) -> str:
     if isinstance(value, str):
         return value.strip()
     data = _safe_dict(value)
-    return _first_text(data.get("name"), data.get("id"), data.get("label"), data.get("title"))
+    return _first_text(
+        data.get("name"),
+        data.get("label"),
+        data.get("title"),
+        data.get("id"),
+    )
 
 
 def _bounded_names(value: Any, *, limit: int = 8) -> list[str]:
@@ -70,6 +75,34 @@ def _bounded_turn_summaries(value: Any, *, limit: int = 5) -> list[dict[str, Any
 
 
 def _active_objectives(state: dict[str, Any]) -> list[str]:
+    quests = _safe_list(state.get("quests") or state.get("active_quests"))
+    quest_objectives: list[str] = []
+    for raw_quest in quests:
+        quest = _safe_dict(raw_quest)
+        if _safe_str(quest.get("status")).casefold() in {"complete", "completed", "failed"}:
+            continue
+        objectives = _safe_list(quest.get("objectives"))
+        active = next(
+            (
+                _name_from_item(item)
+                for item in objectives
+                if _safe_str(_safe_dict(item).get("status")).casefold()
+                not in {"complete", "completed", "failed"}
+                and _name_from_item(item)
+            ),
+            "",
+        )
+        objective = active or _first_text(
+            quest.get("next_step"),
+            quest.get("objective"),
+            quest.get("title"),
+            quest.get("name"),
+        )
+        if objective and objective not in quest_objectives:
+            quest_objectives.append(objective)
+    if quest_objectives:
+        return quest_objectives[:8]
+
     quest_state = _first_dict(state.get("quests"), state.get("quest_log"), state.get("journal"), state.get("objectives"))
     candidates = (
         quest_state.get("active")

@@ -121,10 +121,30 @@ def _session() -> dict:
 
 def test_lore_api_exposes_only_player_safe_known_dossiers() -> None:
     session = _session()
+    session["campaign_bible_projection"]["entities"]["npc:bran"].update(
+        {
+            "description": "Bran keeps the Rusty Flagon running through bad weather.",
+            "backstory": "He inherited the inn after years guarding merchant caravans.",
+            "speech_style": "Plainspoken, dry, and careful with promises.",
+            "goals": ["Keep travelers safe"],
+            "motives": ["Protect the inn and its regulars"],
+            "provenance": {"source": "runtime_scene_materialization_v1"},
+        }
+    )
+    session["campaign_bible_projection"]["entities"]["item:ghost-key"] = {
+        "kind": "item",
+        "name": "Ghost Key",
+        "description": "A wafer-thin access key copied from a drowned courier.",
+        "appearance": "Black ceramic with a pulsing blue edge.",
+        "properties": ["Opens obsolete Kestrel cargo locks"],
+        "visibility": "player_known",
+        "provenance": {"source": "runtime_scene_materialization_v1"},
+    }
     session["campaign_bible_projection"]["discovery_state"]["entities"] = {
         "npc:bran": "partially_known",
         "location:rusty_flagon": "partially_known",
         "faction:hidden": "hidden_from_player",
+        "item:ghost-key": "learned",
     }
     payload = campaign_lore_payload(session)
     assert [row["name"] for row in payload["dossiers"]["characters"]] == ["Bran"]
@@ -133,6 +153,20 @@ def test_lore_api_exposes_only_player_safe_known_dossiers() -> None:
     ]
     assert payload["dossiers"]["factions"] == []
     assert "secrets" not in payload["dossiers"]["characters"][0]
+    bran_card = payload["dossier_cards"]["characters"][0]
+    assert bran_card["id"] == "npc:bran"
+    assert bran_card["metadata"]["lore_origin"] == "gameplay"
+    assert bran_card["dossier"]["schema_version"] == "rpg_world_entity_dossier_v1"
+    assert {section["title"] for section in bran_card["dossier"]["sections"]} >= {
+        "Overview",
+        "Backstory",
+        "Goals and Motives",
+        "Speech Style",
+    }
+    ghost_key = payload["topic_cards"]["equipment_vehicles"][0]
+    assert ghost_key["id"] == "item:ghost-key"
+    assert ghost_key["metadata"]["lore_origin"] == "gameplay"
+    assert ghost_key["dossier"]["sections"]
 
 
 def test_lore_api_never_exposes_private_or_game_master_pages() -> None:
