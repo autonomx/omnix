@@ -132,8 +132,10 @@ describe('ChatbotWorkspace character runtime projection', () => {
     expect(screen.getByLabelText('Cloned voice')).toHaveValue('maya-clone');
     expect(screen.getByPlaceholderText('Message Maya, or use the microphone…')).toBeInTheDocument();
 
-    const message = screen.getByText('Hello from Maya.').closest('article');
-    expect(message).not.toBeNull();
+    const message = screen.getAllByText('Hello from Maya.')
+      .map((element) => element.closest('article'))
+      .find((element): element is HTMLElement => element instanceof HTMLElement);
+    expect(message).toBeDefined();
     expect(within(message as HTMLElement).getByText('Maya')).toBeInTheDocument();
 
     const transcript = screen.getByText('Transcript').closest('.assistant-voice-transcript');
