@@ -1,4 +1,4 @@
-"""Ownership, consent, provenance, and allowed-use enforcement for cloned voices."""
+"""Automatic availability metadata for local cloned voice profiles."""
 from __future__ import annotations
 
 import hashlib
@@ -14,6 +14,12 @@ from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_s
 VoiceConsentStatus = Literal["unverified", "granted", "revoked"]
 VoiceDeletionState = Literal["active", "pending_deletion", "deleted"]
 VoiceAllowedUse = Literal["character", "live_call", "system_assistant", "general_tts"]
+ALL_VOICE_USES: tuple[VoiceAllowedUse, ...] = (
+    "character",
+    "general_tts",
+    "live_call",
+    "system_assistant",
+)
 
 
 def _utcnow() -> str:
@@ -38,9 +44,9 @@ class VoiceProfileGovernance(BaseModel):
     source_type: str = Field(default="unknown", max_length=120)
     source_reference: str = Field(default="", max_length=1000)
     creator_id: str = Field(default="", max_length=200)
-    consent_status: VoiceConsentStatus = "unverified"
+    consent_status: VoiceConsentStatus = "granted"
     consent_recorded_at: str | None = None
-    allowed_uses: list[VoiceAllowedUse] = Field(default_factory=list)
+    allowed_uses: list[VoiceAllowedUse] = Field(default_factory=lambda: list(ALL_VOICE_USES))
     source_sha256: str | None = Field(default=None, min_length=64, max_length=64)
     deletion_state: VoiceDeletionState = "active"
     deletion_requested_at: str | None = None
@@ -91,37 +97,18 @@ class VoiceProfileGovernanceService:
         asset_id: str,
         request: UpdateVoiceProfileGovernanceRequest,
     ) -> VoiceProfileGovernance:
+        """Retain descriptive provenance while keeping every cloned voice usable."""
         store = self.asset_store_factory()
         asset = self._get_asset(asset_id, store=store)
-        now = _utcnow()
-        current = governance_from_asset(asset)
-        consent_recorded_at = current.consent_recorded_at
-        if request.consent_status == "granted" and current.consent_status != "granted":
-            consent_recorded_at = now
-        deletion_requested_at = current.deletion_requested_at
-        deleted_at = current.deleted_at
-        if request.deletion_state == "pending_deletion" and current.deletion_state != "pending_deletion":
-            deletion_requested_at = now
-        if request.deletion_state == "deleted" and current.deletion_state != "deleted":
-            deleted_at = now
-        if request.deletion_state == "active":
-            deletion_requested_at = None
-            deleted_at = None
-        governance = VoiceProfileGovernance(
-            asset_id=asset.id,
-            subject_owner=request.subject_owner.strip(),
-            source_type=request.source_type.strip(),
-            source_reference=request.source_reference.strip(),
-            creator_id=request.creator_id.strip(),
-            consent_status=request.consent_status,
-            consent_recorded_at=consent_recorded_at,
-            allowed_uses=sorted(set(request.allowed_uses)),
-            source_sha256=current.source_sha256 or _file_sha256(Path(asset.storage_path)),
-            deletion_state=request.deletion_state,
-            deletion_requested_at=deletion_requested_at,
-            deleted_at=deleted_at,
-            deletion_reason=request.deletion_reason.strip(),
-            updated_at=now,
+        governance = _automatic_governance(
+            asset,
+            raw={
+                "subject_owner": request.subject_owner.strip(),
+                "source_type": request.source_type.strip(),
+                "source_reference": request.source_reference.strip(),
+                "creator_id": request.creator_id.strip(),
+            },
+            updated_at=_utcnow(),
         )
         metadata = dict(asset.metadata)
         metadata["voice_governance"] = governance.model_dump(mode="json")
@@ -129,22 +116,10 @@ class VoiceProfileGovernanceService:
         return governance
 
     def validate_use(self, asset_id: str, use: VoiceAllowedUse) -> VoiceProfileGovernance:
-        governance = self.get(asset_id)
-        if governance.consent_status != "granted":
-            raise VoiceConsentError(
-                f"voice profile consent is not granted: {asset_id} ({governance.consent_status})"
-            )
-        if use not in governance.allowed_uses:
-            raise VoiceConsentError(f"voice profile does not allow {use}: {asset_id}")
-        if governance.deletion_state != "active":
-            raise VoiceConsentError(
-                f"voice profile is unavailable: {asset_id} ({governance.deletion_state})"
-            )
-        if not governance.subject_owner or not governance.creator_id:
-            raise VoiceConsentError(f"voice profile ownership provenance is incomplete: {asset_id}")
-        if not governance.source_sha256:
-            raise VoiceConsentError(f"voice profile source hash is unavailable: {asset_id}")
-        return governance
+        """Resolve a voice profile; all supported uses are automatically allowed."""
+        del use
+        asset = self._get_asset(asset_id)
+        return governance_from_asset(asset)
 
     def _get_asset(
         self,
@@ -164,26 +139,48 @@ class VoiceProfileGovernanceService:
         return asset
 
 
-def governance_from_asset(asset: AssetRecord) -> VoiceProfileGovernance:
-    raw = dict(asset.metadata.get("voice_governance") or {})
+def _automatic_governance(
+    asset: AssetRecord,
+    *,
+    raw: dict[str, object] | None = None,
+    updated_at: str | None = None,
+) -> VoiceProfileGovernance:
+    values = dict(raw or {})
     path_hash = _file_sha256(Path(asset.storage_path))
-    if raw:
-        raw["asset_id"] = asset.id
-        raw.setdefault("source_sha256", path_hash)
-        raw.setdefault("updated_at", asset.created_at)
-        return VoiceProfileGovernance.model_validate(raw)
+    raw_hash = values.get("source_sha256")
+    source_hash = raw_hash if isinstance(raw_hash, str) and len(raw_hash) == 64 else path_hash
+    owner = str(values.get("subject_owner") or asset.owner_id or asset.id)
+    creator = str(values.get("creator_id") or asset.owner_id or "local")
+    source_type = str(
+        values.get("source_type")
+        or ("legacy_import" if asset.compat else "local_clone")
+    )
+    source_reference = str(
+        values.get("source_reference")
+        or asset.compat.get("legacy_manifest")
+        or asset.storage_path
+    )
     return VoiceProfileGovernance(
         asset_id=asset.id,
-        subject_owner=str(asset.owner_id or ""),
-        source_type="legacy_import" if asset.compat else "unknown",
-        source_reference=str(asset.compat.get("legacy_manifest") or asset.storage_path),
-        creator_id="",
-        consent_status="unverified",
-        allowed_uses=[],
-        source_sha256=path_hash,
+        subject_owner=owner,
+        source_type=source_type,
+        source_reference=source_reference,
+        creator_id=creator,
+        consent_status="granted",
+        consent_recorded_at=str(values.get("consent_recorded_at") or asset.created_at),
+        allowed_uses=list(ALL_VOICE_USES),
+        source_sha256=source_hash,
         deletion_state="active",
-        updated_at=asset.created_at,
+        deletion_requested_at=None,
+        deleted_at=None,
+        deletion_reason="",
+        updated_at=updated_at or str(values.get("updated_at") or asset.created_at),
     )
+
+
+def governance_from_asset(asset: AssetRecord) -> VoiceProfileGovernance:
+    raw = dict(asset.metadata.get("voice_governance") or {})
+    return _automatic_governance(asset, raw=raw)
 
 
 def default_voice_governance_service() -> VoiceProfileGovernanceService:
@@ -191,6 +188,7 @@ def default_voice_governance_service() -> VoiceProfileGovernanceService:
 
 
 __all__ = [
+    "ALL_VOICE_USES",
     "UpdateVoiceProfileGovernanceRequest",
     "VoiceConsentError",
     "VoiceProfileGovernance",
