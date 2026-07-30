@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, rpg]
   push:
-    branches: [main, rpg]
+    branches: [main, rpg, verify/live-character-runtime-sync]
   workflow_dispatch:
 
 permissions:
