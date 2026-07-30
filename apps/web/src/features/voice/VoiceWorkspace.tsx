@@ -547,11 +547,11 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
             </section>
 
             <section className="voice-panel-final library-panel-final">
-              <Group justify="space-between"><div><Title order={4}>Voice Library</Title><Text size="sm">Your cloned voices stored in Omnix resources.</Text></div><Button size="xs" variant="subtle">Filter ⟳</Button></Group>
+              <Group justify="space-between"><div><Title order={4}>Voice Library</Title><Text size="sm">Your cloned voices stored in Omnix resources.</Text></div><Button aria-label="Refresh voice library" size="xs" variant="subtle" loading={assetsQuery.isFetching} onClick={() => void assetsQuery.refetch()}>Refresh ⟳</Button></Group>
               <label className="voice-search"><span>Search voices</span><input aria-label="Search voices" value={voiceSearch} onChange={(event) => setVoiceSearch(event.currentTarget.value)} placeholder="Search voices..." /></label>
               <div className="voice-library-table" aria-label="Voice library">
                 <div className="voice-library-row table-head"><span>Name</span><span>ID / Prefix</span><span>Status</span><span>Actions</span></div>
-                {visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} deleting={Boolean(deleteVoiceMutation.isPending && deleteVoiceMutation.variables && voiceAssetId(deleteVoiceMutation.variables) === voiceAssetId(asset))} key={voiceAssetId(asset)} onDelete={() => requestVoiceDelete(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />)}
+                {assetsQuery.isLoading ? <div className="platform-empty" role="status">Loading cloned voices…</div> : assetsQuery.isError ? <div className="platform-empty" role="alert">Voice Library failed to load. The local asset index may be unavailable.<Button aria-label="Retry voice library" size="xs" variant="subtle" onClick={() => void assetsQuery.refetch()}>Retry</Button></div> : visibleProfileAssets.length ? visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} deleting={Boolean(deleteVoiceMutation.isPending && deleteVoiceMutation.variables && voiceAssetId(deleteVoiceMutation.variables) === voiceAssetId(asset))} key={voiceAssetId(asset)} onDelete={() => requestVoiceDelete(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />) : <div className="platform-empty" role="status">No cloned voices were indexed. Create a clone or refresh the library to rescan local voice files.</div>}
               </div>
               {deleteVoiceMutation.isError ? <div className="platform-empty" role="alert">Voice deletion failed. The voice was not removed.</div> : null}
               <Group justify="space-between"><Text size="xs">{filteredProfileAssets.length} voices</Text><Button size="xs" variant="subtle" onClick={() => setShowAllVoices((value) => !value)}>{showAllVoices ? 'Show first 6' : 'View all voices →'}</Button></Group>
@@ -776,12 +776,23 @@ function voiceAssetId(asset: VoiceAsset | undefined): string {
   return typeof value === 'string' ? value : 'voice';
 }
 
+function voiceAssetMetadata(asset: VoiceAsset): Record<string, unknown> {
+  const value = (asset as { metadata?: unknown }).metadata;
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function voiceAssetName(asset: VoiceAsset): string {
+  const metadata = voiceAssetMetadata(asset);
+  const preferred = metadata.profile_name ?? metadata.name ?? metadata.voice_name;
+  if (typeof preferred === 'string' && preferred.trim()) return preferred.trim();
   const source = voiceStoragePath(asset) || voiceAssetId(asset);
   return source.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || voiceAssetId(asset);
 }
 
 function voiceProfileName(asset: VoiceAsset): string {
+  const metadata = voiceAssetMetadata(asset);
+  const preferred = metadata.voice_id ?? metadata.voice_clone_id;
+  if (typeof preferred === 'string' && preferred.trim()) return preferred.trim();
   return voiceAssetId(asset).replace(/^voice-cloning:/, '').replace(/^asset:/, '');
 }
 

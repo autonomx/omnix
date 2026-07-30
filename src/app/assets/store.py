@@ -208,53 +208,155 @@ class SharedAssetStore:
         return preview
 
     def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
-        """Expose old voice clone profiles without mutating the shared manifest."""
+        """Expose voice clone profiles from metadata or recover them from audio files."""
         try:
             import app.shared as shared
         except Exception:
             return []
 
         manifest_path = Path(getattr(shared, "VOICE_CLONES_FILE", ""))
-        if not manifest_path.is_file():
-            return []
-
-        try:
-            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            return []
-
         clones_dir = Path(getattr(shared, "VOICE_CLONES_DIR", manifest_path.parent))
-        records: list[AssetRecord] = []
-        for voice_id, payload in sorted(dict(raw or {}).items()):
-            data = dict(payload or {})
+        raw: Any = {}
+        if manifest_path.is_file():
+            try:
+                raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except Exception:
+                raw = {}
+
+        for wrapper_key in ("voices", "voice_clones", "profiles"):
+            if isinstance(raw, dict) and isinstance(raw.get(wrapper_key), (dict, list)):
+                raw = raw[wrapper_key]
+                break
+
+        manifest_entries: dict[str, dict[str, Any]] = {}
+        if isinstance(raw, list):
+            for index, payload in enumerate(raw):
+                if not isinstance(payload, dict):
+                    continue
+                name = str(
+                    payload.get("profile_name")
+                    or payload.get("voice_id")
+                    or payload.get("voice_clone_id")
+                    or f"voice-{index + 1}"
+                )
+                manifest_entries[name] = dict(payload)
+        elif isinstance(raw, dict):
+            for voice_id, payload in raw.items():
+                if isinstance(payload, dict):
+                    manifest_entries[str(voice_id)] = dict(payload)
+
+        def resolve_audio_path(clone_id: str, data: dict[str, Any]) -> Path | None:
+            candidates: list[Path] = []
+            for key in ("source_path", "audio_path", "storage_path"):
+                value = str(data.get(key) or "").strip()
+                if not value:
+                    continue
+                path = Path(value)
+                candidates.append(path)
+                if not path.is_absolute():
+                    candidates.append(clones_dir / path)
+            clone_name = Path(clone_id).name
+            if clone_name:
+                direct = clones_dir / clone_name
+                candidates.append(direct)
+                stem = Path(clone_name).stem
+                candidates.extend(clones_dir / f"{stem}{suffix}" for suffix in _AUDIO_MIME_TYPES)
+            for candidate in candidates:
+                if candidate.is_file() and candidate.suffix.lower() in _AUDIO_MIME_TYPES:
+                    return candidate
+            return None
+
+        records: dict[str, AssetRecord] = {}
+        referenced_audio_paths: set[Path] = set()
+        for legacy_name, data in sorted(manifest_entries.items()):
+            profile_name = str(data.get("profile_name") or legacy_name)
+            voice_id = str(data.get("voice_id") or legacy_name)
             clone_id = str(data.get("voice_clone_id") or voice_id)
-            wav_path = clones_dir / f"{clone_id}.wav"
-            storage_path = str(wav_path if wav_path.is_file() else manifest_path)
-            records.append(
-                AssetRecord(
-                    id=_safe_voice_asset_id(str(voice_id)),
+            audio_path = resolve_audio_path(clone_id, data)
+            if audio_path is not None:
+                try:
+                    referenced_audio_paths.add(audio_path.resolve())
+                except OSError:
+                    referenced_audio_paths.add(audio_path)
+            storage_path = str(audio_path or manifest_path)
+            mime_type = _AUDIO_MIME_TYPES.get(audio_path.suffix.lower(), "application/octet-stream") if audio_path else "application/json"
+            asset = AssetRecord(
+                id=_safe_voice_asset_id(profile_name),
+                module="voice-cloning",
+                type=AssetType.VOICE_PROFILE,
+                mime_type=mime_type,
+                storage_path=storage_path,
+                metadata={
+                    "profile_name": profile_name,
+                    "voice_id": voice_id,
+                    "voice_clone_id": clone_id,
+                    "speaker": data.get("speaker") or profile_name,
+                    "language": data.get("language") or "",
+                    "gender": data.get("gender") or "neutral",
+                    "has_audio": audio_path is not None or bool(data.get("has_audio")),
+                    "is_preloaded": bool(data.get("is_preloaded")),
+                    "source_path": str(data.get("source_path") or ""),
+                },
+                created_at=_mtime_iso(audio_path or manifest_path),
+                compat={
+                    "legacy_system": "app.shared.VOICE_CLONES_FILE",
+                    "legacy_manifest": str(manifest_path),
+                    "legacy_voice_id": legacy_name,
+                },
+            )
+            records[asset.id] = asset
+
+        if clones_dir.is_dir():
+            audio_files = sorted(
+                path
+                for path in clones_dir.iterdir()
+                if path.is_file() and path.suffix.lower() in _AUDIO_MIME_TYPES
+            )
+            for audio_path in audio_files:
+                try:
+                    resolved_audio_path = audio_path.resolve()
+                except OSError:
+                    resolved_audio_path = audio_path
+                if resolved_audio_path in referenced_audio_paths:
+                    continue
+                sidecar_data: dict[str, Any] = {}
+                sidecar_path = audio_path.with_suffix(".json")
+                if sidecar_path.is_file():
+                    try:
+                        sidecar_raw = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                        if isinstance(sidecar_raw, dict):
+                            sidecar_data = sidecar_raw
+                    except Exception:
+                        sidecar_data = {}
+                profile_name = str(sidecar_data.get("profile_name") or audio_path.stem)
+                voice_id = str(sidecar_data.get("voice_id") or audio_path.stem)
+                asset = AssetRecord(
+                    id=_safe_voice_asset_id(profile_name),
                     module="voice-cloning",
                     type=AssetType.VOICE_PROFILE,
-                    mime_type="audio/wav" if wav_path.is_file() else "application/json",
-                    storage_path=storage_path,
+                    mime_type=_AUDIO_MIME_TYPES.get(audio_path.suffix.lower(), "application/octet-stream"),
+                    storage_path=str(audio_path),
                     metadata={
+                        "profile_name": profile_name,
                         "voice_id": voice_id,
-                        "voice_clone_id": clone_id,
-                        "speaker": data.get("speaker") or "default",
-                        "language": data.get("language") or "",
-                        "gender": data.get("gender") or "neutral",
-                        "has_audio": bool(data.get("has_audio")),
-                        "is_preloaded": bool(data.get("is_preloaded")),
+                        "voice_clone_id": voice_id,
+                        "speaker": sidecar_data.get("speaker") or profile_name,
+                        "language": sidecar_data.get("language") or "",
+                        "gender": sidecar_data.get("gender") or "neutral",
+                        "has_audio": True,
+                        "is_preloaded": bool(sidecar_data.get("is_preloaded")),
+                        "recovered_from_file": True,
                     },
-                    created_at=_mtime_iso(wav_path if wav_path.is_file() else manifest_path),
+                    created_at=_mtime_iso(audio_path),
                     compat={
-                        "legacy_system": "app.shared.VOICE_CLONES_FILE",
-                        "legacy_manifest": str(manifest_path),
+                        "legacy_system": "resources/voice_clones directory scan",
                         "legacy_voice_id": voice_id,
+                        "metadata_sidecar": str(sidecar_path) if sidecar_path.is_file() else "",
                     },
                 )
-            )
-        return records
+                records.setdefault(asset.id, asset)
+
+        return [records[asset_id] for asset_id in sorted(records)]
 
     def _legacy_audio_assets(self) -> list[AssetRecord]:
         """Expose legacy generated audio files without mutating the shared manifest."""
@@ -303,10 +405,18 @@ class SharedAssetStore:
             raw = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         except Exception:
             return {}
-        return {
-            asset_id: AssetRecord(**payload)
-            for asset_id, payload in dict(raw.get("assets") or {}).items()
-        }
+        raw_assets = raw.get("assets") if isinstance(raw, dict) else None
+        if not isinstance(raw_assets, dict):
+            return {}
+        assets: dict[str, AssetRecord] = {}
+        for asset_id, payload in raw_assets.items():
+            if not isinstance(payload, dict):
+                continue
+            try:
+                assets[str(asset_id)] = AssetRecord(**payload)
+            except Exception:
+                continue
+        return assets
 
     def _save_manifest(self, assets: dict[str, AssetRecord]) -> None:
         payload = {
