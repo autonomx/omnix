@@ -1,7 +1,7 @@
 """Structured local diagnostics for character voice resolution.
 
 The browser already persists live-call controller events to
-``resources/logs/live-call-streaming.log``.  This module adds small JSON-line
+``resources/logs/live-call-streaming.log``. This module adds small JSON-line
 logs for the backend-to-TTS handoff and the standalone TTS process without
 recording synthesized text.
 """
@@ -108,7 +108,8 @@ def voice_debug_log(
         **details,
     }
     try:
-        _logger(channel).info(json.dumps(record, ensure_ascii=False, sort_keys=True, default=_json_default))
-    except Exception:
+        serialized = json.dumps(record, ensure_ascii=False, sort_keys=True, default=_json_default)
+        _logger(channel).info(serialized)
+    except (OSError, TypeError, ValueError):
         # Diagnostics must never interrupt speech generation or playback.
         return
