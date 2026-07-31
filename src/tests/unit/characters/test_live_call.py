@@ -4,7 +4,11 @@ import os
 from pathlib import Path
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest, SetSessionInteractionRequest
+from app.characters import (
+    CharacterRepository,
+    CreateCharacterRequest,
+    SetSessionInteractionRequest,
+)
 from app.characters.live_call import normalize_speech_style, resolve_live_call_runtime
 from app.characters.voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
