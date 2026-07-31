@@ -1,8 +1,9 @@
 """Download helpers for global image models."""
 from __future__ import annotations
 
+import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 from app.image.providers.registry import get_image_provider_definition
 from app.shared import MODELS_DIR, load_settings, save_settings
@@ -26,6 +27,28 @@ def _provider_definition(provider_name: str) -> Dict[str, Any]:
     if not definition:
         raise ValueError(f"unsupported_image_provider:{provider_name}")
     return definition
+
+
+def _append_missing(missing: List[str], value: str) -> None:
+    value = _safe_str(value).strip()
+    if value and value not in missing:
+        missing.append(value)
+
+
+def _relative_path(root: str, path: str) -> str:
+    try:
+        return os.path.relpath(path, root).replace("\\", "/")
+    except Exception:
+        return os.path.normpath(path).replace("\\", "/")
+
+
+def _read_json(path: str) -> Dict[str, Any] | None:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            value = json.load(handle)
+    except (OSError, ValueError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
 
 
 def normalize_image_model_local_dir(
@@ -62,11 +85,68 @@ def resolve_image_local_dir_from_settings(settings: Dict[str, Any], provider_nam
 
 
 def required_image_model_files(provider_name: str) -> List[str]:
-    provider_name = _safe_str(provider_name).strip().lower()
+    definition = _provider_definition(provider_name)
     required = ["model_index.json"]
-    if provider_name == "flux_klein":
-        required.append(os.path.join("scheduler", "scheduler_config.json"))
+    for path in definition.get("required_paths") or []:
+        normalized = _safe_str(path).strip()
+        if normalized and normalized not in required:
+            required.append(normalized)
     return required
+
+
+def _validate_model_components(local_dir: str, missing: List[str]) -> None:
+    model_index_path = os.path.join(local_dir, "model_index.json")
+    if not os.path.isfile(model_index_path):
+        return
+    model_index = _read_json(model_index_path)
+    if model_index is None:
+        _append_missing(missing, "model_index.json:invalid")
+        return
+
+    for component, descriptor in model_index.items():
+        if _safe_str(component).startswith("_"):
+            continue
+        if not isinstance(descriptor, (list, tuple)) or len(descriptor) < 2:
+            continue
+        class_name = descriptor[1]
+        if not _safe_str(class_name).strip():
+            continue
+        component_path = os.path.join(local_dir, component)
+        if not os.path.exists(component_path):
+            _append_missing(missing, f"component:{component}")
+
+
+def _weight_index_files(local_dir: str) -> Iterable[str]:
+    for root, _dirs, files in os.walk(local_dir):
+        for name in files:
+            if name.endswith((".safetensors.index.json", ".bin.index.json")):
+                yield os.path.join(root, name)
+
+
+def _validate_weight_shards(local_dir: str, missing: List[str]) -> None:
+    for index_path in _weight_index_files(local_dir):
+        index_data = _read_json(index_path)
+        if index_data is None:
+            _append_missing(missing, f"{_relative_path(local_dir, index_path)}:invalid")
+            continue
+        weight_map = index_data.get("weight_map")
+        if not isinstance(weight_map, dict):
+            _append_missing(missing, f"{_relative_path(local_dir, index_path)}:weight_map")
+            continue
+        index_dir = os.path.dirname(index_path)
+        for shard in sorted({_safe_str(value).strip() for value in weight_map.values()}):
+            if not shard:
+                continue
+            candidates = [os.path.join(index_dir, shard), os.path.join(local_dir, shard)]
+            if not any(os.path.isfile(candidate) for candidate in candidates):
+                _append_missing(missing, _relative_path(local_dir, candidates[0]))
+
+
+def _validate_no_incomplete_downloads(local_dir: str, missing: List[str]) -> None:
+    for root, _dirs, files in os.walk(local_dir):
+        for name in files:
+            if name.endswith(".incomplete"):
+                _append_missing(missing, f"incomplete:{_relative_path(local_dir, os.path.join(root, name))}")
 
 
 def get_image_local_model_status(provider_name: str, local_dir: str = "") -> Dict[str, Any]:
@@ -92,18 +172,22 @@ def get_image_local_model_status(provider_name: str, local_dir: str = "") -> Dic
     if exists:
         for rel in required_image_model_files(provider_name):
             if not os.path.exists(os.path.join(local_dir, rel)):
-                missing.append(rel)
+                _append_missing(missing, rel)
+        _validate_model_components(local_dir, missing)
+        _validate_weight_shards(local_dir, missing)
+        _validate_no_incomplete_downloads(local_dir, missing)
     else:
-        missing.extend(required_image_model_files(provider_name))
+        for rel in required_image_model_files(provider_name):
+            _append_missing(missing, rel)
 
     has_weights = False
     if exists:
-        for root, _dirs, files in os.walk(local_dir):
+        for _root, _dirs, files in os.walk(local_dir):
             if any(name.endswith((".safetensors", ".bin")) for name in files):
                 has_weights = True
                 break
     if not has_weights:
-        missing.append("*.safetensors")
+        _append_missing(missing, "*.safetensors")
 
     complete = exists and not missing
     return {
@@ -158,6 +242,18 @@ def download_image_model(provider_name: str) -> Dict[str, Any]:
             "gated": bool(definition.get("gated")),
         }
 
+    local_status = get_image_local_model_status(provider_name, local_dir)
+    if not local_status.get("complete"):
+        return {
+            "ok": False,
+            "provider": provider_name,
+            "error": f"{provider_name}_download_incomplete",
+            "repo_id": repo_id,
+            "local_dir": local_dir,
+            "local_status": local_status,
+            "loaded": False,
+        }
+
     provider_cfg = dict(provider_cfg)
     provider_cfg.update({
         "repo_id": repo_id,
@@ -185,9 +281,8 @@ def download_image_model(provider_name: str) -> Dict[str, Any]:
         settings["rpg_visual"] = rpg_visual
 
     save_settings(settings)
-    local_status = get_image_local_model_status(provider_name, local_dir)
     return {
-        "ok": bool(local_status.get("complete")),
+        "ok": True,
         "provider": provider_name,
         "repo_id": repo_id,
         "local_dir": local_dir,
