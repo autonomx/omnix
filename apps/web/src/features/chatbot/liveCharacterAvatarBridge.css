@@ -48,12 +48,31 @@
 }
 
 .assistant-live-character-avatar img {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   width: 100%;
   height: 100%;
   display: block;
   object-fit: cover;
+  opacity: 1;
   transform: none;
   filter: none;
+  pointer-events: none;
+  transition: opacity 34ms linear;
+  will-change: opacity;
+}
+
+.assistant-live-character-avatar img[data-avatar-layer='previous'] {
+  opacity: 0;
+}
+
+.assistant-live-character-avatar img[data-avatar-layer='current'].is-entering {
+  opacity: 0;
+}
+
+.assistant-live-character-avatar img[data-avatar-layer='previous'].is-visible {
+  opacity: 1;
 }
 
 .assistant-live-character-avatar[data-voice-mode='speaking'] {
@@ -153,7 +172,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .assistant-live-character-avatar {
+  .assistant-live-character-avatar,
+  .assistant-live-character-avatar img {
     transition: none;
   }
 }
