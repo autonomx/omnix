@@ -5,7 +5,7 @@ import io
 import os
 import uuid
 import wave
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
@@ -29,14 +29,14 @@ def _trace_id(prefix: str) -> str:
     return f"{prefix}:{uuid.uuid4()}"
 
 
-def tts_health(timeout: float = 5.0) -> Dict[str, Any]:
+def tts_health(timeout: float = 5.0) -> dict[str, Any]:
     try:
         response = requests.get(f"{_tts_base_url()}/health", timeout=timeout)
         response.raise_for_status()
         data = response.json()
         data["reachable"] = True
         return data
-    except Exception as exc:
+    except (requests.RequestException, ValueError) as exc:
         return {
             "ok": False,
             "reachable": False,
@@ -45,7 +45,7 @@ def tts_health(timeout: float = 5.0) -> Dict[str, Any]:
         }
 
 
-def tts_speakers(timeout: float = 10.0) -> Dict[str, Any]:
+def tts_speakers(timeout: float = 10.0) -> dict[str, Any]:
     trace_id = _trace_id("tts-speakers")
     endpoint = f"{_tts_base_url()}/api/tts/speakers"
     voice_debug_log(
@@ -79,7 +79,7 @@ def tts_speakers(timeout: float = 10.0) -> Dict[str, Any]:
             ][:100] if isinstance(speakers, list) else [],
         )
         return data
-    except requests.exceptions.RequestException as exc:
+    except (requests.RequestException, ValueError) as exc:
         voice_debug_log(
             "backend",
             "tts_speakers_failed",
@@ -104,7 +104,7 @@ def tts_generate_audio(
     pitch: float = 0.0,
     emotion: str = "neutral",
     timeout: float = 120.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     trace_id = _trace_id("tts-audio")
     endpoint = f"{_tts_base_url()}/api/tts/generate_audio"
     payload = {
@@ -149,7 +149,7 @@ def tts_generate_audio(
             error=result.get("error") if isinstance(result, dict) else None,
         )
         return result
-    except Exception as exc:
+    except (requests.RequestException, ValueError, RuntimeError) as exc:
         voice_debug_log(
             "backend",
             "tts_audio_failed",
@@ -173,7 +173,7 @@ def tts_generate_stream_audio(
     append_silence: bool = False,
     max_new_tokens: int = 180,
     timeout: float = 120.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     trace_id = _trace_id("tts-stream")
     endpoint = f"{_tts_base_url()}/api/tts/generate_stream_audio"
     payload = {
@@ -263,7 +263,7 @@ def tts_generate_stream_audio(
             error=result.get("error") if isinstance(result, dict) else None,
         )
         return result
-    except Exception as exc:
+    except (requests.RequestException, ValueError, RuntimeError) as exc:
         voice_debug_log(
             "backend",
             "tts_stream_failed",
@@ -280,10 +280,10 @@ def tts_voice_clone(
     gender: str = "neutral",
     language: str = "en",
     ref_text: str = "",
-    audio_bytes: Optional[bytes] = None,
+    audio_bytes: bytes | None = None,
     filename: str = "voice.wav",
     timeout: float = 120.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     data = {
         "voice_id": voice_id,
         "gender": gender,
