@@ -42,7 +42,10 @@ export function createAssistantWorkspaceRuntimeConfig(
     defaultModelId: undefined,
     sttServiceUrl: readString(env, 'VITE_ASSISTANT_STT_URL'),
     ttsServiceUrl: readString(env, 'VITE_ASSISTANT_TTS_URL'),
-    ttsVoice: readString(env, 'VITE_ASSISTANT_TTS_VOICE'),
+    // Character Mode is authoritative while its Live Voice card is mounted. Legacy
+    // response-audio paths call this factory at playback time, so resolving the card
+    // here prevents them from silently falling back to the static configured voice.
+    ttsVoice: readActiveCharacterVoice() ?? readString(env, 'VITE_ASSISTANT_TTS_VOICE'),
     eventStorageKey:
       readString(env, 'VITE_ASSISTANT_EVENT_STORAGE_KEY') ??
       DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.eventStorageKey,
@@ -62,6 +65,15 @@ export function createAssistantWorkspaceRuntimeConfig(
 
 function getImportMetaEnv(): AssistantWorkspaceRuntimeEnv {
   return ((import.meta as unknown as { env?: AssistantWorkspaceRuntimeEnv }).env ?? {}) as AssistantWorkspaceRuntimeEnv;
+}
+
+function readActiveCharacterVoice(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const activeVoice = document
+    .querySelector<HTMLElement>('.assistant-live-card')
+    ?.dataset.liveVoiceId
+    ?.trim();
+  return activeVoice || undefined;
 }
 
 function readString(env: AssistantWorkspaceRuntimeEnv, key: string): string | undefined {
