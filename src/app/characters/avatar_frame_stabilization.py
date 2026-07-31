@@ -17,6 +17,11 @@ _DEFAULT_MOUTH_ANCHOR = {
 }
 _SUPPORTED_OUTPUT_FORMATS = {"JPEG", "PNG", "WEBP"}
 _PRECISE_VISEMES = {"a", "e", "o", "u", "mbp", "fv", "l", "wq", "other"}
+_FALLBACK_MOUTH_ARTICULATION = {
+    "mouth_small": 20,
+    "mouth_medium": 35,
+    "mouth_wide": 50,
+}
 
 
 class AvatarFrameStabilizationError(ValueError):
@@ -30,7 +35,7 @@ def stabilize_generated_avatar_frame(
     variant: str,
     store: SharedAssetStore,
     mouth_anchor: Mapping[str, float] | None = None,
-    articulation_percent: int | float | None = None,
+    articulation_percent: float | None = None,
 ) -> dict[str, Any]:
     """Replace global diffusion drift with a localized, conservative facial edit.
 
@@ -114,7 +119,8 @@ def stabilize_generated_avatar_frame(
             region_box,
             ImageChops,
         )
-        _validate_mouth_quality(quality_metrics, articulation)
+        if _base_viseme(variant) is not None:
+            _validate_mouth_quality(quality_metrics, articulation)
         blend_strength = _mouth_blend_strength(articulation)
         aligned = Image.blend(canonical, aligned, blend_strength)
 
@@ -196,16 +202,20 @@ def _base_viseme(variant: str) -> str | None:
 
 def _normalized_articulation(
     variant: str,
-    value: int | float | None,
+    value: float | None,
 ) -> int:
+    normalized_variant = str(variant or "").strip().lower()
     if value is None:
-        suffix = str(variant or "").strip().lower().rsplit("_", 1)
-        if len(suffix) == 2 and suffix[1].isdigit():
-            value = int(suffix[1])
-        elif _base_viseme(variant) is not None:
-            value = 60
+        if normalized_variant in _FALLBACK_MOUTH_ARTICULATION:
+            value = _FALLBACK_MOUTH_ARTICULATION[normalized_variant]
         else:
-            value = 100
+            suffix = normalized_variant.rsplit("_", 1)
+            if len(suffix) == 2 and suffix[1].isdigit():
+                value = int(suffix[1])
+            elif _base_viseme(normalized_variant) is not None:
+                value = 60
+            else:
+                value = 100
     try:
         return max(0, min(100, round(float(value))))
     except (TypeError, ValueError):
