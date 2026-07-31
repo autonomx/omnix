@@ -35,7 +35,7 @@ jobs:
           cache: pip
 
       - name: Install Python test dependencies
-        run: python -m pip install --upgrade pip ruff pytest fastapi httpx pydantic requests python-multipart packaging
+        run: python -m pip install --upgrade pip ruff pytest fastapi httpx pydantic requests python-multipart packaging playwright
 
       - name: Ruff changed image modules
         run: |
