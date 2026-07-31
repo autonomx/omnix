@@ -9,6 +9,8 @@ on:
       - "src/tests/unit/characters/test_live_call.py"
       - "apps/web/src/features/chatbot/characterClient.ts"
       - "apps/web/src/features/chatbot/characterClient.test.ts"
+      - "apps/web/src/features/chatbot/VoiceGovernancePanel.tsx"
+      - "apps/web/src/features/chatbot/VoiceGovernancePanel.test.tsx"
       - ".github/workflows/character-live-voice-resolution.yml"
   workflow_dispatch:
 
@@ -52,7 +54,8 @@ jobs:
           --confcutdir=src/tests/unit
           src/tests/unit/assets/test_canonical_voice_clone_resolution.py
           src/tests/unit/characters/test_live_call.py
-      - name: Verify browser playback adapter
+      - name: Verify browser playback and reassignment
         run: >-
           npm --workspace @omnix/web run test --
           src/features/chatbot/characterClient.test.ts
+          src/features/chatbot/VoiceGovernancePanel.test.tsx
