@@ -88,11 +88,8 @@ function jsonInit(method: string, body: unknown): RequestInit {
 }
 
 export const characterAvatarClient = {
-  async optionalPack(characterId: string): Promise<CharacterAvatarPack | null> {
-    const response = await fetch(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack`);
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(await response.text() || `Avatar request failed with status ${response.status}.`);
-    return response.json() as Promise<CharacterAvatarPack>;
+  optionalPack(characterId: string): Promise<CharacterAvatarPack | null> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack/optional`);
   },
   async uploadSourceImage(file: File): Promise<UploadedAvatarSourceAsset> {
     const payload = await request<{ ok: true; asset: UploadedAvatarSourceAsset }>(
