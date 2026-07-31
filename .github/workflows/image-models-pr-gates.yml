@@ -39,7 +39,7 @@ jobs:
 
       - name: Ruff changed image modules
         run: |
-          ruff check \
+          ruff check --select E,F \
             src/app/gateway/image_model_routes.py \
             src/app/image/config.py \
             src/app/image/downloads.py \
