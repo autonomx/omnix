@@ -7,6 +7,10 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from .canonical_voice_clones import (
+    canonical_voice_clone_root,
+    discover_canonical_voice_clone_assets,
+)
 from .legacy_documents import (
     _DOCUMENT_MIME_TYPES,
     _legacy_document_roots,
@@ -108,13 +112,13 @@ class SharedAssetStore(ManifestSharedAssetStore):
     """Shared asset store with non-mutating compatibility and curated read-through."""
 
     def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
-        """Read voice profiles directly from the canonical resources directory."""
+        """Read voice profiles from configured and compatibility directories."""
         return discover_voice_clone_assets()
 
     def list_assets(self) -> AssetListResponse:
         # The shared manifest remains authoritative, but each compatibility source
-        # is isolated. A broken image index or malformed legacy file must not make
-        # local voice clones disappear behind an HTTP 500 response.
+        # is isolated. The canonical clone directory is scanned independently so an
+        # environment override can never hide resources/voice_clones.
         LOGGER.info(
             "[Voice Library][assets] list started cwd=%s manifest=%s store=%s",
             os.getcwd(),
@@ -126,7 +130,12 @@ class SharedAssetStore(ManifestSharedAssetStore):
             "[Voice Library][assets] shared manifest loaded count=%d",
             len(assets),
         )
-        _merge_assets(assets, "voice_clones", self._legacy_voice_clone_assets)
+        _merge_assets(
+            assets,
+            "canonical_voice_clones",
+            discover_canonical_voice_clone_assets,
+        )
+        _merge_assets(assets, "voice_clone_compatibility", self._legacy_voice_clone_assets)
         _merge_assets(assets, "generated_audio", super()._legacy_audio_assets)
         _merge_assets(
             assets,
@@ -152,7 +161,12 @@ class SharedAssetStore(ManifestSharedAssetStore):
             return manifest_asset
 
         candidates: dict[str, AssetRecord] = {}
-        _merge_assets(candidates, "voice_clones", self._legacy_voice_clone_assets)
+        _merge_assets(
+            candidates,
+            "canonical_voice_clones",
+            discover_canonical_voice_clone_assets,
+        )
+        _merge_assets(candidates, "voice_clone_compatibility", self._legacy_voice_clone_assets)
         _merge_assets(candidates, "generated_audio", super()._legacy_audio_assets)
         _merge_assets(
             candidates,
@@ -166,8 +180,15 @@ class SharedAssetStore(ManifestSharedAssetStore):
     def preview_legacy_non_image_import(self) -> AssetLegacyImportDryRun:
         """Summarize non-image legacy assets without mutating any source."""
         manifest_assets = super()._load_manifest()
+        voice_assets: dict[str, AssetRecord] = {}
+        _merge_assets(
+            voice_assets,
+            "canonical_voice_clones",
+            discover_canonical_voice_clone_assets,
+        )
+        _merge_assets(voice_assets, "voice_clone_compatibility", self._legacy_voice_clone_assets)
         legacy_assets = [
-            *self._legacy_voice_clone_assets(),
+            *voice_assets.values(),
             *super()._legacy_audio_assets(),
             *legacy_document_assets(),
         ]
@@ -211,7 +232,9 @@ class SharedAssetStore(ManifestSharedAssetStore):
 def _voice_clone_roots() -> list[AssetLegacyRootScan]:
     roots: list[AssetLegacyRootScan] = []
     seen: set[tuple[str, str]] = set()
-    for clones_dir, clones_file in voice_clone_sources():
+    canonical_root = canonical_voice_clone_root()
+    source_rows = [(canonical_root, canonical_root / "voice_clones.json"), *voice_clone_sources()]
+    for clones_dir, clones_file in source_rows:
         for family, path in (
             ("voice_cloning", clones_dir),
             ("voice_cloning_manifest", clones_file),
