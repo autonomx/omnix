@@ -14,6 +14,7 @@ import { initializeVoiceSessionEvaluationWorkspace } from './features/chatbot/vo
 import { installRpgTurnUiFetchInterceptor } from './features/rpg/rpgTurnUiStore';
 import './features/podcast/podcastSessionGuard';
 import './features/voice/voiceJobListGuard';
+import { installVoiceLibraryFetchDiagnostics } from './features/voice/voiceLibraryFetchDiagnostics';
 import './styles.css';
 import './legacy-layout.css';
 import './features/chatbot/ChatbotWorkspaceTools.css';
@@ -66,6 +67,7 @@ const queryClient = new QueryClient({
 });
 
 installRpgTurnUiFetchInterceptor();
+installVoiceLibraryFetchDiagnostics();
 initializeLiveConversationStoreBridge();
 initializeLiveSessionCoordinator();
 emitLiveRuntimeProvenance();
