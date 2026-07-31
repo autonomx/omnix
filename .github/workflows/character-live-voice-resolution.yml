@@ -5,8 +5,12 @@ on:
     paths:
       - "src/app/assets/canonical_voice_clones.py"
       - "src/app/characters/live_call.py"
+      - "src/app/tts_http_client.py"
+      - "src/app/voice_debug.py"
+      - "src/tts_server.py"
       - "src/tests/unit/assets/test_canonical_voice_clone_resolution.py"
       - "src/tests/unit/characters/test_live_call.py"
+      - "src/tests/unit/test_voice_resolution_debug_logging.py"
       - "apps/web/src/features/chatbot/characterClient.ts"
       - "apps/web/src/features/chatbot/characterClient.test.ts"
       - "apps/web/src/features/chatbot/VoiceGovernancePanel.tsx"
@@ -46,14 +50,19 @@ jobs:
           ruff check \
             src/app/assets/canonical_voice_clones.py \
             src/app/characters/live_call.py \
+            src/app/tts_http_client.py \
+            src/app/voice_debug.py \
             src/tests/unit/assets/test_canonical_voice_clone_resolution.py \
-            src/tests/unit/characters/test_live_call.py
+            src/tests/unit/characters/test_live_call.py \
+            src/tests/unit/test_voice_resolution_debug_logging.py
+          python -m py_compile src/tts_server.py
       - name: Verify canonical and live-call voice resolution
         run: >-
           pytest -q
           --confcutdir=src/tests/unit
           src/tests/unit/assets/test_canonical_voice_clone_resolution.py
           src/tests/unit/characters/test_live_call.py
+          src/tests/unit/test_voice_resolution_debug_logging.py
       - name: Verify browser playback and reassignment
         run: >-
           npm --workspace @omnix/web run test --
