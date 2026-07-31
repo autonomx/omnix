@@ -7,7 +7,7 @@ from typing import Any, Dict
 from app.image.providers.registry import is_supported_image_provider
 from app.shared import MODELS_DIR, load_settings
 
-DEFAULT_MODEL_DIR = os.path.join(MODELS_DIR, 'image')
+DEFAULT_MODEL_DIR = os.path.join(MODELS_DIR, "image")
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -27,7 +27,7 @@ def _truthy(value: Any) -> bool:
 
 
 def is_image_generation_enabled() -> bool:
-    """Image generation is opt-in because FLUX can consume substantial VRAM."""
+    """Image generation is opt-in because local models can consume substantial VRAM."""
 
     return _truthy(os.environ.get("OMNIX_IMAGE_ENABLED", "0"))
 
@@ -51,7 +51,7 @@ def get_active_image_provider_name() -> str:
         return "mock"
 
     image_cfg = get_image_settings()
-    provider = _safe_str(image_cfg.get("provider")).strip()
+    provider = _safe_str(image_cfg.get("provider")).strip().lower()
     if not provider:
         return "flux_klein"
     if is_supported_image_provider(provider):
@@ -61,11 +61,7 @@ def get_active_image_provider_name() -> str:
 
 def get_provider_config(provider_name: str) -> Dict[str, Any]:
     image_cfg = get_image_settings()
-    provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
-
-    if provider_name == "flux_klein":
-        return _safe_dict(image_cfg.get("flux_klein"))
-    if provider_name == "mock":
-        return _safe_dict(image_cfg.get("mock"))
-
-    return {}
+    provider_name = _safe_str(provider_name).strip().lower() or get_active_image_provider_name()
+    if not is_supported_image_provider(provider_name):
+        return {}
+    return _safe_dict(image_cfg.get(provider_name))
