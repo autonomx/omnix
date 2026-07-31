@@ -12,15 +12,15 @@ from app.assets import AssetType, SharedAssetStore
 _DEFAULT_MOUTH_ANCHOR = {
     "x": 0.5,
     "y": 0.61,
-    "width": 0.36,
-    "height": 0.22,
+    "width": 0.3,
+    "height": 0.17,
 }
 _SUPPORTED_OUTPUT_FORMATS = {"JPEG", "PNG", "WEBP"}
 _PRECISE_VISEMES = {"a", "e", "o", "u", "mbp", "fv", "l", "wq", "other"}
 
 
 class AvatarFrameStabilizationError(ValueError):
-    """Raised when a generated avatar frame cannot be stabilized."""
+    """Raised when a generated avatar frame cannot be stabilized safely."""
 
 
 def stabilize_generated_avatar_frame(
@@ -30,13 +30,14 @@ def stabilize_generated_avatar_frame(
     variant: str,
     store: SharedAssetStore,
     mouth_anchor: Mapping[str, float] | None = None,
+    articulation_percent: int | float | None = None,
 ) -> dict[str, Any]:
-    """Replace global diffusion drift with a localized, feathered facial edit.
+    """Replace global diffusion drift with a localized, conservative facial edit.
 
-    Generated mouth, blink, and expression images are first translation-aligned
-    to the canonical portrait. Only the intended facial region is then blended
-    onto the canonical image, which makes all pixels outside that region exactly
-    identical across animation frames.
+    Generated mouth, blink, and expression images are translation-aligned to the
+    canonical portrait. Only the intended facial region is feathered onto the
+    canonical image. Mouth frames receive an additional articulation-strength
+    clamp and quality gate so a speaking frame cannot become a scream or grin.
     """
 
     region = avatar_frame_region(variant)
@@ -103,6 +104,20 @@ def stabilize_generated_avatar_frame(
     )
 
     region_box = _region_box(region, canonical.size, normalized_anchor)
+    articulation = _normalized_articulation(variant, articulation_percent)
+    quality_metrics: dict[str, float] = {}
+    blend_strength = 1.0
+    if region == "mouth":
+        quality_metrics = _mouth_quality_metrics(
+            canonical,
+            aligned,
+            region_box,
+            ImageChops,
+        )
+        _validate_mouth_quality(quality_metrics, articulation)
+        blend_strength = _mouth_blend_strength(articulation)
+        aligned = Image.blend(canonical, aligned, blend_strength)
+
     mask = Image.new("L", canonical.size, 0)
     ImageDraw.Draw(mask).ellipse(region_box, fill=255)
     feather = _feather_radius(region, canonical.size)
@@ -125,6 +140,9 @@ def stabilize_generated_avatar_frame(
             "bottom": region_box[3],
         },
         "avatar_mouth_anchor": normalized_anchor,
+        "avatar_articulation_percent": articulation,
+        "avatar_articulation_blend_strength": round(blend_strength, 4),
+        **{f"avatar_quality_{key}": value for key, value in quality_metrics.items()},
     }
 
 
@@ -132,7 +150,7 @@ def avatar_frame_region(variant: str) -> str | None:
     normalized = str(variant or "").strip().lower()
     if not normalized or normalized == "base":
         return None
-    if normalized.startswith("mouth_") or normalized in _PRECISE_VISEMES:
+    if normalized.startswith("mouth_") or _base_viseme(normalized) is not None:
         return "mouth"
     if normalized.startswith("blink_"):
         return "eyes"
@@ -169,6 +187,29 @@ def _pillow():
             "avatar_stabilization_runtime_missing:Pillow"
         ) from exc
     return Image, ImageChops, ImageDraw, ImageFilter, ImageOps, ImageStat
+
+
+def _base_viseme(variant: str) -> str | None:
+    base = str(variant or "").strip().lower().split("_", 1)[0]
+    return base if base in _PRECISE_VISEMES else None
+
+
+def _normalized_articulation(
+    variant: str,
+    value: int | float | None,
+) -> int:
+    if value is None:
+        suffix = str(variant or "").strip().lower().rsplit("_", 1)
+        if len(suffix) == 2 and suffix[1].isdigit():
+            value = int(suffix[1])
+        elif _base_viseme(variant) is not None:
+            value = 60
+        else:
+            value = 100
+    try:
+        return max(0, min(100, round(float(value))))
+    except (TypeError, ValueError):
+        return 60 if _base_viseme(variant) is not None else 100
 
 
 def _normalized_value(value: Any, default: float, minimum: float, maximum: float) -> float:
@@ -318,6 +359,81 @@ def _weighted_channel_means(
     return tuple(total / max(1, total_area) for total in totals)  # type: ignore[return-value]
 
 
+def _mouth_quality_metrics(
+    canonical: Any,
+    aligned: Any,
+    region_box: tuple[int, int, int, int],
+    ImageChops: Any,
+) -> dict[str, float]:
+    reference_crop = canonical.crop(region_box)
+    candidate_crop = aligned.crop(region_box)
+    area = max(1, reference_crop.width * reference_crop.height)
+
+    reference_gray = list(reference_crop.convert("L").getdata())
+    candidate_gray = list(candidate_crop.convert("L").getdata())
+    reference_rgb = list(reference_crop.getdata())
+    candidate_rgb = list(candidate_crop.getdata())
+
+    def dark_fraction(values: list[int]) -> float:
+        return sum(value < 62 for value in values) / area
+
+    def bright_neutral_fraction(values: list[tuple[int, int, int]]) -> float:
+        return sum(
+            max(pixel) - min(pixel) < 34 and sum(pixel) / 3 > 214
+            for pixel in values
+        ) / area
+
+    changed = list(
+        ImageChops.difference(reference_crop, candidate_crop).convert("L").getdata()
+    )
+    return {
+        "dark_delta": round(
+            max(0.0, dark_fraction(candidate_gray) - dark_fraction(reference_gray)),
+            4,
+        ),
+        "bright_delta": round(
+            max(
+                0.0,
+                bright_neutral_fraction(candidate_rgb)
+                - bright_neutral_fraction(reference_rgb),
+            ),
+            4,
+        ),
+        "changed_fraction": round(sum(value > 34 for value in changed) / area, 4),
+    }
+
+
+def _validate_mouth_quality(metrics: Mapping[str, float], articulation: int) -> None:
+    factor = articulation / 100
+    max_dark_delta = 0.085 + 0.14 * factor
+    max_bright_delta = 0.07 + 0.12 * factor
+    max_changed_fraction = 0.58 + 0.34 * factor
+    dark_delta = float(metrics.get("dark_delta", 0.0))
+    bright_delta = float(metrics.get("bright_delta", 0.0))
+    changed_fraction = float(metrics.get("changed_fraction", 0.0))
+    broad_extreme_change = changed_fraction > max_changed_fraction and (
+        dark_delta > max_dark_delta * 0.55
+        or bright_delta > max_bright_delta * 0.55
+    )
+    if (
+        dark_delta <= max_dark_delta
+        and bright_delta <= max_bright_delta
+        and not broad_extreme_change
+    ):
+        return
+    raise AvatarFrameStabilizationError(
+        "avatar_frame_quality_rejected:"
+        f"articulation={articulation};"
+        f"dark_delta={dark_delta:.4f};"
+        f"bright_delta={bright_delta:.4f};"
+        f"changed_fraction={changed_fraction:.4f}"
+    )
+
+
+def _mouth_blend_strength(articulation: int) -> float:
+    return max(0.42, min(0.85, 0.4 + articulation * 0.0045))
+
+
 def _region_box(
     region: str,
     size: tuple[int, int],
@@ -331,7 +447,8 @@ def _region_box(
 
     if region == "mouth":
         center_x, center_y = mouth_x, mouth_y
-        region_width, region_height = mouth_width, mouth_height
+        region_width = max(0.18, min(0.34, mouth_width * 0.84))
+        region_height = max(0.09, min(0.18, mouth_height * 0.72))
     elif region == "eyes":
         center_x = mouth_x
         center_y = max(0.2, mouth_y - 0.205)
@@ -352,8 +469,13 @@ def _region_box(
 
 
 def _feather_radius(region: str, size: tuple[int, int]) -> int:
-    scale = 0.012 if region in {"mouth", "eyes"} else 0.02
-    return max(4, round(min(size) * scale))
+    if region == "mouth":
+        scale = 0.0065
+    elif region == "eyes":
+        scale = 0.009
+    else:
+        scale = 0.02
+    return max(3, round(min(size) * scale))
 
 
 def _save_atomic(image: Any, output_path: Path, output_format: str) -> None:
