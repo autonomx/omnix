@@ -165,6 +165,8 @@ export interface CharacterDataActionResponse {
   profile_archived: boolean;
 }
 
+const trackedPlaybackRuntimes = new Map<string, Set<CharacterLiveCallRuntime>>();
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -186,6 +188,21 @@ function adaptLiveCallRuntimeForPlayback(runtime: CharacterLiveCallRuntime): Cha
     voice_profile_asset_id: runtime.voice_asset_id ?? null,
     voice_asset_id: speakerId,
   };
+}
+
+function synchronizeTrackedPlaybackRuntime(runtime: CharacterLiveCallRuntime): CharacterLiveCallRuntime {
+  const playbackRuntime = adaptLiveCallRuntimeForPlayback(runtime);
+  const tracked = trackedPlaybackRuntimes.get(playbackRuntime.session_id) ?? new Set<CharacterLiveCallRuntime>();
+  for (const existing of tracked) Object.assign(existing, playbackRuntime);
+  tracked.add(playbackRuntime);
+  trackedPlaybackRuntimes.set(playbackRuntime.session_id, tracked);
+  publishCharacterAvatarRuntime(playbackRuntime);
+  return playbackRuntime;
+}
+
+async function loadLiveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
+  const runtime = await request<CharacterLiveCallRuntime>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
+  return synchronizeTrackedPlaybackRuntime(runtime);
 }
 
 export const characterClient = {
@@ -237,11 +254,11 @@ export const characterClient = {
   session(sessionId: string): Promise<SessionInteraction> {
     return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`);
   },
-  async liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
-    const runtime = await request<CharacterLiveCallRuntime>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
-    const playbackRuntime = adaptLiveCallRuntimeForPlayback(runtime);
-    publishCharacterAvatarRuntime(playbackRuntime);
-    return playbackRuntime;
+  liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
+    return loadLiveCallRuntime(sessionId);
+  },
+  refreshLiveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
+    return loadLiveCallRuntime(sessionId);
   },
   setSession(
     sessionId: string,
