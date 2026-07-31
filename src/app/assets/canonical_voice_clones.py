@@ -26,6 +26,12 @@ _AUDIO_MIME_TYPES = {
 _GENERIC_AUDIO_NAMES = {"audio", "clone", "reference", "sample", "source", "voice"}
 
 
+def canonical_voice_clone_root() -> Path:
+    """Return the repository-owned clone directory that must always be scanned."""
+
+    return resources_root() / "voice_clones"
+
+
 def discover_canonical_voice_clone_assets() -> list[AssetRecord]:
     """Scan the repository's canonical clone folder regardless of env overrides.
 
@@ -34,7 +40,7 @@ def discover_canonical_voice_clone_assets() -> list[AssetRecord]:
     ``resources/voice_clones``.
     """
 
-    clone_root = resources_root() / "voice_clones"
+    clone_root = canonical_voice_clone_root()
     files = _audio_files(clone_root)
     records: dict[str, AssetRecord] = {}
 
