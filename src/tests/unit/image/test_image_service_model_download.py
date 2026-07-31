@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app import image_service_app
+from app.image.downloads import get_image_local_model_status
 
 
 def test_download_does_not_load_selected_model(monkeypatch):
@@ -45,3 +49,59 @@ def test_download_does_not_load_selected_model(monkeypatch):
     assert response.status_code == 200
     assert response.json()["loaded"] is False
     assert calls == [("download", "krea2_turbo")]
+
+
+def _write_model_skeleton(root: Path, *, missing_second_shard: bool = False) -> None:
+    (root / "scheduler").mkdir(parents=True)
+    (root / "transformer").mkdir(parents=True)
+    (root / "model_index.json").write_text(
+        json.dumps({
+            "_class_name": "Krea2Pipeline",
+            "scheduler": ["diffusers", "FlowMatchEulerDiscreteScheduler"],
+            "transformer": ["diffusers", "Krea2Transformer2DModel"],
+        }),
+        encoding="utf-8",
+    )
+    (root / "scheduler" / "scheduler_config.json").write_text("{}", encoding="utf-8")
+    (root / "transformer" / "diffusion_pytorch_model.safetensors.index.json").write_text(
+        json.dumps({
+            "weight_map": {
+                "layer.0": "diffusion_pytorch_model-00001-of-00002.safetensors",
+                "layer.1": "diffusion_pytorch_model-00002-of-00002.safetensors",
+            }
+        }),
+        encoding="utf-8",
+    )
+    (root / "transformer" / "diffusion_pytorch_model-00001-of-00002.safetensors").write_bytes(b"weights")
+    if not missing_second_shard:
+        (root / "transformer" / "diffusion_pytorch_model-00002-of-00002.safetensors").write_bytes(b"weights")
+
+
+def test_partial_sharded_snapshot_is_not_reported_as_downloaded(tmp_path):
+    _write_model_skeleton(tmp_path, missing_second_shard=True)
+
+    status = get_image_local_model_status("krea2_turbo", str(tmp_path))
+
+    assert status["complete"] is False
+    assert "transformer/diffusion_pytorch_model-00002-of-00002.safetensors" in status["missing"]
+
+
+def test_complete_sharded_snapshot_is_reported_as_downloaded(tmp_path):
+    _write_model_skeleton(tmp_path)
+
+    status = get_image_local_model_status("krea2_turbo", str(tmp_path))
+
+    assert status["complete"] is True
+    assert status["missing"] == []
+
+
+def test_hugging_face_incomplete_file_blocks_download_status(tmp_path):
+    _write_model_skeleton(tmp_path)
+    cache_dir = tmp_path / ".cache" / "huggingface" / "download"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "model.safetensors.incomplete").write_bytes(b"partial")
+
+    status = get_image_local_model_status("krea2_turbo", str(tmp_path))
+
+    assert status["complete"] is False
+    assert any(item.startswith("incomplete:") for item in status["missing"])
