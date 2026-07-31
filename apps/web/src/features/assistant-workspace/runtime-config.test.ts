@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG,
   createAssistantWorkspaceRuntimeConfig,
 } from './runtime-config';
+
+afterEach(() => {
+  document.body.innerHTML = '';
+});
 
 describe('createAssistantWorkspaceRuntimeConfig', () => {
   it('uses durable defaults when env values are absent', () => {
@@ -39,6 +43,16 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
         toolExecution: true,
       },
     });
+  });
+
+  it('uses the active Character Mode speaker instead of the static default voice', () => {
+    document.body.innerHTML = '<section class="assistant-live-card" data-live-voice-id="Inigo"></section>';
+
+    const config = createAssistantWorkspaceRuntimeConfig({
+      VITE_ASSISTANT_TTS_VOICE: 'default',
+    });
+
+    expect(config.ttsVoice).toBe('Inigo');
   });
 
   it('ignores empty strings and unknown boolean values', () => {
