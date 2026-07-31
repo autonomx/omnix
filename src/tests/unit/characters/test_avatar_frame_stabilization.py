@@ -10,6 +10,7 @@ ImageEnhance = pytest.importorskip("PIL.ImageEnhance")
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
 from app.characters.avatar_frame_stabilization import (
+    AvatarFrameStabilizationError,
     avatar_frame_region,
     stabilize_generated_avatar_frame,
 )
@@ -53,11 +54,13 @@ def _store_reference(tmp_path, image) -> tuple[SharedAssetStore, str]:
     return store, asset_id
 
 
-def test_mouth_stabilization_keeps_background_and_upper_face_pixel_identical(tmp_path) -> None:
+def test_mouth_stabilization_keeps_background_and_upper_face_pixel_identical(
+    tmp_path,
+) -> None:
     canonical = _canonical_portrait()
     generated = _shifted_dark_variant(canonical)
     draw = ImageDraw.Draw(generated)
-    draw.ellipse((52 + 3, 72 + 2, 76 + 3, 88 + 2), fill=(120, 20, 32))
+    draw.ellipse((55, 75, 75, 85), fill=(120, 20, 32))
     output_path = tmp_path / "viseme-a.png"
     generated.save(output_path)
     store, reference_asset_id = _store_reference(tmp_path, canonical)
@@ -65,7 +68,8 @@ def test_mouth_stabilization_keeps_background_and_upper_face_pixel_identical(tmp
     metadata = stabilize_generated_avatar_frame(
         output_path,
         reference_asset_id=reference_asset_id,
-        variant="A",
+        variant="A_soft",
+        articulation_percent=15,
         store=store,
     )
 
@@ -76,6 +80,8 @@ def test_mouth_stabilization_keeps_background_and_upper_face_pixel_identical(tmp
         assert stabilized.getpixel((64, 78)) != canonical.getpixel((64, 78))
     assert metadata["avatar_frame_stabilized"] is True
     assert metadata["avatar_stabilization_region"] == "mouth"
+    assert metadata["avatar_articulation_percent"] == 15
+    assert 0.4 <= metadata["avatar_articulation_blend_strength"] < 0.6
     assert abs(metadata["avatar_alignment_dx"]) <= 10
     assert abs(metadata["avatar_alignment_dy"]) <= 10
 
@@ -84,8 +90,8 @@ def test_blink_stabilization_changes_eyes_without_darkening_the_rest(tmp_path) -
     canonical = _canonical_portrait()
     generated = _shifted_dark_variant(canonical, offset_x=-2, offset_y=1)
     draw = ImageDraw.Draw(generated)
-    draw.line((42 - 2, 51 + 1, 54 - 2, 51 + 1), fill=(20, 20, 24), width=4)
-    draw.line((74 - 2, 51 + 1, 86 - 2, 51 + 1), fill=(20, 20, 24), width=4)
+    draw.line((40, 52, 52, 52), fill=(20, 20, 24), width=4)
+    draw.line((72, 52, 84, 52), fill=(20, 20, 24), width=4)
     output_path = tmp_path / "blink.png"
     generated.save(output_path)
     store, reference_asset_id = _store_reference(tmp_path, canonical)
@@ -105,9 +111,34 @@ def test_blink_stabilization_changes_eyes_without_darkening_the_rest(tmp_path) -
     assert metadata["avatar_stabilization_region"] == "eyes"
 
 
+def test_exaggerated_open_mouth_is_rejected_before_storage(tmp_path) -> None:
+    canonical = _canonical_portrait()
+    generated = canonical.copy()
+    draw = ImageDraw.Draw(generated)
+    draw.ellipse((48, 69, 80, 88), fill=(8, 8, 10))
+    draw.rectangle((52, 70, 76, 75), fill=(242, 240, 234))
+    output_path = tmp_path / "scream.png"
+    generated.save(output_path)
+    store, reference_asset_id = _store_reference(tmp_path, canonical)
+
+    with pytest.raises(
+        AvatarFrameStabilizationError,
+        match="avatar_frame_quality_rejected",
+    ):
+        stabilize_generated_avatar_frame(
+            output_path,
+            reference_asset_id=reference_asset_id,
+            variant="A_soft",
+            articulation_percent=15,
+            store=store,
+        )
+
+
 def test_only_animation_variants_are_stabilized() -> None:
     assert avatar_frame_region("mouth_wide") == "mouth"
     assert avatar_frame_region("MBP") == "mouth"
+    assert avatar_frame_region("A_soft") == "mouth"
+    assert avatar_frame_region("other_strong") == "mouth"
     assert avatar_frame_region("blink_closed") == "eyes"
     assert avatar_frame_region("expression_thinking") == "face"
     assert avatar_frame_region("outfit_alternate") is None
