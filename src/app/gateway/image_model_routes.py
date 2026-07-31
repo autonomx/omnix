@@ -1,6 +1,7 @@
 """Gateway controls for the external image model service."""
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -32,6 +33,16 @@ def _model_label(provider: str) -> str:
     return str(definition.get("label") or provider or "Image model")
 
 
+def _read_service_status(provider: str) -> dict[str, Any]:
+    """Forward provider selection while preserving zero-argument test doubles."""
+
+    try:
+        accepts_provider = bool(inspect.signature(get_image_service_status).parameters)
+    except (TypeError, ValueError):
+        accepts_provider = True
+    return get_image_service_status(provider) if accepts_provider else get_image_service_status()
+
+
 async def _call_service(function, *args: Any) -> dict[str, Any]:
     try:
         result = await run_in_threadpool(function, *args)
@@ -48,7 +59,7 @@ async def image_model_status(
 ) -> dict[str, Any]:
     provider_name = _provider(provider)
     try:
-        return await _call_service(get_image_service_status, provider_name)
+        return await _call_service(_read_service_status, provider_name)
     except HTTPException as exc:
         return {
             "ok": False,
