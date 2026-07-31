@@ -113,4 +113,13 @@ def unload_image_model_via_service(provider: str = "flux_klein") -> Dict[str, An
 def generate_image_via_service(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not is_image_generation_enabled():
         return image_disabled_response(source="image_http_client")
-    return post_image_service("/generate", payload, timeout=900.0)
+
+    request_payload = dict(payload if isinstance(payload, dict) else {})
+    reference_asset_ids = request_payload.get("reference_asset_ids")
+    if isinstance(reference_asset_ids, (list, tuple)) and reference_asset_ids:
+        from app.image.reference_transport import REFERENCE_IMAGES_PAYLOAD_KEY, encode_reference_assets
+
+        if not request_payload.get(REFERENCE_IMAGES_PAYLOAD_KEY):
+            request_payload[REFERENCE_IMAGES_PAYLOAD_KEY] = encode_reference_assets(reference_asset_ids)
+
+    return post_image_service("/generate", request_payload, timeout=900.0)
