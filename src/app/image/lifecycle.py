@@ -34,7 +34,7 @@ def _provider_runtime_status(provider: Any) -> Dict[str, Any]:
 
 
 def get_cached_provider(provider_name: str | None = None):
-    provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
+    provider_name = _safe_str(provider_name).strip().lower() or get_active_image_provider_name()
     return _PROVIDER_CACHE.get(provider_name)
 
 
@@ -59,6 +59,10 @@ def _build_provider(provider_name: str):
         from app.image.providers.flux_klein_provider import FluxKleinImageProvider
 
         return FluxKleinImageProvider(config)
+    if provider_name in {"krea2_turbo", "z_image_turbo"}:
+        from app.image.providers.diffusers_turbo_provider import DiffusersTurboImageProvider
+
+        return DiffusersTurboImageProvider(provider_name, config)
     if provider_name == "mock":
         from app.image.providers.mock_provider import MockImageProvider
 
@@ -82,7 +86,7 @@ def is_image_provider_loaded(provider_name: str | None = None) -> bool:
 
 
 def load_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
-    provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
+    provider_name = _safe_str(provider_name).strip().lower() or get_active_image_provider_name()
     provider = get_or_create_image_provider(provider_name)
     provider.load()
     result: Dict[str, Any] = {
@@ -97,8 +101,7 @@ def load_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
 
 
 def unload_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
-    provider_name = _safe_str(provider_name).strip() or get_active_image_provider_name()
-    provider_name = _safe_str(provider_name).strip().lower() or "flux_klein"
+    provider_name = _safe_str(provider_name).strip().lower() or get_active_image_provider_name()
 
     with _PROVIDER_LOCK:
         provider = _PROVIDER_CACHE.pop(provider_name, None)
