@@ -34,6 +34,7 @@
   background-size: cover;
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.28);
   isolation: isolate;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .assistant-live-character-avatar::after {
@@ -51,29 +52,37 @@
   height: 100%;
   display: block;
   object-fit: cover;
-  transform-origin: 50% 72%;
-  transition: transform 180ms ease, filter 180ms ease;
-  animation: character-avatar-breathe 4.8s ease-in-out infinite;
+  transform: none;
+  filter: none;
 }
 
-.assistant-live-character-avatar[data-voice-mode='speaking'] img {
-  transform: scale(1.014);
-  animation-duration: 2.8s;
+.assistant-live-character-avatar[data-voice-mode='speaking'] {
+  border-color: color-mix(in srgb, var(--accent, #4f8cff) 62%, transparent);
+  box-shadow:
+    0 1rem 3rem rgba(0, 0, 0, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--accent, #4f8cff) 20%, transparent),
+    0 0 2rem color-mix(in srgb, var(--accent, #4f8cff) 18%, transparent);
 }
 
-.assistant-live-character-avatar[data-voice-mode='listening'] img {
-  filter: brightness(1.055) saturate(1.025);
-  transform: scale(1.008) translateY(-0.1%);
+.assistant-live-character-avatar[data-voice-mode='listening'] {
+  border-color: color-mix(in srgb, #4ee7c2 52%, transparent);
+  box-shadow:
+    0 1rem 3rem rgba(0, 0, 0, 0.28),
+    0 0 1.5rem rgba(78, 231, 194, 0.12);
 }
 
-.assistant-live-character-avatar[data-voice-mode='thinking'] img {
-  filter: brightness(0.98) saturate(0.96);
-  transform: scale(1.006) translateX(-0.15%);
+.assistant-live-character-avatar[data-voice-mode='thinking'] {
+  border-color: color-mix(in srgb, #a996ff 48%, transparent);
+  box-shadow:
+    0 1rem 3rem rgba(0, 0, 0, 0.28),
+    0 0 1.5rem rgba(169, 150, 255, 0.1);
 }
 
-.assistant-live-character-avatar[data-voice-mode='error'] img {
-  filter: grayscale(0.7);
-  animation-play-state: paused;
+.assistant-live-character-avatar[data-voice-mode='error'] {
+  border-color: rgba(255, 115, 135, 0.56);
+  box-shadow:
+    0 1rem 3rem rgba(0, 0, 0, 0.28),
+    0 0 1.5rem rgba(255, 115, 135, 0.12);
 }
 
 .assistant-live-character-avatar figcaption {
@@ -126,11 +135,6 @@
   padding: 0 0.7rem;
 }
 
-@keyframes character-avatar-breathe {
-  0%, 100% { transform: scale(1) translateY(0); }
-  50% { transform: scale(1.006) translateY(-0.18%); }
-}
-
 @media (max-width: 760px) {
   .assistant-live-visual-stage,
   .assistant-live-visual-stage[data-has-character-avatar='true'] {
@@ -149,8 +153,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .assistant-live-character-avatar img {
-    animation: none;
+  .assistant-live-character-avatar {
     transition: none;
   }
 }
