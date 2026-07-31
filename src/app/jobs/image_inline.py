@@ -167,6 +167,13 @@ def _store_image_asset(
     seed = getattr(result, "seed", request.seed)
     metadata = dict(getattr(result, "metadata", {}) or {})
     request_metadata = dict(request.metadata or {})
+    stabilization_metadata = _stabilize_character_avatar_frame(
+        job,
+        request,
+        storage_path,
+        request_metadata,
+        store,
+    )
     is_rpg_world_image = bool(
         str(request_metadata.get("world_id") or "").strip()
         and str(request_metadata.get("target_id") or "").strip()
@@ -186,6 +193,7 @@ def _store_image_asset(
             mime_type=mime_type,
             storage_path=storage_path,
             source_job_id=job.id,
+            parent_asset_ids=list(request.reference_asset_ids),
             created_at=datetime.now(timezone.utc).isoformat(),
             metadata={
                 "title": title,
@@ -204,6 +212,7 @@ def _store_image_asset(
                 "rpg_world_image": is_rpg_world_image,
                 "rpg_world_id": str(request_metadata.get("world_id") or ""),
                 "rpg_world_target_id": str(request_metadata.get("target_id") or ""),
+                **stabilization_metadata,
             },
             compat={"contract": "image_generation_asset_v1"},
         )
@@ -218,6 +227,35 @@ def _store_image_asset(
         seed=seed,
     )
     return asset, output_ref
+
+
+def _stabilize_character_avatar_frame(
+    job: JobRecord,
+    request: ImageGenerateInput,
+    storage_path: str,
+    request_metadata: dict[str, Any],
+    store: SharedAssetStore,
+) -> dict[str, Any]:
+    if job.module != "character-avatar" or not request.reference_asset_ids:
+        return {}
+    variant = str(
+        request_metadata.get("avatar_viseme")
+        or request_metadata.get("avatar_variant")
+        or ""
+    ).strip()
+    if not variant:
+        return {}
+
+    from app.characters.avatar_frame_stabilization import (
+        stabilize_generated_avatar_frame,
+    )
+
+    return stabilize_generated_avatar_frame(
+        storage_path,
+        reference_asset_id=request.reference_asset_ids[0],
+        variant=variant,
+        store=store,
+    )
 
 
 def _update_progress(
