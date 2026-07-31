@@ -5,8 +5,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-import app.tts_http_client as tts_http_client
 import tts_server
+from app import tts_http_client
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 
 
@@ -55,9 +55,10 @@ def test_backend_stream_forward_includes_speaker_and_trace_id(tmp_path: Path, mo
     captured: dict[str, Any] = {}
 
     class FakeResponse:
-        status_code = 200
-        headers = {"content-type": "application/json"}
-        content = b'{"success": false, "error": "debug-only"}'
+        def __init__(self) -> None:
+            self.status_code = 200
+            self.headers = {"content-type": "application/json"}
+            self.content = b'{"success": false, "error": "debug-only"}'
 
         @staticmethod
         def raise_for_status() -> None:
