@@ -32,8 +32,10 @@ const ENVELOPE_FRAME_EVENT = 'omnix:character-avatar-frame';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
 const INSTALL_KEY = '__omnixCharacterVisemeBridgeInstalled';
 const DEFAULT_VISEME_DURATION_MS = 90;
-const MIN_PHASE_STEP_MS = 18;
-const MAX_PHASE_STEP_MS = 42;
+const STRONG_PHASE_DURATION_MS = 85;
+const PEAK_PHASE_DURATION_MS = 140;
+const MIN_PHASE_STEP_MS = 20;
+const MAX_PHASE_STEP_MS = 45;
 const FALLBACK_FRAME: Record<CharacterViseme, string> = {
   silence: 'closed', A: 'wide', E: 'medium', O: 'wide', U: 'small', MBP: 'closed', FV: 'small', L: 'medium', WQ: 'small', other: 'medium',
 };
@@ -97,6 +99,7 @@ export function visemeAnimationFrameKeys(
   pack: RuntimeAvatarPack,
   previous: CharacterViseme,
   next: CharacterViseme,
+  durationMs = DEFAULT_VISEME_DURATION_MS,
 ): string[] {
   const keys: string[] = [];
   const add = (key: string): void => {
@@ -105,17 +108,19 @@ export function visemeAnimationFrameKeys(
 
   if (next === 'silence') {
     if (previous !== 'silence') {
-      add(`${previous}_70`);
-      add(`${previous}_35`);
+      add(`${previous}_strong`);
+      add(`${previous}_medium`);
+      add(`${previous}_soft`);
     }
     add('silence');
     return keys;
   }
 
-  if (previous !== 'silence' && previous !== next) add(`${previous}_35`);
-  add(`${next}_35`);
-  add(`${next}_70`);
-  add(next);
+  if (previous !== 'silence' && previous !== next) add(`${previous}_soft`);
+  add(`${next}_soft`);
+  add(`${next}_medium`);
+  if (durationMs >= STRONG_PHASE_DURATION_MS) add(`${next}_strong`);
+  if (durationMs >= PEAK_PHASE_DURATION_MS) add(next);
   return keys.length ? keys : [next];
 }
 
@@ -235,8 +240,8 @@ function animateSpriteViseme(
   durationMs: number,
 ): void {
   clearAnimationTimers();
-  const keys = visemeAnimationFrameKeys(pack, previous, next);
-  const boundedDuration = Math.max(55, Math.min(180, durationMs || DEFAULT_VISEME_DURATION_MS));
+  const keys = visemeAnimationFrameKeys(pack, previous, next, durationMs);
+  const boundedDuration = Math.max(55, Math.min(200, durationMs || DEFAULT_VISEME_DURATION_MS));
   const stepMs = Math.max(MIN_PHASE_STEP_MS, Math.min(MAX_PHASE_STEP_MS, boundedDuration / Math.max(1, keys.length)));
   keys.forEach((frameKey, index) => {
     const render = (): void => displaySpriteFrame(pack, frameKey, next);
@@ -313,7 +318,7 @@ function frameAssetId(pack: RuntimeAvatarPack, frameKey: string): string {
   }
   const direct = pack.mouth_frames[frameKey];
   if (direct) return direct;
-  const baseViseme = frameKey.replace(/_(35|70)$/, '') as CharacterViseme;
+  const baseViseme = frameKey.replace(/_(soft|medium|strong)$/, '') as CharacterViseme;
   return pack.mouth_frames[baseViseme]
     || pack.mouth_frames[FALLBACK_FRAME[baseViseme] || 'closed']
     || pack.mouth_frames.closed
