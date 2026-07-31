@@ -1,11 +1,12 @@
 import { Button } from '@mantine/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { ProviderFacadePayload } from '../../api/client';
 import { FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { ImageReferenceControl } from './ImageReferenceControl';
 import {
   imageRequestDefaultValues,
+  resolveImageRequestDefaults,
   type ImageRequestDefaults,
   type ImageRequestFormValues,
   validateImageDimension,
@@ -31,8 +32,13 @@ const ASPECT_PRESETS = [
   { id: 'ultrawide-1344', ratio: '21:9', label: 'Ultrawide', width: 1344, height: 576 },
 ] as const;
 
-const QUALITY_STEPS = [2, 3, 4, 6, 8] as const;
+const FALLBACK_QUALITY_STEPS = [2, 3, 4, 6, 8] as const;
 const DEFAULT_QUALITY = 3;
+
+function qualityIndex(steps: readonly number[], defaultSteps: number): number {
+  const index = steps.indexOf(defaultSteps);
+  return index >= 0 ? index + 1 : DEFAULT_QUALITY;
+}
 
 export function ImageRequestForm({
   defaults,
@@ -44,7 +50,16 @@ export function ImageRequestForm({
   resetToken,
   onSubmit,
 }: ImageRequestFormProps) {
-  const [quality, setQuality] = useState(DEFAULT_QUALITY);
+  const resolvedDefaults = useMemo(() => resolveImageRequestDefaults(defaults), [defaults]);
+  const qualitySteps = useMemo(
+    () => resolvedDefaults.qualitySteps?.length === 5
+      ? [...resolvedDefaults.qualitySteps]
+      : [...FALLBACK_QUALITY_STEPS],
+    [resolvedDefaults.qualitySteps],
+  );
+  const defaultSteps = resolvedDefaults.steps ?? qualitySteps[DEFAULT_QUALITY - 1];
+  const defaultQuality = qualityIndex(qualitySteps, defaultSteps);
+  const [quality, setQuality] = useState(defaultQuality);
   const {
     register,
     handleSubmit,
@@ -52,32 +67,60 @@ export function ImageRequestForm({
     setValue,
     watch,
     formState: { errors, isDirty },
-  } = useForm<ImageRequestFormValues>({ defaultValues: imageRequestDefaultValues(defaults) });
+  } = useForm<ImageRequestFormValues>({ defaultValues: imageRequestDefaultValues(resolvedDefaults) });
 
   useEffect(() => {
-    if (!isDirty) reset(imageRequestDefaultValues(defaults));
-  }, [defaults, isDirty, reset]);
+    if (!isDirty) reset(imageRequestDefaultValues(resolvedDefaults));
+  }, [isDirty, reset, resolvedDefaults]);
+
+  useEffect(() => {
+    setQuality(defaultQuality);
+    setValue('steps', String(defaultSteps), { shouldDirty: false, shouldValidate: true });
+    setValue(
+      'guidanceScale',
+      resolvedDefaults.guidanceScale === undefined ? '' : String(resolvedDefaults.guidanceScale),
+      { shouldDirty: false, shouldValidate: true },
+    );
+    if (resolvedDefaults.supportsImageToImage === false) {
+      setValue('referenceAssetIds', [], { shouldDirty: false });
+    }
+  }, [
+    defaultQuality,
+    defaultSteps,
+    resolvedDefaults.guidanceScale,
+    resolvedDefaults.providerId,
+    resolvedDefaults.supportsImageToImage,
+    setValue,
+  ]);
 
   useEffect(() => {
     if (resetToken) {
-      reset(imageRequestDefaultValues(defaults));
-      setQuality(DEFAULT_QUALITY);
+      reset(imageRequestDefaultValues(resolvedDefaults));
+      setQuality(defaultQuality);
     }
-  }, [defaults, reset, resetToken]);
+  }, [defaultQuality, reset, resetToken, resolvedDefaults]);
 
   const selectedPreset = watch('preset');
   const prompt = watch('prompt') ?? '';
   const width = watch('width');
   const height = watch('height');
   const referenceAssetIds = watch('referenceAssetIds') ?? [];
+  const widthValue = Number.parseInt(width, 10);
+  const heightValue = Number.parseInt(height, 10);
+  const requestedPixels = Number.isFinite(widthValue) && Number.isFinite(heightValue)
+    ? widthValue * heightValue
+    : 0;
+  const exceedsModelPixelLimit = Boolean(
+    resolvedDefaults.maxPixels && requestedPixels > resolvedDefaults.maxPixels,
+  );
 
   useEffect(() => {
-    const providerId = lockedProviderId || defaults.providerId;
+    const providerId = lockedProviderId || resolvedDefaults.providerId;
     if (!providerId) return;
     if (!lockedProviderId && isDirty) return;
     if (!providers.some((provider) => provider.id === providerId)) return;
     setValue('providerId', providerId, { shouldDirty: false });
-  }, [defaults.providerId, isDirty, lockedProviderId, providers, setValue]);
+  }, [isDirty, lockedProviderId, providers, resolvedDefaults.providerId, setValue]);
 
   const choosePreset = (preset: (typeof ASPECT_PRESETS)[number]) => {
     setValue('preset', preset.id, { shouldDirty: true });
@@ -94,14 +137,23 @@ export function ImageRequestForm({
 
   const chooseQuality = (level: number) => {
     setQuality(level);
-    setValue('steps', String(QUALITY_STEPS[level - 1]), { shouldDirty: true, shouldValidate: true });
+    setValue('steps', String(qualitySteps[level - 1]), { shouldDirty: true, shouldValidate: true });
   };
 
-  const submit = handleSubmit((values) => onSubmit({
-    ...values,
-    providerId: lockedProviderId || values.providerId,
-    steps: values.steps || String(QUALITY_STEPS[quality - 1]),
-  }));
+  const submit = handleSubmit((values) => {
+    if (exceedsModelPixelLimit) return;
+    onSubmit({
+      ...values,
+      providerId: lockedProviderId || values.providerId,
+      referenceAssetIds: resolvedDefaults.supportsImageToImage === false ? [] : values.referenceAssetIds,
+      steps: values.steps || String(qualitySteps[quality - 1]),
+    });
+  });
+
+  const modelLimitMessage = resolvedDefaults.maxPixels
+    ? `The selected model is limited to ${resolvedDefaults.maxPixels.toLocaleString()} output pixels per request.`
+    : '';
+  const effectiveDisabledReason = exceedsModelPixelLimit ? modelLimitMessage : disabledReason;
 
   return (
     <>
@@ -177,17 +229,25 @@ export function ImageRequestForm({
             aria-label="Prompt"
             rows={4}
             maxLength={2000}
-            placeholder="Describe the image you want to create, or what to preserve and change from the reference..."
+            placeholder={resolvedDefaults.supportsImageToImage === false
+              ? 'Describe the image you want to create...'
+              : 'Describe the image you want to create, or what to preserve and change from the reference...'}
             aria-invalid={Boolean(errors.prompt)}
             {...register('prompt', { required: true })}
           />
           <small className="image-character-count">{prompt.length} / 2000</small>
         </label>
 
-        <ImageReferenceControl
-          selectedAssetIds={referenceAssetIds}
-          onChange={(assetIds) => setValue('referenceAssetIds', assetIds, { shouldDirty: true })}
-        />
+        {resolvedDefaults.supportsImageToImage === false ? (
+          <p className="image-local-note" role="note">
+            <span aria-hidden="true">◇</span> Reference images are unavailable for the selected text-to-image model.
+          </p>
+        ) : (
+          <ImageReferenceControl
+            selectedAssetIds={referenceAssetIds}
+            onChange={(assetIds) => setValue('referenceAssetIds', assetIds, { shouldDirty: true })}
+          />
+        )}
 
         <div className="image-request-options-row">
           <label className="image-field">
@@ -215,7 +275,7 @@ export function ImageRequestForm({
                   onClick={() => chooseQuality(level)}
                 >★</button>
               ))}
-              <output className="image-quality-value" aria-live="polite">{QUALITY_STEPS[quality - 1]} steps</output>
+              <output className="image-quality-value" aria-live="polite">{qualitySteps[quality - 1]} steps</output>
             </div>
           </fieldset>
 
@@ -232,13 +292,21 @@ export function ImageRequestForm({
           </details>
         </div>
 
-        <Button aria-label={pending ? 'Queueing image' : 'Generate image'} className="image-generate-button" type="submit" disabled={pending || disabled} loading={pending} title={disabledReason}>
+        <Button
+          aria-label={pending ? 'Queueing image' : 'Generate image'}
+          className="image-generate-button"
+          type="submit"
+          disabled={pending || disabled || exceedsModelPixelLimit}
+          loading={pending}
+          title={effectiveDisabledReason}
+        >
           <span aria-hidden="true">✦</span> {pending ? 'Queueing Image...' : 'Generate Image'}
         </Button>
         <p className="image-local-note"><span aria-hidden="true">♢</span> Uses the selected model and saves completed output to Image Assets. Reference-conditioned requests bypass the reusable result cache.</p>
       </form>
       <FeatureValidationMessage show={Boolean(errors.prompt)} message="Enter a prompt before generating an image." />
       <FeatureValidationMessage show={Boolean(errors.width || errors.height)} message="Use dimensions from 128 to 4096 in multiples of 64." />
+      <FeatureValidationMessage show={exceedsModelPixelLimit} message={modelLimitMessage} />
       {disabledReason ? <div className="image-disabled-message" role="status">{disabledReason}</div> : null}
     </>
   );
