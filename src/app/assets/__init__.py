@@ -1,6 +1,8 @@
 """Shared asset/artifact library."""
 from __future__ import annotations
 
+import logging
+import os
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,8 @@ from .store import (
     SharedAssetStore as ManifestSharedAssetStore,
 )
 from .voice_clone_assets import discover_voice_clone_assets, voice_clone_sources
+
+LOGGER = logging.getLogger("uvicorn.error")
 
 
 def _root_scan(family: str, path: Path) -> AssetLegacyRootScan:
@@ -55,16 +59,49 @@ def _skipped_files(family: str, roots: list[Path], supported_suffixes: set[str])
 
 def _merge_assets(
     assets: dict[str, AssetRecord],
+    source: str,
     loader: Callable[[], Iterable[AssetRecord]],
-) -> None:
+) -> int:
     """Merge one compatibility source without allowing it to break the library."""
 
+    before = len(assets)
     try:
-        candidates = loader()
+        candidates = list(loader())
         for asset in candidates:
             assets.setdefault(asset.id, asset)
     except Exception:
-        return
+        LOGGER.exception("[Voice Library][assets] source failed source=%s", source)
+        return 0
+
+    added = len(assets) - before
+    LOGGER.info(
+        "[Voice Library][assets] source loaded source=%s candidates=%d added=%d",
+        source,
+        len(candidates),
+        added,
+    )
+    return added
+
+
+def _voice_debug_rows(assets: Iterable[AssetRecord]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for asset in assets:
+        if asset.type != AssetType.VOICE_PROFILE and asset.module != "voice-cloning":
+            continue
+        metadata = dict(asset.metadata or {})
+        rows.append(
+            {
+                "id": asset.id,
+                "name": str(
+                    metadata.get("profile_name")
+                    or metadata.get("voice_id")
+                    or metadata.get("speaker")
+                    or asset.id
+                ),
+                "path": str(asset.storage_path),
+            }
+        )
+    return rows
 
 
 class SharedAssetStore(ManifestSharedAssetStore):
@@ -78,12 +115,34 @@ class SharedAssetStore(ManifestSharedAssetStore):
         # The shared manifest remains authoritative, but each compatibility source
         # is isolated. A broken image index or malformed legacy file must not make
         # local voice clones disappear behind an HTTP 500 response.
+        LOGGER.info(
+            "[Voice Library][assets] list started cwd=%s manifest=%s store=%s",
+            os.getcwd(),
+            self.manifest_path,
+            type(self).__name__,
+        )
         assets = dict(super()._load_manifest())
-        _merge_assets(assets, self._legacy_voice_clone_assets)
-        _merge_assets(assets, super()._legacy_audio_assets)
-        _merge_assets(assets, lambda: self.preview_image_manifest_import().assets)
-        _merge_assets(assets, legacy_document_assets)
-        _merge_assets(assets, curated_rpg_map_assets)
+        LOGGER.info(
+            "[Voice Library][assets] shared manifest loaded count=%d",
+            len(assets),
+        )
+        _merge_assets(assets, "voice_clones", self._legacy_voice_clone_assets)
+        _merge_assets(assets, "generated_audio", super()._legacy_audio_assets)
+        _merge_assets(
+            assets,
+            "image_manifest",
+            lambda: self.preview_image_manifest_import().assets,
+        )
+        _merge_assets(assets, "legacy_documents", legacy_document_assets)
+        _merge_assets(assets, "curated_rpg_maps", curated_rpg_map_assets)
+
+        voice_rows = _voice_debug_rows(assets.values())
+        LOGGER.info(
+            "[Voice Library][assets] list completed total=%d voice_profiles=%d voices=%s",
+            len(assets),
+            len(voice_rows),
+            voice_rows[:50],
+        )
         return AssetListResponse(assets=list(assets.values()))
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
@@ -93,11 +152,15 @@ class SharedAssetStore(ManifestSharedAssetStore):
             return manifest_asset
 
         candidates: dict[str, AssetRecord] = {}
-        _merge_assets(candidates, self._legacy_voice_clone_assets)
-        _merge_assets(candidates, super()._legacy_audio_assets)
-        _merge_assets(candidates, lambda: self.preview_image_manifest_import().assets)
-        _merge_assets(candidates, legacy_document_assets)
-        _merge_assets(candidates, curated_rpg_map_assets)
+        _merge_assets(candidates, "voice_clones", self._legacy_voice_clone_assets)
+        _merge_assets(candidates, "generated_audio", super()._legacy_audio_assets)
+        _merge_assets(
+            candidates,
+            "image_manifest",
+            lambda: self.preview_image_manifest_import().assets,
+        )
+        _merge_assets(candidates, "legacy_documents", legacy_document_assets)
+        _merge_assets(candidates, "curated_rpg_maps", curated_rpg_map_assets)
         return candidates.get(normalized_id)
 
     def preview_legacy_non_image_import(self) -> AssetLegacyImportDryRun:
