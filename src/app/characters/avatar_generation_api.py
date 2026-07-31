@@ -5,6 +5,11 @@ from collections.abc import Callable
 
 from fastapi import FastAPI, HTTPException
 
+from .avatar_generation_logging import (
+    avatar_generation_log_path,
+    avatar_generation_logger,
+    avatar_generation_payload,
+)
 from .avatar_generation_models import (
     BackfillClonedVoiceCharactersRequest,
     BackfillClonedVoiceCharactersResponse,
@@ -27,6 +32,12 @@ def register_character_avatar_generation_routes(
         [], CharacterAvatarGenerationService
     ] = default_character_avatar_generation_service,
 ) -> None:
+    diagnostics = avatar_generation_logger()
+    diagnostics.info(
+        "event=avatar_generation_routes_registered %s",
+        avatar_generation_payload(log_path=avatar_generation_log_path()),
+    )
+
     @app.post(
         "/api/characters/{character_id}/avatar-generations",
         response_model=CharacterAvatarGenerationBatch,
@@ -38,12 +49,47 @@ def register_character_avatar_generation_routes(
         character_id: str,
         request: CreateCharacterAvatarGenerationRequest,
     ) -> CharacterAvatarGenerationBatch:
+        request_context = avatar_generation_payload(
+            character_id=character_id,
+            request=request.model_dump(mode="json"),
+        )
+        diagnostics.info(
+            "event=avatar_generation_request_started %s",
+            request_context,
+        )
         try:
-            return service_factory().create(character_id, request)
+            batch = service_factory().create(character_id, request)
         except CharacterNotFoundError as exc:
+            diagnostics.warning(
+                "event=avatar_generation_character_not_found %s error=%r",
+                request_context,
+                exc,
+            )
             raise HTTPException(status_code=404, detail="character not found") from exc
         except ValueError as exc:
+            diagnostics.warning(
+                "event=avatar_generation_request_rejected %s error=%r",
+                request_context,
+                exc,
+            )
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception:
+            diagnostics.exception(
+                "event=avatar_generation_request_failed %s",
+                request_context,
+            )
+            raise
+
+        diagnostics.info(
+            "event=avatar_generation_request_accepted %s",
+            avatar_generation_payload(
+                character_id=character_id,
+                batch_id=batch.id,
+                base_job_id=batch.base_job_id,
+                status=batch.status,
+            ),
+        )
+        return batch
 
     @app.get(
         "/api/characters/{character_id}/avatar-generations",
@@ -55,9 +101,23 @@ def register_character_avatar_generation_routes(
         character_id: str,
     ) -> CharacterAvatarGenerationListResponse:
         try:
-            return service_factory().list(character_id)
+            result = service_factory().list(character_id)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail="character not found") from exc
+        except Exception:
+            diagnostics.exception(
+                "event=avatar_generation_list_failed %s",
+                avatar_generation_payload(character_id=character_id),
+            )
+            raise
+        diagnostics.info(
+            "event=avatar_generation_list_completed %s",
+            avatar_generation_payload(
+                character_id=character_id,
+                batch_count=len(result.batches),
+            ),
+        )
+        return result
 
     @app.get(
         "/api/character-avatar-generations/{batch_id}",
@@ -69,9 +129,25 @@ def register_character_avatar_generation_routes(
         batch_id: str,
     ) -> CharacterAvatarGenerationBatch:
         try:
-            return service_factory().get(batch_id)
+            result = service_factory().get(batch_id)
         except CharacterAvatarGenerationNotFoundError as exc:
             raise HTTPException(status_code=404, detail="avatar generation not found") from exc
+        except Exception:
+            diagnostics.exception(
+                "event=avatar_generation_status_failed %s",
+                avatar_generation_payload(batch_id=batch_id),
+            )
+            raise
+        diagnostics.info(
+            "event=avatar_generation_status_completed %s",
+            avatar_generation_payload(
+                batch_id=batch_id,
+                character_id=result.character_id,
+                status=result.status,
+                error=result.error,
+            ),
+        )
+        return result
 
     @app.post(
         "/api/characters/backfill-cloned-voices",
@@ -82,7 +158,26 @@ def register_character_avatar_generation_routes(
     async def backfill_cloned_voice_characters(
         request: BackfillClonedVoiceCharactersRequest,
     ) -> BackfillClonedVoiceCharactersResponse:
-        return service_factory().backfill_cloned_voices(request)
+        request_context = avatar_generation_payload(
+            request=request.model_dump(mode="json"),
+        )
+        diagnostics.info(
+            "event=avatar_backfill_request_started %s",
+            request_context,
+        )
+        try:
+            result = service_factory().backfill_cloned_voices(request)
+        except Exception:
+            diagnostics.exception(
+                "event=avatar_backfill_request_failed %s",
+                request_context,
+            )
+            raise
+        diagnostics.info(
+            "event=avatar_backfill_request_completed %s",
+            avatar_generation_payload(item_count=len(result.items)),
+        )
+        return result
 
 
 __all__ = ["register_character_avatar_generation_routes"]

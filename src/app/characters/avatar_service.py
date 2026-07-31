@@ -35,6 +35,11 @@ class CharacterAvatarService:
             raise CharacterNotFoundError(f"character avatar pack not found: {character_id}")
         return pack
 
+    def optional_get(self, character_id: str) -> CharacterAvatarPack | None:
+        """Return a pack when present without treating normal absence as an error."""
+        self.character_service_factory().get(character_id, include_archived=True)
+        return self.repository.get(character_id)
+
     def resolve(self, character_id: str | None) -> CharacterAvatarPack | None:
         if not character_id:
             return None

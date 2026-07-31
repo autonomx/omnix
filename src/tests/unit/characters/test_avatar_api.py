@@ -46,12 +46,20 @@ def test_character_avatar_routes_round_trip(tmp_path: Path) -> None:
     register_character_avatar_routes(app, service_factory=lambda: avatar_service)
     client = TestClient(app)
 
+    response = client.get("/api/characters/maya/avatar-pack/optional")
+    assert response.status_code == 200
+    assert response.json() is None
+
     response = client.put(
         "/api/characters/maya/avatar-pack",
         json={"base_asset_id": "image:maya", "mouth_frames": {"closed": "image:maya"}},
     )
     assert response.status_code == 200
     assert response.json()["version"] == 1
+
+    response = client.get("/api/characters/maya/avatar-pack/optional")
+    assert response.status_code == 200
+    assert response.json()["mouth_frames"]["closed"] == "image:maya"
 
     response = client.get("/api/characters/maya/avatar-pack")
     assert response.status_code == 200

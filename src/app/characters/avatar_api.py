@@ -24,6 +24,20 @@ def register_character_avatar_routes(
     service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
 ) -> None:
     @app.get(
+        "/api/characters/{character_id}/avatar-pack/optional",
+        response_model=CharacterAvatarPack | None,
+        tags=["characters"],
+        include_in_schema=False,
+    )
+    async def get_optional_character_avatar_pack(
+        character_id: str,
+    ) -> CharacterAvatarPack | None:
+        try:
+            return service_factory().optional_get(character_id)
+        except CharacterNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get(
         "/api/characters/{character_id}/avatar-pack",
         response_model=CharacterAvatarPack,
         tags=["characters"],
