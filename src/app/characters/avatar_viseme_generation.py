@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.jobs import CreateJobRequest, JobStatus, ResourceClass, default_job_store
 
-from .avatar_models import UpsertCharacterAvatarPackRequest
+from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
 from .repository import default_character_db_path
 from .service import CharacterService, default_character_service
@@ -35,6 +35,12 @@ _VISEME_PROMPTS = {
     "WQ": "small forward rounded lips for w or q",
     "other": "neutral lightly open consonant mouth shape",
 }
+_VISEME_PHASES = (
+    ("35", 35),
+    ("70", 70),
+    ("full", 100),
+)
+_MAX_ACTIVE_VISEME_JOBS = 2
 
 
 class CharacterVisemeGenerationBatch(BaseModel):
@@ -147,18 +153,27 @@ class CharacterVisemeGenerationService:
 
     def ensure(self, character_id: str) -> CharacterVisemeGenerationBatch | None:
         pack = self.avatar_service.get(character_id)
-        if pack.render_mode == "viseme":
-            batches = self.repository.list(character_id)
+        batches = self.repository.list(character_id)
+        active = next((batch for batch in batches if batch.status == "generating"), None)
+        if active:
+            return active
+        if pack.render_mode == "viseme" and _has_phased_visemes(pack):
             return batches[0] if batches else None
-        active = next((batch for batch in self.repository.list(character_id) if batch.status == "generating"), None)
-        return active or self.create(character_id)
+        return self.create(character_id)
 
     def reconcile_character(self, character_id: str) -> None:
         for batch in self.repository.list(character_id):
             if batch.status == "generating":
                 self.get(batch.id)
 
-    def _create_job(self, batch: CharacterVisemeGenerationBatch, viseme: str, description: str) -> CharacterVisemeGenerationBatch:
+    def _create_job(
+        self,
+        batch: CharacterVisemeGenerationBatch,
+        frame_key: str,
+        viseme: str,
+        description: str,
+        articulation_percent: int,
+    ) -> str:
         character = self.character_service.get(batch.character_id)
         pack = self.avatar_service.get(batch.character_id)
         reference_asset_id = pack.mouth_frames.get("closed") or pack.base_asset_id
@@ -171,23 +186,35 @@ class CharacterVisemeGenerationService:
                 type="image.generate",
                 resource_class=ResourceClass.GPU_IMAGE,
                 input_payload={
-                    "prompt": (
-                        f"Using the supplied canonical portrait of {character.display_name}, preserve the exact identity, crop, "
-                        f"head position, hair, clothing, lighting, and background. Change only the mouth to a {description}. "
-                        "Keep all unrelated details unchanged. No text or watermark."
+                    "prompt": _viseme_prompt(
+                        character.display_name,
+                        description,
+                        articulation_percent,
                     ),
-                    "negative_prompt": "text, watermark, face change, hair change, clothing change, camera shift, extra person",
+                    "negative_prompt": (
+                        "text, watermark, face change, hair change, clothing change, camera shift, "
+                        "background change, lighting change, extra person"
+                    ),
                     "width": 768,
                     "height": 768,
-                    "style": "locked character lip-sync frame",
+                    "style": "pixel-stable phased character lip-sync frame",
                     "reference_asset_ids": [reference_asset_id],
                     "no_cache": True,
-                    "metadata": {"character_id": batch.character_id, "avatar_viseme": viseme},
+                    "metadata": {
+                        "character_id": batch.character_id,
+                        "avatar_viseme": frame_key,
+                        "avatar_viseme_base": viseme,
+                        "avatar_viseme_articulation_percent": articulation_percent,
+                    },
                 },
-                compat={"character_id": batch.character_id, "avatar_viseme": viseme},
+                compat={
+                    "character_id": batch.character_id,
+                    "avatar_viseme": frame_key,
+                    "avatar_viseme_base": viseme,
+                },
             )
         )
-        return self.repository.update(batch.id, job_ids={**batch.job_ids, viseme: job.id})
+        return job.id
 
     def get(self, batch_id: str) -> CharacterVisemeGenerationBatch:
         batch = self.repository.get(batch_id)
@@ -195,28 +222,100 @@ class CharacterVisemeGenerationService:
             raise KeyError(batch_id)
         if batch.status in {"completed", "failed"}:
             return batch
+
+        specs = _viseme_frame_specs()
         assets = dict(batch.asset_ids)
-        for viseme, description in _VISEME_PROMPTS.items():
-            job_id = batch.job_ids.get(viseme)
+        job_ids = dict(batch.job_ids)
+        active_jobs = 0
+
+        for frame_key, _viseme, _description, _articulation_percent in specs:
+            job_id = job_ids.get(frame_key)
             if not job_id:
-                return self._create_job(batch, viseme, description)
+                continue
             job = self.job_store.get_job(job_id)
             if job is None:
-                return self.repository.update(batch.id, status="failed", error=f"viseme job missing: {viseme}")
+                return self.repository.update(
+                    batch.id,
+                    status="failed",
+                    asset_ids=assets,
+                    error=f"viseme job missing: {frame_key}",
+                )
             if job.status in {JobStatus.FAILED, JobStatus.CANCELED, JobStatus.STALE}:
-                message = job.error.message if job.error and job.error.message else f"viseme generation failed: {viseme}"
-                return self.repository.update(batch.id, status="failed", asset_ids=assets, error=message)
+                message = (
+                    job.error.message
+                    if job.error and job.error.message
+                    else f"viseme generation failed: {frame_key}"
+                )
+                return self.repository.update(
+                    batch.id,
+                    status="failed",
+                    asset_ids=assets,
+                    error=message,
+                )
             if job.status != JobStatus.COMPLETED:
-                return self.repository.update(batch.id, asset_ids=assets)
-            asset_id = next((str(ref.get("asset_id") or "") for ref in job.output_refs if ref.get("asset_id")), "")
+                active_jobs += 1
+                continue
+            asset_id = next(
+                (
+                    str(ref.get("asset_id") or "")
+                    for ref in job.output_refs
+                    if ref.get("asset_id")
+                ),
+                "",
+            )
             if not asset_id:
-                return self.repository.update(batch.id, status="failed", asset_ids=assets, error=f"viseme returned no asset: {viseme}")
-            assets[viseme] = asset_id
+                return self.repository.update(
+                    batch.id,
+                    status="failed",
+                    asset_ids=assets,
+                    error=f"viseme returned no asset: {frame_key}",
+                )
+            assets[frame_key] = asset_id
 
+        jobs_created = False
+        for frame_key, viseme, description, articulation_percent in specs:
+            if active_jobs >= _MAX_ACTIVE_VISEME_JOBS:
+                break
+            if frame_key in job_ids:
+                continue
+            job_ids[frame_key] = self._create_job(
+                batch,
+                frame_key,
+                viseme,
+                description,
+                articulation_percent,
+            )
+            active_jobs += 1
+            jobs_created = True
+
+        if jobs_created or active_jobs:
+            return self.repository.update(
+                batch.id,
+                job_ids=job_ids,
+                asset_ids=assets,
+            )
+        if any(frame_key not in assets for frame_key, *_rest in specs):
+            return self.repository.update(
+                batch.id,
+                status="failed",
+                job_ids=job_ids,
+                asset_ids=assets,
+                error="viseme generation stopped before every phased frame completed",
+            )
+        return self._finalize(batch, assets)
+
+    def _finalize(
+        self,
+        batch: CharacterVisemeGenerationBatch,
+        assets: dict[str, str],
+    ) -> CharacterVisemeGenerationBatch:
         current = self.avatar_service.get(batch.character_id)
         mouth_frames = dict(current.mouth_frames)
         mouth_frames.update(assets)
-        mouth_frames.setdefault("silence", mouth_frames.get("closed") or current.base_asset_id or "")
+        mouth_frames.setdefault(
+            "silence",
+            mouth_frames.get("closed") or current.base_asset_id or "",
+        )
         pack = self.avatar_service.upsert(
             batch.character_id,
             UpsertCharacterAvatarPackRequest(
@@ -242,6 +341,43 @@ class CharacterVisemeGenerationService:
             avatar_pack_version=pack.version,
             error="",
         )
+
+
+def _viseme_frame_specs() -> list[tuple[str, str, str, int]]:
+    specs: list[tuple[str, str, str, int]] = []
+    for viseme, description in _VISEME_PROMPTS.items():
+        for phase, articulation_percent in _VISEME_PHASES:
+            frame_key = viseme if phase == "full" else f"{viseme}_{phase}"
+            specs.append((frame_key, viseme, description, articulation_percent))
+    return specs
+
+
+def _viseme_prompt(
+    display_name: str,
+    description: str,
+    articulation_percent: int,
+) -> str:
+    if articulation_percent >= 100:
+        mouth_direction = f"Change only the mouth to the full {description}."
+    else:
+        mouth_direction = (
+            f"Change only the mouth to a natural {articulation_percent}% transitional articulation "
+            f"toward the full {description}. This must look visibly between the relaxed closed mouth "
+            "and the fully articulated target pose, suitable as an in-between animation frame."
+        )
+    return (
+        f"Using the supplied canonical portrait of {display_name}, preserve the exact identity, crop, "
+        f"head position, hair, clothing, lighting, and background. {mouth_direction} "
+        "Do not move the head, jawline, nose, eyes, hair, shoulders, camera, or background. "
+        "Keep all unrelated pixels visually unchanged. No text or watermark."
+    )
+
+
+def _has_phased_visemes(pack: CharacterAvatarPack) -> bool:
+    return all(
+        frame_key in pack.mouth_frames and bool(pack.mouth_frames[frame_key])
+        for frame_key, *_rest in _viseme_frame_specs()
+    )
 
 
 def _utcnow() -> str:
