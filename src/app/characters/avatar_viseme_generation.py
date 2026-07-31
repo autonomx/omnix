@@ -25,22 +25,35 @@ from .service import CharacterService, default_character_service
 VisemeGenerationStatus = Literal["generating", "completed", "failed"]
 
 _VISEME_PROMPTS = {
-    "A": "open vertical mouth shape used for an ah sound",
-    "E": "slightly spread mouth shape used for an ee or eh sound",
-    "O": "rounded open mouth shape used for an oh sound",
-    "U": "small rounded pursed mouth shape used for an oo sound",
-    "MBP": "fully closed lips pressed naturally together for m, b, or p",
+    "A": "small vertical opening used for an ah sound",
+    "E": "slightly spread lips used for an ee or eh sound",
+    "O": "gently rounded lips used for an oh sound",
+    "U": "small rounded pursed lips used for an oo sound",
+    "MBP": "naturally closed lips for m, b, or p",
     "FV": "upper teeth lightly touching the lower lip for f or v",
-    "L": "slightly open mouth with the tongue subtly raised for l",
+    "L": "slightly parted lips with the tongue subtly raised for l",
     "WQ": "small forward rounded lips for w or q",
-    "other": "neutral lightly open consonant mouth shape",
+    "other": "neutral minimally parted consonant lips",
+}
+_VISEME_MAX_ARTICULATION = {
+    "A": 60,
+    "E": 50,
+    "O": 55,
+    "U": 32,
+    "MBP": 100,
+    "FV": 35,
+    "L": 45,
+    "WQ": 32,
+    "other": 30,
 }
 _VISEME_PHASES = (
-    ("35", 35),
-    ("70", 70),
-    ("full", 100),
+    ("soft", 0.25),
+    ("medium", 0.5),
+    ("strong", 0.75),
+    ("peak", 1.0),
 )
 _MAX_ACTIVE_VISEME_JOBS = 2
+_MAX_QUALITY_ATTEMPTS = 3
 
 
 class CharacterVisemeGenerationBatch(BaseModel):
@@ -51,6 +64,8 @@ class CharacterVisemeGenerationBatch(BaseModel):
     status: VisemeGenerationStatus
     job_ids: dict[str, str] = Field(default_factory=dict)
     asset_ids: dict[str, str] = Field(default_factory=dict)
+    attempts: dict[str, int] = Field(default_factory=dict)
+    quality_fallbacks: dict[str, str] = Field(default_factory=dict)
     avatar_pack_version: int | None = None
     error: str = ""
     created_at: str
@@ -99,7 +114,11 @@ class CharacterVisemeGenerationRepository:
 
     def list(self, character_id: str) -> list[CharacterVisemeGenerationBatch]:
         with self._state.lock:
-            values = [item for item in self._state.batches.values() if item.character_id == character_id]
+            values = [
+                item
+                for item in self._state.batches.values()
+                if item.character_id == character_id
+            ]
             values.sort(key=lambda item: (item.created_at, item.id), reverse=True)
             return deepcopy(values)
 
@@ -110,6 +129,8 @@ class CharacterVisemeGenerationRepository:
         status: VisemeGenerationStatus | None = None,
         job_ids: dict[str, str] | None = None,
         asset_ids: dict[str, str] | None = None,
+        attempts: dict[str, int] | None = None,
+        quality_fallbacks: dict[str, str] | None = None,
         avatar_pack_version: int | None = None,
         error: str | None = None,
     ) -> CharacterVisemeGenerationBatch:
@@ -121,8 +142,20 @@ class CharacterVisemeGenerationRepository:
                 update={
                     "status": status or current.status,
                     "job_ids": dict(job_ids) if job_ids is not None else current.job_ids,
-                    "asset_ids": dict(asset_ids) if asset_ids is not None else current.asset_ids,
-                    "avatar_pack_version": avatar_pack_version if avatar_pack_version is not None else current.avatar_pack_version,
+                    "asset_ids": (
+                        dict(asset_ids) if asset_ids is not None else current.asset_ids
+                    ),
+                    "attempts": dict(attempts) if attempts is not None else current.attempts,
+                    "quality_fallbacks": (
+                        dict(quality_fallbacks)
+                        if quality_fallbacks is not None
+                        else current.quality_fallbacks
+                    ),
+                    "avatar_pack_version": (
+                        avatar_pack_version
+                        if avatar_pack_version is not None
+                        else current.avatar_pack_version
+                    ),
                     "error": error if error is not None else current.error,
                     "updated_at": _utcnow(),
                 }
@@ -154,7 +187,10 @@ class CharacterVisemeGenerationService:
     def ensure(self, character_id: str) -> CharacterVisemeGenerationBatch | None:
         pack = self.avatar_service.get(character_id)
         batches = self.repository.list(character_id)
-        active = next((batch for batch in batches if batch.status == "generating"), None)
+        active = next(
+            (batch for batch in batches if batch.status == "generating"),
+            None,
+        )
         if active:
             return active
         if pack.render_mode == "viseme" and _has_phased_visemes(pack):
@@ -173,6 +209,7 @@ class CharacterVisemeGenerationService:
         viseme: str,
         description: str,
         articulation_percent: int,
+        attempt: int,
     ) -> str:
         character = self.character_service.get(batch.character_id)
         pack = self.avatar_service.get(batch.character_id)
@@ -190,14 +227,18 @@ class CharacterVisemeGenerationService:
                         character.display_name,
                         description,
                         articulation_percent,
+                        attempt,
                     ),
                     "negative_prompt": (
-                        "text, watermark, face change, hair change, clothing change, camera shift, "
-                        "background change, lighting change, extra person"
+                        "text, watermark, face change, hair change, clothing change, "
+                        "camera shift, background change, lighting change, extra person, "
+                        "exaggerated open mouth, scream, shouting, laugh, grin, smile, "
+                        "stretched lips, oversized teeth, exposed gums, distorted jaw, "
+                        "lower-face deformation, cheek deformation, chin movement"
                     ),
                     "width": 768,
                     "height": 768,
-                    "style": "pixel-stable phased character lip-sync frame",
+                    "style": "neutral conservative character speech articulation frame",
                     "reference_asset_ids": [reference_asset_id],
                     "no_cache": True,
                     "metadata": {
@@ -205,12 +246,15 @@ class CharacterVisemeGenerationService:
                         "avatar_viseme": frame_key,
                         "avatar_viseme_base": viseme,
                         "avatar_viseme_articulation_percent": articulation_percent,
+                        "avatar_viseme_quality_attempt": attempt,
+                        "avatar_mouth_anchor": dict(pack.mouth_anchor),
                     },
                 },
                 compat={
                     "character_id": batch.character_id,
                     "avatar_viseme": frame_key,
                     "avatar_viseme_base": viseme,
+                    "avatar_viseme_quality_attempt": attempt,
                 },
             )
         )
@@ -224,11 +268,17 @@ class CharacterVisemeGenerationService:
             return batch
 
         specs = _viseme_frame_specs()
+        pack = self.avatar_service.get(batch.character_id)
         assets = dict(batch.asset_ids)
         job_ids = dict(batch.job_ids)
+        attempts = dict(batch.attempts)
+        quality_fallbacks = dict(batch.quality_fallbacks)
         active_jobs = 0
+        retry_specs: list[tuple[str, str, str, int]] = []
 
-        for frame_key, _viseme, _description, _articulation_percent in specs:
+        for frame_key, viseme, description, articulation_percent in specs:
+            if frame_key in assets:
+                continue
             job_id = job_ids.get(frame_key)
             if not job_id:
                 continue
@@ -238,9 +288,27 @@ class CharacterVisemeGenerationService:
                     batch.id,
                     status="failed",
                     asset_ids=assets,
+                    attempts=attempts,
+                    quality_fallbacks=quality_fallbacks,
                     error=f"viseme job missing: {frame_key}",
                 )
             if job.status in {JobStatus.FAILED, JobStatus.CANCELED, JobStatus.STALE}:
+                if _is_quality_rejection(job):
+                    if attempts.get(frame_key, 1) < _MAX_QUALITY_ATTEMPTS:
+                        retry_specs.append(
+                            (frame_key, viseme, description, articulation_percent)
+                        )
+                        continue
+                    fallback_asset_id = _quality_fallback_asset(
+                        frame_key,
+                        viseme,
+                        assets,
+                        pack,
+                    )
+                    if fallback_asset_id:
+                        assets[frame_key] = fallback_asset_id
+                        quality_fallbacks[frame_key] = fallback_asset_id
+                        continue
                 message = (
                     job.error.message
                     if job.error and job.error.message
@@ -250,6 +318,8 @@ class CharacterVisemeGenerationService:
                     batch.id,
                     status="failed",
                     asset_ids=assets,
+                    attempts=attempts,
+                    quality_fallbacks=quality_fallbacks,
                     error=message,
                 )
             if job.status != JobStatus.COMPLETED:
@@ -268,31 +338,54 @@ class CharacterVisemeGenerationService:
                     batch.id,
                     status="failed",
                     asset_ids=assets,
+                    attempts=attempts,
+                    quality_fallbacks=quality_fallbacks,
                     error=f"viseme returned no asset: {frame_key}",
                 )
             assets[frame_key] = asset_id
 
         jobs_created = False
-        for frame_key, viseme, description, articulation_percent in specs:
+        for frame_key, viseme, description, articulation_percent in retry_specs:
             if active_jobs >= _MAX_ACTIVE_VISEME_JOBS:
                 break
-            if frame_key in job_ids:
-                continue
+            attempt = attempts.get(frame_key, 1) + 1
             job_ids[frame_key] = self._create_job(
                 batch,
                 frame_key,
                 viseme,
                 description,
                 articulation_percent,
+                attempt,
             )
+            attempts[frame_key] = attempt
             active_jobs += 1
             jobs_created = True
 
-        if jobs_created or active_jobs:
+        for frame_key, viseme, description, articulation_percent in specs:
+            if active_jobs >= _MAX_ACTIVE_VISEME_JOBS:
+                break
+            if frame_key in assets or frame_key in job_ids:
+                continue
+            attempt = 1
+            job_ids[frame_key] = self._create_job(
+                batch,
+                frame_key,
+                viseme,
+                description,
+                articulation_percent,
+                attempt,
+            )
+            attempts[frame_key] = attempt
+            active_jobs += 1
+            jobs_created = True
+
+        if jobs_created or active_jobs or retry_specs:
             return self.repository.update(
                 batch.id,
                 job_ids=job_ids,
                 asset_ids=assets,
+                attempts=attempts,
+                quality_fallbacks=quality_fallbacks,
             )
         if any(frame_key not in assets for frame_key, *_rest in specs):
             return self.repository.update(
@@ -300,17 +393,25 @@ class CharacterVisemeGenerationService:
                 status="failed",
                 job_ids=job_ids,
                 asset_ids=assets,
+                attempts=attempts,
+                quality_fallbacks=quality_fallbacks,
                 error="viseme generation stopped before every phased frame completed",
             )
-        return self._finalize(batch, assets)
+        return self._finalize(batch, assets, attempts, quality_fallbacks)
 
     def _finalize(
         self,
         batch: CharacterVisemeGenerationBatch,
         assets: dict[str, str],
+        attempts: dict[str, int],
+        quality_fallbacks: dict[str, str],
     ) -> CharacterVisemeGenerationBatch:
         current = self.avatar_service.get(batch.character_id)
-        mouth_frames = dict(current.mouth_frames)
+        mouth_frames = {
+            key: value
+            for key, value in current.mouth_frames.items()
+            if not _is_precise_viseme_frame_key(key)
+        }
         mouth_frames.update(assets)
         mouth_frames.setdefault(
             "silence",
@@ -338,6 +439,8 @@ class CharacterVisemeGenerationService:
             batch.id,
             status="completed",
             asset_ids=assets,
+            attempts=attempts,
+            quality_fallbacks=quality_fallbacks,
             avatar_pack_version=pack.version,
             error="",
         )
@@ -346,8 +449,10 @@ class CharacterVisemeGenerationService:
 def _viseme_frame_specs() -> list[tuple[str, str, str, int]]:
     specs: list[tuple[str, str, str, int]] = []
     for viseme, description in _VISEME_PROMPTS.items():
-        for phase, articulation_percent in _VISEME_PHASES:
-            frame_key = viseme if phase == "full" else f"{viseme}_{phase}"
+        maximum = _VISEME_MAX_ARTICULATION[viseme]
+        for phase, fraction in _VISEME_PHASES:
+            frame_key = viseme if phase == "peak" else f"{viseme}_{phase}"
+            articulation_percent = max(5, round(maximum * fraction))
             specs.append((frame_key, viseme, description, articulation_percent))
     return specs
 
@@ -356,21 +461,62 @@ def _viseme_prompt(
     display_name: str,
     description: str,
     articulation_percent: int,
+    attempt: int,
 ) -> str:
-    if articulation_percent >= 100:
-        mouth_direction = f"Change only the mouth to the full {description}."
-    else:
-        mouth_direction = (
-            f"Change only the mouth to a natural {articulation_percent}% transitional articulation "
-            f"toward the full {description}. This must look visibly between the relaxed closed mouth "
-            "and the fully articulated target pose, suitable as an in-between animation frame."
+    retry_direction = ""
+    if attempt > 1:
+        retry_direction = (
+            "A previous attempt was rejected for excessive mouth or teeth movement. "
+            "Make this attempt substantially subtler and closer to the closed-mouth portrait. "
         )
     return (
-        f"Using the supplied canonical portrait of {display_name}, preserve the exact identity, crop, "
-        f"head position, hair, clothing, lighting, and background. {mouth_direction} "
-        "Do not move the head, jawline, nose, eyes, hair, shoulders, camera, or background. "
-        "Keep all unrelated pixels visually unchanged. No text or watermark."
+        f"Using the supplied canonical portrait of {display_name}, preserve the exact identity, "
+        "crop, head position, jawline, chin, cheeks, nose, eyes, hair, clothing, lighting, and "
+        f"background. {retry_direction}Change only the lips and a minimal amount of inner mouth "
+        f"to a neutral {articulation_percent}% articulation toward {description}. This is ordinary "
+        "quiet conversational speech, not an emotional expression. Keep the jaw almost fixed, "
+        "keep the lip corners close to their original position, expose little or no teeth, and "
+        "never create a smile, grin, laugh, shout, scream, or dramatic open mouth. All pixels "
+        "outside the immediate lip area should remain visually unchanged. No text or watermark."
     )
+
+
+def _is_quality_rejection(job: Any) -> bool:
+    error = getattr(job, "error", None)
+    if error is None:
+        return False
+    code = str(getattr(error, "code", "") or "")
+    message = str(getattr(error, "message", "") or "")
+    return code == "avatar_frame_quality_rejected" or message.startswith(
+        "avatar_frame_quality_rejected:"
+    )
+
+
+def _quality_fallback_asset(
+    frame_key: str,
+    viseme: str,
+    assets: dict[str, str],
+    pack: CharacterAvatarPack,
+) -> str:
+    ordered_keys = [
+        key
+        for key, candidate_viseme, *_rest in _viseme_frame_specs()
+        if candidate_viseme == viseme
+    ]
+    try:
+        index = ordered_keys.index(frame_key)
+    except ValueError:
+        index = 0
+    for candidate in reversed(ordered_keys[:index]):
+        asset_id = assets.get(candidate)
+        if asset_id:
+            return asset_id
+    return pack.mouth_frames.get("closed") or pack.base_asset_id or ""
+
+
+def _is_precise_viseme_frame_key(frame_key: str) -> bool:
+    base = str(frame_key or "").split("_", 1)[0]
+    return base in _VISEME_PROMPTS
 
 
 def _has_phased_visemes(pack: CharacterAvatarPack) -> bool:
