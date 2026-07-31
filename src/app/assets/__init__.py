@@ -1,6 +1,7 @@
 """Shared asset/artifact library."""
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,20 @@ def _skipped_files(family: str, roots: list[Path], supported_suffixes: set[str])
     return skipped
 
 
+def _merge_assets(
+    assets: dict[str, AssetRecord],
+    loader: Callable[[], Iterable[AssetRecord]],
+) -> None:
+    """Merge one compatibility source without allowing it to break the library."""
+
+    try:
+        candidates = loader()
+        for asset in candidates:
+            assets.setdefault(asset.id, asset)
+    except Exception:
+        return
+
+
 class SharedAssetStore(ManifestSharedAssetStore):
     """Shared asset store with non-mutating compatibility and curated read-through."""
 
@@ -60,32 +75,30 @@ class SharedAssetStore(ManifestSharedAssetStore):
         return discover_voice_clone_assets()
 
     def list_assets(self) -> AssetListResponse:
-        assets = {asset.id: asset for asset in super().list_assets().assets}
-        for asset in self.preview_image_manifest_import().assets:
-            assets.setdefault(asset.id, asset)
-        for asset in legacy_document_assets():
-            assets.setdefault(asset.id, asset)
-        for asset in curated_rpg_map_assets():
-            assets.setdefault(asset.id, asset)
+        # The shared manifest remains authoritative, but each compatibility source
+        # is isolated. A broken image index or malformed legacy file must not make
+        # local voice clones disappear behind an HTTP 500 response.
+        assets = dict(super()._load_manifest())
+        _merge_assets(assets, self._legacy_voice_clone_assets)
+        _merge_assets(assets, super()._legacy_audio_assets)
+        _merge_assets(assets, lambda: self.preview_image_manifest_import().assets)
+        _merge_assets(assets, legacy_document_assets)
+        _merge_assets(assets, curated_rpg_map_assets)
         return AssetListResponse(assets=list(assets.values()))
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
         normalized_id = str(asset_id)
-        asset = super().get_asset(normalized_id)
-        if asset is not None:
-            return asset
-        return next(
-            (
-                candidate
-                for candidate in [
-                    *self.preview_image_manifest_import().assets,
-                    *legacy_document_assets(),
-                    *curated_rpg_map_assets(),
-                ]
-                if candidate.id == normalized_id
-            ),
-            None,
-        )
+        manifest_asset = super()._load_manifest().get(normalized_id)
+        if manifest_asset is not None:
+            return manifest_asset
+
+        candidates: dict[str, AssetRecord] = {}
+        _merge_assets(candidates, self._legacy_voice_clone_assets)
+        _merge_assets(candidates, super()._legacy_audio_assets)
+        _merge_assets(candidates, lambda: self.preview_image_manifest_import().assets)
+        _merge_assets(candidates, legacy_document_assets)
+        _merge_assets(candidates, curated_rpg_map_assets)
+        return candidates.get(normalized_id)
 
     def preview_legacy_non_image_import(self) -> AssetLegacyImportDryRun:
         """Summarize non-image legacy assets without mutating any source."""
