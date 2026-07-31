@@ -1,0 +1,58 @@
+name: Character live voice resolution
+
+on:
+  pull_request:
+    paths:
+      - "src/app/assets/canonical_voice_clones.py"
+      - "src/app/characters/live_call.py"
+      - "src/tests/unit/assets/test_canonical_voice_clone_resolution.py"
+      - "src/tests/unit/characters/test_live_call.py"
+      - "apps/web/src/features/chatbot/characterClient.ts"
+      - "apps/web/src/features/chatbot/characterClient.test.ts"
+      - ".github/workflows/character-live-voice-resolution.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-character-live-voice:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      PYTHONPATH: src
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install focused Python dependencies
+        run: >-
+          python -m pip install
+          ruff pytest pydantic fastapi httpx requests python-multipart
+      - name: Install web dependencies
+        run: npm install
+      - name: Lint voice resolution path
+        run: |
+          ruff check \
+            src/app/assets/canonical_voice_clones.py \
+            src/app/characters/live_call.py \
+            src/tests/unit/assets/test_canonical_voice_clone_resolution.py \
+            src/tests/unit/characters/test_live_call.py
+      - name: Verify canonical and live-call voice resolution
+        run: >-
+          pytest -q
+          --confcutdir=src/tests/unit
+          src/tests/unit/assets/test_canonical_voice_clone_resolution.py
+          src/tests/unit/characters/test_live_call.py
+      - name: Verify browser playback adapter
+        run: >-
+          npm --workspace @omnix/web run test --
+          src/features/chatbot/characterClient.test.ts
