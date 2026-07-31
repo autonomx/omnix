@@ -4,6 +4,8 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any, Callable
 
+from app.persistence.tenant import LOCAL_USER_ID
+
 from .models import JobRecord, JobStatus, TERMINAL_STATUSES
 
 RPG_TURN_JOB_TYPE = "rpg.turn"
@@ -38,6 +40,7 @@ def _install_create_guard(sqlite_job_store_cls: Any) -> None:
 
     @wraps(original_create_job)
     def create_job_with_rpg_turn_guard(self: Any, request: Any) -> JobRecord:
+        request = _normalize_durable_job_owner(request)
         duplicate = _find_duplicate_rpg_turn_job(self, request)
         if duplicate is not None:
             return duplicate
@@ -64,6 +67,17 @@ def _install_terminal_guards(sqlite_job_store_cls: Any) -> None:
             return __original(self, job_id, *args, **kwargs)
 
         setattr(sqlite_job_store_cls, method_name, terminal_safe)
+
+
+def _normalize_durable_job_owner(request: Any) -> Any:
+    """Map legacy subject owners to the local user required by PostgreSQL."""
+
+    owner_id = _text(getattr(request, "owner_id", None))
+    if not owner_id or owner_id.startswith("user:"):
+        return request
+    compat = _dict_value(getattr(request, "compat", None))
+    compat.setdefault("subject_owner_id", owner_id)
+    return request.model_copy(update={"owner_id": LOCAL_USER_ID, "compat": compat})
 
 
 def _find_duplicate_rpg_turn_job(job_store: Any, request: Any) -> JobRecord | None:
