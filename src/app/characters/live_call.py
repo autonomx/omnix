@@ -37,6 +37,23 @@ def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, parsed))
 
 
+def _voice_speaker_id(asset_id: str | None, service: CharacterService) -> str | None:
+    """Resolve a governed voice asset into the exact speaker ID expected by TTS."""
+
+    normalized_asset_id = str(asset_id or "").strip()
+    if not normalized_asset_id:
+        return None
+    asset = service.asset_store_factory().get_asset(normalized_asset_id)
+    if asset is not None:
+        metadata = dict(asset.metadata or {})
+        for key in ("voice_clone_id", "voice_id", "speaker"):
+            value = str(metadata.get(key) or "").strip()
+            if value and value.lower() != "default":
+                return value
+    fallback = normalized_asset_id.removeprefix("voice-cloning:").strip()
+    return fallback or None
+
+
 class LiveCallSpeechStyle(BaseModel):
     """Validated delivery controls kept separate from language identity."""
 
@@ -77,6 +94,7 @@ class CharacterLiveCallRuntime(BaseModel):
     character_profile_version: int | None = Field(default=None, ge=1)
     effective_identity_hash: str | None = Field(default=None, min_length=64, max_length=64)
     voice_asset_id: str | None = None
+    voice_speaker_id: str | None = None
     greeting: str = Field(default="", max_length=2_000)
     avatar_pack: CharacterAvatarPack | None = None
     speech_style: LiveCallSpeechStyle
@@ -137,6 +155,7 @@ def resolve_live_call_runtime(
             # system voice while surfacing the exact asset problem for diagnostics.
             voice_error = str(exc)
             voice_asset_id = None
+    voice_speaker_id = _voice_speaker_id(voice_asset_id, character_service)
     # Live-call greetings are generated ephemerally by the active LLM. Keep the
     # legacy field empty so old browser playback code cannot race that stream.
     greeting = ""
@@ -152,6 +171,7 @@ def resolve_live_call_runtime(
         character_profile_version=interaction.character_profile_version,
         effective_identity_hash=interaction.effective_identity_hash,
         voice_asset_id=voice_asset_id,
+        voice_speaker_id=voice_speaker_id,
         greeting=greeting,
         avatar_pack=avatar_pack,
         speech_style=speech_style,
@@ -161,7 +181,7 @@ def resolve_live_call_runtime(
         memory_snapshot_id=session.memory_snapshot_id if memory_loaded else None,
         preload=LiveCallPreloadState(
             profile_loaded=character is not None,
-            voice_resolved=bool(voice_asset_id),
+            voice_resolved=bool(voice_speaker_id),
             voice_error=voice_error,
             avatar_pack_loaded=avatar_pack is not None,
             memory_snapshot_loaded=memory_loaded,
