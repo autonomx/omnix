@@ -1,0 +1,90 @@
+name: Image model PR gates
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/image-models-pr-gates.yml'
+      - 'apps/web/src/features/image-generation/**'
+      - 'src/app/gateway/image_model_routes.py'
+      - 'src/app/image/**'
+      - 'src/app/image_http_client.py'
+      - 'src/app/image_service_app.py'
+      - 'src/app/image_service_runtime.py'
+      - 'src/requirements-rpg-flux.txt'
+      - 'src/tests/unit/gateway/test_image_model_routes.py'
+      - 'src/tests/unit/image/**'
+      - 'bootstrap_omnix_flux_env.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image-model-gates:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: src
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python test dependencies
+        run: python -m pip install --upgrade pip ruff pytest fastapi httpx pydantic requests python-multipart packaging
+
+      - name: Ruff changed image modules
+        run: |
+          ruff check \
+            src/app/gateway/image_model_routes.py \
+            src/app/image/config.py \
+            src/app/image/downloads.py \
+            src/app/image/lifecycle.py \
+            src/app/image/providers/diffusers_turbo_provider.py \
+            src/app/image/providers/registry.py \
+            src/app/image_http_client.py \
+            src/app/image_service_app.py \
+            src/app/image_service_runtime.py \
+            src/tests/unit/gateway/test_image_model_routes.py \
+            src/tests/unit/image/test_image_service_model_download.py \
+            src/tests/unit/image/test_image_service_on_demand.py
+
+      - name: Compile changed image modules
+        run: |
+          python -m compileall -q \
+            src/app/gateway/image_model_routes.py \
+            src/app/image \
+            src/app/image_http_client.py \
+            src/app/image_service_app.py \
+            src/app/image_service_runtime.py
+
+      - name: Run image model backend tests
+        run: |
+          python -m pytest -q \
+            src/tests/unit/gateway/test_image_model_routes.py \
+            src/tests/unit/image/test_image_service_model_download.py \
+            src/tests/unit/image/test_image_service_on_demand.py
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm install
+
+      - name: Web typecheck
+        run: npm run web:typecheck
+
+      - name: Image generation unit tests
+        run: |
+          npm run web:test -- \
+            apps/web/src/features/image-generation/ImageModelControl.test.tsx \
+            apps/web/src/features/image-generation/ImageModelSelection.test.tsx \
+            apps/web/src/features/image-generation/ImageModelWorkspaceWiring.test.tsx \
+            apps/web/src/features/image-generation/ImageGenerationWorkspace.test.tsx
