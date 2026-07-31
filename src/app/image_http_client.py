@@ -16,7 +16,7 @@ def _truthy(value: str) -> bool:
 def is_image_generation_enabled() -> bool:
     """Return whether image generation is explicitly enabled.
 
-    The lightweight image service can be started without loading FLUX weights.
+    The lightweight image service can be started without loading model weights.
     ``OMNIX_IMAGE_ENABLED`` controls whether model load and generation actions
     are allowed.
     """
@@ -93,13 +93,19 @@ def post_image_service(path: str, payload: Dict[str, Any] | None = None, timeout
     return request_image_service("POST", path, payload, timeout)
 
 
-def get_image_service_status() -> Dict[str, Any]:
-    return request_image_service("GET", "/provider/status", timeout=5.0)
+def get_image_service_status(provider: str = "") -> Dict[str, Any]:
+    provider = str(provider or "").strip().lower()
+    query = f"?provider={urllib.parse.quote(provider, safe='')}" if provider else ""
+    return request_image_service("GET", f"/provider/status{query}", timeout=5.0)
 
 
 def get_image_generation_progress(request_id: str) -> Dict[str, Any]:
     encoded = urllib.parse.quote(str(request_id or ""), safe="")
     return request_image_service("GET", f"/generate/progress/{encoded}", timeout=5.0)
+
+
+def download_image_model_via_service(provider: str = "flux_klein") -> Dict[str, Any]:
+    return post_image_service("/provider/download", {"provider": provider}, timeout=7200.0)
 
 
 def load_image_model_via_service(provider: str = "flux_klein") -> Dict[str, Any]:
