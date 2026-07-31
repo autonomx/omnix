@@ -14,7 +14,11 @@ from .avatar_models import CharacterAvatarPack
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
 from .interaction import resolve_system_session_identity
 from .models import SYSTEM_ASSISTANT_NAME, CharacterProfileSnapshot
-from .service import CharacterService, CharacterVoiceAssetError, default_character_service
+from .service import (
+    CharacterService,
+    CharacterVoiceAssetError,
+    default_character_service,
+)
 
 
 def _utcnow() -> str:
