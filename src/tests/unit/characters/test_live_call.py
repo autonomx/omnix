@@ -23,6 +23,7 @@ def _configure(tmp_path: Path, monkeypatch) -> None:
     for voice_id in ("maya", "alternate"):
         audio = tmp_path / f"{voice_id}.wav"
         audio.write_bytes(f"RIFF-{voice_id}".encode())
+        speaker_id = voice_id.title()
         assets.upsert_asset(
             AssetRecord(
                 id=f"voice-cloning:{voice_id}",
@@ -31,7 +32,12 @@ def _configure(tmp_path: Path, monkeypatch) -> None:
                 type=AssetType.VOICE_PROFILE,
                 mime_type="audio/wav",
                 storage_path=str(audio),
-                metadata={},
+                metadata={
+                    "profile_name": speaker_id,
+                    "voice_id": speaker_id,
+                    "voice_clone_id": speaker_id,
+                    "speaker": speaker_id,
+                },
                 created_at="2026-01-01T00:00:00+00:00",
             )
         )
@@ -91,6 +97,7 @@ def test_character_live_call_runtime_resolves_profile_voice_and_delivery(tmp_pat
     assert runtime.display_name == "Maya"
     assert runtime.character_profile_version == 1
     assert runtime.voice_asset_id == "voice-cloning:maya"
+    assert runtime.voice_speaker_id == "Maya"
     assert runtime.greeting == ""
     assert runtime.speech_style.speed == 0.94
     assert runtime.speech_style.temperature == 0.52
@@ -125,6 +132,7 @@ def test_character_default_voice_overrides_stale_session_voice_for_live_call(tmp
     assert runtime.character_id == "maya"
     assert runtime.display_name == "Maya"
     assert runtime.voice_asset_id == "voice-cloning:maya"
+    assert runtime.voice_speaker_id == "Maya"
     assert runtime.character_profile_version == 1
 
 
@@ -151,6 +159,7 @@ def test_character_runtime_keeps_identity_when_linked_voice_is_missing(tmp_path:
     assert runtime.character_id == "maya"
     assert runtime.display_name == "Maya"
     assert runtime.voice_asset_id is None
+    assert runtime.voice_speaker_id is None
     assert runtime.preload.profile_loaded is True
     assert runtime.preload.voice_resolved is False
     assert runtime.preload.voice_error is not None
@@ -173,6 +182,7 @@ def test_system_live_call_runtime_stays_identity_neutral(tmp_path: Path, monkeyp
     assert runtime.character_id is None
     assert runtime.display_name == "System Assistant"
     assert runtime.voice_asset_id == "voice-cloning:maya"
+    assert runtime.voice_speaker_id == "Maya"
     assert runtime.greeting == ""
     assert runtime.preload.profile_loaded is False
 
