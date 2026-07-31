@@ -1,4 +1,4 @@
-export { ImageGenerationWorkspaceImpl as ImageGenerationWorkspace } from './ImageGenerationWorkspaceImpl';
+export { ImageGenerationWorkspaceImpl as ImageGenerationWorkspace } from './ImageGenerationWorkspaceMultiModel';
 export {
   hasActiveImageJobs,
   imageAssetUrl,
