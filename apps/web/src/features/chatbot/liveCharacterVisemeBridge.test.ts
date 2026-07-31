@@ -13,12 +13,14 @@ const phasedPack: RuntimeAvatarPack = {
   mouth_frames: {
     closed: 'image:maya-closed',
     silence: 'image:maya-closed',
-    A_35: 'image:maya-a-35',
-    A_70: 'image:maya-a-70',
-    A: 'image:maya-a',
-    E_35: 'image:maya-e-35',
-    E_70: 'image:maya-e-70',
-    E: 'image:maya-e',
+    A_soft: 'image:maya-a-soft',
+    A_medium: 'image:maya-a-medium',
+    A_strong: 'image:maya-a-strong',
+    A: 'image:maya-a-peak',
+    E_soft: 'image:maya-e-soft',
+    E_medium: 'image:maya-e-medium',
+    E_strong: 'image:maya-e-strong',
+    E: 'image:maya-e-peak',
   },
 };
 
@@ -54,21 +56,28 @@ describe('live character timed visemes', () => {
     ]);
   });
 
-  it('opens, changes, and closes through generated articulation phases', () => {
-    expect(visemeAnimationFrameKeys(phasedPack, 'silence', 'A')).toEqual([
-      'A_35',
-      'A_70',
+  it('uses subtle phases for ordinary speech and reserves peak poses for long cues', () => {
+    expect(visemeAnimationFrameKeys(phasedPack, 'silence', 'A', 90)).toEqual([
+      'A_soft',
+      'A_medium',
+      'A_strong',
+    ]);
+    expect(visemeAnimationFrameKeys(phasedPack, 'silence', 'A', 160)).toEqual([
+      'A_soft',
+      'A_medium',
+      'A_strong',
       'A',
     ]);
-    expect(visemeAnimationFrameKeys(phasedPack, 'A', 'E')).toEqual([
-      'A_35',
-      'E_35',
-      'E_70',
-      'E',
+    expect(visemeAnimationFrameKeys(phasedPack, 'A', 'E', 90)).toEqual([
+      'A_soft',
+      'E_soft',
+      'E_medium',
+      'E_strong',
     ]);
-    expect(visemeAnimationFrameKeys(phasedPack, 'E', 'silence')).toEqual([
-      'E_70',
-      'E_35',
+    expect(visemeAnimationFrameKeys(phasedPack, 'E', 'silence', 75)).toEqual([
+      'E_strong',
+      'E_medium',
+      'E_soft',
       'silence',
     ]);
   });
