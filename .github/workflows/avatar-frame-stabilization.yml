@@ -37,4 +37,7 @@ jobs:
       - name: Compile image-job integration
         run: python -m py_compile src/app/jobs/image_inline.py
       - name: Verify pixel-stable avatar frames
-        run: pytest -q src/tests/unit/characters/test_avatar_frame_stabilization.py
+        run: >-
+          pytest -q
+          --confcutdir=src/tests/unit/characters
+          src/tests/unit/characters/test_avatar_frame_stabilization.py
