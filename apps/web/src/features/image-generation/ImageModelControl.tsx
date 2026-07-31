@@ -1,1 +1,1 @@
-export * from './ImageModelSelectorControl';
+export * from './ImageModelControlCompat';
