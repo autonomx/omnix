@@ -7,7 +7,10 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-from .canonical_voice_clones import discover_canonical_voice_clone_assets
+from .canonical_voice_clones import (
+    canonical_voice_clone_root,
+    discover_canonical_voice_clone_assets,
+)
 from .legacy_documents import (
     _DOCUMENT_MIME_TYPES,
     _legacy_document_roots,
@@ -229,7 +232,7 @@ class SharedAssetStore(ManifestSharedAssetStore):
 def _voice_clone_roots() -> list[AssetLegacyRootScan]:
     roots: list[AssetLegacyRootScan] = []
     seen: set[tuple[str, str]] = set()
-    canonical_root = Path(str(discover_canonical_voice_clone_assets.__globals__["resources_root"]())) / "voice_clones"
+    canonical_root = canonical_voice_clone_root()
     source_rows = [(canonical_root, canonical_root / "voice_clones.json"), *voice_clone_sources()]
     for clones_dir, clones_file in source_rows:
         for family, path in (
