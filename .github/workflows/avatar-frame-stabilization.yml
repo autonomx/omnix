@@ -9,6 +9,7 @@ on:
       - "src/tests/unit/characters/test_avatar_frame_stabilization.py"
       - "src/tests/unit/characters/test_avatar_viseme_generation.py"
       - "apps/web/src/features/chatbot/liveCharacterAvatarBridge.css"
+      - "apps/web/src/features/chatbot/liveCharacterAvatarBridge.test.ts"
       - "apps/web/src/features/chatbot/liveCharacterVisemeBridge.ts"
       - "apps/web/src/features/chatbot/liveCharacterVisemeBridge.test.ts"
       - ".github/workflows/avatar-frame-stabilization.yml"
@@ -59,4 +60,5 @@ jobs:
       - name: Verify phased browser playback
         run: >-
           npm --workspace @omnix/web run test --
+          src/features/chatbot/liveCharacterAvatarBridge.test.ts
           src/features/chatbot/liveCharacterVisemeBridge.test.ts
