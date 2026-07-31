@@ -52,6 +52,7 @@ from .tts_live_call_websocket import install_tts_live_call_websocket_hook
 from .tts_pcm_websocket import install_tts_pcm_websocket_hook
 from .tts_runtime_routes import install_tts_runtime_route_hook
 from .voice_job_summary_routes import install_voice_job_summary_hook
+from .voice_library_routes import install_voice_library_route_hook
 
 __all__ = ["app", "create_gateway_app"]
 
@@ -121,6 +122,7 @@ install_tts_runtime_route_hook()
 install_tts_pcm_websocket_hook()
 install_tts_live_call_websocket_hook()
 install_voice_job_summary_hook()
+install_voice_library_route_hook()
 install_image_asset_file_hook()
 install_image_reference_route_hook()
 install_image_workspace_route_hook()
