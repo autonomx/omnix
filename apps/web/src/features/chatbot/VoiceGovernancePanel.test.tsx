@@ -17,6 +17,7 @@ function renderPanel(
         assetId={assetId}
         character={character}
         characterIsActive={characterIsActive}
+        onActivateCharacter={characterIsActive ? () => undefined : undefined}
       />
     </QueryClientProvider>,
   );
