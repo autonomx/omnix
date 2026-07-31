@@ -3,6 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { ImageModelControl, type ImageModelStatusPayload } from './ImageModelSelectorControl';
+import {
+  buildImageGenerateInput,
+  imageRequestDefaultValues,
+  resolveImageRequestDefaults,
+} from './imageRequestModel';
 
 it('selects another image model without downloading or loading it', () => {
   const onSelect = vi.fn();
@@ -59,4 +64,44 @@ it('selects another image model without downloading or loading it', () => {
   expect(onSelect).toHaveBeenCalledWith('krea2_turbo');
   expect(onDownload).not.toHaveBeenCalled();
   expect(onLoad).not.toHaveBeenCalled();
+});
+
+it('uses model-specific generation defaults', () => {
+  const base = {
+    width: 768,
+    height: 768,
+    unloadAfterGeneration: false,
+  };
+
+  const krea = imageRequestDefaultValues({ ...base, providerId: 'image:krea2_turbo' });
+  const zImage = imageRequestDefaultValues({ ...base, providerId: 'image:z_image_turbo' });
+  const flux = imageRequestDefaultValues({ ...base, providerId: 'image:flux_klein' });
+
+  expect(flux.steps).toBe('4');
+  expect(flux.guidanceScale).toBe('1');
+  expect(krea.steps).toBe('8');
+  expect(krea.guidanceScale).toBe('0');
+  expect(zImage.steps).toBe('9');
+  expect(zImage.guidanceScale).toBe('0');
+});
+
+it('removes reference assets for text-to-image-only models', () => {
+  const defaults = {
+    providerId: 'image:krea2_turbo',
+    width: 768,
+    height: 768,
+    unloadAfterGeneration: false,
+  };
+  const values = {
+    ...imageRequestDefaultValues(defaults),
+    prompt: 'city',
+    referenceAssetIds: ['image:reference'],
+  };
+
+  const input = buildImageGenerateInput(values, defaults);
+  const resolved = resolveImageRequestDefaults(defaults);
+
+  expect(resolved.supportsImageToImage).toBe(false);
+  expect(input.reference_asset_ids).toEqual([]);
+  expect(input.no_cache).toBe(false);
 });
