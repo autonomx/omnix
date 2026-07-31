@@ -239,7 +239,8 @@ def _stabilize_character_avatar_frame(
     if job.module != "character-avatar" or not request.reference_asset_ids:
         return {}
     variant = str(
-        request_metadata.get("avatar_viseme")
+        request_metadata.get("avatar_viseme_base")
+        or request_metadata.get("avatar_viseme")
         or request_metadata.get("avatar_variant")
         or ""
     ).strip()
