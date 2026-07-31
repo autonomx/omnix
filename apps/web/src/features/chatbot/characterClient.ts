@@ -124,6 +124,8 @@ export interface CharacterLiveCallRuntime {
   character_profile_version?: number | null;
   effective_identity_hash?: string | null;
   voice_asset_id?: string | null;
+  voice_speaker_id?: string | null;
+  voice_profile_asset_id?: string | null;
   greeting: string;
   avatar_pack?: CharacterAvatarPack | null;
   speech_style: LiveCallSpeechStyle;
@@ -134,6 +136,7 @@ export interface CharacterLiveCallRuntime {
   preload: {
     profile_loaded: boolean;
     voice_resolved: boolean;
+    voice_error?: string | null;
     avatar_pack_loaded?: boolean;
     memory_snapshot_loaded: boolean;
     memory_record_count: number;
@@ -173,6 +176,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 function jsonInit(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+}
+
+function adaptLiveCallRuntimeForPlayback(runtime: CharacterLiveCallRuntime): CharacterLiveCallRuntime {
+  const speakerId = runtime.voice_speaker_id?.trim();
+  if (!speakerId) return runtime;
+  return {
+    ...runtime,
+    voice_profile_asset_id: runtime.voice_asset_id ?? null,
+    voice_asset_id: speakerId,
+  };
 }
 
 export const characterClient = {
@@ -226,8 +239,9 @@ export const characterClient = {
   },
   async liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
     const runtime = await request<CharacterLiveCallRuntime>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
-    publishCharacterAvatarRuntime(runtime);
-    return runtime;
+    const playbackRuntime = adaptLiveCallRuntimeForPlayback(runtime);
+    publishCharacterAvatarRuntime(playbackRuntime);
+    return playbackRuntime;
   },
   setSession(
     sessionId: string,
