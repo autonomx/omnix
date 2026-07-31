@@ -59,7 +59,10 @@ def _complete_image_job(
     return asset_id
 
 
-def test_viseme_generation_upgrades_existing_pack_and_preserves_fallbacks(tmp_path: Path, monkeypatch) -> None:
+def test_viseme_generation_upgrades_existing_pack_and_preserves_fallbacks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     database = tmp_path / "characters.sqlite3"
     assets = SharedAssetStore(tmp_path / "assets.json")
@@ -114,22 +117,36 @@ def test_viseme_generation_upgrades_existing_pack_and_preserves_fallbacks(tmp_pa
 
     batch = service.create("maya")
     assert batch.status == "generating"
-    assert list(batch.job_ids) == ["A"]
+    assert list(batch.job_ids) == ["A_35", "A_70"]
     completed: set[str] = set()
     while batch.status != "completed":
-        pending = [(viseme, job_id) for viseme, job_id in batch.job_ids.items() if viseme not in completed]
-        assert len(pending) == 1
-        viseme, job_id = pending[0]
-        _complete_image_job(tmp_path, jobs, assets, job_id, f"maya-viseme-{viseme.lower()}")
-        completed.add(viseme)
+        pending = [
+            (frame_key, job_id)
+            for frame_key, job_id in batch.job_ids.items()
+            if frame_key not in completed
+        ]
+        assert 1 <= len(pending) <= 2
+        for frame_key, job_id in pending:
+            _complete_image_job(
+                tmp_path,
+                jobs,
+                assets,
+                job_id,
+                f"maya-viseme-{frame_key.lower()}",
+            )
+            completed.add(frame_key)
         batch = service.get(batch.id)
 
     assert batch.status == "completed"
     assert batch.avatar_pack_version == 2
+    assert len(batch.asset_ids) == 27
     pack = avatar_service.get("maya")
     assert pack.render_mode == "viseme"
     assert pack.renderer == "sprite"
+    assert pack.mouth_frames["A_35"] == "image:maya-viseme-a_35"
+    assert pack.mouth_frames["A_70"] == "image:maya-viseme-a_70"
     assert pack.mouth_frames["A"] == "image:maya-viseme-a"
+    assert pack.mouth_frames["MBP_35"] == "image:maya-viseme-mbp_35"
     assert pack.mouth_frames["MBP"] == "image:maya-viseme-mbp"
     assert pack.mouth_frames["silence"] == "image:maya-closed"
     assert pack.expression_frames["listening"] == "image:maya-closed"
