@@ -1,0 +1,33 @@
+name: New chat selection
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/src/features/chatbot/newChatCoordinator.ts"
+      - "apps/web/src/features/chatbot/newChatCoordinator.test.ts"
+      - "apps/web/src/features/chatbot/live-chat-fullscreen-controller.ts"
+      - "apps/web/src/features/chatbot/live-chat-fullscreen-controller.test.ts"
+      - ".github/workflows/new-chat-selection.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-new-chat-selection:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web dependencies
+        run: npm install
+      - name: Verify new chat creation and selection
+        run: >-
+          npm --workspace @omnix/web run test --
+          src/features/chatbot/newChatCoordinator.test.ts
+          src/features/chatbot/live-chat-fullscreen-controller.test.ts
