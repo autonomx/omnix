@@ -13,6 +13,7 @@ import {
 } from '../../api/rpgMapClient';
 import { RpgMapChildControls, RpgMapHierarchyNav } from './RpgMapHierarchyNav';
 import { RpgMapViewportSurface } from './RpgMapViewportSurface';
+import { useRpgWorldMapArtwork } from './useRpgWorldMapArtwork';
 import './RpgMapSurface.css';
 
 interface RpgMapSurfaceProps {
@@ -37,6 +38,12 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     enabled: Boolean(sessionId && viewMapId),
     refetchInterval: 2500,
     refetchIntervalInBackground: false,
+  });
+  const worldMapArtwork = useRpgWorldMapArtwork({
+    locationId: overlayQuery.data?.overlay?.current_location_id,
+    mapId: viewMapId,
+    mapLevel: definitionQuery.data?.definition?.level,
+    sessionId,
   });
   const actionMutation = useMutation({
     mutationFn: (capability: RpgMapActionCapability) => {
@@ -102,6 +109,14 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
     return <MapStateMessage title="Empty map overlay" detail="The selected session did not return live map state." />;
   }
 
+  const presentationDefinition: RpgMapDefinition = worldMapArtwork.assetId ? {
+    ...definition,
+    background: {
+      asset_id: worldMapArtwork.assetId,
+      destination_bounds: definition.background?.destination_bounds ?? definition.bounds,
+      source_crop: definition.background?.source_crop ?? null,
+    },
+  } : definition;
   const revisionMismatch = definition.definition_revision !== overlay.definition_revision;
   const visible = visibleObjects(definition, overlay);
   const selectedObject = visible.find((item) => item.id === selectedObjectId) ?? null;
@@ -138,7 +153,7 @@ export function RpgMapSurface({ mapId, sessionId }: RpgMapSurfaceProps) {
       ) : null}
       <RpgMapViewportSurface
         activeObjectId={activeObjectId}
-        definition={definition}
+        definition={presentationDefinition}
         onActiveObjectChange={setActiveObjectId}
         onSelectObject={selectObject}
         overlay={revisionMismatch ? { ...overlay, availability: 'stale', capabilities: [] } : overlay}
