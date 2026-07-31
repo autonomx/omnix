@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from app.runtime_paths import repo_root, resources_root
 
 from .models import AssetRecord, AssetType
 
+LOGGER = logging.getLogger("uvicorn.error")
 
 _AUDIO_MIME_TYPES = {
     ".aac": "audio/aac",
@@ -39,7 +41,12 @@ def voice_clone_sources() -> list[tuple[Path, Path]]:
     if override_dir:
         clones_dir = Path(override_dir)
         manifest_path = Path(override_file) if override_file else clones_dir / "voice_clones.json"
-        return [(clones_dir, manifest_path)]
+        sources = [(clones_dir, manifest_path)]
+        LOGGER.info(
+            "[Voice Library][scan] using environment override sources=%s",
+            _source_debug_rows(sources),
+        )
+        return sources
 
     canonical_dir = resources_root() / "voice_clones"
     canonical_manifest = Path(override_file) if override_file else canonical_dir / "voice_clones.json"
@@ -55,9 +62,9 @@ def voice_clone_sources() -> list[tuple[Path, Path]]:
             shared_file = Path(str(shared_file_value)) if shared_file_value else shared_dir / "voice_clones.json"
             sources.append((shared_dir, shared_file))
     except Exception:
-        # Voice-library discovery must not disappear because an unrelated import in
-        # the legacy shared module failed. The canonical resources path still works.
-        pass
+        LOGGER.exception(
+            "[Voice Library][scan] legacy app.shared paths could not be loaded; canonical source remains active"
+        )
 
     deduplicated: list[tuple[Path, Path]] = []
     seen: set[tuple[str, str]] = set()
@@ -67,6 +74,13 @@ def voice_clone_sources() -> list[tuple[Path, Path]]:
             continue
         seen.add(key)
         deduplicated.append((clones_dir, manifest_path))
+
+    LOGGER.info(
+        "[Voice Library][scan] resolved sources repo_root=%s resources_root=%s sources=%s",
+        repo_root(),
+        resources_root(),
+        _source_debug_rows(deduplicated),
+    )
     return deduplicated
 
 
@@ -80,13 +94,35 @@ def discover_voice_clone_assets() -> list[AssetRecord]:
 
     records: dict[str, AssetRecord] = {}
     referenced_audio_paths: set[str] = set()
+    sources = voice_clone_sources()
+    LOGGER.info(
+        "[Voice Library][scan] discovery started source_count=%d",
+        len(sources),
+    )
 
-    for clones_dir, manifest_path in voice_clone_sources():
+    for clones_dir, manifest_path in sources:
         try:
             audio_files = _audio_files(clones_dir)
             manifest_entries = _load_manifest_entries(manifest_path)
         except Exception:
+            LOGGER.exception(
+                "[Voice Library][scan] source initialization failed directory=%s manifest=%s",
+                clones_dir,
+                manifest_path,
+            )
             continue
+
+        LOGGER.info(
+            "[Voice Library][scan] source inspected directory=%s directory_exists=%s "
+            "manifest=%s manifest_exists=%s audio_count=%d manifest_entries=%d audio_files=%s",
+            clones_dir,
+            _safe_is_dir(clones_dir),
+            manifest_path,
+            _safe_is_file(manifest_path),
+            len(audio_files),
+            len(manifest_entries),
+            [str(path) for path in audio_files[:100]],
+        )
 
         for legacy_name, data in sorted(manifest_entries.items()):
             try:
@@ -130,7 +166,13 @@ def discover_voice_clone_assets() -> list[AssetRecord]:
                 )
                 records[asset.id] = asset
             except Exception:
-                continue
+                LOGGER.exception(
+                    "[Voice Library][scan] manifest row failed directory=%s manifest=%s row=%s data=%r",
+                    clones_dir,
+                    manifest_path,
+                    legacy_name,
+                    data,
+                )
 
         for audio_path in audio_files:
             if _path_key(audio_path) in referenced_audio_paths:
@@ -185,9 +227,26 @@ def discover_voice_clone_assets() -> list[AssetRecord]:
                 )
                 records.setdefault(asset.id, asset)
             except Exception:
-                continue
+                LOGGER.exception(
+                    "[Voice Library][scan] audio file failed directory=%s audio=%s",
+                    clones_dir,
+                    audio_path,
+                )
 
-    return [records[asset_id] for asset_id in sorted(records)]
+    discovered = [records[asset_id] for asset_id in sorted(records)]
+    LOGGER.info(
+        "[Voice Library][scan] discovery completed voice_profile_count=%d voices=%s",
+        len(discovered),
+        [
+            {
+                "id": asset.id,
+                "name": asset.metadata.get("profile_name") or asset.metadata.get("voice_id"),
+                "path": asset.storage_path,
+            }
+            for asset in discovered[:100]
+        ],
+    )
+    return discovered
 
 
 def _audio_files(clones_dir: Path) -> list[Path]:
@@ -195,19 +254,38 @@ def _audio_files(clones_dir: Path) -> list[Path]:
 
     try:
         if not clones_dir.is_dir():
+            LOGGER.warning(
+                "[Voice Library][scan] clone directory is missing or not a directory path=%s",
+                clones_dir,
+            )
             return []
     except OSError:
+        LOGGER.exception(
+            "[Voice Library][scan] clone directory could not be inspected path=%s",
+            clones_dir,
+        )
         return []
 
     files: list[Path] = []
+
+    def handle_walk_error(error: OSError) -> None:
+        LOGGER.warning(
+            "[Voice Library][scan] directory walk error path=%s error=%s",
+            clones_dir,
+            error,
+        )
+
     try:
-        for root, _directories, names in os.walk(clones_dir, onerror=lambda _error: None):
+        for root, _directories, names in os.walk(clones_dir, onerror=handle_walk_error):
             for name in names:
                 path = Path(root) / name
                 if path.suffix.lower() in _AUDIO_MIME_TYPES:
                     files.append(path)
     except OSError:
-        pass
+        LOGGER.exception(
+            "[Voice Library][scan] directory walk failed path=%s",
+            clones_dir,
+        )
     return sorted(files, key=_path_key)
 
 
@@ -217,6 +295,10 @@ def _load_manifest_entries(manifest_path: Path) -> dict[str, dict[str, Any]]:
         if manifest_path.is_file():
             raw = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
+        LOGGER.exception(
+            "[Voice Library][scan] voice manifest could not be parsed path=%s",
+            manifest_path,
+        )
         raw = {}
 
     for wrapper_key in ("voices", "voice_clones", "profiles"):
@@ -285,7 +367,10 @@ def _resolve_audio_path(
             if candidate.is_file() and candidate.suffix.lower() in _AUDIO_MIME_TYPES:
                 return candidate
         except OSError:
-            continue
+            LOGGER.warning(
+                "[Voice Library][scan] candidate audio path could not be inspected path=%s",
+                candidate,
+            )
     return None
 
 
@@ -304,6 +389,11 @@ def _read_sidecar(audio_path: Path) -> tuple[Path | None, dict[str, Any]]:
                 continue
             raw = json.loads(sidecar_path.read_text(encoding="utf-8"))
         except Exception:
+            LOGGER.exception(
+                "[Voice Library][scan] sidecar could not be read audio=%s sidecar=%s",
+                audio_path,
+                sidecar_path,
+            )
             continue
         if isinstance(raw, dict):
             return sidecar_path, raw
@@ -325,6 +415,32 @@ def _safe_segment(value: str) -> str:
     normalized = value.strip().replace("\\", "/").replace(":", "-")
     pieces = [piece for part in normalized.split("/") for piece in part.split()]
     return "-".join(pieces) or "unnamed"
+
+
+def _source_debug_rows(sources: list[tuple[Path, Path]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "directory": str(clones_dir),
+            "directory_exists": _safe_is_dir(clones_dir),
+            "manifest": str(manifest_path),
+            "manifest_exists": _safe_is_file(manifest_path),
+        }
+        for clones_dir, manifest_path in sources
+    ]
+
+
+def _safe_is_dir(path: Path) -> bool:
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _safe_is_file(path: Path) -> bool:
+    try:
+        return path.is_file()
+    except OSError:
+        return False
 
 
 def _path_key(path: Path) -> str:
