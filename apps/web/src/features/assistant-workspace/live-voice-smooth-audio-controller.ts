@@ -1,6 +1,7 @@
 import { playBufferedTts, stopBufferedTtsPlayback } from './assistant-buffered-tts-player';
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
-import { resolveCharacterPlaybackVoice } from './runtime-config';
+import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+import { resolvePlaybackVoiceWithDiagnostics } from './voice-resolution-diagnostics';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
@@ -125,24 +126,51 @@ async function consumeAssistantText(
     return;
   }
 
+  const voiceResolution = resolvePlaybackVoiceWithDiagnostics('smooth-live-audio');
+  const reporter = createLiveCallDiagnosticsReporter(voiceResolution.traceId);
+  reporter.record('voice_resolution_decision', {
+    ...voiceResolution.details,
+    playback_voice_id: voiceResolution.voiceId,
+    spoken_text_length: spokenText.length,
+  }, 'voice-resolution');
+
   setInlineStatus('Generating and buffering smooth live audio…');
-  await playBufferedTts(spokenText, {
-    voiceId: selectedVoiceId(),
-    signal: turn.signal,
-    onStateChange: (state) => {
-      if (activeTurn !== turn) return;
-      if (state === 'buffering') {
-        setVoiceSpeaking(false);
-        setInlineStatus('Generating and buffering smooth live audio…');
-      } else if (state === 'playing') {
-        setVoiceSpeaking(true);
-        setInlineStatus('Playing smooth live response audio…');
-      } else if (state === 'finished') {
-        setVoiceSpeaking(false);
-        setInlineStatus('Live response audio finished.');
-      }
-    },
-  });
+  try {
+    await playBufferedTts(spokenText, {
+      voiceId: voiceResolution.voiceId,
+      signal: turn.signal,
+      onStateChange: (state) => {
+        reporter.record('buffered_playback_state', {
+          caller: voiceResolution.diagnosticSource,
+          playback_voice_id: voiceResolution.voiceId,
+          playback_state: state,
+        }, 'buffered-tts');
+        if (activeTurn !== turn) return;
+        if (state === 'buffering') {
+          setVoiceSpeaking(false);
+          setInlineStatus('Generating and buffering smooth live audio…');
+        } else if (state === 'playing') {
+          setVoiceSpeaking(true);
+          setInlineStatus('Playing smooth live response audio…');
+        } else if (state === 'finished') {
+          setVoiceSpeaking(false);
+          setInlineStatus('Live response audio finished.');
+        }
+      },
+    });
+    await reporter.close('buffered_playback_completed', {
+      caller: voiceResolution.diagnosticSource,
+      playback_voice_id: voiceResolution.voiceId,
+    });
+  } catch (error) {
+    await reporter.close('buffered_playback_failed', {
+      caller: voiceResolution.diagnosticSource,
+      playback_voice_id: voiceResolution.voiceId,
+      error_type: error instanceof Error ? error.name : typeof error,
+      error_message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
   if (activeTurn === turn) activeTurn = null;
 }
 
@@ -209,19 +237,6 @@ function isLiveCallActive(): boolean {
   return Array.from(card.querySelectorAll<HTMLButtonElement>('button')).some(
     (button) => button.textContent?.trim().toLowerCase() === 'end call',
   );
-}
-
-function selectedVoiceId(): string | null {
-  const characterVoice = resolveCharacterPlaybackVoice();
-  if (characterVoice) return characterVoice;
-  const selected = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]')?.value.trim();
-  if (selected) return selected;
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') || '{}') as { voiceId?: unknown };
-    return typeof parsed.voiceId === 'string' && parsed.voiceId.trim() ? parsed.voiceId.trim() : null;
-  } catch {
-    return null;
-  }
 }
 
 function setVoiceSpeaking(speaking: boolean): void {
