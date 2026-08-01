@@ -40,6 +40,7 @@ import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
 import { LiveChatFullscreenShell } from './LiveChatFullscreenShell';
+import { Live2DZoomControl } from './Live2DZoomControl';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
 import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
@@ -1709,6 +1710,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <div className="assistant-voice-meter assistant-voice-meter-right">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`right-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
                 </div>
               </div>
+              {liveCallRuntime?.avatar_pack?.renderer === 'live2d' ? <Live2DZoomControl /> : null}
               <div className="assistant-voice-input-indicator" aria-live="polite">
                 <span>Mic input</span>
                 <strong className="assistant-voice-input-status">{liveVoiceActive ? 'Listening' : 'Idle'}</strong>

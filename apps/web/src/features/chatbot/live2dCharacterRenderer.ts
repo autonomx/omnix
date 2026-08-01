@@ -1,4 +1,5 @@
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
+import type { AvatarMouthFrame } from './liveCharacterAvatarBridge';
 
 export type Live2DViseme = 'silence' | 'A' | 'E' | 'O' | 'U' | 'MBP' | 'FV' | 'L' | 'WQ' | 'other';
 
@@ -41,7 +42,20 @@ type PixiApplication = {
 };
 
 type Live2DCoreModel = {
-  setParameterValueById?: (id: string, value: number, weight?: number) => void;
+  _parameterIds?: unknown[];
+  getParameterCount?: () => number;
+  getParameterMaximumValue?: (index: number) => number;
+  getParameterMinimumValue?: (index: number) => number;
+  getParameterIndex?: (id: unknown) => number;
+  setParameterValueById?: (id: unknown, value: number, weight?: number) => void;
+  setParameterValueByIndex?: (index: number, value: number, weight?: number) => void;
+};
+
+type Live2DInternalModel = {
+  coreModel?: Live2DCoreModel;
+  on?: (event: string, listener: () => void) => unknown;
+  off?: (event: string, listener: () => void) => unknown;
+  removeListener?: (event: string, listener: () => void) => unknown;
 };
 
 type Live2DModel = {
@@ -51,7 +65,7 @@ type Live2DModel = {
   y: number;
   width: number;
   height: number;
-  internalModel?: { coreModel?: Live2DCoreModel };
+  internalModel?: Live2DInternalModel;
   destroy?: (options?: Record<string, boolean>) => void;
 };
 
@@ -73,6 +87,9 @@ type Live2DWindow = Window & typeof globalThis & {
 const RENDER_EVENT = 'omnix:character-live2d-render';
 const RIG_VISEME_EVENT = 'omnix:character-rig-viseme';
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
+const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
+const LIVE2D_ZOOM_EVENT = 'omnix:character-live2d-zoom';
+const LIVE2D_FRAMING_EVENT = 'omnix:character-live2d-framing';
 const RUNTIME_SCRIPTS = [
   '/api/character-live2d/runtime/pixi.min.js',
   '/api/character-live2d/runtime/live2dcubismcore.min.js',
@@ -85,6 +102,11 @@ const MODEL_ENTRY_PATHS: Record<string, string> = {
 const MOUTH_OPEN_PARAMETER_IDS = ['ParamMouthOpenY', 'PARAM_MOUTH_OPEN_Y', 'ParamA'] as const;
 const MOUTH_FORM_PARAMETER_IDS = ['ParamMouthForm', 'PARAM_MOUTH_FORM'] as const;
 
+export const LIVE2D_ZOOM_MIN = 0.75;
+export const LIVE2D_ZOOM_MAX = 1.6;
+export const LIVE2D_ZOOM_STEP = 0.05;
+export type Live2DFraming = 'full' | 'head';
+
 let activeRigAssetId: string | null = null;
 let activeHost: HTMLElement | null = null;
 let activeApplication: PixiApplication | null = null;
@@ -92,6 +114,13 @@ let activeModel: Live2DModel | null = null;
 let activeResizeObserver: ResizeObserver | null = null;
 let currentMouthShape: Live2DMouthShape = { open: 0, form: 0 };
 let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+let preciseVisemeUntil = 0;
+let currentZoom = 1;
+let currentFraming: Live2DFraming = 'full';
+let mouthAnimationFrame: number | null = null;
+let activeMouthUpdateBinding: { internalModel: Live2DInternalModel; listener: () => void } | null = null;
+let activeMouthOpenParameterIndices: number[] = [];
+let activeMouthFormParameterIndices: number[] = [];
 let renderSequence = 0;
 let runtimePromise: Promise<PixiGlobal> | null = null;
 
@@ -110,6 +139,46 @@ export function live2dMouthShapeForViseme(viseme: Live2DViseme): Live2DMouthShap
     default:
       return { open: 0, form: 0 };
   }
+}
+
+export function live2dMouthShapeForAvatarFrame(frame: AvatarMouthFrame): Live2DMouthShape {
+  switch (frame) {
+    case 'small': return { open: 0.28, form: -0.25 };
+    case 'medium': return { open: 0.58, form: 0.2 };
+    case 'wide': return { open: 0.95, form: 0.05 };
+    case 'closed':
+    default:
+      return { open: 0, form: 0 };
+  }
+}
+
+export function clampLive2DZoom(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(LIVE2D_ZOOM_MAX, Math.max(LIVE2D_ZOOM_MIN, value));
+}
+
+export function live2dZoomPercent(value: number): number {
+  return Math.round(clampLive2DZoom(value) * 100);
+}
+
+export function readLive2DZoom(): number {
+  return currentZoom;
+}
+
+export function setLive2DZoom(value: number): void {
+  currentZoom = clampLive2DZoom(value);
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(LIVE2D_ZOOM_EVENT, { detail: { zoom: currentZoom } }));
+}
+
+export function readLive2DFraming(): Live2DFraming {
+  return currentFraming;
+}
+
+export function setLive2DFraming(value: Live2DFraming): void {
+  currentFraming = value === 'head' ? 'head' : 'full';
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(LIVE2D_FRAMING_EVENT, { detail: { framing: currentFraming } }));
 }
 
 export function live2dModelUrl(rigAssetId: string): string {
@@ -132,6 +201,23 @@ function install(): void {
     const detail = (event as CustomEvent<RigVisemeDetail>).detail;
     if (!detail || detail.renderer !== 'live2d' || detail.rigAssetId !== activeRigAssetId) return;
     setViseme(detail.viseme, detail.durationMs);
+  });
+  window.addEventListener(AVATAR_FRAME_EVENT, (event) => {
+    const detail = (event as CustomEvent<{ frame?: AvatarMouthFrame }>).detail;
+    if (!detail?.frame || performance.now() < preciseVisemeUntil) return;
+    currentMouthShape = live2dMouthShapeForAvatarFrame(detail.frame);
+  });
+  window.addEventListener(LIVE2D_ZOOM_EVENT, (event) => {
+    const zoom = (event as CustomEvent<{ zoom?: number }>).detail?.zoom;
+    if (typeof zoom !== 'number') return;
+    currentZoom = clampLive2DZoom(zoom);
+    fitActiveModel();
+  });
+  window.addEventListener(LIVE2D_FRAMING_EVENT, (event) => {
+    const framing = (event as CustomEvent<{ framing?: Live2DFraming }>).detail?.framing;
+    if (framing !== 'full' && framing !== 'head') return;
+    currentFraming = framing;
+    fitActiveModel();
   });
   window.addEventListener(AVATAR_RUNTIME_EVENT, (event) => {
     const runtime = (event as CustomEvent<CharacterLiveCallRuntime | null>).detail;
@@ -188,7 +274,7 @@ async function renderLive2D(runtime: CharacterLiveCallRuntime, host: HTMLElement
     activeApplication = application;
     activeModel = model;
     application.stage.addChild(model);
-    application.ticker.add(() => applyMouthShape(model, currentMouthShape));
+    bindMouthParameterUpdate(model, sequence);
     activeResizeObserver = new ResizeObserver(() => fitModel(host, application, model));
     activeResizeObserver.observe(host);
     fitModel(host, application, model);
@@ -211,30 +297,139 @@ function fitModel(host: HTMLElement, application: PixiApplication, model: Live2D
   const naturalWidth = Math.max(1, model.width);
   const naturalHeight = Math.max(1, model.height);
   const scale = Math.min((width * 0.92) / naturalWidth, (height * 0.96) / naturalHeight);
-  model.scale.set(Number.isFinite(scale) && scale > 0 ? scale : 1);
+  const framingScale = currentFraming === 'head' ? 2.2 : 1;
+  const fittedScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  model.scale.set(fittedScale * currentZoom * framingScale);
   model.anchor?.set(0.5, 0.5);
   model.x = width / 2;
-  model.y = height * 0.52;
+  model.y = currentFraming === 'head' ? height * 1.04 : height * 0.52;
 }
 
 function setViseme(viseme: Live2DViseme, durationMs: number): void {
   currentMouthShape = live2dMouthShapeForViseme(viseme);
   if (silenceTimer !== null) clearTimeout(silenceTimer);
+  const holdMs = Math.max(80, Math.min(500, durationMs + 65));
+  preciseVisemeUntil = viseme === 'silence' ? 0 : performance.now() + holdMs;
   if (viseme === 'silence') return;
   silenceTimer = setTimeout(() => {
     currentMouthShape = live2dMouthShapeForViseme('silence');
+    preciseVisemeUntil = 0;
     silenceTimer = null;
-  }, Math.max(80, Math.min(500, durationMs + 65)));
+  }, holdMs);
+}
+
+function fitActiveModel(): void {
+  if (!activeHost || !activeApplication || !activeModel) return;
+  fitModel(activeHost, activeApplication, activeModel);
+}
+
+function bindMouthParameterUpdate(model: Live2DModel, sequence: number): void {
+  releaseMouthParameterUpdate();
+  const internalModel = model.internalModel;
+  const coreModel = internalModel?.coreModel;
+  activeMouthOpenParameterIndices = resolveLive2DParameterIndices(coreModel, MOUTH_OPEN_PARAMETER_IDS);
+  activeMouthFormParameterIndices = resolveLive2DParameterIndices(coreModel, MOUTH_FORM_PARAMETER_IDS);
+
+  const applyBeforeModelUpdate = (): void => {
+    if (sequence !== renderSequence || activeModel !== model) return;
+    const hostFrame = activeHost?.dataset.mouthFrame as AvatarMouthFrame | undefined;
+    if (
+      hostFrame
+      && (hostFrame === 'closed' || hostFrame === 'small' || hostFrame === 'medium' || hostFrame === 'wide')
+      && performance.now() >= preciseVisemeUntil
+    ) {
+      currentMouthShape = live2dMouthShapeForAvatarFrame(hostFrame);
+    }
+    applyMouthShape(model, currentMouthShape);
+  };
+
+  // Apply after motions, expressions, natural movement and physics, immediately
+  // before the Cubism core renders. Earlier writes can be overwritten silently.
+  if (internalModel?.on) {
+    internalModel.on('beforeModelUpdate', applyBeforeModelUpdate);
+    activeMouthUpdateBinding = { internalModel, listener: applyBeforeModelUpdate };
+    applyBeforeModelUpdate();
+    return;
+  }
+
+  // Older runtimes without the internal event emitter keep the RAF fallback.
+  if (mouthAnimationFrame !== null) cancelAnimationFrame(mouthAnimationFrame);
+  const applyOnAnimationFrame = (): void => {
+    if (sequence !== renderSequence || activeModel !== model) {
+      mouthAnimationFrame = null;
+      return;
+    }
+    applyMouthShape(model, currentMouthShape);
+    mouthAnimationFrame = requestAnimationFrame(applyOnAnimationFrame);
+  };
+  mouthAnimationFrame = requestAnimationFrame(applyOnAnimationFrame);
+}
+
+function releaseMouthParameterUpdate(): void {
+  if (activeMouthUpdateBinding) {
+    const { internalModel, listener } = activeMouthUpdateBinding;
+    if (internalModel.off) internalModel.off('beforeModelUpdate', listener);
+    else internalModel.removeListener?.('beforeModelUpdate', listener);
+    activeMouthUpdateBinding = null;
+  }
+  activeMouthOpenParameterIndices = [];
+  activeMouthFormParameterIndices = [];
+  if (mouthAnimationFrame !== null) cancelAnimationFrame(mouthAnimationFrame);
+  mouthAnimationFrame = null;
+}
+
+export function resolveLive2DParameterIndices(
+  coreModel: Live2DCoreModel | null | undefined,
+  parameterIds: readonly string[],
+): number[] {
+  if (!coreModel) return [];
+  const count = coreModel.getParameterCount?.() ?? coreModel._parameterIds?.length ?? 0;
+  const resolved = new Set<number>();
+
+  for (const parameterId of parameterIds) {
+    const index = coreModel.getParameterIndex?.(parameterId);
+    // Cubism returns a synthetic index at or above parameter count for unknown
+    // IDs. Those values are writable but never affect the rendered model.
+    if (typeof index === 'number' && index >= 0 && index < count) resolved.add(index);
+  }
+
+  coreModel._parameterIds?.forEach((parameterId, index) => {
+    const readableId = typeof parameterId === 'string'
+      ? parameterId
+      : typeof (parameterId as { getString?: () => unknown })?.getString === 'function'
+        ? String((parameterId as { getString: () => unknown }).getString())
+        : String(parameterId);
+    if (parameterIds.some((candidate) => candidate.toLocaleLowerCase() === readableId.toLocaleLowerCase())) {
+      resolved.add(index);
+    }
+  });
+
+  return [...resolved];
 }
 
 function applyMouthShape(model: Live2DModel, shape: Live2DMouthShape): void {
   const coreModel = model.internalModel?.coreModel;
-  if (!coreModel?.setParameterValueById) return;
-  for (const parameterId of MOUTH_OPEN_PARAMETER_IDS) {
-    try { coreModel.setParameterValueById(parameterId, shape.open, 1); } catch { /* model may not expose this alias */ }
+  if (!coreModel) return;
+  if (coreModel.setParameterValueByIndex && activeMouthOpenParameterIndices.length) {
+    for (const parameterIndex of activeMouthOpenParameterIndices) {
+      const minimum = coreModel.getParameterMinimumValue?.(parameterIndex) ?? 0;
+      const maximum = coreModel.getParameterMaximumValue?.(parameterIndex) ?? 1;
+      const value = minimum + shape.open * (maximum - minimum);
+      coreModel.setParameterValueByIndex(parameterIndex, value, 1);
+    }
+  } else if (coreModel.setParameterValueById) {
+    for (const parameterId of MOUTH_OPEN_PARAMETER_IDS) {
+      try { coreModel.setParameterValueById(parameterId, shape.open, 1); } catch { /* legacy runtime fallback */ }
+    }
   }
-  for (const parameterId of MOUTH_FORM_PARAMETER_IDS) {
-    try { coreModel.setParameterValueById(parameterId, shape.form, 1); } catch { /* optional parameter */ }
+  if (coreModel.setParameterValueByIndex && activeMouthFormParameterIndices.length) {
+    for (const parameterIndex of activeMouthFormParameterIndices) {
+      coreModel.setParameterValueByIndex(parameterIndex, shape.form, 1);
+    }
+  } else if (coreModel.setParameterValueById) {
+    for (const parameterId of MOUTH_FORM_PARAMETER_IDS) {
+      try { coreModel.setParameterValueById(parameterId, shape.form, 1); } catch { /* optional parameter */ }
+    }
   }
 }
 
@@ -287,6 +482,8 @@ function destroyActiveRenderer(): void {
   renderSequence += 1;
   if (silenceTimer !== null) clearTimeout(silenceTimer);
   silenceTimer = null;
+  releaseMouthParameterUpdate();
+  preciseVisemeUntil = 0;
   currentMouthShape = { open: 0, form: 0 };
   activeResizeObserver?.disconnect();
   activeResizeObserver = null;

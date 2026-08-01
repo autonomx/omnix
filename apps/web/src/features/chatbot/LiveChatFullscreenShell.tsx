@@ -9,6 +9,8 @@ import {
   exitLiveChatFullscreen,
   useLiveChatFullscreenState,
 } from './live-chat-fullscreen-controller';
+import { Live2DZoomControl } from './Live2DZoomControl';
+import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from './characterClient';
 import {
   invokeExistingLiveCallControl,
   readLiveChatMirroredAvatar,
@@ -21,6 +23,7 @@ import './LiveChatFullscreenShell.css';
 
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
+const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 const PRESENTATION_UPDATE_DELAY_MS = 24;
 
 export function LiveChatFullscreenShell() {
@@ -29,6 +32,7 @@ export function LiveChatFullscreenShell() {
   const snapshot = selectLiveChatSnapshot(runtime);
   const [messages, setMessages] = useState<LiveChatMirroredMessage[]>(() => readLiveChatMirroredMessages());
   const [avatar, setAvatar] = useState<LiveChatMirroredAvatar>(() => readLiveChatMirroredAvatar());
+  const [characterRuntime, setCharacterRuntime] = useState<CharacterLiveCallRuntime | null>(() => readLatestTrustedCharacterRuntime());
   const [composerText, setComposerText] = useState('');
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const shellRef = useRef<HTMLElement | null>(null);
@@ -42,8 +46,14 @@ export function LiveChatFullscreenShell() {
       timer = setTimeout(() => {
         timer = null;
         setMessages(readLiveChatMirroredMessages());
-        setAvatar(readLiveChatMirroredAvatar());
+        const nextAvatar = readLiveChatMirroredAvatar();
+        if (nextAvatar.imageUrl || nextAvatar.backgroundImage) setAvatar(nextAvatar);
+        setCharacterRuntime(readLatestTrustedCharacterRuntime());
       }, PRESENTATION_UPDATE_DELAY_MS);
+    };
+    const handleRuntime = (event: Event) => {
+      setCharacterRuntime((event as CustomEvent<CharacterLiveCallRuntime | null>).detail ?? null);
+      refresh();
     };
     const observer = new MutationObserver(refresh);
     observer.observe(document.body, {
@@ -53,12 +63,12 @@ export function LiveChatFullscreenShell() {
       attributes: true,
       attributeFilter: ['src', 'style', 'data-mouth-frame', 'data-voice-mode'],
     });
-    window.addEventListener(AVATAR_RUNTIME_EVENT, refresh);
+    window.addEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
     window.addEventListener(AVATAR_FRAME_EVENT, refresh);
     refresh();
     return () => {
       observer.disconnect();
-      window.removeEventListener(AVATAR_RUNTIME_EVENT, refresh);
+      window.removeEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
       window.removeEventListener(AVATAR_FRAME_EVENT, refresh);
       if (timer !== null) clearTimeout(timer);
     };
@@ -96,6 +106,7 @@ export function LiveChatFullscreenShell() {
         ? 'Hearing you'
         : 'Microphone listening';
   const duplexLabel = snapshot.duplexMode === 'echo_aware' ? 'Echo-aware' : 'Safe half-duplex';
+  const displayIdentity = characterRuntime?.display_name?.trim() || snapshot.identity;
 
   function toggleCall(): void {
     if (!invokeExistingLiveCallControl()) {
@@ -129,7 +140,7 @@ export function LiveChatFullscreenShell() {
       data-live-chat-fullscreen-shell
       role="dialog"
       aria-modal="true"
-      aria-label={`Immersive Live Chat with ${snapshot.identity}`}
+      aria-label={`Immersive Live Chat with ${displayIdentity}`}
       tabIndex={-1}
     >
       <div className="live-chat-fullscreen-topbar">
@@ -148,14 +159,15 @@ export function LiveChatFullscreenShell() {
       <main className="live-chat-fullscreen-layout">
         <LiveCharacterStage
           avatar={avatar}
-          identity={snapshot.identity}
+          identity={displayIdentity}
           status={snapshot.state}
           stageMode={stageMode}
+          characterRuntime={characterRuntime}
         />
 
         <aside className="live-chat-fullscreen-rail" aria-label="Live conversation">
           <header>
-            <div><p className="eyebrow">Private conversation</p><h1>Talk with {snapshot.identity}</h1></div>
+            <div><p className="eyebrow">Private conversation</p><h1>Talk with {displayIdentity}</h1></div>
             <span>{fullscreen.browserState === 'active' ? 'Browser fullscreen' : 'Immersive view'}</span>
           </header>
 
@@ -190,7 +202,7 @@ export function LiveChatFullscreenShell() {
 
           <form className="live-chat-fullscreen-composer" onSubmit={submitMessage}>
             <label>
-              <span>Message {snapshot.identity}</span>
+              <span>Message {displayIdentity}</span>
               <textarea
                 rows={2}
                 value={composerText}
@@ -218,21 +230,35 @@ function LiveCharacterStage({
   identity,
   status,
   stageMode,
+  characterRuntime,
 }: {
   avatar: LiveChatMirroredAvatar;
   identity: string;
   status: string;
   stageMode: string;
+  characterRuntime: CharacterLiveCallRuntime | null;
 }) {
   const initial = identity.trim().charAt(0).toLocaleUpperCase() || 'O';
   const stageStyle = avatar.backgroundImage ? { backgroundImage: avatar.backgroundImage } : undefined;
+  const live2dHostRef = useRef<HTMLElement | null>(null);
+  const isLive2D = characterRuntime?.avatar_pack?.renderer === 'live2d'
+    && Boolean(characterRuntime.avatar_pack.rig_asset_id);
+
+  useEffect(() => {
+    if (!isLive2D || !characterRuntime || !live2dHostRef.current) return;
+    window.dispatchEvent(new CustomEvent(LIVE2D_RENDER_EVENT, {
+      detail: { runtime: characterRuntime, host: live2dHostRef.current },
+    }));
+  }, [characterRuntime, isLive2D]);
+
   return (
     <section className="live-chat-character-stage" style={stageStyle} aria-label={`${identity} character stage`}>
       <div className="live-chat-stage-stars" aria-hidden="true" />
       <header><div><p className="eyebrow">Live room</p><h2>{identity}</h2></div><span>{title(stageMode)}</span></header>
       <div className="live-chat-stage-avatar" data-mouth-frame={avatar.mouthFrame} data-voice-mode={avatar.voiceMode}>
-        {avatar.imageUrl ? <img src={avatar.imageUrl} alt={avatar.alt} /> : <div className="live-chat-stage-fallback" aria-label={`${identity} visual placeholder`}><span>{initial}</span><i aria-hidden="true" /></div>}
+        {isLive2D ? <figure ref={live2dHostRef} className="assistant-live-character-avatar" data-renderer="live2d" aria-label={`${identity} Live2D avatar`} /> : avatar.imageUrl ? <img src={avatar.imageUrl} alt={avatar.alt} /> : <div className="live-chat-stage-fallback" aria-label={`${identity} visual placeholder`}><span>{initial}</span><i aria-hidden="true" /></div>}
       </div>
+      {isLive2D ? <Live2DZoomControl /> : null}
       <div className="live-chat-stage-caption" aria-live="polite"><i aria-hidden="true" /><span>{status}</span></div>
       <footer><span>Character-first mode</span><span>{avatar.imageUrl ? 'Avatar animation linked' : 'System visual fallback'}</span></footer>
     </section>

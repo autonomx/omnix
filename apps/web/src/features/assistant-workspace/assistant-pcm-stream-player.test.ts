@@ -224,6 +224,26 @@ describe('assistant PCM stream player', () => {
     expect(diagnosticEvents).toContain('playback_finished');
   });
 
+  it('publishes streaming PCM timing for avatar mouth animation', async () => {
+    installAudioFakes([pcmFrame(new Int16Array([1_000, -1_000]))]);
+    const avatarPcmEvents: CustomEvent[] = [];
+    const onAvatarPcm = (event: Event) => avatarPcmEvents.push(event as CustomEvent);
+    window.addEventListener('omnix:character-avatar-pcm', onAvatarPcm);
+
+    try {
+      fireEvent.click(renderMessage());
+
+      await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
+      expect(avatarPcmEvents).toHaveLength(1);
+      expect(avatarPcmEvents[0].detail.samples).toBeInstanceOf(Int16Array);
+      expect(Array.from(avatarPcmEvents[0].detail.samples)).toEqual([1_000, -1_000]);
+      expect(avatarPcmEvents[0].detail.sampleRate).toBe(24_000);
+      expect(avatarPcmEvents[0].detail.startDelayMs).toBe(400);
+    } finally {
+      window.removeEventListener('omnix:character-avatar-pcm', onAvatarPcm);
+    }
+  });
+
   it('sends the active Character Mode speaker through the PCM websocket', async () => {
     installAudioFakes([pcmFrame(new Int16Array([0, 0]))]);
 

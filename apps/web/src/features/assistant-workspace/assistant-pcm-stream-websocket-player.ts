@@ -9,6 +9,7 @@ const STREAMING_TTS_TRANSITION_FADE_SECONDS = 0.008;
 const STREAMING_TTS_WEBSOCKET_PATH = '/api/tts/stream/websocket';
 const STREAMING_TTS_CHUNK_SIZE = 8;
 const STREAMING_TTS_WORKLET_NAME = 'omnix-assistant-pcm-stream';
+const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 
 type StreamingAudioWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
@@ -196,6 +197,7 @@ function streamPcmWebSocket(
       if (playback.closed) return;
       if (event.data instanceof ArrayBuffer) {
         const now = performance.now();
+        const isFirstAudioFrame = playback.stats.receivedSamples === 0;
         const previousFrameAtMs = playback.stats.lastFrameAtMs;
         if (playback.stats.firstFrameAtMs === null) playback.stats.firstFrameAtMs = now;
         playback.stats.lastFrameAtMs = now;
@@ -216,7 +218,11 @@ function streamPcmWebSocket(
             ? ((now - playback.startedAtMs) / (playback.stats.receivedSamples * 1000 / playback.sampleRate))
             : null,
         });
-        const convertedSamples = enqueuePcmBytes(playback, event.data);
+        const convertedSamples = enqueuePcmBytes(
+          playback,
+          event.data,
+          isFirstAudioFrame ? STREAMING_TTS_START_BUFFER_SECONDS * 1000 : 0,
+        );
         playback.stats.convertedSamples += convertedSamples;
         sendDiagnostic(playback, 'network_frame_enqueued', {
           frame_index: frameIndex,
@@ -326,12 +332,19 @@ async function createContinuousPcmSink(
   return node;
 }
 
-function enqueuePcmBytes(playback: MessageStreamPlayback, buffer: ArrayBuffer): number {
+function enqueuePcmBytes(playback: MessageStreamPlayback, buffer: ArrayBuffer, startDelayMs = 0): number {
   if (playback.closed || !playback.node || buffer.byteLength < 2) return 0;
   const evenByteLength = buffer.byteLength - (buffer.byteLength % 2);
   const samples = new Int16Array(buffer.slice(0, evenByteLength));
   const floatSamples = pcm16ToFloat32(samples, playback.sampleRate, playback.audioContext.sampleRate);
   const convertedSamples = floatSamples.length;
+  window.dispatchEvent(new CustomEvent(AVATAR_PCM_EVENT, {
+    detail: {
+      samples: samples.slice(),
+      sampleRate: playback.sampleRate,
+      startDelayMs,
+    },
+  }));
   playback.node.port.postMessage(
     { type: 'push', samples: floatSamples },
     [floatSamples.buffer],

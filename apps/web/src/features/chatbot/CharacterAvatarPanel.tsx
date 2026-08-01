@@ -311,6 +311,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
           {live2dCatalogQuery.data?.models.map((model) => <button
             type="button"
             key={model.id}
+            disabled={live2dBusy}
             className={`character-live2d-model-card${selectedLive2DModelId === model.id ? ' is-selected' : ''}${model.selected ? ' is-active' : ''}`}
             onClick={() => {
               setSelectedLive2DModelId(model.id);
@@ -340,6 +341,18 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
               {disableLive2DMutation.isPending ? 'Restoring…' : 'Restore previous generated avatar'}
             </button> : null}
           </div>
+          {activateLive2DMutation.isPending ? <div className="character-live2d-download-progress" role="status" aria-live="polite">
+            <div
+              className="character-live2d-download-progress-bar"
+              role="progressbar"
+              aria-label="Live2D download progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <span />
+            </div>
+            <span>{selectedLive2DModel.installed ? 'Activating Live2D avatar…' : 'Downloading runtime and model files…'}</span>
+          </div> : null}
         </div> : null}
       </div>}
     </div>

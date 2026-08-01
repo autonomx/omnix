@@ -106,8 +106,15 @@ export interface Live2DAvatarActionResponse {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Avatar request failed with status ${response.status}.`);
+    const responseBody = await response.text();
+    let message = responseBody;
+    try {
+      const payload = JSON.parse(responseBody) as { detail?: unknown };
+      if (typeof payload.detail === 'string') message = payload.detail;
+    } catch {
+      // Keep the raw response when the server did not return JSON.
+    }
+    throw new Error(message || `Avatar request failed with status ${response.status}.`);
   }
   return response.json() as Promise<T>;
 }

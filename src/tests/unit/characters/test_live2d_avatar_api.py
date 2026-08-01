@@ -65,7 +65,10 @@ def test_live2d_catalog_activation_serving_and_sprite_restore(tmp_path: Path) ->
         }
     ).encode()
 
+    downloaded_urls: list[str] = []
+
     def download(url: str) -> bytes:
+        downloaded_urls.append(url)
         if url.endswith(".model3.json"):
             return model_json
         if url.endswith("maya.moc3"):
@@ -111,6 +114,7 @@ def test_live2d_catalog_activation_serving_and_sprite_restore(tmp_path: Path) ->
     assert payload["avatar_pack"]["renderer"] == "live2d"
     assert payload["avatar_pack"]["render_mode"] == "viseme"
     rig_asset_id = payload["avatar_pack"]["rig_asset_id"]
+    assert any("/live2d-models/mao_pro/runtime/mao_pro.model3.json" in url for url in downloaded_urls)
 
     installed_catalog = client.get("/api/characters/maya/live2d-models").json()
     assert installed_catalog["runtime_installed"] is True

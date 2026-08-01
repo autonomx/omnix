@@ -40,7 +40,7 @@ let currentRuntime: CharacterLiveCallRuntime | null = null;
 let currentMouthFrame: AvatarMouthFrame = 'closed';
 let nextAudioFrameAt = 0;
 let blinkClosed = false;
-let blinkTimer: number | null = null;
+let blinkTimer: ReturnType<typeof setTimeout> | null = null;
 const audioElementStops = new WeakMap<HTMLAudioElement, () => void>();
 
 export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime | null): void {
@@ -169,9 +169,17 @@ function installLiveCharacterAvatarBridge(): void {
   });
   window.addEventListener(AVATAR_RUNTIME_EVENT, () => renderAvatarHost());
   window.addEventListener(AVATAR_PCM_EVENT, (event) => {
-    const detail = (event as CustomEvent<{ samples?: Int16Array; sampleRate?: number }>).detail;
+    const detail = (event as CustomEvent<{
+      samples?: Int16Array;
+      sampleRate?: number;
+      startDelayMs?: number;
+    }>).detail;
     if (!(detail?.samples instanceof Int16Array)) return;
-    schedulePcmSamples(detail.samples, Number(detail.sampleRate) || 24_000);
+    schedulePcmSamples(
+      detail.samples,
+      Number(detail.sampleRate) || 24_000,
+      Number(detail.startDelayMs) || 0,
+    );
   });
 
   installTtsFetchMonitor();
@@ -381,9 +389,9 @@ function schedulePcmFrames(audioBase64: string, sampleRate: number): void {
   schedulePcmSamples(samples, sampleRate);
 }
 
-function schedulePcmSamples(samples: Int16Array, sampleRate: number): void {
+function schedulePcmSamples(samples: Int16Array, sampleRate: number, startDelayMs = 0): void {
   const now = performance.now();
-  const startAt = Math.max(nextAudioFrameAt, now + 25);
+  const startAt = Math.max(nextAudioFrameAt, now + 25 + Math.max(0, startDelayMs));
   const timeline = pcmMouthTimeline(samples, sampleRate);
   for (const point of timeline) {
     window.setTimeout(() => dispatchAvatarFrame(point.frame), Math.max(0, startAt - now + point.offsetMs));
@@ -455,9 +463,11 @@ function normalizeLiveVoiceLayout(): {
 
 function renderAvatarHost(): void {
   const layout = normalizeLiveVoiceLayout();
-  const existing = typeof document === 'undefined'
+  const fullscreenHost = typeof document === 'undefined'
     ? null
-    : document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`);
+    : document.querySelector<HTMLElement>(`[data-live-chat-fullscreen-shell] .${AVATAR_HOST_CLASS}`);
+  const existing = fullscreenHost
+    ?? (typeof document === 'undefined' ? null : document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`));
   const runtime = currentRuntime;
   const pack = runtime?.avatar_pack;
   const live2d = pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);
@@ -467,7 +477,7 @@ function renderAvatarHost(): void {
       delete layout.stage.dataset.hasCharacterAvatar;
       layout.orb.hidden = false;
     }
-    existing?.remove();
+    if (existing?.closest('.assistant-live-card')) existing.remove();
     return;
   }
 
@@ -477,7 +487,7 @@ function renderAvatarHost(): void {
   host.className = AVATAR_HOST_CLASS;
   host.dataset.mouthFrame = currentMouthFrame;
   host.dataset.renderer = live2d ? 'live2d' : 'sprite';
-  if (host.parentElement !== layout.stage) layout.stage.append(host);
+  if (!fullscreenHost && host.parentElement !== layout.stage) layout.stage.append(host);
 
   if (live2d) {
     const presentationState = currentPresentationState();

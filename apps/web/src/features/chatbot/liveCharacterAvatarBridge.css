@@ -12,6 +12,64 @@
   grid-area: 1 / 1;
 }
 
+.assistant-live2d-zoom-control {
+  align-items: center;
+  background: rgba(5, 9, 20, 0.78);
+  border: 1px solid rgba(151, 126, 255, 0.28);
+  border-radius: 999px;
+  color: #e8eaff;
+  display: flex;
+  gap: 0.45rem;
+  padding: 0.4rem 0.65rem;
+  position: relative;
+  z-index: 3;
+}
+
+.assistant-live-card > .assistant-live2d-zoom-control {
+  justify-self: center;
+  margin: 0.65rem auto 0;
+  width: max-content;
+}
+
+.assistant-live2d-zoom-control > label {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.assistant-live2d-zoom-control span,
+.assistant-live2d-zoom-control output,
+.assistant-live2d-framing button {
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.assistant-live2d-zoom-control input {
+  accent-color: #a996ff;
+  cursor: pointer;
+  width: 5.5rem;
+}
+
+.assistant-live2d-framing {
+  display: flex;
+  gap: 0.18rem;
+}
+
+.assistant-live2d-framing button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: #bfc3dd;
+  cursor: pointer;
+  padding: 0.32rem 0.55rem;
+}
+
+.assistant-live2d-framing button[aria-pressed='true'] {
+  background: rgba(126, 91, 255, 0.34);
+  color: #fff;
+}
+
 .assistant-live-visual-stage > .assistant-voice-orb[hidden] {
   display: none !important;
 }

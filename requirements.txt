@@ -5,6 +5,7 @@
 # CORE WEB FRAMEWORK
 # ============================================
 requests==2.31.0
+certifi>=2023.7.22
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 python-multipart>=0.0.6

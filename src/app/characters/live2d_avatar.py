@@ -4,12 +4,14 @@ from __future__ import annotations
 import json
 import mimetypes
 import posixpath
+import ssl
 import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import certifi
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,6 +26,7 @@ from .repository import CharacterNotFoundError
 OPEN_LLM_VTUBER_REVISION = "992309c0aa19845960228f880013d4685fde93b5"
 OPEN_LLM_VTUBER_WEB_REVISION = "d176e7df2366952e3bacbf12cf9a8b18a4315932"
 MAX_LIVE2D_FILE_BYTES = 64 * 1024 * 1024
+_LIVE2D_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 _RUNTIME_FILES = {
     "pixi.min.js": "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.10/browser/pixi.min.js",
@@ -454,7 +457,7 @@ def _model_references(model_json: dict[str, Any]) -> list[str]:
 
 def _download_bytes(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "Omnix-Live2D-Installer/1.0"})
-    with urllib.request.urlopen(request, timeout=45) as response:
+    with urllib.request.urlopen(request, timeout=45, context=_LIVE2D_SSL_CONTEXT) as response:
         content_length = int(response.headers.get("Content-Length") or 0)
         if content_length > MAX_LIVE2D_FILE_BYTES:
             raise ValueError(f"Live2D download exceeds {MAX_LIVE2D_FILE_BYTES} bytes: {url}")

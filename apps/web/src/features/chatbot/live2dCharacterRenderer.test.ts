@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   isLive2DPack,
   live2dModelUrl,
+  live2dMouthShapeForAvatarFrame,
   live2dMouthShapeForViseme,
+  resolveLive2DParameterIndices,
 } from './live2dCharacterRenderer';
 
 
@@ -13,6 +15,15 @@ describe('Live2D character renderer helpers', () => {
     expect(live2dMouthShapeForViseme('O').form).toBeLessThan(0);
     expect(live2dMouthShapeForViseme('E').form).toBeGreaterThan(0);
     expect(live2dMouthShapeForViseme('MBP').open).toBeLessThan(0.1);
+  });
+
+  it('maps PCM envelope frames to Live2D mouth shapes', () => {
+    expect(live2dMouthShapeForAvatarFrame('closed')).toEqual({ open: 0, form: 0 });
+    expect(live2dMouthShapeForAvatarFrame('small').open).toBeGreaterThan(0);
+    expect(live2dMouthShapeForAvatarFrame('medium').open).toBeGreaterThan(
+      live2dMouthShapeForAvatarFrame('small').open,
+    );
+    expect(live2dMouthShapeForAvatarFrame('wide').open).toBeLessThanOrEqual(1);
   });
 
   it('uses the pinned local model entry path for bundled catalog models', () => {
@@ -28,5 +39,20 @@ describe('Live2D character renderer helpers', () => {
     expect(isLive2DPack({ renderer: 'live2d', rig_asset_id: 'character-live2d:model' } as never)).toBe(true);
     expect(isLive2DPack({ renderer: 'live2d', rig_asset_id: null } as never)).toBe(false);
     expect(isLive2DPack({ renderer: 'sprite', rig_asset_id: 'character-live2d:model' } as never)).toBe(false);
+  });
+
+  it('rejects Cubism phantom indexes and resolves real model parameters', () => {
+    const parameterIds = [
+      { getString: () => 'ParamAngleX' },
+      { getString: () => 'ParamA' },
+    ];
+    const coreModel = {
+      _parameterIds: parameterIds,
+      getParameterCount: () => parameterIds.length,
+      getParameterIndex: () => parameterIds.length,
+    };
+
+    expect(resolveLive2DParameterIndices(coreModel, ['ParamA'])).toEqual([1]);
+    expect(resolveLive2DParameterIndices(coreModel, ['MissingMouthParameter'])).toEqual([]);
   });
 });
