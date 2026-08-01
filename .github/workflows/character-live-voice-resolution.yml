@@ -13,6 +13,7 @@ on:
       - "src/tests/unit/test_voice_resolution_debug_logging.py"
       - "apps/web/src/features/assistant-workspace/runtime-config.ts"
       - "apps/web/src/features/assistant-workspace/runtime-config.test.ts"
+      - "apps/web/src/features/assistant-workspace/voice-resolution-diagnostics.ts"
       - "apps/web/src/features/assistant-workspace/assistant-pcm-stream-player.test.ts"
       - "apps/web/src/features/assistant-workspace/chat-message-audio-controller-v2.ts"
       - "apps/web/src/features/assistant-workspace/chat-message-audio-controller-v2.test.ts"
