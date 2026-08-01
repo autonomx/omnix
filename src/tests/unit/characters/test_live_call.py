@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from app.assets import (
@@ -100,6 +99,34 @@ def _configure(tmp_path: Path, monkeypatch) -> None:
     )
 
 
+def _configure_lowercase_canonical_maya(tmp_path: Path, monkeypatch) -> CharacterService:
+    canonical_resources = tmp_path / "lowercase-canonical"
+    clone_root = canonical_resources / "voice_clones"
+    clone_root.mkdir(parents=True)
+    (clone_root / "maya.wav").write_bytes(b"RIFF-maya")
+    (clone_root / "voice_clones.json").write_text(
+        json.dumps(
+            {
+                "Maya": {
+                    "profile_name": "Maya",
+                    "voice_id": "Maya",
+                    "voice_clone_id": "Maya",
+                    "speaker": "Maya",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        canonical_voice_clones,
+        "resources_root",
+        lambda: canonical_resources,
+    )
+    return CharacterService(
+        asset_store_factory=lambda: _EmptyAssetStore(),  # type: ignore[arg-type]
+    )
+
+
 def test_character_live_call_runtime_resolves_profile_voice_and_delivery(tmp_path: Path, monkeypatch) -> None:
     _configure(tmp_path, monkeypatch)
     store = default_chat_store()
@@ -163,7 +190,7 @@ def test_character_default_voice_overrides_stale_session_voice_for_live_call(tmp
 
 def test_character_service_canonicalizes_legacy_voice_asset_casing(tmp_path: Path, monkeypatch) -> None:
     _configure(tmp_path, monkeypatch)
-    service = CharacterService()
+    service = _configure_lowercase_canonical_maya(tmp_path, monkeypatch)
     current = service.get("maya")
 
     updated = service.update(
@@ -179,6 +206,7 @@ def test_character_service_canonicalizes_legacy_voice_asset_casing(tmp_path: Pat
 
 def test_live_call_runtime_recovers_legacy_voice_asset_casing(tmp_path: Path, monkeypatch) -> None:
     _configure(tmp_path, monkeypatch)
+    service = _configure_lowercase_canonical_maya(tmp_path, monkeypatch)
     repository = CharacterRepository()
     current = repository.get("maya")
     assert current is not None
@@ -200,7 +228,10 @@ def test_live_call_runtime_recovers_legacy_voice_asset_casing(tmp_path: Path, mo
     )
     assert session is not None
 
-    runtime = resolve_live_call_runtime(session)
+    runtime = resolve_live_call_runtime(
+        session,
+        character_service_factory=lambda: service,
+    )
 
     assert runtime.voice_asset_id == "voice-cloning:maya"
     assert runtime.voice_speaker_id == "Maya"
@@ -268,10 +299,9 @@ def test_live_call_runtime_reads_canonical_library_when_store_is_empty(tmp_path:
 
 def test_character_runtime_keeps_identity_when_linked_voice_is_missing(tmp_path: Path, monkeypatch) -> None:
     _configure(tmp_path, monkeypatch)
-    assets = SharedAssetStore(Path(os.environ["OMNIX_ASSETS_MANIFEST_PATH"]))
-    result = assets.delete_asset("voice-cloning:maya", delete_file=False)
-    assert result["deleted"] is True
-
+    service = CharacterService(
+        asset_store_factory=lambda: _EmptyAssetStore(),  # type: ignore[arg-type]
+    )
     store = default_chat_store()
     session = store.create_session(CreateChatSessionRequest(title="Maya without voice"))
     session = store.set_session_interaction(
@@ -283,7 +313,10 @@ def test_character_runtime_keeps_identity_when_linked_voice_is_missing(tmp_path:
     )
     assert session is not None
 
-    runtime = resolve_live_call_runtime(session)
+    runtime = resolve_live_call_runtime(
+        session,
+        character_service_factory=lambda: service,
+    )
 
     assert runtime.interaction_mode == "character"
     assert runtime.character_id == "maya"
