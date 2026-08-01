@@ -28,11 +28,13 @@ def is_image_generation_enabled() -> bool:
 def _image_service_url() -> str:
     if not is_image_generation_enabled():
         return ""
-    return os.environ.get("OMNIX_IMAGE_URL", "http://127.0.0.1:5301").strip().rstrip("/")
+    configured = os.environ.get("OMNIX_IMAGE_URL", "").strip()
+    return (configured or "http://127.0.0.1:5301").rstrip("/")
 
 
 def _launcher_control_url() -> str:
-    return os.environ.get("OMNIX_LAUNCHER_URL", "http://127.0.0.1:5055").strip().rstrip("/")
+    configured = os.environ.get("OMNIX_LAUNCHER_URL", "").strip()
+    return (configured or "http://127.0.0.1:5055").rstrip("/")
 
 
 def is_image_service_enabled() -> bool:
