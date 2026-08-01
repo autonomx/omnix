@@ -48,7 +48,7 @@ jobs:
           python -m pip install
           pytest fastapi httpx pydantic requests python-multipart playwright
           packaging pyyaml huggingface_hub
-      - name: Run image lifecycle tests
+      - name: Run image lifecycle and download-progress tests
         run: >-
           python -m pytest
           src/tests/unit/gateway/test_image_model_routes.py
@@ -70,7 +70,7 @@ jobs:
         run: npm install
       - name: Typecheck web workspace
         run: npm run web:typecheck
-      - name: Run image generation unit tests
+      - name: Run image generation and download-progress unit tests
         run: >-
           npm --workspace @omnix/web run test --
           src/features/image-generation/ImageModelControl.test.tsx
