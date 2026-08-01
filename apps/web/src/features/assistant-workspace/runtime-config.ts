@@ -21,6 +21,45 @@ export type AssistantWorkspaceRuntimeConfig = {
 
 export type AssistantWorkspaceRuntimeEnv = Record<string, string | boolean | number | undefined>;
 
+export type CharacterPlaybackVoiceSource =
+  | 'trusted_runtime_speaker'
+  | 'trusted_runtime_store_voice'
+  | 'rendered_character_voice'
+  | 'session_store_voice'
+  | 'system_assistant_veto'
+  | 'document_unavailable'
+  | 'none';
+
+export type CharacterPlaybackVoiceDecision = {
+  voiceId: string | null;
+  source: CharacterPlaybackVoiceSource;
+  reason: string;
+  cardCount: number;
+  renderedIdentities: string[];
+  renderedVoiceIds: Array<string | null>;
+  systemOnlyRendered: boolean;
+  sameSelectedSession: boolean;
+  sameDisplayedCharacter: boolean;
+  store: {
+    sessionId: string | null;
+    characterId: string;
+    displayName: string;
+    voiceId: string | null;
+    profileVersion: number | null;
+  };
+  runtime: {
+    sessionId: string;
+    interactionMode: 'system' | 'character';
+    characterId: string | null;
+    displayName: string;
+    voiceAssetId: string | null;
+    voiceProfileAssetId: string | null;
+    voiceSpeakerId: string | null;
+    voiceResolved: boolean;
+    voiceError: string | null;
+  } | null;
+};
+
 export const DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG: AssistantWorkspaceRuntimeConfig = {
   workspaceId: 'workspace:default',
   projectId: 'project:chatbot',
@@ -72,11 +111,37 @@ function getImportMetaEnv(): AssistantWorkspaceRuntimeEnv {
 }
 
 export function resolveCharacterPlaybackVoice(): string | null {
-  if (typeof document === 'undefined') return null;
+  return resolveCharacterPlaybackVoiceDecision().voiceId;
+}
+
+export function resolveCharacterPlaybackVoiceDecision(): CharacterPlaybackVoiceDecision {
+  if (typeof document === 'undefined') {
+    return {
+      voiceId: null,
+      source: 'document_unavailable',
+      reason: 'browser_document_unavailable',
+      cardCount: 0,
+      renderedIdentities: [],
+      renderedVoiceIds: [],
+      systemOnlyRendered: false,
+      sameSelectedSession: false,
+      sameDisplayedCharacter: false,
+      store: {
+        sessionId: null,
+        characterId: 'system-assistant',
+        displayName: 'System Assistant',
+        voiceId: null,
+        profileVersion: null,
+      },
+      runtime: null,
+    };
+  }
+
   const cards = Array.from(document.querySelectorAll<HTMLElement>('.assistant-live-card'));
   const renderedIdentities = cards.map((card) => normalizeIdentity(
     card.querySelector<HTMLElement>('.assistant-live-identity')?.textContent ?? '',
   ));
+  const renderedVoiceIds = cards.map((card) => card.dataset.liveVoiceId?.trim() || null);
   const visibleIdentities = renderedIdentities.filter(Boolean);
   const systemOnlyRendered = Boolean(
     visibleIdentities.length
@@ -86,35 +151,92 @@ export function resolveCharacterPlaybackVoice(): string | null {
   const storeState = liveConversationStore.getState();
   const storeCharacterActive = storeState.identity.characterId !== 'system-assistant';
   const storedVoice = storeCharacterActive ? storeState.identity.voiceId?.trim() : '';
+  const runtime = readLatestTrustedCharacterRuntime();
+  const runtimeIdentity = runtime ? normalizeIdentity(runtime.display_name) : '';
+  const sameSelectedSession = Boolean(
+    runtime
+    && storeState.sessionId
+    && storeState.sessionId === runtime.session_id,
+  );
+  const sameDisplayedCharacter = Boolean(
+    runtimeIdentity
+    && renderedIdentities.some((identity) => identity.includes(runtimeIdentity)),
+  );
+  const runtimeSnapshot = runtime ? {
+    sessionId: runtime.session_id,
+    interactionMode: runtime.interaction_mode,
+    characterId: runtime.character_id ?? null,
+    displayName: runtime.display_name,
+    voiceAssetId: runtime.voice_asset_id ?? null,
+    voiceProfileAssetId: runtime.voice_profile_asset_id ?? null,
+    voiceSpeakerId: runtime.voice_speaker_id ?? null,
+    voiceResolved: Boolean(runtime.preload?.voice_resolved),
+    voiceError: runtime.preload?.voice_error ?? null,
+  } : null;
+  const base = {
+    cardCount: cards.length,
+    renderedIdentities,
+    renderedVoiceIds,
+    systemOnlyRendered,
+    sameSelectedSession,
+    sameDisplayedCharacter,
+    store: {
+      sessionId: storeState.sessionId,
+      characterId: storeState.identity.characterId,
+      displayName: storeState.identity.displayName,
+      voiceId: storeState.identity.voiceId,
+      profileVersion: storeState.identity.profileVersion,
+    },
+    runtime: runtimeSnapshot,
+  };
 
   // The normalized result of the latest successful /live-call/runtime request is the
   // authoritative source. A matching selected session must win over stale React
   // presentation, including a briefly rendered System Assistant label.
-  const runtime = readLatestTrustedCharacterRuntime();
   if (runtime?.interaction_mode === 'character') {
     const speakerId = runtime.voice_speaker_id?.trim() || runtime.voice_asset_id?.trim();
-    const sameSelectedSession = Boolean(
-      storeState.sessionId
-      && storeState.sessionId === runtime.session_id,
-    );
-    const runtimeIdentity = normalizeIdentity(runtime.display_name);
-    const sameDisplayedCharacter = Boolean(
-      runtimeIdentity
-      && renderedIdentities.some((identity) => identity.includes(runtimeIdentity)),
-    );
-    if ((sameSelectedSession || sameDisplayedCharacter) && speakerId) return speakerId;
-    if (sameSelectedSession && storedVoice) return storedVoice;
+    if ((sameSelectedSession || sameDisplayedCharacter) && speakerId) {
+      return {
+        ...base,
+        voiceId: speakerId,
+        source: 'trusted_runtime_speaker',
+        reason: sameSelectedSession
+          ? 'trusted_runtime_matches_selected_session'
+          : 'trusted_runtime_matches_displayed_character',
+      };
+    }
+    if (sameSelectedSession && storedVoice) {
+      return {
+        ...base,
+        voiceId: storedVoice,
+        source: 'trusted_runtime_store_voice',
+        reason: 'trusted_runtime_matches_session_but_has_no_speaker',
+      };
+    }
   }
 
   // Only veto character fallbacks after the trusted runtime has had a chance to
   // prove that it belongs to the selected session. The DOM can lag the runtime.
-  if (systemOnlyRendered) return null;
+  if (systemOnlyRendered) {
+    return {
+      ...base,
+      voiceId: null,
+      source: 'system_assistant_veto',
+      reason: 'all_rendered_live_voice_cards_are_system_assistant',
+    };
+  }
 
-  const renderedVoice = cards
-    .filter((_card, index) => renderedIdentities[index] !== 'system assistant')
-    .map((card) => card.dataset.liveVoiceId?.trim() ?? '')
-    .find(Boolean);
-  if (renderedVoice) return renderedVoice;
+  const renderedVoice = renderedVoiceIds.find((voiceId, index) => (
+    Boolean(voiceId) && renderedIdentities[index] !== 'system assistant'
+  ));
+  if (renderedVoice) {
+    return {
+      ...base,
+      voiceId: renderedVoice,
+      source: 'rendered_character_voice',
+      reason: 'rendered_character_card_exposes_voice_id',
+    };
+  }
 
   // A hot-swapped assignment updates the session-scoped identity before the runtime
   // refresh can finish. Permit that exact voice only when a displayed identity still
@@ -125,9 +247,22 @@ export function resolveCharacterPlaybackVoice(): string | null {
     && storedDisplayName
     && renderedIdentities.some((identity) => identity.includes(storedDisplayName))
   ) {
-    return storedVoice;
+    return {
+      ...base,
+      voiceId: storedVoice,
+      source: 'session_store_voice',
+      reason: 'session_store_identity_matches_displayed_character',
+    };
   }
-  return null;
+
+  return {
+    ...base,
+    voiceId: null,
+    source: 'none',
+    reason: runtime?.interaction_mode === 'character'
+      ? 'trusted_runtime_did_not_match_selected_or_displayed_character'
+      : 'no_character_voice_source_available',
+  };
 }
 
 function normalizeIdentity(value: string): string {
