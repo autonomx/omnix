@@ -76,6 +76,11 @@ function readActiveCharacterVoice(): string | undefined {
   const renderedVoice = card?.dataset.liveVoiceId?.trim();
   if (renderedVoice) return renderedVoice;
 
+  const renderedIdentity = normalizeIdentity(
+    card?.querySelector<HTMLElement>('.assistant-live-identity')?.textContent ?? '',
+  );
+  if (renderedIdentity === 'system assistant') return undefined;
+
   const storeState = liveConversationStore.getState();
   const storeCharacterActive = storeState.identity.characterId !== 'system-assistant';
   const storedVoice = storeCharacterActive ? storeState.identity.voiceId?.trim() : '';
