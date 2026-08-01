@@ -1,4 +1,4 @@
-import { Button, Progress, Text } from '@mantine/core';
+import { Button, PasswordInput, Progress, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { OmnixStatusPill } from '../../design/primitives';
 
@@ -61,7 +61,7 @@ interface ImageModelControlProps {
   action: ImageModelAction;
   error?: string;
   onSelect: (provider: string) => void;
-  onDownload: (provider: string) => void;
+  onDownload: (provider: string, hfToken?: string) => void;
   onLoad: (provider: string) => void;
   onUnload: (provider: string) => void;
   onRefresh: () => void | Promise<unknown>;
@@ -132,6 +132,7 @@ export function ImageModelControl({
 }: ImageModelControlProps) {
   const [serviceStarting, setServiceStarting] = useState(false);
   const [serviceStartError, setServiceStartError] = useState('');
+  const [hfToken, setHfToken] = useState('');
   const [polledDownloadProgress, setPolledDownloadProgress] = useState<ImageDownloadProgress>();
   const selected = selectedImageModel(status, selectedProvider);
   const loaded = Boolean(selected?.loaded);
@@ -168,7 +169,12 @@ export function ImageModelControl({
 
   useEffect(() => {
     setServiceStartError('');
+    setHfToken('');
   }, [selectedProvider]);
+
+  useEffect(() => {
+    if (downloaded) setHfToken('');
+  }, [downloaded]);
 
   useEffect(() => {
     if (selectedAction !== 'download') {
@@ -222,7 +228,10 @@ export function ImageModelControl({
 
   const downloadModel = async () => {
     if (serviceUnavailable && !(await startImageService())) return;
-    onDownload(selectedProvider);
+    onDownload(
+      selectedProvider,
+      selected?.gated ? hfToken.trim() || undefined : undefined,
+    );
   };
 
   const loadModel = async () => {
@@ -289,10 +298,24 @@ export function ImageModelControl({
         {!downloaded && missing.length ? (
           <Text c="dimmed" size="xs">Missing local files: {missing.join(', ')}</Text>
         ) : null}
-        {selected?.gated ? (
-          <Text c="yellow" size="xs">
-            This gated model requires accepting its Hugging Face license and setting HF_TOKEN before download.
-          </Text>
+        {selected?.gated && !downloaded ? (
+          <div>
+            <PasswordInput
+              autoComplete="off"
+              disabled={busy}
+              label="Hugging Face token"
+              maxLength={512}
+              onChange={(event) => setHfToken(event.currentTarget.value)}
+              placeholder="hf_…"
+              value={hfToken}
+            />
+            <Text c="dimmed" mt={4} size="xs">
+              Used only for this download and not stored. Leave blank to use the launcher's HF_TOKEN.
+            </Text>
+            <Text c="yellow" mt={4} size="xs">
+              Accept this model's Hugging Face license before downloading.
+            </Text>
+          </div>
         ) : null}
         {serviceStartError ? <Text c="red" size="xs" role="alert">{serviceStartError}</Text> : null}
         {error ? <Text c="red" size="xs" role="alert">{error}</Text> : null}
@@ -345,7 +368,7 @@ export function imageModelGenerationBlockReason(
   statusError: boolean,
 ): string | undefined {
   const selected = selectedImageModel(status, selectedProvider);
-  const modelName = selected?.model || selected?.label || selectedProvider;
+  const modelName = selected?.model || selectedProvider;
   if (statusLoading) return `Checking ${modelName} model status.`;
   if (statusError || !status) return 'The image model service is unavailable. Downloading or loading can start it automatically.';
   if (!status.enabled) return 'Image generation is disabled for this startup.';
