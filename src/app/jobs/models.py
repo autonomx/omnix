@@ -125,21 +125,6 @@ class CreateJobRequest(BaseModel):
         module = str(value.get("module") or "").strip()
         raw_resource_class = value.get("resource_class")
         resource_class = str(getattr(raw_resource_class, "value", raw_resource_class) or "").strip()
-        routed_value = dict(value)
-
-        # ``owner_id`` is a legacy semantic owner in the shared job contract,
-        # but PostgreSQL maps it to ``omnix_jobs.owner_user_id``. Character IDs
-        # are not user IDs and therefore violate that foreign key. Preserve the
-        # semantic owner in compatibility metadata and leave the durable user
-        # owner unset so the PostgreSQL adapter uses the active tenant user.
-        if module == "character-avatar":
-            semantic_owner = str(routed_value.get("owner_id") or "").strip()
-            if semantic_owner:
-                compat = dict(routed_value.get("compat") or {})
-                compat.setdefault("subject_owner_id", semantic_owner)
-                routed_value["compat"] = compat
-            routed_value["owner_id"] = None
-
         defaulted_modules = {
             "storyteller",
             "podcast",
@@ -150,7 +135,8 @@ class CreateJobRequest(BaseModel):
             "character-avatar",
         }
         if module not in defaulted_modules and resource_class != ResourceClass.GPU_LLM.value:
-            return routed_value
+            return value
+        routed_value = dict(value)
         routed_value["resource_class"] = resource_class
         if module == "voice-cloning":
             from app.platform.voice_cloning_defaults import apply_voice_cloning_defaults
