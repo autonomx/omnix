@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore
+import app.assets.canonical_voice_clones as canonical_voice_clones
+from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore
 from app.characters import (
     CharacterRepository,
     CreateCharacterRequest,
@@ -19,11 +21,23 @@ from app.characters.voice_consent import (
 from app.chat import CreateChatSessionRequest, default_chat_store
 
 
+class _EmptyAssetStore:
+    def list_assets(self) -> AssetListResponse:
+        return AssetListResponse(assets=[])
+
+
 def _configure(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_MEMORY_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
+    canonical_resources = tmp_path / "canonical-resources"
+    (canonical_resources / "voice_clones").mkdir(parents=True)
+    monkeypatch.setattr(
+        canonical_voice_clones,
+        "resources_root",
+        lambda: canonical_resources,
+    )
     manifest = tmp_path / "assets.json"
     assets = SharedAssetStore(manifest)
     for voice_id in ("maya", "alternate"):
@@ -185,6 +199,64 @@ def test_live_call_runtime_recovers_legacy_voice_asset_casing(tmp_path: Path, mo
 
     assert runtime.voice_asset_id == "voice-cloning:maya"
     assert runtime.voice_speaker_id == "Maya"
+    assert runtime.preload.voice_resolved is True
+    assert runtime.preload.voice_error is None
+
+
+def test_live_call_runtime_reads_canonical_library_when_store_is_empty(tmp_path: Path, monkeypatch) -> None:
+    _configure(tmp_path, monkeypatch)
+    canonical_resources = tmp_path / "canonical-only"
+    clone_root = canonical_resources / "voice_clones"
+    clone_root.mkdir(parents=True)
+    (clone_root / "Jinx.wav").write_bytes(b"RIFF-jinx")
+    (clone_root / "voice_clones.json").write_text(
+        json.dumps(
+            {
+                "Jinx": {
+                    "profile_name": "Jinx",
+                    "voice_id": "Jinx",
+                    "voice_clone_id": "Jinx",
+                    "speaker": "Jinx",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        canonical_voice_clones,
+        "resources_root",
+        lambda: canonical_resources,
+    )
+    CharacterRepository().create(
+        CreateCharacterRequest(
+            id="jinx",
+            display_name="Jinx",
+            personality_prompt="Be volatile and energetic.",
+            default_greeting="Hey.",
+            default_voice_asset_id="voice-cloning:Jinx",
+        )
+    )
+    store = default_chat_store()
+    session = store.create_session(CreateChatSessionRequest(title="Canonical Jinx"))
+    session = store.set_session_interaction(
+        session.id,
+        SetSessionInteractionRequest(
+            interaction_mode="character",
+            character_id="jinx",
+        ),
+    )
+    assert session is not None
+    service = CharacterService(
+        asset_store_factory=lambda: _EmptyAssetStore(),  # type: ignore[arg-type]
+    )
+
+    runtime = resolve_live_call_runtime(
+        session,
+        character_service_factory=lambda: service,
+    )
+
+    assert runtime.voice_asset_id == "voice-cloning:Jinx"
+    assert runtime.voice_speaker_id == "Jinx"
     assert runtime.preload.voice_resolved is True
     assert runtime.preload.voice_error is None
 
