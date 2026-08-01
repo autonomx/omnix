@@ -132,13 +132,10 @@ function install(): void {
 async function renderLive2D(runtime: CharacterLiveCallRuntime, host: HTMLElement): Promise<void> {
   const pack = runtime.avatar_pack;
   if (!pack?.rig_asset_id || pack.renderer !== 'live2d') return;
-  if (activeRigAssetId === pack.rig_asset_id && activeHost === host && activeModel) {
-    updateCaption(host, runtime.display_name, 'ready');
-    return;
-  }
+  if (activeRigAssetId === pack.rig_asset_id && activeHost === host && activeModel) return;
 
-  const sequence = ++renderSequence;
   destroyActiveRenderer();
+  const sequence = ++renderSequence;
   activeRigAssetId = pack.rig_asset_id;
   activeHost = host;
   host.dataset.renderer = 'live2d';
@@ -283,8 +280,11 @@ function destroyActiveRenderer(): void {
   currentMouthShape = { open: 0, form: 0 };
   activeResizeObserver?.disconnect();
   activeResizeObserver = null;
-  activeModel?.destroy?.({ children: true, texture: true, baseTexture: true });
-  activeApplication?.destroy(false, { children: true, texture: true, baseTexture: true });
+  if (activeApplication) {
+    activeApplication.destroy(false, { children: true, texture: true, baseTexture: true });
+  } else {
+    activeModel?.destroy?.({ children: true, texture: true, baseTexture: true });
+  }
   activeModel = null;
   activeApplication = null;
   activeRigAssetId = null;
