@@ -8,6 +8,7 @@ import {
 afterEach(() => {
   document.body.innerHTML = '';
   liveConversationStore.reset();
+  window.dispatchEvent(new CustomEvent('omnix:character-avatar-runtime', { detail: null }));
 });
 
 describe('createAssistantWorkspaceRuntimeConfig', () => {
@@ -78,6 +79,51 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     });
 
     expect(config.ttsVoice).toBe('Jinx');
+  });
+
+  it('uses the exact server-published speaker when store identity has not populated yet', () => {
+    document.body.innerHTML = `
+      <section class="assistant-live-card" data-live-voice-id="">
+        <span class="assistant-live-identity active">Talking to Jinx</span>
+      </section>`;
+    window.dispatchEvent(new CustomEvent('omnix:character-avatar-runtime', {
+      detail: {
+        session_id: 'chat:jinx',
+        interaction_mode: 'character',
+        character_id: 'jinx',
+        display_name: 'Jinx',
+        voice_asset_id: 'voice-cloning:jinx',
+        voice_speaker_id: 'Jinx',
+      },
+    }));
+
+    const config = createAssistantWorkspaceRuntimeConfig({
+      VITE_ASSISTANT_TTS_VOICE: 'default',
+    });
+
+    expect(config.ttsVoice).toBe('Jinx');
+  });
+
+  it('does not use a published speaker belonging to a different active character', () => {
+    document.body.innerHTML = `
+      <section class="assistant-live-card" data-live-voice-id="">
+        <span class="assistant-live-identity active">Talking to Maya</span>
+      </section>`;
+    window.dispatchEvent(new CustomEvent('omnix:character-avatar-runtime', {
+      detail: {
+        session_id: 'chat:jinx',
+        interaction_mode: 'character',
+        character_id: 'jinx',
+        display_name: 'Jinx',
+        voice_speaker_id: 'Jinx',
+      },
+    }));
+
+    const config = createAssistantWorkspaceRuntimeConfig({
+      VITE_ASSISTANT_TTS_VOICE: 'default',
+    });
+
+    expect(config.ttsVoice).toBe('default');
   });
 
   it('does not leak a stale character-store voice into a System Assistant session', () => {
