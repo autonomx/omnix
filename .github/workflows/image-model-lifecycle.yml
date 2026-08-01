@@ -1,0 +1,112 @@
+name: Image model lifecycle gates
+
+on:
+  pull_request:
+    paths:
+      - "src/app/image/**"
+      - "src/app/image_http_client.py"
+      - "src/app/image_service_app.py"
+      - "src/app/image_service_runtime.py"
+      - "src/app/gateway/image_model_routes.py"
+      - "src/app/gateway/image_asset_routes.py"
+      - "src/app/launcher/service_manager.py"
+      - "src/app/jobs/models.py"
+      - "src/app/platform/effective_defaults.py"
+      - "src/app/characters/avatar_generation_api.py"
+      - "src/app/characters/avatar_generation_models.py"
+      - "apps/web/src/features/chatbot/characterAvatarClient.ts"
+      - "apps/web/src/features/chatbot/characterAvatarClient.test.ts"
+      - "src/tests/app/test_character_avatar_job_owner.py"
+      - "src/tests/app/test_effective_settings_defaults.py"
+      - "src/tests/app/test_image_asset_file_route.py"
+      - "src/tests/unit/characters/test_avatar_generation_logging.py"
+      - "src/tests/unit/characters/test_avatar_generation_provider_contract.py"
+      - "src/tests/unit/gateway/test_image_model_routes.py"
+      - "src/tests/unit/image/**"
+      - "src/tests/unit/launcher/test_image_service_manual_start.py"
+      - "apps/web/src/features/image-generation/**"
+      - "src/requirements-rpg-flux.txt"
+      - "bootstrap_omnix_flux_env.ps1"
+      - ".github/workflows/image-model-lifecycle.yml"
+  push:
+    paths:
+      - "src/app/image/**"
+      - "src/app/image_http_client.py"
+      - "src/app/image_service_app.py"
+      - "src/app/image_service_runtime.py"
+      - "src/app/gateway/image_model_routes.py"
+      - "src/app/gateway/image_asset_routes.py"
+      - "src/app/launcher/service_manager.py"
+      - "src/app/jobs/models.py"
+      - "src/app/platform/effective_defaults.py"
+      - "src/app/characters/avatar_generation_api.py"
+      - "src/app/characters/avatar_generation_models.py"
+      - "apps/web/src/features/chatbot/characterAvatarClient.ts"
+      - "apps/web/src/features/chatbot/characterAvatarClient.test.ts"
+      - "src/tests/app/test_character_avatar_job_owner.py"
+      - "src/tests/app/test_effective_settings_defaults.py"
+      - "src/tests/app/test_image_asset_file_route.py"
+      - "src/tests/unit/characters/test_avatar_generation_logging.py"
+      - "src/tests/unit/characters/test_avatar_generation_provider_contract.py"
+      - "src/tests/unit/gateway/test_image_model_routes.py"
+      - "src/tests/unit/image/**"
+      - "src/tests/unit/launcher/test_image_service_manual_start.py"
+      - "apps/web/src/features/image-generation/**"
+      - "src/requirements-rpg-flux.txt"
+      - "bootstrap_omnix_flux_env.ps1"
+      - ".github/workflows/image-model-lifecycle.yml"
+
+jobs:
+  backend-image-lifecycle:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install focused test dependencies
+        run: >-
+          python -m pip install
+          pytest fastapi httpx pydantic requests python-multipart playwright
+          packaging pyyaml huggingface_hub pillow
+      - name: Run image lifecycle, avatar routing, and browser-output tests
+        run: >-
+          python -m pytest
+          src/tests/app/test_character_avatar_job_owner.py
+          src/tests/app/test_effective_settings_defaults.py
+          src/tests/app/test_image_asset_file_route.py
+          src/tests/unit/characters/test_avatar_generation_logging.py
+          src/tests/unit/characters/test_avatar_generation_provider_contract.py
+          src/tests/unit/gateway/test_image_model_routes.py
+          src/tests/unit/image/test_image_reference_transport.py
+          src/tests/unit/image/test_image_service_on_demand.py
+          src/tests/unit/image/test_image_service_model_download.py
+          src/tests/unit/image/test_image_output_normalization.py
+          src/tests/unit/image/test_image_service_start.py
+          src/tests/unit/launcher/test_image_service_manual_start.py
+          -q --tb=short
+
+  web-image-lifecycle:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install web dependencies
+        run: npm install
+      - name: Typecheck web workspace
+        run: npm run web:typecheck
+      - name: Run image generation and avatar-routing unit tests
+        run: >-
+          npm --workspace @omnix/web run test --
+          src/features/chatbot/characterAvatarClient.test.ts
+          src/features/image-generation/ImageModelControl.test.tsx
+          src/features/image-generation/ImageModelSelection.test.tsx
+          src/features/image-generation/ImageGenerationWorkspace.test.tsx
+          src/features/image-generation/ImageWorkspaceInteractions.test.tsx
+          src/features/image-generation/ImageWorkspaceJobActions.test.tsx

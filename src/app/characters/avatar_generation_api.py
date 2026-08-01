@@ -25,6 +25,11 @@ from .avatar_generation_service import (
 from .repository import CharacterNotFoundError
 
 
+def _queue_failure_detail(exc: RuntimeError) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    return f"avatar_generation_queue_unavailable:{message}"
+
+
 def register_character_avatar_generation_routes(
     app: FastAPI,
     *,
@@ -73,6 +78,12 @@ def register_character_avatar_generation_routes(
                 exc,
             )
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            diagnostics.exception(
+                "event=avatar_generation_queue_unavailable %s",
+                request_context,
+            )
+            raise HTTPException(status_code=503, detail=_queue_failure_detail(exc)) from exc
         except Exception:
             diagnostics.exception(
                 "event=avatar_generation_request_failed %s",

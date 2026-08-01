@@ -4,7 +4,7 @@ $EnvName = "omnix312"
 $PythonVersion = "3.12"
 
 Write-Host ""
-Write-Host "=== Omnix FLUX environment bootstrap ==="
+Write-Host "=== Omnix image environment bootstrap ==="
 Write-Host "Env: $EnvName"
 Write-Host "Python: $PythonVersion"
 Write-Host ""
@@ -24,7 +24,6 @@ function Ok($msg) {
     Write-Host "OK: $msg" -ForegroundColor Green
 }
 
-# Ensure conda exists
 Step "Checking conda"
 $condaCmd = Get-Command conda -ErrorAction SilentlyContinue
 if (-not $condaCmd) {
@@ -32,7 +31,6 @@ if (-not $condaCmd) {
 }
 Ok "conda found"
 
-# Create env if missing
 Step "Checking whether env '$EnvName' already exists"
 $envList = conda env list | Out-String
 if ($envList -match "(?m)^\s*$EnvName\s") {
@@ -43,7 +41,6 @@ if ($envList -match "(?m)^\s*$EnvName\s") {
     Ok "Environment created"
 }
 
-# Helper to run commands inside env
 function InEnv($command) {
     conda run -n $EnvName powershell -NoProfile -Command $command
 }
@@ -53,12 +50,16 @@ InEnv "python -m pip install --upgrade pip setuptools wheel"
 Ok "pip toolchain upgraded"
 
 Step "Installing PyTorch CUDA 12.4 wheels"
-InEnv "python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124"
+InEnv "python -m pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124"
 Ok "PyTorch installed"
 
-Step "Installing core FLUX runtime dependencies"
-InEnv "python -m pip install diffusers transformers accelerate safetensors sentencepiece"
-Ok "Core FLUX dependencies installed"
+if (Test-Path "src/requirements-rpg-flux.txt") {
+    Step "Installing pinned local image runtime"
+    InEnv "python -m pip install -r src/requirements-rpg-flux.txt"
+    Ok "Pinned image runtime installed"
+} else {
+    Fail "src/requirements-rpg-flux.txt was not found."
+}
 
 if (Test-Path "requirements.txt") {
     Step "Installing project requirements"
@@ -71,7 +72,7 @@ if (Test-Path "requirements.txt") {
 Step "Printing interpreter path"
 InEnv "python -c ""import sys; print(sys.executable)"""
 
-Step "Verifying imports"
+Step "Verifying image runtime imports"
 InEnv @'
 python -c "
 import sys
@@ -89,14 +90,16 @@ import accelerate
 print('accelerate:', accelerate.__version__)
 import safetensors
 print('safetensors:', safetensors.__version__)
-from diffusers import Flux2KleinPipeline
+from diffusers import Flux2KleinPipeline, Krea2Pipeline, ZImagePipeline
 print('Flux2KleinPipeline: OK')
+print('Krea2Pipeline: OK')
+print('ZImagePipeline: OK')
 "
 '@
 Ok "Imports verified"
 
 if (Test-Path "src/tests/unit/rpg/test_phase1212_flux_klein_runtime.py") {
-    Step "Running FLUX runtime regression test"
+    Step "Running image runtime regression test"
     InEnv "python -m pytest src/tests/unit/rpg/test_phase1212_flux_klein_runtime.py -q"
     Ok "Regression test passed"
 } else {

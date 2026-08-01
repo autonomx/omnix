@@ -314,7 +314,8 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     app_python = _python_env("RPG_FLUX_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe")
     tts_python = _python_env("RPG_TTS_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe")
     stt_python = _python_env("RPG_STT_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe")
-    image_enabled = _env_flag("OMNIX_IMAGE_ENABLED") and _env_flag("OMNIX_START_IMAGE_SERVICE")
+    image_enabled = _env_flag("OMNIX_IMAGE_ENABLED")
+    image_auto_start = image_enabled and _env_flag("OMNIX_START_IMAGE_SERVICE")
     hermes_enabled = _env_flag("HERMES_ENABLED")
     hermes_auto_start = hermes_enabled and _env_flag("OMNIX_START_HERMES")
     hermes_base_url = os.environ.get("HERMES_BASE_URL", "http://127.0.0.1:8642")
@@ -397,12 +398,22 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             label="Image Service",
             command=[app_python, "-m", "uvicorn", "app.image_service_app:app", "--host", "127.0.0.1", "--port", "5301"],
             cwd=root,
-            env={**common, "OMNIX_IMAGE_ENABLED": "1", "OMNIX_IMAGE_SERVICE_MODE": "1", "OMNIX_IMAGE_PRELOAD": "1", "OMNIX_IMAGE_WARMUP": "1", "OMNIX_IMAGE_URL": ""},
+            env={
+                **common,
+                "OMNIX_IMAGE_ENABLED": "1",
+                "OMNIX_IMAGE_SERVICE_MODE": "1",
+                "OMNIX_IMAGE_PRELOAD": os.environ.get("OMNIX_IMAGE_PRELOAD", "0"),
+                "OMNIX_IMAGE_WARMUP": os.environ.get("OMNIX_IMAGE_WARMUP", "0"),
+                "OMNIX_IMAGE_URL": "",
+            },
             ports=(5301,),
             optional=True,
             enabled=image_enabled,
-            auto_start=image_enabled,
-            description="Optional FLUX/image generation service. Disabled unless OMNIX_IMAGE_ENABLED=1 and OMNIX_START_IMAGE_SERVICE=1.",
+            auto_start=image_auto_start,
+            description=(
+                "Optional lightweight image generation service. It can be started manually "
+                "without downloading or loading model weights."
+            ),
         ),
     ]
 

@@ -2,10 +2,16 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { JobListResponse } from '../../api/client';
+import type { JobListResponse, JobRecord } from '../../api/client';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
-import { hasActiveImageJobs, ImageGenerationWorkspace, isImageJobEventPayload } from './ImageGenerationWorkspace';
+import {
+  completedImageAssetIds,
+  hasActiveImageJobs,
+  ImageGenerationWorkspace,
+  isCompletedImageJobEventPayload,
+  isImageJobEventPayload,
+} from './ImageGenerationWorkspace';
 
 function renderImageGeneration() {
   const queryClient = new QueryClient({
@@ -38,7 +44,7 @@ afterEach(() => {
 });
 
 describe('ImageGenerationWorkspace', () => {
-  it('queues image jobs and reads bounded workspace projections', async () => {
+  it('queues image jobs, keeps the model resident, and reads bounded workspace projections', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -144,6 +150,7 @@ describe('ImageGenerationWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:image"');
       expect(createCall?.[1]?.body).toContain('"provider_id":"image:flux_klein"');
       expect(createCall?.[1]?.body).toContain('"style":"cinematic"');
+      expect(createCall?.[1]?.body).toContain('"unload_after_generation":false');
     });
   });
 });
@@ -153,6 +160,44 @@ describe('image job synchronization helpers', () => {
     expect(isImageJobEventPayload({ payload: { type: 'image.generate', module: 'image-generation' } })).toBe(true);
     expect(isImageJobEventPayload({ payload: { type: 'tts.synthesize', module: 'voice' } })).toBe(false);
     expect(isImageJobEventPayload({ payload: null })).toBe(false);
+  });
+
+  it('recognizes completed image data even when it arrives as job.updated', () => {
+    const completedPayload = {
+      payload: {
+        type: 'image.generate',
+        module: 'image-generation',
+        status: 'completed',
+        output_refs: [{ type: 'image', asset_id: 'asset:new' }],
+      },
+    };
+    expect(isCompletedImageJobEventPayload(completedPayload)).toBe(true);
+    expect(isCompletedImageJobEventPayload({ payload: { status: 'running' } })).toBe(false);
+  });
+
+  it('extracts unique completed output assets for immediate gallery refresh', () => {
+    const jobs = [
+      {
+        id: 'job-one',
+        status: 'completed',
+        output_refs: [{ type: 'image', asset_id: 'asset-one' }],
+      },
+      {
+        id: 'job-two',
+        status: 'completed',
+        output_refs: [
+          { type: 'image', asset_id: 'asset-one' },
+          { type: 'image', asset_id: 'asset-two' },
+        ],
+      },
+      {
+        id: 'job-running',
+        status: 'running',
+        output_refs: [{ type: 'image', asset_id: 'asset-ignored' }],
+      },
+    ] as JobRecord[];
+
+    expect(completedImageAssetIds(jobs)).toEqual(['asset-one', 'asset-two']);
   });
 
   it('polls only while an image job is active', () => {

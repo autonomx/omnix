@@ -4,20 +4,25 @@ from __future__ import annotations
 from email.utils import formatdate, parsedate_to_datetime
 from functools import wraps
 import hashlib
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
+from PIL import Image
 
 from app.assets import AssetRecord, AssetType, default_asset_store
+from app.image.output_normalization import normalize_generated_image
 
 _ROUTE_SENTINEL = "_omnix_image_asset_file_registered"
 _HOOK_SENTINEL = "_omnix_image_asset_file_hook_installed"
 IMAGE_ASSET_FILE_PATH = "/api/assets/{asset_id}/file"
 SUPPORTED_IMAGE_MIME_TYPES = {"image/gif", "image/jpeg", "image/png", "image/webp", "image/svg+xml"}
+NORMALIZABLE_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 IMMUTABLE_ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable"
 MUTABLE_ASSET_CACHE_CONTROL = "public, max-age=300, must-revalidate"
+BROWSER_PREVIEW_CACHE_CONTROL = "public, max-age=300, must-revalidate"
 
 
 def register_image_asset_file_route(gateway: FastAPI) -> None:
@@ -32,6 +37,7 @@ def register_image_asset_file_route(gateway: FastAPI) -> None:
         asset_id: str,
         request: Request,
         download: bool = Query(default=False),
+        preview: bool = Query(default=False),
     ) -> Response:
         asset = _asset_by_id(asset_id)
         if asset is None:
@@ -47,16 +53,29 @@ def register_image_asset_file_route(gateway: FastAPI) -> None:
             stat_result = path.stat()
         except OSError as exc:
             raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
-        etag = _asset_etag(asset, stat_result.st_size, stat_result.st_mtime_ns)
+
+        browser_preview = bool(preview and not download)
+        etag = _asset_etag(
+            asset,
+            stat_result.st_size,
+            stat_result.st_mtime_ns,
+            variant="browser-preview-v2" if browser_preview else "original",
+        )
         last_modified = formatdate(stat_result.st_mtime, usegmt=True)
         headers = {
-            "Cache-Control": _cache_control(asset),
+            "Cache-Control": BROWSER_PREVIEW_CACHE_CONTROL if browser_preview else _cache_control(asset),
             "ETag": etag,
             "Last-Modified": last_modified,
             "X-Content-Type-Options": "nosniff",
         }
         if _not_modified(request, etag, stat_result.st_mtime):
             return Response(status_code=304, headers=headers)
+
+        if browser_preview:
+            normalized_response = _normalized_browser_preview(path, asset, headers)
+            if normalized_response is not None:
+                return normalized_response
+
         return FileResponse(
             path,
             media_type=asset.mime_type,
@@ -65,6 +84,43 @@ def register_image_asset_file_route(gateway: FastAPI) -> None:
             headers=headers,
             stat_result=stat_result,
         )
+
+
+def _normalized_browser_preview(
+    path: Path,
+    asset: AssetRecord,
+    headers: dict[str, str],
+) -> Response | None:
+    """Re-encode unusual raster assets without mutating the stored original."""
+
+    if asset.mime_type.lower() not in NORMALIZABLE_IMAGE_MIME_TYPES:
+        return None
+    try:
+        with Image.open(path) as source:
+            width, height = source.size
+            requires_normalization = (
+                source.mode != "RGB"
+                or max(width, height) > 8192
+                or width * height > 32 * 1024 * 1024
+            )
+            if not requires_normalization:
+                return None
+            normalized, _metadata = normalize_generated_image(source)
+            output = BytesIO()
+            normalized.save(output, format="PNG", optimize=False, compress_level=6)
+    except (OSError, TypeError, ValueError):
+        # A valid browser-decodable original remains preferable to replacing a
+        # failed normalization attempt with a gateway error.
+        return None
+
+    preview_headers = dict(headers)
+    preview_headers["Content-Disposition"] = f'inline; filename="{path.stem}.png"'
+    preview_headers["X-Omnix-Image-Normalized"] = "1"
+    return Response(
+        content=output.getvalue(),
+        media_type="image/png",
+        headers=preview_headers,
+    )
 
 
 def _asset_by_id(asset_id: str) -> AssetRecord | None:
@@ -87,8 +143,8 @@ def _cache_control(asset: AssetRecord) -> str:
     return IMMUTABLE_ASSET_CACHE_CONTROL if bool(asset.metadata.get("immutable")) else MUTABLE_ASSET_CACHE_CONTROL
 
 
-def _asset_etag(asset: AssetRecord, size: int, mtime_ns: int) -> str:
-    source = f"{asset.id}:{size}:{mtime_ns}".encode("utf-8")
+def _asset_etag(asset: AssetRecord, size: int, mtime_ns: int, *, variant: str = "original") -> str:
+    source = f"{asset.id}:{size}:{mtime_ns}:{variant}".encode("utf-8")
     return f'"{hashlib.sha256(source).hexdigest()}"'
 
 

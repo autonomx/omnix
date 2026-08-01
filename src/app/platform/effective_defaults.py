@@ -185,6 +185,13 @@ def apply_job_defaults(value: Any) -> Any:
         _apply_stt_defaults(payload, profile)
     elif module == "image-generation":
         _apply_image_defaults(payload, profile)
+    elif module == "character-avatar":
+        # Avatar packs require image-to-image variants for mouth, blink, and
+        # expression frames. FLUX is the only compatible local provider in the
+        # current registry, so do not inherit a text-to-image-only selection.
+        _set_if_missing(payload, "provider_id", "image:flux_klein")
+        _set_if_missing(payload, "unload_after_generation", False)
+        _apply_image_defaults(payload, profile)
 
     if resource_class == "gpu:llm":
         provider_id, model_id = effective_llm_route(profile, module, task)

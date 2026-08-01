@@ -21,7 +21,6 @@ type ImagePreviewDialogProps = ImagePreviewDialogAssetProps | ImagePreviewDialog
 export function ImagePreviewDialog(props: ImagePreviewDialogProps) {
   const [zoom, setZoom] = useState(1);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [imagePainted, setImagePainted] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const title = 'asset' in props ? imageAssetTitle(props.asset) : props.title;
   const imageUrl = 'asset' in props ? imageAssetUrl(props.asset.id) : props.imageUrl;
@@ -47,35 +46,28 @@ export function ImagePreviewDialog(props: ImagePreviewDialogProps) {
           }}
         >
           <img
-            className={imageLoaded ? 'image-preview-rendered-image' : 'image-preview-preloader'}
+            key={imageUrl}
+            className={`image-preview-rendered-image${imageLoaded ? ' loaded' : ''}`}
             src={imageUrl}
-            alt={imageLoaded ? title : ''}
-            aria-hidden={!imageLoaded}
+            alt={title}
             data-testid="image-preview-loader"
             decoding="async"
             loading="eager"
-            onLoad={(event) => {
-              const image = event.currentTarget;
-              const revealDecodedImage = () => {
-                setImageLoaded(true);
-                window.setTimeout(() => setImagePainted(true), 250);
-              };
-              if (typeof image.decode !== 'function') {
-                revealDecodedImage();
-                return;
-              }
-              void image.decode()
-                .then(revealDecodedImage)
-                .catch(() => setImageFailed(true));
+            onLoad={() => {
+              setImageFailed(false);
+              setImageLoaded(true);
             }}
-            onError={() => setImageFailed(true)}
+            onError={() => {
+              setImageLoaded(false);
+              setImageFailed(true);
+            }}
             style={{ transform: `scale(${zoom})` }}
           />
           {imageFailed ? (
             <p className="image-preview-load-error" role="alert">
               The image could not be displayed. Use Open to view the original file.
             </p>
-          ) : !imagePainted ? (
+          ) : !imageLoaded ? (
             <p className="image-preview-loading" role="status">Loading image...</p>
           ) : null}
         </div>

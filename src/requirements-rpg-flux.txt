@@ -1,22 +1,25 @@
-# Omnix optional RPG FLUX runtime requirements
+# Omnix optional RPG image runtime requirements
 # Installed by setup.bat into the rpg-flux conda environment.
 #
-# This file must fully pin the fragile HF stack used by FLUX runtime validation.
+# This file must fully pin the fragile HF stack used by the local image runtime.
 # Do not rely on broad requirements.txt ranges for these packages.
 
 numpy==1.26.4
 soundfile>=0.12,<1
 Pillow>=10,<12
 
-# FLUX / image stack
-# FLUX.2 [klein] requires the Flux2KleinPipeline / Flux2Transformer2DModel
-# generation path introduced in diffusers 0.37.x.
-diffusers==0.37.0
+# Local image stack
+# - FLUX.2 [klein] uses Flux2KleinPipeline.
+# - Krea 2 Turbo uses Krea2Pipeline, introduced in diffusers 0.39.x.
+# - Z-Image Turbo uses ZImagePipeline.
+# Krea 2 support in diffusers 0.39 requires PyTorch 2.6 or newer.
+torch>=2.6
+diffusers==0.39.0
 accelerate==1.12.0
-safetensors>=0.5,<0.7
-huggingface_hub==0.34.6
-transformers==4.57.3
-tokenizers==0.22.2
+safetensors>=0.5,<0.9
+huggingface_hub>=0.34.6,<1
+transformers>=4.57.3,<6
+tokenizers>=0.22.2,<0.23
 psutil>=5.9,<7
 regex>=2024.0.0
 

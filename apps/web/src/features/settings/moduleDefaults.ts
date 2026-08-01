@@ -84,7 +84,9 @@ export function imageGenerationDefaults(document: SettingsDocument = DEFAULT_SET
     providerId: document.global.providers.image || DEFAULT_IMAGE_PROVIDER_ID,
     width: document.image.width,
     height: document.image.height,
-    unloadAfterGeneration: document.image.unloadAfterGeneration,
+    // Explicit loading should stay resident across generations. Users can still
+    // opt into per-request unloading from Advanced Options when they need VRAM.
+    unloadAfterGeneration: false,
   };
 }
 

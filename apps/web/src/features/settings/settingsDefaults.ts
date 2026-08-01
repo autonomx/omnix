@@ -55,7 +55,7 @@ export const DEFAULT_SETTINGS_DOCUMENT: SettingsDocument = {
   storyteller: { providerId: '', modelId: '', tone: 'Cozy', writingStyle: 'Lyrical & Descriptive', readSpeed: 1, pauseParagraphMs: 500, pauseChapterMs: 1200, readChapterTitles: true, readStylePreset: 'Dramatic audiobook', pronunciation: {} },
   podcast: { providerId: '', modelId: '', format: 'interview', durationMinutes: 5, tone: 'Professional', language: 'English (US)', generationStyle: 'automatic', autoplay: false, playbackRate: 1, stability: 0.72, similarity: 0.78, effects: ['Compression', 'De-esser'] },
   rpg: { difficulty: 'normal', worldActivity: 'standard', economyPressure: 'normal', combatLethality: 'normal', companions: true, permadeath: false, autosave: true, validator: true, backgroundSoftAudit: true, llmNarration: true, imageGeneration: false, tts: false, stt: false, campaignDefaults: {}, hermesAssistMode: 'review_each_step' },
-  image: { width: 768, height: 768, aspectRatio: '1:1', portraitPreset: '', scenePreset: '', unloadAfterGeneration: true },
+  image: { width: 768, height: 768, aspectRatio: '1:1', portraitPreset: '', scenePreset: '', unloadAfterGeneration: false },
   stt: { language: '', alignment: true, saveTranscript: true, microphoneDeviceId: '', noiseSuppression: true, echoCancellation: true },
   storage: { saveOutputByDefault: true, retentionDays: 30, temporaryAssetCleanup: true },
 };

@@ -1,9 +1,9 @@
 """Contracts for Character Mode avatar generation and cloned-voice backfill."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 AvatarGenerationStatus = Literal[
     "queued",
@@ -21,7 +21,7 @@ class CreateCharacterAvatarGenerationRequest(BaseModel):
     style: str = Field(default="illustrated character portrait", max_length=200)
     outfit_prompt: str = Field(default="", max_length=1_000)
     background_prompt: str = Field(default="", max_length=1_000)
-    provider_id: str = Field(default="", max_length=200)
+    provider_id: str = Field(default="image:flux_klein", max_length=200)
     width: int = Field(default=768, ge=256, le=2_048, multiple_of=64)
     height: int = Field(default=768, ge=256, le=2_048, multiple_of=64)
     seed: int | None = Field(default=None, ge=0)
@@ -34,6 +34,19 @@ class CreateCharacterAvatarGenerationRequest(BaseModel):
     unload_after_generation: bool = False
     source_asset_id: str = Field(default="", max_length=300)
     source_image_consent_confirmed: bool = False
+
+    @field_validator("provider_id", mode="before")
+    @classmethod
+    def normalize_avatar_provider(cls, value: Any) -> str:
+        provider = str(value or "").strip().lower()
+        if not provider or provider == "flux_klein":
+            return "image:flux_klein"
+        if provider != "image:flux_klein":
+            raise ValueError(
+                "character_avatar_requires_flux_klein: avatar mouth, blink, and expression "
+                "frames require an image-to-image provider"
+            )
+        return provider
 
 
 class CharacterAvatarGenerationBatch(BaseModel):

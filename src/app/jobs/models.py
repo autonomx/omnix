@@ -125,7 +125,15 @@ class CreateJobRequest(BaseModel):
         module = str(value.get("module") or "").strip()
         raw_resource_class = value.get("resource_class")
         resource_class = str(getattr(raw_resource_class, "value", raw_resource_class) or "").strip()
-        defaulted_modules = {"storyteller", "podcast", "voice", "voice-cloning", "stt", "image-generation"}
+        defaulted_modules = {
+            "storyteller",
+            "podcast",
+            "voice",
+            "voice-cloning",
+            "stt",
+            "image-generation",
+            "character-avatar",
+        }
         if module not in defaulted_modules and resource_class != ResourceClass.GPU_LLM.value:
             return value
         routed_value = dict(value)
