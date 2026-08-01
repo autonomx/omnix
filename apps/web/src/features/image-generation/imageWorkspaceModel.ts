@@ -65,7 +65,8 @@ export function selectLatestImageAsset(
 }
 
 export function imageAssetUrl(assetId: string, download = false): string {
-  return `/api/assets/${encodeURIComponent(assetId)}/file${download ? '?download=true' : ''}`;
+  const suffix = download ? '?download=true' : '?preview=true';
+  return `/api/assets/${encodeURIComponent(assetId)}/file${suffix}`;
 }
 
 export function imageAssetTitle(asset: ImageAsset): string {
