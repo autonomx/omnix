@@ -143,6 +143,23 @@ def start_image_service_via_launcher(
             "error": "image_generation_disabled",
         }
 
+    # The service may already be running while Launcher Control is unavailable
+    # or restarting. In that case there is nothing to start and lifecycle
+    # actions should continue directly against the healthy service.
+    try:
+        if _image_service_ready():
+            return {
+                "ok": True,
+                "service": "image",
+                "provider": provider,
+                "loaded": False,
+                "state": "ready",
+                "started": False,
+                "already_running": True,
+            }
+    except RuntimeError:
+        pass
+
     launcher_url = _launcher_control_url()
     if not launcher_url:
         return {
