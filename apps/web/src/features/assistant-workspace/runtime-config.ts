@@ -74,24 +74,21 @@ function getImportMetaEnv(): AssistantWorkspaceRuntimeEnv {
 export function resolveCharacterPlaybackVoice(): string | null {
   if (typeof document === 'undefined') return null;
   const cards = Array.from(document.querySelectorAll<HTMLElement>('.assistant-live-card'));
-  const renderedVoice = cards
-    .map((card) => card.dataset.liveVoiceId?.trim() ?? '')
-    .find(Boolean);
-  if (renderedVoice) return renderedVoice;
-
   const renderedIdentities = cards.map((card) => normalizeIdentity(
     card.querySelector<HTMLElement>('.assistant-live-identity')?.textContent ?? '',
   ));
-  if (renderedIdentities.some((identity) => identity === 'system assistant')) return null;
+  const visibleIdentities = renderedIdentities.filter(Boolean);
+  if (visibleIdentities.length && visibleIdentities.every((identity) => identity === 'system assistant')) {
+    return null;
+  }
 
   const storeState = liveConversationStore.getState();
   const storeCharacterActive = storeState.identity.characterId !== 'system-assistant';
   const storedVoice = storeCharacterActive ? storeState.identity.voiceId?.trim() : '';
 
-  // characterClient retains the normalized result of every successful trusted
-  // /live-call/runtime request. Reading it directly avoids losing the speaker when
-  // an avatar event fired before a player module loaded or before React rendered the
-  // data-live-voice-id attribute.
+  // The normalized result of the latest successful /live-call/runtime request is the
+  // authoritative source. It must win over a stale data-live-voice-id left behind by
+  // a prior render or voice reassignment.
   const runtime = readLatestTrustedCharacterRuntime();
   if (runtime?.interaction_mode === 'character') {
     const speakerId = runtime.voice_speaker_id?.trim() || runtime.voice_asset_id?.trim();
@@ -105,10 +102,16 @@ export function resolveCharacterPlaybackVoice(): string | null {
       runtimeIdentity
       && renderedIdentities.some((identity) => identity.includes(runtimeIdentity)),
     );
-    if ((sameSelectedSession || sameDisplayedCharacter) && (storedVoice || speakerId)) {
-      return storedVoice || speakerId || null;
+    if ((sameSelectedSession || sameDisplayedCharacter) && (speakerId || storedVoice)) {
+      return speakerId || storedVoice || null;
     }
   }
+
+  const renderedVoice = cards
+    .filter((_card, index) => renderedIdentities[index] !== 'system assistant')
+    .map((card) => card.dataset.liveVoiceId?.trim() ?? '')
+    .find(Boolean);
+  if (renderedVoice) return renderedVoice;
 
   // A hot-swapped assignment updates the session-scoped identity before the runtime
   // refresh can finish. Permit that exact voice only when a displayed identity still
