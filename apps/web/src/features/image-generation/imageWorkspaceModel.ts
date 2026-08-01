@@ -12,15 +12,35 @@ export function imageCapableProviders(payload: ProviderFacadePayload | undefined
 }
 
 export function isImageJobEventPayload(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  const payload = (value as { payload?: unknown }).payload;
-  if (!payload || typeof payload !== 'object') return false;
-  const job = payload as { module?: unknown; type?: unknown };
-  return job.type === 'image.generate' || job.module === 'image' || job.module === 'image-generation';
+  const job = imageJobEventPayload(value);
+  return Boolean(job && (job.type === 'image.generate' || job.module === 'image' || job.module === 'image-generation'));
+}
+
+export function isCompletedImageJobEventPayload(value: unknown): boolean {
+  const job = imageJobEventPayload(value);
+  if (!job) return false;
+  if (job.status === 'completed') return true;
+  return Array.isArray(job.output_refs) && job.output_refs.some((ref) => {
+    if (!ref || typeof ref !== 'object') return false;
+    const candidate = ref as { type?: unknown; asset_id?: unknown };
+    return candidate.type === 'image' && typeof candidate.asset_id === 'string' && Boolean(candidate.asset_id);
+  });
 }
 
 export function hasActiveImageJobs(payload: JobListResponse | undefined): boolean {
   return payload?.jobs.some((job) => ACTIVE_IMAGE_JOB_STATUSES.has(job.status)) ?? false;
+}
+
+export function completedImageAssetIds(jobs: JobRecord[]): string[] {
+  const result: string[] = [];
+  for (const job of jobs) {
+    if (job.status !== 'completed') continue;
+    for (const ref of job.output_refs ?? []) {
+      const assetId = ref.type === 'image' && typeof ref.asset_id === 'string' ? ref.asset_id : '';
+      if (assetId && !result.includes(assetId)) result.push(assetId);
+    }
+  }
+  return result;
 }
 
 export function selectLatestImageAsset(
@@ -67,6 +87,12 @@ export function formatCreatedAt(value: string): string {
 export function parseJobEvent(data: unknown): unknown {
   if (typeof data !== 'string') return undefined;
   try { return JSON.parse(data); } catch { return undefined; }
+}
+
+function imageJobEventPayload(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const payload = (value as { payload?: unknown }).payload;
+  return payload && typeof payload === 'object' ? payload as Record<string, unknown> : undefined;
 }
 
 function metadataString(asset: ImageAsset, key: string): string {
