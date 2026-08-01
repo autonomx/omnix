@@ -12,6 +12,7 @@ import torch
 from packaging.version import InvalidVersion, Version
 
 from app.image.downloads import get_image_local_model_status
+from app.image.output_normalization import normalize_generated_image
 from app.image.providers.base import BaseImageProvider, ImageGenerationResult
 from app.image.providers.registry import get_image_provider_definition
 from app.runtime_paths import generated_images_root
@@ -236,6 +237,8 @@ class DiffusersTurboImageProvider(BaseImageProvider):
             pipe = None
             output = None
             output_image = None
+            browser_image = None
+            normalization_metadata: Dict[str, Any] = {}
             try:
                 try:
                     pipe = self._ensure_pipeline()
@@ -278,7 +281,13 @@ class DiffusersTurboImageProvider(BaseImageProvider):
                 )
                 file_path = os.path.normpath(os.path.join(out_dir, filename))
                 try:
-                    output_image.save(file_path, format="PNG")
+                    browser_image, normalization_metadata = normalize_generated_image(output_image)
+                    browser_image.save(
+                        file_path,
+                        format="PNG",
+                        optimize=False,
+                        compress_level=6,
+                    )
                 except Exception as exc:
                     with contextlib.suppress(OSError):
                         os.remove(file_path)
@@ -288,6 +297,8 @@ class DiffusersTurboImageProvider(BaseImageProvider):
                         error=f"{self.provider_name}_finalize_failed:{repr(exc)}",
                     )
 
+                actual_width = int(browser_image.width)
+                actual_height = int(browser_image.height)
                 return ImageGenerationResult(
                     ok=True,
                     status="completed",
@@ -296,14 +307,18 @@ class DiffusersTurboImageProvider(BaseImageProvider):
                     file_path=file_path,
                     asset_url="",
                     metadata={
-                        "width": width,
-                        "height": height,
+                        "width": actual_width,
+                        "height": actual_height,
+                        "requested_width": width,
+                        "requested_height": height,
                         "memory_mode": self._memory_mode,
                         "pipeline_class": _safe_str(self.definition.get("pipeline_class")),
+                        "image_normalization": normalization_metadata,
                     },
                 )
             finally:
                 output = None
                 output_image = None
+                browser_image = None
                 pipe = None
                 _release_memory()
