@@ -78,6 +78,30 @@ def _write_model_skeleton(root: Path, *, missing_second_shard: bool = False) -> 
         (root / "transformer" / "diffusion_pytorch_model-00002-of-00002.safetensors").write_bytes(b"weights")
 
 
+def test_status_without_explicit_dir_resolves_canonical_model_path(monkeypatch, tmp_path):
+    canonical_dir = tmp_path / "image" / "flux2-klein-4b"
+    _write_model_skeleton(canonical_dir)
+    monkeypatch.setattr(image_downloads, "MODELS_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        image_downloads,
+        "load_settings",
+        lambda: {
+            "image": {
+                "flux_klein": {
+                    "local_dir": "",
+                    "download_dir": "image",
+                }
+            }
+        },
+    )
+
+    status = get_image_local_model_status("flux_klein")
+
+    assert Path(status["local_dir"]) == canonical_dir
+    assert status["complete"] is True
+    assert status["missing"] == []
+
+
 def test_canonical_flux_download_wins_over_stale_configured_directory(monkeypatch, tmp_path):
     stale_dir = tmp_path / "stale-flux-path"
     stale_dir.mkdir()
