@@ -18,7 +18,7 @@ type Props = {
   action: ImageModelAction;
   error?: string;
   onSelect?: (provider: string) => void;
-  onDownload?: (provider: string) => void;
+  onDownload?: (provider: string, hfToken?: string) => void;
   onLoad: (provider?: string) => void;
   onUnload: (provider?: string) => void;
   onRefresh: () => void;
