@@ -13,6 +13,30 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function renderControl(
+  status: ImageModelStatusPayload,
+  overrides: Partial<Parameters<typeof ImageModelControl>[0]> = {},
+) {
+  const props = {
+    status,
+    selectedProvider: status.provider,
+    statusLoading: false,
+    action: null,
+    onSelect: vi.fn(),
+    onDownload: vi.fn(),
+    onLoad: vi.fn(),
+    onUnload: vi.fn(),
+    onRefresh: vi.fn(),
+    ...overrides,
+  };
+  render(
+    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+      <ImageModelControl {...props} />
+    </MantineProvider>,
+  );
+  return props;
+}
+
 it('selects another image model without downloading or loading it', () => {
   const onSelect = vi.fn();
   const onDownload = vi.fn();
@@ -45,21 +69,7 @@ it('selects another image model without downloading or loading it', () => {
     ],
   };
 
-  render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      <ImageModelControl
-        status={status}
-        selectedProvider="flux_klein"
-        statusLoading={false}
-        action={null}
-        onSelect={onSelect}
-        onDownload={onDownload}
-        onLoad={onLoad}
-        onUnload={vi.fn()}
-        onRefresh={vi.fn()}
-      />
-    </MantineProvider>,
-  );
+  renderControl(status, { onSelect, onDownload, onLoad });
 
   fireEvent.change(screen.getByRole('combobox', { name: 'Image model' }), {
     target: { value: 'krea2_turbo' },
@@ -70,8 +80,9 @@ it('selects another image model without downloading or loading it', () => {
   expect(onLoad).not.toHaveBeenCalled();
 });
 
-it('starts the lightweight image service when runtime status is unavailable', async () => {
+it('shows Download Model and starts the service automatically before downloading', async () => {
   const onRefresh = vi.fn();
+  const onDownload = vi.fn();
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
@@ -90,27 +101,13 @@ it('starts the lightweight image service when runtime status is unavailable', as
     state: 'unavailable',
     error: 'image_service_unreachable',
     supports_download: true,
-    local_model: { complete: false },
+    local_model: { complete: false, missing: ['model_index.json'] },
   };
 
-  render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      <ImageModelControl
-        status={status}
-        selectedProvider="z_image_turbo"
-        statusLoading={false}
-        action={null}
-        onSelect={vi.fn()}
-        onDownload={vi.fn()}
-        onLoad={vi.fn()}
-        onUnload={vi.fn()}
-        onRefresh={onRefresh}
-      />
-    </MantineProvider>,
-  );
+  renderControl(status, { onRefresh, onDownload });
 
-  expect(screen.queryByRole('button', { name: 'Download Model' })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Start Image Service' }));
+  expect(screen.queryByRole('button', { name: 'Start Image Service' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Download Model' }));
 
   await waitFor(() => {
     expect(fetchMock).toHaveBeenCalledWith('/api/image-generation/service/start', {
@@ -119,7 +116,57 @@ it('starts the lightweight image service when runtime status is unavailable', as
       body: JSON.stringify({ provider: 'z_image_turbo' }),
     });
     expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(onDownload).toHaveBeenCalledWith('z_image_turbo');
   });
+});
+
+it('shows Start Image Service when model files already exist', () => {
+  const status: ImageModelStatusPayload = {
+    ok: false,
+    service: 'image',
+    enabled: true,
+    provider: 'flux_klein',
+    model: 'FLUX.2 [klein] 4B',
+    loaded: false,
+    state: 'unavailable',
+    error: 'image_service_unreachable',
+    supports_download: true,
+    downloaded: true,
+    local_model: { complete: true },
+  };
+
+  renderControl(status);
+
+  expect(screen.getByRole('button', { name: 'Start Image Service' })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: 'Download Model' })).toBeNull();
+});
+
+it('shows byte and percentage progress while a model downloads', () => {
+  const status: ImageModelStatusPayload = {
+    ok: false,
+    service: 'image',
+    enabled: true,
+    provider: 'z_image_turbo',
+    model: 'Z-Image Turbo',
+    loaded: false,
+    state: 'downloading',
+    supports_download: true,
+    local_model: { complete: false },
+    download_progress: {
+      status: 'downloading',
+      bytes_downloaded: 5 * 1024 * 1024 * 1024,
+      bytes_total: 20 * 1024 * 1024 * 1024,
+      percent: 25,
+      indeterminate: false,
+    },
+  };
+
+  renderControl(status, {
+    action: { type: 'download', provider: 'z_image_turbo' },
+  });
+
+  expect(screen.getByLabelText('Model download progress bar')).toHaveAttribute('aria-valuenow', '25');
+  expect(screen.getByText(/5\.00 GB of 20\.0 GB · 25\.0%/)).toBeInTheDocument();
 });
 
 it('uses model-specific generation defaults', () => {
