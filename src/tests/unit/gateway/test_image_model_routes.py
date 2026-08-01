@@ -142,6 +142,77 @@ def test_image_service_start_failure_is_actionable(monkeypatch):
     assert response.json()["detail"] == "service_disabled"
 
 
+def test_ensure_loaded_starts_service_then_loads_requested_model(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    def start(provider: str):
+        calls.append(("start", provider))
+        return {"ok": True, "provider": provider, "loaded": False, "state": "unloaded"}
+
+    def status(provider: str):
+        calls.append(("status", provider))
+        return {"ok": True, "provider": provider, "loaded": False, "state": "unloaded"}
+
+    def load(provider: str):
+        calls.append(("load", provider))
+        return {"ok": True, "provider": provider, "loaded": True, "state": "loaded"}
+
+    monkeypatch.setattr(image_model_routes, "start_image_service_via_launcher", start)
+    monkeypatch.setattr(image_model_routes, "get_image_service_status", status)
+    monkeypatch.setattr(image_model_routes, "load_image_model_via_service", load)
+
+    response = TestClient(_app()).post(
+        "/api/image-generation/model/ensure-loaded",
+        json={"provider": "image:flux_klein"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["loaded"] is True
+    assert calls == [
+        ("start", "flux_klein"),
+        ("status", "flux_klein"),
+        ("load", "flux_klein"),
+    ]
+
+
+def test_ensure_loaded_skips_duplicate_model_load(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        image_model_routes,
+        "start_image_service_via_launcher",
+        lambda provider: calls.append(("start", provider)) or {
+            "ok": True,
+            "provider": provider,
+            "loaded": True,
+        },
+    )
+    monkeypatch.setattr(
+        image_model_routes,
+        "get_image_service_status",
+        lambda provider: calls.append(("status", provider)) or {
+            "ok": True,
+            "provider": provider,
+            "loaded": True,
+            "state": "loaded",
+        },
+    )
+    monkeypatch.setattr(
+        image_model_routes,
+        "load_image_model_via_service",
+        lambda _provider: (_ for _ in ()).throw(AssertionError("already loaded model must not reload")),
+    )
+
+    response = TestClient(_app()).post(
+        "/api/image-generation/model/ensure-loaded",
+        json={"provider": "flux_klein"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["loaded"] is True
+    assert calls == [("start", "flux_klein"), ("status", "flux_klein")]
+
+
 def test_image_model_load_and_unload_proxy_provider(monkeypatch):
     calls: list[tuple[str, str]] = []
 
