@@ -3,31 +3,35 @@ from __future__ import annotations
 from app import image_http_client
 
 
-def test_start_image_service_uses_launcher_then_waits_for_status(monkeypatch) -> None:
+def test_start_image_service_uses_launcher_then_lightweight_readiness_probe(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
     monkeypatch.setenv("OMNIX_IMAGE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_LAUNCHER_URL", "http://127.0.0.1:5055")
+    monkeypatch.setenv("OMNIX_IMAGE_URL", "http://127.0.0.1:5301")
 
     def request_json(method: str, url: str, payload, timeout: float):
         calls.append((method, url))
-        return {"ok": True, "service": {"id": "image", "status": "running"}}
+        if url.endswith("/api/services/image/start"):
+            return {"ok": True, "service": {"id": "image", "status": "running"}}
+        if url.endswith("/openapi.json"):
+            return {"openapi": "3.1.0"}
+        raise AssertionError(f"unexpected request: {method} {url}")
 
     monkeypatch.setattr(image_http_client, "_request_json", request_json)
     monkeypatch.setattr(
         image_http_client,
         "get_image_service_status",
-        lambda provider: {
-            "ok": True,
-            "service": "image",
-            "provider": provider,
-            "loaded": False,
-            "state": "unloaded",
-        },
+        lambda _provider: (_ for _ in ()).throw(
+            AssertionError("startup must not perform full provider status validation")
+        ),
     )
 
     result = image_http_client.start_image_service_via_launcher("z_image_turbo")
 
-    assert calls == [("POST", "http://127.0.0.1:5055/api/services/image/start")]
+    assert calls == [
+        ("POST", "http://127.0.0.1:5055/api/services/image/start"),
+        ("GET", "http://127.0.0.1:5301/openapi.json"),
+    ]
     assert result["ok"] is True
     assert result["provider"] == "z_image_turbo"
     assert result["state"] == "unloaded"
