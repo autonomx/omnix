@@ -14,6 +14,9 @@ on:
       - "apps/web/src/features/assistant-workspace/runtime-config.ts"
       - "apps/web/src/features/assistant-workspace/runtime-config.test.ts"
       - "apps/web/src/features/assistant-workspace/assistant-pcm-stream-player.test.ts"
+      - "apps/web/src/features/assistant-workspace/chat-message-audio-controller-v2.ts"
+      - "apps/web/src/features/assistant-workspace/chat-message-audio-controller-v2.test.ts"
+      - "apps/web/src/features/assistant-workspace/live-voice-smooth-audio-controller.ts"
       - "apps/web/src/features/chatbot/characterClient.ts"
       - "apps/web/src/features/chatbot/characterClient.test.ts"
       - "apps/web/src/features/chatbot/VoiceGovernancePanel.tsx"
@@ -39,7 +42,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
       - name: Install focused Python dependencies
@@ -71,5 +74,6 @@ jobs:
           npm --workspace @omnix/web run test --
           src/features/assistant-workspace/runtime-config.test.ts
           src/features/assistant-workspace/assistant-pcm-stream-player.test.ts
+          src/features/assistant-workspace/chat-message-audio-controller-v2.test.ts
           src/features/chatbot/characterClient.test.ts
           src/features/chatbot/VoiceGovernancePanel.test.tsx
