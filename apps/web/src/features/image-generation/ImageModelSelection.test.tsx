@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { ImageModelControl, type ImageModelStatusPayload } from './ImageModelSelectorControl';
 import {
@@ -8,6 +8,10 @@ import {
   imageRequestDefaultValues,
   resolveImageRequestDefaults,
 } from './imageRequestModel';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 it('selects another image model without downloading or loading it', () => {
   const onSelect = vi.fn();
@@ -64,6 +68,58 @@ it('selects another image model without downloading or loading it', () => {
   expect(onSelect).toHaveBeenCalledWith('krea2_turbo');
   expect(onDownload).not.toHaveBeenCalled();
   expect(onLoad).not.toHaveBeenCalled();
+});
+
+it('starts the lightweight image service when runtime status is unavailable', async () => {
+  const onRefresh = vi.fn();
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: async () => ({ ok: true, state: 'unloaded' }),
+  } as Response);
+  vi.stubGlobal('fetch', fetchMock);
+
+  const status: ImageModelStatusPayload = {
+    ok: false,
+    service: 'image',
+    enabled: true,
+    provider: 'z_image_turbo',
+    model: 'Z-Image Turbo',
+    loaded: false,
+    state: 'unavailable',
+    error: 'image_service_unreachable',
+    supports_download: true,
+    local_model: { complete: false },
+  };
+
+  render(
+    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+      <ImageModelControl
+        status={status}
+        selectedProvider="z_image_turbo"
+        statusLoading={false}
+        action={null}
+        onSelect={vi.fn()}
+        onDownload={vi.fn()}
+        onLoad={vi.fn()}
+        onUnload={vi.fn()}
+        onRefresh={onRefresh}
+      />
+    </MantineProvider>,
+  );
+
+  expect(screen.queryByRole('button', { name: 'Download Model' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Start Image Service' }));
+
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledWith('/api/image-generation/service/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'z_image_turbo' }),
+    });
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
 });
 
 it('uses model-specific generation defaults', () => {
