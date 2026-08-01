@@ -63,7 +63,7 @@ describe('ImageAssetGallery interactions', () => {
 
     const openLinks = screen.getAllByRole('link', { name: 'Open' });
     const downloadLinks = screen.getAllByRole('link', { name: 'Download' });
-    expect(openLinks[0]).toHaveAttribute('href', '/api/assets/asset-one/file');
+    expect(openLinks[0]).toHaveAttribute('href', '/api/assets/asset-one/file?preview=true');
     expect(downloadLinks[0]).toHaveAttribute('href', '/api/assets/asset-one/file?download=true');
 
     fireEvent.change(screen.getByLabelText('Search images'), { target: { value: 'neon' } });
@@ -177,7 +177,7 @@ describe('ImageJobList interactions', () => {
     fireEvent.load(imageLoader);
     expect(imageLoader).toHaveClass('image-preview-rendered-image', 'loaded');
     expect(screen.queryByText('Loading image...')).not.toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Completed image' })).toHaveAttribute('src', '/api/assets/asset-one/file');
+    expect(screen.getByRole('img', { name: 'Completed image' })).toHaveAttribute('src', '/api/assets/asset-one/file?preview=true');
     fireEvent.error(imageLoader);
     expect(screen.getByRole('alert')).toHaveTextContent('The image could not be displayed.');
     expect(screen.getByRole('link', { name: 'Download Completed image' })).toHaveAttribute('href', '/api/assets/asset-one/file?download=true');
@@ -197,6 +197,6 @@ describe('ImageLatestResult interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open in Assets' }));
     expect(onOpenInAssets).toHaveBeenCalledWith('asset-one');
     expect(screen.getByRole('link', { name: 'Download Mountain lake' })).toHaveAttribute('href', '/api/assets/asset-one/file?download=true');
-    expect(screen.getByRole('link', { name: 'Open Mountain lake in a new tab' })).toHaveAttribute('href', '/api/assets/asset-one/file');
+    expect(screen.getByRole('link', { name: 'Open Mountain lake in a new tab' })).toHaveAttribute('href', '/api/assets/asset-one/file?preview=true');
   });
 });
