@@ -40,6 +40,11 @@ import {
 const DEFAULT_IMAGE_MODEL = 'flux_klein';
 const IMAGE_MODEL_QUERY_ROOT = ['image-generation', 'model-status'] as const;
 
+type ImageModelDownloadRequest = {
+  provider: string;
+  hf_token?: string;
+};
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Image model action failed.';
 }
@@ -117,9 +122,9 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     queryClient.invalidateQueries({ queryKey: ['platform', 'providers'] }),
   ]);
   const downloadModelMutation = useMutation({
-    mutationFn: (provider: string) => omnixApiClient.post<{ provider: string }, ImageModelStatusPayload>(
+    mutationFn: (request: ImageModelDownloadRequest) => omnixApiClient.post<ImageModelDownloadRequest, ImageModelStatusPayload>(
       '/api/image-generation/model/download',
-      { provider },
+      request,
     ),
     onSuccess: refreshModelQueries,
   });
@@ -138,7 +143,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     onSuccess: refreshModelQueries,
   });
   const modelAction: ImageModelAction = downloadModelMutation.isPending
-    ? { type: 'download', provider: downloadModelMutation.variables }
+    ? { type: 'download', provider: downloadModelMutation.variables.provider }
     : loadModelMutation.isPending
       ? { type: 'load', provider: loadModelMutation.variables }
       : unloadModelMutation.isPending
@@ -214,7 +219,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     document.getElementById('image-assets')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const modelActionError = downloadModelMutation.isError && downloadModelMutation.variables === selectedModelProvider
+  const modelActionError = downloadModelMutation.isError && downloadModelMutation.variables.provider === selectedModelProvider
     ? errorMessage(downloadModelMutation.error)
     : loadModelMutation.isError && loadModelMutation.variables === selectedModelProvider
       ? errorMessage(loadModelMutation.error)
@@ -272,7 +277,10 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
             action={modelAction}
             error={modelActionError}
             onSelect={selectModelProvider}
-            onDownload={(provider) => downloadModelMutation.mutate(provider)}
+            onDownload={(provider, hfToken) => downloadModelMutation.mutate({
+              provider,
+              ...(hfToken ? { hf_token: hfToken } : {}),
+            })}
             onLoad={(provider) => loadModelMutation.mutate(provider)}
             onUnload={(provider) => unloadModelMutation.mutate(provider)}
             onRefresh={() => void modelStatusQuery.refetch()}
