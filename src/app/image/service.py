@@ -19,6 +19,7 @@ from app.image.reference_assets import (
     close_image_references,
     load_image_reference_assets,
 )
+from app.image.reference_transport import REFERENCE_IMAGES_PAYLOAD_KEY, decode_reference_payloads
 from app.image.style import apply_image_style
 from app.image_http_client import generate_image_via_service, is_image_service_enabled
 
@@ -54,6 +55,12 @@ def _reference_asset_ids(value: Any) -> list[str]:
         if normalized and normalized not in result:
             result.append(normalized)
     return result
+
+
+def _reference_transport_payloads(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [normalized for item in value if (normalized := _safe_str(item).strip())]
 
 
 def _normalize_request(payload: Dict[str, Any]) -> ImageGenerationRequest:
@@ -104,7 +111,13 @@ def _map_to_provider_payload(req: ImageGenerationRequest, provider_config: Dict[
     }
 
 
-def _reference_failure(req: ImageGenerationRequest, provider_name: str, error: Exception) -> ImageGenerationResponse:
+def _reference_failure(
+    req: ImageGenerationRequest,
+    provider_name: str,
+    error: Exception,
+    *,
+    image_to_image: bool,
+) -> ImageGenerationResponse:
     return ImageGenerationResponse(
         ok=False,
         provider=provider_name,
@@ -115,17 +128,20 @@ def _reference_failure(req: ImageGenerationRequest, provider_name: str, error: E
         height=req.height,
         mime_type="image/png",
         metadata={
-            "image_to_image": True,
+            "image_to_image": image_to_image,
             "reference_asset_ids": list(req.reference_asset_ids),
         },
     )
 
 
 def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
+    payload = payload if isinstance(payload, dict) else {}
     req = _normalize_request(payload)
     provider_name = req.provider or get_active_image_provider_name()
     provider_config = get_provider_config(provider_name)
     provider = get_or_create_image_provider(provider_name)
+    transported_references = _reference_transport_payloads(payload.get(REFERENCE_IMAGES_PAYLOAD_KEY))
+    image_to_image = bool(req.reference_asset_ids or transported_references)
 
     provider_payload = _map_to_provider_payload(req, provider_config)
     provider_payload["provider"] = provider_name
@@ -139,7 +155,7 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
     use_cache = (
         not bool(payload.get("no_cache"))
         and not bool(payload.get("warmup"))
-        and not req.reference_asset_ids
+        and not image_to_image
     )
     cache_key = image_cache_key(provider_payload)
     if use_cache:
@@ -161,8 +177,17 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
 
     reference_images = []
     try:
-        if req.reference_asset_ids:
+        if transported_references:
+            if req.reference_asset_ids and len(transported_references) != len(req.reference_asset_ids):
+                raise ImageReferenceError(
+                    "image_reference_transport_count_mismatch:"
+                    f"ids={len(req.reference_asset_ids)} payloads={len(transported_references)}"
+                )
+            reference_images = decode_reference_payloads(transported_references)
+        elif req.reference_asset_ids:
             reference_images = load_image_reference_assets(req.reference_asset_ids)
+
+        if reference_images:
             provider_payload["image"] = reference_images[0] if len(reference_images) == 1 else reference_images
 
         result = provider.generate(provider_payload)
@@ -172,7 +197,7 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
                 result.file_path = cached.get("file_path") or getattr(result, "file_path", "")
                 result.asset_url = cached.get("asset_url") or getattr(result, "asset_url", "")
     except ImageReferenceError as exc:
-        return _reference_failure(req, provider_name, exc)
+        return _reference_failure(req, provider_name, exc, image_to_image=image_to_image)
     finally:
         close_image_references(reference_images)
 
@@ -204,7 +229,7 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
             "source": req.source,
             "kind": req.kind,
             "style": req.style,
-            "image_to_image": bool(req.reference_asset_ids),
+            "image_to_image": image_to_image,
             "reference_asset_ids": list(req.reference_asset_ids),
             "request_id": req.request_id,
             "session_id": req.session_id,

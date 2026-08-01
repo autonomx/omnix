@@ -43,7 +43,12 @@ def install_image_job_execution(sqlite_job_store_cls: Any) -> None:
 
 
 def _executor_enabled() -> bool:
-    return os.environ.get(IMAGE_EXECUTOR_ENV, "1").strip().lower() not in {"0", "false", "off", "disabled"}
+    return os.environ.get(IMAGE_EXECUTOR_ENV, "1").strip().lower() not in {
+        "0",
+        "false",
+        "off",
+        "disabled",
+    }
 
 
 def _start_image_job(job_store: Any, job: JobRecord) -> None:
@@ -66,29 +71,68 @@ def execute_image_job(
     """Run one image job, index its file, and complete the shared job."""
 
     job_store.mark_running(job.id)
-    _update_progress(job_store, job.id, 1, 4, "Preparing image request", stage_id="generate-image")
+    _update_progress(
+        job_store,
+        job.id,
+        1,
+        4,
+        "Preparing image request",
+        stage_id="generate-image",
+    )
     try:
         request = ImageGenerateInput.model_validate(job.input_payload or {})
         provider_payload = request.provider_payload()
         provider_payload["request_id"] = job.id
     except ValidationError as exc:
-        return _fail(job_store, job, "image_invalid_request", str(exc), retryable=False)
+        return _fail(
+            job_store,
+            job,
+            "image_invalid_request",
+            str(exc),
+            retryable=False,
+        )
     except ValueError as exc:
-        return _fail(job_store, job, "image_provider_unavailable", str(exc), retryable=False)
+        return _fail(
+            job_store,
+            job,
+            "image_provider_unavailable",
+            str(exc),
+            retryable=False,
+        )
 
     if generate_fn is None:
         from app.image.service import generate_image
 
         generate_fn = generate_image
 
-    _update_progress(job_store, job.id, 0, 100, "Waiting for image service", stage_id="generate-image")
+    _update_progress(
+        job_store,
+        job.id,
+        0,
+        100,
+        "Waiting for image service",
+        stage_id="generate-image",
+    )
     with _IMAGE_GENERATION_SLOTS:
-        _update_progress(job_store, job.id, 0, 100, "Generating image - 0%", stage_id="generate-image")
+        _update_progress(
+            job_store,
+            job.id,
+            0,
+            100,
+            "Generating image - 0%",
+            stage_id="generate-image",
+        )
         progress_poller = _start_image_generation_progress_poll(job_store, job.id)
         try:
             result = generate_fn(provider_payload)
         except Exception as exc:
-            return _fail(job_store, job, "image_generation_failed", str(exc) or "Image generation failed", retryable=True)
+            return _fail(
+                job_store,
+                job,
+                "image_generation_failed",
+                str(exc) or "Image generation failed",
+                retryable=True,
+            )
         finally:
             if progress_poller is not None:
                 progress_poller()
@@ -101,7 +145,10 @@ def execute_image_job(
             "image_generation_failed",
             message,
             retryable=True,
-            details={"provider": getattr(result, "provider", ""), "status": getattr(result, "status", "")},
+            details={
+                "provider": getattr(result, "provider", ""),
+                "status": getattr(result, "status", ""),
+            },
         )
 
     _update_progress(
@@ -113,19 +160,49 @@ def execute_image_job(
         stage_id="generate-image",
         stage_status=JobStatus.COMPLETED,
     )
-    _update_progress(job_store, job.id, 100, 100, "Storing image asset", stage_id="store-asset")
+    _update_progress(
+        job_store,
+        job.id,
+        100,
+        100,
+        "Storing image asset",
+        stage_id="store-asset",
+    )
     try:
-        asset, output_ref = _store_image_asset(job, request, result, asset_store or default_asset_store())
+        asset, output_ref = _store_image_asset(
+            job,
+            request,
+            result,
+            asset_store or default_asset_store(),
+        )
     except FileNotFoundError as exc:
-        return _fail(job_store, job, "image_output_missing", str(exc), retryable=True)
+        return _fail(
+            job_store,
+            job,
+            "image_output_missing",
+            str(exc),
+            retryable=True,
+        )
     except Exception as exc:
-        return _fail(job_store, job, "image_asset_store_failed", str(exc) or "Image asset could not be stored", retryable=True)
+        message = str(exc) or "Image asset could not be stored"
+        code = (
+            "avatar_frame_quality_rejected"
+            if message.startswith("avatar_frame_quality_rejected:")
+            else "image_asset_store_failed"
+        )
+        return _fail(job_store, job, code, message, retryable=True)
 
     completed = job_store.complete_job(
         job.id,
         CompleteJobRequest(
             output_refs=[output_ref.model_dump(mode="json")],
-            logs=[{"level": "info", "message": "Image generated and stored", "asset_id": asset.id}],
+            logs=[
+                {
+                    "level": "info",
+                    "message": "Image generated and stored",
+                    "asset_id": asset.id,
+                }
+            ],
         ),
     )
     _advance_character_avatar_generation(job)
@@ -135,12 +212,18 @@ def execute_image_job(
 def _advance_character_avatar_generation(job: JobRecord) -> None:
     if job.module != "character-avatar":
         return
-    character_id = str((job.input_payload or {}).get("metadata", {}).get("character_id") or "").strip()
+    character_id = str(
+        (job.input_payload or {}).get("metadata", {}).get("character_id") or ""
+    ).strip()
     if not character_id:
         return
     try:
-        from app.characters.avatar_generation_service import CharacterAvatarGenerationService
-        from app.characters.avatar_viseme_generation import CharacterVisemeGenerationService
+        from app.characters.avatar_generation_service import (
+            CharacterAvatarGenerationService,
+        )
+        from app.characters.avatar_viseme_generation import (
+            CharacterVisemeGenerationService,
+        )
 
         CharacterAvatarGenerationService().list(character_id)
         CharacterVisemeGenerationService().reconcile_character(character_id)
@@ -157,7 +240,9 @@ def _store_image_asset(
 ) -> tuple[AssetRecord, ImageOutputRef]:
     storage_path = str(getattr(result, "local_path", "") or "").strip()
     if not storage_path or not Path(storage_path).is_file():
-        raise FileNotFoundError("Image provider did not produce a readable local file")
+        raise FileNotFoundError(
+            "Image provider did not produce a readable local file"
+        )
 
     title = image_title_from_prompt(request.prompt)
     provider_key = str(getattr(result, "provider", "") or request.provider_key())
@@ -167,6 +252,13 @@ def _store_image_asset(
     seed = getattr(result, "seed", request.seed)
     metadata = dict(getattr(result, "metadata", {}) or {})
     request_metadata = dict(request.metadata or {})
+    stabilization_metadata = _stabilize_character_avatar_frame(
+        job,
+        request,
+        storage_path,
+        request_metadata,
+        store,
+    )
     is_rpg_world_image = bool(
         str(request_metadata.get("world_id") or "").strip()
         and str(request_metadata.get("target_id") or "").strip()
@@ -186,6 +278,7 @@ def _store_image_asset(
             mime_type=mime_type,
             storage_path=storage_path,
             source_job_id=job.id,
+            parent_asset_ids=list(request.reference_asset_ids),
             created_at=datetime.now(timezone.utc).isoformat(),
             metadata={
                 "title": title,
@@ -203,7 +296,10 @@ def _store_image_asset(
                 "source_module": job.module,
                 "rpg_world_image": is_rpg_world_image,
                 "rpg_world_id": str(request_metadata.get("world_id") or ""),
-                "rpg_world_target_id": str(request_metadata.get("target_id") or ""),
+                "rpg_world_target_id": str(
+                    request_metadata.get("target_id") or ""
+                ),
+                **stabilization_metadata,
             },
             compat={"contract": "image_generation_asset_v1"},
         )
@@ -218,6 +314,41 @@ def _store_image_asset(
         seed=seed,
     )
     return asset, output_ref
+
+
+def _stabilize_character_avatar_frame(
+    job: JobRecord,
+    request: ImageGenerateInput,
+    storage_path: str,
+    request_metadata: dict[str, Any],
+    store: SharedAssetStore,
+) -> dict[str, Any]:
+    if job.module != "character-avatar" or not request.reference_asset_ids:
+        return {}
+    variant = str(
+        request_metadata.get("avatar_viseme")
+        or request_metadata.get("avatar_variant")
+        or request_metadata.get("avatar_viseme_base")
+        or ""
+    ).strip()
+    if not variant:
+        return {}
+
+    from app.characters.avatar_frame_stabilization import (
+        stabilize_generated_avatar_frame,
+    )
+
+    mouth_anchor = request_metadata.get("avatar_mouth_anchor")
+    return stabilize_generated_avatar_frame(
+        storage_path,
+        reference_asset_id=request.reference_asset_ids[0],
+        variant=variant,
+        store=store,
+        mouth_anchor=mouth_anchor if isinstance(mouth_anchor, dict) else None,
+        articulation_percent=request_metadata.get(
+            "avatar_viseme_articulation_percent"
+        ),
+    )
 
 
 def _update_progress(
@@ -242,9 +373,15 @@ def _update_progress(
         )
 
 
-def _start_image_generation_progress_poll(job_store: Any, job_id: str) -> Callable[[], None] | None:
+def _start_image_generation_progress_poll(
+    job_store: Any,
+    job_id: str,
+) -> Callable[[], None] | None:
     try:
-        from app.image_http_client import get_image_generation_progress, is_image_service_enabled
+        from app.image_http_client import (
+            get_image_generation_progress,
+            is_image_service_enabled,
+        )
     except Exception:
         return None
 
@@ -264,17 +401,41 @@ def _start_image_generation_progress_poll(job_store: Any, job_id: str) -> Callab
             return
         total = int(data.get("total") or 1)
         current = int(data.get("current") or 0)
-        generation_percent = max(0, min(100, round((current / max(1, total)) * 100)))
-        percent = 95 if generation_percent >= 100 else max(0, min(94, round(generation_percent * 0.95)))
+        generation_percent = max(
+            0,
+            min(100, round((current / max(1, total)) * 100)),
+        )
+        percent = (
+            95
+            if generation_percent >= 100
+            else max(0, min(94, round(generation_percent * 0.95)))
+        )
         if percent < last_percent:
             return
-        if percent == last_percent and str(data.get("message") or "").strip() == "Generating image":
+        if (
+            percent == last_percent
+            and str(data.get("message") or "").strip() == "Generating image"
+        ):
             return
         last_percent = percent
-        message = str(data.get("message") or "Generating image").strip() or "Generating image"
+        message = (
+            str(data.get("message") or "Generating image").strip()
+            or "Generating image"
+        )
         if message.lower() == "generating image":
-            message = "Finalizing image..." if generation_percent >= 100 else f"Generating image - {percent}%"
-        _update_progress(job_store, job_id, percent, 100, message, stage_id="generate-image")
+            message = (
+                "Finalizing image..."
+                if generation_percent >= 100
+                else f"Generating image - {percent}%"
+            )
+        _update_progress(
+            job_store,
+            job_id,
+            percent,
+            100,
+            message,
+            stage_id="generate-image",
+        )
         if generation_percent >= 100:
             stop.set()
 
@@ -312,7 +473,11 @@ def _fail(
             code=code,
             message=message,
             retryable=retryable,
-            details={"job_type": job.type, "module": job.module, **(details or {})},
+            details={
+                "job_type": job.type,
+                "module": job.module,
+                **(details or {}),
+            },
         ),
     )
     return failed or job

@@ -46,6 +46,8 @@ export interface CharacterVisemeGenerationBatch {
   status: VisemeGenerationStatus;
   job_ids: Record<string, string>;
   asset_ids: Record<string, string>;
+  attempts: Record<string, number>;
+  quality_fallbacks: Record<string, string>;
   avatar_pack_version?: number | null;
   error: string;
   created_at: string;
