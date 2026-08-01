@@ -79,25 +79,36 @@ function readActiveCharacterVoice(): string | undefined {
   const storeState = liveConversationStore.getState();
   const storeCharacterActive = storeState.identity.characterId !== 'system-assistant';
   const storedVoice = storeCharacterActive ? storeState.identity.voiceId?.trim() : '';
-  if (storedVoice) return storedVoice;
+  const activeIdentity = card?.querySelector<HTMLElement>('.assistant-live-identity.active');
+  const visibleIdentity = normalizeIdentity(activeIdentity?.textContent ?? '');
 
   // characterClient retains the normalized result of every successful trusted
   // /live-call/runtime request. Reading it directly avoids losing the speaker when
   // the avatar event fired before this module loaded or before React rendered the
   // data-live-voice-id attribute.
   const runtime = readLatestTrustedCharacterRuntime();
-  if (!runtime || runtime.interaction_mode !== 'character') return undefined;
-  const speakerId = runtime.voice_speaker_id?.trim() || runtime.voice_asset_id?.trim();
-  if (!speakerId) return undefined;
-
-  if (storeCharacterActive && storeState.sessionId && storeState.sessionId === runtime.session_id) {
-    return speakerId;
+  if (runtime?.interaction_mode === 'character') {
+    const speakerId = runtime.voice_speaker_id?.trim() || runtime.voice_asset_id?.trim();
+    const sameSelectedSession = Boolean(
+      storeCharacterActive
+      && storeState.sessionId
+      && storeState.sessionId === runtime.session_id,
+    );
+    const sameVisibleCharacter = Boolean(
+      visibleIdentity
+      && visibleIdentity.includes(normalizeIdentity(runtime.display_name)),
+    );
+    if ((sameSelectedSession || sameVisibleCharacter) && (storedVoice || speakerId)) {
+      return storedVoice || speakerId;
+    }
   }
 
-  const activeIdentity = card?.querySelector<HTMLElement>('.assistant-live-identity.active');
-  const visibleIdentity = normalizeIdentity(activeIdentity?.textContent ?? '');
-  if (visibleIdentity && visibleIdentity.includes(normalizeIdentity(runtime.display_name))) {
-    return speakerId;
+  // A hot-swapped assignment updates the session-scoped identity before the runtime
+  // refresh can finish. Permit that exact voice only when the visible active identity
+  // still matches the store's character.
+  const storedDisplayName = normalizeIdentity(storeState.identity.displayName);
+  if (storedVoice && visibleIdentity && storedDisplayName && visibleIdentity.includes(storedDisplayName)) {
+    return storedVoice;
   }
   return undefined;
 }
