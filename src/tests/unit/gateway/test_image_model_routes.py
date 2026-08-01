@@ -74,6 +74,26 @@ def test_image_model_status_reports_download_byte_progress(monkeypatch, tmp_path
     assert progress["indeterminate"] is False
 
 
+def test_download_forwards_one_time_hf_token_without_echoing_it(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    def download(provider: str, token: str):
+        calls.append((provider, token))
+        return {"ok": True, "provider": provider, "loaded": False}
+
+    monkeypatch.setattr(image_model_routes, "download_image_model_via_service", download)
+
+    response = TestClient(_app()).post(
+        "/api/image-generation/model/download",
+        json={"provider": "krea2_turbo", "hf_token": "hf_secret_token"},
+    )
+
+    assert response.status_code == 200
+    assert calls == [("krea2_turbo", "hf_secret_token")]
+    assert "hf_secret_token" not in response.text
+    assert "krea2_turbo" not in image_model_routes._DOWNLOAD_TOKENS
+
+
 def test_image_service_start_uses_launcher_and_returns_ready_status(monkeypatch):
     calls: list[str] = []
 
