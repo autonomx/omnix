@@ -72,6 +72,7 @@ type Live2DWindow = Window & typeof globalThis & {
 
 const RENDER_EVENT = 'omnix:character-live2d-render';
 const RIG_VISEME_EVENT = 'omnix:character-rig-viseme';
+const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const RUNTIME_SCRIPTS = [
   '/api/character-live2d/runtime/pixi.min.js',
   '/api/character-live2d/runtime/live2dcubismcore.min.js',
@@ -132,12 +133,16 @@ function install(): void {
     if (!detail || detail.renderer !== 'live2d' || detail.rigAssetId !== activeRigAssetId) return;
     setViseme(detail.viseme, detail.durationMs);
   });
+  window.addEventListener(AVATAR_RUNTIME_EVENT, (event) => {
+    const runtime = (event as CustomEvent<CharacterLiveCallRuntime | null>).detail;
+    if (runtime?.avatar_pack?.renderer !== 'live2d') destroyActiveRenderer();
+  });
 }
 
 async function renderLive2D(runtime: CharacterLiveCallRuntime, host: HTMLElement): Promise<void> {
   const pack = runtime.avatar_pack;
   if (!pack?.rig_asset_id || pack.renderer !== 'live2d') return;
-  if (activeRigAssetId === pack.rig_asset_id && activeHost === host && activeModel) return;
+  if (activeRigAssetId === pack.rig_asset_id && activeHost === host) return;
 
   destroyActiveRenderer();
   const sequence = ++renderSequence;
