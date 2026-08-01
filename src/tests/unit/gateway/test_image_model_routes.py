@@ -32,6 +32,48 @@ def test_image_model_status_proxies_service_status(monkeypatch):
     assert response.json()["loaded"] is False
 
 
+def test_image_model_status_reports_download_byte_progress(monkeypatch, tmp_path):
+    model_dir = tmp_path / "z-image-turbo"
+    model_dir.mkdir()
+    (model_dir / "completed.safetensors").write_bytes(b"x" * 300)
+    cache_dir = model_dir / ".cache" / "huggingface" / "download"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "next.safetensors.incomplete").write_bytes(b"x" * 200)
+    (cache_dir / "metadata.json").write_bytes(b"x" * 500)
+
+    monkeypatch.setattr(
+        image_model_routes,
+        "get_image_service_status",
+        lambda _provider: {
+            "ok": False,
+            "service": "image",
+            "enabled": True,
+            "provider": "z_image_turbo",
+            "model": "Z-Image Turbo",
+            "loaded": False,
+            "state": "downloading",
+            "local_model": {"complete": False, "local_dir": str(model_dir)},
+            "models": [],
+        },
+    )
+    monkeypatch.setattr(
+        image_model_routes,
+        "_repository_total_bytes",
+        lambda _provider: 1000,
+    )
+
+    response = TestClient(_app()).get(
+        "/api/image-generation/model/status?provider=z_image_turbo"
+    )
+
+    assert response.status_code == 200
+    progress = response.json()["download_progress"]
+    assert progress["bytes_downloaded"] == 500
+    assert progress["bytes_total"] == 1000
+    assert progress["percent"] == 50.0
+    assert progress["indeterminate"] is False
+
+
 def test_image_service_start_uses_launcher_and_returns_ready_status(monkeypatch):
     calls: list[str] = []
 
