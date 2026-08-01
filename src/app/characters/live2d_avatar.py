@@ -454,7 +454,7 @@ def _model_references(model_json: dict[str, Any]) -> list[str]:
 
 def _download_bytes(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "Omnix-Live2D-Installer/1.0"})
-    with urllib.request.urlopen(request, timeout=45) as response:  # noqa: S310 - catalog URLs are fixed above
+    with urllib.request.urlopen(request, timeout=45) as response:
         content_length = int(response.headers.get("Content-Length") or 0)
         if content_length > MAX_LIVE2D_FILE_BYTES:
             raise ValueError(f"Live2D download exceeds {MAX_LIVE2D_FILE_BYTES} bytes: {url}")
