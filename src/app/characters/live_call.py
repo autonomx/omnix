@@ -9,12 +9,17 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.chat.models import ChatSession
+from app.voice_debug import voice_debug_log
 
 from .avatar_models import CharacterAvatarPack
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
 from .interaction import resolve_system_session_identity
 from .models import SYSTEM_ASSISTANT_NAME, CharacterProfileSnapshot
-from .service import CharacterService, CharacterVoiceAssetError, default_character_service
+from .service import (
+    CharacterService,
+    CharacterVoiceAssetError,
+    default_character_service,
+)
 
 
 def _utcnow() -> str:
@@ -35,6 +40,23 @@ def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(minimum, min(maximum, parsed))
+
+
+def _voice_speaker_id(asset_id: str | None, service: CharacterService) -> str | None:
+    """Resolve a governed voice asset into the exact speaker ID expected by TTS."""
+
+    normalized_asset_id = str(asset_id or "").strip()
+    if not normalized_asset_id:
+        return None
+    asset = service.resolve_voice_asset(normalized_asset_id)
+    if asset is not None:
+        metadata = dict(asset.metadata or {})
+        for key in ("voice_clone_id", "voice_id", "speaker"):
+            value = str(metadata.get(key) or "").strip()
+            if value and value.lower() != "default":
+                return value
+    fallback = normalized_asset_id.removeprefix("voice-cloning:").strip()
+    return fallback or None
 
 
 class LiveCallSpeechStyle(BaseModel):
@@ -77,6 +99,7 @@ class CharacterLiveCallRuntime(BaseModel):
     character_profile_version: int | None = Field(default=None, ge=1)
     effective_identity_hash: str | None = Field(default=None, min_length=64, max_length=64)
     voice_asset_id: str | None = None
+    voice_speaker_id: str | None = None
     greeting: str = Field(default="", max_length=2_000)
     avatar_pack: CharacterAvatarPack | None = None
     speech_style: LiveCallSpeechStyle
@@ -128,6 +151,19 @@ def resolve_live_call_runtime(
         else interaction.voice_asset_id
     )
     voice_error: str | None = None
+
+    # Older profiles can preserve speaker casing in the governed ID, for example
+    # voice-cloning:Jinx, while the current library record is voice-cloning:jinx.
+    # Canonicalize the asset identifier before validation; speaker casing remains
+    # independent and is read from the asset metadata below.
+    if voice_asset_id:
+        resolved_voice_asset = character_service.resolve_voice_asset(voice_asset_id)
+        if resolved_voice_asset is not None:
+            voice_asset_id = resolved_voice_asset.id
+        elif character is not None:
+            voice_error = f"voice asset not found: {voice_asset_id}"
+            voice_asset_id = None
+
     if character is not None and voice_asset_id:
         try:
             character_service.validate_voice_for_use(voice_asset_id, "live_call")
@@ -137,6 +173,7 @@ def resolve_live_call_runtime(
             # system voice while surfacing the exact asset problem for diagnostics.
             voice_error = str(exc)
             voice_asset_id = None
+    voice_speaker_id = _voice_speaker_id(voice_asset_id, character_service)
     # Live-call greetings are generated ephemerally by the active LLM. Keep the
     # legacy field empty so old browser playback code cannot race that stream.
     greeting = ""
@@ -144,7 +181,7 @@ def resolve_live_call_runtime(
     resolved_at = _utcnow()
     preload_ms = round((time.perf_counter() - started) * 1000, 3)
     memory_loaded = bool(session.read_memory and session.memory_snapshot_id)
-    return CharacterLiveCallRuntime(
+    runtime = CharacterLiveCallRuntime(
         session_id=session.id,
         interaction_mode=interaction.interaction_mode,
         display_name=character.display_name if character else SYSTEM_ASSISTANT_NAME,
@@ -152,6 +189,7 @@ def resolve_live_call_runtime(
         character_profile_version=interaction.character_profile_version,
         effective_identity_hash=interaction.effective_identity_hash,
         voice_asset_id=voice_asset_id,
+        voice_speaker_id=voice_speaker_id,
         greeting=greeting,
         avatar_pack=avatar_pack,
         speech_style=speech_style,
@@ -161,7 +199,7 @@ def resolve_live_call_runtime(
         memory_snapshot_id=session.memory_snapshot_id if memory_loaded else None,
         preload=LiveCallPreloadState(
             profile_loaded=character is not None,
-            voice_resolved=bool(voice_asset_id),
+            voice_resolved=bool(voice_speaker_id),
             voice_error=voice_error,
             avatar_pack_loaded=avatar_pack is not None,
             memory_snapshot_loaded=memory_loaded,
@@ -170,6 +208,24 @@ def resolve_live_call_runtime(
             resolved_at=resolved_at,
         ),
     )
+    voice_debug_log(
+        "backend",
+        "live_call_runtime_resolved",
+        trace_id=f"live-call-runtime:{session.id}",
+        session_id=session.id,
+        interaction_mode=runtime.interaction_mode,
+        character_id=runtime.character_id,
+        character_profile_version=runtime.character_profile_version,
+        display_name=runtime.display_name,
+        voice_asset_id=runtime.voice_asset_id,
+        voice_speaker_id=runtime.voice_speaker_id,
+        voice_resolved=runtime.preload.voice_resolved,
+        voice_error=runtime.preload.voice_error,
+        profile_loaded=runtime.preload.profile_loaded,
+        avatar_pack_loaded=runtime.preload.avatar_pack_loaded,
+        preload_ms=runtime.preload.preload_ms,
+    )
+    return runtime
 
 
 __all__ = [

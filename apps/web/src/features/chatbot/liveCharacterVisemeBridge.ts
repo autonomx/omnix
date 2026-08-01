@@ -6,7 +6,7 @@ export interface TimedCharacterViseme {
   durationMs: number;
 }
 
-type RuntimeAvatarPack = {
+export type RuntimeAvatarPack = {
   render_mode: 'audio_envelope' | 'viseme' | 'static';
   renderer?: 'sprite' | 'live2d' | 'rive';
   rig_asset_id?: string | null;
@@ -19,10 +19,23 @@ type RuntimeDetail = {
   avatar_pack?: RuntimeAvatarPack | null;
 };
 
+type RigVisemeDetail = {
+  viseme: CharacterViseme;
+  renderer: 'sprite' | 'live2d' | 'rive';
+  rigAssetId: string | null;
+  durationMs: number;
+};
+
 const RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const RIG_VISEME_EVENT = 'omnix:character-rig-viseme';
+const ENVELOPE_FRAME_EVENT = 'omnix:character-avatar-frame';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
 const INSTALL_KEY = '__omnixCharacterVisemeBridgeInstalled';
+const DEFAULT_VISEME_DURATION_MS = 90;
+const STRONG_PHASE_DURATION_MS = 85;
+const PEAK_PHASE_DURATION_MS = 140;
+const MIN_PHASE_STEP_MS = 20;
+const MAX_PHASE_STEP_MS = 45;
 const FALLBACK_FRAME: Record<CharacterViseme, string> = {
   silence: 'closed', A: 'wide', E: 'medium', O: 'wide', U: 'small', MBP: 'closed', FV: 'small', L: 'medium', WQ: 'small', other: 'medium',
 };
@@ -30,6 +43,8 @@ const FALLBACK_FRAME: Record<CharacterViseme, string> = {
 let runtime: RuntimeDetail | null = null;
 let currentViseme: CharacterViseme = 'silence';
 let nextVisemeAudioAt = 0;
+let animationTimers: number[] = [];
+const preloadedImages = new Map<string, HTMLImageElement>();
 
 export function visemeSequenceFromText(text: string): CharacterViseme[] {
   const result: CharacterViseme[] = [];
@@ -80,6 +95,35 @@ export function fitVisemesToDuration(text: string, durationMs: number): TimedCha
   });
 }
 
+export function visemeAnimationFrameKeys(
+  pack: RuntimeAvatarPack,
+  previous: CharacterViseme,
+  next: CharacterViseme,
+  durationMs = DEFAULT_VISEME_DURATION_MS,
+): string[] {
+  const keys: string[] = [];
+  const add = (key: string): void => {
+    if (frameAssetId(pack, key) && keys.at(-1) !== key) keys.push(key);
+  };
+
+  if (next === 'silence') {
+    if (previous !== 'silence') {
+      add(`${previous}_strong`);
+      add(`${previous}_medium`);
+      add(`${previous}_soft`);
+    }
+    add('silence');
+    return keys;
+  }
+
+  if (previous !== 'silence' && previous !== next) add(`${previous}_soft`);
+  add(`${next}_soft`);
+  add(`${next}_medium`);
+  if (durationMs >= STRONG_PHASE_DURATION_MS) add(`${next}_strong`);
+  if (durationMs >= PEAK_PHASE_DURATION_MS) add(next);
+  return keys.length ? keys : [next];
+}
+
 function install(): void {
   if (typeof window === 'undefined') return;
   const state = window as typeof window & Record<string, unknown>;
@@ -88,7 +132,12 @@ function install(): void {
   window.addEventListener(RUNTIME_EVENT, (event) => {
     runtime = (event as CustomEvent<RuntimeDetail | null>).detail;
     currentViseme = 'silence';
+    clearAnimationTimers();
+    preloadAvatarFrames(runtime?.avatar_pack ?? null);
   });
+  window.addEventListener(ENVELOPE_FRAME_EVENT, (event) => {
+    if (runtime?.avatar_pack?.render_mode === 'viseme') event.stopImmediatePropagation();
+  }, { capture: true });
   installFetchMonitor();
 }
 
@@ -130,7 +179,9 @@ async function monitorStream(stream: ReadableStream<Uint8Array>, text: string): 
           const durationMs = pcmDurationMs(payload.audio_b64, Number(payload.sample_rate) || 24_000);
           sequenceIndex = scheduleChunkVisemes(sequence, sequenceIndex, durationMs);
         }
-        if (payload.type === 'done' || payload.type === 'error') scheduleViseme('silence', Math.max(0, nextVisemeAudioAt - performance.now()));
+        if (payload.type === 'done' || payload.type === 'error') {
+          scheduleViseme('silence', Math.max(0, nextVisemeAudioAt - performance.now()), 75);
+        }
       }
     }
   } finally {
@@ -146,7 +197,11 @@ function scheduleChunkVisemes(sequence: CharacterViseme[], startIndex: number, d
   const cues: CharacterViseme[] = [];
   for (let index = 0; index < cueCount; index += 1) cues.push(sequence[(startIndex + index) % sequence.length]);
   const cueDuration = durationMs / cueCount;
-  cues.forEach((viseme, index) => scheduleViseme(viseme, Math.max(0, startAt - now + index * cueDuration)));
+  cues.forEach((viseme, index) => scheduleViseme(
+    viseme,
+    Math.max(0, startAt - now + index * cueDuration),
+    cueDuration,
+  ));
   nextVisemeAudioAt = startAt + durationMs;
   return (startIndex + cueCount) % sequence.length;
 }
@@ -154,26 +209,142 @@ function scheduleChunkVisemes(sequence: CharacterViseme[], startIndex: number, d
 function scheduleNativeViseme(payload: Record<string, unknown>): void {
   const viseme = normalizeViseme(String(payload.viseme || 'silence'));
   const startMs = Number(payload.start_ms) || 0;
-  scheduleViseme(viseme, Math.max(0, nextVisemeAudioAt - performance.now() + startMs));
+  const durationMs = Math.max(1, Number(payload.duration_ms) || DEFAULT_VISEME_DURATION_MS);
+  scheduleViseme(viseme, Math.max(0, nextVisemeAudioAt - performance.now() + startMs), durationMs);
 }
 
-function scheduleViseme(viseme: CharacterViseme, delayMs: number): void {
-  window.setTimeout(() => renderViseme(viseme), delayMs);
+function scheduleViseme(viseme: CharacterViseme, delayMs: number, durationMs = DEFAULT_VISEME_DURATION_MS): void {
+  window.setTimeout(() => renderViseme(viseme, durationMs), delayMs);
 }
 
-function renderViseme(viseme: CharacterViseme): void {
+function renderViseme(viseme: CharacterViseme, durationMs: number): void {
+  const previous = currentViseme;
   currentViseme = viseme;
   const pack = runtime?.avatar_pack;
   if (!pack || pack.render_mode !== 'viseme') return;
-  window.dispatchEvent(new CustomEvent(RIG_VISEME_EVENT, { detail: { viseme, renderer: pack.renderer ?? 'sprite', rigAssetId: pack.rig_asset_id ?? null } }));
+  const detail: RigVisemeDetail = {
+    viseme,
+    renderer: pack.renderer ?? 'sprite',
+    rigAssetId: pack.rig_asset_id ?? null,
+    durationMs,
+  };
+  window.dispatchEvent(new CustomEvent(RIG_VISEME_EVENT, { detail }));
+  if ((pack.renderer ?? 'sprite') !== 'sprite') return;
+  animateSpriteViseme(pack, previous, viseme, durationMs);
+}
+
+function animateSpriteViseme(
+  pack: RuntimeAvatarPack,
+  previous: CharacterViseme,
+  next: CharacterViseme,
+  durationMs: number,
+): void {
+  clearAnimationTimers();
+  const keys = visemeAnimationFrameKeys(pack, previous, next, durationMs);
+  const boundedDuration = Math.max(55, Math.min(200, durationMs || DEFAULT_VISEME_DURATION_MS));
+  const stepMs = Math.max(MIN_PHASE_STEP_MS, Math.min(MAX_PHASE_STEP_MS, boundedDuration / Math.max(1, keys.length)));
+  keys.forEach((frameKey, index) => {
+    const render = (): void => displaySpriteFrame(pack, frameKey, next);
+    if (index === 0) render();
+    else animationTimers.push(window.setTimeout(render, Math.round(index * stepMs)));
+  });
+}
+
+function displaySpriteFrame(
+  pack: RuntimeAvatarPack,
+  frameKey: string,
+  viseme: CharacterViseme,
+): void {
   const host = document.querySelector<HTMLElement>('.assistant-live-character-avatar');
-  const image = host?.querySelector<HTMLImageElement>('img');
-  if (!host || !image) return;
-  const assetId = pack.mouth_frames[viseme] || pack.mouth_frames[FALLBACK_FRAME[viseme]] || pack.mouth_frames.closed || pack.base_asset_id || '';
+  const currentImage = host?.querySelector<HTMLImageElement>('img:not([data-avatar-layer="previous"])');
+  if (!host || !currentImage) return;
+  const assetId = frameAssetId(pack, frameKey);
   if (!assetId) return;
+  const imageUrl = `/api/assets/${encodeURIComponent(assetId)}/file`;
+  currentImage.dataset.avatarLayer = 'current';
+  currentImage.classList.add('assistant-live-character-frame');
   host.dataset.viseme = viseme;
+  host.dataset.visemeFrame = frameKey;
   host.dataset.renderer = pack.renderer ?? 'sprite';
-  image.src = `/api/assets/${encodeURIComponent(assetId)}/file`;
+
+  const previousImage = ensurePreviousFrameImage(host, currentImage);
+  const previousUrl = currentImage.getAttribute('src') || '';
+  if (previousUrl === imageUrl) {
+    updateCaption(host, viseme);
+    return;
+  }
+  if (!previousUrl) {
+    currentImage.src = imageUrl;
+    updateCaption(host, viseme);
+    return;
+  }
+
+  previousImage.src = previousUrl;
+  previousImage.classList.add('is-visible');
+  currentImage.classList.add('is-entering');
+  currentImage.src = imageUrl;
+  void currentImage.offsetWidth;
+  currentImage.classList.remove('is-entering');
+  previousImage.classList.remove('is-visible');
+  updateCaption(host, viseme);
+}
+
+function ensurePreviousFrameImage(
+  host: HTMLElement,
+  currentImage: HTMLImageElement,
+): HTMLImageElement {
+  const existing = host.querySelector<HTMLImageElement>('img[data-avatar-layer="previous"]');
+  if (existing) return existing;
+  const image = document.createElement('img');
+  image.alt = '';
+  image.setAttribute('aria-hidden', 'true');
+  image.dataset.avatarLayer = 'previous';
+  image.className = 'assistant-live-character-frame assistant-live-character-frame-previous';
+  currentImage.insertAdjacentElement('afterend', image);
+  return image;
+}
+
+function updateCaption(host: HTMLElement, viseme: CharacterViseme): void {
+  const caption = host.querySelector<HTMLElement>('figcaption');
+  if (!caption || !runtime) return;
+  caption.textContent = viseme === 'silence'
+    ? runtime.display_name
+    : `${runtime.display_name} is speaking`;
+}
+
+function frameAssetId(pack: RuntimeAvatarPack, frameKey: string): string {
+  if (frameKey === 'silence') {
+    return pack.mouth_frames.silence || pack.mouth_frames.closed || pack.base_asset_id || '';
+  }
+  const direct = pack.mouth_frames[frameKey];
+  if (direct) return direct;
+  const baseViseme = frameKey.replace(/_(soft|medium|strong)$/, '') as CharacterViseme;
+  return pack.mouth_frames[baseViseme]
+    || pack.mouth_frames[FALLBACK_FRAME[baseViseme] || 'closed']
+    || pack.mouth_frames.closed
+    || pack.base_asset_id
+    || '';
+}
+
+function preloadAvatarFrames(pack: RuntimeAvatarPack | null): void {
+  preloadedImages.clear();
+  if (!pack || typeof window.Image !== 'function') return;
+  const assetIds = new Set([
+    ...Object.values(pack.mouth_frames),
+    pack.base_asset_id || '',
+  ].filter(Boolean));
+  for (const assetId of assetIds) {
+    const url = `/api/assets/${encodeURIComponent(assetId)}/file`;
+    const image = new window.Image();
+    image.decoding = 'async';
+    image.src = url;
+    preloadedImages.set(url, image);
+  }
+}
+
+function clearAnimationTimers(): void {
+  for (const timer of animationTimers) window.clearTimeout(timer);
+  animationTimers = [];
 }
 
 function requestText(body: BodyInit | null | undefined): string {

@@ -1,10 +1,17 @@
 """Character profile management with shared voice-asset validation."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from app.assets import AssetType, SharedAssetStore, default_asset_store
+from app.assets import (
+    AssetRecord,
+    AssetType,
+    SharedAssetStore,
+    default_asset_store,
+    discover_canonical_voice_clone_assets,
+)
 
 from .models import (
     ArchiveCharacterResponse,
@@ -14,8 +21,14 @@ from .models import (
     CreateCharacterRequest,
     UpdateCharacterRequest,
 )
-from .repository import CharacterConflictError, CharacterNotFoundError, CharacterRepository
-from .voice_consent import VoiceConsentError, VoiceProfileGovernanceService
+from .repository import (
+    CharacterConflictError,
+    CharacterNotFoundError,
+    CharacterRepository,
+)
+from .voice_consent import governance_from_asset
+
+LOGGER = logging.getLogger("uvicorn.error")
 
 
 class CharacterVoiceAssetError(ValueError):
@@ -44,12 +57,16 @@ class CharacterService:
         return profile
 
     def create(self, request: CreateCharacterRequest) -> CharacterProfile:
-        self._validate_voice_asset(request.default_voice_asset_id)
+        asset = self._validate_voice_asset(request.default_voice_asset_id)
+        if asset is not None and request.default_voice_asset_id != asset.id:
+            request = request.model_copy(update={"default_voice_asset_id": asset.id})
         return self.repository.create(request)
 
     def update(self, character_id: str, request: UpdateCharacterRequest) -> CharacterProfile:
         if request.default_voice_asset_id is not None:
-            self._validate_voice_asset(request.default_voice_asset_id)
+            asset = self._validate_voice_asset(request.default_voice_asset_id)
+            if asset is not None and request.default_voice_asset_id != asset.id:
+                request = request.model_copy(update={"default_voice_asset_id": asset.id})
         return self.repository.update(character_id, request)
 
     def archive(self, character_id: str) -> ArchiveCharacterResponse:
@@ -61,25 +78,62 @@ class CharacterService:
     def resolve_snapshot(self, character_id: str):
         return self.get(character_id).snapshot()
 
-    def validate_voice_for_use(self, asset_id: str, use: str = "character") -> None:
-        try:
-            VoiceProfileGovernanceService(
-                asset_store_factory=self.asset_store_factory
-            ).validate_use(asset_id, use)  # type: ignore[arg-type]
-        except VoiceConsentError as exc:
-            raise CharacterVoiceAssetError(str(exc)) from exc
+    def resolve_voice_asset(self, asset_id: str | None) -> AssetRecord | None:
+        """Resolve a voice from the shared store or canonical clone directory.
 
-    def _validate_voice_asset(self, asset_id: str | None) -> None:
+        ``/api/voice-library`` reads ``resources/voice_clones`` directly. Character
+        validation must use the same source even when a manifest-backed store in a
+        different process has not imported that record. A unique case-insensitive
+        match also repairs older profiles that preserved speaker casing in the
+        governed asset ID. The returned asset ID remains canonical, while exact TTS
+        speaker casing continues to come from asset metadata.
+        """
+
+        normalized_id = str(asset_id or "").strip()
+        if not normalized_id:
+            return None
+
+        candidates: dict[str, AssetRecord] = {}
+        try:
+            for item in self.asset_store_factory().list_assets().assets:
+                candidates.setdefault(item.id, item)
+        except (OSError, TypeError, ValueError) as exc:
+            LOGGER.warning(
+                "[Character Voice] shared asset discovery failed asset_id=%s error=%s",
+                normalized_id,
+                exc,
+            )
+        try:
+            for item in discover_canonical_voice_clone_assets():
+                candidates.setdefault(item.id, item)
+        except (OSError, TypeError, ValueError) as exc:
+            LOGGER.warning(
+                "[Character Voice] canonical voice discovery failed asset_id=%s error=%s",
+                normalized_id,
+                exc,
+            )
+
+        exact = candidates.get(normalized_id)
+        if exact is not None:
+            return exact
+        folded_id = normalized_id.casefold()
+        matches = [item for item in candidates.values() if item.id.casefold() == folded_id]
+        return matches[0] if len(matches) == 1 else None
+
+    def validate_voice_for_use(self, asset_id: str, use: str = "character") -> None:
+        del use
+        asset = self.resolve_voice_asset(asset_id)
+        if asset is None:
+            raise CharacterVoiceAssetError(f"voice asset not found: {asset_id}")
+        # Voice governance is automatic for every local clone. Resolving directly
+        # from the canonical asset avoids a second manifest-only lookup that can
+        # disagree with /api/voice-library across processes.
+        governance_from_asset(asset)
+
+    def _validate_voice_asset(self, asset_id: str | None) -> AssetRecord | None:
         if not asset_id:
-            return
-        asset = next(
-            (
-                item
-                for item in self.asset_store_factory().list_assets().assets
-                if item.id == asset_id
-            ),
-            None,
-        )
+            return None
+        asset = self.resolve_voice_asset(asset_id)
         if asset is None:
             raise CharacterVoiceAssetError(f"voice asset not found: {asset_id}")
         if asset.type != AssetType.VOICE_PROFILE:
@@ -88,8 +142,9 @@ class CharacterService:
             )
         storage_path = Path(asset.storage_path)
         if asset.mime_type == "audio/wav" and not storage_path.is_file():
-            raise CharacterVoiceAssetError(f"voice profile audio is missing: {asset_id}")
-        self.validate_voice_for_use(asset_id, "character")
+            raise CharacterVoiceAssetError(f"voice profile audio is missing: {asset.id}")
+        self.validate_voice_for_use(asset.id, "character")
+        return asset
 
 
 def default_character_service() -> CharacterService:

@@ -42,13 +42,22 @@ function asAssets(value: unknown): AssetRecordLike[] {
 }
 
 function mergeAssets(baseAssets: AssetRecordLike[], voiceAssets: AssetRecordLike[]): AssetRecordLike[] {
-  const merged = [...baseAssets];
-  const ids = new Set(baseAssets.map((asset) => String(asset.id ?? '')).filter(Boolean));
+  const directById = new Map(
+    voiceAssets
+      .map((asset) => [String(asset.id ?? ''), asset] as const)
+      .filter(([id]) => Boolean(id)),
+  );
+  const seen = new Set<string>();
+  const merged = baseAssets.map((asset) => {
+    const id = String(asset.id ?? '');
+    if (id) seen.add(id);
+    return id && directById.has(id) ? directById.get(id) ?? asset : asset;
+  });
   for (const asset of voiceAssets) {
     const id = String(asset.id ?? '');
-    if (id && ids.has(id)) continue;
+    if (id && seen.has(id)) continue;
     merged.push(asset);
-    if (id) ids.add(id);
+    if (id) seen.add(id);
   }
   return merged;
 }
@@ -97,8 +106,6 @@ export function installVoiceLibraryAssetFallback(fetchImpl?: typeof fetch): void
     }
 
     const baseAssets = asAssets(payload.assets);
-    if (baseAssets.some(isVoiceProfile)) return response;
-
     const directUrl = fallbackUrl(rawUrl);
     try {
       const directResponse = await delegate(directUrl, {
@@ -128,10 +135,11 @@ export function installVoiceLibraryAssetFallback(fetchImpl?: typeof fetch): void
       }
 
       const mergedAssets = mergeAssets(baseAssets, voiceAssets);
-      console.info('[Voice Library][fallback] merged direct voice profiles', {
+      console.info('[Voice Library][fallback] merged authoritative direct voice profiles', {
         requestUrl: directUrl,
         aggregateAssetCount: baseAssets.length,
-        voiceProfileCount: voiceAssets.length,
+        aggregateVoiceProfileCount: baseAssets.filter(isVoiceProfile).length,
+        directVoiceProfileCount: voiceAssets.length,
         mergedAssetCount: mergedAssets.length,
       });
       return responseWithAssets(response, payload, mergedAssets);

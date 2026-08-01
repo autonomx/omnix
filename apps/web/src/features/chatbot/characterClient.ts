@@ -124,6 +124,8 @@ export interface CharacterLiveCallRuntime {
   character_profile_version?: number | null;
   effective_identity_hash?: string | null;
   voice_asset_id?: string | null;
+  voice_speaker_id?: string | null;
+  voice_profile_asset_id?: string | null;
   greeting: string;
   avatar_pack?: CharacterAvatarPack | null;
   speech_style: LiveCallSpeechStyle;
@@ -134,6 +136,7 @@ export interface CharacterLiveCallRuntime {
   preload: {
     profile_loaded: boolean;
     voice_resolved: boolean;
+    voice_error?: string | null;
     avatar_pack_loaded?: boolean;
     memory_snapshot_loaded: boolean;
     memory_record_count: number;
@@ -162,6 +165,13 @@ export interface CharacterDataActionResponse {
   profile_archived: boolean;
 }
 
+const trackedPlaybackRuntimes = new Map<string, Set<CharacterLiveCallRuntime>>();
+let latestTrustedPlaybackRuntime: CharacterLiveCallRuntime | null = null;
+
+export function readLatestTrustedCharacterRuntime(): CharacterLiveCallRuntime | null {
+  return latestTrustedPlaybackRuntime;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -173,6 +183,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 function jsonInit(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+}
+
+function adaptLiveCallRuntimeForPlayback(runtime: CharacterLiveCallRuntime): CharacterLiveCallRuntime {
+  const speakerId = runtime.voice_speaker_id?.trim();
+  if (!speakerId) return runtime;
+  return {
+    ...runtime,
+    voice_profile_asset_id: runtime.voice_asset_id ?? null,
+    voice_asset_id: speakerId,
+  };
+}
+
+function synchronizeTrackedPlaybackRuntime(runtime: CharacterLiveCallRuntime): CharacterLiveCallRuntime {
+  const playbackRuntime = adaptLiveCallRuntimeForPlayback(runtime);
+  const tracked = trackedPlaybackRuntimes.get(playbackRuntime.session_id) ?? new Set<CharacterLiveCallRuntime>();
+  for (const existing of tracked) Object.assign(existing, playbackRuntime);
+  tracked.add(playbackRuntime);
+  trackedPlaybackRuntimes.set(playbackRuntime.session_id, tracked);
+  latestTrustedPlaybackRuntime = playbackRuntime;
+  publishCharacterAvatarRuntime(playbackRuntime);
+  return playbackRuntime;
+}
+
+async function loadLiveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
+  const runtime = await request<CharacterLiveCallRuntime>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
+  return synchronizeTrackedPlaybackRuntime(runtime);
 }
 
 export const characterClient = {
@@ -224,10 +260,11 @@ export const characterClient = {
   session(sessionId: string): Promise<SessionInteraction> {
     return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`);
   },
-  async liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
-    const runtime = await request<CharacterLiveCallRuntime>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
-    publishCharacterAvatarRuntime(runtime);
-    return runtime;
+  liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
+    return loadLiveCallRuntime(sessionId);
+  },
+  refreshLiveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
+    return loadLiveCallRuntime(sessionId);
   },
   setSession(
     sessionId: string,

@@ -183,7 +183,7 @@ describe('live character avatar audio envelope', () => {
     expect(caption?.textContent).toBe('Maya is speaking');
   });
 
-  it('keeps PCM-driven movement visible for viseme avatar packs', () => {
+  it('keeps precise viseme packs isolated from PCM envelope updates', () => {
     vi.useFakeTimers();
     document.body.innerHTML = `
       <section class="assistant-live-card">
@@ -204,7 +204,7 @@ describe('live character avatar audio envelope', () => {
 
     const avatar = document.querySelector<HTMLElement>('.assistant-live-character-avatar');
     const image = avatar?.querySelector<HTMLImageElement>('img');
-    expect(avatar?.dataset.mouthFrame).toBe('wide');
-    expect(image?.getAttribute('src')).toBe('/api/assets/image%3Amaya-A/file');
+    expect(avatar?.dataset.mouthFrame).toBe('closed');
+    expect(image?.getAttribute('src')).toBe('/api/assets/image%3Amaya-closed/file');
   });
 });

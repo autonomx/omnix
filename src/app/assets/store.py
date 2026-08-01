@@ -1,11 +1,16 @@
 """Manifest-backed shared asset store with compatibility read-through."""
 from __future__ import annotations
 
+import errno
 import json
 import os
+import threading
+import time
+import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, Iterator
 
 from app.runtime_paths import resources_data_root
 
@@ -22,6 +27,10 @@ _AUDIO_MIME_TYPES = {
     ".wav": "audio/wav",
     ".webm": "audio/webm",
 }
+_MANIFEST_LOCK_TIMEOUT_SECONDS = 30.0
+_MANIFEST_LOCK_POLL_SECONDS = 0.01
+_PROCESS_LOCKS: dict[str, threading.RLock] = {}
+_PROCESS_LOCKS_GUARD = threading.Lock()
 
 
 def _utcnow() -> str:
@@ -89,6 +98,74 @@ def _legacy_audio_module(root: Path) -> str:
     return "audio"
 
 
+def _process_lock_for(path: Path) -> threading.RLock:
+    try:
+        key = str(path.resolve())
+    except OSError:
+        key = str(path.absolute())
+    with _PROCESS_LOCKS_GUARD:
+        return _PROCESS_LOCKS.setdefault(key, threading.RLock())
+
+
+def _acquire_os_file_lock(handle: BinaryIO, lock_path: Path) -> None:
+    deadline = time.monotonic() + _MANIFEST_LOCK_TIMEOUT_SECONDS
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"\0")
+            handle.flush()
+        while True:
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                return
+            except OSError as exc:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"asset_manifest_lock_timeout:{lock_path}") from exc
+                time.sleep(_MANIFEST_LOCK_POLL_SECONDS)
+
+    import fcntl
+
+    while True:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except OSError as exc:
+            if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                raise
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"asset_manifest_lock_timeout:{lock_path}") from exc
+            time.sleep(_MANIFEST_LOCK_POLL_SECONDS)
+
+
+def _release_os_file_lock(handle: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _exclusive_manifest_lock(manifest_path: Path) -> Iterator[None]:
+    lock_path = manifest_path.with_name(f"{manifest_path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with _process_lock_for(lock_path):
+        with lock_path.open("a+b") as handle:
+            _acquire_os_file_lock(handle, lock_path)
+            try:
+                yield
+            finally:
+                _release_os_file_lock(handle)
+
+
 class SharedAssetStore:
     """Small JSON manifest store for shared asset metadata."""
 
@@ -119,25 +196,27 @@ class SharedAssetStore:
         return None
 
     def upsert_asset(self, asset: AssetRecord) -> AssetRecord:
-        manifest = self._load_manifest()
-        manifest[asset.id] = asset
-        self._save_manifest(manifest)
+        with _exclusive_manifest_lock(self.manifest_path):
+            manifest = self._load_manifest()
+            manifest[asset.id] = asset
+            self._save_manifest(manifest)
         return asset
 
     def delete_asset(self, asset_id: str, *, delete_file: bool = True) -> dict[str, Any]:
         """Delete one manifest-backed asset and, by default, its stored file."""
 
-        manifest = self._load_manifest()
-        asset = manifest.pop(str(asset_id), None)
-        if asset is None:
-            return {
-                "ok": False,
-                "asset_id": str(asset_id),
-                "deleted": False,
-                "file_deleted": False,
-            }
+        with _exclusive_manifest_lock(self.manifest_path):
+            manifest = self._load_manifest()
+            asset = manifest.pop(str(asset_id), None)
+            if asset is None:
+                return {
+                    "ok": False,
+                    "asset_id": str(asset_id),
+                    "deleted": False,
+                    "file_deleted": False,
+                }
+            self._save_manifest(manifest)
 
-        self._save_manifest(manifest)
         file_deleted = False
         file_error = ""
         path = Path(str(asset.storage_path or ""))
@@ -201,10 +280,11 @@ class SharedAssetStore:
 
     def import_image_manifest(self, image_manifest: dict[str, Any] | None = None) -> AssetMigrationPreview:
         preview = self.preview_image_manifest_import(image_manifest=image_manifest)
-        manifest = self._load_manifest()
-        for asset in preview.assets:
-            manifest[asset.id] = asset
-        self._save_manifest(manifest)
+        with _exclusive_manifest_lock(self.manifest_path):
+            manifest = self._load_manifest()
+            for asset in preview.assets:
+                manifest[asset.id] = asset
+            self._save_manifest(manifest)
         return preview
 
     def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
@@ -425,7 +505,18 @@ class SharedAssetStore:
                 for asset_id, asset in sorted(assets.items())
             }
         }
-        self.manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        temporary_path = self.manifest_path.with_name(
+            f".{self.manifest_path.name}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}.tmp"
+        )
+        try:
+            with temporary_path.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(serialized)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, self.manifest_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
 
 def default_asset_store() -> SharedAssetStore:

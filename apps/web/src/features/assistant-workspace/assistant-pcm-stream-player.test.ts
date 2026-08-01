@@ -6,6 +6,11 @@ let cleanupController: (() => void) | null = null;
 
 type SocketListener = (event: Event | MessageEvent) => void;
 
+type RenderMessageOptions = {
+  liveVoiceId?: string;
+  selectedVoice?: string | null;
+};
+
 class FakeMessagePort {
   onmessage: ((event: MessageEvent) => void) | null = null;
   messages: unknown[] = [];
@@ -144,9 +149,17 @@ class FakeWebSocket {
   }
 }
 
-function renderMessage(): HTMLButtonElement {
+function renderMessage(options: RenderMessageOptions = {}): HTMLButtonElement {
+  const selectedVoice = options.selectedVoice === undefined ? 'ari-clone' : options.selectedVoice;
+  const voiceSelect = selectedVoice === null
+    ? ''
+    : `<select aria-label="Cloned voice"><option value="${selectedVoice}" selected>Ari</option></select>`;
+  const liveCard = options.liveVoiceId
+    ? `<section class="assistant-live-card" data-live-voice-id="${options.liveVoiceId}"></section>`
+    : '';
   document.body.innerHTML = `
-    <select aria-label="Cloned voice"><option value="ari-clone" selected>Ari</option></select>
+    ${liveCard}
+    ${voiceSelect}
     <article class="assistant-chat-message assistant">
       <div class="assistant-chat-bubble"><p>Stream this reply.</p>
         <div class="assistant-message-actions"><button aria-label="More response actions">⋮</button></div>
@@ -209,6 +222,21 @@ describe('assistant PCM stream player', () => {
     expect(diagnosticEvents).toContain('network_frame_received');
     expect(diagnosticEvents).toContain('worklet_buffered');
     expect(diagnosticEvents).toContain('playback_finished');
+  });
+
+  it('sends the active Character Mode speaker through the PCM websocket', async () => {
+    installAudioFakes([pcmFrame(new Int16Array([0, 0]))]);
+
+    fireEvent.click(renderMessage({ liveVoiceId: 'Inigo', selectedVoice: null }));
+
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const [socket] = FakeWebSocket.instances;
+    await waitFor(() => expect(document.body).toHaveTextContent('Streaming response audio finished.'));
+    const requestBody = socket.parsedMessages().find((message) => message.type !== 'diagnostic');
+    expect(requestBody).toMatchObject({
+      speaker: 'Inigo',
+      text: 'Stream this reply.',
+    });
   });
 
   it('keeps the adaptive AudioWorklet startup and recovery reserves', async () => {

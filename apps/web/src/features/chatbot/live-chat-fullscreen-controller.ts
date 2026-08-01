@@ -1,5 +1,9 @@
 import { useSyncExternalStore } from 'react';
 
+import { initializeNewChatCoordinator } from './newChatCoordinator';
+
+initializeNewChatCoordinator();
+
 export type LiveChatBrowserFullscreenState = 'inactive' | 'requesting' | 'active' | 'denied' | 'unavailable';
 
 export type LiveChatFullscreenState = {
