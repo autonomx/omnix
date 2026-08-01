@@ -7,6 +7,7 @@ export type AvatarPresentationState = 'idle' | 'listening' | 'thinking' | 'speak
 const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
+const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
 const LIVE_VISUAL_STAGE_CLASS = 'assistant-live-visual-stage';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
@@ -457,9 +458,11 @@ function renderAvatarHost(): void {
   const existing = typeof document === 'undefined'
     ? null
     : document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`);
-  const pack = currentRuntime?.avatar_pack;
-  const assetId = resolveFrameAsset(pack, currentMouthFrame, currentPresentationState());
-  if (!layout || !assetId || !currentRuntime) {
+  const runtime = currentRuntime;
+  const pack = runtime?.avatar_pack;
+  const live2d = pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);
+  const assetId = live2d ? '' : resolveFrameAsset(pack, currentMouthFrame, currentPresentationState());
+  if (!layout || !runtime || (!live2d && !assetId)) {
     if (layout) {
       delete layout.stage.dataset.hasCharacterAvatar;
       layout.orb.hidden = false;
@@ -473,13 +476,21 @@ function renderAvatarHost(): void {
   const host = existing ?? document.createElement('figure');
   host.className = AVATAR_HOST_CLASS;
   host.dataset.mouthFrame = currentMouthFrame;
-  if (!existing) {
-    const image = document.createElement('img');
-    image.alt = `${currentRuntime.display_name} live avatar`;
-    const caption = document.createElement('figcaption');
-    host.append(image, caption);
-  }
+  host.dataset.renderer = live2d ? 'live2d' : 'sprite';
   if (host.parentElement !== layout.stage) layout.stage.append(host);
+
+  if (live2d) {
+    host.dataset.voiceMode = currentPresentationState();
+    window.dispatchEvent(new CustomEvent(LIVE2D_RENDER_EVENT, { detail: { runtime, host } }));
+    return;
+  }
+
+  if (!host.querySelector('img') || existing?.dataset.renderer === 'live2d') {
+    const image = document.createElement('img');
+    image.alt = `${runtime.display_name} live avatar`;
+    const caption = document.createElement('figcaption');
+    host.replaceChildren(image, caption);
+  }
   updateAvatarImage();
 }
 
@@ -492,10 +503,17 @@ function currentPresentationState(): AvatarPresentationState {
 
 function updateAvatarImage(): void {
   const host = document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`);
-  const image = host?.querySelector<HTMLImageElement>('img');
-  const caption = host?.querySelector<HTMLElement>('figcaption');
   const pack = currentRuntime?.avatar_pack;
   const presentationState = currentPresentationState();
+  if (host && currentRuntime && pack?.renderer === 'live2d') {
+    host.dataset.voiceMode = presentationState;
+    const caption = host.querySelector<HTMLElement>('figcaption');
+    if (caption) caption.textContent = captionForState(currentRuntime.display_name, presentationState);
+    return;
+  }
+
+  const image = host?.querySelector<HTMLImageElement>('img');
+  const caption = host?.querySelector<HTMLElement>('figcaption');
   const assetId = resolveFrameAsset(pack, currentMouthFrame, presentationState);
   if (!host || !image || !caption || !assetId || !currentRuntime) return;
   if (host.dataset.mouthFrame !== currentMouthFrame) host.dataset.mouthFrame = currentMouthFrame;
@@ -509,14 +527,18 @@ function updateAvatarImage(): void {
     ? `linear-gradient(rgba(6, 10, 22, 0.12), rgba(6, 10, 22, 0.42)), url("${characterAvatarAssetUrl(backgroundId)}")`
     : '';
   if (host.style.backgroundImage !== backgroundImage) host.style.backgroundImage = backgroundImage;
-  const captionText = presentationState === 'speaking'
-    ? `${currentRuntime.display_name} is speaking`
-    : presentationState === 'listening'
-      ? `${currentRuntime.display_name} is listening`
-      : presentationState === 'thinking'
-        ? `${currentRuntime.display_name} is thinking`
-        : currentRuntime.display_name;
+  const captionText = captionForState(currentRuntime.display_name, presentationState);
   if (caption.textContent !== captionText) caption.textContent = captionText;
+}
+
+function captionForState(displayName: string, state: AvatarPresentationState): string {
+  return state === 'speaking'
+    ? `${displayName} is speaking`
+    : state === 'listening'
+      ? `${displayName} is listening`
+      : state === 'thinking'
+        ? `${displayName} is thinking`
+        : displayName;
 }
 
 function resolveFrameAsset(
@@ -524,7 +546,7 @@ function resolveFrameAsset(
   frame: AvatarMouthFrame,
   state: AvatarPresentationState,
 ): string {
-  if (!pack) return '';
+  if (!pack || pack.renderer !== 'sprite') return '';
   if (blinkClosed && pack.blink_frames.closed) return pack.blink_frames.closed;
   if (frame !== 'closed') return avatarMouthAssetForFrame(pack, frame);
   if (pack.expression_frames[state]) return pack.expression_frames[state];
