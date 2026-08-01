@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from app.image.downloads import get_image_local_model_status
 from app.image.providers.registry import get_image_provider_definition, list_image_providers
 from app.image_http_client import (
     download_image_model_via_service,
@@ -133,6 +134,23 @@ def _attach_download_progress(payload: dict[str, Any], provider: str) -> dict[st
     return payload
 
 
+def _unavailable_model_entry(definition: dict[str, Any]) -> dict[str, Any]:
+    provider = _provider(str(definition.get("key") or ""))
+    try:
+        local_model = get_image_local_model_status(provider)
+    except Exception:
+        local_model = {"complete": False, "missing": [], "local_dir": ""}
+    return {
+        **definition,
+        "provider": provider,
+        "model": definition.get("label"),
+        "loaded": False,
+        "state": "unavailable",
+        "downloaded": bool(local_model.get("complete")),
+        "local_model": local_model,
+    }
+
+
 async def _call_service(function, *args: Any) -> dict[str, Any]:
     try:
         result = await run_in_threadpool(function, *args)
@@ -152,7 +170,17 @@ async def image_model_status(
         result = await _call_service(_read_service_status, provider_name)
         return await run_in_threadpool(_attach_download_progress, result, provider_name)
     except HTTPException as exc:
+        models = [
+            _unavailable_model_entry(definition)
+            for definition in list_image_providers()
+            if definition.get("supports_local_model")
+        ]
+        selected = next(
+            (model for model in models if model.get("provider") == provider_name),
+            _unavailable_model_entry(_model_definition(provider_name)),
+        )
         return {
+            **selected,
             "ok": False,
             "service": "image",
             "enabled": is_image_generation_enabled(),
@@ -162,19 +190,7 @@ async def image_model_status(
             "state": "unavailable",
             "error": str(exc.detail or "image_service_unavailable"),
             "explicit_load_required": True,
-            "local_model": {"complete": False, "missing": [], "local_dir": ""},
-            "models": [
-                {
-                    **definition,
-                    "provider": definition.get("key"),
-                    "model": definition.get("label"),
-                    "loaded": False,
-                    "state": "unavailable",
-                    "local_model": {"complete": False, "missing": [], "local_dir": ""},
-                }
-                for definition in list_image_providers()
-                if definition.get("supports_local_model")
-            ],
+            "models": models,
         }
 
 
