@@ -206,7 +206,8 @@ def _validate_no_incomplete_downloads(local_dir: str, missing: List[str]) -> Non
 def get_image_local_model_status(provider_name: str, local_dir: str = "") -> Dict[str, Any]:
     provider_name = _safe_str(provider_name).strip().lower()
     definition = _provider_definition(provider_name)
-    local_dir = os.path.normpath(_safe_str(local_dir).strip())
+    raw_local_dir = _safe_str(local_dir).strip()
+    local_dir = os.path.normpath(raw_local_dir) if raw_local_dir else ""
     if not local_dir:
         local_dir = resolve_image_local_dir_from_settings(load_settings(), provider_name)
 
