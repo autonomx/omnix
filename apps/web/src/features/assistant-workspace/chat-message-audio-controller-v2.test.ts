@@ -67,9 +67,12 @@ async function retainRuntime(runtime = trustedRuntime()): Promise<void> {
   await characterClient.liveCallRuntime(runtime.session_id);
 }
 
-function renderBufferedAudioMessage(identity = 'Jinx is active in Live Voice'): HTMLButtonElement {
+function renderBufferedAudioMessage(
+  identity = 'Jinx is active in Live Voice',
+  renderedVoice = '',
+): HTMLButtonElement {
   document.body.innerHTML = `
-    <section class="assistant-live-card" data-live-voice-id="">
+    <section class="assistant-live-card" data-live-voice-id="${renderedVoice}">
       <span class="assistant-live-identity">${identity}</span>
     </section>
     <article class="assistant-chat-message assistant">
@@ -101,6 +104,20 @@ describe('buffered chat response voice resolution', () => {
   it('uses the retained trusted speaker when the rendered voice attribute is empty', async () => {
     await retainRuntime();
     const button = renderBufferedAudioMessage();
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(audioMocks.playBufferedTts).toHaveBeenCalledTimes(1));
+    expect(audioMocks.playBufferedTts).toHaveBeenCalledWith(
+      'Play this reply.',
+      expect.objectContaining({ voiceId: 'Jinx' }),
+    );
+    expect(resolveChatMessageAudioVoiceId()).toBe('Jinx');
+  });
+
+  it('prefers the fresh trusted runtime over a stale rendered voice after reassignment', async () => {
+    await retainRuntime();
+    const button = renderBufferedAudioMessage('Jinx is active in Live Voice', 'Inigo');
 
     fireEvent.click(button);
 
