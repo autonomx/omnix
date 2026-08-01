@@ -8,8 +8,10 @@ from app.characters import (
     CharacterRepository,
     CreateCharacterRequest,
     SetSessionInteractionRequest,
+    UpdateCharacterRequest,
 )
 from app.characters.live_call import normalize_speech_style, resolve_live_call_runtime
+from app.characters.service import CharacterService
 from app.characters.voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
@@ -138,6 +140,53 @@ def test_character_default_voice_overrides_stale_session_voice_for_live_call(tmp
     assert runtime.voice_asset_id == "voice-cloning:maya"
     assert runtime.voice_speaker_id == "Maya"
     assert runtime.character_profile_version == 1
+
+
+def test_character_service_canonicalizes_legacy_voice_asset_casing(tmp_path: Path, monkeypatch) -> None:
+    _configure(tmp_path, monkeypatch)
+    service = CharacterService()
+    current = service.get("maya")
+
+    updated = service.update(
+        "maya",
+        UpdateCharacterRequest(
+            expected_version=current.active_version,
+            default_voice_asset_id="voice-cloning:Maya",
+        ),
+    )
+
+    assert updated.default_voice_asset_id == "voice-cloning:maya"
+
+
+def test_live_call_runtime_recovers_legacy_voice_asset_casing(tmp_path: Path, monkeypatch) -> None:
+    _configure(tmp_path, monkeypatch)
+    repository = CharacterRepository()
+    current = repository.get("maya")
+    assert current is not None
+    repository.update(
+        "maya",
+        UpdateCharacterRequest(
+            expected_version=current.active_version,
+            default_voice_asset_id="voice-cloning:Maya",
+        ),
+    )
+    store = default_chat_store()
+    session = store.create_session(CreateChatSessionRequest(title="Legacy Maya casing"))
+    session = store.set_session_interaction(
+        session.id,
+        SetSessionInteractionRequest(
+            interaction_mode="character",
+            character_id="maya",
+        ),
+    )
+    assert session is not None
+
+    runtime = resolve_live_call_runtime(session)
+
+    assert runtime.voice_asset_id == "voice-cloning:maya"
+    assert runtime.voice_speaker_id == "Maya"
+    assert runtime.preload.voice_resolved is True
+    assert runtime.preload.voice_error is None
 
 
 def test_character_runtime_keeps_identity_when_linked_voice_is_missing(tmp_path: Path, monkeypatch) -> None:
