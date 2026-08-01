@@ -1,3 +1,5 @@
+import { liveConversationStore } from './live-conversation-store';
+
 export type AssistantWorkspaceRuntimeFeatureFlags = {
   liveAssistant: boolean;
   persistedEvents: boolean;
@@ -69,11 +71,22 @@ function getImportMetaEnv(): AssistantWorkspaceRuntimeEnv {
 
 function readActiveCharacterVoice(): string | undefined {
   if (typeof document === 'undefined') return undefined;
-  const activeVoice = document
-    .querySelector<HTMLElement>('.assistant-live-card')
-    ?.dataset.liveVoiceId
-    ?.trim();
-  return activeVoice || undefined;
+  const card = document.querySelector<HTMLElement>('.assistant-live-card');
+  const renderedVoice = card?.dataset.liveVoiceId?.trim();
+  if (renderedVoice) return renderedVoice;
+
+  // React can intentionally retain the current live-call runtime object while a call
+  // is connected. The session-scoped conversation store is updated immediately by
+  // the trusted runtime/voice-assignment event bridge, so use it when the current DOM
+  // identity confirms that this session is in Character Mode. Requiring the active
+  // identity marker prevents a stale character store value from affecting a System
+  // Assistant session.
+  const characterModeActive = Boolean(card?.querySelector('.assistant-live-identity.active'));
+  if (!characterModeActive) return undefined;
+  const identity = liveConversationStore.getState().identity;
+  if (identity.characterId === 'system-assistant') return undefined;
+  const storedVoice = identity.voiceId?.trim();
+  return storedVoice || undefined;
 }
 
 function readString(env: AssistantWorkspaceRuntimeEnv, key: string): string | undefined {
