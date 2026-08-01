@@ -8,7 +8,9 @@ on:
       - "src/app/image_service_app.py"
       - "src/app/image_service_runtime.py"
       - "src/app/gateway/image_model_routes.py"
+      - "src/app/gateway/image_asset_routes.py"
       - "src/app/launcher/service_manager.py"
+      - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/gateway/test_image_model_routes.py"
       - "src/tests/unit/image/**"
       - "src/tests/unit/launcher/test_image_service_manual_start.py"
@@ -23,7 +25,9 @@ on:
       - "src/app/image_service_app.py"
       - "src/app/image_service_runtime.py"
       - "src/app/gateway/image_model_routes.py"
+      - "src/app/gateway/image_asset_routes.py"
       - "src/app/launcher/service_manager.py"
+      - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/gateway/test_image_model_routes.py"
       - "src/tests/unit/image/**"
       - "src/tests/unit/launcher/test_image_service_manual_start.py"
@@ -51,6 +55,7 @@ jobs:
       - name: Run image lifecycle and browser-output tests
         run: >-
           python -m pytest
+          src/tests/app/test_image_asset_file_route.py
           src/tests/unit/gateway/test_image_model_routes.py
           src/tests/unit/image/test_image_service_on_demand.py
           src/tests/unit/image/test_image_service_model_download.py
