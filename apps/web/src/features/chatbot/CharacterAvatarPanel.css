@@ -3,6 +3,29 @@
   gap: 0.85rem;
 }
 
+.character-avatar-type-tabs {
+  background: rgba(5, 10, 22, 0.58);
+  border: 1px solid rgba(130, 146, 190, 0.14);
+  border-radius: 0.65rem;
+  display: grid;
+  gap: 0.3rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.3rem;
+}
+
+.character-avatar-type-tabs button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #8390ad;
+  min-height: 2.35rem;
+}
+
+.character-avatar-type-tabs button.is-active {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.22), rgba(54, 113, 210, 0.18));
+  border-color: rgba(151, 126, 255, 0.32);
+  color: #eef1ff;
+}
+
 .character-avatar-layout {
   display: grid;
   gap: 1rem;
@@ -18,7 +41,8 @@
 }
 
 .character-avatar-preview > img,
-.character-avatar-empty {
+.character-avatar-empty,
+.character-live2d-preview {
   aspect-ratio: 1 / 1;
   width: 100%;
 }
@@ -52,6 +76,57 @@
   font-size: 0.67rem;
 }
 
+.character-live2d-preview {
+  align-content: end;
+  background: radial-gradient(circle at 50% 30%, rgba(122, 100, 255, 0.34), rgba(5, 10, 22, 0.96));
+  display: grid;
+  gap: 0.2rem;
+  overflow: hidden;
+  padding: 0.8rem;
+  position: relative;
+}
+
+.character-live2d-preview::after {
+  background: linear-gradient(transparent, rgba(3, 6, 16, 0.92));
+  content: '';
+  inset: 35% 0 0;
+  position: absolute;
+}
+
+.character-live2d-preview img {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  opacity: 0.66;
+  position: absolute;
+  width: 100%;
+}
+
+.character-live2d-preview span,
+.character-live2d-preview strong,
+.character-live2d-preview small {
+  position: relative;
+  z-index: 1;
+}
+
+.character-live2d-preview span {
+  color: #b7a9ff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.character-live2d-preview strong {
+  color: #f1f3ff;
+  font-size: 0.8rem;
+}
+
+.character-live2d-preview small {
+  color: #9ba8c5;
+  font-size: 0.6rem;
+}
+
 .character-avatar-meta {
   border-top: 1px solid rgba(130, 146, 190, 0.12);
   display: grid;
@@ -79,7 +154,8 @@
   white-space: nowrap;
 }
 
-.character-avatar-form {
+.character-avatar-form,
+.character-live2d-panel {
   align-content: start;
   display: grid;
   gap: 0.65rem;
@@ -102,6 +178,27 @@
   display: grid;
   gap: 0.65rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.character-avatar-mode-notice {
+  align-items: start;
+  background: rgba(124, 92, 255, 0.1);
+  border: 1px solid rgba(151, 126, 255, 0.22);
+  border-radius: 0.65rem;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem;
+}
+
+.character-avatar-mode-notice strong {
+  color: #e4ddff;
+  font-size: 0.72rem;
+}
+
+.character-avatar-mode-notice span {
+  color: #8f9cba;
+  font-size: 0.64rem;
+  line-height: 1.4;
 }
 
 .character-avatar-upload-card {
@@ -243,28 +340,220 @@
   flex-basis: 100%;
 }
 
-.character-viseme-panel {
+.character-live2d-intro {
+  align-items: start;
+  background: linear-gradient(135deg, rgba(67, 53, 145, 0.2), rgba(8, 16, 34, 0.82));
+  border: 1px solid rgba(151, 126, 255, 0.22);
+  border-radius: 0.7rem;
+  display: flex;
+  gap: 0.8rem;
+  justify-content: space-between;
+  padding: 0.75rem;
+}
+
+.character-live2d-intro div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.character-live2d-intro strong {
+  color: #eceeff;
+  font-size: 0.76rem;
+}
+
+.character-live2d-intro p {
+  color: #8d9ab8;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  margin: 0;
+  max-width: 44rem;
+}
+
+.character-live2d-intro > span {
+  background: rgba(124, 92, 255, 0.14);
+  border: 1px solid rgba(151, 126, 255, 0.22);
+  border-radius: 999px;
+  color: #c7bdff;
+  flex: 0 0 auto;
+  font-size: 0.58rem;
+  padding: 0.28rem 0.5rem;
+}
+
+.character-live2d-loading {
+  color: #8f9cba;
+  font-size: 0.68rem;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.character-live2d-loading.is-error {
+  color: #f0a8b2;
+}
+
+.character-live2d-model-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.character-live2d-model-card {
+  align-items: stretch;
+  background: rgba(6, 11, 24, 0.68);
+  border: 1px solid rgba(130, 146, 190, 0.14);
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 7.2rem minmax(0, 1fr);
+  min-height: 8rem;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+}
+
+.character-live2d-model-card:hover,
+.character-live2d-model-card.is-selected {
+  border-color: rgba(151, 126, 255, 0.42);
+}
+
+.character-live2d-model-card.is-selected {
+  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.2);
+}
+
+.character-live2d-model-card.is-active {
+  border-color: rgba(78, 231, 194, 0.42);
+}
+
+.character-live2d-model-visual {
+  background: radial-gradient(circle at 50% 36%, rgba(124, 92, 255, 0.36), rgba(5, 9, 20, 0.98));
+  display: block;
+  min-height: 8rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.character-live2d-model-visual img {
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.72;
+  width: 100%;
+}
+
+.character-live2d-model-visual i {
+  background: rgba(5, 9, 20, 0.78);
+  border: 1px solid rgba(191, 180, 255, 0.28);
+  border-radius: 999px;
+  bottom: 0.45rem;
+  color: #d9d2ff;
+  font-size: 0.52rem;
+  font-style: normal;
+  font-weight: 800;
+  left: 0.45rem;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.35rem;
+  position: absolute;
+  text-transform: uppercase;
+}
+
+.character-live2d-model-copy {
+  align-content: center;
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.65rem 0.65rem 0.65rem 0;
+}
+
+.character-live2d-model-copy strong {
+  color: #e8ecfb;
+  font-size: 0.73rem;
+}
+
+.character-live2d-model-copy small {
+  color: #8693af;
+  font-size: 0.61rem;
+  line-height: 1.4;
+}
+
+.character-live2d-model-copy em {
+  color: #a99cff;
+  font-size: 0.57rem;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.character-live2d-model-card.is-active .character-live2d-model-copy em {
+  color: #74e8cc;
+}
+
+.character-live2d-license-card {
+  background: rgba(6, 11, 24, 0.72);
+  border: 1px solid rgba(130, 146, 190, 0.16);
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.character-live2d-license-card > strong {
+  color: #e7ebfb;
+  font-size: 0.74rem;
+}
+
+.character-live2d-license-card > p {
+  color: #8996b3;
+  font-size: 0.63rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.character-live2d-license-card > label {
+  align-items: start;
+  color: #aab5cf;
+  display: flex;
+  font-size: 0.63rem;
+  gap: 0.45rem;
+  line-height: 1.4;
+}
+
+.character-live2d-license-card input {
+  accent-color: #7c5cff;
+  margin-top: 0.12rem;
+}
+
+.character-live2d-license-card a {
+  color: #ad9fff;
+}
+
+.character-viseme-panel,
+.character-live2d-sync-panel {
   background: rgba(5, 10, 22, 0.5);
   border: 1px solid rgba(130, 146, 190, 0.12);
   border-radius: 0.7rem;
   padding: 0.65rem;
 }
 
-.character-viseme-panel > header {
+.character-viseme-panel > header,
+.character-live2d-sync-panel > header {
   align-items: center;
   display: flex;
   gap: 0.65rem;
   justify-content: space-between;
 }
 
-.character-viseme-panel > header strong {
+.character-viseme-panel > header strong,
+.character-live2d-sync-panel > header strong {
   color: #dce4f8;
   font-size: 0.72rem;
 }
 
-.character-viseme-panel > header span {
+.character-viseme-panel > header span,
+.character-live2d-sync-panel > header span {
   color: #8c9ab9;
   font-size: 0.62rem;
+}
+
+.character-live2d-sync-panel > header span {
+  color: #74e8cc;
 }
 
 .character-viseme-strip {
@@ -313,9 +602,11 @@
   white-space: nowrap;
 }
 
-.character-viseme-panel > p {
+.character-viseme-panel > p,
+.character-live2d-sync-panel > p {
   color: #7c89a6;
   font-size: 0.62rem;
+  line-height: 1.45;
   margin: 0.5rem 0 0;
 }
 
@@ -327,12 +618,17 @@
   .character-viseme-strip {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
+
+  .character-live2d-model-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 720px) {
   .character-avatar-layout,
   .character-avatar-form-grid,
-  .character-avatar-upload-card {
+  .character-avatar-upload-card,
+  .character-live2d-model-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -346,5 +642,13 @@
 
   .character-viseme-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .character-live2d-intro {
+    display: grid;
+  }
+
+  .character-live2d-intro > span {
+    justify-self: start;
   }
 }
