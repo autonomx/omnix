@@ -1,5 +1,6 @@
 import { playBufferedTts, stopBufferedTtsPlayback } from './assistant-buffered-tts-player';
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
+import { resolveCharacterPlaybackVoice } from './runtime-config';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
@@ -211,8 +212,8 @@ function isLiveCallActive(): boolean {
 }
 
 function selectedVoiceId(): string | null {
-  const liveCallVoice = document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceId?.trim();
-  if (liveCallVoice) return liveCallVoice;
+  const characterVoice = resolveCharacterPlaybackVoice();
+  if (characterVoice) return characterVoice;
   const selected = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]')?.value.trim();
   if (selected) return selected;
   try {
