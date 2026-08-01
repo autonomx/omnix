@@ -8,8 +8,10 @@ on:
       - "src/app/image_service_app.py"
       - "src/app/image_service_runtime.py"
       - "src/app/gateway/image_model_routes.py"
+      - "src/app/launcher/service_manager.py"
       - "src/tests/unit/gateway/test_image_model_routes.py"
       - "src/tests/unit/image/**"
+      - "src/tests/unit/launcher/test_image_service_manual_start.py"
       - "apps/web/src/features/image-generation/**"
       - "src/requirements-rpg-flux.txt"
       - "bootstrap_omnix_flux_env.ps1"
@@ -21,8 +23,10 @@ on:
       - "src/app/image_service_app.py"
       - "src/app/image_service_runtime.py"
       - "src/app/gateway/image_model_routes.py"
+      - "src/app/launcher/service_manager.py"
       - "src/tests/unit/gateway/test_image_model_routes.py"
       - "src/tests/unit/image/**"
+      - "src/tests/unit/launcher/test_image_service_manual_start.py"
       - "apps/web/src/features/image-generation/**"
       - "src/requirements-rpg-flux.txt"
       - "bootstrap_omnix_flux_env.ps1"
@@ -50,6 +54,8 @@ jobs:
           src/tests/unit/gateway/test_image_model_routes.py
           src/tests/unit/image/test_image_service_on_demand.py
           src/tests/unit/image/test_image_service_model_download.py
+          src/tests/unit/image/test_image_service_start.py
+          src/tests/unit/launcher/test_image_service_manual_start.py
           -q --tb=short
 
   web-image-lifecycle:
