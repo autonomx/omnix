@@ -1,0 +1,32 @@
+import { describe, expect, it } from 'vitest';
+import {
+  isLive2DPack,
+  live2dModelUrl,
+  live2dMouthShapeForViseme,
+} from './live2dCharacterRenderer';
+
+
+describe('Live2D character renderer helpers', () => {
+  it('maps speech visemes to bounded mouth-open and mouth-form values', () => {
+    expect(live2dMouthShapeForViseme('silence')).toEqual({ open: 0, form: 0 });
+    expect(live2dMouthShapeForViseme('A').open).toBe(1);
+    expect(live2dMouthShapeForViseme('O').form).toBeLessThan(0);
+    expect(live2dMouthShapeForViseme('E').form).toBeGreaterThan(0);
+    expect(live2dMouthShapeForViseme('MBP').open).toBeLessThan(0.1);
+  });
+
+  it('uses the pinned local model entry path for bundled catalog models', () => {
+    expect(live2dModelUrl('character-live2d:open-llm-vtuber-mao-pro')).toBe(
+      '/api/character-live2d/assets/character-live2d%3Aopen-llm-vtuber-mao-pro/runtime/mao_pro.model3.json',
+    );
+    expect(live2dModelUrl('character-live2d:open-llm-vtuber-shizuku')).toContain(
+      '/runtime/shizuku.model3.json',
+    );
+  });
+
+  it('recognizes only rigged Live2D avatar packs', () => {
+    expect(isLive2DPack({ renderer: 'live2d', rig_asset_id: 'character-live2d:model' } as never)).toBe(true);
+    expect(isLive2DPack({ renderer: 'live2d', rig_asset_id: null } as never)).toBe(false);
+    expect(isLive2DPack({ renderer: 'sprite', rig_asset_id: 'character-live2d:model' } as never)).toBe(false);
+  });
+});
