@@ -20,6 +20,24 @@ export type AssistantWorkspaceRuntimeConfig = {
 
 export type AssistantWorkspaceRuntimeEnv = Record<string, string | boolean | number | undefined>;
 
+type PublishedCharacterRuntime = {
+  sessionId: string;
+  characterId: string;
+  displayName: string;
+  speakerId: string;
+};
+
+type CharacterRuntimeEventDetail = {
+  session_id?: unknown;
+  interaction_mode?: unknown;
+  character_id?: unknown;
+  display_name?: unknown;
+  voice_speaker_id?: unknown;
+  voice_asset_id?: unknown;
+};
+
+let publishedCharacterRuntime: PublishedCharacterRuntime | null = null;
+
 export const DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG: AssistantWorkspaceRuntimeConfig = {
   workspaceId: 'workspace:default',
   projectId: 'project:chatbot',
@@ -30,6 +48,8 @@ export const DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG: AssistantWorkspaceRunti
     toolExecution: true,
   },
 };
+
+installCharacterRuntimeVoiceBridge();
 
 export function createAssistantWorkspaceRuntimeConfig(
   env: AssistantWorkspaceRuntimeEnv = getImportMetaEnv(),
@@ -69,24 +89,61 @@ function getImportMetaEnv(): AssistantWorkspaceRuntimeEnv {
   return ((import.meta as unknown as { env?: AssistantWorkspaceRuntimeEnv }).env ?? {}) as AssistantWorkspaceRuntimeEnv;
 }
 
+function installCharacterRuntimeVoiceBridge(): void {
+  if (typeof window === 'undefined') return;
+  window.addEventListener('omnix:character-avatar-runtime', (event) => {
+    const detail = (event as CustomEvent<CharacterRuntimeEventDetail | null>).detail;
+    if (!detail || detail.interaction_mode !== 'character') {
+      publishedCharacterRuntime = null;
+      return;
+    }
+    const sessionId = textValue(detail.session_id);
+    const characterId = textValue(detail.character_id);
+    const displayName = textValue(detail.display_name);
+    const speakerId = textValue(detail.voice_speaker_id)
+      || textValue(detail.voice_asset_id).replace(/^voice-cloning:/, '');
+    publishedCharacterRuntime = sessionId && characterId && displayName && speakerId
+      ? { sessionId, characterId, displayName, speakerId }
+      : null;
+  });
+}
+
 function readActiveCharacterVoice(): string | undefined {
   if (typeof document === 'undefined') return undefined;
   const card = document.querySelector<HTMLElement>('.assistant-live-card');
   const renderedVoice = card?.dataset.liveVoiceId?.trim();
   if (renderedVoice) return renderedVoice;
 
+  const activeIdentity = card?.querySelector<HTMLElement>('.assistant-live-identity.active');
+  if (!activeIdentity) return undefined;
+
   // React can intentionally retain the current live-call runtime object while a call
   // is connected. The session-scoped conversation store is updated immediately by
-  // the trusted runtime/voice-assignment event bridge, so use it when the current DOM
-  // identity confirms that this session is in Character Mode. Requiring the active
-  // identity marker prevents a stale character store value from affecting a System
-  // Assistant session.
-  const characterModeActive = Boolean(card?.querySelector('.assistant-live-identity.active'));
-  if (!characterModeActive) return undefined;
-  const identity = liveConversationStore.getState().identity;
-  if (identity.characterId === 'system-assistant') return undefined;
-  const storedVoice = identity.voiceId?.trim();
-  return storedVoice || undefined;
+  // the trusted runtime/voice-assignment event bridge, so use it when available.
+  const storeState = liveConversationStore.getState();
+  const storedVoice = storeState.identity.characterId !== 'system-assistant'
+    ? storeState.identity.voiceId?.trim()
+    : '';
+  if (storedVoice) return storedVoice;
+
+  // Ordinary runtime loads publish the trusted server runtime through the avatar
+  // bridge even when the conversation store has not yet received identity state.
+  // Match the visible active identity before using the cached speaker so a runtime
+  // from a prior character or session cannot leak into the current conversation.
+  const published = publishedCharacterRuntime;
+  const visibleIdentity = normalizeIdentity(activeIdentity.textContent ?? '');
+  if (published && visibleIdentity.includes(normalizeIdentity(published.displayName))) {
+    return published.speakerId;
+  }
+  return undefined;
+}
+
+function normalizeIdentity(value: string): string {
+  return value.trim().toLocaleLowerCase().replace(/^talking to\s+/, '');
+}
+
+function textValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function readString(env: AssistantWorkspaceRuntimeEnv, key: string): string | undefined {
