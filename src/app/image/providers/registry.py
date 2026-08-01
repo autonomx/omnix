@@ -61,7 +61,7 @@ _IMAGE_PROVIDER_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "pipeline_class": "ZImagePipeline",
         "default_steps": 9,
         "default_guidance_scale": 0.0,
-        "default_cpu_offload": False,
+        "default_cpu_offload": True,
         "max_pixels": 1024 * 1024,
         "min_load_free_gib": 14.0,
         "min_generation_free_gib": 3.0,
