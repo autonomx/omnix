@@ -151,11 +151,10 @@ export function ImageModelControl({
           ? 'unloading'
           : selected?.state || 'checking';
   const busy = Boolean(action) || statusLoading || serviceStarting;
-  const canStartService = Boolean(status?.enabled && serviceUnavailable && downloaded && !busy);
   const canDownload = Boolean(
     status?.enabled && selected?.supports_download !== false && !downloaded && !busy,
   );
-  const canLoad = Boolean(serviceReady && downloaded && !loaded && !busy);
+  const canLoad = Boolean(status?.enabled && downloaded && !loaded && !busy);
   const canUnload = Boolean(serviceReady && loaded && !busy);
   const location = selected?.local_model?.local_dir || '';
   const missing = selected?.local_model?.missing ?? [];
@@ -166,6 +165,10 @@ export function ImageModelControl({
       setServiceStartError('');
     }
   }, [serviceUnavailable]);
+
+  useEffect(() => {
+    setServiceStartError('');
+  }, [selectedProvider]);
 
   useEffect(() => {
     if (selectedAction !== 'download') {
@@ -206,7 +209,6 @@ export function ImageModelControl({
         body: JSON.stringify({ provider: selectedProvider }),
       });
       if (!response.ok) throw new Error(await responseError(response));
-      await Promise.resolve(onRefresh());
       return true;
     } catch (startError) {
       setServiceStartError(
@@ -221,6 +223,11 @@ export function ImageModelControl({
   const downloadModel = async () => {
     if (serviceUnavailable && !(await startImageService())) return;
     onDownload(selectedProvider);
+  };
+
+  const loadModel = async () => {
+    if (serviceUnavailable && !(await startImageService())) return;
+    onLoad(selectedProvider);
   };
 
   const progressValue = downloadProgress?.indeterminate || downloadProgress?.percent == null
@@ -255,7 +262,7 @@ export function ImageModelControl({
             </label>
             <Text size="xs">
               {serviceUnavailable && downloaded
-                ? 'The lightweight image service is stopped. Start it before loading the downloaded model.'
+                ? 'Model files are downloaded. Load will start the lightweight service automatically.'
                 : serviceUnavailable
                   ? 'Model files are not downloaded. Download will start the lightweight service automatically.'
                   : loaded
@@ -302,21 +309,11 @@ export function ImageModelControl({
           >
             Unload Model
           </Button>
-        ) : downloaded && serviceUnavailable ? (
-          <Button
-            loading={serviceStarting}
-            disabled={!canStartService}
-            onClick={() => void startImageService()}
-            size="compact-sm"
-            variant="filled"
-          >
-            Start Image Service
-          </Button>
         ) : downloaded ? (
           <Button
-            loading={selectedAction === 'load'}
+            loading={selectedAction === 'load' || serviceStarting}
             disabled={!canLoad}
-            onClick={() => onLoad(selectedProvider)}
+            onClick={() => void loadModel()}
             size="compact-sm"
             variant="filled"
           >
@@ -350,10 +347,10 @@ export function imageModelGenerationBlockReason(
   const selected = selectedImageModel(status, selectedProvider);
   const modelName = selected?.model || selected?.label || selectedProvider;
   if (statusLoading) return `Checking ${modelName} model status.`;
-  if (statusError || !status) return 'The image model service is unavailable. Downloading can start it automatically.';
+  if (statusError || !status) return 'The image model service is unavailable. Downloading or loading can start it automatically.';
   if (!status.enabled) return 'Image generation is disabled for this startup.';
   if (selected?.local_model?.complete !== true && selected?.downloaded !== true) return `Download ${modelName} before loading it.`;
-  if (status.error || status.state === 'unavailable') return 'Start the image model service before loading or generating.';
+  if (status.error || status.state === 'unavailable') return `Load ${modelName} to start the image service and make it resident.`;
   if (!selected?.loaded) return `Load ${modelName} before generating an image.`;
   return undefined;
 }
