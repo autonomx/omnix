@@ -78,23 +78,23 @@ export function resolveCharacterPlaybackVoice(): string | null {
     card.querySelector<HTMLElement>('.assistant-live-identity')?.textContent ?? '',
   ));
   const visibleIdentities = renderedIdentities.filter(Boolean);
-  if (visibleIdentities.length && visibleIdentities.every((identity) => identity === 'system assistant')) {
-    return null;
-  }
+  const systemOnlyRendered = Boolean(
+    visibleIdentities.length
+    && visibleIdentities.every((identity) => identity === 'system assistant'),
+  );
 
   const storeState = liveConversationStore.getState();
   const storeCharacterActive = storeState.identity.characterId !== 'system-assistant';
   const storedVoice = storeCharacterActive ? storeState.identity.voiceId?.trim() : '';
 
   // The normalized result of the latest successful /live-call/runtime request is the
-  // authoritative source. It must win over a stale data-live-voice-id left behind by
-  // a prior render or voice reassignment.
+  // authoritative source. A matching selected session must win over stale React
+  // presentation, including a briefly rendered System Assistant label.
   const runtime = readLatestTrustedCharacterRuntime();
   if (runtime?.interaction_mode === 'character') {
     const speakerId = runtime.voice_speaker_id?.trim() || runtime.voice_asset_id?.trim();
     const sameSelectedSession = Boolean(
-      storeCharacterActive
-      && storeState.sessionId
+      storeState.sessionId
       && storeState.sessionId === runtime.session_id,
     );
     const runtimeIdentity = normalizeIdentity(runtime.display_name);
@@ -102,10 +102,13 @@ export function resolveCharacterPlaybackVoice(): string | null {
       runtimeIdentity
       && renderedIdentities.some((identity) => identity.includes(runtimeIdentity)),
     );
-    if ((sameSelectedSession || sameDisplayedCharacter) && (speakerId || storedVoice)) {
-      return speakerId || storedVoice || null;
-    }
+    if ((sameSelectedSession || sameDisplayedCharacter) && speakerId) return speakerId;
+    if (sameSelectedSession && storedVoice) return storedVoice;
   }
+
+  // Only veto character fallbacks after the trusted runtime has had a chance to
+  // prove that it belongs to the selected session. The DOM can lag the runtime.
+  if (systemOnlyRendered) return null;
 
   const renderedVoice = cards
     .filter((_card, index) => renderedIdentities[index] !== 'system assistant')
