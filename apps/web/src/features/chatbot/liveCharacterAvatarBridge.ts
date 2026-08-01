@@ -40,7 +40,7 @@ let currentRuntime: CharacterLiveCallRuntime | null = null;
 let currentMouthFrame: AvatarMouthFrame = 'closed';
 let nextAudioFrameAt = 0;
 let blinkClosed = false;
-let blinkTimer: ReturnType<typeof setTimeout> | null = null;
+let blinkTimer: number | null = null;
 const audioElementStops = new WeakMap<HTMLAudioElement, () => void>();
 
 export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime | null): void {
