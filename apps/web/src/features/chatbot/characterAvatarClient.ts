@@ -74,6 +74,8 @@ export interface UploadedAvatarSourceAsset {
   metadata: Record<string, unknown>;
 }
 
+const CHARACTER_AVATAR_PROVIDER_ID = 'image:flux_klein';
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -103,7 +105,14 @@ export const characterAvatarClient = {
     return payload.asset;
   },
   createGeneration(characterId: string, input: CreateCharacterAvatarGenerationInput): Promise<CharacterAvatarGenerationBatch> {
-    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-generations`, jsonInit('POST', input));
+    return request(
+      `/api/characters/${encodeURIComponent(characterId)}/avatar-generations`,
+      jsonInit('POST', {
+        ...input,
+        provider_id: input.provider_id?.trim() || CHARACTER_AVATAR_PROVIDER_ID,
+        unload_after_generation: input.unload_after_generation ?? false,
+      }),
+    );
   },
   generation(batchId: string): Promise<CharacterAvatarGenerationBatch> {
     return request(`/api/character-avatar-generations/${encodeURIComponent(batchId)}`);
@@ -126,5 +135,5 @@ export const characterAvatarClient = {
 };
 
 export function characterAvatarAssetUrl(assetId: string): string {
-  return `/api/assets/${encodeURIComponent(assetId)}/file`;
+  return `/api/assets/${encodeURIComponent(assetId)}/file?preview=true`;
 }
