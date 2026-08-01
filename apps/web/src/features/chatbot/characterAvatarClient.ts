@@ -76,6 +76,33 @@ export interface UploadedAvatarSourceAsset {
   metadata: Record<string, unknown>;
 }
 
+export interface Live2DModelCatalogItem {
+  id: string;
+  name: string;
+  description: string;
+  preview_url: string;
+  repository: string;
+  revision: string;
+  source_url: string;
+  model_license_url: string;
+  runtime_license_url: string;
+  license_summary: string;
+  installed: boolean;
+  selected: boolean;
+}
+
+export interface Live2DModelCatalogResponse {
+  models: Live2DModelCatalogItem[];
+  runtime_installed: boolean;
+}
+
+export interface Live2DAvatarActionResponse {
+  ok: boolean;
+  character_id: string;
+  avatar_pack?: CharacterAvatarPack | null;
+  downloaded: boolean;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -115,6 +142,22 @@ export const characterAvatarClient = {
   },
   visemeGeneration(batchId: string): Promise<CharacterVisemeGenerationBatch> {
     return request(`/api/character-avatar-visemes/${encodeURIComponent(batchId)}`);
+  },
+  live2dCatalog(characterId: string): Promise<Live2DModelCatalogResponse> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/live2d-models`);
+  },
+  activateLive2d(
+    characterId: string,
+    input: {
+      model_id: string;
+      accept_live2d_runtime_terms: boolean;
+      accept_model_terms: boolean;
+    },
+  ): Promise<Live2DAvatarActionResponse> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/live2d-avatar`, jsonInit('POST', input));
+  },
+  disableLive2d(characterId: string): Promise<Live2DAvatarActionResponse> {
+    return request(`/api/characters/${encodeURIComponent(characterId)}/live2d-avatar/disable`, { method: 'POST' });
   },
   backfillClonedVoices(input: {
     queue_avatar_generation?: boolean;
