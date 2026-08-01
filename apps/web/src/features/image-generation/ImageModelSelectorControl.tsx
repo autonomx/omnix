@@ -1,4 +1,4 @@
-import { Button, Text } from '@mantine/core';
+import { Button, Progress, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import { OmnixStatusPill } from '../../design/primitives';
 
@@ -11,6 +11,14 @@ export interface ImageLocalModelStatus {
   repo_id?: string;
   gated?: boolean;
   license?: string;
+}
+
+export interface ImageDownloadProgress {
+  status: string;
+  bytes_downloaded: number;
+  bytes_total: number;
+  percent?: number | null;
+  indeterminate?: boolean;
 }
 
 export interface ImageModelRecord {
@@ -29,6 +37,7 @@ export interface ImageModelRecord {
   minimum_diffusers?: string;
   minimum_torch?: string;
   local_model?: ImageLocalModelStatus;
+  download_progress?: ImageDownloadProgress;
 }
 
 export interface ImageModelStatusPayload extends ImageModelRecord {
@@ -89,6 +98,26 @@ async function responseError(response: Response): Promise<string> {
   return response.statusText || `Image service start failed (${response.status}).`;
 }
 
+function formatBytes(value: number): string {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let amount = bytes / 1024;
+  let unit = units[0];
+  for (let index = 1; index < units.length && amount >= 1024; index += 1) {
+    amount /= 1024;
+    unit = units[index];
+  }
+  return `${amount >= 10 ? amount.toFixed(1) : amount.toFixed(2)} ${unit}`;
+}
+
+function progressFromPayload(
+  payload: ImageModelStatusPayload,
+  provider: string,
+): ImageDownloadProgress | undefined {
+  return selectedImageModel(payload, provider)?.download_progress ?? payload.download_progress;
+}
+
 export function ImageModelControl({
   status,
   selectedProvider,
@@ -103,12 +132,15 @@ export function ImageModelControl({
 }: ImageModelControlProps) {
   const [serviceStarting, setServiceStarting] = useState(false);
   const [serviceStartError, setServiceStartError] = useState('');
+  const [polledDownloadProgress, setPolledDownloadProgress] = useState<ImageDownloadProgress>();
   const selected = selectedImageModel(status, selectedProvider);
   const loaded = Boolean(selected?.loaded);
   const downloaded = selected?.local_model?.complete === true || selected?.downloaded === true;
   const selectedAction = action?.provider === selectedProvider ? action.type : null;
   const serviceUnavailable = Boolean(status && (status.error || status.state === 'unavailable'));
   const serviceReady = Boolean(status && status.enabled && !serviceUnavailable);
+  const downloadProgress = polledDownloadProgress ?? selected?.download_progress ?? status?.download_progress;
+  const downloading = selectedAction === 'download' || selected?.state === 'downloading';
   const state = serviceStarting
     ? 'starting service'
     : selectedAction === 'download'
@@ -133,6 +165,35 @@ export function ImageModelControl({
     }
   }, [serviceUnavailable]);
 
+  useEffect(() => {
+    if (selectedAction !== 'download') {
+      setPolledDownloadProgress(undefined);
+      return;
+    }
+
+    let disposed = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(
+          `/api/image-generation/model/status?provider=${encodeURIComponent(selectedProvider)}`,
+        );
+        if (!response.ok) return;
+        const payload = await response.json() as ImageModelStatusPayload;
+        const progress = progressFromPayload(payload, selectedProvider);
+        if (!disposed && progress) setPolledDownloadProgress(progress);
+      } catch {
+        // Keep the last known progress while a transient status poll fails.
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), 750);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [selectedAction, selectedProvider]);
+
   const startImageService = async () => {
     setServiceStarting(true);
     setServiceStartError('');
@@ -152,6 +213,15 @@ export function ImageModelControl({
       setServiceStarting(false);
     }
   };
+
+  const progressValue = downloadProgress?.indeterminate || downloadProgress?.percent == null
+    ? 100
+    : Math.max(0, Math.min(100, downloadProgress.percent));
+  const progressLabel = downloadProgress?.bytes_total
+    ? `${formatBytes(downloadProgress.bytes_downloaded)} of ${formatBytes(downloadProgress.bytes_total)} · ${progressValue.toFixed(1)}%`
+    : downloadProgress?.bytes_downloaded
+      ? `${formatBytes(downloadProgress.bytes_downloaded)} downloaded`
+      : 'Preparing Hugging Face download…';
 
   return (
     <section className={`image-model-control ${loaded ? 'loaded' : 'unloaded'}`} aria-label="Image model control" aria-live="polite">
@@ -186,6 +256,17 @@ export function ImageModelControl({
           </div>
           <OmnixStatusPill>{state}</OmnixStatusPill>
         </div>
+        {downloading ? (
+          <div aria-label="Model download progress">
+            <Progress
+              animated
+              aria-label="Model download progress bar"
+              striped
+              value={progressValue}
+            />
+            <Text mt={4} size="xs">{progressLabel}</Text>
+          </div>
+        ) : null}
         {location ? <Text className="image-model-path" size="xs" title={location}>{location}</Text> : null}
         {!serviceUnavailable && !downloaded && missing.length ? (
           <Text c="dimmed" size="xs">Missing local files: {missing.join(', ')}</Text>
