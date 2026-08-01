@@ -10,7 +10,14 @@ on:
       - "src/app/gateway/image_model_routes.py"
       - "src/app/gateway/image_asset_routes.py"
       - "src/app/launcher/service_manager.py"
+      - "src/app/jobs/models.py"
+      - "src/app/platform/effective_defaults.py"
+      - "src/app/characters/avatar_generation_api.py"
+      - "apps/web/src/features/chatbot/characterAvatarClient.ts"
+      - "apps/web/src/features/chatbot/characterAvatarClient.test.ts"
+      - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
+      - "src/tests/unit/characters/test_avatar_generation_logging.py"
       - "src/tests/unit/gateway/test_image_model_routes.py"
       - "src/tests/unit/image/**"
       - "src/tests/unit/launcher/test_image_service_manual_start.py"
@@ -27,7 +34,14 @@ on:
       - "src/app/gateway/image_model_routes.py"
       - "src/app/gateway/image_asset_routes.py"
       - "src/app/launcher/service_manager.py"
+      - "src/app/jobs/models.py"
+      - "src/app/platform/effective_defaults.py"
+      - "src/app/characters/avatar_generation_api.py"
+      - "apps/web/src/features/chatbot/characterAvatarClient.ts"
+      - "apps/web/src/features/chatbot/characterAvatarClient.test.ts"
+      - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
+      - "src/tests/unit/characters/test_avatar_generation_logging.py"
       - "src/tests/unit/gateway/test_image_model_routes.py"
       - "src/tests/unit/image/**"
       - "src/tests/unit/launcher/test_image_service_manual_start.py"
@@ -52,10 +66,12 @@ jobs:
           python -m pip install
           pytest fastapi httpx pydantic requests python-multipart playwright
           packaging pyyaml huggingface_hub pillow
-      - name: Run image lifecycle and browser-output tests
+      - name: Run image lifecycle, avatar routing, and browser-output tests
         run: >-
           python -m pytest
+          src/tests/app/test_effective_settings_defaults.py
           src/tests/app/test_image_asset_file_route.py
+          src/tests/unit/characters/test_avatar_generation_logging.py
           src/tests/unit/gateway/test_image_model_routes.py
           src/tests/unit/image/test_image_service_on_demand.py
           src/tests/unit/image/test_image_service_model_download.py
@@ -76,9 +92,10 @@ jobs:
         run: npm install
       - name: Typecheck web workspace
         run: npm run web:typecheck
-      - name: Run image generation and download-progress unit tests
+      - name: Run image generation and avatar-routing unit tests
         run: >-
           npm --workspace @omnix/web run test --
+          src/features/chatbot/characterAvatarClient.test.ts
           src/features/image-generation/ImageModelControl.test.tsx
           src/features/image-generation/ImageModelSelection.test.tsx
           src/features/image-generation/ImageGenerationWorkspace.test.tsx
