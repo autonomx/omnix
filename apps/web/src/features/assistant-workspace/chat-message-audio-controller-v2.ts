@@ -4,6 +4,7 @@ import {
   type BufferedTtsPlaybackState,
 } from './assistant-buffered-tts-player';
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
+import { resolveCharacterPlaybackVoice } from './runtime-config';
 
 const STREAM_AUDIO_BUTTON_ATTRIBUTE = 'data-omnix-stream-audio';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
@@ -60,7 +61,7 @@ export function initializeChatMessageAudioControllerV2(root: ParentNode = docume
     activeButton = button;
     setButtonState(button, true);
     void playBufferedTts(text, {
-      voiceId: selectedVoiceId(),
+      voiceId: resolveChatMessageAudioVoiceId(),
       onStateChange: (playbackState) => handlePlaybackState(root, button, playbackState),
     }).catch((error: unknown) => {
       if (activeButton !== button) return;
@@ -144,9 +145,9 @@ function announceAudioPlayback(speaking: boolean, source: string): void {
   }));
 }
 
-function selectedVoiceId(): string | null {
-  const liveCallVoice = document.querySelector<HTMLElement>('.assistant-live-card')?.dataset.liveVoiceId?.trim();
-  if (liveCallVoice) return liveCallVoice;
+export function resolveChatMessageAudioVoiceId(): string | null {
+  const characterVoice = resolveCharacterPlaybackVoice();
+  if (characterVoice) return characterVoice;
   const selected = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]')?.value.trim();
   if (selected) return selected;
   try {
