@@ -59,8 +59,8 @@ def _candidate_image_model_dirs(
     definition = _provider_definition(provider_name)
     download_dir = _safe_str(download_dir).strip() or "image"
     root = download_dir if os.path.isabs(download_dir) else os.path.join(MODELS_DIR, download_dir)
-
     candidates: List[str] = []
+
     configured = _safe_str(local_dir).strip()
     if configured:
         candidates.append(os.path.normpath(configured))
@@ -259,7 +259,7 @@ def get_image_local_model_status(provider_name: str, local_dir: str = "") -> Dic
     }
 
 
-def download_image_model(provider_name: str) -> Dict[str, Any]:
+def download_image_model(provider_name: str, hf_token: str = "") -> Dict[str, Any]:
     provider_name = _safe_str(provider_name).strip().lower()
     definition = _provider_definition(provider_name)
     if not definition.get("supports_download"):
@@ -277,7 +277,9 @@ def download_image_model(provider_name: str) -> Dict[str, Any]:
     except Exception as exc:
         return {"ok": False, "provider": provider_name, "error": f"huggingface_hub_missing:{exc}"}
 
-    token = os.environ.get("HF_TOKEN", "").strip() or None
+    # A UI-supplied token is scoped to this call only. It is never persisted in
+    # settings; the launcher-level HF_TOKEN remains the fallback for headless use.
+    token = _safe_str(hf_token).strip() or os.environ.get("HF_TOKEN", "").strip() or None
     try:
         snapshot_download(
             repo_id=repo_id,
@@ -288,7 +290,7 @@ def download_image_model(provider_name: str) -> Dict[str, Any]:
     except Exception as exc:
         hint = ""
         if definition.get("gated"):
-            hint = ": accept the model license on Hugging Face and set HF_TOKEN"
+            hint = ": accept the model license on Hugging Face and provide a valid token"
         return {
             "ok": False,
             "provider": provider_name,
