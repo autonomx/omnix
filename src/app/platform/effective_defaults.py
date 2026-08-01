@@ -183,7 +183,7 @@ def apply_job_defaults(value: Any) -> Any:
         _apply_voice_defaults(payload, profile)
     elif module == "stt":
         _apply_stt_defaults(payload, profile)
-    elif module == "image-generation":
+    elif module in {"image-generation", "character-avatar"}:
         _apply_image_defaults(payload, profile)
 
     if resource_class == "gpu:llm":
