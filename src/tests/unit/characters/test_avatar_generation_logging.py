@@ -13,7 +13,7 @@ class _FailingAvatarGenerationService:
         raise RuntimeError(f"image queue unavailable for {character_id}")
 
 
-def test_avatar_generation_500_writes_traceback_to_resources_log(
+def test_avatar_generation_queue_failure_is_actionable_and_logged(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -29,9 +29,12 @@ def test_avatar_generation_500_writes_traceback_to_resources_log(
 
     response = client.post("/api/characters/anaka/avatar-generations", json={})
 
-    assert response.status_code == 500
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "avatar_generation_queue_unavailable:image queue unavailable for anaka"
+    )
     contents = log_path.read_text(encoding="utf-8")
     assert "event=avatar_generation_request_started" in contents
-    assert "event=avatar_generation_request_failed" in contents
+    assert "event=avatar_generation_queue_unavailable" in contents
     assert '"character_id": "anaka"' in contents
     assert "RuntimeError: image queue unavailable for anaka" in contents
