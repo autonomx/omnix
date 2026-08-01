@@ -226,6 +226,17 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
     assert image.input_payload["height"] == 640
     assert image.input_payload["unload_after_generation"] is False
 
+    avatar = CreateJobRequest(
+        module="character-avatar",
+        type="image.generate",
+        resource_class=ResourceClass.GPU_IMAGE,
+        input_payload={"prompt": "front-facing portrait"},
+    )
+    assert avatar.input_payload["provider_id"] == "image:flux_klein"
+    assert avatar.input_payload["width"] == 1024
+    assert avatar.input_payload["height"] == 640
+    assert avatar.input_payload["unload_after_generation"] is False
+
 
 def test_unrelated_cpu_job_payload_is_not_mutated(monkeypatch) -> None:
     _install(monkeypatch)
