@@ -149,6 +149,20 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config.ttsVoice).toBe('Jinx');
   });
 
+  it('uses the retained runtime for manual playback without an active call marker', async () => {
+    document.body.innerHTML = `
+      <section class="assistant-live-card" data-live-voice-id="">
+        <span class="assistant-live-identity">Jinx is active in Live Voice</span>
+      </section>`;
+    await retainRuntime();
+
+    const config = createAssistantWorkspaceRuntimeConfig({
+      VITE_ASSISTANT_TTS_VOICE: 'default',
+    });
+
+    expect(config.ttsVoice).toBe('Jinx');
+  });
+
   it('uses the retained trusted runtime when only the visible active character can confirm it', async () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-id="">
@@ -163,10 +177,10 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config.ttsVoice).toBe('Jinx');
   });
 
-  it('does not use a retained runtime belonging to a different active character', async () => {
+  it('does not use a retained runtime belonging to a different displayed character', async () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-id="">
-        <span class="assistant-live-identity active">Talking to Maya</span>
+        <span class="assistant-live-identity">Maya is active in Live Voice</span>
       </section>`;
     await retainRuntime();
 
