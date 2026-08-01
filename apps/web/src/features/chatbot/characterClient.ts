@@ -166,6 +166,11 @@ export interface CharacterDataActionResponse {
 }
 
 const trackedPlaybackRuntimes = new Map<string, Set<CharacterLiveCallRuntime>>();
+let latestTrustedPlaybackRuntime: CharacterLiveCallRuntime | null = null;
+
+export function readLatestTrustedCharacterRuntime(): CharacterLiveCallRuntime | null {
+  return latestTrustedPlaybackRuntime;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -196,6 +201,7 @@ function synchronizeTrackedPlaybackRuntime(runtime: CharacterLiveCallRuntime): C
   for (const existing of tracked) Object.assign(existing, playbackRuntime);
   tracked.add(playbackRuntime);
   trackedPlaybackRuntimes.set(playbackRuntime.session_id, tracked);
+  latestTrustedPlaybackRuntime = playbackRuntime;
   publishCharacterAvatarRuntime(playbackRuntime);
   return playbackRuntime;
 }
