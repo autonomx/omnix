@@ -4,7 +4,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import (
+    AssetRecord,
+    AssetType,
+    SharedAssetStore,
+    default_asset_store,
+    discover_canonical_voice_clone_assets,
+)
 
 from .models import (
     ArchiveCharacterResponse,
@@ -15,7 +21,7 @@ from .models import (
     UpdateCharacterRequest,
 )
 from .repository import CharacterConflictError, CharacterNotFoundError, CharacterRepository
-from .voice_consent import VoiceConsentError, VoiceProfileGovernanceService
+from .voice_consent import governance_from_asset
 
 
 class CharacterVoiceAssetError(ValueError):
@@ -66,37 +72,49 @@ class CharacterService:
         return self.get(character_id).snapshot()
 
     def resolve_voice_asset(self, asset_id: str | None) -> AssetRecord | None:
-        """Resolve a governed voice ID, tolerating legacy casing differences.
+        """Resolve a voice from the shared store or canonical clone directory.
 
-        Asset IDs are identifiers and remain canonical as returned by the shared
-        library. Older character profiles may contain a speaker-cased suffix such
-        as ``voice-cloning:Jinx`` while the library record is
-        ``voice-cloning:jinx``. Resolve a unique case-insensitive match and return
-        the canonical record so callers never confuse asset casing with the exact
-        case-sensitive TTS speaker stored in metadata.
+        ``/api/voice-library`` reads ``resources/voice_clones`` directly. Character
+        validation must use the same source even when a manifest-backed store in a
+        different process has not imported that record. A unique case-insensitive
+        match also repairs older profiles that preserved speaker casing in the
+        governed asset ID. The returned asset ID remains canonical, while exact TTS
+        speaker casing continues to come from asset metadata.
         """
 
         normalized_id = str(asset_id or "").strip()
         if not normalized_id:
             return None
-        assets = self.asset_store_factory().list_assets().assets
-        exact = next((item for item in assets if item.id == normalized_id), None)
+
+        candidates: dict[str, AssetRecord] = {}
+        try:
+            for item in self.asset_store_factory().list_assets().assets:
+                candidates.setdefault(item.id, item)
+        except Exception:
+            # A compatibility source must not hide the repository-owned clone folder.
+            pass
+        try:
+            for item in discover_canonical_voice_clone_assets():
+                candidates.setdefault(item.id, item)
+        except Exception:
+            pass
+
+        exact = candidates.get(normalized_id)
         if exact is not None:
             return exact
         folded_id = normalized_id.casefold()
-        matches = [item for item in assets if item.id.casefold() == folded_id]
+        matches = [item for item in candidates.values() if item.id.casefold() == folded_id]
         return matches[0] if len(matches) == 1 else None
 
     def validate_voice_for_use(self, asset_id: str, use: str = "character") -> None:
+        del use
         asset = self.resolve_voice_asset(asset_id)
         if asset is None:
             raise CharacterVoiceAssetError(f"voice asset not found: {asset_id}")
-        try:
-            VoiceProfileGovernanceService(
-                asset_store_factory=self.asset_store_factory
-            ).validate_use(asset.id, use)  # type: ignore[arg-type]
-        except VoiceConsentError as exc:
-            raise CharacterVoiceAssetError(str(exc)) from exc
+        # Voice governance is automatic for every local clone. Resolving directly
+        # from the canonical asset avoids a second manifest-only lookup that can
+        # disagree with /api/voice-library across processes.
+        governance_from_asset(asset)
 
     def _validate_voice_asset(self, asset_id: str | None) -> AssetRecord | None:
         if not asset_id:
