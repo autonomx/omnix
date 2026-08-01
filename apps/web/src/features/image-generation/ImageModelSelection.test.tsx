@@ -115,9 +115,35 @@ it('shows Download Model and starts the service automatically before downloading
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: 'z_image_turbo' }),
     });
-    expect(onDownload).toHaveBeenCalledWith('z_image_turbo');
+    expect(onDownload).toHaveBeenCalledWith('z_image_turbo', undefined);
   });
   expect(onRefresh).not.toHaveBeenCalled();
+});
+
+it('passes a masked one-time token when downloading a gated model', () => {
+  const onDownload = vi.fn();
+  const status: ImageModelStatusPayload = {
+    ok: false,
+    service: 'image',
+    enabled: true,
+    provider: 'krea2_turbo',
+    model: 'Krea 2 Turbo',
+    loaded: false,
+    state: 'unloaded',
+    supports_download: true,
+    gated: true,
+    local_model: { complete: false, missing: ['model_index.json'] },
+  };
+
+  renderControl(status, { onDownload });
+
+  const tokenInput = screen.getByLabelText('Hugging Face token');
+  expect(tokenInput).toHaveAttribute('type', 'password');
+  fireEvent.change(tokenInput, { target: { value: '  hf_test_token  ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Download Model' }));
+
+  expect(onDownload).toHaveBeenCalledWith('krea2_turbo', 'hf_test_token');
+  expect(screen.getByText(/Used only for this download and not stored/)).toBeInTheDocument();
 });
 
 it('shows Load Model and starts the service automatically for downloaded files', async () => {
