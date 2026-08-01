@@ -1,6 +1,7 @@
 """Character profile management with shared voice-asset validation."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -20,8 +21,14 @@ from .models import (
     CreateCharacterRequest,
     UpdateCharacterRequest,
 )
-from .repository import CharacterConflictError, CharacterNotFoundError, CharacterRepository
+from .repository import (
+    CharacterConflictError,
+    CharacterNotFoundError,
+    CharacterRepository,
+)
 from .voice_consent import governance_from_asset
+
+LOGGER = logging.getLogger("uvicorn.error")
 
 
 class CharacterVoiceAssetError(ValueError):
@@ -90,14 +97,21 @@ class CharacterService:
         try:
             for item in self.asset_store_factory().list_assets().assets:
                 candidates.setdefault(item.id, item)
-        except Exception:
-            # A compatibility source must not hide the repository-owned clone folder.
-            pass
+        except (OSError, TypeError, ValueError) as exc:
+            LOGGER.warning(
+                "[Character Voice] shared asset discovery failed asset_id=%s error=%s",
+                normalized_id,
+                exc,
+            )
         try:
             for item in discover_canonical_voice_clone_assets():
                 candidates.setdefault(item.id, item)
-        except Exception:
-            pass
+        except (OSError, TypeError, ValueError) as exc:
+            LOGGER.warning(
+                "[Character Voice] canonical voice discovery failed asset_id=%s error=%s",
+                normalized_id,
+                exc,
+            )
 
         exact = candidates.get(normalized_id)
         if exact is not None:
