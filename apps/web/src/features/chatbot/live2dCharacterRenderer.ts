@@ -91,7 +91,7 @@ let activeApplication: PixiApplication | null = null;
 let activeModel: Live2DModel | null = null;
 let activeResizeObserver: ResizeObserver | null = null;
 let currentMouthShape: Live2DMouthShape = { open: 0, form: 0 };
-let silenceTimer: number | null = null;
+let silenceTimer: ReturnType<typeof setTimeout> | null = null;
 let renderSequence = 0;
 let runtimePromise: Promise<PixiGlobal> | null = null;
 
@@ -219,9 +219,9 @@ function fitModel(host: HTMLElement, application: PixiApplication, model: Live2D
 
 function setViseme(viseme: Live2DViseme, durationMs: number): void {
   currentMouthShape = live2dMouthShapeForViseme(viseme);
-  if (silenceTimer !== null) window.clearTimeout(silenceTimer);
+  if (silenceTimer !== null) clearTimeout(silenceTimer);
   if (viseme === 'silence') return;
-  silenceTimer = window.setTimeout(() => {
+  silenceTimer = setTimeout(() => {
     currentMouthShape = live2dMouthShapeForViseme('silence');
     silenceTimer = null;
   }, Math.max(80, Math.min(500, durationMs + 65)));
@@ -285,7 +285,7 @@ function loadScript(source: string): Promise<void> {
 
 function destroyActiveRenderer(): void {
   renderSequence += 1;
-  if (silenceTimer !== null) window.clearTimeout(silenceTimer);
+  if (silenceTimer !== null) clearTimeout(silenceTimer);
   silenceTimer = null;
   currentMouthShape = { open: 0, form: 0 };
   activeResizeObserver?.disconnect();
