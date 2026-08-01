@@ -166,6 +166,19 @@
   border-top: 1px solid rgba(112, 130, 176, 0.13);
 }
 
+.image-preview-rendered-image {
+  height: auto;
+  max-height: 100%;
+  max-width: 100%;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  width: auto;
+}
+
+.image-preview-rendered-image.loaded {
+  opacity: 1;
+}
+
 @media (max-width: 980px) {
   .image-assets-toolbar {
     max-width: none;
