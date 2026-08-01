@@ -115,12 +115,19 @@ def get_image_service_status(provider: str = "") -> Dict[str, Any]:
     return request_image_service("GET", f"/provider/status{query}", timeout=5.0)
 
 
+def _image_service_ready() -> bool:
+    """Probe only FastAPI readiness; do not scan model files during startup."""
+
+    payload = request_image_service("GET", "/openapi.json", timeout=2.0)
+    return bool(payload.get("openapi"))
+
+
 def start_image_service_via_launcher(
     provider: str = "flux_klein",
     *,
     startup_timeout: float = 30.0,
 ) -> Dict[str, Any]:
-    """Start the lightweight image service and wait until its status endpoint responds.
+    """Start the lightweight image service and wait until FastAPI is reachable.
 
     Starting the service does not download a model or load weights into memory.
     The launcher remains the process owner so service logs and stop/restart actions
@@ -176,17 +183,18 @@ def start_image_service_via_launcher(
     last_error = "image_service_unreachable"
     while time.monotonic() < deadline:
         try:
-            status = get_image_service_status(provider)
+            if _image_service_ready():
+                return {
+                    "ok": True,
+                    "service": "image",
+                    "provider": provider,
+                    "loaded": False,
+                    "state": "unloaded",
+                    "started": True,
+                    "launcher": launcher_result,
+                }
         except RuntimeError as exc:
             last_error = str(exc)
-            time.sleep(0.25)
-            continue
-        if status.get("ok") and status.get("state") != "unavailable":
-            status = dict(status)
-            status["started"] = True
-            status["launcher"] = launcher_result
-            return status
-        last_error = str(status.get("error") or status.get("state") or "image_service_not_ready")
         time.sleep(0.25)
 
     return {
