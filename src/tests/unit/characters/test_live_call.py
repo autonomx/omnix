@@ -4,8 +4,13 @@ import json
 import os
 from pathlib import Path
 
-import app.assets.canonical_voice_clones as canonical_voice_clones
-from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore
+from app.assets import (
+    AssetListResponse,
+    AssetRecord,
+    AssetType,
+    SharedAssetStore,
+    canonical_voice_clones,
+)
 from app.characters import (
     CharacterRepository,
     CreateCharacterRequest,
