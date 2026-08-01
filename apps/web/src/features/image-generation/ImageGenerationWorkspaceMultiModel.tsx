@@ -52,17 +52,20 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
   const workersQuery = useQuery({
     queryKey: ['image-generation', 'worker-health'],
     queryFn: () => omnixApiClient.get<WorkerHealthPayload>('/api/workers/health'),
-    refetchInterval: 30_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
   const modelStatusQuery = useQuery({
     queryKey: [...IMAGE_MODEL_QUERY_ROOT, selectedModelProvider],
     queryFn: () => omnixApiClient.get<ImageModelStatusPayload>(
       `/api/image-generation/model/status?provider=${encodeURIComponent(selectedModelProvider)}`,
     ),
-    refetchInterval: (query) => {
-      const state = query.state.data?.state;
-      return state === 'downloading' || state === 'loading' || state === 'unloading' ? 1_000 : 10_000;
-    },
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
   const jobsQuery = useQuery({
     queryKey: IMAGE_JOBS_QUERY_KEY,
