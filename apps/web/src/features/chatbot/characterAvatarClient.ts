@@ -76,12 +76,22 @@ export interface UploadedAvatarSourceAsset {
 
 const CHARACTER_AVATAR_PROVIDER_ID = 'image:flux_klein';
 
+async function requestError(response: Response): Promise<string> {
+  const body = await response.text();
+  if (!body) return `Avatar request failed with status ${response.status}.`;
+  try {
+    const payload = JSON.parse(body) as { detail?: unknown; error?: unknown };
+    const detail = payload.detail ?? payload.error;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+  } catch {
+    // Preserve non-JSON error text.
+  }
+  return body;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Avatar request failed with status ${response.status}.`);
-  }
+  if (!response.ok) throw new Error(await requestError(response));
   return response.json() as Promise<T>;
 }
 
@@ -104,12 +114,20 @@ export const characterAvatarClient = {
     );
     return payload.asset;
   },
-  createGeneration(characterId: string, input: CreateCharacterAvatarGenerationInput): Promise<CharacterAvatarGenerationBatch> {
+  async createGeneration(
+    characterId: string,
+    input: CreateCharacterAvatarGenerationInput,
+  ): Promise<CharacterAvatarGenerationBatch> {
+    const providerId = input.provider_id?.trim() || CHARACTER_AVATAR_PROVIDER_ID;
+    await request<Record<string, unknown>>(
+      '/api/image-generation/model/ensure-loaded',
+      jsonInit('POST', { provider: providerId }),
+    );
     return request(
       `/api/characters/${encodeURIComponent(characterId)}/avatar-generations`,
       jsonInit('POST', {
         ...input,
-        provider_id: input.provider_id?.trim() || CHARACTER_AVATAR_PROVIDER_ID,
+        provider_id: providerId,
         unload_after_generation: input.unload_after_generation ?? false,
       }),
     );
