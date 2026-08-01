@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from io import BytesIO
+
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
 from app.gateway.main import create_gateway_app
@@ -54,6 +57,43 @@ def test_image_asset_file_is_served_by_asset_id_with_cache_headers(tmp_path, mon
 
     download = client.get("/api/assets/image:test/file?download=true")
     assert download.headers["content-disposition"].startswith("attachment")
+
+
+def test_browser_preview_normalizes_transparent_png_without_changing_download(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "transparent-z-image.png"
+    Image.new("RGBA", (4, 3), (220, 40, 60, 0)).save(image_path, format="PNG")
+    original_bytes = image_path.read_bytes()
+    store = _store_with_asset(
+        tmp_path,
+        AssetRecord(
+            id="image:z-transparent",
+            module="image-generation",
+            type=AssetType.IMAGE,
+            mime_type="image/png",
+            storage_path=str(image_path),
+            created_at="2026-01-01T00:00:00+00:00",
+        ),
+    )
+    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: store)
+    client = TestClient(create_gateway_app())
+
+    preview = client.get("/api/assets/image:z-transparent/file?preview=true")
+
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/png"
+    assert preview.headers["x-omnix-image-normalized"] == "1"
+    assert preview.headers["cache-control"] == "public, max-age=300, must-revalidate"
+    with Image.open(BytesIO(preview.content)) as normalized:
+        assert normalized.mode == "RGB"
+        assert normalized.size == (4, 3)
+        assert normalized.getpixel((0, 0)) == (220, 40, 60)
+
+    download = client.get("/api/assets/image:z-transparent/file?download=true")
+    assert download.status_code == 200
+    assert download.content == original_bytes
+    with Image.open(BytesIO(download.content)) as original:
+        assert original.mode == "RGBA"
+        assert original.getpixel((0, 0))[3] == 0
 
 
 def test_image_asset_file_uses_direct_lookup_beyond_list_page(tmp_path, monkeypatch) -> None:
