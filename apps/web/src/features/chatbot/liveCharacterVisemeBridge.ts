@@ -43,7 +43,7 @@ const FALLBACK_FRAME: Record<CharacterViseme, string> = {
 let runtime: RuntimeDetail | null = null;
 let currentViseme: CharacterViseme = 'silence';
 let nextVisemeAudioAt = 0;
-let animationTimers: number[] = [];
+let animationTimers: ReturnType<typeof setTimeout>[] = [];
 const preloadedImages = new Map<string, HTMLImageElement>();
 
 export function visemeSequenceFromText(text: string): CharacterViseme[] {
@@ -246,7 +246,7 @@ function animateSpriteViseme(
   keys.forEach((frameKey, index) => {
     const render = (): void => displaySpriteFrame(pack, frameKey, next);
     if (index === 0) render();
-    else animationTimers.push(window.setTimeout(render, Math.round(index * stepMs)));
+    else animationTimers.push(setTimeout(render, Math.round(index * stepMs)));
   });
 }
 
@@ -343,7 +343,7 @@ function preloadAvatarFrames(pack: RuntimeAvatarPack | null): void {
 }
 
 function clearAnimationTimers(): void {
-  for (const timer of animationTimers) window.clearTimeout(timer);
+  for (const timer of animationTimers) clearTimeout(timer);
   animationTimers = [];
 }
 
