@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { characterClient, type CharacterLiveCallRuntime } from './characterClient';
+import {
+  characterClient,
+  readLatestTrustedCharacterRuntime,
+  type CharacterLiveCallRuntime,
+} from './characterClient';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -41,7 +45,7 @@ function runtime(overrides: Partial<CharacterLiveCallRuntime> = {}): CharacterLi
 }
 
 describe('characterClient live-call runtime', () => {
-  it('loads the trusted runtime for the selected chat session', async () => {
+  it('loads and retains the trusted runtime for the selected chat session', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       expect(input.toString()).toBe('/api/chat/sessions/chat%3Aone/live-call/runtime');
       return Response.json(runtime());
@@ -55,10 +59,11 @@ describe('characterClient live-call runtime', () => {
     expect(resolved.voice_profile_asset_id).toBe('voice-cloning:maya');
     expect(resolved.speech_style.speed).toBe(0.94);
     expect(resolved.preload.memory_record_count).toBe(4);
+    expect(readLatestTrustedCharacterRuntime()).toBe(resolved);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('updates an already-referenced playback runtime when the linked voice changes', async () => {
+  it('updates an already-referenced playback runtime and retained runtime when the linked voice changes', async () => {
     let requestCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       expect(input.toString()).toBe('/api/chat/sessions/chat%3Ahot-swap/live-call/runtime');
@@ -83,6 +88,7 @@ describe('characterClient live-call runtime', () => {
     expect(activeRuntimeReference.voice_speaker_id).toBe('Inigo');
     expect(activeRuntimeReference.voice_profile_asset_id).toBe('voice-cloning:inigo');
     expect(activeRuntimeReference.character_profile_version).toBe(4);
+    expect(readLatestTrustedCharacterRuntime()).toBe(refreshedRuntime);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
