@@ -32,6 +32,54 @@ def test_image_model_status_proxies_service_status(monkeypatch):
     assert response.json()["loaded"] is False
 
 
+def test_image_service_start_uses_launcher_and_returns_ready_status(monkeypatch):
+    calls: list[str] = []
+
+    def start(provider: str):
+        calls.append(provider)
+        return {
+            "ok": True,
+            "service": "image",
+            "provider": provider,
+            "loaded": False,
+            "state": "unloaded",
+            "started": True,
+        }
+
+    monkeypatch.setattr(image_model_routes, "start_image_service_via_launcher", start)
+
+    response = TestClient(_app()).post(
+        "/api/image-generation/service/start",
+        json={"provider": "Z_IMAGE_TURBO"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "unloaded"
+    assert response.json()["loaded"] is False
+    assert calls == ["z_image_turbo"]
+
+
+def test_image_service_start_failure_is_actionable(monkeypatch):
+    monkeypatch.setattr(
+        image_model_routes,
+        "start_image_service_via_launcher",
+        lambda _provider: {
+            "ok": False,
+            "loaded": False,
+            "state": "unavailable",
+            "error": "service_disabled",
+        },
+    )
+
+    response = TestClient(_app()).post(
+        "/api/image-generation/service/start",
+        json={"provider": "z_image_turbo"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "service_disabled"
+
+
 def test_image_model_load_and_unload_proxy_provider(monkeypatch):
     calls: list[tuple[str, str]] = []
 
