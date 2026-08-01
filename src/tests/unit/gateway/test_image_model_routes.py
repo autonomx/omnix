@@ -147,12 +147,53 @@ def test_image_model_load_and_unload_proxy_provider(monkeypatch):
     assert calls == [("load", "flux_klein"), ("unload", "flux_klein")]
 
 
+def test_unavailable_runtime_preserves_downloaded_flux_status(monkeypatch):
+    def fail():
+        raise RuntimeError("image_service_unreachable")
+
+    monkeypatch.setattr(image_model_routes, "get_image_service_status", fail)
+    monkeypatch.setattr(image_model_routes, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(
+        image_model_routes,
+        "get_image_local_model_status",
+        lambda provider: {
+            "ok": provider == "flux_klein",
+            "exists": provider == "flux_klein",
+            "complete": provider == "flux_klein",
+            "missing": [] if provider == "flux_klein" else ["model_index.json"],
+            "local_dir": f"resources/models/image/{provider}",
+        },
+    )
+
+    response = TestClient(_app()).get(
+        "/api/image-generation/model/status?provider=flux_klein"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["state"] == "unavailable"
+    assert payload["downloaded"] is True
+    assert payload["local_model"]["complete"] is True
+    assert payload["local_model"]["local_dir"].endswith("flux_klein")
+
+
 def test_image_model_status_returns_structured_unavailable_payload(monkeypatch):
     def fail():
         raise RuntimeError("image_service_unreachable")
 
     monkeypatch.setattr(image_model_routes, "get_image_service_status", fail)
     monkeypatch.setattr(image_model_routes, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(
+        image_model_routes,
+        "get_image_local_model_status",
+        lambda provider: {
+            "ok": False,
+            "exists": False,
+            "complete": False,
+            "missing": ["model_index.json"],
+            "local_dir": f"resources/models/image/{provider}",
+        },
+    )
 
     response = TestClient(_app()).get("/api/image-generation/model/status")
 
