@@ -88,7 +88,7 @@ describe('ImageAssetGallery interactions', () => {
 });
 
 describe('ImageJobList interactions', () => {
-  it('expands the bounded list and wires result, cancel, and retry actions', () => {
+  it('expands the bounded list and wires result, cancel, retry, and visible preview actions', () => {
     const onCancel = vi.fn();
     const onRetry = vi.fn();
     const onSelectAsset = vi.fn();
@@ -173,7 +173,10 @@ describe('ImageJobList interactions', () => {
     expect(dialog).toBeInTheDocument();
     expect(dialog.parentElement).toBe(document.body);
     const imageLoader = screen.getByTestId('image-preview-loader');
+    expect(screen.getByText('Loading image...')).toBeInTheDocument();
     fireEvent.load(imageLoader);
+    expect(imageLoader).toHaveClass('image-preview-rendered-image', 'loaded');
+    expect(screen.queryByText('Loading image...')).not.toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Completed image' })).toHaveAttribute('src', '/api/assets/asset-one/file');
     fireEvent.error(imageLoader);
     expect(screen.getByRole('alert')).toHaveTextContent('The image could not be displayed.');
