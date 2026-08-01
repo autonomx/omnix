@@ -181,10 +181,13 @@ def start_image_service_via_launcher(
             last_error = str(exc)
             time.sleep(0.25)
             continue
-        status = dict(status)
-        status["started"] = True
-        status["launcher"] = launcher_result
-        return status
+        if status.get("ok") and status.get("state") != "unavailable":
+            status = dict(status)
+            status["started"] = True
+            status["launcher"] = launcher_result
+            return status
+        last_error = str(status.get("error") or status.get("state") or "image_service_not_ready")
+        time.sleep(0.25)
 
     return {
         "ok": False,
