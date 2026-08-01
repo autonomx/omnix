@@ -4,7 +4,8 @@ import {
   type BufferedTtsPlaybackState,
 } from './assistant-buffered-tts-player';
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
-import { resolveCharacterPlaybackVoice } from './runtime-config';
+import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+import { resolvePlaybackVoiceWithDiagnostics } from './voice-resolution-diagnostics';
 
 const STREAM_AUDIO_BUTTON_ATTRIBUTE = 'data-omnix-stream-audio';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
@@ -60,10 +61,35 @@ export function initializeChatMessageAudioControllerV2(root: ParentNode = docume
     stopActiveButton(root);
     activeButton = button;
     setButtonState(button, true);
+
+    const voiceResolution = resolvePlaybackVoiceWithDiagnostics('manual-play');
+    const reporter = createLiveCallDiagnosticsReporter(voiceResolution.traceId);
+    reporter.record('voice_resolution_decision', {
+      ...voiceResolution.details,
+      playback_voice_id: voiceResolution.voiceId,
+      spoken_text_length: text.length,
+    }, 'voice-resolution');
+
     void playBufferedTts(text, {
-      voiceId: resolveChatMessageAudioVoiceId(),
-      onStateChange: (playbackState) => handlePlaybackState(root, button, playbackState),
-    }).catch((error: unknown) => {
+      voiceId: voiceResolution.voiceId,
+      onStateChange: (playbackState) => {
+        reporter.record('buffered_playback_state', {
+          caller: voiceResolution.diagnosticSource,
+          playback_voice_id: voiceResolution.voiceId,
+          playback_state: playbackState,
+        }, 'buffered-tts');
+        handlePlaybackState(root, button, playbackState);
+      },
+    }).then(() => reporter.close('buffered_playback_completed', {
+      caller: voiceResolution.diagnosticSource,
+      playback_voice_id: voiceResolution.voiceId,
+    })).catch(async (error: unknown) => {
+      await reporter.close('buffered_playback_failed', {
+        caller: voiceResolution.diagnosticSource,
+        playback_voice_id: voiceResolution.voiceId,
+        error_type: error instanceof Error ? error.name : typeof error,
+        error_message: error instanceof Error ? error.message : String(error),
+      });
       if (activeButton !== button) return;
       setButtonState(button, false);
       activeButton = null;
@@ -146,16 +172,7 @@ function announceAudioPlayback(speaking: boolean, source: string): void {
 }
 
 export function resolveChatMessageAudioVoiceId(): string | null {
-  const characterVoice = resolveCharacterPlaybackVoice();
-  if (characterVoice) return characterVoice;
-  const selected = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]')?.value.trim();
-  if (selected) return selected;
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') || '{}') as { voiceId?: unknown };
-    return typeof parsed.voiceId === 'string' && parsed.voiceId.trim() ? parsed.voiceId.trim() : null;
-  } catch {
-    return null;
-  }
+  return resolvePlaybackVoiceWithDiagnostics('manual-play-inspection').voiceId;
 }
 
 function setStatus(root: ParentNode, message: string): void {
