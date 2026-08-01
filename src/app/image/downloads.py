@@ -51,25 +51,60 @@ def _read_json(path: str) -> Dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def _candidate_image_model_dirs(
+    provider_name: str,
+    local_dir: str,
+    download_dir: str,
+) -> List[str]:
+    definition = _provider_definition(provider_name)
+    download_dir = _safe_str(download_dir).strip() or "image"
+    root = download_dir if os.path.isabs(download_dir) else os.path.join(MODELS_DIR, download_dir)
+
+    candidates: List[str] = []
+    configured = _safe_str(local_dir).strip()
+    if configured:
+        candidates.append(os.path.normpath(configured))
+
+    preferred_name = _safe_str(definition.get("local_dir_name")).strip()
+    if preferred_name:
+        candidates.append(os.path.normpath(os.path.join(root, preferred_name)))
+
+    for legacy_name in definition.get("legacy_local_dir_names") or []:
+        legacy_name = _safe_str(legacy_name).strip()
+        if legacy_name:
+            candidates.append(os.path.normpath(os.path.join(root, legacy_name)))
+
+    unique: List[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = os.path.normcase(os.path.abspath(candidate))
+        if key not in seen:
+            unique.append(candidate)
+            seen.add(key)
+    return unique
+
+
 def normalize_image_model_local_dir(
     provider_name: str,
     local_dir: str,
     download_dir: str,
 ) -> str:
-    local_dir = _safe_str(local_dir).strip()
-    if local_dir:
-        return os.path.normpath(local_dir)
+    candidates = _candidate_image_model_dirs(provider_name, local_dir, download_dir)
+    if not candidates:
+        raise ValueError(f"image_model_local_dir_unresolved:{provider_name}")
 
-    definition = _provider_definition(provider_name)
-    download_dir = _safe_str(download_dir).strip() or "image"
-    root = download_dir if os.path.isabs(download_dir) else os.path.join(MODELS_DIR, download_dir)
-    preferred = os.path.normpath(os.path.join(root, _safe_str(definition.get("local_dir_name"))))
+    # Prefer a directory that already contains a real model snapshot. This lets
+    # the canonical resources/models/image/<model> folder win over stale paths
+    # left in settings by earlier builds.
+    for candidate in candidates:
+        if os.path.isfile(os.path.join(candidate, "model_index.json")):
+            return candidate
 
-    for legacy_name in definition.get("legacy_local_dir_names") or []:
-        legacy = os.path.normpath(os.path.join(root, _safe_str(legacy_name)))
-        if os.path.isdir(legacy):
-            return legacy
-    return preferred
+    # Preserve partial downloads so Hugging Face can resume them.
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
+    return candidates[0]
 
 
 def resolve_image_local_dir_from_settings(settings: Dict[str, Any], provider_name: str) -> str:
@@ -77,11 +112,29 @@ def resolve_image_local_dir_from_settings(settings: Dict[str, Any], provider_nam
     settings = _safe_dict(settings)
     image_cfg = _safe_dict(settings.get("image"))
     provider_cfg = _safe_dict(image_cfg.get(provider_name))
-    return normalize_image_model_local_dir(
+    primary = normalize_image_model_local_dir(
         provider_name,
         _safe_str(provider_cfg.get("local_dir")),
         _safe_str(provider_cfg.get("download_dir")),
     )
+
+    if provider_name != "flux_klein":
+        return primary
+
+    # Older installs stored the FLUX path only under rpg_visual. Retain that as
+    # a fallback, while still preferring the canonical downloaded directory.
+    rpg_visual = _safe_dict(settings.get("rpg_visual"))
+    rpg_flux = _safe_dict(rpg_visual.get("flux_klein"))
+    legacy = normalize_image_model_local_dir(
+        provider_name,
+        _safe_str(rpg_flux.get("local_dir")),
+        _safe_str(rpg_flux.get("download_dir")),
+    )
+    if os.path.isfile(os.path.join(primary, "model_index.json")):
+        return primary
+    if os.path.isfile(os.path.join(legacy, "model_index.json")):
+        return legacy
+    return primary
 
 
 def required_image_model_files(provider_name: str) -> List[str]:
@@ -117,7 +170,8 @@ def _validate_model_components(local_dir: str, missing: List[str]) -> None:
 
 
 def _weight_index_files(local_dir: str) -> Iterable[str]:
-    for root, _dirs, files in os.walk(local_dir):
+    for root, dirs, files in os.walk(local_dir):
+        dirs[:] = [name for name in dirs if name != ".cache"]
         for name in files:
             if name.endswith((".safetensors.index.json", ".bin.index.json")):
                 yield os.path.join(root, name)
@@ -182,7 +236,8 @@ def get_image_local_model_status(provider_name: str, local_dir: str = "") -> Dic
 
     has_weights = False
     if exists:
-        for _root, _dirs, files in os.walk(local_dir):
+        for _root, dirs, files in os.walk(local_dir):
+            dirs[:] = [name for name in dirs if name != ".cache"]
             if any(name.endswith((".safetensors", ".bin")) for name in files):
                 has_weights = True
                 break
