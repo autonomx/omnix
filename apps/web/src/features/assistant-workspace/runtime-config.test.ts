@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { liveConversationStore } from './live-conversation-store';
 import {
   DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG,
   createAssistantWorkspaceRuntimeConfig,
@@ -6,6 +7,7 @@ import {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  liveConversationStore.reset();
 });
 
 describe('createAssistantWorkspaceRuntimeConfig', () => {
@@ -53,6 +55,52 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     });
 
     expect(config.ttsVoice).toBe('Inigo');
+  });
+
+  it('uses the session-scoped Character Mode store when the rendered voice is temporarily empty', () => {
+    document.body.innerHTML = `
+      <section class="assistant-live-card" data-live-voice-id="">
+        <span class="assistant-live-identity active">Talking to Jinx</span>
+      </section>`;
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:jinx' });
+    liveConversationStore.dispatch({
+      type: 'identity',
+      identity: {
+        characterId: 'jinx',
+        displayName: 'Jinx',
+        voiceId: 'Jinx',
+        profileVersion: 4,
+      },
+    });
+
+    const config = createAssistantWorkspaceRuntimeConfig({
+      VITE_ASSISTANT_TTS_VOICE: 'default',
+    });
+
+    expect(config.ttsVoice).toBe('Jinx');
+  });
+
+  it('does not leak a stale character-store voice into a System Assistant session', () => {
+    document.body.innerHTML = `
+      <section class="assistant-live-card" data-live-voice-id="">
+        <span class="assistant-live-identity">System Assistant</span>
+      </section>`;
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:old-character' });
+    liveConversationStore.dispatch({
+      type: 'identity',
+      identity: {
+        characterId: 'jinx',
+        displayName: 'Jinx',
+        voiceId: 'Jinx',
+        profileVersion: 4,
+      },
+    });
+
+    const config = createAssistantWorkspaceRuntimeConfig({
+      VITE_ASSISTANT_TTS_VOICE: 'default',
+    });
+
+    expect(config.ttsVoice).toBe('default');
   });
 
   it('ignores empty strings and unknown boolean values', () => {
