@@ -46,8 +46,9 @@ export function createAssistantWorkspaceRuntimeConfig(
     sttServiceUrl: readString(env, 'VITE_ASSISTANT_STT_URL'),
     ttsServiceUrl: readString(env, 'VITE_ASSISTANT_TTS_URL'),
     // Character Mode is authoritative while its trusted runtime belongs to the
-    // currently selected session. Legacy response-audio paths call this factory at
-    // playback time, so they receive the exact case-sensitive TTS speaker.
+    // currently selected or visibly displayed character. Legacy response-audio
+    // paths call this factory at playback time, so they receive the exact
+    // case-sensitive TTS speaker.
     ttsVoice: readActiveCharacterVoice() ?? readString(env, 'VITE_ASSISTANT_TTS_VOICE'),
     eventStorageKey:
       readString(env, 'VITE_ASSISTANT_EVENT_STORAGE_KEY') ??
@@ -84,8 +85,6 @@ function readActiveCharacterVoice(): string | undefined {
   const storeState = liveConversationStore.getState();
   const storeCharacterActive = storeState.identity.characterId !== 'system-assistant';
   const storedVoice = storeCharacterActive ? storeState.identity.voiceId?.trim() : '';
-  const activeIdentity = card?.querySelector<HTMLElement>('.assistant-live-identity.active');
-  const visibleIdentity = normalizeIdentity(activeIdentity?.textContent ?? '');
 
   // characterClient retains the normalized result of every successful trusted
   // /live-call/runtime request. Reading it directly avoids losing the speaker when
@@ -99,20 +98,29 @@ function readActiveCharacterVoice(): string | undefined {
       && storeState.sessionId
       && storeState.sessionId === runtime.session_id,
     );
-    const sameVisibleCharacter = Boolean(
-      visibleIdentity
-      && visibleIdentity.includes(normalizeIdentity(runtime.display_name)),
+    // Manual response playback does not start a Live Voice call, so the identity
+    // label is intentionally not styled `.active`. The displayed character name is
+    // still authoritative for the selected chat and is sufficient to reject a
+    // retained runtime belonging to a different character.
+    const sameDisplayedCharacter = Boolean(
+      renderedIdentity
+      && renderedIdentity.includes(normalizeIdentity(runtime.display_name)),
     );
-    if ((sameSelectedSession || sameVisibleCharacter) && (storedVoice || speakerId)) {
+    if ((sameSelectedSession || sameDisplayedCharacter) && (storedVoice || speakerId)) {
       return storedVoice || speakerId;
     }
   }
 
   // A hot-swapped assignment updates the session-scoped identity before the runtime
-  // refresh can finish. Permit that exact voice only when the visible active identity
+  // refresh can finish. Permit that exact voice only when the displayed identity
   // still matches the store's character.
   const storedDisplayName = normalizeIdentity(storeState.identity.displayName);
-  if (storedVoice && visibleIdentity && storedDisplayName && visibleIdentity.includes(storedDisplayName)) {
+  if (
+    storedVoice
+    && renderedIdentity
+    && storedDisplayName
+    && renderedIdentity.includes(storedDisplayName)
+  ) {
     return storedVoice;
   }
   return undefined;
