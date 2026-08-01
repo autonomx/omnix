@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { characterClient, type CharacterLiveCallRuntime } from '../chatbot/characterClient';
 import { liveConversationStore } from './live-conversation-store';
 import {
   DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG,
@@ -8,8 +9,51 @@ import {
 afterEach(() => {
   document.body.innerHTML = '';
   liveConversationStore.reset();
-  window.dispatchEvent(new CustomEvent('omnix:character-avatar-runtime', { detail: null }));
+  vi.unstubAllGlobals();
 });
+
+function trustedRuntime(
+  overrides: Partial<CharacterLiveCallRuntime> = {},
+): CharacterLiveCallRuntime {
+  return {
+    session_id: 'chat:jinx',
+    interaction_mode: 'character',
+    display_name: 'Jinx',
+    character_id: 'jinx',
+    character_profile_version: 4,
+    effective_identity_hash: 'a'.repeat(64),
+    voice_asset_id: 'voice-cloning:jinx',
+    voice_speaker_id: 'Jinx',
+    greeting: '',
+    speech_style: {
+      speed: 1,
+      temperature: 0.6,
+      top_k: 20,
+      top_p: 0.85,
+      repetition_penalty: 1,
+      expressiveness: 'neutral',
+      emotion: 'neutral',
+      interruption_style: 'balanced',
+    },
+    read_memory: true,
+    write_memory: false,
+    shared_memory_access: 'read_only',
+    preload: {
+      profile_loaded: true,
+      voice_resolved: true,
+      memory_snapshot_loaded: false,
+      memory_record_count: 0,
+      preload_ms: 1,
+      resolved_at: '2026-08-01T00:00:00Z',
+    },
+    ...overrides,
+  };
+}
+
+async function retainRuntime(runtime = trustedRuntime()): Promise<void> {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json(runtime)));
+  await characterClient.liveCallRuntime(runtime.session_id);
+}
 
 describe('createAssistantWorkspaceRuntimeConfig', () => {
   it('uses durable defaults when env values are absent', () => {
@@ -58,7 +102,7 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config.ttsVoice).toBe('Inigo');
   });
 
-  it('uses the session-scoped Character Mode store when the rendered voice is temporarily empty', () => {
+  it('uses a hot-swapped session voice when the rendered voice is temporarily empty', () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-id="">
         <span class="assistant-live-identity active">Talking to Jinx</span>
@@ -81,21 +125,22 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config.ttsVoice).toBe('Jinx');
   });
 
-  it('uses the exact server-published speaker when store identity has not populated yet', () => {
+  it('uses the retained trusted runtime when its event and rendered attribute were missed', async () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-id="">
-        <span class="assistant-live-identity active">Talking to Jinx</span>
+        <span class="assistant-live-identity">Jinx</span>
       </section>`;
-    window.dispatchEvent(new CustomEvent('omnix:character-avatar-runtime', {
-      detail: {
-        session_id: 'chat:jinx',
-        interaction_mode: 'character',
-        character_id: 'jinx',
-        display_name: 'Jinx',
-        voice_asset_id: 'voice-cloning:jinx',
-        voice_speaker_id: 'Jinx',
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:jinx' });
+    liveConversationStore.dispatch({
+      type: 'identity',
+      identity: {
+        characterId: 'jinx',
+        displayName: 'Jinx',
+        voiceId: null,
+        profileVersion: 4,
       },
-    }));
+    });
+    await retainRuntime();
 
     const config = createAssistantWorkspaceRuntimeConfig({
       VITE_ASSISTANT_TTS_VOICE: 'default',
@@ -104,20 +149,26 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config.ttsVoice).toBe('Jinx');
   });
 
-  it('does not use a published speaker belonging to a different active character', () => {
+  it('uses the retained trusted runtime when only the visible active character can confirm it', async () => {
+    document.body.innerHTML = `
+      <section class="assistant-live-card" data-live-voice-id="">
+        <span class="assistant-live-identity active">Talking to Jinx</span>
+      </section>`;
+    await retainRuntime();
+
+    const config = createAssistantWorkspaceRuntimeConfig({
+      VITE_ASSISTANT_TTS_VOICE: 'default',
+    });
+
+    expect(config.ttsVoice).toBe('Jinx');
+  });
+
+  it('does not use a retained runtime belonging to a different active character', async () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-id="">
         <span class="assistant-live-identity active">Talking to Maya</span>
       </section>`;
-    window.dispatchEvent(new CustomEvent('omnix:character-avatar-runtime', {
-      detail: {
-        session_id: 'chat:jinx',
-        interaction_mode: 'character',
-        character_id: 'jinx',
-        display_name: 'Jinx',
-        voice_speaker_id: 'Jinx',
-      },
-    }));
+    await retainRuntime();
 
     const config = createAssistantWorkspaceRuntimeConfig({
       VITE_ASSISTANT_TTS_VOICE: 'default',
@@ -126,12 +177,12 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config.ttsVoice).toBe('default');
   });
 
-  it('does not leak a stale character-store voice into a System Assistant session', () => {
+  it('does not leak a stale retained or stored character voice into System Assistant', async () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-id="">
         <span class="assistant-live-identity">System Assistant</span>
       </section>`;
-    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:old-character' });
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:jinx' });
     liveConversationStore.dispatch({
       type: 'identity',
       identity: {
@@ -141,6 +192,7 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
         profileVersion: 4,
       },
     });
+    await retainRuntime();
 
     const config = createAssistantWorkspaceRuntimeConfig({
       VITE_ASSISTANT_TTS_VOICE: 'default',
