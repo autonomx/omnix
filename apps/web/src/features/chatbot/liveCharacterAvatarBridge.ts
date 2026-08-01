@@ -480,7 +480,8 @@ function renderAvatarHost(): void {
   if (host.parentElement !== layout.stage) layout.stage.append(host);
 
   if (live2d) {
-    host.dataset.voiceMode = currentPresentationState();
+    const presentationState = currentPresentationState();
+    if (host.dataset.voiceMode !== presentationState) host.dataset.voiceMode = presentationState;
     window.dispatchEvent(new CustomEvent(LIVE2D_RENDER_EVENT, { detail: { runtime, host } }));
     return;
   }
@@ -506,7 +507,7 @@ function updateAvatarImage(): void {
   const pack = currentRuntime?.avatar_pack;
   const presentationState = currentPresentationState();
   if (host && currentRuntime && pack?.renderer === 'live2d') {
-    host.dataset.voiceMode = presentationState;
+    if (host.dataset.voiceMode !== presentationState) host.dataset.voiceMode = presentationState;
     const caption = host.querySelector<HTMLElement>('figcaption');
     if (caption) caption.textContent = captionForState(currentRuntime.display_name, presentationState);
     return;
