@@ -49,7 +49,7 @@ export function createAssistantWorkspaceRuntimeConfig(
     // currently selected or visibly displayed character. Legacy response-audio
     // paths call this factory at playback time, so they receive the exact
     // case-sensitive TTS speaker.
-    ttsVoice: readActiveCharacterVoice() ?? readString(env, 'VITE_ASSISTANT_TTS_VOICE'),
+    ttsVoice: resolveCharacterPlaybackVoice() ?? readString(env, 'VITE_ASSISTANT_TTS_VOICE'),
     eventStorageKey:
       readString(env, 'VITE_ASSISTANT_EVENT_STORAGE_KEY') ??
       DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG.eventStorageKey,
@@ -71,16 +71,18 @@ function getImportMetaEnv(): AssistantWorkspaceRuntimeEnv {
   return ((import.meta as unknown as { env?: AssistantWorkspaceRuntimeEnv }).env ?? {}) as AssistantWorkspaceRuntimeEnv;
 }
 
-function readActiveCharacterVoice(): string | undefined {
-  if (typeof document === 'undefined') return undefined;
-  const card = document.querySelector<HTMLElement>('.assistant-live-card');
-  const renderedVoice = card?.dataset.liveVoiceId?.trim();
+export function resolveCharacterPlaybackVoice(): string | null {
+  if (typeof document === 'undefined') return null;
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('.assistant-live-card'));
+  const renderedVoice = cards
+    .map((card) => card.dataset.liveVoiceId?.trim() ?? '')
+    .find(Boolean);
   if (renderedVoice) return renderedVoice;
 
-  const renderedIdentity = normalizeIdentity(
-    card?.querySelector<HTMLElement>('.assistant-live-identity')?.textContent ?? '',
-  );
-  if (renderedIdentity === 'system assistant') return undefined;
+  const renderedIdentities = cards.map((card) => normalizeIdentity(
+    card.querySelector<HTMLElement>('.assistant-live-identity')?.textContent ?? '',
+  ));
+  if (renderedIdentities.some((identity) => identity === 'system assistant')) return null;
 
   const storeState = liveConversationStore.getState();
   const storeCharacterActive = storeState.identity.characterId !== 'system-assistant';
@@ -88,7 +90,7 @@ function readActiveCharacterVoice(): string | undefined {
 
   // characterClient retains the normalized result of every successful trusted
   // /live-call/runtime request. Reading it directly avoids losing the speaker when
-  // the avatar event fired before this module loaded or before React rendered the
+  // an avatar event fired before a player module loaded or before React rendered the
   // data-live-voice-id attribute.
   const runtime = readLatestTrustedCharacterRuntime();
   if (runtime?.interaction_mode === 'character') {
@@ -98,32 +100,28 @@ function readActiveCharacterVoice(): string | undefined {
       && storeState.sessionId
       && storeState.sessionId === runtime.session_id,
     );
-    // Manual response playback does not start a Live Voice call, so the identity
-    // label is intentionally not styled `.active`. The displayed character name is
-    // still authoritative for the selected chat and is sufficient to reject a
-    // retained runtime belonging to a different character.
+    const runtimeIdentity = normalizeIdentity(runtime.display_name);
     const sameDisplayedCharacter = Boolean(
-      renderedIdentity
-      && renderedIdentity.includes(normalizeIdentity(runtime.display_name)),
+      runtimeIdentity
+      && renderedIdentities.some((identity) => identity.includes(runtimeIdentity)),
     );
     if ((sameSelectedSession || sameDisplayedCharacter) && (storedVoice || speakerId)) {
-      return storedVoice || speakerId;
+      return storedVoice || speakerId || null;
     }
   }
 
   // A hot-swapped assignment updates the session-scoped identity before the runtime
-  // refresh can finish. Permit that exact voice only when the displayed identity
-  // still matches the store's character.
+  // refresh can finish. Permit that exact voice only when a displayed identity still
+  // matches the store's character.
   const storedDisplayName = normalizeIdentity(storeState.identity.displayName);
   if (
     storedVoice
-    && renderedIdentity
     && storedDisplayName
-    && renderedIdentity.includes(storedDisplayName)
+    && renderedIdentities.some((identity) => identity.includes(storedDisplayName))
   ) {
     return storedVoice;
   }
-  return undefined;
+  return null;
 }
 
 function normalizeIdentity(value: string): string {
