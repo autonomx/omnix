@@ -7,7 +7,7 @@ import threading
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 from starlette.concurrency import run_in_threadpool
 
 from app.image.downloads import get_image_local_model_status
@@ -25,10 +25,15 @@ router = APIRouter()
 
 _DOWNLOAD_TOTALS_LOCK = threading.Lock()
 _DOWNLOAD_TOTALS: dict[str, int] = {}
+_DOWNLOAD_TOKENS: dict[str, str] = {}
 
 
 class ImageModelActionRequest(BaseModel):
     provider: str = "flux_klein"
+
+
+class ImageModelDownloadRequest(ImageModelActionRequest):
+    hf_token: SecretStr | None = None
 
 
 def _provider(value: str | None) -> str:
@@ -57,6 +62,7 @@ def _read_service_status(provider: str) -> dict[str, Any]:
 def _repository_total_bytes(provider: str) -> int:
     with _DOWNLOAD_TOTALS_LOCK:
         cached = _DOWNLOAD_TOTALS.get(provider)
+        transient_token = _DOWNLOAD_TOKENS.get(provider, "")
     if cached is not None:
         return cached
 
@@ -70,7 +76,7 @@ def _repository_total_bytes(provider: str) -> int:
         info = HfApi().repo_info(
             repo_id=repo_id,
             files_metadata=True,
-            token=os.environ.get("HF_TOKEN", "").strip() or None,
+            token=transient_token or os.environ.get("HF_TOKEN", "").strip() or None,
         )
         total = sum(
             max(0, int(getattr(sibling, "size", 0) or 0))
@@ -79,8 +85,11 @@ def _repository_total_bytes(provider: str) -> int:
     except Exception:
         total = 0
 
-    with _DOWNLOAD_TOTALS_LOCK:
-        _DOWNLOAD_TOTALS[provider] = total
+    # Do not cache a failed/unauthenticated lookup. A subsequent gated download
+    # may provide a one-time token that makes repository metadata available.
+    if total > 0:
+        with _DOWNLOAD_TOTALS_LOCK:
+            _DOWNLOAD_TOTALS[provider] = total
     return total
 
 
@@ -206,8 +215,24 @@ async def start_image_service(request: ImageModelActionRequest) -> dict[str, Any
 
 
 @router.post("/api/image-generation/model/download", include_in_schema=False)
-async def download_image_model(request: ImageModelActionRequest) -> dict[str, Any]:
-    result = await _call_service(download_image_model_via_service, _provider(request.provider))
+async def download_image_model(request: ImageModelDownloadRequest) -> dict[str, Any]:
+    provider_name = _provider(request.provider)
+    token = request.hf_token.get_secret_value().strip() if request.hf_token else ""
+    with _DOWNLOAD_TOTALS_LOCK:
+        _DOWNLOAD_TOTALS.pop(provider_name, None)
+        if token:
+            _DOWNLOAD_TOKENS[provider_name] = token
+        else:
+            _DOWNLOAD_TOKENS.pop(provider_name, None)
+    try:
+        result = await _call_service(
+            download_image_model_via_service,
+            provider_name,
+            token,
+        )
+    finally:
+        with _DOWNLOAD_TOTALS_LOCK:
+            _DOWNLOAD_TOKENS.pop(provider_name, None)
     if not result.get("ok"):
         raise HTTPException(status_code=503, detail=result.get("error") or "image_model_download_failed")
     return result
