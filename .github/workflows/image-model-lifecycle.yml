@@ -81,6 +81,7 @@ jobs:
           src/tests/unit/characters/test_avatar_generation_logging.py
           src/tests/unit/characters/test_avatar_generation_provider_contract.py
           src/tests/unit/gateway/test_image_model_routes.py
+          src/tests/unit/image/test_image_reference_transport.py
           src/tests/unit/image/test_image_service_on_demand.py
           src/tests/unit/image/test_image_service_model_download.py
           src/tests/unit/image/test_image_output_normalization.py
