@@ -37,7 +37,8 @@ class ImageModelDownloadRequest(ImageModelActionRequest):
 
 
 def _provider(value: str | None) -> str:
-    return str(value or "flux_klein").strip().lower() or "flux_klein"
+    normalized = str(value or "flux_klein").strip().lower() or "flux_klein"
+    return normalized.removeprefix("image:")
 
 
 def _model_definition(provider: str) -> dict[str, Any]:
@@ -85,8 +86,6 @@ def _repository_total_bytes(provider: str) -> int:
     except Exception:
         total = 0
 
-    # Do not cache a failed/unauthenticated lookup. A subsequent gated download
-    # may provide a one-time token that makes repository metadata available.
     if total > 0:
         with _DOWNLOAD_TOTALS_LOCK:
             _DOWNLOAD_TOTALS[provider] = total
@@ -170,6 +169,12 @@ async def _call_service(function, *args: Any) -> dict[str, Any]:
     return result
 
 
+def _require_ok(result: dict[str, Any], fallback: str) -> dict[str, Any]:
+    if not result.get("ok"):
+        raise HTTPException(status_code=503, detail=result.get("error") or fallback)
+    return result
+
+
 @router.get("/api/image-generation/model/status", include_in_schema=False)
 async def image_model_status(
     provider: str = Query(default="flux_klein"),
@@ -206,12 +211,23 @@ async def image_model_status(
 @router.post("/api/image-generation/service/start", include_in_schema=False)
 async def start_image_service(request: ImageModelActionRequest) -> dict[str, Any]:
     result = await _call_service(start_image_service_via_launcher, _provider(request.provider))
-    if not result.get("ok"):
-        raise HTTPException(
-            status_code=503,
-            detail=result.get("error") or "image_service_start_failed",
-        )
-    return result
+    return _require_ok(result, "image_service_start_failed")
+
+
+@router.post("/api/image-generation/model/ensure-loaded", include_in_schema=False)
+async def ensure_image_model_loaded(request: ImageModelActionRequest) -> dict[str, Any]:
+    """Start the managed service and make the requested model resident."""
+
+    provider_name = _provider(request.provider)
+    start_result = await _call_service(start_image_service_via_launcher, provider_name)
+    _require_ok(start_result, "image_service_start_failed")
+
+    status = await _call_service(_read_service_status, provider_name)
+    if status.get("ok") and status.get("loaded") and _provider(str(status.get("provider") or "")) == provider_name:
+        return status
+
+    load_result = await _call_service(load_image_model_via_service, provider_name)
+    return _require_ok(load_result, "image_model_load_failed")
 
 
 @router.post("/api/image-generation/model/download", include_in_schema=False)
@@ -233,22 +249,16 @@ async def download_image_model(request: ImageModelDownloadRequest) -> dict[str, 
     finally:
         with _DOWNLOAD_TOTALS_LOCK:
             _DOWNLOAD_TOKENS.pop(provider_name, None)
-    if not result.get("ok"):
-        raise HTTPException(status_code=503, detail=result.get("error") or "image_model_download_failed")
-    return result
+    return _require_ok(result, "image_model_download_failed")
 
 
 @router.post("/api/image-generation/model/load", include_in_schema=False)
 async def load_image_model(request: ImageModelActionRequest) -> dict[str, Any]:
     result = await _call_service(load_image_model_via_service, _provider(request.provider))
-    if not result.get("ok"):
-        raise HTTPException(status_code=503, detail=result.get("error") or "image_model_load_failed")
-    return result
+    return _require_ok(result, "image_model_load_failed")
 
 
 @router.post("/api/image-generation/model/unload", include_in_schema=False)
 async def unload_image_model(request: ImageModelActionRequest) -> dict[str, Any]:
     result = await _call_service(unload_image_model_via_service, _provider(request.provider))
-    if not result.get("ok"):
-        raise HTTPException(status_code=503, detail=result.get("error") or "image_model_unload_failed")
-    return result
+    return _require_ok(result, "image_model_unload_failed")
