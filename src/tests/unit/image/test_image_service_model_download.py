@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -52,6 +54,43 @@ def test_download_does_not_load_selected_model(monkeypatch):
     assert calls == [("download", "krea2_turbo")]
 
 
+def test_image_service_forwards_request_scoped_hf_token(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(image_service_app, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(image_service_app, "is_image_provider_loaded", lambda _provider=None: False)
+    monkeypatch.setattr(
+        image_service_app,
+        "download_image_model",
+        lambda provider, token: calls.append((provider, token)) or {
+            "ok": True,
+            "provider": provider,
+            "loaded": False,
+        },
+    )
+    monkeypatch.setattr(
+        image_service_app,
+        "_local_model_status",
+        lambda provider: {
+            "ok": True,
+            "exists": True,
+            "complete": True,
+            "missing": [],
+            "local_dir": f"resources/models/image/{provider}",
+        },
+    )
+
+    with TestClient(image_service_app.app) as client:
+        response = client.post(
+            "/provider/download",
+            json={"provider": "krea2_turbo", "hf_token": "hf_request_token"},
+        )
+
+    assert response.status_code == 200
+    assert calls == [("krea2_turbo", "hf_request_token")]
+    assert "hf_request_token" not in response.text
+
+
 def _write_model_skeleton(root: Path, *, missing_second_shard: bool = False) -> None:
     (root / "scheduler").mkdir(parents=True)
     (root / "transformer").mkdir(parents=True)
@@ -76,6 +115,40 @@ def _write_model_skeleton(root: Path, *, missing_second_shard: bool = False) -> 
     (root / "transformer" / "diffusion_pytorch_model-00001-of-00002.safetensors").write_bytes(b"weights")
     if not missing_second_shard:
         (root / "transformer" / "diffusion_pytorch_model-00002-of-00002.safetensors").write_bytes(b"weights")
+
+
+def test_explicit_hf_token_is_used_only_for_snapshot_download(monkeypatch, tmp_path):
+    calls: list[dict[str, object]] = []
+
+    def snapshot_download(**kwargs):
+        calls.append(kwargs)
+        _write_model_skeleton(Path(str(kwargs["local_dir"])))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        SimpleNamespace(snapshot_download=snapshot_download),
+    )
+    monkeypatch.setattr(
+        image_downloads,
+        "load_settings",
+        lambda: {
+            "image": {
+                "krea2_turbo": {
+                    "local_dir": str(tmp_path),
+                    "download_dir": "image",
+                }
+            }
+        },
+    )
+    monkeypatch.setattr(image_downloads, "save_settings", lambda _settings: None)
+
+    result = image_downloads.download_image_model("krea2_turbo", "hf_direct_token")
+
+    assert result["ok"] is True
+    assert calls[0]["token"] == "hf_direct_token"
+    assert "hf_token" not in result
+    assert "hf_direct_token" not in json.dumps(result)
 
 
 def test_status_without_explicit_dir_resolves_canonical_model_path(monkeypatch, tmp_path):
