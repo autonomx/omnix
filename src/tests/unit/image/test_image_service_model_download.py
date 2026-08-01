@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app import image_service_app
+from app.image import downloads as image_downloads
 from app.image.downloads import get_image_local_model_status
 
 
@@ -75,6 +76,31 @@ def _write_model_skeleton(root: Path, *, missing_second_shard: bool = False) -> 
     (root / "transformer" / "diffusion_pytorch_model-00001-of-00002.safetensors").write_bytes(b"weights")
     if not missing_second_shard:
         (root / "transformer" / "diffusion_pytorch_model-00002-of-00002.safetensors").write_bytes(b"weights")
+
+
+def test_canonical_flux_download_wins_over_stale_configured_directory(monkeypatch, tmp_path):
+    stale_dir = tmp_path / "stale-flux-path"
+    stale_dir.mkdir()
+    canonical_dir = tmp_path / "image" / "flux2-klein-4b"
+    _write_model_skeleton(canonical_dir)
+    monkeypatch.setattr(image_downloads, "MODELS_DIR", str(tmp_path))
+
+    resolved = image_downloads.resolve_image_local_dir_from_settings(
+        {
+            "image": {
+                "flux_klein": {
+                    "local_dir": str(stale_dir),
+                    "download_dir": "image",
+                }
+            }
+        },
+        "flux_klein",
+    )
+
+    assert Path(resolved) == canonical_dir
+    status = get_image_local_model_status("flux_klein", resolved)
+    assert status["complete"] is True
+    assert status["missing"] == []
 
 
 def test_partial_sharded_snapshot_is_not_reported_as_downloaded(tmp_path):
