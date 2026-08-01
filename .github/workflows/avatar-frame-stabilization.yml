@@ -5,13 +5,24 @@ on:
     paths:
       - "src/app/characters/avatar_frame_stabilization.py"
       - "src/app/characters/avatar_viseme_generation.py"
+      - "src/app/characters/live2d_avatar.py"
+      - "src/app/assistant_context/__init__.py"
       - "src/app/jobs/image_inline.py"
       - "src/tests/unit/characters/test_avatar_frame_stabilization.py"
       - "src/tests/unit/characters/test_avatar_viseme_generation.py"
+      - "src/tests/unit/characters/test_live2d_avatar_api.py"
+      - "apps/web/src/features/chatbot/CharacterAvatarPanel.tsx"
+      - "apps/web/src/features/chatbot/CharacterAvatarPanel.css"
+      - "apps/web/src/features/chatbot/characterAvatarClient.ts"
+      - "apps/web/src/features/chatbot/characterClient.ts"
       - "apps/web/src/features/chatbot/liveCharacterAvatarBridge.css"
+      - "apps/web/src/features/chatbot/liveCharacterAvatarBridge.ts"
       - "apps/web/src/features/chatbot/liveCharacterAvatarBridge.test.ts"
       - "apps/web/src/features/chatbot/liveCharacterVisemeBridge.ts"
       - "apps/web/src/features/chatbot/liveCharacterVisemeBridge.test.ts"
+      - "apps/web/src/features/chatbot/live2dCharacterRenderer.ts"
+      - "apps/web/src/features/chatbot/live2dCharacterRenderer.test.ts"
+      - "docs/character-mode/live-avatar-phases.md"
       - ".github/workflows/avatar-frame-stabilization.yml"
   workflow_dispatch:
 
@@ -42,23 +53,29 @@ jobs:
           ruff pytest pillow pydantic fastapi httpx requests python-multipart
       - name: Install web dependencies
         run: npm install
-      - name: Lint stabilization code
+      - name: Lint avatar code
         run: |
           ruff check \
             src/app/characters/avatar_frame_stabilization.py \
             src/app/characters/avatar_viseme_generation.py \
+            src/app/characters/live2d_avatar.py \
             src/tests/unit/characters/test_avatar_frame_stabilization.py \
-            src/tests/unit/characters/test_avatar_viseme_generation.py
+            src/tests/unit/characters/test_avatar_viseme_generation.py \
+            src/tests/unit/characters/test_live2d_avatar_api.py
       - name: Compile image-job integration
         run: python -m py_compile src/app/jobs/image_inline.py
-      - name: Verify generated phased avatar frames
+      - name: Verify avatar backend behavior
         run: >-
           pytest -q
           --confcutdir=src/tests/unit/characters
           src/tests/unit/characters/test_avatar_frame_stabilization.py
           src/tests/unit/characters/test_avatar_viseme_generation.py
-      - name: Verify phased browser playback
+          src/tests/unit/characters/test_live2d_avatar_api.py
+      - name: Typecheck character web UI
+        run: npm --workspace @omnix/web run typecheck
+      - name: Verify browser avatar playback
         run: >-
           npm --workspace @omnix/web run test --
           src/features/chatbot/liveCharacterAvatarBridge.test.ts
           src/features/chatbot/liveCharacterVisemeBridge.test.ts
+          src/features/chatbot/live2dCharacterRenderer.test.ts
