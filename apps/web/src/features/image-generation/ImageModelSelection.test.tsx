@@ -10,6 +10,7 @@ import {
 } from './imageRequestModel';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -106,7 +107,6 @@ it('shows Download Model and starts the service automatically before downloading
 
   renderControl(status, { onRefresh, onDownload });
 
-  expect(screen.queryByRole('button', { name: 'Start Image Service' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Download Model' }));
 
   await waitFor(() => {
@@ -115,12 +115,22 @@ it('shows Download Model and starts the service automatically before downloading
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: 'z_image_turbo' }),
     });
-    expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(onDownload).toHaveBeenCalledWith('z_image_turbo');
   });
+  expect(onRefresh).not.toHaveBeenCalled();
 });
 
-it('shows Start Image Service when model files already exist', () => {
+it('shows Load Model and starts the service automatically for downloaded files', async () => {
+  const onRefresh = vi.fn();
+  const onLoad = vi.fn();
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: async () => ({ ok: true, state: 'unloaded' }),
+  } as Response);
+  vi.stubGlobal('fetch', fetchMock);
+
   const status: ImageModelStatusPayload = {
     ok: false,
     service: 'image',
@@ -132,13 +142,48 @@ it('shows Start Image Service when model files already exist', () => {
     error: 'image_service_unreachable',
     supports_download: true,
     downloaded: true,
+    local_model: {
+      complete: true,
+      local_dir: 'resources/models/image/flux2-klein-4b',
+    },
+  };
+
+  renderControl(status, { onRefresh, onLoad });
+
+  expect(screen.queryByRole('button', { name: 'Download Model' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Load Model' }));
+
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledWith('/api/image-generation/service/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'flux_klein' }),
+    });
+    expect(onLoad).toHaveBeenCalledWith('flux_klein');
+  });
+  expect(onRefresh).not.toHaveBeenCalled();
+});
+
+it('does not poll model status while no download is active', async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const status: ImageModelStatusPayload = {
+    ok: true,
+    service: 'image',
+    enabled: true,
+    provider: 'flux_klein',
+    model: 'FLUX.2 [klein] 4B',
+    loaded: false,
+    state: 'unloaded',
+    downloaded: true,
     local_model: { complete: true },
   };
 
   renderControl(status);
+  await vi.advanceTimersByTimeAsync(30_000);
 
-  expect(screen.getByRole('button', { name: 'Start Image Service' })).toBeEnabled();
-  expect(screen.queryByRole('button', { name: 'Download Model' })).toBeNull();
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 it('shows byte and percentage progress while a model downloads', () => {
