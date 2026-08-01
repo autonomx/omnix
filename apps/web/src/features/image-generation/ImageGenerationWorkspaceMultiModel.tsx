@@ -202,16 +202,23 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     ]);
   };
 
+  const selectModelProvider = (provider: string) => {
+    downloadModelMutation.reset();
+    loadModelMutation.reset();
+    unloadModelMutation.reset();
+    setSelectedModelProvider(provider);
+  };
+
   const openAssetInGallery = (assetId: string) => {
     setSelectedAssetId(assetId);
     document.getElementById('image-assets')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const modelActionError = downloadModelMutation.isError
+  const modelActionError = downloadModelMutation.isError && downloadModelMutation.variables === selectedModelProvider
     ? errorMessage(downloadModelMutation.error)
-    : loadModelMutation.isError
+    : loadModelMutation.isError && loadModelMutation.variables === selectedModelProvider
       ? errorMessage(loadModelMutation.error)
-      : unloadModelMutation.isError
+      : unloadModelMutation.isError && unloadModelMutation.variables === selectedModelProvider
         ? errorMessage(unloadModelMutation.error)
         : modelStatusQuery.isError
           ? errorMessage(modelStatusQuery.error)
@@ -264,7 +271,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
             statusLoading={modelStatusQuery.isLoading || modelStatusQuery.isFetching}
             action={modelAction}
             error={modelActionError}
-            onSelect={setSelectedModelProvider}
+            onSelect={selectModelProvider}
             onDownload={(provider) => downloadModelMutation.mutate(provider)}
             onLoad={(provider) => loadModelMutation.mutate(provider)}
             onUnload={(provider) => unloadModelMutation.mutate(provider)}
