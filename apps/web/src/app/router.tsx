@@ -29,7 +29,7 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
   OmnixModuleDefinition
 >;
 const defaultModule = moduleById.chatbot;
-const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'voice', 'image-generation'];
+const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'podcast', 'voice', 'image-generation'];
 
 function moduleFromPath(pathname: string): OmnixModuleDefinition {
   return (
