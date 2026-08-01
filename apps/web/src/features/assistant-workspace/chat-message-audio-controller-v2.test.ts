@@ -101,9 +101,11 @@ afterEach(() => {
 });
 
 describe('buffered chat response voice resolution', () => {
-  it('uses the retained trusted speaker when the rendered voice attribute is empty', async () => {
+  it('uses and logs the retained trusted speaker when the rendered voice attribute is empty', async () => {
     await retainRuntime();
     const button = renderBufferedAudioMessage();
+    const diagnostics = vi.fn();
+    window.addEventListener('omnix:live-call-diagnostic', diagnostics);
 
     fireEvent.click(button);
 
@@ -113,6 +115,29 @@ describe('buffered chat response voice resolution', () => {
       expect.objectContaining({ voiceId: 'Jinx' }),
     );
     expect(resolveChatMessageAudioVoiceId()).toBe('Jinx');
+
+    const decision = diagnostics.mock.calls
+      .map((call) => call[0] as CustomEvent)
+      .find((event) => event.detail.event === 'voice_resolution_decision');
+    expect(decision?.detail).toEqual(expect.objectContaining({
+      source: 'voice-resolution',
+      event: 'voice_resolution_decision',
+      details: expect.objectContaining({
+        caller: 'manual-play',
+        final_voice_id: 'Jinx',
+        final_source: 'trusted_runtime_speaker',
+        playback_voice_id: 'Jinx',
+        spoken_text_length: 16,
+        character_decision: expect.objectContaining({
+          runtime_session_id: 'chat:jinx',
+          runtime_character_id: 'jinx',
+          runtime_voice_speaker_id: 'Jinx',
+          runtime_voice_resolved: true,
+          same_displayed_character: true,
+        }),
+      }),
+    }));
+    window.removeEventListener('omnix:live-call-diagnostic', diagnostics);
   });
 
   it('prefers the fresh trusted runtime over a stale rendered voice after reassignment', async () => {
