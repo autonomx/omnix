@@ -11,7 +11,10 @@ from app.characters import CharacterRepository, CreateCharacterRequest
 from app.characters.avatar_models import UpsertCharacterAvatarPackRequest
 from app.characters.avatar_repository import CharacterAvatarRepository
 from app.characters.avatar_service import CharacterAvatarService
-from app.characters.live2d_avatar import CharacterLive2DAvatarService, register_character_live2d_avatar_routes
+from app.characters.live2d_avatar import (
+    CharacterLive2DAvatarService,
+    register_character_live2d_avatar_routes,
+)
 from app.characters.service import CharacterService
 
 
