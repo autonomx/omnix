@@ -149,6 +149,21 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config.ttsVoice).toBe('Jinx');
   });
 
+  it('trusts the selected Character Mode runtime before a stale System Assistant label', async () => {
+    document.body.innerHTML = `
+      <section class="assistant-live-card" data-live-voice-id="">
+        <span class="assistant-live-identity">System Assistant</span>
+      </section>`;
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:jinx' });
+    await retainRuntime();
+
+    const config = createAssistantWorkspaceRuntimeConfig({
+      VITE_ASSISTANT_TTS_VOICE: 'default',
+    });
+
+    expect(config.ttsVoice).toBe('Jinx');
+  });
+
   it('uses the retained runtime for manual playback without an active call marker', async () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-id="">
@@ -191,19 +206,19 @@ describe('createAssistantWorkspaceRuntimeConfig', () => {
     expect(config.ttsVoice).toBe('default');
   });
 
-  it('does not leak a stale retained or stored character voice into System Assistant', async () => {
+  it('does not leak a stale retained or stored character voice into another System Assistant session', async () => {
     document.body.innerHTML = `
       <section class="assistant-live-card" data-live-voice-id="">
         <span class="assistant-live-identity">System Assistant</span>
       </section>`;
-    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:jinx' });
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:system' });
     liveConversationStore.dispatch({
       type: 'identity',
       identity: {
-        characterId: 'jinx',
-        displayName: 'Jinx',
-        voiceId: 'Jinx',
-        profileVersion: 4,
+        characterId: 'system-assistant',
+        displayName: 'System Assistant',
+        voiceId: null,
+        profileVersion: null,
       },
     });
     await retainRuntime();
