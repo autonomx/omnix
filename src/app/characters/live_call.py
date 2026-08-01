@@ -48,7 +48,7 @@ def _voice_speaker_id(asset_id: str | None, service: CharacterService) -> str | 
     normalized_asset_id = str(asset_id or "").strip()
     if not normalized_asset_id:
         return None
-    asset = service.asset_store_factory().get_asset(normalized_asset_id)
+    asset = service.resolve_voice_asset(normalized_asset_id)
     if asset is not None:
         metadata = dict(asset.metadata or {})
         for key in ("voice_clone_id", "voice_id", "speaker"):
@@ -151,6 +151,19 @@ def resolve_live_call_runtime(
         else interaction.voice_asset_id
     )
     voice_error: str | None = None
+
+    # Older profiles can preserve speaker casing in the governed ID, for example
+    # voice-cloning:Jinx, while the current library record is voice-cloning:jinx.
+    # Canonicalize the asset identifier before validation; speaker casing remains
+    # independent and is read from the asset metadata below.
+    if voice_asset_id:
+        resolved_voice_asset = character_service.resolve_voice_asset(voice_asset_id)
+        if resolved_voice_asset is not None:
+            voice_asset_id = resolved_voice_asset.id
+        elif character is not None:
+            voice_error = f"voice asset not found: {voice_asset_id}"
+            voice_asset_id = None
+
     if character is not None and voice_asset_id:
         try:
             character_service.validate_voice_for_use(voice_asset_id, "live_call")
