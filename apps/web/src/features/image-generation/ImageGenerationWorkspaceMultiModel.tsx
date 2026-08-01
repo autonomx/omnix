@@ -31,7 +31,9 @@ import {
   IMAGE_ASSETS_QUERY_KEY,
   IMAGE_JOB_EVENT_TYPES,
   IMAGE_JOBS_QUERY_KEY,
+  completedImageAssetIds,
   hasActiveImageJobs,
+  isCompletedImageJobEventPayload,
   isImageJobEventPayload,
   parseJobEvent,
   selectLatestImageAsset,
@@ -96,7 +98,9 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
       const payload = parseJobEvent(event.data);
       if (!isImageJobEventPayload(payload)) return;
       void queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY });
-      if (event.type === 'job.completed') void queryClient.invalidateQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY });
+      if (event.type === 'job.completed' || isCompletedImageJobEventPayload(payload)) {
+        void queryClient.refetchQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY, type: 'active' });
+      }
     };
     IMAGE_JOB_EVENT_TYPES.forEach((eventType) => source.addEventListener(eventType, handleEvent));
     return () => {
@@ -115,6 +119,29 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
   }), [providersQuery.data, providersQuery.isError, providersQuery.isLoading, settingsQuery.isLoading, workersQuery.data, workersQuery.isError]);
   const imageJobs = jobsQuery.data?.jobs ?? [];
   const imageAssets = assetsQuery.data?.assets ?? [];
+  const missingCompletedAssetSignature = useMemo(() => {
+    const availableAssetIds = new Set(imageAssets.map((asset) => asset.id));
+    return completedImageAssetIds(imageJobs)
+      .filter((assetId) => !availableAssetIds.has(assetId))
+      .sort()
+      .join('|');
+  }, [imageAssets, imageJobs]);
+
+  useEffect(() => {
+    if (!missingCompletedAssetSignature) return;
+    let disposed = false;
+    const refreshAssets = () => {
+      if (disposed) return;
+      void queryClient.refetchQueries({ queryKey: IMAGE_ASSETS_QUERY_KEY, type: 'active' });
+    };
+
+    refreshAssets();
+    const retryTimer = window.setTimeout(refreshAssets, 750);
+    return () => {
+      disposed = true;
+      window.clearTimeout(retryTimer);
+    };
+  }, [missingCompletedAssetSignature, queryClient]);
 
   const refreshModelQueries = async () => Promise.all([
     queryClient.invalidateQueries({ queryKey: IMAGE_MODEL_QUERY_ROOT }),
