@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.chat.models import ChatSession
+from app.voice_debug import voice_debug_log
 
 from .avatar_models import CharacterAvatarPack
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
@@ -167,7 +168,7 @@ def resolve_live_call_runtime(
     resolved_at = _utcnow()
     preload_ms = round((time.perf_counter() - started) * 1000, 3)
     memory_loaded = bool(session.read_memory and session.memory_snapshot_id)
-    return CharacterLiveCallRuntime(
+    runtime = CharacterLiveCallRuntime(
         session_id=session.id,
         interaction_mode=interaction.interaction_mode,
         display_name=character.display_name if character else SYSTEM_ASSISTANT_NAME,
@@ -194,6 +195,24 @@ def resolve_live_call_runtime(
             resolved_at=resolved_at,
         ),
     )
+    voice_debug_log(
+        "backend",
+        "live_call_runtime_resolved",
+        trace_id=f"live-call-runtime:{session.id}",
+        session_id=session.id,
+        interaction_mode=runtime.interaction_mode,
+        character_id=runtime.character_id,
+        character_profile_version=runtime.character_profile_version,
+        display_name=runtime.display_name,
+        voice_asset_id=runtime.voice_asset_id,
+        voice_speaker_id=runtime.voice_speaker_id,
+        voice_resolved=runtime.preload.voice_resolved,
+        voice_error=runtime.preload.voice_error,
+        profile_loaded=runtime.preload.profile_loaded,
+        avatar_pack_loaded=runtime.preload.avatar_pack_loaded,
+        preload_ms=runtime.preload.preload_ms,
+    )
+    return runtime
 
 
 __all__ = [
