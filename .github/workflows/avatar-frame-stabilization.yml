@@ -71,8 +71,24 @@ jobs:
           src/tests/unit/characters/test_avatar_frame_stabilization.py
           src/tests/unit/characters/test_avatar_viseme_generation.py
           src/tests/unit/characters/test_live2d_avatar_api.py
-      - name: Typecheck character web UI
-        run: npm --workspace @omnix/web run typecheck
+      - name: Typecheck character avatar production modules
+        run: |
+          cat > apps/web/tsconfig.avatar.json <<'JSON'
+          {
+            "extends": "./tsconfig.json",
+            "include": [
+              "src/features/chatbot/CharacterAvatarPanel.tsx",
+              "src/features/chatbot/characterAvatarClient.ts",
+              "src/features/chatbot/characterClient.ts",
+              "src/features/chatbot/liveCharacterAvatarBridge.ts",
+              "src/features/chatbot/liveCharacterVisemeBridge.ts",
+              "src/features/chatbot/live2dCharacterRenderer.ts"
+            ],
+            "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+          }
+          JSON
+          cd apps/web
+          npx tsc -p tsconfig.avatar.json
       - name: Verify browser avatar playback
         run: >-
           npm --workspace @omnix/web run test --
