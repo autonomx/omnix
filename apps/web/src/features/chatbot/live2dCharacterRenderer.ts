@@ -77,6 +77,10 @@ const RUNTIME_SCRIPTS = [
   '/api/character-live2d/runtime/live2dcubismcore.min.js',
   '/api/character-live2d/runtime/cubism4.min.js',
 ] as const;
+const MODEL_ENTRY_PATHS: Record<string, string> = {
+  'character-live2d:open-llm-vtuber-mao-pro': 'runtime/mao_pro.model3.json',
+  'character-live2d:open-llm-vtuber-shizuku': 'runtime/shizuku.model3.json',
+};
 const MOUTH_OPEN_PARAMETER_IDS = ['ParamMouthOpenY', 'PARAM_MOUTH_OPEN_Y', 'ParamA'] as const;
 const MOUTH_FORM_PARAMETER_IDS = ['ParamMouthForm', 'PARAM_MOUTH_FORM'] as const;
 
@@ -108,7 +112,8 @@ export function live2dMouthShapeForViseme(viseme: Live2DViseme): Live2DMouthShap
 }
 
 export function live2dModelUrl(rigAssetId: string): string {
-  return `/api/character-live2d/assets/${encodeURIComponent(rigAssetId)}/model.model3.json`;
+  const entryPath = MODEL_ENTRY_PATHS[rigAssetId] ?? 'model.model3.json';
+  return `/api/character-live2d/assets/${encodeURIComponent(rigAssetId)}/${entryPath}`;
 }
 
 function install(): void {
