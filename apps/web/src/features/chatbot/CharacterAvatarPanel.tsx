@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import type { CharacterProfile } from './characterClient';
-import { characterAvatarAssetUrl, characterAvatarClient } from './characterAvatarClient';
+import {
+  characterAvatarAssetUrl,
+  characterAvatarClient,
+  type Live2DModelCatalogItem,
+} from './characterAvatarClient';
 import './CharacterAvatarPanel.css';
 
 const ACTIVE_GENERATION_STATES = new Set(['queued', 'generating_base', 'generating_variants']);
@@ -9,8 +13,11 @@ const VISEME_KEYS = ['A', 'E', 'O', 'U', 'MBP', 'FV', 'L', 'WQ', 'other'] as con
 const AVATAR_UPLOAD_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_AVATAR_UPLOAD_BYTES = 12 * 1024 * 1024;
 
+type AvatarEditorMode = 'generated' | 'live2d';
+
 export function CharacterAvatarPanel({ character }: { character: CharacterProfile }) {
   const queryClient = useQueryClient();
+  const [editorMode, setEditorMode] = useState<AvatarEditorMode>('generated');
   const [appearancePrompt, setAppearancePrompt] = useState('');
   const [style, setStyle] = useState('illustrated character portrait');
   const [outfitPrompt, setOutfitPrompt] = useState('');
@@ -21,11 +28,19 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [visemeGenerationId, setVisemeGenerationId] = useState<string | null>(null);
   const [visemeRequestedForGenerationId, setVisemeRequestedForGenerationId] = useState<string | null>(null);
+  const [selectedLive2DModelId, setSelectedLive2DModelId] = useState<string | null>(null);
+  const [acceptLive2DRuntimeTerms, setAcceptLive2DRuntimeTerms] = useState(false);
+  const [acceptLive2DModelTerms, setAcceptLive2DModelTerms] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const packQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'character-avatar-pack', character.id],
     queryFn: () => characterAvatarClient.optionalPack(character.id),
+    retry: false,
+  });
+  const live2dCatalogQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'character-live2d-models', character.id],
+    queryFn: () => characterAvatarClient.live2dCatalog(character.id),
     retry: false,
   });
   const generationQuery = useQuery({
@@ -49,15 +64,58 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Viseme generation could not be queued.'),
   });
+  const activateLive2DMutation = useMutation({
+    mutationFn: (modelId: string) => characterAvatarClient.activateLive2d(character.id, {
+      model_id: modelId,
+      accept_live2d_runtime_terms: acceptLive2DRuntimeTerms,
+      accept_model_terms: acceptLive2DModelTerms,
+    }),
+    onSuccess: (result) => {
+      setStatus(result.downloaded
+        ? 'Live2D runtime and model downloaded. The avatar is active for new and refreshed live calls.'
+        : 'Live2D avatar selected. Refresh an active live call to apply it.');
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', character.id] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-live2d-models', character.id] });
+    },
+    onError: (error) => setStatus(error instanceof Error ? error.message : 'Live2D avatar could not be activated.'),
+  });
+  const disableLive2DMutation = useMutation({
+    mutationFn: () => characterAvatarClient.disableLive2d(character.id),
+    onSuccess: (result) => {
+      setEditorMode('generated');
+      setStatus(result.avatar_pack
+        ? 'The previous generated avatar has been restored.'
+        : 'Live2D has been disabled. Live calls will use the voice orb until another avatar is selected.');
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', character.id] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-live2d-models', character.id] });
+    },
+    onError: (error) => setStatus(error instanceof Error ? error.message : 'Live2D avatar could not be disabled.'),
+  });
 
   useEffect(() => {
+    setEditorMode('generated');
     setSourceFile(null);
     setSourceConsentConfirmed(false);
     setGenerationId(null);
     setVisemeGenerationId(null);
     setVisemeRequestedForGenerationId(null);
+    setSelectedLive2DModelId(null);
+    setAcceptLive2DRuntimeTerms(false);
+    setAcceptLive2DModelTerms(false);
     setStatus(null);
   }, [character.id]);
+
+  useEffect(() => {
+    if (packQuery.data?.renderer === 'live2d') setEditorMode('live2d');
+  }, [packQuery.data?.renderer]);
+
+  useEffect(() => {
+    const selected = live2dCatalogQuery.data?.models.find((model) => model.selected);
+    if (selected) setSelectedLive2DModelId(selected.id);
+    else if (!selectedLive2DModelId && live2dCatalogQuery.data?.models[0]) {
+      setSelectedLive2DModelId(live2dCatalogQuery.data.models[0].id);
+    }
+  }, [live2dCatalogQuery.data, selectedLive2DModelId]);
 
   useEffect(() => {
     if (!sourceFile || typeof URL.createObjectURL !== 'function') {
@@ -141,7 +199,10 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
   });
 
   const pack = packQuery.data;
-  const previewAssetId = pack?.mouth_frames.closed || pack?.mouth_frames.silence || pack?.base_asset_id || '';
+  const isLive2D = pack?.renderer === 'live2d';
+  const previewAssetId = isLive2D ? '' : pack?.mouth_frames.closed || pack?.mouth_frames.silence || pack?.base_asset_id || '';
+  const selectedLive2DModel = live2dCatalogQuery.data?.models.find((model) => model.id === selectedLive2DModelId) ?? null;
+  const activeLive2DModel = live2dCatalogQuery.data?.models.find((model) => model.selected) ?? null;
   const generation = generationQuery.data;
   const visemeGeneration = visemeQuery.data;
   const generatedVariants = useMemo(() => Object.keys(generation?.asset_ids ?? {}).length, [generation?.asset_ids]);
@@ -149,19 +210,38 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
   const generationActive = ACTIVE_GENERATION_STATES.has(generation?.status ?? '');
   const visemeActive = visemeMutation.isPending || visemeGeneration?.status === 'generating';
   const anyGenerationActive = generateMutation.isPending || uploadMutation.isPending || generationActive || visemeActive;
+  const live2dBusy = activateLive2DMutation.isPending || disableLive2DMutation.isPending;
 
   return <section className="character-dashboard-section character-avatar-panel" aria-labelledby={`character-avatar-${character.id}`}>
     <header className="character-section-heading">
       <div><span>03</span><h4 id={`character-avatar-${character.id}`}>Live avatar</h4></div>
     </header>
 
+    <div className="character-avatar-type-tabs" role="tablist" aria-label="Avatar type">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={editorMode === 'generated'}
+        className={editorMode === 'generated' ? 'is-active' : undefined}
+        onClick={() => setEditorMode('generated')}
+      >Generated avatar</button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={editorMode === 'live2d'}
+        className={editorMode === 'live2d' ? 'is-active' : undefined}
+        onClick={() => setEditorMode('live2d')}
+      >Live2D avatar</button>
+    </div>
+
     <div className="character-avatar-layout">
       <div className="character-avatar-preview">
-        {previewAssetId ? <img src={characterAvatarAssetUrl(previewAssetId)} alt={`${character.display_name} avatar preview`} /> : <div className="character-avatar-empty"><span aria-hidden="true">◌</span><strong>No avatar pack</strong><small>Generate one or upload your own image.</small></div>}
+        {previewAssetId ? <img src={characterAvatarAssetUrl(previewAssetId)} alt={`${character.display_name} avatar preview`} /> : isLive2D ? <Live2DPreview model={activeLive2DModel} /> : <div className="character-avatar-empty"><span aria-hidden="true">◌</span><strong>No avatar pack</strong><small>Generate one, upload an image, or select Live2D.</small></div>}
         {pack ? <div className="character-avatar-meta"><span><small>Pack version</small><strong>v{pack.version}</strong></span><span><small>Render mode</small><strong>{pack.render_mode.replace('_', ' ')}</strong></span><span><small>Renderer</small><strong>{pack.renderer}</strong></span></div> : null}
       </div>
 
-      <div className="character-avatar-form">
+      {editorMode === 'generated' ? <div className="character-avatar-form">
+        {isLive2D ? <div className="character-avatar-mode-notice"><strong>Live2D is currently active.</strong><span>Generating a new image pack will replace it. You can also restore the previously generated pack from the Live2D tab.</span></div> : null}
         <div className="character-avatar-upload-card">
           <div className="character-avatar-upload-preview">
             {sourcePreviewUrl ? <img src={sourcePreviewUrl} alt="Selected avatar source preview" /> : <span aria-hidden="true">＋</span>}
@@ -211,18 +291,60 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
         </div>
         <div className="character-avatar-actions">
           <button type="button" disabled={anyGenerationActive} onClick={() => generateMutation.mutate()}>
-            {generateMutation.isPending ? 'Queueing…' : generationActive ? 'Generating avatar pack…' : pack ? 'Regenerate avatar pack' : 'Generate avatar pack'}
+            {generateMutation.isPending ? 'Queueing…' : generationActive ? 'Generating avatar pack…' : pack && !isLive2D ? 'Regenerate avatar pack' : 'Generate avatar pack'}
           </button>
-          {pack ? <button type="button" disabled={anyGenerationActive} onClick={() => visemeMutation.mutate()}>
+          {pack && !isLive2D ? <button type="button" disabled={anyGenerationActive} onClick={() => visemeMutation.mutate()}>
             {visemeActive ? 'Generating visemes…' : pack.render_mode === 'viseme' ? 'Regenerate precise visemes' : 'Generate precise visemes'}
           </button> : null}
         </div>
         {generation ? <div className="character-avatar-progress"><strong>{generation.status.replaceAll('_', ' ')}</strong><span>{generatedVariants} base and presentation assets ready</span>{generation.error ? <small>{generation.error}</small> : null}</div> : null}
         {visemeGeneration ? <div className="character-avatar-progress"><strong>{visemeGeneration.status.replaceAll('_', ' ')}</strong><span>{generatedVisemes} precise mouth shapes ready</span>{visemeGeneration.error ? <small>{visemeGeneration.error}</small> : null}</div> : null}
-      </div>
+      </div> : <div className="character-live2d-panel">
+        <div className="character-live2d-intro">
+          <div><strong>Rigged Live2D avatars</strong><p>Select a model for character live calls. Omnix downloads the pinned runtime and model only after you accept their separate licenses, then serves everything locally.</p></div>
+          <span>{live2dCatalogQuery.data?.runtime_installed ? 'Runtime installed' : 'Download on selection'}</span>
+        </div>
+
+        {live2dCatalogQuery.isLoading ? <div className="character-live2d-loading">Loading Live2D catalog…</div> : null}
+        {live2dCatalogQuery.isError ? <div className="character-live2d-loading is-error">Live2D catalog could not be loaded.</div> : null}
+        <div className="character-live2d-model-grid">
+          {live2dCatalogQuery.data?.models.map((model) => <button
+            type="button"
+            key={model.id}
+            className={`character-live2d-model-card${selectedLive2DModelId === model.id ? ' is-selected' : ''}${model.selected ? ' is-active' : ''}`}
+            onClick={() => {
+              setSelectedLive2DModelId(model.id);
+              setAcceptLive2DRuntimeTerms(false);
+              setAcceptLive2DModelTerms(false);
+            }}
+          >
+            <span className="character-live2d-model-visual"><img src={model.preview_url} alt="" loading="lazy" /><i>Live2D</i></span>
+            <span className="character-live2d-model-copy"><strong>{model.name}</strong><small>{model.description}</small><em>{model.selected ? 'Active' : model.installed ? 'Installed' : 'Not downloaded'}</em></span>
+          </button>)}
+        </div>
+
+        {selectedLive2DModel ? <div className="character-live2d-license-card">
+          <strong>{selectedLive2DModel.name}</strong>
+          <p>{selectedLive2DModel.license_summary}</p>
+          <label><input type="checkbox" checked={acceptLive2DRuntimeTerms} onChange={(event) => setAcceptLive2DRuntimeTerms(event.currentTarget.checked)} /><span>I accept the <a href={selectedLive2DModel.runtime_license_url} target="_blank" rel="noreferrer">Live2D Cubism runtime license</a>.</span></label>
+          <label><input type="checkbox" checked={acceptLive2DModelTerms} onChange={(event) => setAcceptLive2DModelTerms(event.currentTarget.checked)} /><span>I accept the <a href={selectedLive2DModel.model_license_url} target="_blank" rel="noreferrer">sample model terms</a> and confirm they fit my intended use.</span></label>
+          <div className="character-avatar-actions">
+            <button
+              type="button"
+              disabled={live2dBusy || !acceptLive2DRuntimeTerms || !acceptLive2DModelTerms || selectedLive2DModel.selected}
+              onClick={() => activateLive2DMutation.mutate(selectedLive2DModel.id)}
+            >
+              {activateLive2DMutation.isPending ? 'Downloading and activating…' : selectedLive2DModel.selected ? 'Live2D avatar active' : selectedLive2DModel.installed ? 'Use this Live2D avatar' : 'Download and use Live2D avatar'}
+            </button>
+            {isLive2D ? <button type="button" disabled={live2dBusy} onClick={() => disableLive2DMutation.mutate()}>
+              {disableLive2DMutation.isPending ? 'Restoring…' : 'Restore previous generated avatar'}
+            </button> : null}
+          </div>
+        </div> : null}
+      </div>}
     </div>
 
-    <div className="character-viseme-panel">
+    {isLive2D ? <div className="character-live2d-sync-panel"><header><strong>Live2D lip sync</strong><span>Rig parameters active</span></header><p>Omnix maps the same timed TTS visemes used by generated avatar packs to the model’s mouth-open and mouth-form parameters. Idle motion, physics, eye movement, and expressions remain model-driven.</p></div> : <div className="character-viseme-panel">
       <header><strong>Viseme support (9 mouth shapes)</strong><span>{pack?.render_mode === 'viseme' ? 'Precise lip sync ready' : 'Audio-envelope fallback active'}</span></header>
       <div className="character-viseme-strip">
         {VISEME_KEYS.map((viseme) => {
@@ -234,8 +356,17 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
         })}
       </div>
       <p>Used for low-latency lip sync in Omnix Chat live calls. Missing shapes fall back to the four-frame audio envelope.</p>
-    </div>
+    </div>}
 
     {status ? <p className="character-avatar-status" role="status">{status}</p> : null}
   </section>;
+}
+
+function Live2DPreview({ model }: { model: Live2DModelCatalogItem | null }) {
+  return <div className="character-live2d-preview">
+    {model?.preview_url ? <img src={model.preview_url} alt="" /> : null}
+    <span>Live2D</span>
+    <strong>{model?.name ?? 'Rigged avatar'}</strong>
+    <small>Rendered during character live calls</small>
+  </div>;
 }
