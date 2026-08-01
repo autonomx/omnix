@@ -5,6 +5,7 @@ on:
     paths:
       - "src/app/assets/canonical_voice_clones.py"
       - "src/app/characters/live_call.py"
+      - "src/app/characters/service.py"
       - "src/app/tts_http_client.py"
       - "src/app/voice_debug.py"
       - "src/tts_server.py"
@@ -22,6 +23,8 @@ on:
       - "apps/web/src/features/chatbot/characterClient.test.ts"
       - "apps/web/src/features/chatbot/VoiceGovernancePanel.tsx"
       - "apps/web/src/features/chatbot/VoiceGovernancePanel.test.tsx"
+      - "apps/web/src/features/voice/voiceLibraryAssetFallback.ts"
+      - "apps/web/src/features/voice/voiceLibraryAssetFallback.test.ts"
       - ".github/workflows/character-live-voice-resolution.yml"
   workflow_dispatch:
 
@@ -57,6 +60,7 @@ jobs:
           ruff check \
             src/app/assets/canonical_voice_clones.py \
             src/app/characters/live_call.py \
+            src/app/characters/service.py \
             src/app/tts_http_client.py \
             src/app/voice_debug.py \
             src/tests/unit/assets/test_canonical_voice_clone_resolution.py \
@@ -78,3 +82,4 @@ jobs:
           src/features/assistant-workspace/chat-message-audio-controller-v2.test.ts
           src/features/chatbot/characterClient.test.ts
           src/features/chatbot/VoiceGovernancePanel.test.tsx
+          src/features/voice/voiceLibraryAssetFallback.test.ts
