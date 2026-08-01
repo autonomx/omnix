@@ -75,6 +75,40 @@
   opacity: 1;
 }
 
+.assistant-live-character-live2d-canvas {
+  display: block;
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+  z-index: 0;
+}
+
+.assistant-live-character-live2d-status {
+  background: rgba(5, 9, 20, 0.76);
+  border: 1px solid rgba(151, 126, 255, 0.22);
+  border-radius: 0.65rem;
+  color: #b9c3db;
+  font-size: 0.68rem;
+  left: 50%;
+  max-width: calc(100% - 2rem);
+  padding: 0.55rem 0.7rem;
+  position: absolute;
+  text-align: center;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.assistant-live-character-live2d-status[data-state='error'] {
+  border-color: rgba(255, 115, 135, 0.38);
+  color: #ffc2cb;
+}
+
+.assistant-live-character-avatar[data-renderer='live2d']::after {
+  box-shadow: inset 0 -3.5rem 4rem rgba(3, 6, 17, 0.22);
+}
+
 .assistant-live-character-avatar[data-voice-mode='speaking'] {
   border-color: color-mix(in srgb, var(--accent, #4f8cff) 62%, transparent);
   box-shadow:
