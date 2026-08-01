@@ -14,6 +14,7 @@ from app.image_http_client import (
     get_image_service_status,
     is_image_generation_enabled,
     load_image_model_via_service,
+    start_image_service_via_launcher,
     unload_image_model_via_service,
 )
 
@@ -85,6 +86,17 @@ async def image_model_status(
                 if definition.get("supports_local_model")
             ],
         }
+
+
+@router.post("/api/image-generation/service/start", include_in_schema=False)
+async def start_image_service(request: ImageModelActionRequest) -> dict[str, Any]:
+    result = await _call_service(start_image_service_via_launcher, _provider(request.provider))
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error") or "image_service_start_failed",
+        )
+    return result
 
 
 @router.post("/api/image-generation/model/download", include_in_schema=False)
