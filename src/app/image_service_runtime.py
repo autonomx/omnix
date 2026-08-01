@@ -259,10 +259,15 @@ async def provider_download(request: Request):
     if not is_image_generation_enabled():
         return {"ok": False, "provider": "disabled", "loaded": False, "error": "image_generation_disabled"}
     payload = await request.json()
-    provider = _provider_name(payload.get("provider") if isinstance(payload, dict) else None)
+    payload = payload if isinstance(payload, dict) else {}
+    provider = _provider_name(payload.get("provider"))
+    hf_token = str(payload.get("hf_token") or "").strip()
     _set_model_operation("downloading", provider)
     try:
-        result = await run_in_threadpool(download_image_model, provider)
+        if hf_token:
+            result = await run_in_threadpool(download_image_model, provider, hf_token)
+        else:
+            result = await run_in_threadpool(download_image_model, provider)
         return {**result, "loaded": is_image_provider_loaded(provider), "status": image_model_status(provider)}
     except Exception as exc:
         return {
@@ -273,6 +278,7 @@ async def provider_download(request: Request):
             "status": image_model_status(provider),
         }
     finally:
+        hf_token = ""
         _set_model_operation("idle")
 
 
