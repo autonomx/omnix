@@ -212,8 +212,15 @@ def get_image_generation_progress(request_id: str) -> Dict[str, Any]:
     return request_image_service("GET", f"/generate/progress/{encoded}", timeout=5.0)
 
 
-def download_image_model_via_service(provider: str = "flux_klein") -> Dict[str, Any]:
-    return post_image_service("/provider/download", {"provider": provider}, timeout=7200.0)
+def download_image_model_via_service(
+    provider: str = "flux_klein",
+    hf_token: str = "",
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"provider": provider}
+    token = str(hf_token or "").strip()
+    if token:
+        payload["hf_token"] = token
+    return post_image_service("/provider/download", payload, timeout=7200.0)
 
 
 def load_image_model_via_service(provider: str = "flux_klein") -> Dict[str, Any]:
