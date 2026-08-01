@@ -39,3 +39,62 @@ describe('characterAvatarClient optional avatar pack lookup', () => {
     expect(pack?.base_asset_id).toBe('image:anaka');
   });
 });
+
+describe('characterAvatarClient avatar generation routing', () => {
+  it('routes avatar generation through FLUX and keeps the model loaded', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({
+      id: 'avatar-generation:test',
+      character_id: 'maya',
+      status: 'generating_base',
+      request: {},
+      base_job_id: 'job:test',
+      variant_job_ids: {},
+      asset_ids: {},
+      error: '',
+      created_at: '2026-08-01T00:00:00Z',
+      updated_at: '2026-08-01T00:00:00Z',
+    }, { status: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await characterAvatarClient.createGeneration('maya', {
+      appearance_prompt: 'Silver hair',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe('/api/characters/maya/avatar-generations');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      appearance_prompt: 'Silver hair',
+      provider_id: 'image:flux_klein',
+      unload_after_generation: false,
+    });
+  });
+
+  it('preserves explicit residency behavior', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({
+      id: 'avatar-generation:test',
+      character_id: 'maya',
+      status: 'generating_base',
+      request: {},
+      base_job_id: 'job:test',
+      variant_job_ids: {},
+      asset_ids: {},
+      error: '',
+      created_at: '2026-08-01T00:00:00Z',
+      updated_at: '2026-08-01T00:00:00Z',
+    }, { status: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await characterAvatarClient.createGeneration('maya', {
+      provider_id: 'image:flux_klein',
+      unload_after_generation: true,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider_id: 'image:flux_klein',
+      unload_after_generation: true,
+    });
+  });
+});
