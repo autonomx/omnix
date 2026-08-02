@@ -29,12 +29,23 @@ def live_tts_capabilities_payload() -> dict[str, Any]:
     return {
         "ok": provider_available,
         "protocol": "live-tts-v2",
+        # The browser keeps one websocket/audio worklet for the complete live session.
         "persistent_websocket": True,
+        # LLM text is committed into streaming synthesis incrementally rather than
+        # waiting for the complete assistant response.
+        "incremental_text_ingest": True,
+        "text_commit_deadline_ms": 140,
+        "text_commit_minimum_characters": 12,
+        "streaming_audio_chunks": provider_available,
+        # Native decoder continuation is a separate provider capability. The current
+        # Qwen provider streams each committed clause but does not expose a decoder
+        # session that accepts more text after generation has started.
+        "native_decoder_text_append": native_text_append,
         "stateful_text_append": native_text_append,
         "prosody_continuous_decoder": native_text_append,
         "cancellation_generations": True,
         "adaptive_playback_buffer": True,
-        "fallback_mode": "persistent_phrase_stream",
+        "fallback_mode": "persistent_incremental_clause_stream",
         "provider_available": provider_available,
         "provider_name": getattr(provider, "provider_name", None) if provider else None,
     }
