@@ -36,10 +36,13 @@ type BufferedAudio = {
   sampleRate: number;
 };
 
-type RuntimeClient = StreamingSttWebSocketClient & {
+type RuntimeClient = {
   options: StreamingSttWebSocketClientOptions;
-  handleMessage: (rawData: string) => Promise<void>;
-  deliverAcceptedFinal: (final: AcceptedVoiceFinal) => Promise<void>;
+  connect(): Promise<void>;
+  sendAudio(audio: Float32Array, sampleRate: number): void;
+  sendFinal(): string | null;
+  handleMessage(rawData: string): Promise<void>;
+  deliverAcceptedFinal(final: AcceptedVoiceFinal): Promise<void>;
 };
 
 type ClientAuthorityState = {
@@ -55,9 +58,9 @@ type AuthorityWindow = Window & typeof globalThis & {
   __omnixLiveSttAuthorityInstalled?: boolean;
 };
 
-const clientStates = new WeakMap<StreamingSttWebSocketClient, ClientAuthorityState>();
+const clientStates = new WeakMap<object, ClientAuthorityState>();
 
-function clientState(client: StreamingSttWebSocketClient): ClientAuthorityState {
+function clientState(client: object): ClientAuthorityState {
   const existing = clientStates.get(client);
   if (existing) return existing;
   const created: ClientAuthorityState = {
@@ -250,11 +253,15 @@ export function initializeLiveSttAuthorityController(): () => void {
     this: RuntimeClient,
     final: AcceptedVoiceFinal,
   ): Promise<void> {
+    let delivery: Promise<void>;
     try {
-      await originalDeliverAcceptedFinal.call(this, final);
+      delivery = originalDeliverAcceptedFinal.call(this, final);
     } finally {
+      // The live voice controller resets the user turn synchronously before its first await.
+      // Release captured continuation audio immediately; do not wait for the LLM/TTS response.
       releaseBufferedAudio(this, clientState(this), originalSendAudio);
     }
+    await delivery;
   };
 
   return () => {
@@ -269,7 +276,7 @@ export function initializeLiveSttAuthorityController(): () => void {
 function releaseBufferedAudio(
   client: RuntimeClient,
   state: ClientAuthorityState,
-  sendAudio: StreamingSttWebSocketClient['sendAudio'],
+  sendAudio: (this: RuntimeClient, audio: Float32Array, sampleRate: number) => void,
 ): void {
   if (!state.finalPending && !state.bufferedAudio.length) return;
   const buffered = state.bufferedAudio;
@@ -293,10 +300,10 @@ function boundedProbability(value: string | null): number {
   return Math.max(0.5, Math.min(0.99, parsed));
 }
 
-function parseMessage(rawData: string): Record<string, any> | null {
+function parseMessage(rawData: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(rawData) as unknown;
-    return value && typeof value === 'object' ? value as Record<string, any> : null;
+    return value && typeof value === 'object' ? value as Record<string, unknown> : null;
   } catch {
     return null;
   }
