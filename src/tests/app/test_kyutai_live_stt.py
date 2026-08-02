@@ -8,6 +8,7 @@ import pytest
 
 from app.providers.kyutai_live_stt import (
     KYUTAI_FRAME_SAMPLES,
+    KyutaiLiveSttError,
     KyutaiLiveSttProvider,
     KyutaiLiveSttSession,
     pcm16le_to_float32,
@@ -27,7 +28,7 @@ class FakeKyutaiSocket:
         self.closed = True
         await self.incoming.put(None)
 
-    def __aiter__(self) -> "FakeKyutaiSocket":
+    def __aiter__(self) -> FakeKyutaiSocket:
         return self
 
     async def __anext__(self) -> bytes:
@@ -130,7 +131,7 @@ def test_kyutai_flush_advances_delayed_model_state() -> None:
 def test_kyutai_provider_rejects_unsupported_languages_before_connecting() -> None:
     async def scenario() -> None:
         provider = KyutaiLiveSttProvider(base_url="ws://unused")
-        with pytest.raises(Exception, match="does not support language"):
+        with pytest.raises(KyutaiLiveSttError, match="does not support language"):
             await provider.create_live_session(language="ja")
 
     asyncio.run(scenario())
