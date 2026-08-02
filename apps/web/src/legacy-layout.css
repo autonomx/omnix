@@ -784,6 +784,37 @@
   padding: 0 1rem;
 }
 
+.assistant-live2d-motion-control {
+  align-items: center;
+  background: rgba(12, 18, 34, 0.82);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.65rem;
+  display: flex;
+  justify-self: center;
+  min-height: 2.45rem;
+  padding: 0 0.7rem 0 1rem;
+}
+
+.assistant-live2d-motion-control select {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--omnix-cyan);
+  cursor: pointer;
+  font: inherit;
+  min-width: 5rem;
+  outline: 0;
+  padding: 0 1.25rem 0 0;
+}
+
+.assistant-live2d-motion-control::after {
+  color: var(--omnix-cyan);
+  content: '⌄';
+  font-size: 1rem;
+  margin-left: -1rem;
+  pointer-events: none;
+}
+
 .assistant-voice-orb {
   min-height: 10.5rem;
 }

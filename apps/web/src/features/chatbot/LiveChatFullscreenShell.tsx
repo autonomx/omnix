@@ -10,6 +10,7 @@ import {
   useLiveChatFullscreenState,
 } from './live-chat-fullscreen-controller';
 import { Live2DZoomControl } from './Live2DZoomControl';
+import { Live2DMotionControl } from './Live2DMotionControl';
 import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from './characterClient';
 import {
   invokeExistingLiveCallControl,
@@ -258,6 +259,7 @@ function LiveCharacterStage({
       <div className="live-chat-stage-avatar" data-mouth-frame={avatar.mouthFrame} data-voice-mode={avatar.voiceMode}>
         {isLive2D ? <figure ref={live2dHostRef} className="assistant-live-character-avatar" data-renderer="live2d" aria-label={`${identity} Live2D avatar`} /> : avatar.imageUrl ? <img src={avatar.imageUrl} alt={avatar.alt} /> : <div className="live-chat-stage-fallback" aria-label={`${identity} visual placeholder`}><span>{initial}</span><i aria-hidden="true" /></div>}
       </div>
+      {isLive2D ? <Live2DMotionControl rigAssetId={characterRuntime.avatar_pack?.rig_asset_id} /> : null}
       {isLive2D ? <Live2DZoomControl /> : null}
       <div className="live-chat-stage-caption" aria-live="polite"><i aria-hidden="true" /><span>{status}</span></div>
       <footer><span>Character-first mode</span><span>{avatar.imageUrl ? 'Avatar animation linked' : 'System visual fallback'}</span></footer>

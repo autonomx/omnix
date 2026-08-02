@@ -41,6 +41,7 @@ import { CharacterManagementPanel } from './CharacterManagementPanel';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
 import { LiveChatFullscreenShell } from './LiveChatFullscreenShell';
 import { Live2DZoomControl } from './Live2DZoomControl';
+import { Live2DMotionControl } from './Live2DMotionControl';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
 import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
@@ -1702,7 +1703,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <div className="assistant-live-tools-grid" data-active-panel={activeUtilityPanel}>
             <section className="assistant-live-card" data-live-voice-id={currentLiveCallVoiceId()}>
               <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>
-              <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>
+              {liveCallRuntime?.avatar_pack?.renderer === 'live2d'
+                ? <Live2DMotionControl rigAssetId={liveCallRuntime.avatar_pack.rig_asset_id} />
+                : <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>}
               <div className="assistant-live-visual-stage" aria-label="Live character visual">
                 <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
                   <div className="assistant-voice-meter assistant-voice-meter-left">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`left-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>

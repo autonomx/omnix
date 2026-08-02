@@ -70,7 +70,27 @@ type Live2DModel = {
   height: number;
   internalModel?: Live2DInternalModel;
   textures?: Array<{ source?: { _gpuData?: Record<number, unknown> } }>;
+  motion?: (
+    group: string,
+    index: number,
+    priority?: number,
+    options?: { loop?: boolean; onFinish?: () => void },
+  ) => Promise<boolean>;
+  stopAllMotions?: () => void;
   destroy?: (options?: Record<string, boolean>) => void;
+};
+
+export type Live2DMotionOption = {
+  id: string;
+  group: string;
+  index: number;
+  label: string;
+};
+
+export type Live2DMotionSelection = {
+  rigAssetId: string;
+  group: string | null;
+  index: number;
 };
 
 type Live2DRuntime = {
@@ -89,6 +109,7 @@ const RENDER_EVENT = 'omnix:character-live2d-render';
 const RIG_VISEME_EVENT = 'omnix:character-rig-viseme';
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
+const LIVE2D_MOTION_EVENT = 'omnix:character-live2d-motion';
 const LIVE2D_ZOOM_EVENT = 'omnix:character-live2d-zoom';
 const LIVE2D_FRAMING_EVENT = 'omnix:character-live2d-framing';
 const RUNTIME_SCRIPTS = [
@@ -98,6 +119,11 @@ const MODEL_ENTRY_PATHS: Record<string, string> = {
   'character-live2d:open-llm-vtuber-mao-pro': 'runtime/mao_pro.model3.json',
   'character-live2d:open-llm-vtuber-shizuku': 'runtime/shizuku.model3.json',
 };
+// The bundled sample rigs each expose a single looping `Idle` motion. In the
+// live-call stage that reads as a repeated gesture rather than an idle avatar,
+// so reserve an intentionally empty group and let Cubism update physics,
+// blinking, expressions, and lip-sync parameters without replaying that clip.
+const STATIC_IDLE_MOTION_GROUP = '__omnix_static_idle__';
 const MOUTH_OPEN_PARAMETER_IDS = ['ParamMouthOpenY', 'PARAM_MOUTH_OPEN_Y', 'ParamA'] as const;
 const MOUTH_FORM_PARAMETER_IDS = ['ParamMouthForm', 'PARAM_MOUTH_FORM'] as const;
 
@@ -135,6 +161,40 @@ let activeMouthOpenParameterIndices: number[] = [];
 let activeMouthFormParameterIndices: number[] = [];
 let renderSequence = 0;
 let runtimePromise: Promise<Live2DRuntime> | null = null;
+let activeMotionSelection: Live2DMotionSelection | null = null;
+const motionOptionsCache = new Map<string, Promise<Live2DMotionOption[]>>();
+
+export function loadLive2DMotionOptions(rigAssetId: string): Promise<Live2DMotionOption[]> {
+  const cached = motionOptionsCache.get(rigAssetId);
+  if (cached) return cached;
+  const request = fetch(live2dModelUrl(rigAssetId))
+    .then((response) => {
+      if (!response.ok) throw new Error(`Live2D model manifest could not be loaded (${response.status}).`);
+      return response.json() as Promise<{
+        FileReferences?: { Motions?: Record<string, unknown> };
+      }>;
+    })
+    .then((manifest) => Object.entries(manifest.FileReferences?.Motions ?? {}).flatMap(([group, definitions]) => {
+      if (!Array.isArray(definitions)) return [];
+      const groupLabel = group.trim()
+        ? group.replace(/([a-z])([A-Z])/g, '$1 $2')
+        : 'Motion';
+      return definitions.map((_, index) => ({
+        id: `${group}:${index}`,
+        group,
+        index,
+        label: `${groupLabel} ${index + 1}`,
+      }));
+    }))
+    .catch(() => []);
+  motionOptionsCache.set(rigAssetId, request);
+  return request;
+}
+
+export function setLive2DMotion(selection: Live2DMotionSelection): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(LIVE2D_MOTION_EVENT, { detail: selection }));
+}
 
 export function live2dMouthShapeForViseme(viseme: Live2DViseme): Live2DMouthShape {
   switch (viseme) {
@@ -219,6 +279,12 @@ function install(): void {
     if (!detail?.frame || performance.now() < preciseVisemeUntil) return;
     currentMouthShape = live2dMouthShapeForAvatarFrame(detail.frame);
   });
+  window.addEventListener(LIVE2D_MOTION_EVENT, (event) => {
+    const detail = (event as CustomEvent<Live2DMotionSelection>).detail;
+    if (!detail?.rigAssetId || detail.rigAssetId !== activeRigAssetId) return;
+    activeMotionSelection = detail;
+    applyLive2DMotion(detail);
+  });
   window.addEventListener(LIVE2D_ZOOM_EVENT, (event) => {
     const zoom = (event as CustomEvent<{ zoom?: number }>).detail?.zoom;
     if (typeof zoom !== 'number') return;
@@ -273,6 +339,7 @@ async function renderLive2D(
   activeAvatarCharacterId = packCharacterId;
   activeAvatarPackVersion = pack.version;
   activeHost = host;
+  activeMotionSelection = { rigAssetId: pack.rig_asset_id, group: null, index: -1 };
   host.dataset.live2dCharacterId = packCharacterId ?? '';
   host.dataset.live2dPackVersion = String(pack.version);
   host.dataset.live2dRigAssetId = pack.rig_asset_id;
@@ -306,8 +373,8 @@ async function renderLive2D(
       autoHitTest: false,
       autoFocus: false,
       autoUpdate: true,
-      motionPreload: 'IDLE',
-      idleMotionGroup: 'Idle',
+      motionPreload: 'NONE',
+      idleMotionGroup: STATIC_IDLE_MOTION_GROUP,
     }) as unknown as Live2DModel;
     if (sequence !== renderSequence || activeHost !== host) {
       model.destroy?.(LIVE2D_INSTANCE_DESTROY_OPTIONS);
@@ -319,6 +386,7 @@ async function renderLive2D(
     activeModel = model;
     prepareLive2DTextures(model);
     application.stage.addChild(model);
+    if (activeMotionSelection) applyLive2DMotion(activeMotionSelection);
     bindMouthParameterUpdate(model, sequence);
     activeResizeObserver = new ResizeObserver(() => fitModel(host, application, model));
     activeResizeObserver.observe(host);
@@ -331,6 +399,24 @@ async function renderLive2D(
     status.dataset.state = 'error';
     updateCaption(host, runtime.display_name, 'error');
   }
+}
+
+function applyLive2DMotion(selection: Live2DMotionSelection): void {
+  const model = activeModel;
+  if (!model || selection.rigAssetId !== activeRigAssetId) return;
+  if (!selection.group || selection.index < 0) {
+    model.stopAllMotions?.();
+    return;
+  }
+  const modelAtStart = model;
+  void model.motion?.(selection.group, selection.index, 2, {
+    loop: false,
+    onFinish: () => {
+      if (activeModel !== modelAtStart || activeMotionSelection !== selection) return;
+      activeMotionSelection = { rigAssetId: selection.rigAssetId, group: null, index: -1 };
+      modelAtStart.stopAllMotions?.();
+    },
+  });
 }
 
 /**
@@ -418,10 +504,11 @@ function bindMouthParameterUpdate(model: Live2DModel, sequence: number): void {
     internalModel.on('beforeModelUpdate', applyBeforeModelUpdate);
     activeMouthUpdateBinding = { internalModel, listener: applyBeforeModelUpdate };
     applyBeforeModelUpdate();
-    return;
   }
 
-  // Older runtimes without the internal event emitter keep the RAF fallback.
+  // Keep a post-update write as well. Some Cubism builds restore saved
+  // parameters after `beforeModelUpdate`, which otherwise makes the mouth
+  // appear frozen even though audio frames are arriving correctly.
   if (mouthAnimationFrame !== null) cancelAnimationFrame(mouthAnimationFrame);
   const applyOnAnimationFrame = (): void => {
     if (sequence !== renderSequence || activeModel !== model) {
@@ -476,11 +563,19 @@ export function resolveLive2DParameterIndices(
   }
 
   const inspectParameterId = (parameterId: unknown, index: number): void => {
-    const readableId = typeof parameterId === 'string'
-      ? parameterId
-      : typeof (parameterId as { getString?: () => unknown })?.getString === 'function'
-        ? String((parameterId as { getString: () => unknown }).getString())
-        : String(parameterId);
+    let readableId: string;
+    if (typeof parameterId === 'string') {
+      readableId = parameterId;
+    } else if (typeof (parameterId as { getString?: () => unknown })?.getString === 'function') {
+      const value = (parameterId as { getString: () => unknown }).getString();
+      readableId = typeof value === 'string'
+        ? value
+        : typeof (value as { s?: unknown })?.s === 'string'
+          ? (value as { s: string }).s
+          : String(value);
+    } else {
+      readableId = String(parameterId);
+    }
     if (parameterIds.some((candidate) => candidate.toLocaleLowerCase() === readableId.toLocaleLowerCase())) {
       resolved.add(index);
     }

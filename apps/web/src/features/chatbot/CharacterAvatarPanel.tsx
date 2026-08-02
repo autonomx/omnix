@@ -387,7 +387,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
       </div>}
     </div>
 
-    {isLive2D ? <div className="character-live2d-sync-panel"><header><strong>Live2D lip sync</strong><span>Rig parameters active</span></header><p>Omnix maps the same timed TTS visemes used by generated avatar packs to the model’s mouth-open and mouth-form parameters. Idle motion, physics, eye movement, and expressions remain model-driven.</p></div> : <div className="character-viseme-panel">
+    {isLive2D ? <div className="character-live2d-sync-panel"><header><strong>Live2D lip sync</strong><span>Rig parameters active</span></header><p>Omnix maps the same timed TTS visemes used by generated avatar packs to the model’s mouth-open and mouth-form parameters. Physics, eye movement, and expressions remain model-driven while the live view stays idle.</p></div> : <div className="character-viseme-panel">
       <header><strong>Viseme support (9 mouth shapes)</strong><span>{pack?.render_mode === 'viseme' ? 'Precise lip sync ready' : 'Audio-envelope fallback active'}</span></header>
       <div className="character-viseme-strip">
         {VISEME_KEYS.map((viseme) => {

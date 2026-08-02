@@ -87,4 +87,15 @@ describe('Live2D character renderer helpers', () => {
     expect(model.textures[0].source._gpuData).toEqual({});
     expect(model.textures[1].source._gpuData).toEqual({ 2: 'ready' });
   });
+
+  it('reads parameter names from Cubism string handles', () => {
+    const parameterIds = [{ getString: () => ({ s: 'PARAM_MOUTH_OPEN_Y' }) }];
+    const coreModel = {
+      _parameterIds: { getSize: () => 1, at: (index: number) => parameterIds[index] },
+      getParameterCount: () => 1,
+      getParameterIndex: () => { throw new TypeError('CubismId handle required'); },
+    };
+
+    expect(resolveLive2DParameterIndices(coreModel, ['PARAM_MOUTH_OPEN_Y'])).toEqual([0]);
+  });
 });
