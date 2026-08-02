@@ -45,6 +45,7 @@ import { Live2DMotionControl } from './Live2DMotionControl';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
 import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
+import { CHARACTER_AVATAR_RUNTIME_EVENT } from './liveCharacterAvatarBridge';
 
 interface ChatbotFormValues {
   content: string;
@@ -349,6 +350,21 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     liveCallRuntimeRef.current = liveCallRuntimeQuery.data;
     setLiveCallRuntime(liveCallRuntimeQuery.data);
   }, [liveCallRuntimeQuery.data]);
+
+  // Avatar selection can update the live runtime without changing the chat
+  // session or interaction query key. Keep the React-owned runtime in sync
+  // with the bridge so the visible Live Voice controls and fullscreen surface
+  // switch rigs immediately instead of retaining the previous model.
+  useEffect(() => {
+    const syncSelectedAvatar = (event: Event): void => {
+      const runtime = (event as CustomEvent<CharacterLiveCallRuntime | null>).detail;
+      if (!runtime || runtime.session_id !== selectedSessionId) return;
+      liveCallRuntimeRef.current = runtime;
+      setLiveCallRuntime(runtime);
+    };
+    window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, syncSelectedAvatar);
+    return () => window.removeEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, syncSelectedAvatar);
+  }, [selectedSessionId]);
 
   const sendMutation = useMutation({
     mutationFn: async (values: ChatbotFormValues) => {
@@ -1706,7 +1722,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               {liveCallRuntime?.avatar_pack?.renderer === 'live2d'
                 ? <Live2DMotionControl rigAssetId={liveCallRuntime.avatar_pack.rig_asset_id} />
                 : <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>}
-              <div className="assistant-live-visual-stage" aria-label="Live character visual">
+              <div
+                key={liveCallRuntime?.avatar_pack?.renderer === 'live2d'
+                  ? `${liveCallRuntime.avatar_pack.character_id}:${liveCallRuntime.avatar_pack.version}:${liveCallRuntime.avatar_pack.rig_asset_id}`
+                  : 'voice-orb'}
+                className="assistant-live-visual-stage"
+                aria-label="Live character visual"
+              >
                 <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
                   <div className="assistant-voice-meter assistant-voice-meter-left">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`left-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
                   <div className="assistant-voice-core"><span className="assistant-voice-pulse" /><span className="assistant-voice-mic" /></div>

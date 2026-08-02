@@ -1,4 +1,4 @@
-import { publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
+import { applyAvatarPackToCurrentRuntime, publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
 import './liveCharacterVisemeBridge';
 import './live2dCharacterRenderer';
 
@@ -190,6 +190,7 @@ export function applyCharacterAvatarPackToTrackedRuntimes(
     runtimeToPublish = latestTrustedPlaybackRuntime;
   }
   if (runtimeToPublish) publishCharacterAvatarRuntime(runtimeToPublish);
+  else applyAvatarPackToCurrentRuntime(characterId, avatarPack);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

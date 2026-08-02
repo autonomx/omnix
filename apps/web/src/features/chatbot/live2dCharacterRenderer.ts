@@ -426,10 +426,21 @@ function applyLive2DMotion(selection: Live2DMotionSelection): void {
  */
 export function forceRenderLive2DAvatar(runtime: CharacterLiveCallRuntime): void {
   if (typeof document === 'undefined') return;
-  const host = document.querySelector<HTMLElement>(
-    `[data-live-chat-fullscreen-shell] .assistant-live-character-avatar`,
-  ) ?? document.querySelector<HTMLElement>('.assistant-live-character-avatar');
-  if (host) void renderLive2D(runtime, host, true);
+  const hosts = Array.from(document.querySelectorAll<HTMLElement>('.assistant-live-character-avatar'));
+  const visibleHost = hosts.find((candidate) => {
+    const bounds = candidate.getBoundingClientRect();
+    return bounds.width > 0 && bounds.height > 0;
+  });
+  const host = visibleHost ?? hosts[0] ?? null;
+  if (!host) return;
+
+  // Fullscreen and inline Live Voice can briefly coexist during a transition.
+  // Remove every stale canvas first, then make the visible host authoritative.
+  for (const candidate of hosts) {
+    if (candidate !== host) candidate.replaceChildren();
+  }
+  host.replaceChildren();
+  void renderLive2D(runtime, host, true);
 }
 
 export function prepareLive2DTextures(model: {

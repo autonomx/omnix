@@ -80,21 +80,17 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
     onSuccess: (result) => {
       applyCharacterAvatarPackToTrackedRuntimes(character.id, result.avatar_pack ?? null);
       const liveRuntime = readLatestTrustedCharacterRuntime();
-      if (liveRuntime?.character_id === character.id && result.avatar_pack?.renderer === 'live2d') {
+      const live2dActivated = result.avatar_pack?.renderer === 'live2d';
+      if (live2dActivated) {
         // Use the mutation response, not the mutable runtime cache. A request
         // that started before selection may still hold the previous pack.
-        forceRenderLive2DAvatar({ ...liveRuntime, avatar_pack: result.avatar_pack });
-
-        // Cubism keeps renderer-bound model state that cannot be reliably
-        // released while another model is already playing. Remount the Live
-        // Voice surface after the selection is durable so it always starts
-        // from the selected rig's actual Idle motion instead of retaining the
-        // previous model or its current animation.
-        window.setTimeout(() => window.location.reload(), 0);
+        if (liveRuntime?.character_id === character.id) {
+          forceRenderLive2DAvatar({ ...liveRuntime, avatar_pack: result.avatar_pack });
+        }
       }
       setStatus(result.downloaded
-        ? 'Live2D runtime and model downloaded. Refreshing Live Voice with the new idle avatar…'
-        : 'Live2D avatar selected. Refreshing Live Voice with the new idle avatar…');
+        ? 'Live2D runtime and model downloaded. Live Voice is now using the new idle avatar.'
+        : 'Live2D avatar selected. Live Voice is now using the new idle avatar.');
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', character.id] });
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-live2d-models', character.id] });
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'live-call-runtime'] });

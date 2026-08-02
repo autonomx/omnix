@@ -5,7 +5,7 @@ export type AvatarMouthFrame = 'closed' | 'small' | 'medium' | 'wide';
 export type AvatarPresentationState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
 const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
-const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
+export const CHARACTER_AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
@@ -50,9 +50,19 @@ export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime 
   blinkClosed = false;
   scheduleBlink();
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(AVATAR_RUNTIME_EVENT, { detail: runtime }));
+    window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_RUNTIME_EVENT, { detail: runtime }));
   }
   renderAvatarHost();
+}
+
+/** Apply a newly selected pack to the runtime currently driving the live host. */
+export function applyAvatarPackToCurrentRuntime(
+  characterId: string,
+  avatarPack: CharacterAvatarPack | null,
+): boolean {
+  if (!currentRuntime || currentRuntime.character_id !== characterId) return false;
+  publishCharacterAvatarRuntime({ ...currentRuntime, avatar_pack: avatarPack });
+  return true;
 }
 
 export function mouthFrameForRms(rms: number): AvatarMouthFrame {
@@ -167,7 +177,7 @@ function installLiveCharacterAvatarBridge(): void {
     currentMouthFrame = detail.frame;
     updateAvatarImage();
   });
-  window.addEventListener(AVATAR_RUNTIME_EVENT, () => renderAvatarHost());
+  window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, () => renderAvatarHost());
   window.addEventListener(AVATAR_PCM_EVENT, (event) => {
     const detail = (event as CustomEvent<{
       samples?: Int16Array;

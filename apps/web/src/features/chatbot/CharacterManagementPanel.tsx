@@ -47,6 +47,19 @@ export function CharacterManagementPanel({
     if (!selectedId && characters[0]) setSelectedId(characters[0].id);
   }, [characters, selectedId]);
 
+  // When this dashboard is opened from Chatbot, the active session is the
+  // source of truth for Live Voice. Do not let a character-management choice
+  // left in localStorage make the avatar editor operate on a different
+  // character than the live canvas currently represents.
+  useEffect(() => {
+    const activeCharacterId = interactionQuery.data?.interaction_mode === 'character'
+      ? interactionQuery.data.character_id
+      : null;
+    if (activeCharacterId && characters.some((character) => character.id === activeCharacterId)) {
+      setSelectedId((current) => current === activeCharacterId ? current : activeCharacterId);
+    }
+  }, [characters, interactionQuery.data?.character_id, interactionQuery.data?.interaction_mode]);
+
   useEffect(() => {
     if (selectedId) window.localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, selectedId);
   }, [selectedId]);
