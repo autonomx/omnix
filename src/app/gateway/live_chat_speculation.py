@@ -16,7 +16,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app import shared
-from app.chat import ChatMessage, ChatSessionStore, SendChatMessageRequest, default_chat_store
+from app.chat import (
+    ChatMessage,
+    ChatSessionStore,
+    SendChatMessageRequest,
+    default_chat_store,
+)
 from app.chat.store import _model_key, _provider_key
 from app.gateway.live_chat_low_latency_stream import LowLatencyTextChunker
 from app.providers import ChatMessage as ProviderMessage
