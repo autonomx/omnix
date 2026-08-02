@@ -25,9 +25,7 @@ jobs:
       - name: Apply reviewed live latency fixes
         if: github.event_name == 'pull_request'
         run: |
-          cat \
-            .github/live-latency-review/controller-ws.part00 \
-            .github/live-latency-review/controller-ws.part01 \
+          cat .github/live-latency-review/controller-ws.part00 \
             | base64 --decode > /tmp/live-latency-controller.tar.gz
           tar -xzf /tmp/live-latency-controller.tar.gz
           cat \
