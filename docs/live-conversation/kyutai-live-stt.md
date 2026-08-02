@@ -1,56 +1,164 @@
-# Kyutai live STT proof of concept
+# Kyutai low-latency live voice rollout
 
-This integration adds an optional Omnix-compatible adapter for Kyutai's streaming speech-to-text service. It is intentionally additive: Parakeet remains the default and its existing segmented scheduling/finalization path is unchanged.
+This branch implements the complete five-PR low-latency voice rollout while keeping `main` unchanged. Parakeet remains the default unless the frontend is explicitly configured to use Kyutai.
 
 ## Architecture
 
 ```text
-Browser
-  -> existing Omnix /ws/transcribe JSON protocol
-  -> kyutai_stt_runtime.py
-  -> persistent MessagePack WebSocket
-  -> Kyutai moshi-server /api/asr-streaming
+Microphone
+  -> Omnix negotiated /ws/transcribe protocol
+  -> Kyutai adapter on port 5202
+  -> persistent MessagePack websocket
+  -> moshi-server /api/asr-streaming
+  -> endpoint candidate / authoritative final
+  -> side-effect-free LLM speculation
+  -> accepted final transcript
+  -> normal chat persistence
+  -> incremental Qwen TTS clause streaming
+  -> persistent PCM websocket + adaptive AudioWorklet buffer
 ```
 
-The browser-facing protocol keeps Omnix ownership of capture epochs, segment identity, sequence ordering, result replay, stale-final rejection, and accepted-final routing. Kyutai-specific `prs[2]` values are normalized to provider-neutral `endpoint_score` messages.
+The browser-facing STT protocol keeps Omnix ownership of capture epochs, segment identities, sequence ordering, result replay, stale-final rejection, accepted-final routing, and provider fallback decisions.
 
-## Negotiated capture contract
+## PR 1: negotiated provider-neutral STT
 
-The adapter sends this information in the initial `ready` message:
+The server sends a `ready` contract containing:
 
-- provider: `kyutai`
-- protocol: `segmented-v1`
-- sample rate: 24,000 Hz
-- recommended frame size: 1,920 samples (80 ms)
-- encoding: little-endian PCM16
+- provider and protocol
+- sample rate and recommended frame size
+- encoding
 - selected language
-- capabilities: continuous words, word timestamps, semantic endpointing, delayed flush, authoritative final transcription, and client audio replay
+- capabilities
+- configuration version
 
-The browser freezes the negotiated provider and audio format for the complete capture epoch. A reconnect that advertises a different contract is rejected rather than mixing sample indexes or providers mid-utterance.
+The browser freezes the negotiated contract for the entire capture epoch. A reconnect that advertises a different provider, sample rate, language, or capability set is rejected rather than mixing incompatible sample indexes.
 
-Kyutai decoder state is connection-local. The `client_audio_replay` capability therefore tells the browser to retain acknowledged segment audio until the authoritative result commits. After a reconnect, Omnix waits for `session_ready`, applies any cached completed results, and then replays every still-pending Kyutai segment from its original `captureStartSample`. Parakeet continues pruning acknowledged frames because its existing backend owns persistent segment state and result replay.
+Parakeet continues using 16,000 Hz PCM and its existing segmented finalize-and-transcribe path. Kyutai negotiates 24,000 Hz PCM with 1,920-sample frames.
 
-Parakeet advertises its actual capabilities through the same handshake while continuing to use 16,000 Hz PCM and the existing finalize-and-transcribe implementation.
+## PR 2: Kyutai streaming adapter
 
-## Reproducible upstream setup
+The adapter connects to Kyutai's `/api/asr-streaming` endpoint and normalizes:
 
-The adapter was implemented against these upstream artifacts:
+- partial transcript updates
+- timestamped words
+- semantic endpoint scores and candidates
+- delayed-state flush lifecycle
+- authoritative final transcripts
 
-- Unmute repository commit: `c49982eb3aeaf76633dfe4155fa3b8dcb5b3d962`
-- Moshi configuration: `services/moshi-server/configs/stt.toml` at that commit
-- Kyutai model repository: `kyutai/stt-1b-en_fr-candle`
-- Verified `model.safetensors` revision: `9196091a4634222b56cfd9ba9c22a37b208dd304`
-- Verified `model.safetensors` SHA-256: `b9e97c53229dce728d65c76bfa892f7b563c69d671899f0ebc6518582dddec6f`
+Kyutai decoder state is connection-local. The `client_audio_replay` capability therefore tells the browser to retain acknowledged segment audio until a final result is accepted. After reconnect, Omnix applies cached completed results and replays every still-pending segment from its original sample offset.
 
-The upstream configuration uses six delayed ASR tokens, batch size one, and `/api/asr-streaming`. Pin the tokenizer and Mimi/audio-tokenizer artifacts in the deployment manifest as well; do not rely on moving Hugging Face defaults.
+The bridge also provides:
 
-From a checkout of the pinned Unmute commit, the upstream compose service is named `stt` and runs:
+- cancellable delayed-state flushes
+- a serialized provider action worker
+- bounded queues and segment sizes
+- malformed audio rejection
+- a rolling circuit breaker
+- real upstream health probing
+- provider and latency diagnostics without raw transcript text
+
+## PR 3: authoritative Kyutai endpointing
+
+Kyutai can become authoritative only after a pre-session gate succeeds. The browser calls:
 
 ```text
-worker --config configs/stt.toml
+GET http://127.0.0.1:5202/authorityz?language=en&mode=test
+GET http://127.0.0.1:5202/authorityz?language=en&mode=auto
 ```
 
-The upstream compose file keeps the service on its internal Docker network at port `8080`. To run the Omnix adapter on the host, add a local compose override such as:
+The gate requires:
+
+- English or French
+- reachable upstream moshi-server
+- closed circuit breaker
+- a recent successful ready handshake, indicating a warm model
+
+`authority=test` enables authoritative endpoint commitment for local latency testing after readiness and warm-model checks. It does not claim that production quality gates have passed.
+
+`authority=auto` additionally requires both environment gates:
+
+```text
+KYUTAI_STT_QUALITY_GATE_PASSED=true
+KYUTAI_STT_CONTENTION_GATE_PASSED=true
+```
+
+The production thresholds encoded by the gate are:
+
+- median speech-end to first audio below 750 ms
+- p95 speech-end to first audio below 1,000 ms
+- false endpoint rate below 3%
+- missed endpoint rate below 5%
+- interruption to silence below 250 ms
+- TTS-underrun turns below 2%
+- no more than 15% p95 regression in downstream LLM/TTS latency under contention
+
+A configured fallback is selected before microphone capture begins. Providers are never switched after partial processing has started. When a qualified Kyutai endpoint candidate crosses the configured threshold, the existing Omnix finalization protocol is invoked and captured continuation audio is held until the accepted final establishes the next turn boundary.
+
+## PR 4: safe LLM speculation
+
+A stable Kyutai endpoint candidate may start a private LLM generation before the final transcript returns.
+
+Speculative generation is deliberately side-effect-free:
+
+- no user message is persisted
+- no assistant message is persisted
+- tools are disabled
+- memory writes are disabled
+- generated text is not shown or spoken before acceptance
+
+The speculative response is reusable only when the final accepted transcript has the exact same normalized words. Differences in case, punctuation, whitespace, and curly apostrophes are allowed; word additions, removals, and substitutions invalidate it. Candidates containing unresolved correction or hesitation markers are not speculated.
+
+When the final matches, the normal chat stream is satisfied from the already-running speculative stream and persistence occurs exactly once through the acceptance route. When it does not match, the speculative request is aborted and the ordinary final-transcript chat request runs.
+
+Disable speculation with:
+
+```text
+VITE_LIVE_SPECULATION_ENABLED=false
+```
+
+## PR 5: incremental TTS and adaptive playback
+
+The current Qwen provider exposes streaming audio generation for a complete synthesis request, but it does not expose a native decoder session that accepts additional text after decoding has begun. The rollout therefore implements two clearly distinguished capability levels:
+
+1. **Application-level incremental text ingestion:** LLM stream text is committed to TTS continuously using stable clauses, a 12-character minimum, and a 140 ms maximum text-commit deadline.
+2. **Native decoder text append:** reported separately by `/api/tts/live-call/capabilities`; it remains false for the current Faster Qwen3 TTS provider unless a provider-native incremental session API is added.
+
+The complete assistant response no longer needs to finish before TTS starts. Each committed clause uses the existing Qwen audio generator, while one persistent live-session websocket, one AudioContext, one AudioWorklet, generation ownership, cancellation, and delivery tracking remain active across the response.
+
+Playback buffering is adaptive. The default policy starts near 260 ms, raises start and rebuffer targets after underruns, and cautiously lowers them after stable turns. The policy is kept locally and emits diagnostics on the existing voice-performance event channel.
+
+Disable adaptive buffering with:
+
+```text
+VITE_LIVE_TTS_ADAPTIVE_BUFFER=false
+```
+
+Inspect TTS capabilities at:
+
+```text
+GET /api/tts/live-call/capabilities
+```
+
+Important fields include:
+
+- `incremental_text_ingest`
+- `text_commit_deadline_ms`
+- `streaming_audio_chunks`
+- `native_decoder_text_append`
+- `cancellation_generations`
+- `adaptive_playback_buffer`
+
+## Reproducible Kyutai upstream setup
+
+The adapter was implemented against:
+
+- Unmute commit `c49982eb3aeaf76633dfe4155fa3b8dcb5b3d962`
+- `services/moshi-server/configs/stt.toml` at that commit
+- model repository `kyutai/stt-1b-en_fr-candle`
+- `model.safetensors` revision `9196091a4634222b56cfd9ba9c22a37b208dd304`
+- verified model SHA-256 `b9e97c53229dce728d65c76bfa892f7b563c69d671899f0ebc6518582dddec6f`
+
+From the pinned Unmute checkout, create `docker-compose.omnix-stt.yml`:
 
 ```yaml
 services:
@@ -59,133 +167,128 @@ services:
       - "8090:8080"
 ```
 
-Then start the pinned STT service:
+Start the upstream service:
 
 ```bash
 git checkout c49982eb3aeaf76633dfe4155fa3b8dcb5b3d962
 docker compose -f docker-compose.yml -f docker-compose.omnix-stt.yml up --build stt
 ```
 
-Start the Omnix adapter separately:
+Start the Omnix adapter from the Omnix branch:
 
 ```bash
 python src/kyutai_stt_runtime.py
 ```
 
-The adapter defaults to port `5202` and upstream URL `ws://127.0.0.1:8090`, allowing it to run beside the current Parakeet service on `5201`.
+The adapter defaults to port `5202`, upstream URL `ws://127.0.0.1:8090`, and can run beside Parakeet on `5201`.
 
-## Provider and language selection
+## Exact local latency-test configuration
 
-Configure the live-chat STT service URL to use the Kyutai adapter only for an explicit proof-of-concept session:
+For an English RTX 4090 test with authoritative Kyutai and pre-session Parakeet fallback, start Vite with:
 
-```text
-http://127.0.0.1:5202?language=en
-http://127.0.0.1:5202?language=fr
+```powershell
+$env:VITE_ASSISTANT_STT_URL="http://127.0.0.1:5202?language=en&authority=test&endpoint_threshold=0.75&fallback=http%3A%2F%2F127.0.0.1%3A5201"
+$env:VITE_LIVE_SPECULATION_ENABLED="true"
+$env:VITE_LIVE_TTS_ADAPTIVE_BUFFER="true"
+npm run web:dev
 ```
 
-The browser converts the URL to `/ws/transcribe` while preserving only the `language` query parameter. Other query parameters are discarded. The negotiated language is then frozen with the rest of the capture contract.
+For French, replace `language=en` with `language=fr`.
 
-### Environment variables
+For production-gated selection, use `authority=auto` only after setting the two release-evidence environment variables on the Kyutai adapter process.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `KYUTAI_STT_URL` | `ws://127.0.0.1:8090` | Upstream moshi-server base URL |
-| `KYUTAI_STT_API_KEY` | `public_token` | `kyutai-api-key` header |
-| `OMNIX_STT_PORT` | `5202` | Omnix adapter port |
-| `OMNIX_LIVE_STT_LANGUAGE` | `en` | Default session language when the URL does not select one |
-| `KYUTAI_STT_CONNECT_TIMEOUT_SECONDS` | `5` | Upstream ready timeout |
-| `KYUTAI_STT_FLUSH_TIMEOUT_SECONDS` | `3` | Delayed-state flush timeout |
-| `KYUTAI_STT_HEALTH_PROBE_MAX_AGE_SECONDS` | `5` | Maximum age of a cached successful upstream health probe |
-| `KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD` | `0.75` | Observational endpoint candidate threshold |
-| `KYUTAI_STT_BREAKER_FAILURES` | `3` | Failures required to open the circuit |
-| `KYUTAI_STT_BREAKER_WINDOW` | `5` | New-session attempt window |
-| `KYUTAI_STT_BREAKER_COOLDOWN_SECONDS` | `60` | Initial open-circuit cooldown |
+Before opening Live Chat, verify:
 
-## PR 2 behavior
+```powershell
+Invoke-RestMethod http://127.0.0.1:5202/healthz
+Invoke-RestMethod "http://127.0.0.1:5202/authorityz?language=en&mode=test"
+Invoke-RestMethod http://127.0.0.1:8000/api/tts/live-call/capabilities
+```
 
-This proof of concept does not automatically commit a turn from Kyutai's endpoint score. It emits:
-
-- `partial`
-- `word` with start and end timestamps
-- `endpoint_score`
-- `endpoint_candidate`
-- `flush_started`
-- `flush_completed`
-- `flush_cancelled`
-
-The existing browser silence/finalization path remains authoritative during this stage. When Omnix sends `finalize`, the bridge queues the action behind preceding audio, pads any incomplete frame, submits zero frames to advance Kyutai's delayed decoder state, waits for the model timeline to catch up, and then publishes the normal Omnix `result_available` payload.
-
-The browser receive loop and provider action worker are independent. A `cancel_flush` message can therefore be read while the worker is waiting for delayed model state. Cancellation wakes the flush immediately and marks the failed source sequence so later accepted results are not permanently blocked.
-
-Audio is processed through a stateful streaming resampler so interpolation state and sample counts remain continuous across browser audio chunks.
-
-Each Kyutai result includes provider identity and metrics:
-
-- flush wall time
-- modeled delayed time
-- standard real-time factor (`wall time / modeled audio time`)
-- total finalization time
+The exact gateway port may differ in the local Omnix setup.
 
 ## Runtime diagnostics
 
-Negotiation, session restoration, timestamped words, endpoint scores, endpoint candidates, flush lifecycle, provider finals, and provider errors are emitted through Omnix's existing `omnix:assistant-voice-perf` event channel.
+Listen for:
 
-These events include identities, timing, probabilities, capabilities, language, and character counts, but not raw transcript text. Existing diagnostics consumers can therefore record Kyutai performance without adding a second telemetry path or leaking spoken content.
+```javascript
+window.addEventListener(
+  'omnix:assistant-voice-perf',
+  event => console.log('[voice-perf]', event.detail),
+);
+```
 
-## Health and fallback
+Relevant stages include:
 
-`GET /healthz` performs or reuses a recent real upstream connection probe. A newly started adapter with no reachable `moshi-server` reports `ok: false`; an open or half-open circuit is not reported healthy.
+- `stt_authority_selected`
+- `stt_endpoint_candidate`
+- `stt_endpoint_committed`
+- `stt_flush_started`
+- `stt_flush_completed`
+- `stt_provider_final`
+- `llm_speculation_started`
+- `llm_speculation_cancelled`
+- `llm_speculation_reused`
+- `llm_speculation_committed`
+- `tts_capabilities_negotiated`
+- `tts_adaptive_buffer_applied`
+- `tts_adaptive_buffer_updated`
 
-The breaker opens after three failed new-session attempts within five attempts. Protocol, schema, configuration, and authentication failures are treated as non-transient and can open it immediately. While open, new Kyutai sessions are rejected so the caller can select Parakeet before starting a new capture epoch. After the cooldown, one half-open probe is allowed. Providers are never switched in the middle of an utterance.
+These events contain timing, identities, probabilities, capabilities, and character counts but not raw spoken transcript text.
 
-## Resource limits
+## Environment variables
 
-The bridge enforces:
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `KYUTAI_STT_URL` | `ws://127.0.0.1:8090` | Upstream moshi-server URL |
+| `KYUTAI_STT_API_KEY` | `public_token` | `kyutai-api-key` header |
+| `OMNIX_STT_PORT` | `5202` | Omnix adapter port |
+| `OMNIX_STT_CORS_ORIGINS` | local Vite origins | Allowed authority-preflight origins |
+| `OMNIX_LIVE_STT_LANGUAGE` | `en` | Default language when URL has none |
+| `KYUTAI_STT_CONNECT_TIMEOUT_SECONDS` | `5` | Upstream ready timeout |
+| `KYUTAI_STT_FLUSH_TIMEOUT_SECONDS` | `3` | Delayed-state flush timeout |
+| `KYUTAI_STT_HEALTH_PROBE_MAX_AGE_SECONDS` | `5` | Successful health-probe cache age |
+| `KYUTAI_STT_WARM_MAX_AGE_SECONDS` | `120` | Maximum age of ready handshake for authority |
+| `KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD` | `0.75` | Bridge candidate threshold |
+| `KYUTAI_STT_QUALITY_GATE_PASSED` | false | Required for `authority=auto` |
+| `KYUTAI_STT_CONTENTION_GATE_PASSED` | false | Required for `authority=auto` |
+| `KYUTAI_STT_BREAKER_FAILURES` | `3` | Failures required to open breaker |
+| `KYUTAI_STT_BREAKER_WINDOW` | `5` | New-session attempt window |
+| `KYUTAI_STT_BREAKER_COOLDOWN_SECONDS` | `60` | Initial breaker cooldown |
 
-- maximum decoded audio-frame size of two seconds
-- maximum audio per segment of 15 seconds
-- maximum open segments per connection
-- bounded provider action queue
-- bounded completed-result replay cache
+## Evaluation procedure
 
-Malformed base64, partial PCM samples, sample gaps, identity changes, and invalid finalize ranges produce normalized `segment_error` responses rather than reaching the upstream model.
+Do not use Parakeet as accuracy ground truth. Evaluate both providers against human transcripts containing commands, hesitation, self-correction, incomplete clauses, noise, interruptions, accents, NPC names, numbers, inventory terms, and negation.
 
-## Language scope
+Run three separate suites:
 
-The initial low-delay model is limited to English and French. Unsupported languages are rejected before connecting upstream. Japanese and other languages must continue using the existing provider until a suitable streaming model is added.
+1. offline replay for transcript and endpoint accuracy
+2. isolated Kyutai live-provider latency
+3. production-like contention with Kyutai, the local LLM, and Qwen TTS loaded on the RTX 4090
 
-## Evaluation plan
+Track:
 
-Do not use Parakeet as accuracy ground truth. Evaluate both systems against human transcripts using a labeled set containing:
-
-- short commands and questions
-- hesitation and self-correction
-- incomplete clauses
-- background noise and interruptions
-- English and French accents
-- NPC names, locations, inventory items, numbers, and negation
-
-Track at minimum:
-
-- Kyutai and Parakeet WER against human labels
-- entity, proper-name, number, negation, and command-intent accuracy
+- WER and command-intent accuracy
+- entity, proper-name, number, and negation accuracy
 - first-word latency
 - endpoint early/late timing
 - false and missed endpoint rates
-- flush wall time and real-time factor
-- reconnect recovery rate
-- GPU memory
-- LLM TTFT regression
-- TTS first-PCM regression
-
-Use three separate runs: offline replay for accuracy, isolated live-provider performance, and a production-like contention test with STT, LLM, and TTS active. Full dual-provider shadowing on one GPU can distort the latency measurement.
+- speech-end to accepted final
+- LLM speculative hit and cancellation rates
+- LLM TTFT
+- TTS text-commit to first PCM
+- speech-end to first audible response
+- interruption to silence
+- underruns and adaptive-buffer values
+- GPU memory and downstream p95 regressions
 
 Raw audio capture for evaluation must remain disabled by default and require an explicit local evaluation setting with bounded retention.
 
 ## Current limitations
 
-- Kyutai is opt-in and is not the default provider.
-- Endpoint candidates are observational; server-owned automatic endpoint commitment belongs to the next rollout stage.
-- The adapter does not add LLM speculation.
-- Phrase-at-a-time Qwen TTS remains the larger response-onset floor.
-- Running moshi-server on the same RTX 4090 as the LLM and TTS must be benchmarked before production use.
+- Kyutai is still opt-in; Parakeet remains the default configuration.
+- `authority=test` is for local measurement, not production promotion.
+- `authority=auto` fails closed until quality and contention evidence is explicitly approved.
+- Speculation is never allowed to perform tools, memory writes, or other side effects before final-transcript acceptance.
+- Qwen TTS now receives LLM text incrementally and streams PCM immediately, but the current provider does not offer native cross-append decoder continuity; this is exposed honestly in the capability contract.
+- Real RTX 4090 contention, latency, transcript quality, and interruption measurements still must be run locally before this draft PR is considered release-ready.
