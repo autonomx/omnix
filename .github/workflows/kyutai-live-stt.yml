@@ -48,6 +48,50 @@ jobs:
             | base64 --decode > /tmp/live-latency-remaining.tar.gz
           tar -xzf /tmp/live-latency-remaining.tar.gz
           cp /tmp/test_kyutai_authority.py src/tests/app/test_kyutai_authority.py
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path("src/app/gateway/live_chat_speculation.py")
+          text = source.read_text()
+          old = '''                "user_turn_id": (
+                    request.user_turn_id
+                    or f"speculation-user:{generation_id}"[:160]
+                ),
+                "speech_segment_id": (
+                    request.speech_segment_id
+                    or f"speculation-segment:{speculation.segment_id}"[:160]
+                ),
+          '''
+          new = '''                "user_turn_id": (
+                    request.user_turn_id
+                    or (
+                        f"voice-user-turn:{request.live_voice_turn_id}"[:160]
+                        if request.live_voice_turn_id
+                        else f"speculation-user:{generation_id}"[:160]
+                    )
+                ),
+                "speech_segment_id": (
+                    request.speech_segment_id
+                    or (
+                        f"voice-segment:{request.live_voice_turn_id}"[:160]
+                        if request.live_voice_turn_id
+                        else f"speculation-segment:{speculation.segment_id}"[:160]
+                    )
+                ),
+          '''
+          if old not in text:
+              raise SystemExit("speculation identity patch target not found")
+          source.write_text(text.replace(old, new))
+
+          test_path = Path("src/tests/app/test_live_chat_speculation.py")
+          test_text = test_path.read_text()
+          test_path.write_text(
+              test_text.replace(
+                  '"/remember my access token"',
+                  '"remember that my access token is private"',
+              )
+          )
+          PY
 
       - name: Set up Python
         uses: actions/setup-python@v5
