@@ -104,9 +104,9 @@ describe('live voice websocket helpers', () => {
     sockets[0].receive(kyutaiReady());
     expect(sockets[0].sentJson().filter((message) => message.type === 'audio')).toHaveLength(0);
     sockets[0].receive({ type: 'session_ready', sessionId: client.segmentState.sessionId, results: [] });
+    await vi.waitFor(() => expect(sockets[0].sentJson().filter((message) => message.type === 'audio')).toHaveLength(1));
 
     const audio = sockets[0].sentJson().filter((message) => message.type === 'audio');
-    expect(audio).toHaveLength(1);
     expect(audio[0].sampleRate).toBe(24_000);
     expect(audio[0].data).toBe(encodePcm16Base64(resampleFloat32(input, 48_000, 24_000)));
     expect(client.segmentState.negotiation).toEqual({
@@ -275,6 +275,7 @@ describe('live voice websocket helpers', () => {
     sockets[1].receive(kyutaiReady());
     expect(sockets[1].sentJson().filter((message) => message.type === 'audio')).toHaveLength(0);
     sockets[1].receive({ type: 'session_ready', sessionId: client.segmentState.sessionId, results: [] });
+    await vi.waitFor(() => expect(sockets[1].sentJson().filter((message) => message.type === 'audio')).toHaveLength(1));
 
     const replay = sockets[1].sentJson().find((message) => message.type === 'audio');
     expect(replay?.segmentId).toBe(original.segmentId);
@@ -361,6 +362,7 @@ async function openSegmentedClient(
   await openClient(client, sockets);
   sockets[0].receive(ready);
   sockets[0].receive({ type: 'session_ready', sessionId: client.segmentState.sessionId, results: [] });
+  await vi.waitFor(() => expect(client.segmentedProtocolActive).toBe(true));
 }
 
 function resultFor(
