@@ -22,14 +22,20 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref_name }}
 
-      - name: Apply reviewed controller and websocket fixes
+      - name: Apply reviewed live latency fixes
         if: github.event_name == 'pull_request'
         run: |
           cat \
             .github/live-latency-review/controller-ws.part00 \
             .github/live-latency-review/controller-ws.part01 \
-            | base64 --decode > /tmp/live-latency-fixes.tar.gz
-          tar -xzf /tmp/live-latency-fixes.tar.gz
+            | base64 --decode > /tmp/live-latency-controller.tar.gz
+          tar -xzf /tmp/live-latency-controller.tar.gz
+          cat \
+            .github/live-latency-review/remaining.part00 \
+            .github/live-latency-review/remaining.part01 \
+            .github/live-latency-review/remaining.part02 \
+            | base64 --decode > /tmp/live-latency-remaining.tar.gz
+          tar -xzf /tmp/live-latency-remaining.tar.gz
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -98,7 +104,7 @@ jobs:
             src/features/assistant-workspace/live-voice-websocket.spec.ts \
             src/features/assistant-workspace/live-latency-rollout.spec.ts
 
-      - name: Commit reviewed controller and websocket fixes
+      - name: Commit reviewed live latency fixes
         if: >-
           success() &&
           github.event_name == 'pull_request' &&
@@ -108,9 +114,17 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
             apps/web/src/features/assistant-workspace/live-voice-controller.ts \
-            apps/web/src/features/assistant-workspace/live-voice-websocket.ts
+            apps/web/src/features/assistant-workspace/live-voice-websocket.ts \
+            apps/web/src/features/assistant-workspace/live-voice-websocket.spec.ts \
+            apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.ts \
+            apps/web/src/features/assistant-workspace/live-latency-rollout.spec.ts \
+            apps/web/src/features/assistant-workspace/live-tts-adaptive-buffer-controller.ts \
+            apps/web/src/features/assistant-workspace/live-speculation-controller.ts \
+            src/app/gateway/live_chat_speculation.py \
+            src/kyutai_stt_runtime.py \
+            src/tests/app/test_live_chat_speculation.py
           if ! git diff --cached --quiet; then
-            git commit -m "Fix authoritative live voice ownership and STT readiness"
+            git commit -m "Complete live voice correctness review fixes"
             git push origin HEAD:${{ github.head_ref }}
           fi
 
