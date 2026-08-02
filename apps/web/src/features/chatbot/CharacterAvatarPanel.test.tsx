@@ -80,6 +80,7 @@ describe('CharacterAvatarPanel', () => {
 
     renderPanel();
 
+    expect(await screen.findByRole('region', { name: 'Live2D avatar catalog' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByLabelText('Shizuku (PRO) rig preview')).toHaveLength(2));
   });
 

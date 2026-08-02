@@ -332,7 +332,12 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
 
         {live2dCatalogQuery.isLoading ? <div className="character-live2d-loading">Loading Live2D catalog…</div> : null}
         {live2dCatalogQuery.isError ? <div className="character-live2d-loading is-error">Live2D catalog could not be loaded.</div> : null}
-        <div className="character-live2d-model-grid">
+        <div
+          className="character-live2d-model-grid"
+          role="region"
+          aria-label="Live2D avatar catalog"
+          tabIndex={0}
+        >
           {live2dCatalogQuery.data?.models.map((model) => <button
             type="button"
             key={model.id}

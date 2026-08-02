@@ -395,9 +395,38 @@
 }
 
 .character-live2d-model-grid {
+  --character-live2d-card-height: 8rem;
   display: grid;
   gap: 0.65rem;
+  grid-auto-rows: var(--character-live2d-card-height);
   grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  max-height: calc(var(--character-live2d-card-height) + var(--character-live2d-card-height) + 0.65rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.35rem;
+  scrollbar-color: rgba(151, 126, 255, 0.58) rgba(6, 11, 24, 0.52);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.character-live2d-model-grid:focus-visible {
+  border-radius: 0.7rem;
+  outline: 2px solid rgba(151, 126, 255, 0.72);
+  outline-offset: 0.2rem;
+}
+
+.character-live2d-model-grid::-webkit-scrollbar {
+  width: 0.55rem;
+}
+
+.character-live2d-model-grid::-webkit-scrollbar-track {
+  background: rgba(6, 11, 24, 0.52);
+  border-radius: 999px;
+}
+
+.character-live2d-model-grid::-webkit-scrollbar-thumb {
+  background: rgba(151, 126, 255, 0.58);
+  border-radius: 999px;
 }
 
 .character-live2d-model-card {
@@ -408,6 +437,7 @@
   display: grid;
   gap: 0.65rem;
   grid-template-columns: 7.2rem minmax(0, 1fr);
+  height: var(--character-live2d-card-height);
   min-height: 8rem;
   overflow: hidden;
   padding: 0;

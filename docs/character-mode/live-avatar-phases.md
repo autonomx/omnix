@@ -43,13 +43,13 @@ Implemented; the final exact-head verification is the release gate.
 Implemented behind explicit third-party license acceptance.
 
 - The Characters page exposes separate **Generated avatar** and **Live2D avatar** workflows. Selecting Live2D does not remove or overwrite the character's generated image assets.
-- The initial catalog includes the Niziiro Mao (PRO) and Shizuku (PRO) sample models used by Open-LLM-VTuber.
+- The catalog includes Niziiro Mao (PRO) and Shizuku (PRO) from Open-LLM-VTuber, plus the official Haru, Hiyori Momose (PRO), Epsilon (PRO), Chitose, Koharu, Haruto, Tororo, and Hijiki sample runtimes.
 - Omnix does not vendor the Live2D Cubism Core or sample model binaries. The user must accept the Live2D runtime and sample-model terms before Omnix downloads pinned files from their original projects.
 - Downloaded runtime and model files are stored under `resources/data/character_live2d`, registered as governed shared assets, and served by local-only API routes after installation.
 - Character avatar packs select the installed model through `renderer=live2d`, `render_mode=viseme`, and a governed `rig_asset_id`.
 - Character live calls mount a PixiJS/Live2D canvas in the existing avatar stage. The same timed viseme stream used by sprite packs drives common Cubism mouth-open and mouth-form parameters while the model retains its own idle motion, physics, blink, and pose behavior.
 - Disabling Live2D restores the character's previous generated avatar pack when one existed; otherwise the live call returns to the Voice orb.
-- Model and runtime revisions are pinned so a later upstream change cannot silently alter an installed character.
+- Model and runtime revisions are pinned so a later upstream change cannot silently alter an installed character. Official sample ZIPs are verified against catalogued SHA-256 hashes and only their referenced runtime files are extracted; Cubism authoring files are not retained.
 
 ### Licensing boundary
 
