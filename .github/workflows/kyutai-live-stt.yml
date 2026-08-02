@@ -37,42 +37,52 @@ jobs:
           python -m pip install ruff pytest fastapi httpx uvicorn msgpack playwright requests "websockets>=12"
           npm install
 
-      - name: Lint Kyutai live STT modules
+      - name: Lint live latency modules
         run: |
           ruff check \
             src/app/providers/live_stt_contracts.py \
+            src/app/providers/kyutai_authority.py \
             src/app/providers/kyutai_live_stt.py \
             src/app/providers/kyutai_stt_websocket.py \
             src/app/providers/stt_live_websocket.py \
+            src/app/gateway/live_chat_speculation.py \
+            src/app/gateway/tts_live_capabilities.py \
             src/kyutai_stt_runtime.py \
             src/tests/app/test_live_stt_contracts.py \
+            src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
-            src/tests/app/test_kyutai_stt_websocket.py
+            src/tests/app/test_kyutai_stt_websocket.py \
+            src/tests/app/test_live_chat_speculation.py \
+            src/tests/app/test_tts_live_capabilities.py
 
-      - name: Run Kyutai live STT unit and bridge tests
+      - name: Run live latency unit and bridge tests
         run: |
           python -m pytest \
             src/tests/app/test_live_stt_contracts.py \
+            src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
             src/tests/app/test_kyutai_stt_websocket.py \
             src/tests/app/test_stt_streaming_audio.py \
+            src/tests/app/test_live_chat_speculation.py \
+            src/tests/app/test_tts_live_capabilities.py \
             -q --tb=short
 
-      - name: Typecheck negotiated STT browser path
+      - name: Typecheck live latency browser path
         run: |
           set +e
           npm --workspace @omnix/web run typecheck 2>&1 | tee live-stt-typecheck.txt
           typecheck_status=${PIPESTATUS[0]}
           set -e
-          if grep -E "live-(voice-websocket(\\.spec)?|accepted-final)\\.ts" live-stt-typecheck.txt; then
-            echo "TypeScript errors were reported in the negotiated live STT path."
+          if grep -E "(live-(voice-websocket(\\.spec)?|accepted-final|stt-authority-controller|speculation-controller|tts-adaptive-buffer-controller|tts-capability-controller|latency-rollout\\.spec)\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
+            echo "TypeScript errors were reported in the live latency rollout path."
             exit "${typecheck_status:-1}"
           fi
           if [ "$typecheck_status" -ne 0 ]; then
-            echo "::warning::Repository-wide typecheck has baseline failures outside the negotiated live STT files."
+            echo "::warning::Repository-wide typecheck has baseline failures outside the live latency files."
           fi
 
-      - name: Test negotiated browser STT client
+      - name: Test live latency browser controllers
         run: |
           npm --workspace @omnix/web run test -- --run \
-            src/features/assistant-workspace/live-voice-websocket.spec.ts
+            src/features/assistant-workspace/live-voice-websocket.spec.ts \
+            src/features/assistant-workspace/live-latency-rollout.spec.ts
