@@ -94,7 +94,14 @@ jobs:
             src/tests/app/test_stt_streaming_audio.py \
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_tts_live_capabilities.py \
-            -q --tb=short
+            -q --tb=short --junitxml=live-latency-pytest.xml
+
+      - name: Upload focused pytest diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-latency-pytest-diagnostics
+          path: live-latency-pytest.xml
 
       - name: Typecheck live latency browser path
         run: |
