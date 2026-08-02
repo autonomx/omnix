@@ -165,6 +165,8 @@ class LiveSttCircuitBreaker:
         return True
 
     def record_success(self) -> None:
+        if self._state is CircuitState.HALF_OPEN:
+            self._outcomes.clear()
         self._outcomes.append(True)
         self._state = CircuitState.CLOSED
         self._half_open_probe_in_flight = False
