@@ -13,7 +13,7 @@ permissions:
 jobs:
   kyutai-live-stt:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       PYTHONPATH: src
     steps:
@@ -26,10 +26,16 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install focused dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install ruff pytest fastapi uvicorn msgpack playwright requests "websockets>=12"
+          npm install
 
       - name: Lint Kyutai live STT modules
         run: |
@@ -49,3 +55,11 @@ jobs:
             src/tests/app/test_kyutai_live_stt.py \
             src/tests/app/test_stt_streaming_audio.py \
             -q --tb=short
+
+      - name: Typecheck web application
+        run: npm --workspace @omnix/web run typecheck
+
+      - name: Test negotiated browser STT client
+        run: |
+          npm --workspace @omnix/web run test -- --run \
+            src/features/assistant-workspace/live-voice-websocket.spec.ts
