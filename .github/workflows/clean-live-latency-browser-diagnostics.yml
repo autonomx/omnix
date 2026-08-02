@@ -1,0 +1,33 @@
+name: Clean live latency browser diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - name: Run browser diagnostics
+        run: |
+          npm --workspace @omnix/web run test -- --run \
+            src/features/assistant-workspace/live-voice-websocket.spec.ts \
+            src/features/assistant-workspace/live-latency-rollout.spec.ts \
+            --reporter=default --reporter=junit \
+            --outputFile.junit=clean-live-latency-vitest.xml
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-live-latency-vitest-diagnostics
+          path: apps/web/clean-live-latency-vitest.xml
