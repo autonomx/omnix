@@ -1,0 +1,50 @@
+"""Capability contract for incremental live-call TTS."""
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import FastAPI
+
+from app.shared import get_tts_provider
+
+_ROUTE_SENTINEL = "_omnix_tts_live_capabilities_registered"
+
+
+def live_tts_capabilities_payload() -> dict[str, Any]:
+    provider = get_tts_provider()
+    provider_available = provider is not None and hasattr(provider, "generate_audio_stream")
+    incremental_factory = None if provider is None else next(
+        (
+            getattr(provider, name)
+            for name in (
+                "create_incremental_tts_session",
+                "create_streaming_tts_session",
+                "create_text_append_session",
+            )
+            if callable(getattr(provider, name, None))
+        ),
+        None,
+    )
+    native_text_append = incremental_factory is not None
+    return {
+        "ok": provider_available,
+        "protocol": "live-tts-v2",
+        "persistent_websocket": True,
+        "stateful_text_append": native_text_append,
+        "prosody_continuous_decoder": native_text_append,
+        "cancellation_generations": True,
+        "adaptive_playback_buffer": True,
+        "fallback_mode": "persistent_phrase_stream",
+        "provider_available": provider_available,
+        "provider_name": getattr(provider, "provider_name", None) if provider else None,
+    }
+
+
+def register_tts_live_capability_routes(app: FastAPI) -> None:
+    if getattr(app.state, _ROUTE_SENTINEL, False):
+        return
+    setattr(app.state, _ROUTE_SENTINEL, True)
+
+    @app.get("/api/tts/live-call/capabilities", include_in_schema=False)
+    async def tts_live_call_capabilities() -> dict[str, Any]:
+        return live_tts_capabilities_payload()
