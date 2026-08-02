@@ -1,11 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import type { CharacterProfile } from './characterClient';
+import {
+  applyCharacterAvatarPackToTrackedRuntimes,
+  readLatestTrustedCharacterRuntime,
+  type CharacterProfile,
+} from './characterClient';
 import {
   characterAvatarAssetUrl,
   characterAvatarClient,
   type Live2DModelCatalogItem,
 } from './characterAvatarClient';
+import { Live2DModelThumbnail } from './Live2DModelThumbnail';
+import { forceRenderLive2DAvatar } from './live2dCharacterRenderer';
 import './CharacterAvatarPanel.css';
 
 const ACTIVE_GENERATION_STATES = new Set(['queued', 'generating_base', 'generating_variants']);
@@ -71,23 +77,40 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
       accept_model_terms: acceptLive2DModelTerms,
     }),
     onSuccess: (result) => {
+      applyCharacterAvatarPackToTrackedRuntimes(character.id, result.avatar_pack ?? null);
+      const liveRuntime = readLatestTrustedCharacterRuntime();
+      if (liveRuntime?.character_id === character.id && result.avatar_pack?.renderer === 'live2d') {
+        // Use the mutation response, not the mutable runtime cache. A request
+        // that started before selection may still hold the previous pack.
+        forceRenderLive2DAvatar({ ...liveRuntime, avatar_pack: result.avatar_pack });
+
+        // Cubism keeps renderer-bound model state that cannot be reliably
+        // released while another model is already playing. Remount the Live
+        // Voice surface after the selection is durable so it always starts
+        // from the selected rig's actual Idle motion instead of retaining the
+        // previous model or its current animation.
+        window.setTimeout(() => window.location.reload(), 0);
+      }
       setStatus(result.downloaded
-        ? 'Live2D runtime and model downloaded. The avatar is active for new and refreshed live calls.'
-        : 'Live2D avatar selected. Refresh an active live call to apply it.');
+        ? 'Live2D runtime and model downloaded. Refreshing Live Voice with the new idle avatar…'
+        : 'Live2D avatar selected. Refreshing Live Voice with the new idle avatar…');
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', character.id] });
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-live2d-models', character.id] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'live-call-runtime'] });
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Live2D avatar could not be activated.'),
   });
   const disableLive2DMutation = useMutation({
     mutationFn: () => characterAvatarClient.disableLive2d(character.id),
     onSuccess: (result) => {
+      applyCharacterAvatarPackToTrackedRuntimes(character.id, result.avatar_pack ?? null);
       setEditorMode('generated');
       setStatus(result.avatar_pack
         ? 'The previous generated avatar has been restored.'
         : 'Live2D has been disabled. Live calls will use the voice orb until another avatar is selected.');
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-avatar-pack', character.id] });
       void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'character-live2d-models', character.id] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'live-call-runtime'] });
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Live2D avatar could not be disabled.'),
   });
@@ -110,12 +133,19 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
   }, [packQuery.data?.renderer]);
 
   useEffect(() => {
-    const selected = live2dCatalogQuery.data?.models.find((model) => model.selected);
-    if (selected) setSelectedLive2DModelId(selected.id);
-    else if (!selectedLive2DModelId && live2dCatalogQuery.data?.models[0]) {
-      setSelectedLive2DModelId(live2dCatalogQuery.data.models[0].id);
-    }
-  }, [live2dCatalogQuery.data, selectedLive2DModelId]);
+    const models = live2dCatalogQuery.data?.models;
+    if (!models?.length) return;
+
+    setSelectedLive2DModelId((currentModelId) => {
+      // Keep an intentional card selection when catalog data refreshes. Previously
+      // this effect always restored the active server model after a click, making
+      // every other model appear impossible to select.
+      if (currentModelId && models.some((model) => model.id === currentModelId)) {
+        return currentModelId;
+      }
+      return models.find((model) => model.selected)?.id ?? models[0].id;
+    });
+  }, [live2dCatalogQuery.data]);
 
   useEffect(() => {
     if (!sourceFile || typeof URL.createObjectURL !== 'function') {
@@ -319,7 +349,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
               setAcceptLive2DModelTerms(false);
             }}
           >
-            <span className="character-live2d-model-visual"><img src={model.preview_url} alt="" loading="lazy" /><i>Live2D</i></span>
+            <span className="character-live2d-model-visual"><Live2DModelThumbnail model={model} /><i>Live2D</i></span>
             <span className="character-live2d-model-copy"><strong>{model.name}</strong><small>{model.description}</small><em>{model.selected ? 'Active' : model.installed ? 'Installed' : 'Not downloaded'}</em></span>
           </button>)}
         </div>
@@ -377,7 +407,7 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
 
 function Live2DPreview({ model }: { model: Live2DModelCatalogItem | null }) {
   return <div className="character-live2d-preview">
-    {model?.preview_url ? <img src={model.preview_url} alt="" /> : null}
+    {model ? <Live2DModelThumbnail model={model} /> : null}
     <span>Live2D</span>
     <strong>{model?.name ?? 'Rigged avatar'}</strong>
     <small>Rendered during character live calls</small>

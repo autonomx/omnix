@@ -173,6 +173,25 @@ export function readLatestTrustedCharacterRuntime(): CharacterLiveCallRuntime | 
   return latestTrustedPlaybackRuntime;
 }
 
+export function applyCharacterAvatarPackToTrackedRuntimes(
+  characterId: string,
+  avatarPack: CharacterAvatarPack | null,
+): void {
+  let runtimeToPublish: CharacterLiveCallRuntime | null = null;
+  for (const tracked of trackedPlaybackRuntimes.values()) {
+    for (const runtime of tracked) {
+      if (runtime.character_id !== characterId) continue;
+      runtime.avatar_pack = avatarPack;
+      if (runtime === latestTrustedPlaybackRuntime) runtimeToPublish = runtime;
+    }
+  }
+  if (latestTrustedPlaybackRuntime?.character_id === characterId) {
+    latestTrustedPlaybackRuntime.avatar_pack = avatarPack;
+    runtimeToPublish = latestTrustedPlaybackRuntime;
+  }
+  if (runtimeToPublish) publishCharacterAvatarRuntime(runtimeToPublish);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
@@ -199,6 +218,17 @@ function adaptLiveCallRuntimeForPlayback(runtime: CharacterLiveCallRuntime): Cha
 function synchronizeTrackedPlaybackRuntime(runtime: CharacterLiveCallRuntime): CharacterLiveCallRuntime {
   const playbackRuntime = adaptLiveCallRuntimeForPlayback(runtime);
   const tracked = trackedPlaybackRuntimes.get(playbackRuntime.session_id) ?? new Set<CharacterLiveCallRuntime>();
+  const incomingPackVersion = playbackRuntime.avatar_pack?.version ?? -1;
+  const newerTrackedPack = [...tracked].find((existing) => (
+    existing.character_id === playbackRuntime.character_id
+    && (existing.avatar_pack?.version ?? -1) > incomingPackVersion
+  ))?.avatar_pack;
+
+  // Avatar selection updates the active runtime immediately. A runtime request
+  // that began before that mutation can finish afterwards with the previous
+  // pack, so never let an older pack version put the old Live2D rig back on
+  // screen.
+  if (newerTrackedPack) playbackRuntime.avatar_pack = newerTrackedPack;
   for (const existing of tracked) Object.assign(existing, playbackRuntime);
   tracked.add(playbackRuntime);
   trackedPlaybackRuntimes.set(playbackRuntime.session_id, tracked);

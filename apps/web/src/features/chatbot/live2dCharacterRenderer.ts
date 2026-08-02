@@ -1,3 +1,4 @@
+import { Application, extensions } from 'pixi.js';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
 import type { AvatarMouthFrame } from './liveCharacterAvatarBridge';
 
@@ -35,14 +36,16 @@ type PixiStage = {
 };
 
 type PixiApplication = {
+  init(options: Record<string, unknown>): Promise<void>;
   renderer: PixiRenderer;
   stage: PixiStage;
   ticker: PixiTicker;
+  render(): void;
   destroy(removeView?: boolean, options?: Record<string, boolean>): void;
 };
 
 type Live2DCoreModel = {
-  _parameterIds?: unknown[];
+  _parameterIds?: unknown;
   getParameterCount?: () => number;
   getParameterMaximumValue?: (index: number) => number;
   getParameterMinimumValue?: (index: number) => number;
@@ -66,20 +69,18 @@ type Live2DModel = {
   width: number;
   height: number;
   internalModel?: Live2DInternalModel;
+  textures?: Array<{ source?: { _gpuData?: Record<number, unknown> } }>;
   destroy?: (options?: Record<string, boolean>) => void;
 };
 
-type PixiGlobal = {
-  Application: new (options: Record<string, unknown>) => PixiApplication;
-  live2d?: {
-    Live2DModel?: {
-      from(url: string, options?: Record<string, unknown>): Promise<Live2DModel>;
-    };
+type Live2DRuntime = {
+  Application: typeof Application;
+  Live2DModel: {
+    from(url: string, options?: Record<string, unknown>): Promise<unknown>;
   };
 };
 
 type Live2DWindow = Window & typeof globalThis & {
-  PIXI?: PixiGlobal;
   Live2DCubismCore?: unknown;
   __omnixLive2DRendererInstalled?: boolean;
 };
@@ -91,9 +92,7 @@ const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 const LIVE2D_ZOOM_EVENT = 'omnix:character-live2d-zoom';
 const LIVE2D_FRAMING_EVENT = 'omnix:character-live2d-framing';
 const RUNTIME_SCRIPTS = [
-  '/api/character-live2d/runtime/pixi.min.js',
   '/api/character-live2d/runtime/live2dcubismcore.min.js',
-  '/api/character-live2d/runtime/cubism4.min.js',
 ] as const;
 const MODEL_ENTRY_PATHS: Record<string, string> = {
   'character-live2d:open-llm-vtuber-mao-pro': 'runtime/mao_pro.model3.json',
@@ -107,7 +106,20 @@ export const LIVE2D_ZOOM_MAX = 1.6;
 export const LIVE2D_ZOOM_STEP = 0.05;
 export type Live2DFraming = 'full' | 'head';
 
+// Pixi's asset cache returns shared Texture instances for repeated loads of the
+// same rig. Destroying a selector/preview must therefore release its display
+// tree without destroying texture sources that may still be used by the live
+// stage or another preview.
+export const LIVE2D_INSTANCE_DESTROY_OPTIONS = Object.freeze({
+  children: true,
+  texture: false,
+  textureSource: false,
+  baseTexture: false,
+});
+
 let activeRigAssetId: string | null = null;
+let activeAvatarCharacterId: string | null = null;
+let activeAvatarPackVersion = -1;
 let activeHost: HTMLElement | null = null;
 let activeApplication: PixiApplication | null = null;
 let activeModel: Live2DModel | null = null;
@@ -122,7 +134,7 @@ let activeMouthUpdateBinding: { internalModel: Live2DInternalModel; listener: ()
 let activeMouthOpenParameterIndices: number[] = [];
 let activeMouthFormParameterIndices: number[] = [];
 let renderSequence = 0;
-let runtimePromise: Promise<PixiGlobal> | null = null;
+let runtimePromise: Promise<Live2DRuntime> | null = null;
 
 export function live2dMouthShapeForViseme(viseme: Live2DViseme): Live2DMouthShape {
   switch (viseme) {
@@ -221,19 +233,49 @@ function install(): void {
   });
   window.addEventListener(AVATAR_RUNTIME_EVENT, (event) => {
     const runtime = (event as CustomEvent<CharacterLiveCallRuntime | null>).detail;
-    if (runtime?.avatar_pack?.renderer !== 'live2d') destroyActiveRenderer();
+    if (runtime?.avatar_pack?.renderer !== 'live2d' || !runtime.avatar_pack.rig_asset_id) {
+      destroyActiveRenderer();
+      return;
+    }
+
+    // The avatar bridge also emits a render event, but responding here makes a
+    // Live2D-to-Live2D selection atomic. Otherwise the previous rig can remain
+    // visible when the bridge reuses the existing host during a catalog refresh.
+    const host = document.querySelector<HTMLElement>(
+      `[data-live-chat-fullscreen-shell] .assistant-live-character-avatar`,
+    ) ?? document.querySelector<HTMLElement>('.assistant-live-character-avatar');
+    if (host) void renderLive2D(runtime, host);
   });
 }
 
-async function renderLive2D(runtime: CharacterLiveCallRuntime, host: HTMLElement): Promise<void> {
+async function renderLive2D(
+  runtime: CharacterLiveCallRuntime,
+  host: HTMLElement,
+  forceReload = false,
+): Promise<void> {
   const pack = runtime.avatar_pack;
   if (!pack?.rig_asset_id || pack.renderer !== 'live2d') return;
-  if (activeRigAssetId === pack.rig_asset_id && activeHost === host) return;
+  const packCharacterId = pack.character_id || runtime.character_id || null;
+  const hostPackVersion = Number(host.dataset.live2dPackVersion ?? -1);
+  const hostCharacterId = host.dataset.live2dCharacterId ?? null;
+  // Runtime queries can complete out of order. Ignore an older pack before it
+  // can destroy/restart the newer live rig (which made the stage appear one
+  // selection behind and repeatedly restarted its first motion).
+  if (
+    (activeAvatarCharacterId === packCharacterId && pack.version < activeAvatarPackVersion)
+    || (hostCharacterId === packCharacterId && pack.version < hostPackVersion)
+  ) return;
+  if (!forceReload && activeRigAssetId === pack.rig_asset_id && activeHost === host) return;
 
   destroyActiveRenderer();
   const sequence = ++renderSequence;
   activeRigAssetId = pack.rig_asset_id;
+  activeAvatarCharacterId = packCharacterId;
+  activeAvatarPackVersion = pack.version;
   activeHost = host;
+  host.dataset.live2dCharacterId = packCharacterId ?? '';
+  host.dataset.live2dPackVersion = String(pack.version);
+  host.dataset.live2dRigAssetId = pack.rig_asset_id;
   host.dataset.renderer = 'live2d';
   host.replaceChildren();
 
@@ -250,29 +292,32 @@ async function renderLive2D(runtime: CharacterLiveCallRuntime, host: HTMLElement
   try {
     const pixi = await loadRuntime();
     if (sequence !== renderSequence || activeHost !== host) return;
-    const Live2DModelFactory = pixi.live2d?.Live2DModel;
-    if (!Live2DModelFactory) throw new Error('Live2D renderer did not initialize.');
-
-    const application = new pixi.Application({
-      view: canvas,
+    const application = new pixi.Application() as unknown as PixiApplication;
+    await application.init({
+      canvas,
       autoStart: true,
       backgroundAlpha: 0,
       antialias: true,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
+      preference: 'webgl',
     });
-    const model = await Live2DModelFactory.from(live2dModelUrl(pack.rig_asset_id), {
-      autoInteract: true,
+    const model = await pixi.Live2DModel.from(live2dModelUrl(pack.rig_asset_id), {
+      autoHitTest: false,
+      autoFocus: false,
       autoUpdate: true,
-    });
+      motionPreload: 'IDLE',
+      idleMotionGroup: 'Idle',
+    }) as unknown as Live2DModel;
     if (sequence !== renderSequence || activeHost !== host) {
-      model.destroy?.({ children: true, texture: true, baseTexture: true });
-      application.destroy(false, { children: true, texture: true, baseTexture: true });
+      model.destroy?.(LIVE2D_INSTANCE_DESTROY_OPTIONS);
+      application.destroy(false, LIVE2D_INSTANCE_DESTROY_OPTIONS);
       return;
     }
 
     activeApplication = application;
     activeModel = model;
+    prepareLive2DTextures(model);
     application.stage.addChild(model);
     bindMouthParameterUpdate(model, sequence);
     activeResizeObserver = new ResizeObserver(() => fitModel(host, application, model));
@@ -285,6 +330,30 @@ async function renderLive2D(runtime: CharacterLiveCallRuntime, host: HTMLElement
     status.textContent = error instanceof Error ? error.message : 'Live2D avatar could not be loaded.';
     status.dataset.state = 'error';
     updateCaption(host, runtime.display_name, 'error');
+  }
+}
+
+/**
+ * Immediately replace the rig in the visible live avatar host. Avatar
+ * selection calls this after the server confirms the new pack so the live
+ * canvas never depends on a later bridge refresh to release its old model.
+ */
+export function forceRenderLive2DAvatar(runtime: CharacterLiveCallRuntime): void {
+  if (typeof document === 'undefined') return;
+  const host = document.querySelector<HTMLElement>(
+    `[data-live-chat-fullscreen-shell] .assistant-live-character-avatar`,
+  ) ?? document.querySelector<HTMLElement>('.assistant-live-character-avatar');
+  if (host) void renderLive2D(runtime, host, true);
+}
+
+export function prepareLive2DTextures(model: {
+  textures?: Array<{ source?: { _gpuData?: Record<number, unknown> } }>;
+}): void {
+  // The Pixi 8 texture source creates this private map lazily, while the
+  // Live2D render pipe reads it before its first bind. Initialize it at the
+  // integration boundary so the first rendered frame can upload the atlas.
+  for (const texture of model.textures ?? []) {
+    if (texture.source && !texture.source._gpuData) texture.source._gpuData = {};
   }
 }
 
@@ -383,17 +452,30 @@ export function resolveLive2DParameterIndices(
   parameterIds: readonly string[],
 ): number[] {
   if (!coreModel) return [];
-  const count = coreModel.getParameterCount?.() ?? coreModel._parameterIds?.length ?? 0;
+  const rawParameterIds = coreModel._parameterIds;
+  const vectorParameterIds = rawParameterIds && typeof rawParameterIds === 'object'
+    ? rawParameterIds as { getSize?: () => number; at?: (index: number) => unknown }
+    : null;
+  const parameterIdCount = Array.isArray(rawParameterIds)
+    ? rawParameterIds.length
+    : vectorParameterIds?.getSize?.() ?? 0;
+  const count = coreModel.getParameterCount?.() ?? parameterIdCount;
   const resolved = new Set<number>();
 
   for (const parameterId of parameterIds) {
-    const index = coreModel.getParameterIndex?.(parameterId);
+    let index: number | undefined;
+    try {
+      index = coreModel.getParameterIndex?.(parameterId);
+    } catch {
+      // The official Cubism framework expects CubismId handles rather than
+      // strings. Its private ID vector is scanned below instead.
+    }
     // Cubism returns a synthetic index at or above parameter count for unknown
     // IDs. Those values are writable but never affect the rendered model.
     if (typeof index === 'number' && index >= 0 && index < count) resolved.add(index);
   }
 
-  coreModel._parameterIds?.forEach((parameterId, index) => {
+  const inspectParameterId = (parameterId: unknown, index: number): void => {
     const readableId = typeof parameterId === 'string'
       ? parameterId
       : typeof (parameterId as { getString?: () => unknown })?.getString === 'function'
@@ -402,7 +484,14 @@ export function resolveLive2DParameterIndices(
     if (parameterIds.some((candidate) => candidate.toLocaleLowerCase() === readableId.toLocaleLowerCase())) {
       resolved.add(index);
     }
-  });
+  };
+  if (Array.isArray(rawParameterIds)) {
+    rawParameterIds.forEach(inspectParameterId);
+  } else if (vectorParameterIds?.at) {
+    for (let index = 0; index < parameterIdCount; index += 1) {
+      inspectParameterId(vectorParameterIds.at(index), index);
+    }
+  }
 
   return [...resolved];
 }
@@ -439,20 +528,27 @@ function updateCaption(host: HTMLElement, displayName: string, state: 'ready' | 
   caption.textContent = state === 'error' ? `${displayName} Live2D unavailable` : displayName;
 }
 
-function loadRuntime(): Promise<PixiGlobal> {
+function loadRuntime(): Promise<Live2DRuntime> {
   if (runtimePromise) return runtimePromise;
   runtimePromise = (async () => {
     for (const source of RUNTIME_SCRIPTS) await loadScript(source);
-    const pixi = (window as Live2DWindow).PIXI;
-    if (!pixi?.Application || !pixi.live2d?.Live2DModel) {
-      throw new Error('Installed Live2D browser runtime is incomplete.');
+    if (!(window as Live2DWindow).Live2DCubismCore) {
+      throw new Error('Installed Live2D Cubism runtime is incomplete.');
     }
-    return pixi;
+    const live2d = await import('untitled-pixi-live2d-engine/cubism');
+    extensions.add(live2d.Live2DPlugin);
+    live2d.configureCubismSDK({ memorySizeMB: 64 });
+    return { Application, Live2DModel: live2d.Live2DModel };
   })().catch((error) => {
     runtimePromise = null;
     throw error;
   });
   return runtimePromise;
+}
+
+/** Reuse the installed Live2D runtime for lightweight model previews. */
+export function loadLive2DPreviewRuntime(): Promise<Live2DRuntime> {
+  return loadRuntime();
 }
 
 function loadScript(source: string): Promise<void> {
@@ -488,13 +584,15 @@ function destroyActiveRenderer(): void {
   activeResizeObserver?.disconnect();
   activeResizeObserver = null;
   if (activeApplication) {
-    activeApplication.destroy(false, { children: true, texture: true, baseTexture: true });
+    activeApplication.destroy(false, LIVE2D_INSTANCE_DESTROY_OPTIONS);
   } else {
-    activeModel?.destroy?.({ children: true, texture: true, baseTexture: true });
+    activeModel?.destroy?.(LIVE2D_INSTANCE_DESTROY_OPTIONS);
   }
   activeModel = null;
   activeApplication = null;
   activeRigAssetId = null;
+  activeAvatarCharacterId = null;
+  activeAvatarPackVersion = -1;
   activeHost = null;
 }
 

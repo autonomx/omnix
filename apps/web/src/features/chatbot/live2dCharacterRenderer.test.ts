@@ -1,14 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LIVE2D_INSTANCE_DESTROY_OPTIONS,
   isLive2DPack,
   live2dModelUrl,
   live2dMouthShapeForAvatarFrame,
   live2dMouthShapeForViseme,
+  prepareLive2DTextures,
   resolveLive2DParameterIndices,
 } from './live2dCharacterRenderer';
 
 
 describe('Live2D character renderer helpers', () => {
+  it('releases renderer instances without destroying cached rig textures', () => {
+    expect(LIVE2D_INSTANCE_DESTROY_OPTIONS).toMatchObject({
+      children: true,
+      texture: false,
+      textureSource: false,
+      baseTexture: false,
+    });
+  });
+
   it('maps speech visemes to bounded mouth-open and mouth-form values', () => {
     expect(live2dMouthShapeForViseme('silence')).toEqual({ open: 0, form: 0 });
     expect(live2dMouthShapeForViseme('A').open).toBe(1);
@@ -54,5 +65,26 @@ describe('Live2D character renderer helpers', () => {
 
     expect(resolveLive2DParameterIndices(coreModel, ['ParamA'])).toEqual([1]);
     expect(resolveLive2DParameterIndices(coreModel, ['MissingMouthParameter'])).toEqual([]);
+  });
+
+  it('supports official Cubism parameter vectors and primes Pixi texture metadata', () => {
+    const parameterIds = [
+      { getString: () => 'ParamAngleX' },
+      { getString: () => 'ParamA' },
+    ];
+    const coreModel = {
+      _parameterIds: {
+        getSize: () => parameterIds.length,
+        at: (index: number) => parameterIds[index],
+      },
+      getParameterCount: () => parameterIds.length,
+      getParameterIndex: () => { throw new TypeError('CubismId handle required'); },
+    };
+    const model = { textures: [{ source: {} }, { source: { _gpuData: { 2: 'ready' } } }] };
+
+    expect(resolveLive2DParameterIndices(coreModel, ['ParamA'])).toEqual([1]);
+    prepareLive2DTextures(model);
+    expect(model.textures[0].source._gpuData).toEqual({});
+    expect(model.textures[1].source._gpuData).toEqual({ 2: 'ready' });
   });
 });
