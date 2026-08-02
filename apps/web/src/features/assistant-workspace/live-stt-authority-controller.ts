@@ -8,6 +8,7 @@ import type { AcceptedVoiceFinal } from './live-accepted-final';
 export const LIVE_STT_SPECULATION_PARTIAL_EVENT = 'omnix:live-stt-speculation-partial';
 export const LIVE_STT_SPECULATION_CANDIDATE_EVENT = 'omnix:live-stt-speculation-candidate';
 export const LIVE_STT_SPECULATION_FINAL_EVENT = 'omnix:live-stt-speculation-final';
+export const LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT = 'omnix:live-stt-speculation-delivery-settled';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const INSTALLED_KEY = '__omnixLiveSttAuthorityInstalled';
 const DEFAULT_ENDPOINT_THRESHOLD = 0.75;
@@ -275,7 +276,15 @@ export function initializeLiveSttAuthorityController(): () => void {
       // Release captured continuation audio immediately; do not wait for the LLM/TTS response.
       releaseBufferedAudio(this, clientState(this), originalSendAudio);
     }
-    await delivery;
+    try {
+      await delivery;
+    } finally {
+      dispatchInternal(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, {
+        chatSessionId: this.options.chatSessionId,
+        segmentId: final.segmentId,
+        sourceSequence: final.sourceSequence,
+      });
+    }
   };
 
   return () => {
