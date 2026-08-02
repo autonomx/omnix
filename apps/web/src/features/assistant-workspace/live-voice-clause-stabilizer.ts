@@ -12,10 +12,12 @@ export type ClauseStabilizerOptions = {
   deadlineMs?: number;
 };
 
-const DEFAULT_MINIMUM = 24;
-const DEFAULT_LOOKAHEAD = 24;
-const DEFAULT_MAXIMUM = 180;
-const DEFAULT_DEADLINE_MS = 420;
+// PR 5: feed the existing streaming Qwen generator incrementally from the LLM stream.
+// These bounds trade some long-range prosody for substantially earlier first-audio onset.
+const DEFAULT_MINIMUM = 12;
+const DEFAULT_LOOKAHEAD = 12;
+const DEFAULT_MAXIMUM = 96;
+const DEFAULT_DEADLINE_MS = 140;
 const STRONG_BOUNDARY = /[.!?][\]})"'’”]*(?=\s|$)/g;
 const WEAK_BOUNDARY = /[,;:][\]})"'’”]*(?=\s|$)/g;
 const ABBREVIATION = /(?:\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e)|\b[A-Z])\.$/i;
