@@ -13,13 +13,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.routing import APIWebSocketRoute
 
 from app.providers.kyutai_live_stt import (
-    KYUTAI_FRAME_SAMPLES,
     KYUTAI_SAMPLE_RATE,
     KyutaiLiveSttError,
     KyutaiLiveSttProvider,
     KyutaiLiveSttSession,
 )
-from app.providers.live_stt_contracts import LiveSttEvent
 
 SESSION_TTL_SECONDS = 600.0
 MAX_SESSION_STATES = 64
@@ -108,7 +106,7 @@ async def _safe_send(websocket: WebSocket, lock: asyncio.Lock, payload: dict[str
         async with lock:
             await websocket.send_json(payload)
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - client disconnects surface through framework-specific exceptions
         return False
 
 
@@ -130,7 +128,7 @@ def install_kyutai_stt_websocket(
         language = websocket.query_params.get("language") or os.environ.get("OMNIX_LIVE_STT_LANGUAGE", "en")
         try:
             session = await live_provider.create_live_session(language=language)
-        except Exception as exc:
+        except (KyutaiLiveSttError, ValueError, OSError) as exc:
             await _safe_send(
                 websocket,
                 send_lock,
@@ -232,8 +230,6 @@ def install_kyutai_stt_websocket(
                                 "error": event.text,
                             },
                         )
-            except asyncio.CancelledError:
-                raise
             finally:
                 closed = True
 
@@ -311,10 +307,7 @@ def install_kyutai_stt_websocket(
                             accepted_through_sample=capture_start,
                         )
                     segment = segments[segment_id]
-                    if sample_start < segment.accepted_through_sample:
-                        duplicate_samples = segment.accepted_through_sample - sample_start
-                    else:
-                        duplicate_samples = 0
+                    duplicate_samples = max(0, segment.accepted_through_sample - sample_start)
                     payload = base64.b64decode(encoded_audio)
                     if duplicate_samples:
                         payload = payload[duplicate_samples * 2 :]
@@ -405,7 +398,7 @@ def install_kyutai_stt_websocket(
                         )
                         segments.pop(segment.segment_id, None)
                         continue
-                    except Exception as exc:
+                    except (KyutaiLiveSttError, TimeoutError, OSError, ValueError) as exc:
                         live_provider.breaker.record_failure(transient=True)
                         await _safe_send(
                             websocket,
