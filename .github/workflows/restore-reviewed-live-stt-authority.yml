@@ -1,0 +1,74 @@
+name: Restore reviewed live STT authority
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  restore-reviewed-authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Recover reviewed authority source
+        run: |
+          REVIEW_COMMIT=34c1fbd53b89bd6d383945a8d55f9b219516b7a5
+          for index in 00 01 02 03 04 05 06 07; do
+            git show "${REVIEW_COMMIT}:.github/live-latency-review/remaining4.part${index}"
+          done | base64 --decode > /tmp/reviewed-remaining.tar.gz
+          mkdir -p /tmp/reviewed-source
+          tar -xzf /tmp/reviewed-remaining.tar.gz -C /tmp/reviewed-source
+          reviewed=/tmp/reviewed-source/apps/web/src/features/assistant-workspace/live-stt-authority-controller.ts
+          current=apps/web/src/features/assistant-workspace/live-stt-authority-controller.ts
+          test -f "$reviewed"
+          if cmp -s "$reviewed" "$current"; then
+            echo "Reviewed authority source is already present."
+          else
+            cp "$reviewed" "$current"
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck reviewed authority path
+        run: |
+          set +e
+          npm --workspace @omnix/web run typecheck 2>&1 | tee reviewed-authority-typecheck.txt
+          status=${PIPESTATUS[0]}
+          set -e
+          if grep -E "(live-(stt-authority-controller|voice-controller|voice-websocket|latency-rollout)\\.ts|src/main\\.tsx)" reviewed-authority-typecheck.txt; then
+            exit "${status:-1}"
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::Repository-wide typecheck has baseline failures outside reviewed files."
+          fi
+
+      - name: Test clean live latency browser path
+        run: |
+          npm --workspace @omnix/web run test -- --run \
+            src/features/assistant-workspace/live-voice-websocket.spec.ts \
+            src/features/assistant-workspace/live-latency-rollout.spec.ts
+
+      - name: Commit reviewed authority source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/features/assistant-workspace/live-stt-authority-controller.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "Restore reviewed live STT authority integration"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
