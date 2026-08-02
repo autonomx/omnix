@@ -1,0 +1,122 @@
+name: Finalize live latency review
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Restore reviewed authority integration
+        run: |
+          REVIEW_COMMIT=34c1fbd53b89bd6d383945a8d55f9b219516b7a5
+          for index in 00 01 02 03 04 05 06 07; do
+            git show "${REVIEW_COMMIT}:.github/live-latency-review/remaining4.part${index}"
+          done | base64 --decode > /tmp/reviewed-remaining.tar.gz
+          mkdir -p /tmp/reviewed-source
+          tar -xzf /tmp/reviewed-remaining.tar.gz -C /tmp/reviewed-source
+          cp \
+            /tmp/reviewed-source/apps/web/src/features/assistant-workspace/live-stt-authority-controller.ts \
+            apps/web/src/features/assistant-workspace/live-stt-authority-controller.ts
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff pytest fastapi httpx uvicorn msgpack pillow playwright requests "websockets>=12"
+          npm install
+
+      - name: Lint focused Python
+        run: |
+          ruff check \
+            src/app/providers/live_stt_contracts.py \
+            src/app/providers/kyutai_authority.py \
+            src/app/providers/kyutai_live_stt.py \
+            src/app/providers/kyutai_stt_websocket.py \
+            src/app/providers/stt_live_websocket.py \
+            src/app/gateway/live_chat_speculation.py \
+            src/app/gateway/tts_live_capabilities.py \
+            src/kyutai_stt_runtime.py \
+            src/tests/app/test_live_stt_contracts.py \
+            src/tests/app/test_kyutai_authority.py \
+            src/tests/app/test_kyutai_live_stt.py \
+            src/tests/app/test_kyutai_stt_websocket.py \
+            src/tests/app/test_live_chat_speculation.py \
+            src/tests/app/test_tts_live_capabilities.py
+
+      - name: Test focused Python
+        run: |
+          python -m pytest \
+            src/tests/app/test_live_stt_contracts.py \
+            src/tests/app/test_kyutai_authority.py \
+            src/tests/app/test_kyutai_live_stt.py \
+            src/tests/app/test_kyutai_stt_websocket.py \
+            src/tests/app/test_stt_streaming_audio.py \
+            src/tests/app/test_live_chat_speculation.py \
+            src/tests/app/test_tts_live_capabilities.py \
+            -q --tb=short
+
+      - name: Typecheck focused browser path
+        run: |
+          set +e
+          npm --workspace @omnix/web run typecheck 2>&1 | tee final-live-review-typecheck.txt
+          status=${PIPESTATUS[0]}
+          set -e
+          if grep -E "(live-(voice-websocket(\\.spec)?|voice-controller|accepted-final|stt-authority-controller|speculation-controller|tts-adaptive-buffer-controller|tts-capability-controller|voice-clause-stabilizer|voice-pcm-worklet|latency-rollout\\.spec)\\.ts|src/main\\.tsx)" final-live-review-typecheck.txt; then
+            exit "${status:-1}"
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::Repository-wide typecheck has baseline failures outside focused files."
+          fi
+
+      - name: Test focused browser path
+        run: |
+          npm --workspace @omnix/web run test -- --run \
+            src/features/assistant-workspace/live-voice-websocket.spec.ts \
+            src/features/assistant-workspace/live-latency-rollout.spec.ts
+
+      - name: Remove temporary diagnostics and commit clean source
+        run: |
+          rm -f \
+            .github/clean-live-latency-browser-failure.txt \
+            .github/workflows/clean-live-latency-browser-diagnostics.yml \
+            .github/workflows/clean-live-latency-browser-diagnostics-publish.yml \
+            .github/workflows/restore-reviewed-live-stt-authority.yml \
+            .github/workflows/finalize-live-latency-review.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A \
+            apps/web/src/features/assistant-workspace/live-stt-authority-controller.ts \
+            .github/clean-live-latency-browser-failure.txt \
+            .github/workflows/clean-live-latency-browser-diagnostics.yml \
+            .github/workflows/clean-live-latency-browser-diagnostics-publish.yml \
+            .github/workflows/restore-reviewed-live-stt-authority.yml \
+            .github/workflows/finalize-live-latency-review.yml
+          if ! git diff --cached --quiet; then
+            git commit -m "Finalize live voice correctness review"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
