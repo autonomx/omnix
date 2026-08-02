@@ -1,0 +1,82 @@
+name: Publish clean live latency browser diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  browser-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run clean browser diagnostics
+        id: tests
+        continue-on-error: true
+        run: |
+          npm --workspace @omnix/web run test -- --run \
+            src/features/assistant-workspace/live-voice-websocket.spec.ts \
+            src/features/assistant-workspace/live-latency-rollout.spec.ts \
+            --reporter=default --reporter=junit \
+            --outputFile.junit=clean-live-latency-vitest.xml \
+            2>&1 | tee clean-live-latency-vitest.log
+
+      - name: Write diagnostic summary
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          report = Path("apps/web/clean-live-latency-vitest.xml")
+          output = Path(".github/clean-live-latency-browser-failure.txt")
+          lines = []
+          if report.exists():
+              root = ET.parse(report).getroot()
+              for case in root.iter("testcase"):
+                  failure = case.find("failure")
+                  error = case.find("error")
+                  node = failure if failure is not None else error
+                  if node is None:
+                      continue
+                  lines.append(f"TEST: {case.attrib.get('classname', '')} :: {case.attrib.get('name', '')}")
+                  lines.append((node.text or node.attrib.get("message", "")).strip())
+                  lines.append("")
+          if not lines:
+              log = Path("clean-live-latency-vitest.log")
+              lines.append("No JUnit failure entries were found.")
+              if log.exists():
+                  lines.append(log.read_text()[-12000:])
+          output.write_text("\n".join(lines))
+          PY
+
+      - name: Commit diagnostic summary
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/clean-live-latency-browser-failure.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Record clean live latency browser failure"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
+      - name: Fail when tests failed
+        if: steps.tests.outcome != 'success'
+        run: exit 1
