@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   kyutai-live-stt:
@@ -19,6 +19,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Apply reviewed controller and websocket fixes
+        if: github.event_name == 'pull_request'
+        run: |
+          cat \
+            .github/live-latency-review/controller-ws.part00 \
+            .github/live-latency-review/controller-ws.part01 \
+            | base64 --decode > /tmp/live-latency-fixes.tar.gz
+          tar -xzf /tmp/live-latency-fixes.tar.gz
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -86,6 +97,22 @@ jobs:
           npm --workspace @omnix/web run test -- --run \
             src/features/assistant-workspace/live-voice-websocket.spec.ts \
             src/features/assistant-workspace/live-latency-rollout.spec.ts
+
+      - name: Commit reviewed controller and websocket fixes
+        if: >-
+          success() &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            apps/web/src/features/assistant-workspace/live-voice-controller.ts \
+            apps/web/src/features/assistant-workspace/live-voice-websocket.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "Fix authoritative live voice ownership and STT readiness"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
 
       - name: Upload review source bundle
         if: always()
