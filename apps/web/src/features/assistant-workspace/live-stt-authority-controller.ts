@@ -12,6 +12,7 @@ const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const INSTALLED_KEY = '__omnixLiveSttAuthorityInstalled';
 const DEFAULT_ENDPOINT_THRESHOLD = 0.75;
 const MAX_BUFFERED_AUTHORITY_FRAMES = 250;
+const AUTHORITY_FINAL_TIMEOUT_MS = 8_000;
 
 type AuthorityMode = 'observational' | 'test' | 'auto';
 
@@ -51,6 +52,7 @@ type ClientAuthorityState = {
   mode: AuthorityMode;
   endpointThreshold: number;
   finalPending: boolean;
+  finalTimer: ReturnType<typeof window.setTimeout> | null;
   bufferedAudio: BufferedAudio[];
 };
 
@@ -69,6 +71,7 @@ function clientState(client: object): ClientAuthorityState {
     mode: 'observational',
     endpointThreshold: DEFAULT_ENDPOINT_THRESHOLD,
     finalPending: false,
+    finalTimer: null,
     bufferedAudio: [],
   };
   clientStates.set(client, created);
@@ -205,7 +208,7 @@ export function initializeLiveSttAuthorityController(): () => void {
         text: parsed.text,
       });
     }
-    if (parsed?.type === 'endpoint_candidate') {
+    if (parsed?.type === 'endpoint_candidate' && state.enabled) {
       dispatchInternal(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
         chatSessionId: this.options.chatSessionId,
         segmentId: parsed.segmentId,
@@ -225,6 +228,19 @@ export function initializeLiveSttAuthorityController(): () => void {
       const attemptId = this.sendFinal();
       if (attemptId) {
         state.finalPending = true;
+        clearFinalTimer(state);
+        state.finalTimer = window.setTimeout(() => {
+          state.finalTimer = null;
+          dispatchPerformance('stt_authority_final_timeout', {
+            provider: 'kyutai',
+            mode: state.mode,
+            segmentId: parsed.segmentId,
+            sourceSequence: parsed.sequence,
+            finalizeRequestId: attemptId,
+            bufferedFrames: state.bufferedAudio.length,
+          });
+          releaseBufferedAudio(this, state, originalSendAudio);
+        }, AUTHORITY_FINAL_TIMEOUT_MS);
         dispatchPerformance('stt_endpoint_committed', {
           provider: 'kyutai',
           mode: state.mode,
@@ -271,11 +287,17 @@ export function initializeLiveSttAuthorityController(): () => void {
   };
 }
 
+function clearFinalTimer(state: ClientAuthorityState): void {
+  if (state.finalTimer !== null) window.clearTimeout(state.finalTimer);
+  state.finalTimer = null;
+}
+
 function releaseBufferedAudio(
   client: RuntimeClient,
   state: ClientAuthorityState,
   sendAudio: (this: RuntimeClient, audio: Float32Array, sampleRate: number) => void,
 ): void {
+  clearFinalTimer(state);
   if (!state.finalPending && !state.bufferedAudio.length) return;
   const buffered = state.bufferedAudio;
   state.bufferedAudio = [];
