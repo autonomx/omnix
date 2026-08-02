@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import time
 from collections import deque
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Mapping, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 LIVE_STT_CONFIG_VERSION = "live-stt-v1"
 PCM16LE_ENCODING = "pcm16le"
