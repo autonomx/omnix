@@ -456,7 +456,7 @@ class KyutaiLiveSttProvider:
                 return self._last_probe_ok
             try:
                 session = await self.create_live_session(language=language)
-            except Exception:
+            except (KyutaiLiveSttError, OSError, TimeoutError, ValueError):
                 self._last_probe_at = time.monotonic()
                 self._last_probe_ok = False
                 return False
