@@ -12,6 +12,8 @@ export type AcceptedVoiceFinal = {
   endSample: number;
   protocol: LiveSttProtocol;
   text: string;
+  provider?: string;
+  providerMetrics?: Record<string, number>;
   finalizeRequestedAtMs: number;
   receivedAtMs: number;
 };
