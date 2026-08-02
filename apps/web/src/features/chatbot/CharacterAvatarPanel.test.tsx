@@ -110,8 +110,6 @@ describe('CharacterAvatarPanel', () => {
     renderPanel();
     fireEvent.click(await screen.findByRole('tab', { name: 'Live2D avatar' }));
     fireEvent.click(await screen.findByRole('button', { name: /Niziiro Mao \(PRO\)/ }));
-    fireEvent.click(screen.getAllByRole('checkbox')[0]);
-    fireEvent.click(screen.getAllByRole('checkbox')[1]);
     fireEvent.click(screen.getByRole('button', { name: 'Download and use Live2D avatar' }));
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Live2D avatar active' })).toBeInTheDocument());

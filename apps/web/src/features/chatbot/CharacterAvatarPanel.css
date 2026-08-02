@@ -557,6 +557,11 @@
   margin: 0;
 }
 
+.character-live2d-license-links {
+  color: #8996b3;
+  font-size: 0.62rem;
+}
+
 .character-live2d-license-card > label {
   align-items: start;
   color: #aab5cf;

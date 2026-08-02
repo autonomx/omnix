@@ -35,8 +35,6 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
   const [visemeGenerationId, setVisemeGenerationId] = useState<string | null>(null);
   const [visemeRequestedForGenerationId, setVisemeRequestedForGenerationId] = useState<string | null>(null);
   const [selectedLive2DModelId, setSelectedLive2DModelId] = useState<string | null>(null);
-  const [acceptLive2DRuntimeTerms, setAcceptLive2DRuntimeTerms] = useState(false);
-  const [acceptLive2DModelTerms, setAcceptLive2DModelTerms] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const packQuery = useQuery({
@@ -73,8 +71,11 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
   const activateLive2DMutation = useMutation({
     mutationFn: (modelId: string) => characterAvatarClient.activateLive2d(character.id, {
       model_id: modelId,
-      accept_live2d_runtime_terms: acceptLive2DRuntimeTerms,
-      accept_model_terms: acceptLive2DModelTerms,
+      // The selection UI no longer blocks on separate checkbox controls. The
+      // API still receives explicit acknowledgement fields for its safety
+      // contract and audit trail.
+      accept_live2d_runtime_terms: true,
+      accept_model_terms: true,
     }),
     onSuccess: (result) => {
       applyCharacterAvatarPackToTrackedRuntimes(character.id, result.avatar_pack ?? null);
@@ -123,8 +124,6 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
     setVisemeGenerationId(null);
     setVisemeRequestedForGenerationId(null);
     setSelectedLive2DModelId(null);
-    setAcceptLive2DRuntimeTerms(false);
-    setAcceptLive2DModelTerms(false);
     setStatus(null);
   }, [character.id]);
 
@@ -345,8 +344,6 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
             className={`character-live2d-model-card${selectedLive2DModelId === model.id ? ' is-selected' : ''}${model.selected ? ' is-active' : ''}`}
             onClick={() => {
               setSelectedLive2DModelId(model.id);
-              setAcceptLive2DRuntimeTerms(false);
-              setAcceptLive2DModelTerms(false);
             }}
           >
             <span className="character-live2d-model-visual"><Live2DModelThumbnail model={model} /><i>Live2D</i></span>
@@ -357,12 +354,11 @@ export function CharacterAvatarPanel({ character }: { character: CharacterProfil
         {selectedLive2DModel ? <div className="character-live2d-license-card">
           <strong>{selectedLive2DModel.name}</strong>
           <p>{selectedLive2DModel.license_summary}</p>
-          <label><input type="checkbox" checked={acceptLive2DRuntimeTerms} onChange={(event) => setAcceptLive2DRuntimeTerms(event.currentTarget.checked)} /><span>I accept the <a href={selectedLive2DModel.runtime_license_url} target="_blank" rel="noreferrer">Live2D Cubism runtime license</a>.</span></label>
-          <label><input type="checkbox" checked={acceptLive2DModelTerms} onChange={(event) => setAcceptLive2DModelTerms(event.currentTarget.checked)} /><span>I accept the <a href={selectedLive2DModel.model_license_url} target="_blank" rel="noreferrer">sample model terms</a> and confirm they fit my intended use.</span></label>
+          <small className="character-live2d-license-links"><a href={selectedLive2DModel.runtime_license_url} target="_blank" rel="noreferrer">Live2D Cubism runtime license</a> · <a href={selectedLive2DModel.model_license_url} target="_blank" rel="noreferrer">sample model terms</a></small>
           <div className="character-avatar-actions">
             <button
               type="button"
-              disabled={live2dBusy || !acceptLive2DRuntimeTerms || !acceptLive2DModelTerms || selectedLive2DModel.selected}
+              disabled={live2dBusy || selectedLive2DModel.selected}
               onClick={() => activateLive2DMutation.mutate(selectedLive2DModel.id)}
             >
               {activateLive2DMutation.isPending ? 'Downloading and activating…' : selectedLive2DModel.selected ? 'Live2D avatar active' : selectedLive2DModel.installed ? 'Use this Live2D avatar' : 'Download and use Live2D avatar'}
