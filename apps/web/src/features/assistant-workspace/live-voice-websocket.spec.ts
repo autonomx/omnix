@@ -6,6 +6,7 @@ import {
   downsampleFloat32To16Khz,
   encodePcm16Base64,
   getDefaultStreamingSttWebSocketUrl,
+  resampleFloat32,
   type StreamingSttSocketLike,
 } from './live-voice-websocket';
 
@@ -22,10 +23,10 @@ describe('live voice websocket helpers', () => {
     expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'https:', hostname: 'omnix.local' }, 'https://stt.local/ws/transcribe')).toBe('wss://stt.local/ws/transcribe');
   });
 
-  it('downsamples audio frames to 16khz deterministically', () => {
+  it('resamples audio frames deterministically', () => {
     const input = new Float32Array([0, 0.25, 0.5, 0.75, 1, 0.75]);
-    const output = downsampleFloat32To16Khz(input, 48_000, 16_000);
-    expect(Array.from(output)).toEqual([0, 0.75]);
+    expect(Array.from(downsampleFloat32To16Khz(input, 48_000, 16_000))).toEqual([0, 0.75]);
+    expect(Array.from(resampleFloat32(input, 48_000, 24_000))).toEqual([0, 0.5, 1]);
   });
 
   it('encodes clipped pcm16 audio as base64 payloads for the STT websocket', () => {
@@ -68,6 +69,86 @@ describe('live voice websocket helpers', () => {
     await expect(connection).rejects.toThrow('Live voice WebSocket failed.');
     expect(onError).toHaveBeenCalledWith('Live voice WebSocket failed.');
     expect(statuses).toEqual(['connecting', 'error']);
+    expect(sockets[0].close).toHaveBeenCalledOnce();
+  });
+
+  it('uses the negotiated sample rate for buffered and live audio', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    const onNegotiated = vi.fn();
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5202/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      overlapMs: 0,
+      onNegotiated,
+    });
+    const connected = client.connect();
+    sockets[0].readyState = TestWebSocket.OPEN;
+    sockets[0].onopen?.();
+    await connected;
+
+    const input = new Float32Array([0, 0.25, 0.5, 0.75, 1, 0.75]);
+    client.sendAudio(input, 48_000);
+    expect(sockets[0].sentJson().filter((message) => message.type === 'audio')).toHaveLength(0);
+
+    sockets[0].receive({
+      type: 'ready',
+      protocol: 'segmented-v1',
+      provider: 'kyutai',
+      sampleRate: 24_000,
+      frameSamples: 1_920,
+      encoding: 'pcm16le',
+      capabilities: ['semantic_endpointing', 'continuous_words'],
+      configVersion: 'live-stt-v1',
+    });
+
+    const audio = sockets[0].sentJson().filter((message) => message.type === 'audio');
+    expect(audio).toHaveLength(1);
+    expect(audio[0].sampleRate).toBe(24_000);
+    expect(audio[0].data).toBe(encodePcm16Base64(resampleFloat32(input, 48_000, 24_000)));
+    expect(client.segmentState.negotiation).toEqual({
+      provider: 'kyutai',
+      protocol: 'segmented-v1',
+      sampleRate: 24_000,
+      frameSamples: 1_920,
+      encoding: 'pcm16le',
+      capabilities: ['continuous_words', 'semantic_endpointing'],
+      configVersion: 'live-stt-v1',
+    });
+    expect(onNegotiated).toHaveBeenCalledOnce();
+  });
+
+  it('rejects negotiation changes during a capture epoch', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    const onError = vi.fn();
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5201/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      onError,
+    });
+    const connected = client.connect();
+    sockets[0].readyState = TestWebSocket.OPEN;
+    sockets[0].onopen?.();
+    await connected;
+    sockets[0].receive({ type: 'ready', protocol: 'segmented-v1', provider: 'parakeet', sampleRate: 16_000, frameSamples: 320, encoding: 'pcm16le', configVersion: 'live-stt-v1' });
+    sockets[0].receive({ type: 'ready', protocol: 'segmented-v1', provider: 'kyutai', sampleRate: 24_000, frameSamples: 1_920, encoding: 'pcm16le', configVersion: 'live-stt-v1' });
+
+    expect(onError).toHaveBeenCalledWith('Live STT negotiation changed during the active capture epoch.');
     expect(sockets[0].close).toHaveBeenCalledOnce();
   });
 
