@@ -1,16 +1,60 @@
 import type { AcceptedVoiceFinal, LiveFinalRoutingResult, LiveSttProtocol } from './live-accepted-final';
 
+export type StreamingSttReady = {
+  type: 'ready';
+  protocol?: string;
+  provider?: string;
+  connectionId?: string;
+  sampleRate?: number;
+  frameSamples?: number;
+  encoding?: string;
+  capabilities?: string[];
+  configVersion?: string;
+  maxSegmentAudioMs?: number;
+};
+
+export type StreamingSttEndpointScore = {
+  type: 'endpoint_score';
+  provider?: string;
+  segmentId?: string;
+  sequence?: number;
+  probability: number;
+  modelTimeMs?: number;
+  signal?: string;
+};
+
+export type StreamingSttEndpointCandidate = {
+  type: 'endpoint_candidate';
+  provider?: string;
+  segmentId: string;
+  sequence: number;
+  probability: number;
+  modelTimeMs?: number;
+};
+
+export type StreamingSttProviderEvent = {
+  type: 'flush_started' | 'flush_completed' | 'flush_cancelled';
+  provider?: string;
+  attemptId?: string;
+  wall_ms?: number;
+  model_ms?: number;
+  realtime_factor?: number;
+};
+
 export type StreamingSttMessage =
-  | { type: 'ready'; protocol?: string; connectionId?: string; sampleRate?: number; maxSegmentAudioMs?: number }
-  | { type: 'session_ready'; sessionId: string; results?: SegmentedSttResult[] }
+  | StreamingSttReady
+  | { type: 'session_ready'; sessionId: string; provider?: string; results?: SegmentedSttResult[] }
   | { type: 'text'; text: string; segmentId?: string; sequence?: number }
   | { type: 'partial'; text: string; segmentId: string; sequence: number }
+  | StreamingSttEndpointScore
+  | StreamingSttEndpointCandidate
+  | StreamingSttProviderEvent
   | LegacySttResult
   | { type: 'audio_buffered'; segmentId: string; sequence: number; acceptedThroughSample: number }
   | { type: 'finalize_queued'; segmentId: string; sequence: number; queuedSegments?: number }
   | SegmentedSttResult
   | { type: 'segment_error'; segmentId?: string; sequence?: number; retryable?: boolean; errorCode?: string; error?: string }
-  | { type: 'error'; error?: string };
+  | { type: 'error'; errorCode?: string; retryable?: boolean; error?: string };
 
 export type SegmentedSttResult = {
   type: 'result_available';
@@ -24,6 +68,8 @@ export type SegmentedSttResult = {
   endSample: number;
   text: string;
   acceptedThroughSample?: number;
+  provider?: string;
+  providerMetrics?: Record<string, number>;
 };
 
 export type LegacySttResult = {
@@ -37,6 +83,16 @@ export type LegacySttResult = {
   startSample: number;
   endSample: number;
   text: string;
+};
+
+export type StreamingSttNegotiation = {
+  provider: string;
+  protocol: LiveSttProtocol;
+  sampleRate: number;
+  frameSamples: number;
+  encoding: 'pcm16le';
+  capabilities: readonly string[];
+  configVersion: string;
 };
 
 export type StreamingSttSocketLike = {
@@ -70,6 +126,10 @@ export type StreamingSttWebSocketClientOptions = {
   onStatusChange?: (status: StreamingSttConnectionStatus) => void;
   onError?: (message: string) => void;
   onSegmentStateChange?: (state: StreamingSttSegmentState) => void;
+  onNegotiated?: (negotiation: StreamingSttNegotiation) => void;
+  onEndpointScore?: (event: StreamingSttEndpointScore) => void;
+  onEndpointCandidate?: (event: StreamingSttEndpointCandidate) => void;
+  onProviderEvent?: (event: StreamingSttProviderEvent) => void;
 };
 
 export type StreamingSttConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -82,6 +142,12 @@ export type StreamingSttSegmentState = {
   pendingSegments: number;
   queuedSegments: number;
   absoluteSample: number;
+  negotiation: StreamingSttNegotiation | null;
+};
+
+type PendingAudioFrame = {
+  audio: Float32Array;
+  sourceSampleRate: number;
 };
 
 type PendingSegmentFrame = {
@@ -113,7 +179,10 @@ type LegacyFinalizeIdentity = {
   requestedAtMs: number;
 };
 
-const TARGET_STT_SAMPLE_RATE = 16_000;
+const DEFAULT_STT_SAMPLE_RATE = 16_000;
+const DEFAULT_STT_FRAME_SAMPLES = 320;
+const DEFAULT_STT_PROVIDER = 'parakeet';
+const DEFAULT_STT_CONFIG_VERSION = 'legacy-default';
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_RECONNECT_DELAY_MS = 300;
 const DEFAULT_MAX_PENDING_CHUNKS = 250;
@@ -151,10 +220,10 @@ function toStreamingSttWebSocketUrl(value: string, locationLike: Pick<Location, 
   return url.toString();
 }
 
-export function downsampleFloat32To16Khz(
+export function resampleFloat32(
   audio: Float32Array,
   sourceSampleRate: number,
-  targetSampleRate: number = TARGET_STT_SAMPLE_RATE,
+  targetSampleRate: number,
 ): Float32Array {
   if (sourceSampleRate <= 0 || targetSampleRate <= 0) throw new Error('Audio sample rates must be positive.');
   if (sourceSampleRate === targetSampleRate) return new Float32Array(audio);
@@ -169,6 +238,14 @@ export function downsampleFloat32To16Khz(
     output[i] = audio[index0] * (1 - fraction) + audio[index1] * fraction;
   }
   return output;
+}
+
+export function downsampleFloat32To16Khz(
+  audio: Float32Array,
+  sourceSampleRate: number,
+  targetSampleRate: number = DEFAULT_STT_SAMPLE_RATE,
+): Float32Array {
+  return resampleFloat32(audio, sourceSampleRate, targetSampleRate);
 }
 
 export function encodePcm16Base64(audio: Float32Array): string {
@@ -226,13 +303,44 @@ function concatFloat32(frames: readonly Float32Array[]): Float32Array {
   return result;
 }
 
+function normalizeReady(message: StreamingSttReady): StreamingSttNegotiation {
+  const protocol: LiveSttProtocol = message.protocol === SEGMENTED_PROTOCOL ? 'segmented-v1' : 'legacy';
+  const sampleRate = message.sampleRate ?? DEFAULT_STT_SAMPLE_RATE;
+  const frameSamples = message.frameSamples ?? DEFAULT_STT_FRAME_SAMPLES;
+  const encoding = message.encoding ?? 'pcm16le';
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) throw new Error('Live STT returned an invalid sample rate.');
+  if (!Number.isFinite(frameSamples) || frameSamples <= 0) throw new Error('Live STT returned an invalid frame size.');
+  if (encoding !== 'pcm16le') throw new Error(`Live STT returned unsupported encoding: ${encoding}`);
+  return {
+    provider: message.provider?.trim() || DEFAULT_STT_PROVIDER,
+    protocol,
+    sampleRate: Math.round(sampleRate),
+    frameSamples: Math.round(frameSamples),
+    encoding,
+    capabilities: [...new Set(message.capabilities ?? [])].sort(),
+    configVersion: message.configVersion?.trim() || DEFAULT_STT_CONFIG_VERSION,
+  };
+}
+
+function negotiationsMatch(left: StreamingSttNegotiation, right: StreamingSttNegotiation): boolean {
+  return left.provider === right.provider
+    && left.protocol === right.protocol
+    && left.sampleRate === right.sampleRate
+    && left.frameSamples === right.frameSamples
+    && left.encoding === right.encoding
+    && left.configVersion === right.configVersion
+    && left.capabilities.length === right.capabilities.length
+    && left.capabilities.every((capability, index) => capability === right.capabilities[index]);
+}
+
 export class StreamingSttWebSocketClient {
   private socket: StreamingSttSocketLike | null = null;
   private connecting = false;
   private autoReconnect = false;
   private serverReady = false;
   private protocol: LiveSttProtocol = 'legacy';
-  private pendingAudio: Float32Array[] = [];
+  private negotiation: StreamingSttNegotiation | null = null;
+  private pendingAudio: PendingAudioFrame[] = [];
   private pendingFinal = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly sessionId = createRuntimeId('stt-session');
@@ -269,6 +377,7 @@ export class StreamingSttWebSocketClient {
       pendingSegments: this.pendingSegments.size + (this.legacyFinalize ? 1 : 0),
       queuedSegments: this.queuedSegments,
       absoluteSample: this.absoluteSample,
+      negotiation: this.negotiation,
     };
   }
 
@@ -334,16 +443,12 @@ export class StreamingSttWebSocketClient {
   }
 
   sendAudio(audio: Float32Array, sampleRate: number): void {
-    const audio16k = downsampleFloat32To16Khz(audio, sampleRate);
-    if (!this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN || !this.serverReady) {
-      this.bufferAudio(audio16k);
+    const frame: PendingAudioFrame = { audio: new Float32Array(audio), sourceSampleRate: sampleRate };
+    if (!this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN || !this.serverReady || !this.negotiation) {
+      this.bufferAudio(frame);
       return;
     }
-    if (this.protocol === 'segmented-v1') this.sendSegmentAudio(audio16k);
-    else {
-      this.sendLegacyAudio(audio16k);
-      this.absoluteSample += audio16k.length;
-    }
+    this.sendPreparedAudio(frame);
   }
 
   sendFinal(): string | null {
@@ -378,6 +483,16 @@ export class StreamingSttWebSocketClient {
     return finalizeRequestId;
   }
 
+  cancelFlush(attemptId: string): void {
+    if (!attemptId || !this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN || !this.serverReady) return;
+    this.socket.send(JSON.stringify({
+      type: 'cancel_flush',
+      sessionId: this.sessionId,
+      captureEpoch: this.captureEpoch,
+      attemptId,
+    }));
+  }
+
   disconnect(): void {
     this.captureClosed = true;
     this.autoReconnect = false;
@@ -396,8 +511,21 @@ export class StreamingSttWebSocketClient {
     this.setStatus('idle');
   }
 
+  private get targetSampleRate(): number {
+    return this.negotiation?.sampleRate ?? DEFAULT_STT_SAMPLE_RATE;
+  }
+
+  private sendPreparedAudio(frame: PendingAudioFrame): void {
+    const resampled = resampleFloat32(frame.audio, frame.sourceSampleRate, this.targetSampleRate);
+    if (this.protocol === 'segmented-v1') this.sendSegmentAudio(resampled);
+    else {
+      this.sendLegacyAudio(resampled);
+      this.absoluteSample += resampled.length;
+    }
+  }
+
   private sendLegacyAudio(audio: Float32Array): void {
-    this.socket?.send(JSON.stringify({ type: 'audio', data: encodePcm16Base64(audio) }));
+    this.socket?.send(JSON.stringify({ type: 'audio', sampleRate: this.targetSampleRate, data: encodePcm16Base64(audio) }));
   }
 
   private ensureActiveSegment(): PendingSegment {
@@ -432,7 +560,7 @@ export class StreamingSttWebSocketClient {
     this.sendSegmentFrame(segment, audio, sampleStart);
     this.absoluteSample += audio.length;
     this.rememberOverlap(audio);
-    const hardSegmentSamples = Math.round(TARGET_STT_SAMPLE_RATE * (this.options.hardSegmentMs ?? DEFAULT_HARD_SEGMENT_MS) / 1_000);
+    const hardSegmentSamples = Math.round(this.targetSampleRate * (this.options.hardSegmentMs ?? DEFAULT_HARD_SEGMENT_MS) / 1_000);
     if (this.absoluteSample - segment.primaryStartSample >= hardSegmentSamples) this.finalizeActiveSegment();
     this.emitSegmentState();
   }
@@ -460,7 +588,7 @@ export class StreamingSttWebSocketClient {
       primaryStartSample: segment.primaryStartSample,
       sampleStart: frame.sampleStart,
       sampleEnd: frame.sampleEnd,
-      sampleRate: TARGET_STT_SAMPLE_RATE,
+      sampleRate: this.targetSampleRate,
       data: frame.encodedAudio,
     }));
   }
@@ -492,7 +620,7 @@ export class StreamingSttWebSocketClient {
   private rememberOverlap(audio: Float32Array): void {
     this.recentOverlapFrames.push(new Float32Array(audio));
     this.recentOverlapSamples += audio.length;
-    const maximum = Math.round(TARGET_STT_SAMPLE_RATE * (this.options.overlapMs ?? DEFAULT_OVERLAP_MS) / 1_000);
+    const maximum = Math.round(this.targetSampleRate * (this.options.overlapMs ?? DEFAULT_OVERLAP_MS) / 1_000);
     while (this.recentOverlapSamples > maximum && this.recentOverlapFrames.length) {
       const first = this.recentOverlapFrames[0];
       const excess = this.recentOverlapSamples - maximum;
@@ -529,11 +657,33 @@ export class StreamingSttWebSocketClient {
       return;
     }
     switch (message.type) {
-      case 'ready':
-        this.protocol = message.protocol === SEGMENTED_PROTOCOL ? 'segmented-v1' : 'legacy';
+      case 'ready': {
+        let received: StreamingSttNegotiation;
+        try {
+          received = normalizeReady(message);
+        } catch (error) {
+          this.failNegotiation(error instanceof Error ? error.message : 'Live STT negotiation failed.');
+          return;
+        }
+        if (this.negotiation && !negotiationsMatch(this.negotiation, received)) {
+          this.failNegotiation('Live STT negotiation changed during the active capture epoch.');
+          return;
+        }
+        if (!this.negotiation) {
+          this.negotiation = received;
+          this.options.onNegotiated?.(received);
+        }
+        this.protocol = this.negotiation.protocol;
         this.serverReady = true;
         if (this.protocol === 'segmented-v1') {
-          this.socket?.send(JSON.stringify({ type: 'hello', protocol: SEGMENTED_PROTOCOL, sessionId: this.sessionId, captureEpoch: this.captureEpoch }));
+          this.socket?.send(JSON.stringify({
+            type: 'hello',
+            protocol: SEGMENTED_PROTOCOL,
+            sessionId: this.sessionId,
+            captureEpoch: this.captureEpoch,
+            sampleRate: this.targetSampleRate,
+            configVersion: this.negotiation.configVersion,
+          }));
           this.replayPendingSegments();
         }
         this.flushPendingAudio();
@@ -543,12 +693,24 @@ export class StreamingSttWebSocketClient {
         }
         this.emitSegmentState();
         return;
+      }
       case 'session_ready':
         message.results?.forEach((result) => this.acceptResult(result));
         return;
       case 'text':
       case 'partial':
         this.options.onPartialTranscript?.(message.text);
+        return;
+      case 'endpoint_score':
+        this.options.onEndpointScore?.(message);
+        return;
+      case 'endpoint_candidate':
+        this.options.onEndpointCandidate?.(message);
+        return;
+      case 'flush_started':
+      case 'flush_completed':
+      case 'flush_cancelled':
+        this.options.onProviderEvent?.(message);
         return;
       case 'done':
         await this.acceptLegacyResult(message);
@@ -575,11 +737,19 @@ export class StreamingSttWebSocketClient {
         this.options.onError?.(message.error ?? message.errorCode ?? 'Live voice segment failed.');
         return;
       case 'error':
-        this.options.onError?.(message.error ?? 'Live voice transcription failed.');
+        this.options.onError?.(message.error ?? message.errorCode ?? 'Live voice transcription failed.');
         return;
       default:
         this.options.onError?.('Unknown live voice transcript message.');
     }
+  }
+
+  private failNegotiation(message: string): void {
+    this.options.onError?.(message);
+    this.autoReconnect = false;
+    this.serverReady = false;
+    this.setStatus('error');
+    try { this.socket?.close(); } catch { /* best-effort close */ }
   }
 
   private async acceptLegacyResult(result: LegacySttResult): Promise<void> {
@@ -703,24 +873,18 @@ export class StreamingSttWebSocketClient {
     return performance.now() - requestedAtMs > (this.options.maxFinalResultAgeMs ?? DEFAULT_MAX_FINAL_RESULT_AGE_MS);
   }
 
-  private bufferAudio(audio: Float32Array): void {
+  private bufferAudio(frame: PendingAudioFrame): void {
     if (!this.connecting && !this.autoReconnect && !this.socket) return;
-    this.pendingAudio.push(audio);
+    this.pendingAudio.push(frame);
     const maxPendingChunks = this.options.maxPendingChunks ?? DEFAULT_MAX_PENDING_CHUNKS;
     while (this.pendingAudio.length > maxPendingChunks) this.pendingAudio.shift();
   }
 
   private flushPendingAudio(): void {
-    if (!this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN || !this.serverReady) return;
+    if (!this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN || !this.serverReady || !this.negotiation) return;
     const pending = this.pendingAudio;
     this.pendingAudio = [];
-    for (const audio of pending) {
-      if (this.protocol === 'segmented-v1') this.sendSegmentAudio(audio);
-      else {
-        this.sendLegacyAudio(audio);
-        this.absoluteSample += audio.length;
-      }
-    }
+    for (const frame of pending) this.sendPreparedAudio(frame);
   }
 
   private replayPendingSegments(): void {
