@@ -40,6 +40,7 @@ import { initializeLiveSessionCoordinator } from './features/assistant-workspace
 import { initializeLiveSpeculationController } from './features/assistant-workspace/live-speculation-controller';
 import { initializeLiveSttAuthorityController } from './features/assistant-workspace/live-stt-authority-controller';
 import { initializeLiveTtsAdaptiveBufferController } from './features/assistant-workspace/live-tts-adaptive-buffer-controller';
+import { initializeLiveTtsCapabilityController } from './features/assistant-workspace/live-tts-capability-controller';
 import { initializeLiveVoiceAudioDuckBridge } from './features/assistant-workspace/live-voice-audio-duck-bridge';
 import { initializeLiveVoiceCueAssetBridge } from './features/assistant-workspace/live-voice-cue-asset-bridge';
 import { initializeLiveVoiceCuePackLoader } from './features/assistant-workspace/live-voice-cue-pack-loader';
@@ -85,6 +86,7 @@ initializeLiveVoiceDuplexGate();
 initializeLiveVoiceAudioDuckBridge();
 initializeLiveVoiceCueAssetBridge();
 initializeLiveVoiceCuePackLoader();
+initializeLiveTtsCapabilityController();
 initializeLiveTtsAdaptiveBufferController();
 initializeLiveVoiceUnifiedAudioController();
 initializeLiveAvatarPresenceController();
