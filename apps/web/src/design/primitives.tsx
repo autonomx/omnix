@@ -29,6 +29,9 @@ export function OmnixShellLayout({
 
 export function OmnixSidebar({ children, hidden = false }: { children: ReactNode; hidden?: boolean }) {
   const [expanded, setExpanded] = useState(true);
+  useEffect(() => {
+    if (!hidden) setExpanded(true);
+  }, [hidden]);
   const sidebarClassName = [expanded ? 'omnix-sidebar expanded' : 'omnix-sidebar collapsed', hidden ? 'hidden' : '']
     .filter(Boolean)
     .join(' ');

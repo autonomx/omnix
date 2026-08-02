@@ -29,7 +29,14 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
   OmnixModuleDefinition
 >;
 const defaultModule = moduleById.chatbot;
-const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'voice', 'image-generation'];
+const modeModuleIds: OmnixModuleId[] = [
+  'chatbot',
+  'rpg',
+  'storyteller',
+  'podcast',
+  'voice',
+  'image-generation',
+];
 
 function moduleFromPath(pathname: string): OmnixModuleDefinition {
   return (
@@ -51,7 +58,7 @@ function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   const { setColorScheme } = useMantineColorScheme();
-  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [appearanceMode, setAppearanceMode] = useState<OmnixAppearanceMode>(initialAppearanceMode);
   const [themeId, setThemeId] = useState<OmnixThemeId>(initialThemeId);
   const activeModule = moduleFromPath(pathname);

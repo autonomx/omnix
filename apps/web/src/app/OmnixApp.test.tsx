@@ -27,7 +27,10 @@ describe('OmnixApp', () => {
   it('renders the shared app shell and all module entrypoints', async () => {
     renderApp();
 
-    expect(await screen.findByRole('heading', { name: 'Omnix' })).toBeInTheDocument();
+    expect((await screen.findAllByLabelText('Omnix')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Show Omnix sidebar' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Omnix sidebar' }));
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'RPG' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Chatbot' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Storyteller' })).toBeInTheDocument();
@@ -48,7 +51,10 @@ describe('OmnixApp', () => {
   it('uses the Omnix mark as a complete sidebar visibility toggle', async () => {
     renderApp();
 
-    expect(await screen.findByRole('link', { name: 'RPG' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Show Omnix sidebar' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Omnix sidebar' }));
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'RPG' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide Omnix sidebar' }));
 
