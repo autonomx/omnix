@@ -154,7 +154,7 @@ class KyutaiLiveSttSession:
             if ready.get("type") != "Ready":
                 await websocket.close()
                 raise KyutaiLiveSttError(f"Expected Kyutai Ready, received {ready.get('type')!r}")
-        except Exception as exc:  # noqa: BLE001 - normalize transport and protocol failures at the provider boundary
+        except Exception as exc:
             if isinstance(exc, KyutaiLiveSttError):
                 raise
             raise KyutaiLiveSttError(f"Could not connect to Kyutai STT at {url}: {exc}") from exc
@@ -377,7 +377,7 @@ class KyutaiLiveSttProvider:
                 connect_timeout_seconds=float(os.environ.get("KYUTAI_STT_CONNECT_TIMEOUT_SECONDS", "5")),
                 flush_timeout_seconds=float(os.environ.get("KYUTAI_STT_FLUSH_TIMEOUT_SECONDS", "3")),
             )
-        except Exception as exc:  # noqa: BLE001 - session setup errors are recorded uniformly
+        except Exception as exc:
             self._last_error = str(exc)
             self.breaker.record_failure(transient=not isinstance(exc, ValueError))
             raise
