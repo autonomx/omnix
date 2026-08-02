@@ -33,7 +33,7 @@
 "src/app/gateway/tts_stream_diagnostics.py" = ["BLE001", "S110"]
 "src/app/providers/lmstudio_provider.py" = ["BLE001", "RUF012", "UP006", "UP007", "UP035", "UP045"]
 "src/app/providers/stt_live_runtime_support.py" = ["BLE001"]
-"src/app/providers/stt_live_websocket.py" = ["BLE001", "S110"]
+"src/app/providers/stt_live_websocket.py" = ["BLE001", "S110", "UP037"]
 "src/tests/app/test_chat_response_metrics.py" = ["I001"]
 "src/tests/app/test_gateway_event_loop_lag_monitor.py" = ["ASYNC251"]
 "src/tests/app/test_live_chat_authoritative_state_source.py" = ["FLY002"]
