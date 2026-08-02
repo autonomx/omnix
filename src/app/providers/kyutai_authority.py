@@ -49,7 +49,7 @@ class KyutaiReleaseMeasurements:
     downstream_p95_regression: float | None = None
 
     @classmethod
-    def from_environment(cls) -> "KyutaiReleaseMeasurements":
+    def from_environment(cls) -> KyutaiReleaseMeasurements:
         return cls(
             median_end_to_audio_ms=_environment_float("KYUTAI_STT_MEDIAN_END_TO_AUDIO_MS"),
             p95_end_to_audio_ms=_environment_float("KYUTAI_STT_P95_END_TO_AUDIO_MS"),
