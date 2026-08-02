@@ -119,6 +119,13 @@ const MODEL_ENTRY_PATHS: Record<string, string> = {
   'character-live2d:open-llm-vtuber-mao-pro': 'runtime/mao_pro.model3.json',
   'character-live2d:open-llm-vtuber-shizuku': 'runtime/shizuku.model3.json',
 };
+// The sample rigs use different amounts of transparent canvas padding. Keep
+// the visible character at a comparable size when the shared 100% zoom is
+// selected; the per-user zoom control is applied on top of this baseline.
+const RIG_BASELINE_SCALE: Record<string, number> = {
+  'character-live2d:open-llm-vtuber-mao-pro': 2,
+  'character-live2d:open-llm-vtuber-shizuku': 1,
+};
 // The bundled sample rigs each expose a single looping `Idle` motion. In the
 // live-call stage that reads as a repeated gesture rather than an idle avatar,
 // so reserve an intentionally empty group and let Cubism update physics,
@@ -404,7 +411,10 @@ async function renderLive2D(
 function applyLive2DMotion(selection: Live2DMotionSelection): void {
   const model = activeModel;
   if (!model || selection.rigAssetId !== activeRigAssetId) return;
-  if (!selection.group || selection.index < 0) {
+  // Cubism manifests can use an empty string as a real motion group (the Mao
+  // sample stores its gesture motions under ""). Only null means the explicit
+  // static-idle selection; treating "" as idle makes those motions no-op.
+  if (selection.group === null || selection.index < 0) {
     model.stopAllMotions?.();
     return;
   }
@@ -464,8 +474,9 @@ function fitModel(host: HTMLElement, application: PixiApplication, model: Live2D
   const naturalHeight = Math.max(1, model.height);
   const scale = Math.min((width * 0.92) / naturalWidth, (height * 0.96) / naturalHeight);
   const framingScale = currentFraming === 'head' ? 2.2 : 1;
+  const baselineScale = RIG_BASELINE_SCALE[host.dataset.live2dRigAssetId ?? ''] ?? 1;
   const fittedScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  model.scale.set(fittedScale * currentZoom * framingScale);
+  model.scale.set(fittedScale * currentZoom * framingScale * baselineScale);
   model.anchor?.set(0.5, 0.5);
   model.x = width / 2;
   model.y = currentFraming === 'head' ? height * 1.04 : height * 0.52;
