@@ -22,6 +22,8 @@ describe('live voice websocket helpers', () => {
     expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost' }, 'http://localhost:5201/transcribe')).toBe('ws://localhost:5201/ws/transcribe');
     expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost' }, 'http://127.0.0.1:5201')).toBe('ws://127.0.0.1:5201/ws/transcribe');
     expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'https:', hostname: 'omnix.local' }, 'https://stt.local/ws/transcribe')).toBe('wss://stt.local/ws/transcribe');
+    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost' }, 'http://127.0.0.1:5202?language=fr')).toBe('ws://127.0.0.1:5202/ws/transcribe?language=fr');
+    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost' }, 'http://127.0.0.1:5202?language=fr&unsafe=discarded')).toBe('ws://127.0.0.1:5202/ws/transcribe?language=fr');
   });
 
   it('resamples audio frames deterministically', () => {
@@ -288,6 +290,9 @@ describe('live voice websocket helpers', () => {
     const sockets: TestStreamingSocket[] = [];
     const onWord = vi.fn();
     const finals: Array<{ provider?: string; metrics?: Record<string, number> }> = [];
+    const diagnostics: Array<Record<string, unknown>> = [];
+    const listener = (event: Event) => diagnostics.push((event as CustomEvent<Record<string, unknown>>).detail);
+    globalThis.addEventListener('omnix:assistant-voice-perf', listener);
     class TestWebSocket extends TestStreamingSocket {
       static readonly OPEN = 1;
 
@@ -296,27 +301,70 @@ describe('live voice websocket helpers', () => {
         sockets.push(this);
       }
     }
-    const client = new StreamingSttWebSocketClient({
-      url: 'ws://127.0.0.1:5202/ws/transcribe',
-      webSocketCtor: TestWebSocket,
-      onWord,
-      onAcceptedFinal: async (final) => {
-        finals.push({ provider: final.provider, metrics: final.providerMetrics });
-        return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: 'test', taskContractVersion: 1 };
-      },
-    });
-    await openSegmentedClient(client, sockets, kyutaiReady());
-    client.sendAudio(new Float32Array([0.1, 0.2]), 24_000);
-    client.sendFinal();
-    const finalize = sockets[0].sentJson().find((message) => message.type === 'finalize')!;
-    sockets[0].receive({ type: 'word', provider: 'kyutai', segmentId: finalize.segmentId, sequence: 0, text: 'hello', startMs: 100, endMs: 300 });
-    sockets[0].receive({
-      ...resultFor(client, finalize, 'r0', 'hello', 'kyutai'),
-      providerMetrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 },
-    });
+    try {
+      const client = new StreamingSttWebSocketClient({
+        url: 'ws://127.0.0.1:5202/ws/transcribe',
+        webSocketCtor: TestWebSocket,
+        onWord,
+        onAcceptedFinal: async (final) => {
+          finals.push({ provider: final.provider, metrics: final.providerMetrics });
+          return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: 'test', taskContractVersion: 1 };
+        },
+      });
+      await openSegmentedClient(client, sockets, kyutaiReady());
+      client.sendAudio(new Float32Array([0.1, 0.2]), 24_000);
+      client.sendFinal();
+      const finalize = sockets[0].sentJson().find((message) => message.type === 'finalize')!;
+      sockets[0].receive({ type: 'word', provider: 'kyutai', segmentId: finalize.segmentId, sequence: 0, text: 'hello', startMs: 100, endMs: 300 });
+      sockets[0].receive({
+        ...resultFor(client, finalize, 'r0', 'hello', 'kyutai'),
+        providerMetrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 },
+      });
 
-    expect(onWord).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello', startMs: 100, endMs: 300 }));
-    await vi.waitFor(() => expect(finals).toEqual([{ provider: 'kyutai', metrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 } }]));
+      expect(onWord).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello', startMs: 100, endMs: 300 }));
+      await vi.waitFor(() => expect(finals).toEqual([{ provider: 'kyutai', metrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 } }]));
+      expect(diagnostics).toEqual(expect.arrayContaining([
+        expect.objectContaining({ stage: 'stt_word', provider: 'kyutai', textChars: 5, startMs: 100, endMs: 300 }),
+        expect.objectContaining({ stage: 'stt_provider_final', provider: 'kyutai', transcriptChars: 5, providerMetrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 } }),
+      ]));
+      expect(diagnostics.some((event) => Object.values(event).includes('hello'))).toBe(false);
+    } finally {
+      globalThis.removeEventListener('omnix:assistant-voice-perf', listener);
+    }
+  });
+
+  it('publishes endpoint and flush diagnostics on the live performance channel', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    const diagnostics: Array<Record<string, unknown>> = [];
+    const listener = (event: Event) => diagnostics.push((event as CustomEvent<Record<string, unknown>>).detail);
+    globalThis.addEventListener('omnix:assistant-voice-perf', listener);
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    try {
+      const client = new StreamingSttWebSocketClient({
+        url: 'ws://127.0.0.1:5202/ws/transcribe?language=fr',
+        webSocketCtor: TestWebSocket,
+      });
+      await openSegmentedClient(client, sockets, { ...kyutaiReady(), language: 'fr' });
+      sockets[0].receive({ type: 'endpoint_score', provider: 'kyutai', segmentId: 'segment-1', sequence: 1, probability: 0.72, modelTimeMs: 400, signal: 'semantic_pause' });
+      sockets[0].receive({ type: 'endpoint_candidate', provider: 'kyutai', segmentId: 'segment-1', sequence: 1, probability: 0.8, modelTimeMs: 480 });
+      sockets[0].receive({ type: 'flush_completed', provider: 'kyutai', attemptId: 'attempt-1', wall_ms: 75, model_ms: 500, realtime_factor: 0.15 });
+
+      expect(diagnostics).toEqual(expect.arrayContaining([
+        expect.objectContaining({ stage: 'stt_negotiated', provider: 'kyutai', language: 'fr' }),
+        expect.objectContaining({ stage: 'stt_endpoint_score', probability: 0.72, modelTimeMs: 400 }),
+        expect.objectContaining({ stage: 'stt_endpoint_candidate', probability: 0.8, modelTimeMs: 480 }),
+        expect.objectContaining({ stage: 'stt_flush_completed', attemptId: 'attempt-1', wallMs: 75, modelMs: 500, realtimeFactor: 0.15 }),
+      ]));
+    } finally {
+      globalThis.removeEventListener('omnix:assistant-voice-perf', listener);
+    }
   });
 });
 
