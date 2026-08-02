@@ -214,15 +214,6 @@ export function initializeLiveSttAuthorityController(): () => void {
         modelTimeMs: parsed.modelTimeMs,
       });
     }
-    if (parsed?.type === 'result_available' && typeof parsed.text === 'string') {
-      dispatchInternal(LIVE_STT_SPECULATION_FINAL_EVENT, {
-        chatSessionId: this.options.chatSessionId,
-        segmentId: parsed.segmentId,
-        sourceSequence: parsed.sequence,
-        text: parsed.text,
-        provider: parsed.provider,
-      });
-    }
     await originalHandleMessage.call(this, rawData);
     if (
       parsed?.type === 'endpoint_candidate'
@@ -253,6 +244,13 @@ export function initializeLiveSttAuthorityController(): () => void {
     this: RuntimeClient,
     final: AcceptedVoiceFinal,
   ): Promise<void> {
+    dispatchInternal(LIVE_STT_SPECULATION_FINAL_EVENT, {
+      chatSessionId: this.options.chatSessionId,
+      segmentId: final.segmentId,
+      sourceSequence: final.sourceSequence,
+      text: final.text,
+      provider: final.provider,
+    });
     let delivery: Promise<void>;
     try {
       delivery = originalDeliverAcceptedFinal.call(this, final);
