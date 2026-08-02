@@ -4,19 +4,34 @@ from __future__ import annotations
 import os
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.providers.kyutai_authority import evaluate_kyutai_authority, parse_authority_mode
 from app.providers.kyutai_live_stt import KyutaiLiveSttProvider
 from app.providers.kyutai_stt_websocket import install_kyutai_stt_websocket
 
 app = FastAPI(title="Omnix Kyutai Live STT", version="1.0")
+origins = [
+    item.strip()
+    for item in os.environ.get(
+        "OMNIX_STT_CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
+    if item.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 provider = KyutaiLiveSttProvider()
 install_kyutai_stt_websocket(app, provider=provider)
 
 
-@app.get("/healthz")
-async def healthz() -> dict[str, object]:
-    language = os.environ.get("OMNIX_LIVE_STT_LANGUAGE", "en")
+async def _probed_health(language: str) -> dict[str, object]:
     probe_max_age = float(os.environ.get("KYUTAI_STT_HEALTH_PROBE_MAX_AGE_SECONDS", "5"))
     upstream_ready = await provider.probe(language=language, max_age_seconds=probe_max_age)
     health = dict(await provider.health())
@@ -24,6 +39,31 @@ async def healthz() -> dict[str, object]:
         "ok": upstream_ready and health.get("state") == "closed",
         **health,
         "upstream_ready": upstream_ready,
+    }
+
+
+@app.get("/healthz")
+async def healthz() -> dict[str, object]:
+    language = os.environ.get("OMNIX_LIVE_STT_LANGUAGE", "en")
+    return await _probed_health(language)
+
+
+@app.get("/authorityz")
+async def authorityz(
+    language: str = Query(default="en", min_length=2, max_length=16),
+    mode: str = Query(default="observational", max_length=24),
+) -> dict[str, object]:
+    resolved_mode = parse_authority_mode(mode)
+    health = await _probed_health(language)
+    decision = evaluate_kyutai_authority(
+        health,
+        language=language,
+        mode=resolved_mode,
+    )
+    return {
+        "ok": decision.eligible,
+        "provider": "kyutai",
+        **decision.payload(),
     }
 
 
