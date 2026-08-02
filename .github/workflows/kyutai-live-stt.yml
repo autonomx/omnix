@@ -73,7 +73,7 @@ jobs:
           npm --workspace @omnix/web run typecheck 2>&1 | tee live-stt-typecheck.txt
           typecheck_status=${PIPESTATUS[0]}
           set -e
-          if grep -E "(live-(voice-websocket(\\.spec)?|accepted-final|stt-authority-controller|speculation-controller|tts-adaptive-buffer-controller|tts-capability-controller|latency-rollout\\.spec)\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
+          if grep -E "(live-(voice-websocket(\\.spec)?|accepted-final|stt-authority-controller|speculation-controller|tts-adaptive-buffer-controller|tts-capability-controller|voice-clause-stabilizer|latency-rollout\\.spec)\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
             echo "TypeScript errors were reported in the live latency rollout path."
             exit "${typecheck_status:-1}"
           fi
