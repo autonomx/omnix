@@ -66,7 +66,8 @@ let activeSpeculation: ActiveSpeculation | null = null;
 const partials = new Map<string, string>();
 
 export function normalizeSpeculationWords(text: string): string[] {
-  return [...text.matchAll(WORD_PATTERN)].map((match) => match[0].casefold?.() ?? match[0].toLocaleLowerCase())
+  return [...text.matchAll(WORD_PATTERN)]
+    .map((match) => match[0].toLocaleLowerCase())
     .map((token) => token.replaceAll('’', "'"));
 }
 
@@ -207,8 +208,8 @@ function createSpeculation(
   sourceSequence: number,
   candidateText: string,
 ): ActiveSpeculation {
-  let resolveStarted = () => undefined;
-  let resolveGeneration = () => undefined;
+  let resolveStarted: () => void = () => {};
+  let resolveGeneration: () => void = () => {};
   const startedPromise = new Promise<void>((resolve) => { resolveStarted = resolve; });
   const generationPromise = new Promise<void>((resolve) => { resolveGeneration = resolve; });
   return {
