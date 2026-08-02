@@ -7,9 +7,10 @@ import os
 import sys
 import time
 from array import array
+from collections.abc import AsyncIterator, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Mapping
+from typing import Any
 
 import msgpack
 import websockets
@@ -136,7 +137,7 @@ class KyutaiLiveSttSession:
         connect_timeout_seconds: float = 5.0,
         delay_seconds: float = KYUTAI_MODEL_DELAY_SECONDS,
         flush_timeout_seconds: float = 3.0,
-    ) -> "KyutaiLiveSttSession":
+    ) -> KyutaiLiveSttSession:
         url = _join_url(base_url, KYUTAI_STT_PATH)
         headers = {"kyutai-api-key": api_key}
         try:
@@ -153,7 +154,7 @@ class KyutaiLiveSttSession:
             if ready.get("type") != "Ready":
                 await websocket.close()
                 raise KyutaiLiveSttError(f"Expected Kyutai Ready, received {ready.get('type')!r}")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - normalize transport and protocol failures at the provider boundary
             if isinstance(exc, KyutaiLiveSttError):
                 raise
             raise KyutaiLiveSttError(f"Could not connect to Kyutai STT at {url}: {exc}") from exc
@@ -327,7 +328,7 @@ class KyutaiLiveSttSession:
                     )
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - transport/schema failures become normalized provider events
             if not self._closed:
                 await self._events.put(
                     LiveSttEvent(type="error", text=str(exc), fields={"retryable": True})
@@ -376,7 +377,7 @@ class KyutaiLiveSttProvider:
                 connect_timeout_seconds=float(os.environ.get("KYUTAI_STT_CONNECT_TIMEOUT_SECONDS", "5")),
                 flush_timeout_seconds=float(os.environ.get("KYUTAI_STT_FLUSH_TIMEOUT_SECONDS", "3")),
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - session setup errors are recorded uniformly
             self._last_error = str(exc)
             self.breaker.record_failure(transient=not isinstance(exc, ValueError))
             raise
