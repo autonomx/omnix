@@ -206,6 +206,7 @@ const DEFAULT_OVERLAP_MS = 300;
 const DEFAULT_MAX_FINAL_RESULT_AGE_MS = 8_000;
 const SEGMENTED_PROTOCOL = 'segmented-v1';
 const CAP_CLIENT_AUDIO_REPLAY = 'client_audio_replay';
+const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 
 export function getDefaultStreamingSttWebSocketUrl(
   locationLike: Pick<Location, 'protocol' | 'hostname'> = globalThis.location,
@@ -225,14 +226,28 @@ function localServiceHostname(hostname: string): string {
 function toStreamingSttWebSocketUrl(value: string, locationLike: Pick<Location, 'protocol' | 'hostname'>): string {
   const baseUrl = `${locationLike.protocol}//${locationLike.hostname}`;
   const url = new URL(value.trim(), baseUrl);
+  const language = url.searchParams.get('language')?.trim();
   url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
   const normalizedPath = url.pathname.replace(/\/+$/, '');
   if (normalizedPath.endsWith('/ws/transcribe')) url.pathname = normalizedPath;
   else if (normalizedPath.endsWith('/transcribe')) url.pathname = `${normalizedPath.slice(0, -'/transcribe'.length)}/ws/transcribe`;
   else url.pathname = `${normalizedPath}/ws/transcribe`.replace(/\/{2,}/g, '/');
   url.search = '';
+  if (language) url.searchParams.set('language', language);
   url.hash = '';
   return url.toString();
+}
+
+function dispatchSttDiagnostic(stage: string, detail: Record<string, unknown>): void {
+  const CustomEventCtor = globalThis.CustomEvent;
+  if (typeof globalThis.dispatchEvent !== 'function' || typeof CustomEventCtor !== 'function') return;
+  globalThis.dispatchEvent(new CustomEventCtor(LIVE_VOICE_PERF_EVENT, {
+    detail: {
+      stage,
+      timestamp: new Date().toISOString(),
+      ...detail,
+    },
+  }));
 }
 
 export class StreamingFloat32Resampler {
@@ -737,6 +752,14 @@ export class StreamingSttWebSocketClient {
         if (!this.negotiation) {
           this.negotiation = received;
           this.options.onNegotiated?.(received);
+          dispatchSttDiagnostic('stt_negotiated', {
+            provider: received.provider,
+            protocol: received.protocol,
+            sampleRate: received.sampleRate,
+            frameSamples: received.frameSamples,
+            capabilities: received.capabilities,
+            language: received.language,
+          });
         }
         this.protocol = this.negotiation.protocol;
         this.serverReady = true;
@@ -765,6 +788,11 @@ export class StreamingSttWebSocketClient {
         for (const result of message.results ?? []) this.acceptResult(result, false);
         await this.commitOrderedResults();
         this.awaitingSessionReady = false;
+        dispatchSttDiagnostic('stt_session_restored', {
+          provider: message.provider ?? this.negotiation?.provider,
+          replayedResults: message.results?.length ?? 0,
+          pendingSegments: this.pendingSegments.size,
+        });
         this.replayPendingSegments();
         this.flushPendingAudio();
         if (this.pendingFinal) {
@@ -778,17 +806,47 @@ export class StreamingSttWebSocketClient {
         this.options.onPartialTranscript?.(message.text);
         return;
       case 'word':
+        dispatchSttDiagnostic('stt_word', {
+          provider: message.provider,
+          segmentId: message.segmentId,
+          sourceSequence: message.sequence,
+          startMs: message.startMs,
+          endMs: message.endMs,
+          textChars: message.text.length,
+        });
         this.options.onWord?.(message);
         return;
       case 'endpoint_score':
+        dispatchSttDiagnostic('stt_endpoint_score', {
+          provider: message.provider,
+          segmentId: message.segmentId,
+          sourceSequence: message.sequence,
+          probability: message.probability,
+          modelTimeMs: message.modelTimeMs,
+          signal: message.signal,
+        });
         this.options.onEndpointScore?.(message);
         return;
       case 'endpoint_candidate':
+        dispatchSttDiagnostic('stt_endpoint_candidate', {
+          provider: message.provider,
+          segmentId: message.segmentId,
+          sourceSequence: message.sequence,
+          probability: message.probability,
+          modelTimeMs: message.modelTimeMs,
+        });
         this.options.onEndpointCandidate?.(message);
         return;
       case 'flush_started':
       case 'flush_completed':
       case 'flush_cancelled':
+        dispatchSttDiagnostic(`stt_${message.type}`, {
+          provider: message.provider,
+          attemptId: message.attemptId,
+          wallMs: message.wall_ms,
+          modelMs: message.model_ms,
+          realtimeFactor: message.realtime_factor,
+        });
         this.options.onProviderEvent?.(message);
         return;
       case 'done':
@@ -812,12 +870,24 @@ export class StreamingSttWebSocketClient {
         return;
       }
       case 'result_available':
+        dispatchSttDiagnostic('stt_provider_final', {
+          provider: message.provider,
+          segmentId: message.segmentId,
+          sourceSequence: message.sequence,
+          providerMetrics: message.providerMetrics,
+          transcriptChars: message.text.trim().length,
+        });
         this.acceptResult(message);
         return;
       case 'segment_error':
         this.handleSegmentError(message);
         return;
       case 'error':
+        dispatchSttDiagnostic('stt_provider_error', {
+          provider: this.negotiation?.provider,
+          errorCode: message.errorCode,
+          retryable: message.retryable,
+        });
         this.options.onError?.(message.error ?? message.errorCode ?? 'Live voice transcription failed.');
         return;
       default:
@@ -826,6 +896,7 @@ export class StreamingSttWebSocketClient {
   }
 
   private failNegotiation(message: string): void {
+    dispatchSttDiagnostic('stt_negotiation_failed', { message });
     this.options.onError?.(message);
     this.autoReconnect = false;
     this.serverReady = false;
@@ -835,6 +906,13 @@ export class StreamingSttWebSocketClient {
   }
 
   private handleSegmentError(message: Extract<StreamingSttMessage, { type: 'segment_error' }>): void {
+    dispatchSttDiagnostic('stt_segment_error', {
+      provider: this.negotiation?.provider,
+      segmentId: message.segmentId,
+      sourceSequence: message.sequence,
+      errorCode: message.errorCode,
+      retryable: message.retryable,
+    });
     this.options.onError?.(message.error ?? message.errorCode ?? 'Live voice segment failed.');
     const segment = message.segmentId ? this.pendingSegments.get(message.segmentId) : undefined;
     const sequence = message.sequence ?? segment?.sequence;
