@@ -1,5 +1,6 @@
 from app.providers.kyutai_authority import (
     KyutaiAuthorityMode,
+    KyutaiReleaseMeasurements,
     evaluate_kyutai_authority,
     parse_authority_mode,
 )
@@ -14,6 +15,20 @@ def _health(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+def _passing_measurements(**overrides):
+    values = {
+        "median_end_to_audio_ms": 500.0,
+        "p95_end_to_audio_ms": 800.0,
+        "false_endpoint_rate": 0.01,
+        "missed_endpoint_rate": 0.02,
+        "interruption_to_silence_ms": 180.0,
+        "underrun_turn_rate": 0.01,
+        "downstream_p95_regression": 0.08,
+    }
+    values.update(overrides)
+    return KyutaiReleaseMeasurements(**values)
 
 
 def test_test_mode_requires_ready_warm_supported_provider() -> None:
@@ -38,9 +53,13 @@ def test_auto_mode_fails_closed_until_release_evidence_passes() -> None:
         now=1_000.0,
         quality_gate_passed=False,
         contention_gate_passed=False,
+        measurements=_passing_measurements(),
     )
     assert blocked.eligible is False
-    assert blocked.reasons == ("quality_gate_not_passed", "contention_gate_not_passed")
+    assert blocked.reasons == (
+        "quality_gate_not_passed",
+        "contention_gate_not_passed",
+    )
 
     promoted = evaluate_kyutai_authority(
         _health(),
@@ -49,8 +68,50 @@ def test_auto_mode_fails_closed_until_release_evidence_passes() -> None:
         now=1_000.0,
         quality_gate_passed=True,
         contention_gate_passed=True,
+        measurements=_passing_measurements(),
     )
     assert promoted.eligible is True
+
+
+def test_auto_mode_rejects_approved_but_failed_measurements(monkeypatch) -> None:
+    monkeypatch.setenv("KYUTAI_STT_QUALITY_GATE_PASSED", "true")
+    monkeypatch.setenv("KYUTAI_STT_CONTENTION_GATE_PASSED", "true")
+    decision = evaluate_kyutai_authority(
+        _health(),
+        language="en",
+        mode="auto",
+        now=1_000.0,
+        measurements=_passing_measurements(
+            p95_end_to_audio_ms=1_200.0,
+            downstream_p95_regression=0.2,
+        ),
+    )
+    assert decision.eligible is False
+    assert "quality_metrics_not_satisfied" in decision.reasons
+    assert "contention_metrics_not_satisfied" in decision.reasons
+    assert decision.quality_metric_failures == (
+        "p95_end_to_audio_ms:above_1000",
+    )
+    assert decision.contention_metric_failures == (
+        "downstream_p95_regression:above_0.15",
+    )
+
+
+def test_auto_mode_requires_complete_measurement_evidence(monkeypatch) -> None:
+    monkeypatch.setenv("KYUTAI_STT_QUALITY_GATE_PASSED", "true")
+    monkeypatch.setenv("KYUTAI_STT_CONTENTION_GATE_PASSED", "true")
+    decision = evaluate_kyutai_authority(
+        _health(),
+        language="en",
+        mode="auto",
+        now=1_000.0,
+        measurements=KyutaiReleaseMeasurements(),
+    )
+    assert decision.eligible is False
+    assert "median_end_to_audio_ms:missing" in decision.quality_metric_failures
+    assert decision.contention_metric_failures == (
+        "downstream_p95_regression:missing",
+    )
 
 
 def test_authority_rejects_cold_or_unsupported_sessions() -> None:
