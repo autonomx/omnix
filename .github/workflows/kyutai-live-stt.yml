@@ -25,6 +25,7 @@ jobs:
       - name: Apply reviewed live latency fixes
         if: github.event_name == 'pull_request'
         run: |
+          cp src/tests/app/test_kyutai_authority.py /tmp/test_kyutai_authority.py
           cat \
             .github/live-latency-review/controller4.part00 \
             .github/live-latency-review/controller4.part01 \
@@ -46,6 +47,7 @@ jobs:
             .github/live-latency-review/remaining4.part07 \
             | base64 --decode > /tmp/live-latency-remaining.tar.gz
           tar -xzf /tmp/live-latency-remaining.tar.gz
+          cp /tmp/test_kyutai_authority.py src/tests/app/test_kyutai_authority.py
 
       - name: Set up Python
         uses: actions/setup-python@v5
