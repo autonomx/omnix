@@ -16,10 +16,14 @@ install_kyutai_stt_websocket(app, provider=provider)
 
 @app.get("/healthz")
 async def healthz() -> dict[str, object]:
+    language = os.environ.get("OMNIX_LIVE_STT_LANGUAGE", "en")
+    probe_max_age = float(os.environ.get("KYUTAI_STT_HEALTH_PROBE_MAX_AGE_SECONDS", "5"))
+    upstream_ready = await provider.probe(language=language, max_age_seconds=probe_max_age)
     health = dict(await provider.health())
     return {
-        "ok": health.get("state") != "open",
+        "ok": upstream_ready and health.get("state") == "closed",
         **health,
+        "upstream_ready": upstream_ready,
     }
 
 
