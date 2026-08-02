@@ -7,7 +7,10 @@ import uvicorn
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.providers.kyutai_authority import evaluate_kyutai_authority, parse_authority_mode
+from app.providers.kyutai_authority import (
+    evaluate_kyutai_authority,
+    parse_authority_mode,
+)
 from app.providers.kyutai_live_stt import KyutaiLiveSttProvider
 from app.providers.kyutai_stt_websocket import install_kyutai_stt_websocket
 
