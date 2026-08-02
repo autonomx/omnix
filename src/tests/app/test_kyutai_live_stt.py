@@ -83,26 +83,24 @@ def test_kyutai_session_normalizes_words_and_endpoint_scores() -> None:
         await socket.push({"type": "EndWord", "stop_time": 0.7})
 
         endpoint = await anext(events)
-        word = await anext(events)
         partial = await anext(events)
-        word_end = await anext(events)
+        word = await anext(events)
 
         assert endpoint.type == "endpoint_score"
         assert endpoint.probability is not None
         assert endpoint.fields == {"signal": "semantic_pause"}
+        assert partial.type == "partial"
+        assert partial.text == "hello"
         assert word.type == "word"
         assert word.text == "hello "
         assert word.start_ms == pytest.approx(400.0)
-        assert partial.type == "partial"
-        assert partial.text == "hello"
-        assert word_end.type == "word_end"
-        assert word_end.end_ms == pytest.approx(700.0)
+        assert word.end_ms == pytest.approx(700.0)
         await session.close()
 
     asyncio.run(scenario())
 
 
-def test_kyutai_flush_advances_delayed_model_state() -> None:
+def test_kyutai_flush_advances_delayed_model_state_and_reports_standard_rtf() -> None:
     async def scenario() -> None:
         socket = FakeKyutaiSocket()
         session = KyutaiLiveSttSession(socket, delay_seconds=0.16, flush_timeout_seconds=1.0)
@@ -122,7 +120,27 @@ def test_kyutai_flush_advances_delayed_model_state() -> None:
         assert result.attempt_id == "attempt-1"
         assert result.model_ms == pytest.approx(160.0)
         assert result.wall_ms >= 0.0
-        assert result.realtime_factor >= 0.0
+        assert result.realtime_factor == pytest.approx(result.wall_ms / result.model_ms)
+        await session.close()
+
+    asyncio.run(scenario())
+
+
+def test_kyutai_flush_can_be_cancelled_while_waiting_for_model_steps() -> None:
+    async def scenario() -> None:
+        socket = FakeKyutaiSocket()
+        session = KyutaiLiveSttSession(socket, delay_seconds=0.16, flush_timeout_seconds=5.0)
+        session._reader_task = asyncio.create_task(session._read_messages())
+
+        flush_task = asyncio.create_task(session.flush("attempt-cancel"))
+        for _ in range(100):
+            if len(socket.sent) >= 3:
+                break
+            await asyncio.sleep(0)
+        await session.cancel_flush("attempt-cancel")
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(flush_task, timeout=0.2)
         await session.close()
 
     asyncio.run(scenario())
@@ -131,7 +149,28 @@ def test_kyutai_flush_advances_delayed_model_state() -> None:
 def test_kyutai_provider_rejects_unsupported_languages_before_connecting() -> None:
     async def scenario() -> None:
         provider = KyutaiLiveSttProvider(base_url="ws://unused")
-        with pytest.raises(KyutaiLiveSttError, match="does not support language"):
+        with pytest.raises(KyutaiLiveSttError, match="does not support language") as caught:
             await provider.create_live_session(language="ja")
+        assert caught.value.retryable is False
+
+    asyncio.run(scenario())
+
+
+def test_kyutai_provider_probe_reports_real_upstream_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def scenario() -> None:
+        socket = FakeKyutaiSocket()
+        session = KyutaiLiveSttSession(socket)
+
+        async def fake_connect(*args: object, **kwargs: object) -> KyutaiLiveSttSession:
+            return session
+
+        monkeypatch.setattr(KyutaiLiveSttSession, "connect", fake_connect)
+        provider = KyutaiLiveSttProvider(base_url="ws://probe")
+
+        assert await provider.probe(language="en", max_age_seconds=0) is True
+        health = await provider.health()
+        assert health["upstream_ready"] is True
+        assert health["state"] == "closed"
+        assert socket.closed is True
 
     asyncio.run(scenario())
