@@ -1,5 +1,6 @@
 import {
   LIVE_STT_SPECULATION_CANDIDATE_EVENT,
+  LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
   LIVE_STT_SPECULATION_FINAL_EVENT,
   LIVE_STT_SPECULATION_PARTIAL_EVENT,
 } from './live-stt-authority-controller';
@@ -32,6 +33,8 @@ type SpeculationEvent = {
   text?: string;
   content?: string;
   message?: string;
+  provider_id?: string | null;
+  model_id?: string | null;
 };
 
 type AcceptedSpeculation = {
@@ -42,11 +45,25 @@ type AcceptedSpeculation = {
   session: Record<string, unknown>;
 };
 
+type ChatStreamRequestBody = Record<string, unknown> & {
+  content?: string;
+  provider_id?: string;
+  model_id?: string;
+  agent_mode?: boolean;
+  dry_run?: boolean;
+  research_mode?: string | null;
+  user_turn_id?: string;
+  speech_segment_id?: string;
+  live_voice_turn_id?: string;
+};
+
 type ActiveSpeculation = {
   sessionId: string;
   segmentId: string;
   sourceSequence: number;
   candidateText: string;
+  providerId: string | null;
+  modelId: string | null;
   generationId: string | null;
   chunks: string[];
   subscribers: Set<() => void>;
@@ -59,6 +76,7 @@ type ActiveSpeculation = {
   completed: boolean;
   error: string | null;
   reused: boolean;
+  acceptBody: ChatStreamRequestBody | null;
 };
 
 let originalFetch: typeof window.fetch | null = null;
@@ -67,7 +85,7 @@ const partials = new Map<string, string>();
 
 export function normalizeSpeculationWords(text: string): string[] {
   return [...text.matchAll(WORD_PATTERN)]
-    .map((match) => match[0].toLocaleLowerCase())
+    .map((match) => match[0].toLowerCase())
     .map((token) => token.replaceAll('’', "'"));
 }
 
@@ -80,6 +98,22 @@ export function transcriptsCanReuseSpeculation(candidate: string, final: string)
   const left = normalizeSpeculationWords(candidate);
   const right = normalizeSpeculationWords(final);
   return left.length === right.length && left.every((word, index) => word === right[index]);
+}
+
+export function speculationRequestCanReuse(
+  body: ChatStreamRequestBody | null,
+  speculativeProviderId: string | null,
+  speculativeModelId: string | null,
+): boolean {
+  if (!body) return false;
+  if (body.agent_mode === true || body.dry_run === true || body.research_mode) {
+    return false;
+  }
+  const providerId = typeof body.provider_id === 'string' ? body.provider_id : null;
+  const modelId = typeof body.model_id === 'string' ? body.model_id : null;
+  if (providerId && providerId !== speculativeProviderId) return false;
+  if (modelId && modelId !== speculativeModelId) return false;
+  return true;
 }
 
 export function initializeLiveSpeculationController(): () => void {
@@ -151,9 +185,28 @@ export function initializeLiveSpeculationController(): () => void {
     notify(active);
   };
 
+  const handleDeliverySettled = (event: Event): void => {
+    const detail = (event as CustomEvent<SttPartialDetail>).detail;
+    const active = activeSpeculation;
+    const key = partialKey(detail);
+    if (key) partials.delete(key);
+    if (
+      active
+      && active.segmentId === detail?.segmentId
+      && active.sourceSequence === detail.sourceSequence
+      && !active.reused
+    ) {
+      cancelSpeculation('accepted_final_not_routed_to_chat');
+    }
+  };
+
   window.addEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
   window.addEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, handleCandidate);
   window.addEventListener(LIVE_STT_SPECULATION_FINAL_EVENT, handleFinal);
+  window.addEventListener(
+    LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
+    handleDeliverySettled,
+  );
 
   return () => {
     if (originalFetch) window.fetch = originalFetch;
@@ -163,6 +216,10 @@ export function initializeLiveSpeculationController(): () => void {
     window.removeEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
     window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, handleCandidate);
     window.removeEventListener(LIVE_STT_SPECULATION_FINAL_EVENT, handleFinal);
+    window.removeEventListener(
+      LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
+      handleDeliverySettled,
+    );
     liveWindow[INSTALLED_KEY] = false;
   };
 }
@@ -175,24 +232,33 @@ async function interceptChatStream(input: RequestInfo | URL, init?: RequestInit)
   const match = method === 'POST' ? CHAT_STREAM_PATH.exec(url.pathname) : null;
   if (!match) return fetchImpl(input, init);
 
-  const body = parseRequestBody(init?.body);
+  const body = await parseRequestBody(input, init);
   const finalText = typeof body?.content === 'string' ? body.content.trim() : '';
   const sessionId = decodeURIComponent(match[1]);
   const active = activeSpeculation;
+  const transcriptMatches = Boolean(
+    active
+    && active.sessionId === sessionId
+    && active.finalText
+    && transcriptsCanReuseSpeculation(active.candidateText, finalText),
+  );
   if (
     !active
     || active.reused
-    || active.sessionId !== sessionId
-    || !active.finalText
-    || !transcriptsCanReuseSpeculation(active.candidateText, finalText)
+    || !transcriptMatches
     || active.error
+    || !speculationRequestCanReuse(body, active.providerId, active.modelId)
   ) {
+    if (active && active.sessionId === sessionId && active.finalText) {
+      cancelSpeculation('final_request_not_compatible');
+    }
     return fetchImpl(input, init);
   }
 
   await Promise.race([active.startedPromise, delay(120)]);
   if (!active.generationId || active.error) return fetchImpl(input, init);
   active.reused = true;
+  active.acceptBody = body;
   dispatchPerformance('llm_speculation_reused', {
     sessionId,
     segmentId: active.segmentId,
@@ -217,6 +283,8 @@ function createSpeculation(
     segmentId,
     sourceSequence,
     candidateText,
+    providerId: null,
+    modelId: null,
     generationId: null,
     chunks: [],
     subscribers: new Set(),
@@ -229,6 +297,7 @@ function createSpeculation(
     completed: false,
     error: null,
     reused: false,
+    acceptBody: null,
   };
 }
 
@@ -267,6 +336,8 @@ async function consumeSpeculation(active: ActiveSpeculation, probability?: numbe
       pending = blocks.pop() ?? '';
       for (const block of blocks) applySpeculationEvent(active, parseSseBlock(block));
     }
+    pending += decoder.decode();
+    if (pending.trim()) applySpeculationEvent(active, parseSseBlock(pending));
   } finally {
     reader.releaseLock();
     active.completed = true;
@@ -280,6 +351,8 @@ function applySpeculationEvent(active: ActiveSpeculation, event: SpeculationEven
   if (!event) return;
   if (event.type === 'speculation_started' && typeof event.generation_id === 'string') {
     active.generationId = event.generation_id;
+    active.providerId = event.provider_id ?? null;
+    active.modelId = event.model_id ?? null;
     active.resolveStarted();
     return;
   }
@@ -325,11 +398,19 @@ function createAcceptedSpeculationResponse(
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ final_text: active.finalText }),
+            body: JSON.stringify({
+              final_text: active.finalText,
+              provider_id: bodyString(active.providerId),
+              model_id: bodyString(active.modelId),
+              user_turn_id: bodyString(active.acceptBody?.user_turn_id),
+              speech_segment_id: bodyString(active.acceptBody?.speech_segment_id),
+              live_voice_turn_id: bodyString(active.acceptBody?.live_voice_turn_id),
+            }),
           },
         );
         if (!acceptedResponse.ok) throw new Error(`Speculation accept failed with status ${acceptedResponse.status}.`);
         const accepted = await acceptedResponse.json() as AcceptedSpeculation;
+        emit({ type: 'user_message', user_message: accepted.user_message });
         emit({ type: 'session', session: accepted.session });
         emit({ type: 'done', speculative_reuse: true });
         dispatchPerformance('llm_speculation_committed', {
@@ -339,6 +420,8 @@ function createAcceptedSpeculationResponse(
         });
         closed = true;
         active.subscribers.delete(update);
+        if (activeSpeculation === active) activeSpeculation = null;
+        partials.delete(`${active.segmentId}:${active.sourceSequence}`);
         controller.close();
       }).catch((error: unknown) => {
         emit({ type: 'error', message: error instanceof Error ? error.message : 'Speculation reuse failed.' });
@@ -386,14 +469,36 @@ function normalizeComparable(text: string): string {
   return normalizeSpeculationWords(text).join(' ');
 }
 
-function parseRequestBody(body: BodyInit | null | undefined): Record<string, unknown> | null {
-  if (typeof body !== 'string') return null;
-  try {
-    const parsed = JSON.parse(body) as unknown;
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
+async function parseRequestBody(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<ChatStreamRequestBody | null> {
+  const body = init?.body;
+  if (typeof body === 'string') {
+    try {
+      const parsed = JSON.parse(body) as unknown;
+      return parsed && typeof parsed === 'object'
+        ? parsed as ChatStreamRequestBody
+        : null;
+    } catch {
+      return null;
+    }
   }
+  if (input instanceof Request) {
+    try {
+      const parsed = await input.clone().json() as unknown;
+      return parsed && typeof parsed === 'object'
+        ? parsed as ChatStreamRequestBody
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function bodyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
 function parseSseBlock(block: string): SpeculationEvent | null {
