@@ -5,6 +5,11 @@ export type LiveTtsCapabilities = {
   ok: boolean;
   protocol: string;
   persistent_websocket: boolean;
+  incremental_text_ingest: boolean;
+  text_commit_deadline_ms: number;
+  text_commit_minimum_characters: number;
+  streaming_audio_chunks: boolean;
+  native_decoder_text_append: boolean;
   stateful_text_append: boolean;
   prosody_continuous_decoder: boolean;
   cancellation_generations: boolean;
