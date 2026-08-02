@@ -61,6 +61,22 @@ def _join_url(base_url: str, path: str) -> str:
     return normalized if normalized.endswith(path) else f"{normalized}{path}"
 
 
+async def _connect_websocket(
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout_seconds: float,
+) -> Any:
+    try:
+        connection = websockets.connect(url, additional_headers=headers, max_size=None)
+        return await asyncio.wait_for(connection, timeout=timeout_seconds)
+    except TypeError as exc:
+        if "additional_headers" not in str(exc):
+            raise
+        connection = websockets.connect(url, extra_headers=headers, max_size=None)
+        return await asyncio.wait_for(connection, timeout=timeout_seconds)
+
+
 def pcm16le_to_float32(pcm16le: bytes) -> list[float]:
     if len(pcm16le) % 2:
         raise ValueError("PCM16 payload must contain whole samples")
@@ -124,11 +140,11 @@ class KyutaiLiveSttSession:
         url = _join_url(base_url, KYUTAI_STT_PATH)
         headers = {"kyutai-api-key": api_key}
         try:
-            try:
-                connection = websockets.connect(url, additional_headers=headers, max_size=None)
-            except TypeError:  # websockets 12 compatibility
-                connection = websockets.connect(url, extra_headers=headers, max_size=None)
-            websocket = await asyncio.wait_for(connection, timeout=connect_timeout_seconds)
+            websocket = await _connect_websocket(
+                url,
+                headers=headers,
+                timeout_seconds=connect_timeout_seconds,
+            )
             ready_raw = await asyncio.wait_for(websocket.recv(), timeout=connect_timeout_seconds)
             ready = msgpack.unpackb(ready_raw, raw=False)
             if ready.get("type") == "Error":
@@ -195,6 +211,8 @@ class KyutaiLiveSttSession:
                     )
 
             await asyncio.wait_for(wait_for_model(), timeout=self._flush_timeout_seconds)
+            if self._closed:
+                raise KyutaiLiveSttError("Kyutai STT session closed while flushing")
             if attempt_id in self._cancelled_attempts:
                 raise asyncio.CancelledError(f"Kyutai flush {attempt_id} was cancelled")
 
@@ -233,8 +251,7 @@ class KyutaiLiveSttSession:
             yield event
 
     async def close(self) -> None:
-        if self._closed:
-            return
+        already_closed = self._closed
         self._closed = True
         with suppress(Exception):
             await self._websocket.close()
@@ -244,7 +261,8 @@ class KyutaiLiveSttSession:
                 await self._reader_task
         async with self._step_condition:
             self._step_condition.notify_all()
-        await self._events.put(None)
+        if not already_closed:
+            await self._events.put(None)
 
     async def _send_pcm16_frame(self, pcm16le: bytes) -> None:
         floats = pcm16le_to_float32(pcm16le)
