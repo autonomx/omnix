@@ -17,6 +17,7 @@ import websockets
 
 from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_FINAL,
+    CAP_CLIENT_AUDIO_REPLAY,
     CAP_CONTINUOUS_WORDS,
     CAP_DELAYED_FLUSH,
     CAP_SEMANTIC_ENDPOINTING,
@@ -37,7 +38,9 @@ SUPPORTED_LANGUAGES = frozenset({"en", "en-us", "en-ca", "en-gb", "fr", "fr-ca",
 
 
 class KyutaiLiveSttError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 @dataclass
@@ -101,6 +104,7 @@ class KyutaiLiveSttSession:
                 CAP_SEMANTIC_ENDPOINTING,
                 CAP_DELAYED_FLUSH,
                 CAP_AUTHORITATIVE_FINAL,
+                CAP_CLIENT_AUDIO_REPLAY,
             }
         ),
     )
@@ -126,6 +130,9 @@ class KyutaiLiveSttSession:
         self._send_lock = asyncio.Lock()
         self._flush_lock = asyncio.Lock()
         self._cancelled_attempts: set[str] = set()
+        self._flush_cancel_events: dict[str, asyncio.Event] = {}
+        self._pending_word_text = ""
+        self._pending_word_start_ms: float | None = None
         self._closed = False
 
     @classmethod
@@ -148,12 +155,20 @@ class KyutaiLiveSttSession:
             )
             ready_raw = await asyncio.wait_for(websocket.recv(), timeout=connect_timeout_seconds)
             ready = msgpack.unpackb(ready_raw, raw=False)
+            if not isinstance(ready, dict):
+                await websocket.close()
+                raise KyutaiLiveSttError("Kyutai ready payload was not a map", retryable=False)
             if ready.get("type") == "Error":
                 await websocket.close()
-                raise KyutaiLiveSttError(str(ready.get("message", "Kyutai service rejected the session")))
+                message = str(ready.get("message", "Kyutai service rejected the session"))
+                retryable = not any(token in message.lower() for token in ("auth", "token", "schema", "config"))
+                raise KyutaiLiveSttError(message, retryable=retryable)
             if ready.get("type") != "Ready":
                 await websocket.close()
-                raise KyutaiLiveSttError(f"Expected Kyutai Ready, received {ready.get('type')!r}")
+                raise KyutaiLiveSttError(
+                    f"Expected Kyutai Ready, received {ready.get('type')!r}",
+                    retryable=False,
+                )
         except Exception as exc:
             if isinstance(exc, KyutaiLiveSttError):
                 raise
@@ -190,58 +205,78 @@ class KyutaiLiveSttSession:
     async def flush(self, attempt_id: str) -> LiveSttFlushResult:
         async with self._flush_lock:
             started = time.perf_counter()
-            self._cancelled_attempts.discard(attempt_id)
-            await self._events.put(LiveSttEvent(type="flush_started", attempt_id=attempt_id))
-
-            if self._pcm_buffer:
-                frame_bytes = KYUTAI_FRAME_SAMPLES * 2
-                padded = bytes(self._pcm_buffer) + bytes(frame_bytes - len(self._pcm_buffer))
-                self._pcm_buffer.clear()
-                await self._send_pcm16_frame(padded)
-
-            target_model_time = self._current_model_time + self._delay_seconds
-            zero_frame = bytes(KYUTAI_FRAME_SAMPLES * 2)
-            frame_count = math.ceil(self._delay_seconds / KYUTAI_FRAME_SECONDS) + 1
-            for _ in range(frame_count):
-                await self._send_pcm16_frame(zero_frame)
-
-            async def wait_for_model() -> None:
-                async with self._step_condition:
-                    await self._step_condition.wait_for(
-                        lambda: self._current_model_time > target_model_time or self._closed
-                    )
-
-            await asyncio.wait_for(wait_for_model(), timeout=self._flush_timeout_seconds)
-            if self._closed:
-                raise KyutaiLiveSttError("Kyutai STT session closed while flushing")
+            cancel_event = asyncio.Event()
+            self._flush_cancel_events[attempt_id] = cancel_event
             if attempt_id in self._cancelled_attempts:
-                raise asyncio.CancelledError(f"Kyutai flush {attempt_id} was cancelled")
+                cancel_event.set()
+            await self._events.put(LiveSttEvent(type="flush_started", attempt_id=attempt_id))
+            try:
+                if cancel_event.is_set():
+                    raise asyncio.CancelledError(f"Kyutai flush {attempt_id} was cancelled")
 
-            wall_ms = (time.perf_counter() - started) * 1000.0
-            model_ms = self._delay_seconds * 1000.0
-            result = LiveSttFlushResult(
-                attempt_id=attempt_id,
-                transcript=self.transcript,
-                wall_ms=wall_ms,
-                model_ms=model_ms,
-                realtime_factor=(model_ms / wall_ms) if wall_ms > 0 else 0.0,
-            )
-            await self._events.put(
-                LiveSttEvent(
-                    type="flush_completed",
-                    text=result.transcript,
+                if self._pcm_buffer:
+                    frame_bytes = KYUTAI_FRAME_SAMPLES * 2
+                    padded = bytes(self._pcm_buffer) + bytes(frame_bytes - len(self._pcm_buffer))
+                    self._pcm_buffer.clear()
+                    await self._send_pcm16_frame(padded)
+
+                target_model_time = self._current_model_time + self._delay_seconds
+                zero_frame = bytes(KYUTAI_FRAME_SAMPLES * 2)
+                frame_count = math.ceil(self._delay_seconds / KYUTAI_FRAME_SECONDS) + 1
+                for _ in range(frame_count):
+                    if cancel_event.is_set():
+                        raise asyncio.CancelledError(f"Kyutai flush {attempt_id} was cancelled")
+                    await self._send_pcm16_frame(zero_frame)
+
+                async def wait_for_model() -> None:
+                    async with self._step_condition:
+                        await self._step_condition.wait_for(
+                            lambda: (
+                                self._current_model_time > target_model_time
+                                or self._closed
+                                or cancel_event.is_set()
+                            )
+                        )
+
+                await asyncio.wait_for(wait_for_model(), timeout=self._flush_timeout_seconds)
+                if self._closed:
+                    raise KyutaiLiveSttError("Kyutai STT session closed while flushing")
+                if cancel_event.is_set():
+                    raise asyncio.CancelledError(f"Kyutai flush {attempt_id} was cancelled")
+
+                wall_ms = (time.perf_counter() - started) * 1000.0
+                model_ms = self._delay_seconds * 1000.0
+                result = LiveSttFlushResult(
                     attempt_id=attempt_id,
-                    fields={
-                        "wall_ms": result.wall_ms,
-                        "model_ms": result.model_ms,
-                        "realtime_factor": result.realtime_factor,
-                    },
+                    transcript=self.transcript,
+                    wall_ms=wall_ms,
+                    model_ms=model_ms,
+                    realtime_factor=(wall_ms / model_ms) if model_ms > 0 else 0.0,
                 )
-            )
-            return result
+                await self._events.put(
+                    LiveSttEvent(
+                        type="flush_completed",
+                        text=result.transcript,
+                        attempt_id=attempt_id,
+                        fields={
+                            "wall_ms": result.wall_ms,
+                            "model_ms": result.model_ms,
+                            "realtime_factor": result.realtime_factor,
+                        },
+                    )
+                )
+                return result
+            finally:
+                self._flush_cancel_events.pop(attempt_id, None)
+                self._cancelled_attempts.discard(attempt_id)
 
     async def cancel_flush(self, attempt_id: str) -> None:
         self._cancelled_attempts.add(attempt_id)
+        cancel_event = self._flush_cancel_events.get(attempt_id)
+        if cancel_event is not None:
+            cancel_event.set()
+        async with self._step_condition:
+            self._step_condition.notify_all()
         await self._events.put(LiveSttEvent(type="flush_cancelled", attempt_id=attempt_id))
 
     async def events(self) -> AsyncIterator[LiveSttEvent]:
@@ -254,14 +289,16 @@ class KyutaiLiveSttSession:
     async def close(self) -> None:
         already_closed = self._closed
         self._closed = True
+        for event in self._flush_cancel_events.values():
+            event.set()
+        async with self._step_condition:
+            self._step_condition.notify_all()
         with suppress(Exception):
             await self._websocket.close()
         if self._reader_task and self._reader_task is not asyncio.current_task():
             self._reader_task.cancel()
             with suppress(asyncio.CancelledError):
                 await self._reader_task
-        async with self._step_condition:
-            self._step_condition.notify_all()
         if not already_closed:
             await self._events.put(None)
 
@@ -279,24 +316,27 @@ class KyutaiLiveSttSession:
         try:
             async for raw in self._websocket:
                 message = msgpack.unpackb(raw, raw=False)
+                if not isinstance(message, dict):
+                    raise KyutaiLiveSttError("Kyutai message was not a map", retryable=False)
                 message_type = str(message.get("type", ""))
                 if message_type == "Word":
                     text = str(message.get("text", ""))
                     self._transcript_parts.append(text)
-                    start_ms = float(message.get("start_time", 0.0)) * 1000.0
-                    await self._events.put(
-                        LiveSttEvent(type="word", text=text, start_ms=start_ms)
-                    )
-                    await self._events.put(
-                        LiveSttEvent(type="partial", text=self.transcript)
-                    )
+                    self._pending_word_text = text
+                    self._pending_word_start_ms = float(message.get("start_time", 0.0)) * 1000.0
+                    await self._events.put(LiveSttEvent(type="partial", text=self.transcript))
                 elif message_type == "EndWord":
+                    end_ms = float(message.get("stop_time", 0.0)) * 1000.0
                     await self._events.put(
                         LiveSttEvent(
-                            type="word_end",
-                            end_ms=float(message.get("stop_time", 0.0)) * 1000.0,
+                            type="word",
+                            text=self._pending_word_text,
+                            start_ms=self._pending_word_start_ms,
+                            end_ms=end_ms,
                         )
                     )
+                    self._pending_word_text = ""
+                    self._pending_word_start_ms = None
                 elif message_type == "Step":
                     self._current_model_time += KYUTAI_FRAME_SECONDS
                     self._steps_seen += 1
@@ -304,7 +344,7 @@ class KyutaiLiveSttSession:
                     if self._steps_seen > KYUTAI_STARTUP_SUPPRESSION_STEPS and len(probabilities) > 2:
                         probability = self._pause_ema.update(
                             dt=KYUTAI_FRAME_SECONDS,
-                            new_value=max(0.0, float(probabilities[2])),
+                            new_value=max(0.0, min(1.0, float(probabilities[2]))),
                         )
                         await self._events.put(
                             LiveSttEvent(
@@ -323,19 +363,23 @@ class KyutaiLiveSttSession:
                 elif message_type == "Error":
                     raise KyutaiLiveSttError(str(message.get("message", "Kyutai STT error")))
                 elif message_type != "Ready":
-                    await self._events.put(
-                        LiveSttEvent(type="unknown", fields={"message_type": message_type})
+                    raise KyutaiLiveSttError(
+                        f"Unknown Kyutai message type: {message_type!r}",
+                        retryable=False,
                     )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - transport/schema failures become normalized provider events
             if not self._closed:
+                retryable = getattr(exc, "retryable", True)
                 await self._events.put(
-                    LiveSttEvent(type="error", text=str(exc), fields={"retryable": True})
+                    LiveSttEvent(type="error", text=str(exc), fields={"retryable": retryable})
                 )
         finally:
             if not self._closed:
                 self._closed = True
+                for event in self._flush_cancel_events.values():
+                    event.set()
                 async with self._step_condition:
                     self._step_condition.notify_all()
                 await self._events.put(None)
@@ -360,11 +404,17 @@ class KyutaiLiveSttProvider:
         )
         self._last_ready_at: float | None = None
         self._last_error: str | None = None
+        self._last_probe_at = 0.0
+        self._last_probe_ok = False
+        self._probe_lock = asyncio.Lock()
 
     async def create_live_session(self, *, language: str | None = None) -> KyutaiLiveSttSession:
         normalized_language = _normalize_language(language)
         if normalized_language not in SUPPORTED_LANGUAGES:
-            raise KyutaiLiveSttError(f"Kyutai live STT does not support language {normalized_language!r}")
+            raise KyutaiLiveSttError(
+                f"Kyutai live STT does not support language {normalized_language!r}",
+                retryable=False,
+            )
         if not self.breaker.allow_new_session():
             snapshot = self.breaker.snapshot()
             raise KyutaiLiveSttError(
@@ -379,12 +429,41 @@ class KyutaiLiveSttProvider:
             )
         except Exception as exc:
             self._last_error = str(exc)
-            self.breaker.record_failure(transient=not isinstance(exc, ValueError))
+            self._last_probe_ok = False
+            retryable = getattr(exc, "retryable", True)
+            self.breaker.record_failure(transient=retryable)
             raise
-        self._last_ready_at = time.time()
+        now = time.time()
+        self._last_ready_at = now
         self._last_error = None
+        self._last_probe_at = time.monotonic()
+        self._last_probe_ok = True
         self.breaker.record_success()
         return session
+
+    def record_runtime_failure(self, message: str, *, retryable: bool = True) -> None:
+        self._last_error = message
+        self._last_probe_ok = False
+        self.breaker.record_failure(transient=retryable)
+
+    async def probe(self, *, language: str | None = None, max_age_seconds: float = 5.0) -> bool:
+        now = time.monotonic()
+        if now - self._last_probe_at <= max_age_seconds:
+            return self._last_probe_ok
+        async with self._probe_lock:
+            now = time.monotonic()
+            if now - self._last_probe_at <= max_age_seconds:
+                return self._last_probe_ok
+            try:
+                session = await self.create_live_session(language=language)
+            except Exception:
+                self._last_probe_at = time.monotonic()
+                self._last_probe_ok = False
+                return False
+            await session.close()
+            self._last_probe_at = time.monotonic()
+            self._last_probe_ok = True
+            return True
 
     async def health(self) -> Mapping[str, Any]:
         snapshot = self.breaker.snapshot()
@@ -392,6 +471,7 @@ class KyutaiLiveSttProvider:
             "provider": self.provider_name,
             "base_url": self.base_url,
             "state": snapshot.state.value,
+            "upstream_ready": self._last_probe_ok,
             "failures_in_window": snapshot.failures_in_window,
             "attempts_in_window": snapshot.attempts_in_window,
             "retry_after_seconds": snapshot.retry_after_seconds,
