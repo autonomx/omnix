@@ -255,7 +255,7 @@ export class StreamingFloat32Resampler {
       this.carry = new Float32Array();
       this.position = 0;
     }
-    const combined = concatFloat32([this.carry, audio]);
+    const combined = concatFloat32([this.carry, audio]) as Float32Array<ArrayBuffer>;
     if (combined.length < 2) {
       this.carry = combined;
       return new Float32Array();
