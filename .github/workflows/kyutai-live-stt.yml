@@ -34,7 +34,7 @@ jobs:
       - name: Install focused dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff pytest fastapi httpx uvicorn msgpack playwright requests "websockets>=12"
+          python -m pip install ruff pytest fastapi httpx uvicorn msgpack pillow playwright requests "websockets>=12"
           npm install
 
       - name: Lint live latency modules
