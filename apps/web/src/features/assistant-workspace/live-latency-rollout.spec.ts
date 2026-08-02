@@ -5,6 +5,7 @@ import {
   transcriptsCanReuseSpeculation,
 } from './live-speculation-controller';
 import { AdaptiveTtsBufferPolicy } from './live-tts-adaptive-buffer-controller';
+import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
 
 const locationLike = { protocol: 'http:', hostname: 'localhost' } as Pick<Location, 'protocol' | 'hostname'>;
 
@@ -49,6 +50,15 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(transcriptsCanReuseSpeculation('Tell me a story', 'tell me a story!')).toBe(true);
     expect(transcriptsCanReuseSpeculation('Tell me a story', 'Tell me the story')).toBe(false);
     expect(transcriptIsSpeculationSafe('Wait, no I mean tell me a story')).toBe(false);
+  });
+
+  it('commits streamed LLM text to TTS after the low-latency deadline', () => {
+    const clauses = new StableClauseAccumulator();
+    expect(clauses.append('This response starts early', 1_000)).toEqual([]);
+    expect(clauses.takeReady(1_141)).toEqual([
+      { text: 'This response starts', reason: 'deadline' },
+    ]);
+    expect(clauses.pendingText()).toBe('early');
   });
 
   it('raises buffering after underruns and cautiously lowers it after stable turns', () => {
