@@ -4,7 +4,6 @@ import os
 import shutil
 import signal
 import subprocess
-import sys
 import threading
 from pathlib import Path
 
@@ -63,9 +62,9 @@ def _stop_service(base_command: list[str]) -> None:
     print("[KYUTAI MOSHI] Stopping Docker Compose service stt...", flush=True)
     try:
         subprocess.run(
-            [*base_command, "stop", "stt"],
+            [*base_command, "stop", "--timeout", "3", "stt"],
             check=False,
-            timeout=30,
+            timeout=6,
         )
     except Exception as exc:
         print(
@@ -87,23 +86,20 @@ def main() -> int:
     print("[KYUTAI MOSHI] Starting: " + " ".join(command), flush=True)
     process = subprocess.Popen(command, cwd=str(root))
 
-    try:
-        while process.poll() is None and not _STOP_REQUESTED.wait(0.25):
-            pass
-        if _STOP_REQUESTED.is_set() and process.poll() is None:
-            _stop_service(base_command)
+    while process.poll() is None and not _STOP_REQUESTED.wait(0.25):
+        pass
+
+    if _STOP_REQUESTED.is_set() and process.poll() is None:
+        _stop_service(base_command)
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            process.terminate()
             try:
-                process.wait(timeout=15)
+                process.wait(timeout=1)
             except subprocess.TimeoutExpired:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=5)
-    finally:
-        if _STOP_REQUESTED.is_set():
-            _stop_service(base_command)
+                process.kill()
+                process.wait(timeout=1)
 
     return int(process.returncode or 0)
 
