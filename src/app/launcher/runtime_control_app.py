@@ -7,9 +7,13 @@ from pathlib import Path
 
 from app.launcher import control_app
 from app.launcher.huggingface_token_control import (
-    enhance_launcher_html,
-    register_huggingface_token_controls,
+    enhance_launcher_html as enhance_huggingface_token_html,
 )
+from app.launcher.huggingface_token_control import register_huggingface_token_controls
+from app.launcher.kyutai_readiness_control import (
+    enhance_launcher_html as enhance_kyutai_readiness_html,
+)
+from app.launcher.kyutai_readiness_control import register_kyutai_readiness_controls
 from app.launcher.kyutai_services import build_kyutai_service_specs
 from app.launcher.service_manager import (
     LauncherServiceManager,
@@ -19,6 +23,22 @@ from app.launcher.service_manager import (
 
 app = control_app.app
 IMAGE_SERVICE_URL = "http://127.0.0.1:5301"
+
+_BASE_REFRESH_BLOCK = "  refresh();\n  window.setInterval(refresh, 2000);"
+_HUGGINGFACE_REFRESH_BLOCK = """  refreshHuggingFaceTokenStatus();
+  refresh();
+  window.setInterval(refresh, 2000);
+  window.setInterval(refreshHuggingFaceTokenStatus, 5000);"""
+_KYUTAI_REFRESH_BLOCK = """  refreshKyutaiReadiness(false);
+  refresh();
+  window.setInterval(refresh, 2000);
+  window.setInterval(() => refreshKyutaiReadiness(false), 5000);"""
+_COMBINED_REFRESH_BLOCK = """  refreshHuggingFaceTokenStatus();
+  refreshKyutaiReadiness(false);
+  refresh();
+  window.setInterval(refresh, 2000);
+  window.setInterval(refreshHuggingFaceTokenStatus, 5000);
+  window.setInterval(() => refreshKyutaiReadiness(false), 5000);"""
 
 
 def build_runtime_service_specs():
@@ -110,8 +130,28 @@ def build_runtime_service_specs():
     return specs
 
 
+def _enhance_runtime_launcher_html(source: str) -> str:
+    with_token = enhance_huggingface_token_html(source)
+    if _HUGGINGFACE_REFRESH_BLOCK not in with_token:
+        raise RuntimeError("launcher Hugging Face refresh block was not found")
+    prepared = with_token.replace(
+        _HUGGINGFACE_REFRESH_BLOCK,
+        _BASE_REFRESH_BLOCK,
+        1,
+    )
+    with_readiness = enhance_kyutai_readiness_html(prepared)
+    if _KYUTAI_REFRESH_BLOCK not in with_readiness:
+        raise RuntimeError("launcher Kyutai refresh block was not found")
+    return with_readiness.replace(
+        _KYUTAI_REFRESH_BLOCK,
+        _COMBINED_REFRESH_BLOCK,
+        1,
+    )
+
+
 reset_default_manager_for_tests(LauncherServiceManager(build_runtime_service_specs()))
-control_app._HTML = enhance_launcher_html(control_app._HTML)
+control_app._HTML = _enhance_runtime_launcher_html(control_app._HTML)
 register_huggingface_token_controls(app)
+register_kyutai_readiness_controls(app)
 
 __all__ = ["app", "build_runtime_service_specs"]
