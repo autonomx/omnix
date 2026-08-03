@@ -66,7 +66,7 @@ def _stop_service(base_command: list[str]) -> None:
             check=False,
             timeout=6,
         )
-    except Exception as exc:
+    except (OSError, subprocess.SubprocessError) as exc:
         print(
             f"[KYUTAI MOSHI] Could not stop stt cleanly: {type(exc).__name__}: {exc}",
             flush=True,
