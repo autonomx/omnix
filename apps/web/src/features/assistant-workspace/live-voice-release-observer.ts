@@ -11,6 +11,8 @@ export type LiveVoiceLatencyMetric =
   | 'stt_finalize_ms'
   | 'final_to_first_token_ms'
   | 'first_token_to_first_audio_ms'
+  | 'final_to_first_audio_ms'
+  | 'stt_request_to_first_audio_ms'
   | 'interruption_to_silence_ms';
 
 export type LiveVoiceQualityMetric =
@@ -125,6 +127,8 @@ function handleDiagnosticEvent(event: Event): void {
   if (diagnosticEvent === 'phrase_first_frame_received' && state.firstAudioAt === null) {
     state.firstAudioAt = now;
     recordLatency('first_token_to_first_audio_ms', elapsed(state.firstTokenAt, now));
+    recordLatency('final_to_first_audio_ms', elapsed(state.sttFinalAt, now));
+    recordLatency('stt_request_to_first_audio_ms', elapsed(state.sttRequestedAt, now));
     return;
   }
   if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {
