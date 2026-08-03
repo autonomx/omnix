@@ -125,6 +125,32 @@ def environment_gate(name: str, *, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on", "passed"}
 
 
+def classify_kyutai_probe_error(value: object) -> str | None:
+    message = str(value or "").strip().lower()
+    if not message:
+        return None
+    if any(token in message for token in ("connection refused", "winerror 10061", "errno 111")):
+        return "upstream_connection_refused"
+    if any(token in message for token in ("timed out", "timeout", "deadline exceeded")):
+        return "upstream_connect_timeout"
+    if any(token in message for token in ("unauthorized", "forbidden", "authentication", "api key", "token")):
+        return "upstream_auth_rejected"
+    if any(
+        token in message
+        for token in (
+            "expected kyutai ready",
+            "ready payload",
+            "unknown kyutai message type",
+            "invalid status code",
+            "handshake",
+        )
+    ):
+        return "upstream_protocol_error"
+    if any(token in message for token in ("name or service not known", "getaddrinfo", "dns")):
+        return "upstream_dns_error"
+    return "upstream_probe_failed"
+
+
 def evaluate_kyutai_authority(
     health: Mapping[str, Any],
     *,
@@ -185,6 +211,9 @@ def evaluate_kyutai_authority(
         reasons.append("language_not_supported")
     if not upstream_ready:
         reasons.append("upstream_not_ready")
+        probe_error = classify_kyutai_probe_error(health.get("last_error"))
+        if probe_error:
+            reasons.append(probe_error)
     if not model_warm:
         reasons.append("model_not_warm")
     if resolved_mode is KyutaiAuthorityMode.AUTO:
