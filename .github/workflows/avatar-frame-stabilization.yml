@@ -76,6 +76,9 @@ jobs:
           cat > apps/web/tsconfig.avatar.json <<'JSON'
           {
             "extends": "./tsconfig.json",
+            "compilerOptions": {
+              "types": []
+            },
             "include": [
               "src/features/chatbot/CharacterAvatarPanel.tsx",
               "src/features/chatbot/characterAvatarClient.ts",
