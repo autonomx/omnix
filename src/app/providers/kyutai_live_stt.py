@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import math
 import os
+import re
 import sys
 import time
 from array import array
@@ -36,11 +37,46 @@ KYUTAI_STARTUP_SUPPRESSION_STEPS = 12
 KYUTAI_STT_PATH = "/api/asr-streaming"
 SUPPORTED_LANGUAGES = frozenset({"en", "en-us", "en-ca", "en-gb", "fr", "fr-ca", "fr-fr"})
 
+_SAFE_PROBE_ERROR_CODES = frozenset(
+    {
+        "upstream_auth_rejected",
+        "upstream_client_incompatible",
+        "upstream_connection_closed",
+        "upstream_connection_refused",
+        "upstream_connect_timeout",
+        "upstream_dns_error",
+        "upstream_endpoint_not_found",
+        "upstream_probe_failed",
+        "upstream_protocol_error",
+        "upstream_rate_limited",
+        "upstream_service_rejected",
+        "upstream_service_unavailable",
+        "upstream_tls_error",
+    }
+)
+_NON_RETRYABLE_PROBE_ERRORS = frozenset(
+    {
+        "upstream_auth_rejected",
+        "upstream_client_incompatible",
+        "upstream_endpoint_not_found",
+        "upstream_protocol_error",
+    }
+)
+
 
 class KyutaiLiveSttError(RuntimeError):
-    def __init__(self, message: str, *, retryable: bool = True) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = True,
+        code: str | None = None,
+        stage: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
+        self.code = code if code in _SAFE_PROBE_ERROR_CODES else None
+        self.stage = stage
 
 
 @dataclass
@@ -65,6 +101,101 @@ def _join_url(base_url: str, path: str) -> str:
     return normalized if normalized.endswith(path) else f"{normalized}{path}"
 
 
+def _exception_chain(exc: BaseException) -> tuple[BaseException, ...]:
+    chain: list[BaseException] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        chain.append(current)
+        seen.add(id(current))
+        next_error = current.__cause__ or current.__context__
+        current = next_error if isinstance(next_error, BaseException) else None
+    return tuple(chain)
+
+
+def _exception_status_code(exc: BaseException) -> int | None:
+    for candidate in (exc, getattr(exc, "response", None)):
+        if candidate is None:
+            continue
+        for attribute in ("status_code", "status"):
+            value = getattr(candidate, attribute, None)
+            if isinstance(value, int):
+                return value
+    match = re.search(r"(?:http|status(?: code)?)\s*[:=]?\s*(\d{3})\b", str(exc), re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def classify_kyutai_connect_exception(exc: BaseException) -> str:
+    chain = _exception_chain(exc)
+    for item in chain:
+        explicit = getattr(item, "code", None)
+        if explicit in _SAFE_PROBE_ERROR_CODES:
+            return str(explicit)
+
+    statuses = [status for item in chain if (status := _exception_status_code(item)) is not None]
+    if any(status in {401, 403} for status in statuses):
+        return "upstream_auth_rejected"
+    if 404 in statuses:
+        return "upstream_endpoint_not_found"
+    if 429 in statuses:
+        return "upstream_rate_limited"
+    if any(status >= 500 for status in statuses):
+        return "upstream_service_unavailable"
+
+    message = " | ".join(f"{type(item).__name__}: {item}" for item in chain).lower()
+    if any(token in message for token in ("connection refused", "winerror 10061", "errno 111")):
+        return "upstream_connection_refused"
+    if any(token in message for token in ("timed out", "timeout", "deadline exceeded")):
+        return "upstream_connect_timeout"
+    if any(token in message for token in ("getaddrinfo", "name or service not known", "dns")):
+        return "upstream_dns_error"
+    if any(
+        token in message
+        for token in (
+            "unauthorized",
+            "forbidden",
+            "authentication",
+            "api key",
+            "invalid token",
+            "token rejected",
+        )
+    ):
+        return "upstream_auth_rejected"
+    if any(token in message for token in ("certificate", "ssl", "tls")):
+        return "upstream_tls_error"
+    if "additional_headers" in message and "extra_headers" in message:
+        return "upstream_client_incompatible"
+    if any(
+        token in message
+        for token in (
+            "connection closed",
+            "closed while",
+            "no close frame",
+            "connectionclosed",
+        )
+    ):
+        return "upstream_connection_closed"
+    if any(
+        token in message
+        for token in (
+            "expected kyutai ready",
+            "ready payload",
+            "unknown kyutai message type",
+            "did not receive a valid http response",
+            "invalid status",
+            "invalidstatus",
+            "invalid message",
+            "invalidmessage",
+            "handshake",
+            "server rejected websocket",
+        )
+    ):
+        return "upstream_protocol_error"
+    if any(token in message for token in ("service rejected", "rejected the session")):
+        return "upstream_service_rejected"
+    return "upstream_probe_failed"
+
+
 async def _connect_websocket(
     url: str,
     *,
@@ -77,8 +208,18 @@ async def _connect_websocket(
     except TypeError as exc:
         if "additional_headers" not in str(exc):
             raise
-        connection = websockets.connect(url, extra_headers=headers, max_size=None)
-        return await asyncio.wait_for(connection, timeout=timeout_seconds)
+        try:
+            connection = websockets.connect(url, extra_headers=headers, max_size=None)
+            return await asyncio.wait_for(connection, timeout=timeout_seconds)
+        except TypeError as fallback_exc:
+            if "extra_headers" not in str(fallback_exc):
+                raise
+            raise KyutaiLiveSttError(
+                "Installed websockets client accepts neither additional_headers nor extra_headers",
+                retryable=False,
+                code="upstream_client_incompatible",
+                stage="connect",
+            ) from fallback_exc
 
 
 def pcm16le_to_float32(pcm16le: bytes) -> list[float]:
@@ -157,22 +298,42 @@ class KyutaiLiveSttSession:
             ready = msgpack.unpackb(ready_raw, raw=False)
             if not isinstance(ready, dict):
                 await websocket.close()
-                raise KyutaiLiveSttError("Kyutai ready payload was not a map", retryable=False)
+                raise KyutaiLiveSttError(
+                    "Kyutai ready payload was not a map",
+                    retryable=False,
+                    code="upstream_protocol_error",
+                    stage="ready",
+                )
             if ready.get("type") == "Error":
                 await websocket.close()
                 message = str(ready.get("message", "Kyutai service rejected the session"))
-                retryable = not any(token in message.lower() for token in ("auth", "token", "schema", "config"))
-                raise KyutaiLiveSttError(message, retryable=retryable)
+                code = classify_kyutai_connect_exception(RuntimeError(message))
+                if code == "upstream_probe_failed":
+                    code = "upstream_service_rejected"
+                raise KyutaiLiveSttError(
+                    message,
+                    retryable=code not in _NON_RETRYABLE_PROBE_ERRORS,
+                    code=code,
+                    stage="ready",
+                )
             if ready.get("type") != "Ready":
                 await websocket.close()
                 raise KyutaiLiveSttError(
                     f"Expected Kyutai Ready, received {ready.get('type')!r}",
                     retryable=False,
+                    code="upstream_protocol_error",
+                    stage="ready",
                 )
         except Exception as exc:
             if isinstance(exc, KyutaiLiveSttError):
                 raise
-            raise KyutaiLiveSttError(f"Could not connect to Kyutai STT at {url}: {exc}") from exc
+            code = classify_kyutai_connect_exception(exc)
+            raise KyutaiLiveSttError(
+                f"Could not connect to Kyutai STT at {url}: {type(exc).__name__}: {exc}",
+                retryable=code not in _NON_RETRYABLE_PROBE_ERRORS,
+                code=code,
+                stage="connect",
+            ) from exc
 
         session = cls(
             websocket,
@@ -317,7 +478,12 @@ class KyutaiLiveSttSession:
             async for raw in self._websocket:
                 message = msgpack.unpackb(raw, raw=False)
                 if not isinstance(message, dict):
-                    raise KyutaiLiveSttError("Kyutai message was not a map", retryable=False)
+                    raise KyutaiLiveSttError(
+                        "Kyutai message was not a map",
+                        retryable=False,
+                        code="upstream_protocol_error",
+                        stage="stream",
+                    )
                 message_type = str(message.get("type", ""))
                 if message_type == "Word":
                     text = str(message.get("text", ""))
@@ -361,19 +527,35 @@ class KyutaiLiveSttSession:
                         LiveSttEvent(type="marker", fields={"id": message.get("id")})
                     )
                 elif message_type == "Error":
-                    raise KyutaiLiveSttError(str(message.get("message", "Kyutai STT error")))
+                    message_text = str(message.get("message", "Kyutai STT error"))
+                    code = classify_kyutai_connect_exception(RuntimeError(message_text))
+                    if code == "upstream_probe_failed":
+                        code = "upstream_service_rejected"
+                    raise KyutaiLiveSttError(
+                        message_text,
+                        retryable=code not in _NON_RETRYABLE_PROBE_ERRORS,
+                        code=code,
+                        stage="stream",
+                    )
                 elif message_type != "Ready":
                     raise KyutaiLiveSttError(
                         f"Unknown Kyutai message type: {message_type!r}",
                         retryable=False,
+                        code="upstream_protocol_error",
+                        stage="stream",
                     )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - transport/schema failures become normalized provider events
             if not self._closed:
                 retryable = getattr(exc, "retryable", True)
+                code = getattr(exc, "code", None) or classify_kyutai_connect_exception(exc)
                 await self._events.put(
-                    LiveSttEvent(type="error", text=str(exc), fields={"retryable": retryable})
+                    LiveSttEvent(
+                        type="error",
+                        text=str(exc),
+                        fields={"retryable": retryable, "error_code": code},
+                    )
                 )
         finally:
             if not self._closed:
@@ -404,6 +586,9 @@ class KyutaiLiveSttProvider:
         )
         self._last_ready_at: float | None = None
         self._last_error: str | None = None
+        self._last_error_code: str | None = None
+        self._last_error_type: str | None = None
+        self._last_error_stage: str | None = None
         self._last_probe_at = 0.0
         self._last_probe_ok = False
         self._probe_lock = asyncio.Lock()
@@ -429,6 +614,10 @@ class KyutaiLiveSttProvider:
             )
         except Exception as exc:
             self._last_error = str(exc)
+            self._last_error_code = getattr(exc, "code", None) or classify_kyutai_connect_exception(exc)
+            source_error = exc.__cause__ if isinstance(exc.__cause__, BaseException) else exc
+            self._last_error_type = type(source_error).__name__
+            self._last_error_stage = getattr(exc, "stage", None) or "connect"
             self._last_probe_ok = False
             retryable = getattr(exc, "retryable", True)
             self.breaker.record_failure(transient=retryable)
@@ -436,13 +625,29 @@ class KyutaiLiveSttProvider:
         now = time.time()
         self._last_ready_at = now
         self._last_error = None
+        self._last_error_code = None
+        self._last_error_type = None
+        self._last_error_stage = None
         self._last_probe_at = time.monotonic()
         self._last_probe_ok = True
         self.breaker.record_success()
         return session
 
-    def record_runtime_failure(self, message: str, *, retryable: bool = True) -> None:
+    def record_runtime_failure(
+        self,
+        message: str,
+        *,
+        retryable: bool = True,
+        code: str | None = None,
+    ) -> None:
         self._last_error = message
+        self._last_error_code = (
+            code
+            if code in _SAFE_PROBE_ERROR_CODES
+            else classify_kyutai_connect_exception(RuntimeError(message))
+        )
+        self._last_error_type = "RuntimeFailure"
+        self._last_error_stage = "stream"
         self._last_probe_ok = False
         self.breaker.record_failure(transient=retryable)
 
@@ -477,6 +682,9 @@ class KyutaiLiveSttProvider:
             "retry_after_seconds": snapshot.retry_after_seconds,
             "last_ready_at": self._last_ready_at,
             "last_error": self._last_error,
+            "last_error_code": self._last_error_code,
+            "last_error_type": self._last_error_type,
+            "last_error_stage": self._last_error_stage,
             "sample_rate": KYUTAI_SAMPLE_RATE,
             "frame_samples": KYUTAI_FRAME_SAMPLES,
             "supported_languages": sorted(SUPPORTED_LANGUAGES),
