@@ -47,6 +47,7 @@ jobs:
             scripts/run_kyutai_moshi.py \
             src/app/launcher/huggingface_token_control.py \
             src/app/launcher/huggingface_token_store.py \
+            src/app/launcher/kyutai_readiness_control.py \
             src/app/launcher/kyutai_services.py \
             src/app/launcher/runtime_control_app.py \
             src/app/providers/live_stt_contracts.py \
@@ -58,6 +59,7 @@ jobs:
             src/app/gateway/tts_live_capabilities.py \
             src/kyutai_stt_runtime.py \
             src/tests/app/test_launcher_huggingface_token.py \
+            src/tests/app/test_launcher_kyutai_readiness.py \
             src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_live_stt_contracts.py \
@@ -71,6 +73,7 @@ jobs:
         run: |
           python -m pytest \
             src/tests/app/test_launcher_huggingface_token.py \
+            src/tests/app/test_launcher_kyutai_readiness.py \
             src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_live_stt_contracts.py \
