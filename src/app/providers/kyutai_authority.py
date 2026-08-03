@@ -3,11 +3,30 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+_SAFE_PROBE_ERROR_CODES = frozenset(
+    {
+        "upstream_auth_rejected",
+        "upstream_client_incompatible",
+        "upstream_connection_closed",
+        "upstream_connection_refused",
+        "upstream_connect_timeout",
+        "upstream_dns_error",
+        "upstream_endpoint_not_found",
+        "upstream_probe_failed",
+        "upstream_protocol_error",
+        "upstream_rate_limited",
+        "upstream_service_rejected",
+        "upstream_service_unavailable",
+        "upstream_tls_error",
+    }
+)
 
 
 class KyutaiAuthorityMode(str, Enum):
@@ -125,16 +144,49 @@ def environment_gate(name: str, *, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on", "passed"}
 
 
+def safe_kyutai_probe_error_code(value: object) -> str | None:
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in _SAFE_PROBE_ERROR_CODES else None
+
+
 def classify_kyutai_probe_error(value: object) -> str | None:
     message = str(value or "").strip().lower()
     if not message:
         return None
+    status_match = re.search(
+        r"(?:http|status(?: code)?)\s*[:=]?\s*(\d{3})\b",
+        message,
+        re.IGNORECASE,
+    )
+    status = int(status_match.group(1)) if status_match else None
+    if status in {401, 403}:
+        return "upstream_auth_rejected"
+    if status == 404:
+        return "upstream_endpoint_not_found"
+    if status == 429:
+        return "upstream_rate_limited"
+    if status is not None and status >= 500:
+        return "upstream_service_unavailable"
     if any(token in message for token in ("connection refused", "winerror 10061", "errno 111")):
         return "upstream_connection_refused"
     if any(token in message for token in ("timed out", "timeout", "deadline exceeded")):
         return "upstream_connect_timeout"
-    if any(token in message for token in ("unauthorized", "forbidden", "authentication", "api key", "token")):
+    if any(token in message for token in ("unauthorized", "forbidden", "authentication", "api key", "invalid token")):
         return "upstream_auth_rejected"
+    if any(token in message for token in ("certificate", "ssl", "tls")):
+        return "upstream_tls_error"
+    if "additional_headers" in message and "extra_headers" in message:
+        return "upstream_client_incompatible"
+    if any(
+        token in message
+        for token in (
+            "connection closed",
+            "closed while",
+            "no close frame",
+            "connectionclosed",
+        )
+    ):
+        return "upstream_connection_closed"
     if any(
         token in message
         for token in (
@@ -142,12 +194,18 @@ def classify_kyutai_probe_error(value: object) -> str | None:
             "ready payload",
             "unknown kyutai message type",
             "invalid status code",
+            "did not receive a valid http response",
+            "invalidstatus",
+            "invalidmessage",
             "handshake",
+            "server rejected websocket",
         )
     ):
         return "upstream_protocol_error"
     if any(token in message for token in ("name or service not known", "getaddrinfo", "dns")):
         return "upstream_dns_error"
+    if any(token in message for token in ("service rejected", "rejected the session")):
+        return "upstream_service_rejected"
     return "upstream_probe_failed"
 
 
@@ -211,7 +269,9 @@ def evaluate_kyutai_authority(
         reasons.append("language_not_supported")
     if not upstream_ready:
         reasons.append("upstream_not_ready")
-        probe_error = classify_kyutai_probe_error(health.get("last_error"))
+        probe_error = safe_kyutai_probe_error_code(health.get("last_error_code"))
+        if probe_error is None:
+            probe_error = classify_kyutai_probe_error(health.get("last_error"))
         if probe_error:
             reasons.append(probe_error)
     if not model_warm:
@@ -270,7 +330,11 @@ def _quality_metric_failures(
         ),
         ("underrun_turn_rate", measurements.underrun_turn_rate, thresholds.underrun_turn_rate),
     )
-    return tuple(_failed_metric(name, value, maximum) for name, value, maximum in checks if _metric_failed(value, maximum))
+    return tuple(
+        _failed_metric(name, value, maximum)
+        for name, value, maximum in checks
+        if _metric_failed(value, maximum)
+    )
 
 
 def _contention_metric_failures(
