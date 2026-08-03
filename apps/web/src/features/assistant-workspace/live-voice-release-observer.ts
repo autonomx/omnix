@@ -13,6 +13,8 @@ export type LiveVoiceLatencyMetric =
   | 'first_token_to_first_audio_ms'
   | 'final_to_first_audio_ms'
   | 'stt_request_to_first_audio_ms'
+  | 'first_pcm_to_first_audible_ms'
+  | 'speech_end_to_first_audible_ms'
   | 'interruption_to_silence_ms';
 
 export type LiveVoiceQualityMetric =
@@ -45,10 +47,12 @@ type QualityDetail = {
 };
 
 type ReleaseState = {
+  speechEndAt: number | null;
   sttRequestedAt: number | null;
   sttFinalAt: number | null;
   firstTokenAt: number | null;
-  firstAudioAt: number | null;
+  firstPcmAt: number | null;
+  firstAudibleAt: number | null;
   interruptionAt: number | null;
   turnId: string | null;
   activeTraceId: string | null;
@@ -90,11 +94,19 @@ function handlePerfEvent(event: Event): void {
   const detail = (event as CustomEvent<PerfDetail>).detail ?? {};
   const stage = typeof detail.stage === 'string' ? detail.stage : '';
   const now = performance.now();
-  if (stage === 'stt_final_requested') {
+  if (stage === 'microphone_speech_end' || stage === 'speech_end') {
     state = {
       ...emptyState(),
-      sttRequestedAt: now,
+      speechEndAt: now,
       turnId: typeof detail.turnId === 'string' ? detail.turnId : null,
+    };
+    return;
+  }
+  if (stage === 'stt_final_requested') {
+    state = {
+      ...state,
+      sttRequestedAt: now,
+      turnId: typeof detail.turnId === 'string' ? detail.turnId : state.turnId,
     };
     return;
   }
@@ -124,11 +136,17 @@ function handleDiagnosticEvent(event: Event): void {
     recordLatency('final_to_first_token_ms', elapsed(state.sttFinalAt, now));
     return;
   }
-  if (diagnosticEvent === 'phrase_first_frame_received' && state.firstAudioAt === null) {
-    state.firstAudioAt = now;
+  if (diagnosticEvent === 'phrase_first_frame_received' && state.firstPcmAt === null) {
+    state.firstPcmAt = now;
+    return;
+  }
+  if (diagnosticEvent === 'worklet_segment_started' && state.firstAudibleAt === null) {
+    state.firstAudibleAt = now;
     recordLatency('first_token_to_first_audio_ms', elapsed(state.firstTokenAt, now));
     recordLatency('final_to_first_audio_ms', elapsed(state.sttFinalAt, now));
     recordLatency('stt_request_to_first_audio_ms', elapsed(state.sttRequestedAt, now));
+    recordLatency('first_pcm_to_first_audible_ms', elapsed(state.firstPcmAt, now));
+    recordLatency('speech_end_to_first_audible_ms', elapsed(state.speechEndAt, now));
     return;
   }
   if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {
@@ -143,10 +161,14 @@ function diagnosticBelongsToActiveTurn(
   traceId: string,
 ): boolean {
   if (!state.activeTraceId || traceId === state.activeTraceId) return true;
-  return diagnosticEvent === 'phrase_first_frame_received'
-    && detail.source === 'pcm_session'
+  return (
+    detail.source === 'pcm_session'
     && state.firstTokenAt !== null
-    && state.firstAudioAt === null;
+    && (
+      (diagnosticEvent === 'phrase_first_frame_received' && state.firstPcmAt === null)
+      || (diagnosticEvent === 'worklet_segment_started' && state.firstAudibleAt === null)
+    )
+  );
 }
 
 function handleInterruption(): void {
@@ -209,10 +231,12 @@ function isQualityMetric(value: unknown): value is LiveVoiceQualityMetric {
 
 function emptyState(): ReleaseState {
   return {
+    speechEndAt: null,
     sttRequestedAt: null,
     sttFinalAt: null,
     firstTokenAt: null,
-    firstAudioAt: null,
+    firstPcmAt: null,
+    firstAudibleAt: null,
     interruptionAt: null,
     turnId: null,
     activeTraceId: null,

@@ -32,11 +32,16 @@ describe('live voice release observer', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => now);
   });
 
-  it('correlates STT, model, persistent-audio, and interruption latency without transcript content', () => {
+  it('measures microphone speech end through the first audible worklet sample', () => {
     const observations: LiveVoiceReleaseObservation[] = [];
     const listener = (event: Event) => observations.push((event as CustomEvent<LiveVoiceReleaseObservation>).detail);
     window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
     window.localStorage.setItem('omnix.liveCall.releaseScenario', 'character-normal');
+
+    now = 0;
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: { stage: 'microphone_speech_end', turnId: 'voice-turn:1' },
+    }));
     now = 100;
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
       detail: { stage: 'stt_final_requested', turnId: 'voice-turn:1' },
@@ -71,9 +76,18 @@ describe('live voice release observer', () => {
         details: {},
       },
     }));
-    now = 1_200;
+    now = 1_250;
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:chat:s1:audio-session:a1',
+        source: 'pcm_session',
+        event: 'worklet_segment_started',
+        details: {},
+      },
+    }));
+    now = 1_300;
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt'));
-    now = 1_450;
+    now = 1_550;
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
       detail: {
         traceId: 'live-call:voice-turn:1',
@@ -90,13 +104,19 @@ describe('live voice release observer', () => {
       metric_name: 'final_to_first_token_ms', value_ms: 500,
     }), 'release_observer');
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
-      metric_name: 'first_token_to_first_audio_ms', value_ms: 300,
+      metric_name: 'first_token_to_first_audio_ms', value_ms: 450,
     }), 'release_observer');
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
-      metric_name: 'final_to_first_audio_ms', value_ms: 800,
+      metric_name: 'final_to_first_audio_ms', value_ms: 950,
     }), 'release_observer');
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
-      metric_name: 'stt_request_to_first_audio_ms', value_ms: 1_000,
+      metric_name: 'stt_request_to_first_audio_ms', value_ms: 1_150,
+    }), 'release_observer');
+    expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
+      metric_name: 'first_pcm_to_first_audible_ms', value_ms: 150,
+    }), 'release_observer');
+    expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
+      metric_name: 'speech_end_to_first_audible_ms', value_ms: 1_250,
     }), 'release_observer');
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
       metric_name: 'interruption_to_silence_ms', value_ms: 250,
@@ -108,12 +128,14 @@ describe('live voice release observer', () => {
         'first_token_to_first_audio_ms',
         'final_to_first_audio_ms',
         'stt_request_to_first_audio_ms',
+        'first_pcm_to_first_audible_ms',
+        'speech_end_to_first_audible_ms',
         'interruption_to_silence_ms',
       ]);
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
   });
 
-  it('does not accept unrelated cross-trace diagnostics as first audio', () => {
+  it('does not count PCM receipt as audible playback', () => {
     now = 100;
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
       detail: { stage: 'stt_final_received', turnId: 'voice-turn:2', sttFinalizeMs: 100 },
@@ -138,8 +160,8 @@ describe('live voice release observer', () => {
     now = 300;
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
       detail: {
-        traceId: 'live-call:unrelated',
-        source: 'controller',
+        traceId: 'live-call:chat:s2:audio-session:a2',
+        source: 'pcm_session',
         event: 'phrase_first_frame_received',
         details: {},
       },
@@ -150,9 +172,43 @@ describe('live voice release observer', () => {
       expect.objectContaining({ metric_name: 'first_token_to_first_audio_ms' }),
       'release_observer',
     );
+  });
+
+  it('rejects unrelated audible events from non-PCM diagnostics', () => {
+    now = 100;
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: { stage: 'stt_final_received', turnId: 'voice-turn:3', sttFinalizeMs: 100 },
+    }));
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:voice-turn:3',
+        source: 'controller',
+        event: 'turn_intercepted',
+        details: {},
+      },
+    }));
+    now = 200;
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:voice-turn:3',
+        source: 'controller',
+        event: 'llm_text_chunk_received',
+        details: {},
+      },
+    }));
+    now = 300;
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:unrelated',
+        source: 'controller',
+        event: 'worklet_segment_started',
+        details: {},
+      },
+    }));
+
     expect(mocks.record).not.toHaveBeenCalledWith(
       'release_metric',
-      expect.objectContaining({ metric_name: 'final_to_first_audio_ms' }),
+      expect.objectContaining({ metric_name: 'first_token_to_first_audio_ms' }),
       'release_observer',
     );
   });
