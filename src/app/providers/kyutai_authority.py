@@ -6,11 +6,11 @@ import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 
-class KyutaiAuthorityMode(StrEnum):
+class KyutaiAuthorityMode(str, Enum):
     OBSERVATIONAL = "observational"
     TEST = "test"
     AUTO = "auto"
