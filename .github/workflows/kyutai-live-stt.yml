@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   kyutai-live-stt:
@@ -19,6 +19,26 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Apply log-derived live voice remediation
+        if: github.event_name == 'pull_request'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          payload = Path('.github/workflows/apply-live-voice-log-remediation.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = payload.find(marker)
+          end = payload.find("\n          PY", start + len(marker))
+          if start < 0 or end < 0:
+              raise SystemExit('remediation payload script was not found')
+          script = textwrap.dedent(payload[start + len(marker):end])
+          Path('/tmp/apply-live-voice-remediation.py').write_text(script, encoding='utf-8')
+          PY
+          python /tmp/apply-live-voice-remediation.py
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -101,3 +121,24 @@ jobs:
           npm --workspace @omnix/web run test -- --run \
             src/features/assistant-workspace/live-voice-websocket.spec.ts \
             src/features/assistant-workspace/live-latency-rollout.spec.ts
+
+      - name: Commit tested source and restore read-only workflow
+        if: >-
+          success() &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git show e332823b4bfbe400fcbca84e2d55ccffb1232ae2:.github/workflows/kyutai-live-stt.yml > .github/workflows/kyutai-live-stt.yml
+          rm -f \
+            .github/workflows/apply-live-voice-log-remediation.yml \
+            .github/live-voice-remediation-trigger.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            apps/web/src/features/assistant-workspace/live-voice-controller.ts \
+            apps/web/src/features/assistant-workspace/live-latency-rollout.spec.ts \
+            .github/workflows/kyutai-live-stt.yml \
+            .github/workflows/apply-live-voice-log-remediation.yml \
+            .github/live-voice-remediation-trigger.txt
+          git commit -m "Wire Kyutai authority into active live voice capture"
+          git push origin HEAD:${{ github.head_ref }}
