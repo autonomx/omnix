@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { resolveAuthoritySelection } from './live-stt-authority-controller';
 import {
+  resolveLiveVoiceSttSelection,
+  shouldCommitProviderEndpoint,
+} from './live-voice-controller';
+import {
   transcriptIsSpeculationSafe,
   transcriptsCanReuseSpeculation,
 } from './live-speculation-controller';
@@ -44,6 +48,33 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(selected.fallbackUsed).toBe(true);
     expect(selected.websocketUrl).toBe('ws://127.0.0.1:5201/ws/transcribe');
     expect(selected.reasons).toContain('quality_gate_not_passed');
+  });
+
+  it('uses the controller authority resolver before capture and defaults to Parakeet', async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const selected = await resolveLiveVoiceSttSelection(undefined, locationLike, fetchImpl);
+
+    expect(selected.authorityEnabled).toBe(false);
+    expect(selected.fallbackUsed).toBe(false);
+    expect(selected.reasons).toEqual(['default_parakeet']);
+    expect(selected.websocketUrl).toBe('ws://127.0.0.1:5201/ws/transcribe');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('allows provider endpoint commitment only through the controller pause state', () => {
+    const ready = {
+      authorityEnabled: true,
+      probability: 0.86,
+      endpointThreshold: 0.75,
+      speechDetected: true,
+      finalRequested: false,
+      pausePending: true,
+    };
+    expect(shouldCommitProviderEndpoint(ready)).toBe(true);
+    expect(shouldCommitProviderEndpoint({ ...ready, authorityEnabled: false })).toBe(false);
+    expect(shouldCommitProviderEndpoint({ ...ready, probability: 0.7 })).toBe(false);
+    expect(shouldCommitProviderEndpoint({ ...ready, pausePending: false })).toBe(false);
+    expect(shouldCommitProviderEndpoint({ ...ready, finalRequested: true })).toBe(false);
   });
 
   it('reuses speculation only when normalized words are unchanged', () => {

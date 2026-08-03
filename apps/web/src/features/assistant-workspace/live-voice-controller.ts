@@ -10,6 +10,14 @@ import { liveConversationStore } from './live-conversation-store';
 import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
 import { liveSessionCoordinator } from './live-session-coordinator';
 import {
+  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
+  LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
+  LIVE_STT_SPECULATION_FINAL_EVENT,
+  LIVE_STT_SPECULATION_PARTIAL_EVENT,
+  type AuthoritySelection,
+  resolveAuthoritySelection,
+} from './live-stt-authority-controller';
+import {
   type ConversationPace,
   type UserFloorState,
   assessSemanticTurn,
@@ -49,6 +57,9 @@ type LiveVoiceSession = {
   client: StreamingSttWebSocketClient;
   finalizationBuffer: FinalizationAudioBuffer;
   reporter: LiveCallDiagnosticsReporter;
+  sttAuthority: AuthoritySelection;
+  speculationSegmentId: string | null;
+  speculationSourceSequence: number | null;
   speechDetected: boolean;
   finalRequested: boolean;
   silenceTimer: ReturnType<typeof setTimeout> | null;
@@ -64,6 +75,23 @@ type LiveVoiceSession = {
 };
 
 type PendingStart = { card: HTMLElement; token: number };
+
+type ProviderEndpointCandidate = {
+  provider?: string;
+  segmentId: string;
+  sequence: number;
+  probability: number;
+  modelTimeMs?: number;
+};
+
+type EndpointCommitState = {
+  authorityEnabled: boolean;
+  probability: number;
+  endpointThreshold: number;
+  speechDetected: boolean;
+  finalRequested: boolean;
+  pausePending: boolean;
+};
 
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
 const LIVE_TASK_INSTRUCTION_STORAGE_KEY = 'omnix.live.taskInstruction';
@@ -88,6 +116,33 @@ let startToken = 0;
 let initialized = false;
 let liveVoiceWorkletModuleUrl: string | null = null;
 const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
+
+export async function resolveLiveVoiceSttSelection(
+  configuredUrl: string | undefined,
+  locationLike: Pick<Location, 'protocol' | 'hostname'>,
+  fetchImpl: typeof fetch,
+): Promise<AuthoritySelection> {
+  if (configuredUrl?.trim()) {
+    return resolveAuthoritySelection(configuredUrl, locationLike, fetchImpl);
+  }
+  return {
+    websocketUrl: getDefaultStreamingSttWebSocketUrl(locationLike),
+    authorityEnabled: false,
+    mode: 'observational',
+    endpointThreshold: 0.75,
+    fallbackUsed: false,
+    reasons: ['default_parakeet'],
+  };
+}
+
+export function shouldCommitProviderEndpoint(state: EndpointCommitState): boolean {
+  return state.authorityEnabled
+    && Number.isFinite(state.probability)
+    && state.probability >= state.endpointThreshold
+    && state.speechDetected
+    && !state.finalRequested
+    && state.pausePending;
+}
 
 export function initializeLiveVoiceController(root: ParentNode = document): void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -201,6 +256,35 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
     const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
     const WebSocketCtor = liveWindow.WebSocket as unknown as StreamingSttWebSocketCtor | undefined;
     if (!AudioContextCtor || !WebSocketCtor) throw new Error('Live voice requires browser AudioContext and WebSocket support.');
+    const runtimeConfig = createAssistantWorkspaceRuntimeConfig();
+    const sttAuthority = await resolveLiveVoiceSttSelection(
+      runtimeConfig.sttServiceUrl,
+      window.location,
+      window.fetch.bind(window),
+    );
+    const selectedProvider = sttAuthority.authorityEnabled
+      ? 'kyutai'
+      : sttAuthority.fallbackUsed || !runtimeConfig.sttServiceUrl?.trim()
+        ? 'parakeet'
+        : 'configured_observational';
+    reporter.record('stt_authority_selected', {
+      selected_provider: selectedProvider,
+      authority_enabled: sttAuthority.authorityEnabled,
+      authority_mode: sttAuthority.mode,
+      fallback_used: sttAuthority.fallbackUsed,
+      endpoint_threshold: sttAuthority.endpointThreshold,
+      reasons: sttAuthority.reasons,
+    }, 'live_voice_controller');
+    dispatchLiveVoicePerfEvent({
+      stage: 'stt_authority_selected',
+      timestamp: new Date().toISOString(),
+      selectedProvider,
+      authorityEnabled: sttAuthority.authorityEnabled,
+      authorityMode: sttAuthority.mode,
+      fallbackUsed: sttAuthority.fallbackUsed,
+      endpointThreshold: sttAuthority.endpointThreshold,
+      reasons: sttAuthority.reasons,
+    });
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Live voice requires browser microphone access.');
     audioContext = new AudioContextCtor({ latencyHint: 'interactive' });
     await ensureAudioContextRunning(audioContext);
@@ -213,11 +297,74 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       return;
     }
     source = audioContext.createMediaStreamSource(stream);
-    const runtimeConfig = createAssistantWorkspaceRuntimeConfig();
     const client = new StreamingSttWebSocketClient({
-      url: getDefaultStreamingSttWebSocketUrl(window.location, runtimeConfig.sttServiceUrl),
+      url: sttAuthority.websocketUrl,
       webSocketCtor: WebSocketCtor,
       chatSessionId: sessionId,
+      onNegotiated: (negotiation) => {
+        reporter.record('stt_negotiated', {
+provider: negotiation.provider,
+protocol: negotiation.protocol,
+sample_rate: negotiation.sampleRate,
+frame_samples: negotiation.frameSamples,
+encoding: negotiation.encoding,
+capabilities: negotiation.capabilities,
+config_version: negotiation.configVersion,
+language: negotiation.language,
+        }, 'live_voice_controller');
+        dispatchLiveVoicePerfEvent({
+stage: 'stt_negotiated',
+timestamp: new Date().toISOString(),
+provider: negotiation.provider,
+protocol: negotiation.protocol,
+sampleRate: negotiation.sampleRate,
+frameSamples: negotiation.frameSamples,
+encoding: negotiation.encoding,
+capabilities: negotiation.capabilities,
+configVersion: negotiation.configVersion,
+language: negotiation.language,
+        });
+      },
+      onEndpointScore: (event) => {
+        reporter.record('stt_endpoint_score', {
+provider: event.provider,
+segment_id: event.segmentId,
+source_sequence: event.sequence,
+probability: event.probability,
+model_time_ms: event.modelTimeMs,
+signal: event.signal,
+        }, 'live_voice_controller');
+        dispatchLiveVoicePerfEvent({
+stage: 'stt_endpoint_score',
+timestamp: new Date().toISOString(),
+provider: event.provider,
+segmentId: event.segmentId,
+sourceSequence: event.sequence,
+probability: event.probability,
+modelTimeMs: event.modelTimeMs,
+signal: event.signal,
+        });
+      },
+      onEndpointCandidate: (event) => handleProviderEndpointCandidate(card, event),
+      onProviderEvent: (event) => {
+        const stage = `stt_${event.type}`;
+        reporter.record(stage, {
+provider: event.provider,
+attempt_id: event.attemptId,
+wall_ms: event.wall_ms,
+model_ms: event.model_ms,
+realtime_factor: event.realtime_factor,
+        }, 'live_voice_controller');
+        dispatchLiveVoicePerfEvent({
+stage,
+timestamp: new Date().toISOString(),
+provider: event.provider,
+attemptId: event.attemptId,
+wallMs: event.wall_ms,
+modelMs: event.model_ms,
+realtimeFactor: event.realtime_factor,
+        });
+      },
       onStatusChange: (status) => {
         if (activeSession?.card === card || pendingStart?.card === card) setPanelStatus(card, status);
       },
@@ -256,6 +403,9 @@ capture_epoch: identity.captureEpoch,
         Math.max(1, Math.round(audioContext.sampleRate * FINALIZATION_BUFFER_MS / 1_000)),
       ),
       reporter,
+      sttAuthority,
+      speculationSegmentId: null,
+      speculationSourceSequence: null,
       speechDetected: false,
       finalRequested: false,
       silenceTimer: null,
@@ -450,10 +600,77 @@ function handleFinalizationBufferOverflow(session: LiveVoiceSession, bufferedSam
   );
 }
 
+function dispatchLiveSttSpeculationEvent(type: string, detail: Record<string, unknown>): void {
+  window.dispatchEvent(new CustomEvent(type, { detail }));
+}
+
+function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpointCandidate): void {
+  const session = activeSession;
+  if (!session || session.card !== card) return;
+  const candidateText = session.partialTranscript.trim();
+  session.speculationSegmentId = event.segmentId;
+  session.speculationSourceSequence = event.sequence;
+  session.reporter.record('stt_endpoint_candidate', {
+    provider: event.provider,
+    segment_id: event.segmentId,
+    source_sequence: event.sequence,
+    probability: event.probability,
+    model_time_ms: event.modelTimeMs,
+    transcript_chars: candidateText.length,
+    authority_enabled: session.sttAuthority.authorityEnabled,
+  }, 'live_voice_controller');
+  dispatchLiveVoicePerfEvent({
+    stage: 'stt_endpoint_candidate',
+    timestamp: new Date().toISOString(),
+    provider: event.provider,
+    segmentId: event.segmentId,
+    sourceSequence: event.sequence,
+    probability: event.probability,
+    modelTimeMs: event.modelTimeMs,
+    transcriptChars: candidateText.length,
+    authorityEnabled: session.sttAuthority.authorityEnabled,
+  });
+  if (session.sttAuthority.authorityEnabled && candidateText) {
+    const detail = {
+      chatSessionId: liveConversationStore.getState().sessionId,
+      segmentId: event.segmentId,
+      sourceSequence: event.sequence,
+      text: candidateText,
+    };
+    dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, detail);
+    dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
+      ...detail,
+      probability: event.probability,
+      modelTimeMs: event.modelTimeMs,
+    });
+  }
+  if (!shouldCommitProviderEndpoint({
+    authorityEnabled: session.sttAuthority.authorityEnabled,
+    probability: event.probability,
+    endpointThreshold: session.sttAuthority.endpointThreshold,
+    speechDetected: session.speechDetected,
+    finalRequested: session.finalRequested,
+    pausePending: session.silenceTimer !== null,
+  })) return;
+  requestFinalTranscript(session, 'provider_endpoint', event);
+}
+
 function handlePartialTranscript(card: HTMLElement, text: string): void {
   const session = activeSession;
   if (session?.card === card) {
     session.partialTranscript = text.trim();
+    if (
+      session.sttAuthority.authorityEnabled
+      && session.speculationSegmentId
+      && session.speculationSourceSequence !== null
+    ) {
+      dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
+        chatSessionId: liveConversationStore.getState().sessionId,
+        segmentId: session.speculationSegmentId,
+        sourceSequence: session.speculationSourceSequence,
+        text: session.partialTranscript,
+      });
+    }
     if (session.floorState === 'overlap_candidate' && liveVoiceAssistantIsSpeaking()) {
       assessOverlapCandidate(session);
     }
@@ -494,7 +711,7 @@ function scheduleSemanticFinalization(session: LiveVoiceSession): void {
     delayMs,
     transcriptChars: session.partialTranscript.length,
   });
-  session.silenceTimer = setTimeout(() => requestFinalTranscript(session), delayMs);
+  session.silenceTimer = setTimeout(() => requestFinalTranscript(session, 'semantic_timeout'), delayMs);
 }
 
 function handleExternalStop(): void {
@@ -521,7 +738,12 @@ function dispatchAssistantVoiceInterrupt(
   }));
 }
 
-function requestFinalTranscript(session: LiveVoiceSession): void {
+function requestFinalTranscript(
+  session: LiveVoiceSession,
+  trigger: 'semantic_timeout' | 'provider_endpoint' = 'semantic_timeout',
+  endpoint?: ProviderEndpointCandidate,
+): void {
+  if (session.silenceTimer) clearTimeout(session.silenceTimer);
   session.silenceTimer = null;
   if (activeSession !== session || session.finalRequested) return;
   if (session.floorState === 'overlap_candidate' && session.partialTranscript) assessOverlapCandidate(session);
@@ -529,10 +751,32 @@ function requestFinalTranscript(session: LiveVoiceSession): void {
   session.finalRequested = true;
   session.perfTurnId ??= `voice-turn:${Date.now()}`;
   session.sttFinalRequestedAt = performance.now();
+  if (trigger === 'provider_endpoint' && endpoint) {
+    session.reporter.record('stt_endpoint_committed', {
+      provider: endpoint.provider,
+      segment_id: endpoint.segmentId,
+      source_sequence: endpoint.sequence,
+      probability: endpoint.probability,
+      model_time_ms: endpoint.modelTimeMs,
+      endpoint_threshold: session.sttAuthority.endpointThreshold,
+    }, 'live_voice_controller');
+    dispatchLiveVoicePerfEvent({
+      stage: 'stt_endpoint_committed',
+      timestamp: new Date().toISOString(),
+      turnId: session.perfTurnId,
+      provider: endpoint.provider,
+      segmentId: endpoint.segmentId,
+      sourceSequence: endpoint.sequence,
+      probability: endpoint.probability,
+      modelTimeMs: endpoint.modelTimeMs,
+      endpointThreshold: session.sttAuthority.endpointThreshold,
+    });
+  }
   dispatchLiveVoicePerfEvent({
     stage: 'stt_final_requested',
     turnId: session.perfTurnId,
     timestamp: new Date().toISOString(),
+    trigger,
   });
   session.client.sendFinal();
   session.finalResponseTimer = setTimeout(() => {
@@ -572,6 +816,12 @@ async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal)
   const interruptionDispatched = session.interruptionDispatched;
   const suppressionReason = acceptedFinalSuppressionReason(final.text, overlapIntent);
   const continuation = session.finalizationBuffer.drain();
+  dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_FINAL_EVENT, {
+    chatSessionId: final.chatSessionId,
+    segmentId: final.segmentId,
+    sourceSequence: final.sourceSequence,
+    text: final.text,
+  });
   dispatchLiveVoicePerfEvent({
     stage: 'stt_final_received',
     turnId: session.perfTurnId ?? `voice-turn:${Date.now()}`,
@@ -672,6 +922,12 @@ async function handleAcceptedFinal(card: HTMLElement, final: AcceptedVoiceFinal)
       return result;
     }
   } finally {
+    dispatchLiveSttSpeculationEvent(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, {
+      chatSessionId: final.chatSessionId,
+      segmentId: final.segmentId,
+      sourceSequence: final.sourceSequence,
+      text: final.text,
+    });
     replayFinalizationBuffer(session, continuation);
   }
 }
@@ -736,6 +992,8 @@ function resetTurnState(session: LiveVoiceSession): void {
   session.perfTurnId = null;
   session.sttFinalRequestedAt = null;
   session.partialTranscript = '';
+  session.speculationSegmentId = null;
+  session.speculationSourceSequence = null;
   session.overlapIntent = null;
   session.interruptionDispatched = false;
   session.floorState = reduceUserFloor(session.floorState, { type: 'reset' });
