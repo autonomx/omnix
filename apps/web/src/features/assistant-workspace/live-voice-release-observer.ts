@@ -116,7 +116,7 @@ function handleDiagnosticEvent(event: Event): void {
     state.activeTraceId = traceId;
     return;
   }
-  if (state.activeTraceId && traceId !== state.activeTraceId) return;
+  if (!diagnosticBelongsToActiveTurn(detail, diagnosticEvent, traceId)) return;
   if (diagnosticEvent === 'llm_text_chunk_received' && state.firstTokenAt === null) {
     state.firstTokenAt = now;
     recordLatency('final_to_first_token_ms', elapsed(state.sttFinalAt, now));
@@ -131,6 +131,18 @@ function handleDiagnosticEvent(event: Event): void {
     recordLatency('interruption_to_silence_ms', elapsed(state.interruptionAt, now));
     state.interruptionAt = null;
   }
+}
+
+function diagnosticBelongsToActiveTurn(
+  detail: DiagnosticDetail,
+  diagnosticEvent: string,
+  traceId: string,
+): boolean {
+  if (!state.activeTraceId || traceId === state.activeTraceId) return true;
+  return diagnosticEvent === 'phrase_first_frame_received'
+    && detail.source === 'pcm_session'
+    && state.firstTokenAt !== null
+    && state.firstAudioAt === null;
 }
 
 function handleInterruption(): void {
