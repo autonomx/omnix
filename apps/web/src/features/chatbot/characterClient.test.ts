@@ -64,6 +64,18 @@ describe('characterClient live-call runtime', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('reuses a recent runtime when broad chat-query invalidation invokes the query again', async () => {
+    const sessionId = 'chat:runtime-cache';
+    const fetchMock = vi.fn(async () => Response.json(runtime({ session_id: sessionId })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const initial = await characterClient.liveCallRuntime(sessionId);
+    const repeated = await characterClient.liveCallRuntime(sessionId);
+
+    expect(repeated).toBe(initial);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('updates an already-referenced playback runtime and retained runtime when the linked voice changes', async () => {
     let requestCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
