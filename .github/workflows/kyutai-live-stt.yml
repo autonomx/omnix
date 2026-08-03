@@ -39,12 +39,14 @@ jobs:
 
       - name: Import launcher entry points on Python 3.10
         run: |
-          python -c "from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.providers.kyutai_authority import KyutaiAuthorityMode; import kyutai_stt_runtime"
+          python -c "from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
 
       - name: Lint live latency and launcher modules
         run: |
           ruff check \
             scripts/run_kyutai_moshi.py \
+            src/app/launcher/huggingface_token_control.py \
+            src/app/launcher/huggingface_token_store.py \
             src/app/launcher/kyutai_services.py \
             src/app/launcher/runtime_control_app.py \
             src/app/providers/live_stt_contracts.py \
@@ -55,6 +57,7 @@ jobs:
             src/app/gateway/live_chat_speculation.py \
             src/app/gateway/tts_live_capabilities.py \
             src/kyutai_stt_runtime.py \
+            src/tests/app/test_launcher_huggingface_token.py \
             src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_live_stt_contracts.py \
@@ -67,6 +70,7 @@ jobs:
       - name: Run live latency and launcher tests
         run: |
           python -m pytest \
+            src/tests/app/test_launcher_huggingface_token.py \
             src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_live_stt_contracts.py \
