@@ -59,6 +59,8 @@ function activeCall() {
       stt_finalize_ms: [400, 500],
       final_to_first_token_ms: [800, 900],
       first_token_to_first_audio_ms: [300, 350],
+      final_to_first_audio_ms: [1_100, 1_250],
+      stt_request_to_first_audio_ms: [1_500, 1_750],
       interruption_to_silence_ms: [120, 150],
     },
     releaseQuality: {
@@ -132,6 +134,8 @@ describe('durable Live Conversation evaluation controller', () => {
         stt_finalize_p95_ms: 500,
         final_to_first_token_p95_ms: 900,
         first_token_to_first_audio_p95_ms: 350,
+        final_to_first_audio_p95_ms: 1_250,
+        stt_request_to_first_audio_p95_ms: 1_750,
         interruption_to_silence_p95_ms: 150,
         cancellation_p95_ms: 140,
         rejected_candidate_restore_p95_ms: 110,
@@ -168,6 +172,9 @@ describe('durable Live Conversation evaluation controller', () => {
       detail: { kind: 'latency', metricName: 'stt_finalize_ms', valueMs: 430, scenario: 'speakers-quiet' },
     }));
     window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
+      detail: { kind: 'latency', metricName: 'stt_request_to_first_audio_ms', valueMs: 1_600, scenario: 'speakers-quiet' },
+    }));
+    window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
       detail: { kind: 'quality', qualityName: 'playback_echo_submission', occurred: false, scenario: 'speakers-quiet' },
     }));
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
@@ -183,6 +190,7 @@ describe('durable Live Conversation evaluation controller', () => {
     const body = JSON.parse(String(init?.body));
     expect(body.eos_termination_counts.natural_eos).toBe(1);
     expect(body.latency_summary.stt_finalize_p95_ms).toBe(430);
+    expect(body.latency_summary.stt_request_to_first_audio_p95_ms).toBe(1_600);
     expect(body.latency_summary.cancellation_p95_ms).toBe(125);
     expect(body.quality_metrics.playback_echo_submission_rate).toBe(0);
     expect(body.release_gate_status).toBe('insufficient');
