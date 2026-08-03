@@ -125,23 +125,16 @@ jobs:
             src/features/assistant-workspace/live-voice-websocket.spec.ts \
             src/features/assistant-workspace/live-latency-rollout.spec.ts
 
-      - name: Commit tested source and restore read-only workflow
+      - name: Commit tested source
         if: >-
           success() &&
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          git show e332823b4bfbe400fcbca84e2d55ccffb1232ae2:.github/workflows/kyutai-live-stt.yml > .github/workflows/kyutai-live-stt.yml
-          rm -f \
-            .github/workflows/apply-live-voice-log-remediation.yml \
-            .github/live-voice-remediation-trigger.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
             apps/web/src/features/assistant-workspace/live-voice-controller.ts \
-            apps/web/src/features/assistant-workspace/live-latency-rollout.spec.ts \
-            .github/workflows/kyutai-live-stt.yml \
-            .github/workflows/apply-live-voice-log-remediation.yml \
-            .github/live-voice-remediation-trigger.txt
+            apps/web/src/features/assistant-workspace/live-latency-rollout.spec.ts
           git commit -m "Wire Kyutai authority into active live voice capture"
           git push origin HEAD:${{ github.head_ref }}
