@@ -17,7 +17,7 @@ def _flag(name: str, default: str = "0") -> bool:
     }
 
 
-def build_kyutai_service_specs(root: Path) -> list[ServiceSpec]:
+def build_kyutai_service_specs(root: Path) -> tuple[list[ServiceSpec], str]:
     enabled = _flag("OMNIX_KYUTAI_ENABLED", "1")
     moshi_auto_start = enabled and _flag("OMNIX_START_KYUTAI_MOSHI", "1")
     adapter_auto_start = enabled and _flag("OMNIX_START_KYUTAI_ADAPTER", "1")
@@ -58,7 +58,7 @@ def build_kyutai_service_specs(root: Path) -> list[ServiceSpec]:
         "KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD": endpoint_threshold,
     }
 
-    return [
+    specs = [
         ServiceSpec(
             service_id="kyutai_moshi",
             label="Kyutai moshi-server",
@@ -88,4 +88,5 @@ def build_kyutai_service_specs(root: Path) -> list[ServiceSpec]:
                 "streams to moshi-server on 127.0.0.1:8090."
             ),
         ),
-    ], browser_stt_url
+    ]
+    return specs, browser_stt_url
