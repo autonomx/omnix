@@ -7,6 +7,8 @@ import subprocess
 import threading
 from pathlib import Path
 
+from app.launcher.huggingface_token_store import load_huggingface_token
+
 _UNMUTE_REPOSITORY = "https://github.com/kyutai-labs/unmute.git"
 _UNMUTE_PIN = "c49982eb3aeaf76633dfe4155fa3b8dcb5b3d962"
 _STOP_REQUESTED = threading.Event()
@@ -140,13 +142,24 @@ def _compose_command(root: Path) -> list[str]:
     ]
 
 
-def _stop_service(base_command: list[str]) -> None:
+def _compose_environment(root: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    token = load_huggingface_token(root)
+    if token:
+        environment["HUGGING_FACE_HUB_TOKEN"] = token
+    else:
+        environment.pop("HUGGING_FACE_HUB_TOKEN", None)
+    return environment
+
+
+def _stop_service(base_command: list[str], environment: dict[str, str]) -> None:
     print("[KYUTAI MOSHI] Stopping Docker Compose service stt...", flush=True)
     try:
         subprocess.run(
             [*base_command, "stop", "--timeout", "3", "stt"],
             check=False,
             timeout=6,
+            env=environment,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         print(
@@ -163,16 +176,29 @@ def main() -> int:
         print(f"[KYUTAI MOSHI] ERROR: {exc}", flush=True)
         return 2
 
+    environment = _compose_environment(root)
+    if environment.get("HUGGING_FACE_HUB_TOKEN"):
+        print(
+            "[KYUTAI MOSHI] Hugging Face token configured; gated model downloads are enabled.",
+            flush=True,
+        )
+    else:
+        print(
+            "[KYUTAI MOSHI] Hugging Face token is not configured. "
+            "Enter it in Omnix Launcher Control if the model download requires access.",
+            flush=True,
+        )
+
     _install_signal_handlers()
     command = [*base_command, "up", "--build", "stt"]
     print("[KYUTAI MOSHI] Starting: " + " ".join(command), flush=True)
-    process = subprocess.Popen(command, cwd=str(root))
+    process = subprocess.Popen(command, cwd=str(root), env=environment)
 
     while process.poll() is None and not _STOP_REQUESTED.wait(0.25):
         pass
 
     if _STOP_REQUESTED.is_set() and process.poll() is None:
-        _stop_service(base_command)
+        _stop_service(base_command, environment)
         try:
             process.wait(timeout=1)
         except subprocess.TimeoutExpired:
