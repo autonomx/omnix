@@ -34,9 +34,12 @@ provider = KyutaiLiveSttProvider()
 install_kyutai_stt_websocket(app, provider=provider)
 
 
-async def _probed_health(language: str) -> dict[str, object]:
+async def _probed_health(language: str, *, force: bool = False) -> dict[str, object]:
     probe_max_age = float(os.environ.get("KYUTAI_STT_HEALTH_PROBE_MAX_AGE_SECONDS", "5"))
-    upstream_ready = await provider.probe(language=language, max_age_seconds=probe_max_age)
+    upstream_ready = await provider.probe(
+        language=language,
+        max_age_seconds=0.0 if force else probe_max_age,
+    )
     health = dict(await provider.health())
     return {
         "ok": upstream_ready and health.get("state") == "closed",
@@ -46,18 +49,21 @@ async def _probed_health(language: str) -> dict[str, object]:
 
 
 @app.get("/healthz")
-async def healthz() -> dict[str, object]:
+async def healthz(
+    force: bool = Query(default=False),
+) -> dict[str, object]:
     language = os.environ.get("OMNIX_LIVE_STT_LANGUAGE", "en")
-    return await _probed_health(language)
+    return await _probed_health(language, force=force)
 
 
 @app.get("/authorityz")
 async def authorityz(
     language: str = Query(default="en", min_length=2, max_length=16),
     mode: str = Query(default="observational", max_length=24),
+    force: bool = Query(default=False),
 ) -> dict[str, object]:
     resolved_mode = parse_authority_mode(mode)
-    health = await _probed_health(language)
+    health = await _probed_health(language, force=force)
     decision = evaluate_kyutai_authority(
         health,
         language=language,
