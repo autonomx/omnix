@@ -195,7 +195,7 @@ describe('image job synchronization helpers', () => {
         status: 'running',
         output_refs: [{ type: 'image', asset_id: 'asset-ignored' }],
       },
-    ] as JobRecord[];
+    ] as unknown as JobRecord[];
 
     expect(completedImageAssetIds(jobs)).toEqual(['asset-one', 'asset-two']);
   });
