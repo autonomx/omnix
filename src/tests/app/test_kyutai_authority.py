@@ -1,6 +1,7 @@
 from app.providers.kyutai_authority import (
     KyutaiAuthorityMode,
     KyutaiReleaseMeasurements,
+    classify_kyutai_probe_error,
     evaluate_kyutai_authority,
     parse_authority_mode,
 )
@@ -125,6 +126,34 @@ def test_authority_rejects_cold_or_unsupported_sessions() -> None:
     assert decision.eligible is False
     assert "language_not_supported" in decision.reasons
     assert "model_not_warm" in decision.reasons
+
+
+def test_authority_surfaces_safe_probe_failure_classification() -> None:
+    decision = evaluate_kyutai_authority(
+        _health(
+            upstream_ready=False,
+            last_ready_at=None,
+            last_error="Could not connect to Kyutai STT: [WinError 10061] Connection refused",
+        ),
+        language="en",
+        mode="test",
+        now=1_000.0,
+    )
+    assert decision.eligible is False
+    assert decision.reasons == (
+        "upstream_not_ready",
+        "upstream_connection_refused",
+        "model_not_warm",
+    )
+
+
+def test_probe_error_classifier_does_not_expose_raw_error_text() -> None:
+    assert classify_kyutai_probe_error("operation timed out") == "upstream_connect_timeout"
+    assert classify_kyutai_probe_error("401 unauthorized token") == "upstream_auth_rejected"
+    assert classify_kyutai_probe_error("Expected Kyutai Ready, received 'Other'") == "upstream_protocol_error"
+    assert classify_kyutai_probe_error("getaddrinfo failed") == "upstream_dns_error"
+    assert classify_kyutai_probe_error("unexpected local failure detail") == "upstream_probe_failed"
+    assert classify_kyutai_probe_error(None) is None
 
 
 def test_authority_mode_parser_rejects_unknown_values() -> None:
