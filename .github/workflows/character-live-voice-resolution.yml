@@ -52,7 +52,7 @@ jobs:
       - name: Install focused Python dependencies
         run: >-
           python -m pip install
-          ruff pytest pydantic fastapi httpx requests python-multipart
+          ruff pytest pydantic fastapi httpx requests python-multipart pillow
       - name: Install web dependencies
         run: npm install
       - name: Lint voice resolution path
