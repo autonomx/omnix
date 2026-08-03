@@ -61,6 +61,8 @@ function activeCall() {
       first_token_to_first_audio_ms: [300, 350],
       final_to_first_audio_ms: [1_100, 1_250],
       stt_request_to_first_audio_ms: [1_500, 1_750],
+      first_pcm_to_first_audible_ms: [140, 160],
+      speech_end_to_first_audible_ms: [1_650, 1_900],
       interruption_to_silence_ms: [120, 150],
     },
     releaseQuality: {
@@ -173,6 +175,9 @@ describe('durable Live Conversation evaluation controller', () => {
     }));
     window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
       detail: { kind: 'latency', metricName: 'stt_request_to_first_audio_ms', valueMs: 1_600, scenario: 'speakers-quiet' },
+    }));
+    window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
+      detail: { kind: 'latency', metricName: 'speech_end_to_first_audible_ms', valueMs: 1_725, scenario: 'speakers-quiet' },
     }));
     window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
       detail: { kind: 'quality', qualityName: 'playback_echo_submission', occurred: false, scenario: 'speakers-quiet' },
