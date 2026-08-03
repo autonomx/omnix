@@ -206,19 +206,21 @@ class LMStudioProvider(BaseProvider):
                 or _DEFAULT_MAX_RESPONSE_BYTES
             ),
         )
+        headers = getattr(response, "headers", {}) or {}
         try:
-            declared_length = int(response.headers.get("content-length") or 0)
-        except (TypeError, ValueError):
+            declared_length = int(headers.get("content-length") or 0)
+        except (AttributeError, TypeError, ValueError):
             declared_length = 0
         if declared_length > max_response_bytes:
             raise ConnectionError(
                 "LM Studio response exceeds configured byte limit: "
                 f"{declared_length}>{max_response_bytes}"
             )
-        if len(response.content) > max_response_bytes:
+        content = getattr(response, "content", b"") or b""
+        if len(content) > max_response_bytes:
             raise ConnectionError(
                 "LM Studio response exceeds configured byte limit: "
-                f"{len(response.content)}>{max_response_bytes}"
+                f"{len(content)}>{max_response_bytes}"
             )
         try:
             data = response.json()
