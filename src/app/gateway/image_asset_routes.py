@@ -1,19 +1,18 @@
 """Browser-safe file delivery for shared image assets."""
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Callable
 from email.utils import formatdate, parsedate_to_datetime
 from functools import wraps
-import hashlib
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
-from PIL import Image
 
 from app.assets import AssetRecord, AssetType, default_asset_store
-from app.image.output_normalization import normalize_generated_image
 
 _ROUTE_SENTINEL = "_omnix_image_asset_file_registered"
 _HOOK_SENTINEL = "_omnix_image_asset_file_hook_installed"
@@ -91,11 +90,20 @@ def _normalized_browser_preview(
     asset: AssetRecord,
     headers: dict[str, str],
 ) -> Response | None:
-    """Re-encode unusual raster assets without mutating the stored original."""
+    """Re-encode unusual raster assets without mutating the stored original.
+
+    Pillow and the image normalization stack are loaded lazily so lightweight
+    gateway consumers, including live-voice release checks, do not require the
+    optional image runtime merely to import the gateway package.
+    """
 
     if asset.mime_type.lower() not in NORMALIZABLE_IMAGE_MIME_TYPES:
         return None
     try:
+        from PIL import Image
+
+        from app.image.output_normalization import normalize_generated_image
+
         with Image.open(path) as source:
             width, height = source.size
             requires_normalization = (
@@ -108,9 +116,9 @@ def _normalized_browser_preview(
             normalized, _metadata = normalize_generated_image(source)
             output = BytesIO()
             normalized.save(output, format="PNG", optimize=False, compress_level=6)
-    except (OSError, TypeError, ValueError):
+    except (ImportError, OSError, TypeError, ValueError):
         # A valid browser-decodable original remains preferable to replacing a
-        # failed normalization attempt with a gateway error.
+        # failed or unavailable normalization attempt with a gateway error.
         return None
 
     preview_headers = dict(headers)
