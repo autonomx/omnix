@@ -6,11 +6,13 @@ from array import array
 import msgpack
 import pytest
 
+import app.providers.kyutai_live_stt as kyutai_module
 from app.providers.kyutai_live_stt import (
     KYUTAI_FRAME_SAMPLES,
     KyutaiLiveSttError,
     KyutaiLiveSttProvider,
     KyutaiLiveSttSession,
+    classify_kyutai_connect_exception,
     pcm16le_to_float32,
 )
 
@@ -39,6 +41,12 @@ class FakeKyutaiSocket:
 
     async def push(self, payload: dict[str, object]) -> None:
         await self.incoming.put(msgpack.packb(payload, use_bin_type=True))
+
+
+class FakeInvalidStatus(Exception):
+    def __init__(self, status_code: int) -> None:
+        super().__init__(f"server rejected WebSocket connection: HTTP {status_code}")
+        self.response = type("FakeResponse", (), {"status_code": status_code})()
 
 
 def _pcm(samples: list[int]) -> bytes:
@@ -171,6 +179,36 @@ def test_kyutai_provider_probe_reports_real_upstream_readiness(monkeypatch: pyte
         health = await provider.health()
         assert health["upstream_ready"] is True
         assert health["state"] == "closed"
+        assert health["last_error_code"] is None
         assert socket.closed is True
+
+    asyncio.run(scenario())
+
+
+def test_connect_exception_classifier_uses_status_and_transport_type() -> None:
+    assert classify_kyutai_connect_exception(FakeInvalidStatus(404)) == "upstream_endpoint_not_found"
+    assert classify_kyutai_connect_exception(FakeInvalidStatus(503)) == "upstream_service_unavailable"
+    assert classify_kyutai_connect_exception(TimeoutError("deadline exceeded")) == "upstream_connect_timeout"
+    assert classify_kyutai_connect_exception(OSError(111, "Connection refused")) == "upstream_connection_refused"
+    assert (
+        classify_kyutai_connect_exception(RuntimeError("did not receive a valid HTTP response"))
+        == "upstream_protocol_error"
+    )
+
+
+def test_provider_health_preserves_safe_connect_failure_details(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def scenario() -> None:
+        async def fail_connect(*args: object, **kwargs: object) -> object:
+            raise FakeInvalidStatus(404)
+
+        monkeypatch.setattr(kyutai_module, "_connect_websocket", fail_connect)
+        provider = KyutaiLiveSttProvider(base_url="ws://probe")
+
+        assert await provider.probe(language="en", max_age_seconds=0) is False
+        health = await provider.health()
+        assert health["upstream_ready"] is False
+        assert health["last_error_code"] == "upstream_endpoint_not_found"
+        assert health["last_error_type"] == "FakeInvalidStatus"
+        assert health["last_error_stage"] == "connect"
 
     asyncio.run(scenario())
