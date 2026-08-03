@@ -93,6 +93,12 @@ describe('live voice release observer', () => {
       metric_name: 'first_token_to_first_audio_ms', value_ms: 300,
     }), 'release_observer');
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
+      metric_name: 'final_to_first_audio_ms', value_ms: 800,
+    }), 'release_observer');
+    expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
+      metric_name: 'stt_request_to_first_audio_ms', value_ms: 1_000,
+    }), 'release_observer');
+    expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
       metric_name: 'interruption_to_silence_ms', value_ms: 250,
     }), 'release_observer');
     expect(observations.map((observation) => observation.kind === 'latency' ? observation.metricName : observation.qualityName))
@@ -100,6 +106,8 @@ describe('live voice release observer', () => {
         'stt_finalize_ms',
         'final_to_first_token_ms',
         'first_token_to_first_audio_ms',
+        'final_to_first_audio_ms',
+        'stt_request_to_first_audio_ms',
         'interruption_to_silence_ms',
       ]);
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
@@ -140,6 +148,11 @@ describe('live voice release observer', () => {
     expect(mocks.record).not.toHaveBeenCalledWith(
       'release_metric',
       expect.objectContaining({ metric_name: 'first_token_to_first_audio_ms' }),
+      'release_observer',
+    );
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'final_to_first_audio_ms' }),
       'release_observer',
     );
   });
