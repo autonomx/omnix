@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   kyutai-live-stt:
@@ -19,77 +19,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-
-      - name: Apply reviewed live latency fixes
-        if: github.event_name == 'pull_request'
-        run: |
-          cp src/tests/app/test_kyutai_authority.py /tmp/test_kyutai_authority.py
-          cat \
-            .github/live-latency-review/controller4.part00 \
-            .github/live-latency-review/controller4.part01 \
-            .github/live-latency-review/controller4.part02 \
-            .github/live-latency-review/controller4.part03 \
-            .github/live-latency-review/controller4.part04 \
-            .github/live-latency-review/controller4.part05 \
-            .github/live-latency-review/controller4.part06 \
-            | base64 --decode > /tmp/live-latency-controller.tar.gz
-          tar -xzf /tmp/live-latency-controller.tar.gz
-          cat \
-            .github/live-latency-review/remaining4.part00 \
-            .github/live-latency-review/remaining4.part01 \
-            .github/live-latency-review/remaining4.part02 \
-            .github/live-latency-review/remaining4.part03 \
-            .github/live-latency-review/remaining4.part04 \
-            .github/live-latency-review/remaining4.part05 \
-            .github/live-latency-review/remaining4.part06 \
-            .github/live-latency-review/remaining4.part07 \
-            | base64 --decode > /tmp/live-latency-remaining.tar.gz
-          tar -xzf /tmp/live-latency-remaining.tar.gz
-          cp /tmp/test_kyutai_authority.py src/tests/app/test_kyutai_authority.py
-          python - <<'PY'
-          from pathlib import Path
-
-          source = Path("src/app/gateway/live_chat_speculation.py")
-          text = source.read_text()
-          start_marker = '                "user_turn_id": (\n'
-          end_marker = '                "live_voice_turn_id": request.live_voice_turn_id,\n'
-          start = text.find(start_marker)
-          end = text.find(end_marker, start)
-          if start < 0 or end < 0:
-              raise SystemExit("speculation identity block not found")
-          replacement = '''                "user_turn_id": (
-                    request.user_turn_id
-                    or (
-                        f"voice-user-turn:{request.live_voice_turn_id}"[:160]
-                        if request.live_voice_turn_id
-                        else f"speculation-user:{generation_id}"[:160]
-                    )
-                ),
-                "speech_segment_id": (
-                    request.speech_segment_id
-                    or (
-                        f"voice-segment:{request.live_voice_turn_id}"[:160]
-                        if request.live_voice_turn_id
-                        else f"speculation-segment:{speculation.segment_id}"[:160]
-                    )
-                ),
-          '''
-          source.write_text(text[:start] + replacement + text[end:])
-
-          test_path = Path("src/tests/app/test_live_chat_speculation.py")
-          test_text = test_path.read_text()
-          old_memory = '"/remember my access token"'
-          if old_memory not in test_text:
-              raise SystemExit("memory command test target not found")
-          test_path.write_text(
-              test_text.replace(
-                  old_memory,
-                  '"remember that my access token is private"',
-              )
-          )
-          PY
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -108,9 +37,12 @@ jobs:
           python -m pip install ruff pytest fastapi httpx uvicorn msgpack pillow playwright requests "websockets>=12"
           npm install
 
-      - name: Lint live latency modules
+      - name: Lint live latency and launcher modules
         run: |
           ruff check \
+            scripts/run_kyutai_moshi.py \
+            src/app/launcher/kyutai_services.py \
+            src/app/launcher/runtime_control_app.py \
             src/app/providers/live_stt_contracts.py \
             src/app/providers/kyutai_authority.py \
             src/app/providers/kyutai_live_stt.py \
@@ -119,6 +51,7 @@ jobs:
             src/app/gateway/live_chat_speculation.py \
             src/app/gateway/tts_live_capabilities.py \
             src/kyutai_stt_runtime.py \
+            src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
@@ -126,9 +59,10 @@ jobs:
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_tts_live_capabilities.py
 
-      - name: Run live latency unit and bridge tests
+      - name: Run live latency and launcher tests
         run: |
           python -m pytest \
+            src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
@@ -136,14 +70,7 @@ jobs:
             src/tests/app/test_stt_streaming_audio.py \
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_tts_live_capabilities.py \
-            -q --tb=short --junitxml=live-latency-pytest.xml
-
-      - name: Upload focused pytest diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: live-latency-pytest-diagnostics
-          path: live-latency-pytest.xml
+            -q --tb=short
 
       - name: Typecheck live latency browser path
         run: |
@@ -164,27 +91,3 @@ jobs:
           npm --workspace @omnix/web run test -- --run \
             src/features/assistant-workspace/live-voice-websocket.spec.ts \
             src/features/assistant-workspace/live-latency-rollout.spec.ts
-
-      - name: Commit reviewed live latency fixes
-        if: >-
-          success() &&
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            apps/web/src/features/assistant-workspace/live-voice-controller.ts \
-            apps/web/src/features/assistant-workspace/live-voice-websocket.ts \
-            apps/web/src/features/assistant-workspace/live-voice-websocket.spec.ts \
-            apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.ts \
-            apps/web/src/features/assistant-workspace/live-latency-rollout.spec.ts \
-            apps/web/src/features/assistant-workspace/live-tts-adaptive-buffer-controller.ts \
-            apps/web/src/features/assistant-workspace/live-speculation-controller.ts \
-            src/app/gateway/live_chat_speculation.py \
-            src/kyutai_stt_runtime.py \
-            src/tests/app/test_live_chat_speculation.py
-          if ! git diff --cached --quiet; then
-            git commit -m "Complete live voice correctness review fixes"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
