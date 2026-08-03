@@ -109,26 +109,50 @@ def _voice_debug_rows(assets: Iterable[AssetRecord]) -> list[dict[str, str]]:
     return rows
 
 
+def _path_key(path: Path) -> str:
+    try:
+        return os.path.normcase(str(path.resolve()))
+    except (OSError, RuntimeError):
+        return os.path.normcase(str(path.absolute()))
+
+
 class SharedAssetStore(ManifestSharedAssetStore):
     """Shared asset store with non-mutating compatibility and curated read-through."""
 
-    def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
-        """Read voice profiles from configured and compatibility directories."""
-        return discover_voice_clone_assets()
-
     def _include_canonical_voice_clones(self) -> bool:
-        """Keep custom manifest stores isolated from the application-wide library.
-
-        Tests, migrations, and scoped tools commonly construct a store with an
-        explicit manifest path. Those stores should read only their configured
-        compatibility sources; the default application store still receives the
-        canonical resources/voice_clones library regardless of overrides.
-        """
+        """Keep custom manifest stores isolated from the application-wide library."""
 
         try:
             return self.manifest_path.resolve() == default_asset_manifest_path().resolve()
         except OSError:
             return self.manifest_path == default_asset_manifest_path()
+
+    def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
+        """Read voice profiles from configured and compatibility directories.
+
+        A custom manifest store is a scoped migration/test view. When legacy
+        ``app.shared`` paths are overridden, filter discovery to that explicit
+        root rather than leaking the application-wide canonical voice library.
+        """
+
+        assets = discover_voice_clone_assets()
+        if self._include_canonical_voice_clones():
+            return assets
+        try:
+            import app.shared as shared
+
+            shared_dir_value = getattr(shared, "VOICE_CLONES_DIR", None)
+        except Exception:
+            shared_dir_value = None
+        if not shared_dir_value:
+            return assets
+        expected_root = _path_key(Path(str(shared_dir_value)))
+        return [
+            asset
+            for asset in assets
+            if _path_key(Path(str(asset.compat.get("voice_clone_root") or "")))
+            == expected_root
+        ]
 
     def _merge_canonical_voice_clones(self, assets: dict[str, AssetRecord]) -> None:
         if self._include_canonical_voice_clones():
