@@ -23,7 +23,11 @@ from .world_forge_fact_pipeline_fixture import compile_deterministic_fixture_fac
 from .world_forge_fact_pipeline_trusted import (
     compile_structured_entity_facts as compile_trusted_structured_entity_facts,
 )
-from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
+from .world_forge_generation import (
+    GeneratedTopic,
+    WorldForgeTopicGenerator,
+    validate_generated_topic_for_publication,
+)
 from .world_forge_integrity import validate_and_normalize_provider_topic
 from .world_forge_lore_scoring import require_preferred_lore_quality
 from .world_forge_presentation_trusted import render_fact_derived_presentations
@@ -132,7 +136,14 @@ class ReferenceSafeWorldForgeGenerator:
         dependency_topics: Mapping[str, GeneratedTopic],
     ) -> GeneratedTopic:
         def process(topic: GeneratedTopic) -> GeneratedTopic:
-            scoped = self._manual_retry_candidate(topic, campaign_context)
+            # Validate the provider boundary before any repair or provenance
+            # inspection. Malformed mappings must fail with the stable publication
+            # contract rather than leaking an incidental attribute error.
+            canonical = validate_generated_topic_for_publication(
+                topic,
+                expected_topic_id=node.topic_id,
+            ).topic
+            scoped = self._manual_retry_candidate(canonical, campaign_context)
             return self._process_topic(
                 node,
                 scoped,
