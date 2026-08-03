@@ -21,17 +21,17 @@ from .generation_authorship_signing import (
     sanitize_untrusted_candidate,
     sign_record,
 )
+from .generation_contract_receipt import (
+    canonical_candidate_content_hash,
+    require_authoritative_contract_receipt,
+)
+from .generation_failure_artifact import FailureStage, build_failure_artifact
 from .generation_manifest_binding import (
     bind_generated_topic_to_manifest,
     dependency_manifest_aliases,
     manifest_slots_from_node,
 )
-from .generation_contract_receipt import (
-    canonical_candidate_content_hash,
-    require_authoritative_contract_receipt,
-)
 from .generation_test_mode import deterministic_world_forge_test_mode
-from .generation_failure_artifact import FailureStage, build_failure_artifact
 
 
 class WorldForgePublicationBoundaryError(RuntimeError):
@@ -101,6 +101,11 @@ def _reference_field_ids(metadata: Mapping[str, Any]) -> tuple[str, ...]:
     )
 
 
+def _candidate_diagnostics(candidate: Any) -> dict[str, Any]:
+    provenance = getattr(candidate, "provenance", None)
+    return dict(provenance) if isinstance(provenance, Mapping) else {}
+
+
 class PublicationValidatedWorldForgeGenerator:
     """Validate provider output and replace all incoming authorship with signed evidence."""
 
@@ -130,11 +135,29 @@ class PublicationValidatedWorldForgeGenerator:
                 exc,
                 stage="topic_audit",
             ) from exc
+
+        # Canonical type and shape validation must be the first operation after
+        # provider generation. Receipt, authorship, retry, and diagnostics code
+        # may only inspect a validated GeneratedTopic.
+        try:
+            validated = validate_generated_topic_for_publication(
+                generated,
+                expected_topic_id=node.topic_id,
+            )
+        except Exception as exc:
+            raise WorldForgePublicationBoundaryError(
+                node,
+                exc,
+                stage="canonical_validation",
+                diagnostics=_candidate_diagnostics(generated),
+            ) from exc
+        canonical = validated.topic
+
         context = _generator_context(self.generator)
         authoritative_receipt: dict[str, Any] = {}
         try:
             authoritative_receipt = require_authoritative_contract_receipt(
-                generated,
+                canonical,
                 expected_topic_id=node.topic_id,
                 verify_content_hash=False,
             )
@@ -147,24 +170,13 @@ class PublicationValidatedWorldForgeGenerator:
                     node,
                     error,
                     stage="contract_mismatch",
-                    diagnostics=dict(generated.provenance),
+                    diagnostics=dict(canonical.provenance),
                 ) from error
-        try:
-            validated = validate_generated_topic_for_publication(
-                generated,
-                expected_topic_id=node.topic_id,
-            )
-        except Exception as exc:
-            raise WorldForgePublicationBoundaryError(
-                node,
-                exc,
-                stage="canonical_validation",
-                diagnostics=dict(generated.provenance),
-            ) from exc
+
         metadata = dict(node.metadata) if isinstance(node.metadata, Mapping) else {}
         try:
             bound = bind_generated_topic_to_manifest(
-                validated.topic,
+                canonical,
                 manifest_slots_from_node(metadata),
                 manifest_hash=str(metadata.get("entity_manifest_hash") or ""),
                 reference_aliases=dependency_manifest_aliases(dependency_topics),
@@ -175,7 +187,7 @@ class PublicationValidatedWorldForgeGenerator:
                 node,
                 exc,
                 stage="canonical_validation",
-                diagnostics=dict(generated.provenance),
+                diagnostics=dict(canonical.provenance),
             ) from exc
         if authoritative_receipt:
             planned_descriptor = context.get("contract_descriptor")
