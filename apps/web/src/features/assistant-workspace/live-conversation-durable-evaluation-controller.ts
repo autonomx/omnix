@@ -126,6 +126,8 @@ export function buildDurableEvaluationPayload(
       stt_finalize_p95_ms: p95(call.releaseLatencies.stt_finalize_ms),
       final_to_first_token_p95_ms: p95(call.releaseLatencies.final_to_first_token_ms),
       first_token_to_first_audio_p95_ms: p95(call.releaseLatencies.first_token_to_first_audio_ms),
+      final_to_first_audio_p95_ms: p95(call.releaseLatencies.final_to_first_audio_ms),
+      stt_request_to_first_audio_p95_ms: p95(call.releaseLatencies.stt_request_to_first_audio_ms),
       interruption_to_silence_p95_ms: p95(call.releaseLatencies.interruption_to_silence_ms),
     },
     quality_metrics: {
@@ -188,6 +190,8 @@ function createActiveCall(): ActiveCall {
       stt_finalize_ms: [],
       final_to_first_token_ms: [],
       first_token_to_first_audio_ms: [],
+      final_to_first_audio_ms: [],
+      stt_request_to_first_audio_ms: [],
       interruption_to_silence_ms: [],
     },
     releaseQuality: {
