@@ -24,6 +24,18 @@ MUTABLE_ASSET_CACHE_CONTROL = "public, max-age=300, must-revalidate"
 BROWSER_PREVIEW_CACHE_CONTROL = "public, max-age=300, must-revalidate"
 
 
+def normalize_generated_image(image: Any) -> tuple[Any, dict[str, Any]]:
+    """Lazily load the optional image-normalization runtime.
+
+    Keeping this wrapper at module scope preserves the test and extension seam
+    without making Pillow a dependency of unrelated gateway imports.
+    """
+
+    from app.image.output_normalization import normalize_generated_image as normalize
+
+    return normalize(image)
+
+
 def register_image_asset_file_route(gateway: FastAPI) -> None:
     """Register an ID-based image response without exposing local paths."""
 
@@ -101,8 +113,6 @@ def _normalized_browser_preview(
         return None
     try:
         from PIL import Image
-
-        from app.image.output_normalization import normalize_generated_image
 
         with Image.open(path) as source:
             width, height = source.size
