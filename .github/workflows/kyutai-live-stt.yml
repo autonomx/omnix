@@ -27,7 +27,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import textwrap
 
           payload = Path('.github/workflows/apply-live-voice-log-remediation.yml').read_text(encoding='utf-8')
           marker = "          python - <<'PY'\n"
@@ -35,7 +34,11 @@ jobs:
           end = payload.find("\n          PY", start + len(marker))
           if start < 0 or end < 0:
               raise SystemExit('remediation payload script was not found')
-          script = textwrap.dedent(payload[start + len(marker):end])
+          raw_script = payload[start + len(marker):end]
+          script = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in raw_script.splitlines()
+          ) + '\n'
           Path('/tmp/apply-live-voice-remediation.py').write_text(script, encoding='utf-8')
           PY
           python /tmp/apply-live-voice-remediation.py
