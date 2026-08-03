@@ -471,6 +471,20 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     return written;
   }
 
+  enterIdle() {
+    if (!this.started && !this.waitingForBuffer) return;
+    this.started = false;
+    this.waitingForBuffer = false;
+    this.waitingForFollowingSpeech = false;
+    this.currentRebufferSamples = this.rebufferSamples;
+    this.lastOutputSample = 0;
+    this.emit('idle', {
+      buffered_samples: this.queuedSamples,
+      buffered_speech_samples: this.bufferedSpeechSamples,
+      underrun_count: this.underrunCount,
+    });
+  }
+
   beginRebuffering() {
     if (this.waitingForBuffer) return;
     this.waitingForBuffer = true;
@@ -590,7 +604,11 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       this.applyFadeOut(channel, written);
       this.maybeCompleteActiveSegment();
       if (this.inputEnded) return this.signalDrained();
-      this.beginRebuffering();
+      if (this.activeSegment === null && this.queuedSamples === 0) {
+        this.enterIdle();
+      } else {
+        this.beginRebuffering();
+      }
     }
     this.maybeReportProgress();
     return true;

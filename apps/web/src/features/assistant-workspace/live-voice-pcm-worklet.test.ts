@@ -291,4 +291,67 @@ describe('live voice PCM worklet state machine', () => {
       output_id: 'output-a', generation_epoch: 1,
     }));
   });
+
+  it('treats a completed persistent-session turn as idle instead of an underrun', () => {
+    const processor = createProcessor();
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-0',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      samples: new Float32Array([0.2, 0.2, 0.2, 0.2]),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-0' });
+    render(processor);
+
+    expect(events(processor, 'started')).toHaveLength(1);
+    expect(events(processor, 'idle')).toHaveLength(1);
+    expect(events(processor, 'underrun')).toHaveLength(0);
+
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-1',
+      segmentKind: 'speech',
+      phraseIndex: 1,
+      samples: new Float32Array([0.3, 0.3]),
+    });
+    render(processor);
+    expect(events(processor, 'started')).toHaveLength(1);
+
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-1',
+      segmentKind: 'speech',
+      phraseIndex: 1,
+      samples: new Float32Array([0.3, 0.3]),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-1' });
+    render(processor);
+
+    expect(events(processor, 'started')).toHaveLength(2);
+    expect(events(processor, 'idle')).toHaveLength(2);
+    expect(events(processor, 'underrun')).toHaveLength(0);
+  });
+
+  it('still counts starvation before an active segment ends as an underrun', () => {
+    const processor = createProcessor();
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-starved',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      samples: new Float32Array([0.2, 0.2, 0.2, 0.2]),
+    });
+    render(processor);
+
+    expect(events(processor, 'idle')).toHaveLength(0);
+    expect(events(processor, 'underrun')).toEqual([
+      expect.objectContaining({
+        buffered_samples: 0,
+        buffered_speech_samples: 0,
+        underrun_count: 1,
+      }),
+    ]);
+  });
+
 });
