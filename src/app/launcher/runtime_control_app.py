@@ -5,7 +5,11 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
-from app.launcher.control_app import app
+from app.launcher import control_app
+from app.launcher.huggingface_token_control import (
+    enhance_launcher_html,
+    register_huggingface_token_controls,
+)
 from app.launcher.kyutai_services import build_kyutai_service_specs
 from app.launcher.service_manager import (
     LauncherServiceManager,
@@ -13,6 +17,7 @@ from app.launcher.service_manager import (
     reset_default_manager_for_tests,
 )
 
+app = control_app.app
 IMAGE_SERVICE_URL = "http://127.0.0.1:5301"
 
 
@@ -106,5 +111,7 @@ def build_runtime_service_specs():
 
 
 reset_default_manager_for_tests(LauncherServiceManager(build_runtime_service_specs()))
+control_app._HTML = enhance_launcher_html(control_app._HTML)
+register_huggingface_token_controls(app)
 
 __all__ = ["app", "build_runtime_service_specs"]
