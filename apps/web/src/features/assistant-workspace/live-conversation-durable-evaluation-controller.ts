@@ -192,6 +192,8 @@ function createActiveCall(): ActiveCall {
       first_token_to_first_audio_ms: [],
       final_to_first_audio_ms: [],
       stt_request_to_first_audio_ms: [],
+      first_pcm_to_first_audible_ms: [],
+      speech_end_to_first_audible_ms: [],
       interruption_to_silence_ms: [],
     },
     releaseQuality: {
