@@ -4,6 +4,7 @@ from app.providers.kyutai_authority import (
     classify_kyutai_probe_error,
     evaluate_kyutai_authority,
     parse_authority_mode,
+    safe_kyutai_probe_error_code,
 )
 
 
@@ -147,13 +148,42 @@ def test_authority_surfaces_safe_probe_failure_classification() -> None:
     )
 
 
+def test_authority_prefers_provider_structured_probe_code() -> None:
+    decision = evaluate_kyutai_authority(
+        _health(
+            upstream_ready=False,
+            last_ready_at=None,
+            last_error="unclassified local transport detail",
+            last_error_code="upstream_endpoint_not_found",
+        ),
+        language="en",
+        mode="test",
+        now=1_000.0,
+    )
+    assert decision.reasons == (
+        "upstream_not_ready",
+        "upstream_endpoint_not_found",
+        "model_not_warm",
+    )
+
+
 def test_probe_error_classifier_does_not_expose_raw_error_text() -> None:
     assert classify_kyutai_probe_error("operation timed out") == "upstream_connect_timeout"
     assert classify_kyutai_probe_error("401 unauthorized token") == "upstream_auth_rejected"
+    assert classify_kyutai_probe_error("HTTP 404") == "upstream_endpoint_not_found"
+    assert classify_kyutai_probe_error("status code 503") == "upstream_service_unavailable"
+    assert classify_kyutai_probe_error("certificate verify failed") == "upstream_tls_error"
+    assert classify_kyutai_probe_error("no close frame received") == "upstream_connection_closed"
     assert classify_kyutai_probe_error("Expected Kyutai Ready, received 'Other'") == "upstream_protocol_error"
     assert classify_kyutai_probe_error("getaddrinfo failed") == "upstream_dns_error"
     assert classify_kyutai_probe_error("unexpected local failure detail") == "upstream_probe_failed"
     assert classify_kyutai_probe_error(None) is None
+
+
+def test_structured_probe_code_is_allowlisted() -> None:
+    assert safe_kyutai_probe_error_code("upstream_rate_limited") == "upstream_rate_limited"
+    assert safe_kyutai_probe_error_code("private filesystem detail") is None
+    assert safe_kyutai_probe_error_code(None) is None
 
 
 def test_authority_mode_parser_rejects_unknown_values() -> None:
