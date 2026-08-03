@@ -8,7 +8,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -218,7 +218,7 @@ def _generate_side_effect_free(
         id=f"speculation-user-{speculation.generation_id}",
         role="user",
         content=speculation.candidate_text,
-        created_at=datetime.now(UTC).isoformat(),
+        created_at=datetime.now(timezone.utc).isoformat(),
         metadata={
             "speculative": True,
             "side_effects_allowed": False,
