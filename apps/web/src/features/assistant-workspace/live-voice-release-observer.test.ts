@@ -32,7 +32,7 @@ describe('live voice release observer', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => now);
   });
 
-  it('correlates STT, model, audio, and interruption latency without transcript content', () => {
+  it('correlates STT, model, persistent-audio, and interruption latency without transcript content', () => {
     const observations: LiveVoiceReleaseObservation[] = [];
     const listener = (event: Event) => observations.push((event as CustomEvent<LiveVoiceReleaseObservation>).detail);
     window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
@@ -46,21 +46,41 @@ describe('live voice release observer', () => {
       detail: { stage: 'stt_final_received', turnId: 'voice-turn:1', sttFinalizeMs: 200 },
     }));
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
-      detail: { traceId: 'live-call:s1:1', event: 'turn_intercepted', details: {} },
+      detail: {
+        traceId: 'live-call:voice-turn:1',
+        source: 'controller',
+        event: 'turn_intercepted',
+        details: {},
+      },
     }));
     now = 800;
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
-      detail: { traceId: 'live-call:s1:1', event: 'llm_text_chunk_received', details: { text_length: 5 } },
+      detail: {
+        traceId: 'live-call:voice-turn:1',
+        source: 'controller',
+        event: 'llm_text_chunk_received',
+        details: { text_length: 5 },
+      },
     }));
     now = 1_100;
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
-      detail: { traceId: 'live-call:s1:1', event: 'phrase_first_frame_received', details: {} },
+      detail: {
+        traceId: 'live-call:chat:s1:audio-session:a1',
+        source: 'pcm_session',
+        event: 'phrase_first_frame_received',
+        details: {},
+      },
     }));
     now = 1_200;
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt'));
     now = 1_450;
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
-      detail: { traceId: 'live-call:s1:1', event: 'turn_stopped', details: {} },
+      detail: {
+        traceId: 'live-call:voice-turn:1',
+        source: 'controller',
+        event: 'turn_stopped',
+        details: {},
+      },
     }));
 
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
@@ -83,6 +103,45 @@ describe('live voice release observer', () => {
         'interruption_to_silence_ms',
       ]);
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
+  });
+
+  it('does not accept unrelated cross-trace diagnostics as first audio', () => {
+    now = 100;
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: { stage: 'stt_final_received', turnId: 'voice-turn:2', sttFinalizeMs: 100 },
+    }));
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:voice-turn:2',
+        source: 'controller',
+        event: 'turn_intercepted',
+        details: {},
+      },
+    }));
+    now = 200;
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:voice-turn:2',
+        source: 'controller',
+        event: 'llm_text_chunk_received',
+        details: {},
+      },
+    }));
+    now = 300;
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:unrelated',
+        source: 'controller',
+        event: 'phrase_first_frame_received',
+        details: {},
+      },
+    }));
+
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'first_token_to_first_audio_ms' }),
+      'release_observer',
+    );
   });
 
   it('records manually labelled quality trials for durable aggregation', () => {
