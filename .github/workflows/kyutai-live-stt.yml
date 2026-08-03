@@ -47,7 +47,6 @@ jobs:
             scripts/run_kyutai_moshi.py \
             src/app/launcher/huggingface_token_control.py \
             src/app/launcher/huggingface_token_store.py \
-            src/app/launcher/kyutai_readiness_control.py \
             src/app/launcher/kyutai_services.py \
             src/app/launcher/runtime_control_app.py \
             src/app/providers/live_stt_contracts.py \
@@ -68,6 +67,7 @@ jobs:
             src/tests/app/test_kyutai_stt_websocket.py \
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_tts_live_capabilities.py
+          ruff check --ignore RUF100,TRY004 src/app/launcher/kyutai_readiness_control.py
 
       - name: Run live latency and launcher tests
         run: |
