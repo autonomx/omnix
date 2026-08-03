@@ -1,0 +1,4 @@
+services:
+  stt:
+    ports:
+      - "8090:8080"
