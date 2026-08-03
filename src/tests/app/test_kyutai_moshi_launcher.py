@@ -6,6 +6,10 @@ from types import ModuleType
 
 import pytest
 
+from app.launcher.huggingface_token_store import save_huggingface_token
+
+_TEST_TOKEN = "hf_" + "b" * 32
+
 
 def _load_launcher_module() -> ModuleType:
     script = Path(__file__).resolve().parents[3] / "scripts" / "run_kyutai_moshi.py"
@@ -71,3 +75,20 @@ def test_invalid_nonempty_unmute_directory_is_not_overwritten(
         module._ensure_unmute_checkout(unmute_dir)
 
     assert (unmute_dir / "local-file.txt").read_text(encoding="utf-8") == "keep me"
+
+
+def test_compose_environment_uses_launcher_saved_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_launcher_module()
+    root = tmp_path / "omnix"
+    root.mkdir()
+    secret_dir = tmp_path / "private"
+    monkeypatch.setenv("OMNIX_LAUNCHER_SECRET_DIR", str(secret_dir))
+    monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
+    save_huggingface_token(_TEST_TOKEN, root)
+
+    environment = module._compose_environment(root)
+
+    assert environment["HUGGING_FACE_HUB_TOKEN"] == _TEST_TOKEN
