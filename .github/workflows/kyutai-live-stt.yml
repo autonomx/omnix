@@ -23,7 +23,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.10"
           cache: pip
 
       - name: Set up Node
@@ -36,6 +36,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ruff pytest fastapi httpx uvicorn msgpack pillow playwright requests "websockets>=12"
           npm install
+
+      - name: Import launcher entry points on Python 3.10
+        run: |
+          python -c "from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.providers.kyutai_authority import KyutaiAuthorityMode; import kyutai_stt_runtime"
 
       - name: Lint live latency and launcher modules
         run: |
@@ -52,6 +56,7 @@ jobs:
             src/app/gateway/tts_live_capabilities.py \
             src/kyutai_stt_runtime.py \
             src/tests/app/test_kyutai_launcher_services.py \
+            src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
@@ -63,6 +68,7 @@ jobs:
         run: |
           python -m pytest \
             src/tests/app/test_kyutai_launcher_services.py \
+            src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
