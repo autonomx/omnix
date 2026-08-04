@@ -16,11 +16,6 @@ from app.providers.kyutai_authority import (
 from app.providers.kyutai_live_stt import KyutaiLiveSttProvider
 from app.providers.kyutai_stt_websocket import install_kyutai_stt_websocket
 
-# The pinned moshi-server worker exposes ASR over this path. Keep this here as
-# a runtime default so direct `python src/kyutai_stt_runtime.py` launches match
-# the official Kyutai Rust client even when the launcher isn't setting env vars.
-os.environ.setdefault("KYUTAI_STT_PATH", "/api/asr-streaming")
-
 app = FastAPI(title="Omnix Kyutai Live STT", version="1.0")
 origins = [
     item.strip()
@@ -37,7 +32,9 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
-provider = KyutaiLiveSttProvider()
+provider = KyutaiLiveSttProvider(
+    path=os.environ.get("KYUTAI_STT_PATH", "/api/asr-streaming"),
+)
 install_kyutai_stt_websocket(app, provider=provider)
 
 
