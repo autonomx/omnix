@@ -2,3 +2,31 @@ services:
   stt:
     ports:
       - "8090:8080"
+    init: true
+    cpu_shares: 512
+    mem_limit: ${OMNIX_KYUTAI_MEMORY_LIMIT:-16g}
+    environment:
+      CARGO_BUILD_JOBS: ${OMNIX_KYUTAI_BUILD_JOBS:-2}
+      CMAKE_BUILD_PARALLEL_LEVEL: ${OMNIX_KYUTAI_BUILD_JOBS:-2}
+      UV_CONCURRENT_BUILDS: ${OMNIX_KYUTAI_UV_BUILD_JOBS:-1}
+      UV_CONCURRENT_INSTALLS: ${OMNIX_KYUTAI_UV_INSTALL_JOBS:-2}
+      UV_LINK_MODE: copy
+    entrypoint:
+      - uv
+      - run
+      - --locked
+      - --project
+      - ./moshi-server
+      - /bin/bash
+      - /opt/omnix/start_moshi_secure.sh
+    volumes:
+      - type: bind
+        source: ${KYUTAI_OMNIX_SECURE_ENTRYPOINT}
+        target: /opt/omnix/start_moshi_secure.sh
+        read_only: true
+      - omnix-kyutai-stt-venv:/app/moshi-server/.venv
+      - omnix-kyutai-stt-cargo-install:/app/omnix-cargo-install
+
+volumes:
+  omnix-kyutai-stt-venv:
+  omnix-kyutai-stt-cargo-install:
