@@ -152,12 +152,15 @@ function diagnosticBelongsToActiveTurn(
   traceId: string,
 ): boolean {
   if (!state.activeTraceId || traceId === state.activeTraceId) return true;
-  return detail.source === 'pcm_session'
-    && state.firstTokenAt !== null
-    && (
-      (diagnosticEvent === 'phrase_first_frame_received' && state.firstPcmAt === null)
-      || (diagnosticEvent === 'worklet_segment_started' && state.firstAudibleAt === null)
-    );
+  const source = typeof detail.source === 'string' ? detail.source : '';
+  const crossTraceAudioEvent = (
+    diagnosticEvent === 'phrase_first_frame_received'
+      ? source === 'pcm_session' && state.firstPcmAt === null
+      : diagnosticEvent === 'worklet_segment_started'
+        ? source === 'audio_worklet' && state.firstAudibleAt === null
+        : false
+  );
+  return state.firstTokenAt !== null && crossTraceAudioEvent;
 }
 
 function handleInterruption(): void {
