@@ -29,6 +29,7 @@ from app.providers import ChatMessage as ProviderMessage
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_registered"
 _SPECULATION_TTL_SECONDS = 90.0
 _MAX_SPECULATIONS = 64
+_MIN_SINGLE_WORD_CHARS = 4
 _WORD_PATTERN = re.compile(r"[\w]+(?:['’][\w]+)?", re.UNICODE)
 _UNRESOLVED_CORRECTION_PATTERN = re.compile(
     r"(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)",
@@ -46,6 +47,9 @@ class LiveSpeculationRequest(BaseModel):
 
 class LiveSpeculationAcceptRequest(BaseModel):
     final_text: str = Field(min_length=1, max_length=8_000)
+    user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
+    speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
+    live_voice_turn_id: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 @dataclass
@@ -75,7 +79,10 @@ def normalized_transcript_words(text: str) -> tuple[str, ...]:
 
 def transcript_is_speculation_safe(text: str) -> bool:
     words = normalized_transcript_words(text)
-    return len(words) >= 2 and _UNRESOLVED_CORRECTION_PATTERN.search(text) is None
+    has_stable_length = len(words) >= 2 or (
+        len(words) == 1 and len(words[0]) >= _MIN_SINGLE_WORD_CHARS
+    )
+    return has_stable_length and _UNRESOLVED_CORRECTION_PATTERN.search(text) is None
 
 
 def transcripts_are_compatible(candidate: str, final: str) -> bool:
@@ -175,8 +182,10 @@ def register_live_chat_speculation_routes(
                 content=request.final_text.strip(),
                 provider_id=speculation.provider_id,
                 model_id=speculation.model_id,
-                user_turn_id=f"speculation-user:{generation_id}"[:160],
-                speech_segment_id=f"speculation-segment:{speculation.segment_id}"[:160],
+                user_turn_id=request.user_turn_id
+                or f"speculation-user:{generation_id}"[:160],
+                speech_segment_id=request.speech_segment_id
+                or f"speculation-segment:{speculation.segment_id}"[:160],
             ),
         )
         if appended is None:
@@ -192,6 +201,7 @@ def register_live_chat_speculation_routes(
                 "speculative_generation": True,
                 "speculation_generation_id": generation_id,
                 "speculation_candidate_words": len(normalized_transcript_words(speculation.candidate_text)),
+                "live_voice_turn_id": request.live_voice_turn_id,
             },
         )
         if completed is None:
