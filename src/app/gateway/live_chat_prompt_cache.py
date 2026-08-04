@@ -12,10 +12,11 @@ import copy
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app.characters.interaction import InteractionSelection, resolve_interaction_context
 from app.characters.live_conversation_profile import LiveConversationProfileStore
