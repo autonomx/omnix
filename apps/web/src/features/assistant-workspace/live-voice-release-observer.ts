@@ -153,11 +153,16 @@ function diagnosticBelongsToActiveTurn(
 ): boolean {
   if (!state.activeTraceId || traceId === state.activeTraceId) return true;
   const source = typeof detail.source === 'string' ? detail.source : '';
+  const segmentKind = typeof detail.details?.segment_kind === 'string'
+    ? detail.details.segment_kind
+    : '';
   const crossTraceAudioEvent = (
     diagnosticEvent === 'phrase_first_frame_received'
       ? source === 'pcm_session' && state.firstPcmAt === null
       : diagnosticEvent === 'worklet_segment_started'
-        ? source === 'audio_worklet' && state.firstAudibleAt === null
+        ? source === 'audio_worklet'
+          && segmentKind === 'speech'
+          && state.firstAudibleAt === null
         : false
   );
   return state.firstTokenAt !== null && crossTraceAudioEvent;
