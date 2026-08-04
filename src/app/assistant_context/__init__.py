@@ -12,6 +12,9 @@ from app.characters.live2d_avatar import register_character_live2d_avatar_routes
 from app.characters.live_conversation_rendering import register_live_conversation_rendering_routes
 from app.desktop_companion.routes import register_desktop_companion_routes
 from app.gateway.live_chat_speculation import register_live_chat_speculation_routes
+from app.gateway.live_chat_speculation_handshake import (
+    register_live_chat_speculation_handshake_routes,
+)
 from app.gateway.tts_live_capabilities import register_tts_live_capability_routes
 
 from .models import AssistantContextChatRequest, AssistantContextItem
@@ -27,6 +30,7 @@ def register_assistant_context_routes(app, **kwargs: Any) -> None:
     if kwargs.get("chat_store_factory") is not None:
         chat_store_kwargs["chat_store_factory"] = kwargs["chat_store_factory"]
     register_live_chat_speculation_routes(app, **chat_store_kwargs)
+    register_live_chat_speculation_handshake_routes(app, **chat_store_kwargs)
     register_tts_live_capability_routes(app)
     register_assistant_memory_routes(app, **chat_store_kwargs)
     register_character_routes(
