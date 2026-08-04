@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
 from types import ModuleType
 
@@ -92,3 +93,62 @@ def test_compose_environment_uses_launcher_saved_token(
     environment = module._compose_environment(root)
 
     assert environment["HUGGING_FACE_HUB_TOKEN"] == _TEST_TOKEN
+
+
+def test_existing_moshi_image_is_reused_without_rebuild(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_launcher_module()
+    monkeypatch.delenv("KYUTAI_MOSHI_FORCE_REBUILD", raising=False)
+    monkeypatch.setattr(module, "_docker_image_exists", lambda _environment: True)
+    base = ["docker", "compose", "-f", "compose.yml"]
+
+    command, reason = module._startup_command(base, {})
+
+    assert command == [*base, "up", "stt"]
+    assert reason == "reusing existing Moshi image and container"
+
+
+def test_missing_moshi_image_triggers_initial_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_launcher_module()
+    monkeypatch.delenv("KYUTAI_MOSHI_FORCE_REBUILD", raising=False)
+    monkeypatch.setattr(module, "_docker_image_exists", lambda _environment: False)
+    base = ["docker", "compose", "-f", "compose.yml"]
+
+    command, reason = module._startup_command(base, {})
+
+    assert command == [*base, "up", "--build", "stt"]
+    assert reason == "Moshi image is missing"
+
+
+def test_force_rebuild_overrides_existing_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_launcher_module()
+    monkeypatch.setenv("KYUTAI_MOSHI_FORCE_REBUILD", "1")
+    monkeypatch.setattr(module, "_docker_image_exists", lambda _environment: True)
+    base = ["docker", "compose", "-f", "compose.yml"]
+
+    command, reason = module._startup_command(base, {})
+
+    assert command == [*base, "up", "--build", "stt"]
+    assert reason == "forced rebuild requested"
+
+
+def test_docker_image_check_uses_configured_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_launcher_module()
+    calls: list[list[str]] = []
+    monkeypatch.setenv("KYUTAI_MOSHI_IMAGE", "custom/moshi:test")
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="[]", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    assert module._docker_image_exists({}) is True
+    assert calls == [["docker", "image", "inspect", "custom/moshi:test"]]
