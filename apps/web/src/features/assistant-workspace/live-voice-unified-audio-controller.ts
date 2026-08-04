@@ -48,7 +48,7 @@ const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 const AUDIO_PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const REQUESTED_PLAYBACK_SAMPLE_RATE = 24_000;
-const START_BUFFER_MS = 400;
+const START_BUFFER_MS = 220;
 const PAUSE_FOLLOWING_SPEECH_BUFFER_MS = 120;
 const AUDIO_COMPLETION_TIMEOUT_MS = 60_000;
 const SPEAKABLE_TEXT_PATTERN = /[\p{L}\p{N}]/u;
@@ -356,7 +356,14 @@ function cancelGreetingStartup(reason: string, preserveUserSpoke = false): void 
 async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: ActiveLiveTurn): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
-  const clauses = new StableClauseAccumulator();
+  const clauses = new StableClauseAccumulator({
+    firstClauseMinimumCharacters: 12,
+    firstClauseDeadlineMs: 160,
+    minimumClauseCharacters: 24,
+    stableLookaheadCharacters: 24,
+    maximumClauseCharacters: 180,
+    deadlineMs: 420,
+  });
   let fallbackText = '';
   let pending = '';
   let deadlineTimer: ReturnType<typeof window.setTimeout> | null = null;
@@ -452,8 +459,8 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
       if (rejected?.status === 'rejected') throw rejected.reason;
       await withTimeout(
         Promise.all(turn.outputOwnerships.map((ownership) => session.waitForOutputItem(
-ownership.outputId,
-ownership.generationEpoch,
+          ownership.outputId,
+          ownership.generationEpoch,
         ))).then(() => undefined),
         AUDIO_COMPLETION_TIMEOUT_MS,
         'Live audio completion timed out.',
@@ -580,6 +587,7 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
         desired_perceived_onset_ms: onset.desiredPerceivedOnsetMs,
         elapsed_ms: onset.elapsedMs,
         extra_delay_ms: onset.extraDelayMs,
+        minimum_buffered_speech_ms: START_BUFFER_MS,
         sample_rate: session.sampleRate,
         source: !turn.flags.naturalTiming
           ? 'rollout_disabled'
