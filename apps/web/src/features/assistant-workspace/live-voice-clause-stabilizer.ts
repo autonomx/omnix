@@ -6,6 +6,8 @@ export type ClauseStabilizerOptions = {
   stableLookaheadCharacters?: number;
   maximumClauseCharacters?: number;
   deadlineMs?: number;
+  firstClauseMinimumCharacters?: number;
+  firstClauseDeadlineMs?: number;
 };
 
 const DEFAULT_MINIMUM = 24;
@@ -31,16 +33,30 @@ const NON_SPEECH_EMOJI_ONLY = /^(?=[\s\S]*\p{Extended_Pictographic})[\s\p{Extend
 export class StableClauseAccumulator {
   private buffer = '';
   private openedAtMs: number | null = null;
+  private committedClauseCount = 0;
   private readonly minimum: number;
+  private readonly firstMinimum: number;
   private readonly lookahead: number;
   private readonly maximum: number;
   private readonly deadlineMs: number;
+  private readonly firstDeadlineMs: number;
 
   constructor(options: ClauseStabilizerOptions = {}) {
     this.minimum = positiveInteger(options.minimumClauseCharacters, DEFAULT_MINIMUM);
+    this.firstMinimum = Math.min(
+      this.minimum,
+      positiveInteger(options.firstClauseMinimumCharacters, this.minimum),
+    );
     this.lookahead = positiveInteger(options.stableLookaheadCharacters, DEFAULT_LOOKAHEAD);
-    this.maximum = Math.max(this.minimum, positiveInteger(options.maximumClauseCharacters, DEFAULT_MAXIMUM));
+    this.maximum = Math.max(
+      this.minimum,
+      positiveInteger(options.maximumClauseCharacters, DEFAULT_MAXIMUM),
+    );
     this.deadlineMs = positiveInteger(options.deadlineMs, DEFAULT_DEADLINE_MS);
+    this.firstDeadlineMs = Math.min(
+      this.deadlineMs,
+      positiveInteger(options.firstClauseDeadlineMs, this.deadlineMs),
+    );
   }
 
   append(fragment: string, nowMs = performance.now()): StableClause[] {
@@ -59,7 +75,10 @@ export class StableClauseAccumulator {
       const text = this.buffer.slice(0, boundary.end).trim();
       this.buffer = this.buffer.slice(boundary.end).trimStart();
       const spokenText = sanitizeLiveVoiceSpokenText(text);
-      if (spokenText) committed.push({ text: spokenText, reason: boundary.reason });
+      if (spokenText) {
+        committed.push({ text: spokenText, reason: boundary.reason });
+        this.committedClauseCount += 1;
+      }
       this.openedAtMs = this.buffer ? nowMs : null;
     }
     return committed;
@@ -69,31 +88,50 @@ export class StableClauseAccumulator {
     const text = sanitizeLiveVoiceSpokenText(this.buffer.trim());
     this.buffer = '';
     this.openedAtMs = null;
-    return text ? [{ text, reason: 'stream-end' }] : [];
+    if (!text) return [];
+    this.committedClauseCount += 1;
+    return [{ text, reason: 'stream-end' }];
   }
 
   pendingText(): string { return this.buffer; }
   deadlineRemainingMs(nowMs = performance.now()): number | null {
     if (this.openedAtMs === null || !this.buffer) return null;
-    return Math.max(0, this.deadlineMs - (nowMs - this.openedAtMs));
+    return Math.max(0, this.activeDeadlineMs() - (nowMs - this.openedAtMs));
   }
 
   private nextBoundary(nowMs: number): { end: number; reason: ClauseCommitReason } | null {
-    const strong = findSafeBoundary(this.buffer, STRONG_BOUNDARY, this.minimum);
-    const weak = findStableWeakBoundary(this.buffer, this.minimum, this.lookahead);
+    const minimum = this.activeMinimum();
+    const strong = findSafeBoundary(this.buffer, STRONG_BOUNDARY, minimum);
+    const weak = findStableWeakBoundary(this.buffer, minimum, this.lookahead);
     if (strong !== null || weak !== null) {
       if (weak !== null && (strong === null || weak < strong)) return { end: weak, reason: 'stable-boundary' };
       if (strong !== null) return { end: strong, reason: 'strong-boundary' };
     }
     if (this.buffer.length >= this.maximum) {
-      const fallback = safeWhitespaceBoundary(this.buffer, this.maximum, this.minimum);
+      const fallback = safeWhitespaceBoundary(this.buffer, this.maximum, minimum);
       if (fallback !== null) return { end: fallback, reason: 'maximum' };
     }
-    if (this.openedAtMs !== null && nowMs - this.openedAtMs >= this.deadlineMs && this.buffer.length >= this.minimum) {
-      const boundary = safeWhitespaceBoundary(this.buffer, Math.min(this.maximum, this.buffer.length), this.minimum);
+    if (
+      this.openedAtMs !== null
+      && nowMs - this.openedAtMs >= this.activeDeadlineMs()
+      && this.buffer.length >= minimum
+    ) {
+      const boundary = safeWhitespaceBoundary(
+        this.buffer,
+        Math.min(this.maximum, this.buffer.length),
+        minimum,
+      );
       if (boundary !== null) return { end: boundary, reason: 'deadline' };
     }
     return null;
+  }
+
+  private activeMinimum(): number {
+    return this.committedClauseCount === 0 ? this.firstMinimum : this.minimum;
+  }
+
+  private activeDeadlineMs(): number {
+    return this.committedClauseCount === 0 ? this.firstDeadlineMs : this.deadlineMs;
   }
 }
 

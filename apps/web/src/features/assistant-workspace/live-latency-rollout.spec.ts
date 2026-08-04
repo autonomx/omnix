@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolveAuthoritySelection } from './live-stt-authority-controller';
 import { resolveLiveVoiceSttSelection, shouldCommitProviderEndpoint } from './live-voice-controller';
 import { transcriptIsSpeculationSafe, transcriptsCanReuseSpeculation } from './live-speculation-controller';
-import { AdaptiveTtsBufferPolicy } from './live-tts-adaptive-buffer-controller';
+import {
+  AdaptiveTtsBufferPolicy,
+  createAdaptiveBufferSessionController,
+} from './live-tts-adaptive-buffer-controller';
 import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
 
 const locationLike = { protocol: 'http:', hostname: 'localhost' } as Pick<Location, 'protocol' | 'hostname'>;
@@ -51,23 +54,32 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(transcriptIsSpeculationSafe('Wait, no I mean tell me a story')).toBe(false);
   });
 
-  it('commits the explicit first-clause profile after the low-latency deadline', () => {
+  it('uses the low-latency deadline only for the first clause', () => {
     const clauses = new StableClauseAccumulator({
-      minimumClauseCharacters: 12,
-      stableLookaheadCharacters: 12,
+      firstClauseMinimumCharacters: 12,
+      firstClauseDeadlineMs: 140,
+      minimumClauseCharacters: 24,
+      stableLookaheadCharacters: 24,
       maximumClauseCharacters: 96,
-      deadlineMs: 140,
+      deadlineMs: 420,
     });
     expect(clauses.append('This response starts early', 1_000)).toEqual([]);
     expect(clauses.takeReady(1_141)).toEqual([{ text: 'This response starts', reason: 'deadline' }]);
     expect(clauses.pendingText()).toBe('early');
+
+    expect(clauses.append('with enough material for the later clause', 1_142)).toEqual([]);
+    expect(clauses.takeReady(1_283)).toEqual([]);
+    expect(clauses.takeReady(1_563)).toEqual([
+      { text: 'early with enough material for the later', reason: 'deadline' },
+    ]);
+    expect(clauses.pendingText()).toBe('clause');
   });
 
   it('raises buffering after underruns and cautiously lowers it after stable turns', () => {
-    const policy = new AdaptiveTtsBufferPolicy({ startBufferMs: 260, rebufferMs: 520 });
+    const policy = new AdaptiveTtsBufferPolicy({ startBufferMs: 220, rebufferMs: 440 });
     const raised = policy.observeWorkletEvent('underrun');
-    expect(raised.startBufferMs).toBeGreaterThan(260);
-    expect(raised.rebufferMs).toBeGreaterThan(520);
+    expect(raised.startBufferMs).toBeGreaterThan(220);
+    expect(raised.rebufferMs).toBeGreaterThan(440);
     policy.observeWorkletEvent('drained');
     const beforeStable = policy.snapshot();
     policy.observeWorkletEvent('drained');
@@ -75,5 +87,16 @@ describe('live latency PR3-PR5 rollout policies', () => {
     const lowered = policy.observeWorkletEvent('drained');
     expect(lowered.startBufferMs).toBeLessThan(beforeStable.startBufferMs);
     expect(lowered.rebufferMs).toBeLessThan(beforeStable.rebufferMs);
+  });
+
+  it('applies adaptive onset updates through the owning PCM session API', () => {
+    const setStartPolicy = vi.fn();
+    const controller = createAdaptiveBufferSessionController(
+      { setStartPolicy },
+      { startBufferMs: 220, rebufferMs: 440 },
+    );
+    expect(setStartPolicy).toHaveBeenLastCalledWith({ minimumBufferedSpeechMs: 220 });
+    controller.observeWorkletEvent({ type: 'underrun' });
+    expect(setStartPolicy).toHaveBeenLastCalledWith({ minimumBufferedSpeechMs: 290 });
   });
 });

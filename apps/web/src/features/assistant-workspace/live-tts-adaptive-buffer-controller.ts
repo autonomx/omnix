@@ -10,14 +10,19 @@ export type AdaptiveBufferSnapshot = {
   underrunTurns: number;
 };
 
+export type AdaptiveBufferSessionController = {
+  snapshot: () => AdaptiveBufferSnapshot;
+  observeWorkletEvent: (event: Record<string, unknown>) => AdaptiveBufferSnapshot;
+};
+
 export class AdaptiveTtsBufferPolicy {
   private snapshotValue: AdaptiveBufferSnapshot;
   private turnUnderruns = 0;
 
   constructor(initial?: Partial<AdaptiveBufferSnapshot>) {
     this.snapshotValue = {
-      startBufferMs: clamp(initial?.startBufferMs ?? 260, 160, 650),
-      rebufferMs: clamp(initial?.rebufferMs ?? 520, 300, 1_200),
+      startBufferMs: clamp(initial?.startBufferMs ?? 220, 160, 650),
+      rebufferMs: clamp(initial?.rebufferMs ?? 440, 300, 1_200),
       maxRebufferMs: clamp(initial?.maxRebufferMs ?? 1_400, 800, 2_000),
       stableTurns: Math.max(0, initial?.stableTurns ?? 0),
       underrunTurns: Math.max(0, initial?.underrunTurns ?? 0),
@@ -144,6 +149,25 @@ export function applyAdaptiveBufferSnapshot(
   session.setStartPolicy({
     minimumBufferedSpeechMs: snapshot.startBufferMs,
   });
+}
+
+export function createAdaptiveBufferSessionController(
+  session: Pick<LiveVoicePcmSession, 'setStartPolicy'>,
+  initial: Partial<AdaptiveBufferSnapshot> | undefined = loadAdaptiveBufferSnapshot(),
+): AdaptiveBufferSessionController {
+  const policy = new AdaptiveTtsBufferPolicy(initial);
+  applyAdaptiveBufferSnapshot(session, policy.snapshot());
+  return {
+    snapshot: () => policy.snapshot(),
+    observeWorkletEvent: (event) => {
+      const type = typeof event.type === 'string' ? event.type : '';
+      if (type !== 'underrun' && type !== 'drained') return policy.snapshot();
+      const next = policy.observeWorkletEvent(type);
+      saveAdaptiveBufferSnapshot(next);
+      applyAdaptiveBufferSnapshot(session, next);
+      return next;
+    },
+  };
 }
 
 function millisecondsToSamples(
