@@ -40,7 +40,7 @@ class _FakeStore:
         rendered = SimpleNamespace(
             messages=[SimpleNamespace(role="user", content=user_message.content)]
         )
-        return SimpleNamespace(sources=[]), rendered
+        return SimpleNamespace(diagnostics={}), rendered
 
     def begin_user_message(self, session_id, request):
         assert session_id == self.session.id
@@ -92,6 +92,41 @@ def test_transcript_compatibility_is_strict_about_words() -> None:
     assert not speculation.transcript_is_speculation_safe("Wait, no I mean tell me a story")
 
 
+def test_accept_compatibility_rejects_mode_or_provider_changes() -> None:
+    active = speculation._Speculation(
+        generation_id="spec-test",
+        session_id="session-1",
+        candidate_text="Tell me a story",
+        provider_id="fake-provider",
+        model_id="fake-model",
+        segment_id="segment-1",
+        source_sequence=0,
+        created_at=1.0,
+    )
+    assert speculation.speculation_accept_request_is_compatible(
+        active,
+        speculation.LiveSpeculationAcceptRequest(
+            final_text="tell me a story!",
+            provider_id="fake-provider",
+            model_id="fake-model",
+        ),
+    )
+    assert not speculation.speculation_accept_request_is_compatible(
+        active,
+        speculation.LiveSpeculationAcceptRequest(
+            final_text="tell me a story!",
+            provider_id="other-provider",
+        ),
+    )
+    assert not speculation.speculation_accept_request_is_compatible(
+        active,
+        speculation.LiveSpeculationAcceptRequest(
+            final_text="tell me a story!",
+            agent_mode=True,
+        ),
+    )
+
+
 def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     store = _FakeStore()
     monkeypatch.setattr(speculation.shared, "get_provider", lambda _provider_id: _FakeProvider())
@@ -109,11 +144,10 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     )
     assert stream_response.status_code == 200
     payloads = _event_payloads(stream_response.text)
-    generation_id = next(
-        payload["generation_id"]
-        for payload in payloads
-        if payload.get("type") == "speculation_started"
-    )
+    started = next(payload for payload in payloads if payload.get("type") == "speculation_started")
+    generation_id = started["generation_id"]
+    assert started["provider_id"] == "fake-provider"
+    assert started["model_id"] == "fake-model"
     assert "".join(
         payload.get("text", "") for payload in payloads if payload.get("type") == "text_chunk"
     ) == "Hello there."
@@ -127,14 +161,17 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     assert mismatch.status_code == 409
     assert store.begin_calls == 0
 
+    accept_payload = {
+        "final_text": "tell me a story!",
+        "provider_id": "fake-provider",
+        "model_id": "fake-model",
+        "user_turn_id": "user-turn:accepted-17",
+        "speech_segment_id": "speech-segment:accepted-17",
+        "live_voice_turn_id": "voice-turn:accepted-17",
+    }
     accepted = client.post(
         f"/api/live/speculation/sessions/session-1/{generation_id}/accept",
-        json={
-            "final_text": "tell me a story!",
-            "user_turn_id": "user-turn:accepted-17",
-            "speech_segment_id": "speech-segment:accepted-17",
-            "live_voice_turn_id": "voice-turn:accepted-17",
-        },
+        json=accept_payload,
     )
     assert accepted.status_code == 200
     assert accepted.json()["content"] == "Hello there."
@@ -146,3 +183,12 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     assert store.last_request.user_turn_id == "user-turn:accepted-17"
     assert store.last_request.speech_segment_id == "speech-segment:accepted-17"
     assert re.fullmatch(r"spec-[0-9a-f]{32}", generation_id)
+
+    repeated = client.post(
+        f"/api/live/speculation/sessions/session-1/{generation_id}/accept",
+        json=accept_payload,
+    )
+    assert repeated.status_code == 200
+    assert repeated.json() == accepted.json()
+    assert store.begin_calls == 1
+    assert store.complete_calls == 1

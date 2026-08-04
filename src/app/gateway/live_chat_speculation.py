@@ -1,6 +1,7 @@
 """Side-effect-free LLM speculation for stable live-STT partials."""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import threading
@@ -29,6 +30,7 @@ from app.providers import ChatMessage as ProviderMessage
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_registered"
 _SPECULATION_TTL_SECONDS = 90.0
+_SPECULATION_ACCEPT_WAIT_SECONDS = 5.0
 _MAX_SPECULATIONS = 64
 _WORD_PATTERN = re.compile(r"[\w]+(?:['’][\w]+)?", re.UNICODE)
 _UNRESOLVED_CORRECTION_PATTERN = re.compile(
@@ -47,6 +49,11 @@ class LiveSpeculationRequest(BaseModel):
 
 class LiveSpeculationAcceptRequest(BaseModel):
     final_text: str = Field(min_length=1, max_length=8_000)
+    provider_id: str | None = None
+    model_id: str | None = None
+    agent_mode: bool = False
+    dry_run: bool = False
+    research_mode: str | None = None
     user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
     live_voice_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
@@ -66,7 +73,10 @@ class _Speculation:
     metadata: dict[str, Any] = field(default_factory=dict)
     completed: bool = False
     error: str | None = None
+    accepting: bool = False
+    accept_error: str | None = None
     accepted_payload: dict[str, Any] | None = None
+    accept_event: threading.Event = field(default_factory=threading.Event, repr=False)
 
 
 _SPECULATIONS: dict[str, _Speculation] = {}
@@ -87,6 +97,19 @@ def transcripts_are_compatible(candidate: str, final: str) -> bool:
         transcript_is_speculation_safe(candidate)
         and normalized_transcript_words(candidate) == normalized_transcript_words(final)
     )
+
+
+def speculation_accept_request_is_compatible(
+    speculation: _Speculation,
+    request: LiveSpeculationAcceptRequest,
+) -> bool:
+    if request.agent_mode or request.dry_run or request.research_mode:
+        return False
+    if request.provider_id and request.provider_id != speculation.provider_id:
+        return False
+    if request.model_id and request.model_id != speculation.model_id:
+        return False
+    return transcripts_are_compatible(speculation.candidate_text, request.final_text)
 
 
 def register_live_chat_speculation_routes(
@@ -133,6 +156,8 @@ def register_live_chat_speculation_routes(
                 "generation_id": generation_id,
                 "segment_id": request.segment_id,
                 "source_sequence": request.source_sequence,
+                "provider_id": speculation.provider_id,
+                "model_id": speculation.model_id,
             })
             try:
                 yield from _generate_side_effect_free(store, session, speculation)
@@ -156,59 +181,93 @@ def register_live_chat_speculation_routes(
         generation_id: str,
         request: LiveSpeculationAcceptRequest,
     ) -> dict[str, Any]:
+        owns_accept = False
+        wait_event: threading.Event | None = None
         with _SPECULATION_LOCK:
             _prune_speculations()
             speculation = _SPECULATIONS.get(generation_id)
             if speculation is None or speculation.session_id != session_id:
                 raise HTTPException(status_code=404, detail="speculation_not_found")
-            if speculation.accepted_payload is not None:
-                return dict(speculation.accepted_payload)
             if not speculation.completed:
                 raise HTTPException(status_code=409, detail="speculation_not_complete")
             if speculation.error:
                 raise HTTPException(status_code=409, detail="speculation_failed")
-            if not transcripts_are_compatible(speculation.candidate_text, request.final_text):
-                raise HTTPException(status_code=409, detail="speculation_transcript_mismatch")
+            if not speculation_accept_request_is_compatible(speculation, request):
+                raise HTTPException(status_code=409, detail="speculation_request_mismatch")
+            if speculation.accepted_payload is not None:
+                return dict(speculation.accepted_payload)
+            if speculation.accepting:
+                wait_event = speculation.accept_event
+            else:
+                speculation.accepting = True
+                speculation.accept_error = None
+                speculation.accept_event.clear()
+                owns_accept = True
 
-        accepted_request = _accepted_chat_request(
-            request,
-            speculation=speculation,
-            generation_id=generation_id,
-        )
-        store = chat_store_factory()
-        appended = store.begin_user_message(session_id, accepted_request)
-        if appended is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
-        _, user_message = appended
-        completed = store.complete_streamed_reply(
-            session_id,
-            user_message.id,
-            speculation.content,
-            {
-                **speculation.metadata,
-                "generation_status": "completed",
-                "speculative_generation": True,
-                "speculation_generation_id": generation_id,
-                "speculation_candidate_words": len(
-                    normalized_transcript_words(speculation.candidate_text)
-                ),
+        if not owns_accept:
+            assert wait_event is not None
+            completed = await asyncio.to_thread(
+                wait_event.wait,
+                _SPECULATION_ACCEPT_WAIT_SECONDS,
+            )
+            if not completed:
+                raise HTTPException(status_code=409, detail="speculation_accept_in_progress")
+            with _SPECULATION_LOCK:
+                if speculation.accepted_payload is not None:
+                    return dict(speculation.accepted_payload)
+                detail = speculation.accept_error or "speculation_accept_failed"
+            raise HTTPException(status_code=409, detail=detail)
+
+        try:
+            accepted_request = _accepted_chat_request(
+                request,
+                speculation=speculation,
+                generation_id=generation_id,
+            )
+            store = chat_store_factory()
+            appended = store.begin_user_message(session_id, accepted_request)
+            if appended is None:
+                raise HTTPException(status_code=404, detail="chat session not found")
+            _, user_message = appended
+            completed_session = store.complete_streamed_reply(
+                session_id,
+                user_message.id,
+                speculation.content,
+                {
+                    **speculation.metadata,
+                    "generation_status": "completed",
+                    "speculative_generation": True,
+                    "speculation_generation_id": generation_id,
+                    "speculation_candidate_words": len(
+                        normalized_transcript_words(speculation.candidate_text)
+                    ),
+                    "user_turn_id": accepted_request.user_turn_id,
+                    "speech_segment_id": accepted_request.speech_segment_id,
+                },
+            )
+            if completed_session is None:
+                raise HTTPException(status_code=409, detail="speculation_accept_failed")
+            payload = {
+                "ok": True,
+                "generation_id": generation_id,
+                "content": speculation.content,
                 "user_turn_id": accepted_request.user_turn_id,
                 "speech_segment_id": accepted_request.speech_segment_id,
-            },
-        )
-        if completed is None:
-            raise HTTPException(status_code=409, detail="speculation_accept_failed")
-        payload = {
-            "ok": True,
-            "generation_id": generation_id,
-            "content": speculation.content,
-            "user_turn_id": accepted_request.user_turn_id,
-            "speech_segment_id": accepted_request.speech_segment_id,
-            "user_message": user_message.model_dump(mode="json"),
-            "session": completed.model_dump(mode="json"),
-        }
+                "user_message": user_message.model_dump(mode="json"),
+                "session": completed_session.model_dump(mode="json"),
+            }
+        except Exception as exc:
+            detail = exc.detail if isinstance(exc, HTTPException) else "speculation_accept_failed"
+            with _SPECULATION_LOCK:
+                speculation.accepting = False
+                speculation.accept_error = str(detail)
+                speculation.accept_event.set()
+            raise
         with _SPECULATION_LOCK:
             speculation.accepted_payload = payload
+            speculation.accepting = False
+            speculation.accept_error = None
+            speculation.accept_event.set()
         return payload
 
 
