@@ -7,7 +7,7 @@ from types import ModuleType
 
 from app.rpg.worlds.world_bundle import parse_world_bundle_archive
 
-BUNDLE_SHA256 = "26ec674aa8fb1d6b73422224713319f4d1388734f4b97b841d938f53b2c6b1f6"
+BUNDLE_SHA256 = "41b3a7f7bdd17d38253034d07b50962f640545b1e920e329116a779ca55c89be"
 SAMPLE_DIR = (
     Path(__file__).resolve().parents[4]
     / "examples"
