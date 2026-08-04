@@ -23,6 +23,8 @@ class _FakeStore:
     def __init__(self) -> None:
         self.begin_calls = 0
         self.complete_calls = 0
+        self.last_request = None
+        self.last_metadata = None
         self.session = ChatSession(
             id="session-1",
             title="Speculation",
@@ -44,6 +46,7 @@ class _FakeStore:
     def begin_user_message(self, session_id, request):
         assert session_id == self.session.id
         self.begin_calls += 1
+        self.last_request = request
         message = ChatMessage(
             id="accepted-user",
             role="user",
@@ -57,6 +60,7 @@ class _FakeStore:
         assert user_message_id == "accepted-user"
         assert metadata["speculative_generation"] is True
         self.complete_calls += 1
+        self.last_metadata = metadata
         self.session.messages = [
             ChatMessage(
                 id="accepted-user",
@@ -78,23 +82,43 @@ class _FakeStore:
 def _event_payloads(body: str) -> list[dict]:
     payloads = []
     for block in body.split("\n\n"):
-        line = next((line for line in block.splitlines() if line.startswith("data: ")), None)
+        line = next(
+            (line for line in block.splitlines() if line.startswith("data: ")),
+            None,
+        )
         if line:
             payloads.append(json.loads(line[6:]))
     return payloads
 
 
 def test_transcript_compatibility_is_strict_about_words() -> None:
-    assert speculation.transcripts_are_compatible("Tell me a story", "tell me a story!")
-    assert not speculation.transcripts_are_compatible("Tell me a story", "Tell me the story")
-    assert not speculation.transcript_is_speculation_safe("Wait, no I mean tell me a story")
+    assert speculation.transcripts_are_compatible(
+        "Tell me a story",
+        "tell me a story!",
+    )
+    assert not speculation.transcripts_are_compatible(
+        "Tell me a story",
+        "Tell me the story",
+    )
+    assert speculation.transcript_is_speculation_safe("Hello")
+    assert not speculation.transcript_is_speculation_safe("Hi")
+    assert not speculation.transcript_is_speculation_safe(
+        "Wait, no I mean tell me a story"
+    )
 
 
 def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     store = _FakeStore()
-    monkeypatch.setattr(speculation.shared, "get_provider", lambda _provider_id: _FakeProvider())
+    monkeypatch.setattr(
+        speculation.shared,
+        "get_provider",
+        lambda _provider_id: _FakeProvider(),
+    )
     app = FastAPI()
-    speculation.register_live_chat_speculation_routes(app, chat_store_factory=lambda: store)
+    speculation.register_live_chat_speculation_routes(
+        app,
+        chat_store_factory=lambda: store,
+    )
     client = TestClient(app)
 
     stream_response = client.post(
@@ -114,7 +138,9 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     assert started["provider_id"] == "fake-provider"
     assert started["model_id"] == "fake-model"
     assert "".join(
-        payload.get("text", "") for payload in payloads if payload.get("type") == "text_chunk"
+        payload.get("text", "")
+        for payload in payloads
+        if payload.get("type") == "text_chunk"
     ) == "Hello there."
     assert store.begin_calls == 0
     assert store.complete_calls == 0
@@ -128,10 +154,18 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
 
     accepted = client.post(
         f"/api/live/speculation/sessions/session-1/{generation_id}/accept",
-        json={"final_text": "tell me a story!"},
+        json={
+            "final_text": "tell me a story!",
+            "user_turn_id": "voice-user-turn:test-1",
+            "speech_segment_id": "voice-segment:test-1",
+            "live_voice_turn_id": "voice-turn:test-1",
+        },
     )
     assert accepted.status_code == 200
     assert accepted.json()["content"] == "Hello there."
     assert store.begin_calls == 1
     assert store.complete_calls == 1
+    assert store.last_request.user_turn_id == "voice-user-turn:test-1"
+    assert store.last_request.speech_segment_id == "voice-segment:test-1"
+    assert store.last_metadata["live_voice_turn_id"] == "voice-turn:test-1"
     assert re.fullmatch(r"spec-[0-9a-f]{32}", generation_id)
