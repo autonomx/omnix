@@ -12,6 +12,7 @@ from app.providers.kyutai_live_stt import (
     KyutaiLiveSttError,
     KyutaiLiveSttProvider,
     KyutaiLiveSttSession,
+    _join_url,
     classify_kyutai_connect_exception,
     pcm16le_to_float32,
 )
@@ -47,6 +48,10 @@ class FakeInvalidStatus(Exception):
     def __init__(self, status_code: int) -> None:
         super().__init__(f"server rejected WebSocket connection: HTTP {status_code}")
         self.response = type("FakeResponse", (), {"status_code": status_code})()
+
+
+class InvalidMessage(Exception):
+    pass
 
 
 def _pcm(samples: list[int]) -> bytes:
@@ -154,6 +159,35 @@ def test_kyutai_flush_can_be_cancelled_while_waiting_for_model_steps() -> None:
     asyncio.run(scenario())
 
 
+def test_pinned_moshi_worker_uses_root_websocket_endpoint() -> None:
+    assert _join_url("ws://127.0.0.1:8090", "") == "ws://127.0.0.1:8090"
+    assert _join_url("ws://127.0.0.1:8090/", "/") == "ws://127.0.0.1:8090"
+    assert (
+        _join_url("ws://127.0.0.1:8090", "/api/asr-streaming")
+        == "ws://127.0.0.1:8090/api/asr-streaming"
+    )
+    assert (
+        _join_url("ws://127.0.0.1:8090/api/asr-streaming", "/api/asr-streaming")
+        == "ws://127.0.0.1:8090/api/asr-streaming"
+    )
+
+
+def test_provider_defaults_to_root_path_and_exposes_override() -> None:
+    provider = KyutaiLiveSttProvider(base_url="ws://probe")
+    overridden = KyutaiLiveSttProvider(base_url="ws://probe", path="/api/asr-streaming")
+
+    assert provider.path == ""
+    assert overridden.path == "/api/asr-streaming"
+
+    async def scenario() -> None:
+        health = await provider.health()
+        override_health = await overridden.health()
+        assert health["path"] == ""
+        assert override_health["path"] == "/api/asr-streaming"
+
+    asyncio.run(scenario())
+
+
 def test_kyutai_provider_rejects_unsupported_languages_before_connecting() -> None:
     async def scenario() -> None:
         provider = KyutaiLiveSttProvider(base_url="ws://unused")
@@ -180,6 +214,7 @@ def test_kyutai_provider_probe_reports_real_upstream_readiness(monkeypatch: pyte
         assert health["upstream_ready"] is True
         assert health["state"] == "closed"
         assert health["last_error_code"] is None
+        assert health["path"] == ""
         assert socket.closed is True
 
     asyncio.run(scenario())
@@ -192,6 +227,12 @@ def test_connect_exception_classifier_uses_status_and_transport_type() -> None:
     assert classify_kyutai_connect_exception(OSError(111, "Connection refused")) == "upstream_connection_refused"
     assert (
         classify_kyutai_connect_exception(RuntimeError("did not receive a valid HTTP response"))
+        == "upstream_protocol_error"
+    )
+    assert (
+        classify_kyutai_connect_exception(
+            InvalidMessage("connection closed while reading HTTP status line")
+        )
         == "upstream_protocol_error"
     )
 
@@ -210,5 +251,6 @@ def test_provider_health_preserves_safe_connect_failure_details(monkeypatch: pyt
         assert health["last_error_code"] == "upstream_endpoint_not_found"
         assert health["last_error_type"] == "FakeInvalidStatus"
         assert health["last_error_stage"] == "connect"
+        assert health["path"] == ""
 
     asyncio.run(scenario())
