@@ -34,7 +34,7 @@ KYUTAI_FRAME_SAMPLES = 1_920
 KYUTAI_FRAME_SECONDS = KYUTAI_FRAME_SAMPLES / KYUTAI_SAMPLE_RATE
 KYUTAI_MODEL_DELAY_SECONDS = 0.5
 KYUTAI_STARTUP_SUPPRESSION_STEPS = 12
-KYUTAI_STT_PATH = "/api/asr-streaming"
+KYUTAI_STT_PATH = ""
 SUPPORTED_LANGUAGES = frozenset({"en", "en-us", "en-ca", "en-gb", "fr", "fr-ca", "fr-fr"})
 
 _SAFE_PROBE_ERROR_CODES = frozenset(
@@ -96,9 +96,19 @@ def _normalize_language(language: str | None) -> str:
     return (language or "en").strip().lower().replace("_", "-")
 
 
-def _join_url(base_url: str, path: str) -> str:
+def _normalize_stt_path(path: str | None) -> str:
+    normalized = (path or "").strip()
+    if not normalized or normalized == "/":
+        return ""
+    return f"/{normalized.lstrip('/')}"
+
+
+def _join_url(base_url: str, path: str | None) -> str:
     normalized = base_url.rstrip("/")
-    return normalized if normalized.endswith(path) else f"{normalized}{path}"
+    normalized_path = _normalize_stt_path(path)
+    if not normalized_path:
+        return normalized
+    return normalized if normalized.endswith(normalized_path) else f"{normalized}{normalized_path}"
 
 
 def _exception_chain(exc: BaseException) -> tuple[BaseException, ...]:
@@ -142,6 +152,7 @@ def classify_kyutai_connect_exception(exc: BaseException) -> str:
     if any(status >= 500 for status in statuses):
         return "upstream_service_unavailable"
 
+    exception_names = {type(item).__name__.lower() for item in chain}
     message = " | ".join(f"{type(item).__name__}: {item}" for item in chain).lower()
     if any(token in message for token in ("connection refused", "winerror 10061", "errno 111")):
         return "upstream_connection_refused"
@@ -165,17 +176,7 @@ def classify_kyutai_connect_exception(exc: BaseException) -> str:
         return "upstream_tls_error"
     if "additional_headers" in message and "extra_headers" in message:
         return "upstream_client_incompatible"
-    if any(
-        token in message
-        for token in (
-            "connection closed",
-            "closed while",
-            "no close frame",
-            "connectionclosed",
-        )
-    ):
-        return "upstream_connection_closed"
-    if any(
+    if exception_names.intersection({"invalidmessage", "invalidhandshake", "invalidstatus"}) or any(
         token in message
         for token in (
             "expected kyutai ready",
@@ -191,6 +192,16 @@ def classify_kyutai_connect_exception(exc: BaseException) -> str:
         )
     ):
         return "upstream_protocol_error"
+    if any(
+        token in message
+        for token in (
+            "connection closed",
+            "closed while",
+            "no close frame",
+            "connectionclosed",
+        )
+    ):
+        return "upstream_connection_closed"
     if any(token in message for token in ("service rejected", "rejected the session")):
         return "upstream_service_rejected"
     return "upstream_probe_failed"
@@ -282,11 +293,13 @@ class KyutaiLiveSttSession:
         base_url: str,
         *,
         api_key: str = "public_token",
+        path: str | None = None,
         connect_timeout_seconds: float = 5.0,
         delay_seconds: float = KYUTAI_MODEL_DELAY_SECONDS,
         flush_timeout_seconds: float = 3.0,
     ) -> KyutaiLiveSttSession:
-        url = _join_url(base_url, KYUTAI_STT_PATH)
+        configured_path = os.environ.get("KYUTAI_STT_PATH", KYUTAI_STT_PATH) if path is None else path
+        url = _join_url(base_url, configured_path)
         headers = {"kyutai-api-key": api_key}
         try:
             websocket = await _connect_websocket(
@@ -575,10 +588,12 @@ class KyutaiLiveSttProvider:
         *,
         base_url: str | None = None,
         api_key: str | None = None,
+        path: str | None = None,
         breaker: LiveSttCircuitBreaker | None = None,
     ) -> None:
         self.base_url = base_url or os.environ.get("KYUTAI_STT_URL", "ws://127.0.0.1:8090")
         self.api_key = api_key or os.environ.get("KYUTAI_STT_API_KEY", "public_token")
+        self.path = os.environ.get("KYUTAI_STT_PATH", KYUTAI_STT_PATH) if path is None else path
         self.breaker = breaker or LiveSttCircuitBreaker(
             failure_threshold=int(os.environ.get("KYUTAI_STT_BREAKER_FAILURES", "3")),
             window_attempts=int(os.environ.get("KYUTAI_STT_BREAKER_WINDOW", "5")),
@@ -609,6 +624,7 @@ class KyutaiLiveSttProvider:
             session = await KyutaiLiveSttSession.connect(
                 self.base_url,
                 api_key=self.api_key,
+                path=self.path,
                 connect_timeout_seconds=float(os.environ.get("KYUTAI_STT_CONNECT_TIMEOUT_SECONDS", "5")),
                 flush_timeout_seconds=float(os.environ.get("KYUTAI_STT_FLUSH_TIMEOUT_SECONDS", "3")),
             )
@@ -675,6 +691,7 @@ class KyutaiLiveSttProvider:
         return {
             "provider": self.provider_name,
             "base_url": self.base_url,
+            "path": _normalize_stt_path(self.path),
             "state": snapshot.state.value,
             "upstream_ready": self._last_probe_ok,
             "failures_in_window": snapshot.failures_in_window,
