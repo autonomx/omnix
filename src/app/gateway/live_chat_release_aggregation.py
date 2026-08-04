@@ -19,6 +19,7 @@ _LATENCY_KEYS = {
     "stt_finalize_p95_ms": "stt_finalize_ms",
     "final_to_first_token_p95_ms": "final_to_first_token_ms",
     "first_token_to_first_audio_p95_ms": "first_token_to_first_audio_ms",
+    "stt_request_to_first_playback_p95_ms": "stt_request_to_first_playback_ms",
     "interruption_to_silence_p95_ms": "interruption_to_silence_ms",
     "cancellation_p95_ms": "duck_to_cancel_ms",
     "rejected_candidate_restore_p95_ms": "rejected_candidate_restore_ms",
