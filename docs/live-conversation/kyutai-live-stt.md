@@ -9,7 +9,8 @@ Microphone
   -> Omnix negotiated /ws/transcribe protocol
   -> Kyutai adapter on port 5202
   -> persistent MessagePack websocket
-  -> moshi-server /api/asr-streaming
+  -> moshi-server worker root on port 8090
+  -> configured ASR module `/api/asr-streaming`
   -> endpoint candidate / authoritative final
   -> side-effect-free LLM speculation
   -> accepted final transcript
@@ -37,13 +38,15 @@ Parakeet continues using 16,000 Hz PCM and its existing segmented finalize-and-t
 
 ## PR 2: Kyutai streaming adapter
 
-The adapter connects to Kyutai's `/api/asr-streaming` endpoint and normalizes:
+The pinned Unmute deployment exposes the `moshi-server worker` directly. Its own backend connects to `ws://stt:8080` without a URL path, while `configs/stt.toml` selects the ASR module at `/api/asr-streaming` inside the worker. Omnix therefore connects to the worker root (`ws://127.0.0.1:8090` after the Docker port mapping) and normalizes:
 
 - partial transcript updates
 - timestamped words
 - semantic endpoint scores and candidates
 - delayed-state flush lifecycle
 - authoritative final transcripts
+
+`KYUTAI_STT_PATH` defaults to an empty string for this pinned worker. It remains available as an explicit override for a future server or proxy that exposes a path-based WebSocket endpoint.
 
 Kyutai decoder state is connection-local. The `client_audio_replay` capability therefore tells the browser to retain acknowledged segment audio until a final result is accepted. After reconnect, Omnix applies cached completed results and replays every still-pending segment from its original sample offset.
 
@@ -180,7 +183,7 @@ Start the Omnix adapter from the Omnix branch:
 python src/kyutai_stt_runtime.py
 ```
 
-The adapter defaults to port `5202`, upstream URL `ws://127.0.0.1:8090`, and can run beside Parakeet on `5201`.
+The adapter defaults to port `5202`, upstream URL `ws://127.0.0.1:8090`, upstream path `""` (worker root), and can run beside Parakeet on `5201`.
 
 ## Exact local latency-test configuration
 
@@ -240,7 +243,8 @@ These events contain timing, identities, probabilities, capabilities, and charac
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `KYUTAI_STT_URL` | `ws://127.0.0.1:8090` | Upstream moshi-server URL |
+| `KYUTAI_STT_URL` | `ws://127.0.0.1:8090` | Upstream moshi-server worker URL |
+| `KYUTAI_STT_PATH` | empty | Optional WebSocket path override; leave empty for the pinned worker |
 | `KYUTAI_STT_API_KEY` | `public_token` | `kyutai-api-key` header |
 | `OMNIX_STT_PORT` | `5202` | Omnix adapter port |
 | `OMNIX_STT_CORS_ORIGINS` | local Vite origins | Allowed authority-preflight origins |
