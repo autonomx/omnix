@@ -4,103 +4,47 @@ export type AvatarGenerationStatus = 'queued' | 'generating_base' | 'generating_
 export type VisemeGenerationStatus = 'generating' | 'completed' | 'failed';
 
 export interface CreateCharacterAvatarGenerationInput {
-  appearance_prompt?: string;
-  style?: string;
-  outfit_prompt?: string;
-  background_prompt?: string;
-  provider_id?: string;
-  width?: number;
-  height?: number;
-  seed?: number | null;
-  steps?: number;
-  guidance_scale?: number | null;
-  include_blink?: boolean;
-  include_expressions?: boolean;
-  include_outfit?: boolean;
-  include_background?: boolean;
-  unload_after_generation?: boolean;
-  source_asset_id?: string;
-  source_image_consent_confirmed?: boolean;
+  appearance_prompt?: string; style?: string; outfit_prompt?: string; background_prompt?: string;
+  provider_id?: string; width?: number; height?: number; seed?: number | null; steps?: number;
+  guidance_scale?: number | null; include_blink?: boolean; include_expressions?: boolean;
+  include_outfit?: boolean; include_background?: boolean; unload_after_generation?: boolean;
+  source_asset_id?: string; source_image_consent_confirmed?: boolean;
 }
 
 export interface CharacterAvatarGenerationBatch {
-  id: string;
-  character_id: string;
-  status: AvatarGenerationStatus;
-  request: Required<Omit<CreateCharacterAvatarGenerationInput, 'seed' | 'guidance_scale'>> & {
-    seed?: number | null;
-    guidance_scale?: number | null;
-  };
-  base_job_id: string;
-  variant_job_ids: Record<string, string>;
-  asset_ids: Record<string, string>;
-  avatar_pack_version?: number | null;
-  error: string;
-  created_at: string;
-  updated_at: string;
+  id: string; character_id: string; status: AvatarGenerationStatus;
+  request: Required<Omit<CreateCharacterAvatarGenerationInput, 'seed' | 'guidance_scale'>> & { seed?: number | null; guidance_scale?: number | null };
+  base_job_id: string; variant_job_ids: Record<string, string>; asset_ids: Record<string, string>;
+  avatar_pack_version?: number | null; error: string; created_at: string; updated_at: string;
 }
 
 export interface CharacterVisemeGenerationBatch {
-  id: string;
-  character_id: string;
-  status: VisemeGenerationStatus;
-  job_ids: Record<string, string>;
-  asset_ids: Record<string, string>;
-  attempts: Record<string, number>;
-  quality_fallbacks: Record<string, string>;
-  avatar_pack_version?: number | null;
-  error: string;
-  created_at: string;
-  updated_at: string;
+  id: string; character_id: string; status: VisemeGenerationStatus; job_ids: Record<string, string>;
+  asset_ids: Record<string, string>; attempts: Record<string, number>; quality_fallbacks: Record<string, string>;
+  avatar_pack_version?: number | null; error: string; created_at: string; updated_at: string;
 }
 
 export interface ClonedVoiceBackfillItem {
-  voice_asset_id: string;
-  display_name: string;
-  character_id?: string | null;
+  voice_asset_id: string; display_name: string; character_id?: string | null;
   result: 'created' | 'existing' | 'queued' | 'already_has_avatar' | 'skipped' | 'failed';
-  generation_batch_id?: string | null;
-  reason: string;
+  generation_batch_id?: string | null; reason: string;
 }
-
-export interface ClonedVoiceBackfillResponse {
-  items: ClonedVoiceBackfillItem[];
-}
-
+export interface ClonedVoiceBackfillResponse { items: ClonedVoiceBackfillItem[]; }
 export interface UploadedAvatarSourceAsset {
-  id: string;
-  module: string;
-  type: 'image';
-  mime_type: string;
-  storage_path: string;
-  metadata: Record<string, unknown>;
+  id: string; module: string; type: 'image'; mime_type: string; storage_path: string; metadata: Record<string, unknown>;
 }
-
 export interface Live2DModelCatalogItem {
-  id: string;
-  name: string;
-  description: string;
-  preview_url: string;
-  repository: string;
-  revision: string;
-  source_url: string;
-  model_license_url: string;
-  runtime_license_url: string;
-  license_summary: string;
-  installed: boolean;
-  selected: boolean;
+  id: string; name: string; description: string; preview_url: string; repository: string; revision: string;
+  source_url: string; model_license_url: string; runtime_license_url: string; license_summary: string;
+  installed: boolean; selected: boolean;
 }
-
-export interface Live2DModelCatalogResponse {
-  models: Live2DModelCatalogItem[];
-  runtime_installed: boolean;
-}
-
+export interface Live2DModelCatalogResponse { models: Live2DModelCatalogItem[]; runtime_installed: boolean; }
 export interface Live2DAvatarActionResponse {
-  ok: boolean;
-  character_id: string;
-  avatar_pack?: CharacterAvatarPack | null;
-  downloaded: boolean;
+  ok: boolean; character_id: string; avatar_pack?: CharacterAvatarPack | null; downloaded: boolean;
+}
+
+class AvatarRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -111,10 +55,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       const payload = JSON.parse(responseBody) as { detail?: unknown };
       if (typeof payload.detail === 'string') message = payload.detail;
-    } catch {
-      // Keep the raw response when the server did not return JSON.
-    }
-    throw new Error(message || `Avatar request failed with status ${response.status}.`);
+    } catch { /* Keep raw response. */ }
+    throw new AvatarRequestError(message || `Avatar request failed with status ${response.status}.`, response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -124,17 +66,24 @@ function jsonInit(method: string, body: unknown): RequestInit {
 }
 
 export const characterAvatarClient = {
-  optionalPack(characterId: string): Promise<CharacterAvatarPack | null> {
-    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack/optional`);
+  async optionalPack(characterId: string): Promise<CharacterAvatarPack | null> {
+    const encoded = encodeURIComponent(characterId);
+    try {
+      return await request(`/api/characters/${encoded}/avatar-pack/optional`);
+    } catch (error) {
+      if (!(error instanceof AvatarRequestError) || error.status !== 404) throw error;
+      try {
+        return await request(`/api/characters/${encoded}/avatar-pack`);
+      } catch (legacyError) {
+        if (legacyError instanceof AvatarRequestError && legacyError.status === 404) return null;
+        throw legacyError;
+      }
+    }
   },
   async uploadSourceImage(file: File): Promise<UploadedAvatarSourceAsset> {
     const payload = await request<{ ok: true; asset: UploadedAvatarSourceAsset }>(
       `/api/image-generation/references?filename=${encodeURIComponent(file.name || 'avatar-source')}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file,
-      },
+      { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file },
     );
     return payload.asset;
   },
@@ -153,26 +102,13 @@ export const characterAvatarClient = {
   live2dCatalog(characterId: string): Promise<Live2DModelCatalogResponse> {
     return request(`/api/characters/${encodeURIComponent(characterId)}/live2d-models`);
   },
-  activateLive2d(
-    characterId: string,
-    input: {
-      model_id: string;
-      accept_live2d_runtime_terms: boolean;
-      accept_model_terms: boolean;
-    },
-  ): Promise<Live2DAvatarActionResponse> {
+  activateLive2d(characterId: string, input: { model_id: string; accept_live2d_runtime_terms: boolean; accept_model_terms: boolean }): Promise<Live2DAvatarActionResponse> {
     return request(`/api/characters/${encodeURIComponent(characterId)}/live2d-avatar`, jsonInit('POST', input));
   },
   disableLive2d(characterId: string): Promise<Live2DAvatarActionResponse> {
     return request(`/api/characters/${encodeURIComponent(characterId)}/live2d-avatar/disable`, { method: 'POST' });
   },
-  backfillClonedVoices(input: {
-    queue_avatar_generation?: boolean;
-    appearance_template?: string;
-    style?: string;
-    provider_id?: string;
-    include_reference_profiles?: boolean;
-  }): Promise<ClonedVoiceBackfillResponse> {
+  backfillClonedVoices(input: { queue_avatar_generation?: boolean; appearance_template?: string; style?: string; provider_id?: string; include_reference_profiles?: boolean }): Promise<ClonedVoiceBackfillResponse> {
     return request('/api/characters/backfill-cloned-voices', jsonInit('POST', input));
   },
 };
