@@ -32,9 +32,10 @@ function diagnostic(
   event: string,
   traceId = 'live-call:voice-turn:1',
   source = 'controller',
+  details: Record<string, unknown> = {},
 ): void {
   window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
-    detail: { traceId, source, event, details: {} },
+    detail: { traceId, source, event, details },
   }));
 }
 
@@ -48,15 +49,13 @@ describe('live voice release observer', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => now);
   });
 
-  it('separates stream-open, model, PCM, playback, and local-pause latency', () => {
+  it('separates stream-open, model, PCM, playback, and endpoint latency', () => {
     const observations: LiveVoiceReleaseObservation[] = [];
     const listener = (event: Event) => observations.push(
       (event as CustomEvent<LiveVoiceReleaseObservation>).detail,
     );
     window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
 
-    now = 50;
-    perf('semantic_turn_assessed');
     now = 100;
     perf('stt_final_requested');
     now = 300;
@@ -71,12 +70,21 @@ describe('live voice release observer', () => {
       'phrase_first_frame_received',
       'live-call:chat:s1:audio-session:a1',
       'pcm_session',
+      { output_id: 'output-one', segment_id: 'speech-one', segment_kind: 'speech' },
+    );
+    now = 1_050;
+    diagnostic(
+      'worklet_segment_started',
+      'live-call:chat:s1:audio-session:a1',
+      'audio_worklet',
+      { output_id: 'other-output', segment_id: 'silence-one', segment_kind: 'silence' },
     );
     now = 1_100;
     diagnostic(
       'worklet_segment_started',
       'live-call:chat:s1:audio-session:a1',
       'audio_worklet',
+      { output_id: 'output-one', segment_id: 'speech-one', segment_kind: 'speech' },
     );
 
     const latency = observations.filter(
@@ -94,11 +102,13 @@ describe('live voice release observer', () => {
       final_to_first_token_ms: 500,
       first_token_to_first_audio_ms: 200,
       final_to_first_audio_ms: 700,
+      stt_request_to_first_audio_ms: 900,
       first_pcm_to_first_playback_ms: 100,
       first_token_to_first_playback_ms: 300,
       final_to_first_playback_ms: 800,
-      local_pause_to_first_playback_ms: 1_050,
+      stt_request_to_first_playback_ms: 1_000,
     });
+    expect(values).not.toHaveProperty('local_pause_to_first_playback_ms');
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
   });
 
@@ -108,8 +118,20 @@ describe('live voice release observer', () => {
     diagnostic('turn_intercepted', 'live-call:voice-turn:2');
     now = 200;
     diagnostic('llm_text_chunk_received', 'live-call:voice-turn:2');
+    now = 250;
+    diagnostic(
+      'phrase_first_frame_received',
+      'live-call:audio-session:two',
+      'pcm_session',
+      { output_id: 'expected-output', segment_id: 'expected-segment', segment_kind: 'speech' },
+    );
     now = 300;
-    diagnostic('worklet_segment_started', 'live-call:unrelated', 'controller');
+    diagnostic(
+      'worklet_segment_started',
+      'live-call:unrelated',
+      'audio_worklet',
+      { output_id: 'wrong-output', segment_id: 'wrong-segment', segment_kind: 'speech' },
+    );
 
     expect(mocks.record).not.toHaveBeenCalledWith(
       'release_metric',
