@@ -11,11 +11,22 @@ from app.launcher.huggingface_token_store import load_huggingface_token
 
 _UNMUTE_REPOSITORY = "https://github.com/kyutai-labs/unmute.git"
 _UNMUTE_PIN = "c49982eb3aeaf76633dfe4155fa3b8dcb5b3d962"
+_DEFAULT_MOSHI_IMAGE = "moshi-server:latest"
 _STOP_REQUESTED = threading.Event()
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _flag(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
 
 
 def _request_stop(_signum: int, _frame: object) -> None:
@@ -152,6 +163,37 @@ def _compose_environment(root: Path) -> dict[str, str]:
     return environment
 
 
+def _docker_image_exists(environment: dict[str, str]) -> bool:
+    image = os.environ.get("KYUTAI_MOSHI_IMAGE", _DEFAULT_MOSHI_IMAGE).strip()
+    if not image:
+        image = _DEFAULT_MOSHI_IMAGE
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=environment,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
+def _startup_command(
+    base_command: list[str],
+    environment: dict[str, str],
+) -> tuple[list[str], str]:
+    force_rebuild = _flag("KYUTAI_MOSHI_FORCE_REBUILD", "0")
+    image_exists = _docker_image_exists(environment)
+    if force_rebuild:
+        return [*base_command, "up", "--build", "stt"], "forced rebuild requested"
+    if not image_exists:
+        return [*base_command, "up", "--build", "stt"], "Moshi image is missing"
+    return [*base_command, "up", "stt"], "reusing existing Moshi image and container"
+
+
 def _stop_service(base_command: list[str], environment: dict[str, str]) -> None:
     print("[KYUTAI MOSHI] Stopping Docker Compose service stt...", flush=True)
     try:
@@ -190,7 +232,8 @@ def main() -> int:
         )
 
     _install_signal_handlers()
-    command = [*base_command, "up", "--build", "stt"]
+    command, startup_reason = _startup_command(base_command, environment)
+    print(f"[KYUTAI MOSHI] Startup mode: {startup_reason}.", flush=True)
     print("[KYUTAI MOSHI] Starting: " + " ".join(command), flush=True)
     process = subprocess.Popen(command, cwd=str(root), env=environment)
 
