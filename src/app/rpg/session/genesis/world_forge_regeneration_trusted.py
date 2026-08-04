@@ -5,7 +5,11 @@ from dataclasses import replace
 from typing import Any, Callable, Mapping
 
 from .world_forge_contract import CampaignTopicNode
-from .world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
+from .world_forge_generation import (
+    GeneratedTopic,
+    WorldForgeTopicGenerator,
+    validate_generated_topic_for_publication,
+)
 from .world_forge_lore_scoring import WorldForgeLoreQualityError
 from .world_forge_regeneration import (
     RegenerationRequest,
@@ -148,12 +152,19 @@ def generate_with_targeted_regeneration(
     quality_candidates: list[tuple[int, int, GeneratedTopic]] = []
 
     for attempt in range(1, attempts + 1):
-        generated = generator.generate(
+        raw_generated = generator.generate(
             node,
             seed=seed + attempt - 1,
             campaign_context=context,
             dependency_topics=dependency_topics,
         )
+        # Validate the provider boundary before retry, provenance, or repair logic
+        # touches the candidate. This keeps malformed mappings from escaping as
+        # incidental attribute errors and guarantees the stable publication error.
+        generated = validate_generated_topic_for_publication(
+            raw_generated,
+            expected_topic_id=node.topic_id,
+        ).topic
         candidate = generated
         try:
             if pending_request is not None and prior_failed_topic is not None:
