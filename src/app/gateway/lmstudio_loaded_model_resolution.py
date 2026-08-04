@@ -280,12 +280,15 @@ def install_lmstudio_loaded_model_resolution_hook() -> None:
         **kwargs,
     ):
         resolved_model, diagnostics = _resolve_lmstudio_model(self, model)
+        log_fields = dict(diagnostics)
+        model_source = log_fields.pop("source")
         stream_log(
             "gateway-live-chat-first-token",
             "runtime",
             "live_chat_lmstudio_model_resolved",
             stream=bool(stream),
-            **diagnostics,
+            model_source=model_source,
+            **log_fields,
         )
         return original_chat_completion(
             self,
