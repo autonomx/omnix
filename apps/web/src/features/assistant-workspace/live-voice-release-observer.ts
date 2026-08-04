@@ -46,7 +46,8 @@ type ReleaseState = {
   sttRequestedAt: number | null;
   sttFinalAt: number | null;
   firstTokenAt: number | null;
-  firstAudioAt: number | null;
+  firstPcmAt: number | null;
+  firstAudibleAt: number | null;
   interruptionAt: number | null;
   turnId: string | null;
   activeTraceId: string | null;
@@ -116,21 +117,47 @@ function handleDiagnosticEvent(event: Event): void {
     state.activeTraceId = traceId;
     return;
   }
-  if (state.activeTraceId && traceId !== state.activeTraceId) return;
+  if (!diagnosticBelongsToActiveTurn(detail, diagnosticEvent, traceId)) return;
   if (diagnosticEvent === 'llm_text_chunk_received' && state.firstTokenAt === null) {
     state.firstTokenAt = now;
     recordLatency('final_to_first_token_ms', elapsed(state.sttFinalAt, now));
     return;
   }
-  if (diagnosticEvent === 'phrase_first_frame_received' && state.firstAudioAt === null) {
-    state.firstAudioAt = now;
+  if (diagnosticEvent === 'phrase_first_frame_received' && state.firstPcmAt === null) {
+    state.firstPcmAt = now;
+    return;
+  }
+  if (diagnosticEvent === 'worklet_segment_started' && state.firstAudibleAt === null) {
+    state.firstAudibleAt = now;
     recordLatency('first_token_to_first_audio_ms', elapsed(state.firstTokenAt, now));
+    reporter?.record('release_audio_boundary', {
+      first_pcm_to_first_audible_ms: elapsed(state.firstPcmAt, now),
+      final_to_first_audible_ms: elapsed(state.sttFinalAt, now),
+      stt_request_to_first_audible_ms: elapsed(state.sttRequestedAt, now),
+      scenario: currentScenario(),
+      turn_id: state.turnId,
+      observed_trace_id: traceId,
+    }, 'release_observer');
     return;
   }
   if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {
     recordLatency('interruption_to_silence_ms', elapsed(state.interruptionAt, now));
     state.interruptionAt = null;
   }
+}
+
+function diagnosticBelongsToActiveTurn(
+  detail: DiagnosticDetail,
+  diagnosticEvent: string,
+  traceId: string,
+): boolean {
+  if (!state.activeTraceId || traceId === state.activeTraceId) return true;
+  return detail.source === 'pcm_session'
+    && state.firstTokenAt !== null
+    && (
+      (diagnosticEvent === 'phrase_first_frame_received' && state.firstPcmAt === null)
+      || (diagnosticEvent === 'worklet_segment_started' && state.firstAudibleAt === null)
+    );
 }
 
 function handleInterruption(): void {
@@ -196,7 +223,8 @@ function emptyState(): ReleaseState {
     sttRequestedAt: null,
     sttFinalAt: null,
     firstTokenAt: null,
-    firstAudioAt: null,
+    firstPcmAt: null,
+    firstAudibleAt: null,
     interruptionAt: null,
     turnId: null,
     activeTraceId: null,
