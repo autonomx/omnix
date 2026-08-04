@@ -142,18 +142,25 @@ class LMStudioProvider(BaseProvider):
         stream: bool = False,
         **kwargs,
     ) -> Union[ChatResponse, Iterator[ChatResponse]]:
+        use_configured_model = bool(kwargs.pop("_use_configured_model", True))
         trace_row = provider_call_enter(
             provider="lmstudio",
             method="chat_completion",
             model=model,
             messages=messages,
-            extra={"stream": bool(stream), "kwargs_keys": sorted(kwargs)},
+            extra={
+                "stream": bool(stream),
+                "kwargs_keys": sorted(kwargs),
+                "use_configured_model": use_configured_model,
+            },
         )
         try:
             if not messages:
                 raise ValueError("Messages list cannot be empty")
             transport = pop_structured_transport_options(kwargs)
-            resolved_model = model or self.config.model
+            resolved_model = model or (
+                self.config.model if use_configured_model else None
+            )
             include_metrics = bool(kwargs.get("include_metrics", False))
             payload: Dict[str, Any] = {
                 "messages": [message.to_dict() for message in messages],
@@ -401,7 +408,7 @@ class LMStudioProvider(BaseProvider):
                     "type": "string",
                     "label": "Default Model",
                     "required": False,
-                    "description": "Model loaded by LM Studio",
+                    "description": "Fallback model used when LM Studio has no loaded LLM",
                 },
             ],
         }
