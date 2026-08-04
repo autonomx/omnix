@@ -5,14 +5,21 @@ const DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const QUALITY_EVENT = 'omnix:assistant-voice-release-quality';
 const SCENARIO_KEY = 'omnix.liveCall.releaseScenario';
+const MAX_PAUSE_ANCHOR_AGE_MS = 10_000;
 export const LIVE_VOICE_RELEASE_OBSERVATION_EVENT = 'omnix:live-voice-release-observation';
 
 export type LiveVoiceLatencyMetric =
   | 'stt_finalize_ms'
+  | 'final_to_response_open_ms'
+  | 'response_open_to_first_token_ms'
   | 'final_to_first_token_ms'
   | 'first_token_to_first_audio_ms'
   | 'final_to_first_audio_ms'
   | 'stt_request_to_first_audio_ms'
+  | 'first_pcm_to_first_playback_ms'
+  | 'first_token_to_first_playback_ms'
+  | 'final_to_first_playback_ms'
+  | 'local_pause_to_first_playback_ms'
   | 'interruption_to_silence_ms';
 
 export type LiveVoiceQualityMetric =
@@ -45,10 +52,13 @@ type QualityDetail = {
 };
 
 type ReleaseState = {
+  localPauseAt: number | null;
   sttRequestedAt: number | null;
   sttFinalAt: number | null;
+  responseOpenedAt: number | null;
   firstTokenAt: number | null;
-  firstAudioAt: number | null;
+  firstPcmAt: number | null;
+  firstPlaybackAt: number | null;
   interruptionAt: number | null;
   turnId: string | null;
   activeTraceId: string | null;
@@ -90,9 +100,19 @@ function handlePerfEvent(event: Event): void {
   const detail = (event as CustomEvent<PerfDetail>).detail ?? {};
   const stage = typeof detail.stage === 'string' ? detail.stage : '';
   const now = performance.now();
+  if (stage === 'semantic_turn_assessed') {
+    state.localPauseAt = now;
+    if (typeof detail.turnId === 'string') state.turnId = detail.turnId;
+    return;
+  }
   if (stage === 'stt_final_requested') {
+    const recentPauseAt = state.localPauseAt !== null
+      && now - state.localPauseAt <= MAX_PAUSE_ANCHOR_AGE_MS
+      ? state.localPauseAt
+      : null;
     state = {
       ...emptyState(),
+      localPauseAt: recentPauseAt,
       sttRequestedAt: now,
       turnId: typeof detail.turnId === 'string' ? detail.turnId : null,
     };
@@ -119,16 +139,30 @@ function handleDiagnosticEvent(event: Event): void {
     return;
   }
   if (!diagnosticBelongsToActiveTurn(detail, diagnosticEvent, traceId)) return;
+  if (diagnosticEvent === 'chat_response_opened' && state.responseOpenedAt === null) {
+    state.responseOpenedAt = now;
+    recordLatency('final_to_response_open_ms', elapsed(state.sttFinalAt, now));
+    return;
+  }
   if (diagnosticEvent === 'llm_text_chunk_received' && state.firstTokenAt === null) {
     state.firstTokenAt = now;
+    recordLatency('response_open_to_first_token_ms', elapsed(state.responseOpenedAt, now));
     recordLatency('final_to_first_token_ms', elapsed(state.sttFinalAt, now));
     return;
   }
-  if (diagnosticEvent === 'phrase_first_frame_received' && state.firstAudioAt === null) {
-    state.firstAudioAt = now;
+  if (diagnosticEvent === 'phrase_first_frame_received' && state.firstPcmAt === null) {
+    state.firstPcmAt = now;
     recordLatency('first_token_to_first_audio_ms', elapsed(state.firstTokenAt, now));
     recordLatency('final_to_first_audio_ms', elapsed(state.sttFinalAt, now));
     recordLatency('stt_request_to_first_audio_ms', elapsed(state.sttRequestedAt, now));
+    return;
+  }
+  if (diagnosticEvent === 'worklet_segment_started' && state.firstPlaybackAt === null) {
+    state.firstPlaybackAt = now;
+    recordLatency('first_pcm_to_first_playback_ms', elapsed(state.firstPcmAt, now));
+    recordLatency('first_token_to_first_playback_ms', elapsed(state.firstTokenAt, now));
+    recordLatency('final_to_first_playback_ms', elapsed(state.sttFinalAt, now));
+    recordLatency('local_pause_to_first_playback_ms', elapsed(state.localPauseAt, now));
     return;
   }
   if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {
@@ -143,10 +177,15 @@ function diagnosticBelongsToActiveTurn(
   traceId: string,
 ): boolean {
   if (!state.activeTraceId || traceId === state.activeTraceId) return true;
-  return diagnosticEvent === 'phrase_first_frame_received'
+  const crossTraceAudio = diagnosticEvent === 'phrase_first_frame_received'
     && detail.source === 'pcm_session'
     && state.firstTokenAt !== null
-    && state.firstAudioAt === null;
+    && state.firstPcmAt === null;
+  const crossTracePlayback = diagnosticEvent === 'worklet_segment_started'
+    && detail.source === 'audio_worklet'
+    && state.firstTokenAt !== null
+    && state.firstPlaybackAt === null;
+  return crossTraceAudio || crossTracePlayback;
 }
 
 function handleInterruption(): void {
@@ -209,10 +248,13 @@ function isQualityMetric(value: unknown): value is LiveVoiceQualityMetric {
 
 function emptyState(): ReleaseState {
   return {
+    localPauseAt: null,
     sttRequestedAt: null,
     sttFinalAt: null,
+    responseOpenedAt: null,
     firstTokenAt: null,
-    firstAudioAt: null,
+    firstPcmAt: null,
+    firstPlaybackAt: null,
     interruptionAt: null,
     turnId: null,
     activeTraceId: null,
