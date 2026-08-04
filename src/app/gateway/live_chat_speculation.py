@@ -1,6 +1,8 @@
 """Side-effect-free LLM speculation for stable live-STT partials."""
 from __future__ import annotations
 
+import asyncio
+import copy
 import json
 import re
 import threading
@@ -9,6 +11,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -23,12 +26,18 @@ from app.chat import (
     default_chat_store,
 )
 from app.chat.store import _model_key, _provider_key
-from app.gateway.live_chat_low_latency_stream import LowLatencyTextChunker
 from app.providers import ChatMessage as ProviderMessage
 
+from .live_chat_low_latency_stream import LowLatencyTextChunker
+from .tts_stream_diagnostics import stream_log
+
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_registered"
+_SESSION_CACHE_HOOK_SENTINEL = "_omnix_live_speculation_session_cache_hook_installed"
 _SPECULATION_TTL_SECONDS = 90.0
+_SESSION_CACHE_TTL_SECONDS = 120.0
+_SESSION_LOAD_WAIT_SECONDS = 5.0
 _MAX_SPECULATIONS = 64
+_MAX_PRIMED_SESSIONS = 64
 _MIN_SINGLE_WORD_CHARS = 4
 _WORD_PATTERN = re.compile(r"[\w]+(?:['’][\w]+)?", re.UNICODE)
 _UNRESOLVED_CORRECTION_PATTERN = re.compile(
@@ -69,7 +78,15 @@ class _Speculation:
     accepted_payload: dict[str, Any] | None = None
 
 
+@dataclass
+class _PrimedSession:
+    session: Any
+    primed_at: float
+
+
 _SPECULATIONS: dict[str, _Speculation] = {}
+_PRIMED_SESSIONS: dict[str, _PrimedSession] = {}
+_SESSION_LOADS: dict[str, threading.Event] = {}
 _SPECULATION_LOCK = threading.RLock()
 
 
@@ -92,11 +109,114 @@ def transcripts_are_compatible(candidate: str, final: str) -> bool:
     )
 
 
+def prime_live_speculation_session(session: Any) -> None:
+    """Cache one read-only session snapshot for the next live speculation."""
+
+    session_id = str(getattr(session, "id", "") or "").strip()
+    if not session_id:
+        return
+    snapshot = _copy_session(session)
+    with _SPECULATION_LOCK:
+        _prune_speculations()
+        _PRIMED_SESSIONS[session_id] = _PrimedSession(
+            session=snapshot,
+            primed_at=time.time(),
+        )
+        _prune_primed_sessions()
+
+
+def clear_live_speculation_session_cache() -> None:
+    """Clear session snapshots and single-flight state for focused tests."""
+
+    with _SPECULATION_LOCK:
+        _PRIMED_SESSIONS.clear()
+        waiting = list(_SESSION_LOADS.values())
+        _SESSION_LOADS.clear()
+    for event in waiting:
+        event.set()
+
+
+def _install_live_speculation_session_cache_hook() -> None:
+    """Prime speculation snapshots from normal PostgreSQL chat operations."""
+
+    from app.persistence.chat_runtime_compat import (
+        PostgresCharacterChatSessionStore,
+        PostgresChatSessionStore,
+    )
+
+    if getattr(PostgresCharacterChatSessionStore, _SESSION_CACHE_HOOK_SENTINEL, False):
+        return
+
+    original_get_session = PostgresChatSessionStore.get_session
+    original_begin_user_message = PostgresCharacterChatSessionStore.begin_user_message
+    original_complete_streamed_reply = (
+        PostgresCharacterChatSessionStore.complete_streamed_reply
+    )
+
+    @wraps(original_get_session)
+    def cached_get_session(
+        store: PostgresChatSessionStore,
+        session_id: str,
+    ) -> Any | None:
+        session = original_get_session(store, session_id)
+        if session is not None:
+            prime_live_speculation_session(session)
+        return session
+
+    @wraps(original_begin_user_message)
+    def cached_begin_user_message(
+        store: PostgresCharacterChatSessionStore,
+        session_id: str,
+        request: SendChatMessageRequest,
+        **kwargs: Any,
+    ) -> Any:
+        result = original_begin_user_message(
+            store,
+            session_id,
+            request,
+            **kwargs,
+        )
+        if result is not None:
+            prime_live_speculation_session(result[0])
+        return result
+
+    @wraps(original_complete_streamed_reply)
+    def cached_complete_streamed_reply(
+        store: PostgresCharacterChatSessionStore,
+        session_id: str,
+        user_message_id: str,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> Any | None:
+        session = original_complete_streamed_reply(
+            store,
+            session_id,
+            user_message_id,
+            content,
+            metadata,
+        )
+        if session is not None:
+            prime_live_speculation_session(session)
+        return session
+
+    PostgresChatSessionStore.get_session = cached_get_session
+    PostgresCharacterChatSessionStore.begin_user_message = cached_begin_user_message
+    PostgresCharacterChatSessionStore.complete_streamed_reply = (
+        cached_complete_streamed_reply
+    )
+    setattr(
+        PostgresCharacterChatSessionStore,
+        _SESSION_CACHE_HOOK_SENTINEL,
+        True,
+    )
+
+
 def register_live_chat_speculation_routes(
     app: FastAPI,
     *,
     chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
 ) -> None:
+    _install_live_speculation_session_cache_hook()
     if getattr(app.state, _ROUTE_SENTINEL, False):
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
@@ -112,7 +232,17 @@ def register_live_chat_speculation_routes(
         if not transcript_is_speculation_safe(request.content):
             raise HTTPException(status_code=409, detail="speculation_transcript_not_stable")
         store = chat_store_factory()
-        session = store.get_session(session_id)
+        session, cache_hit, session_load_ms = await _resolve_speculation_session(
+            store,
+            session_id,
+        )
+        stream_log(
+            "gateway-live-chat-speculation",
+            "runtime",
+            "live_chat_speculation_session_resolved",
+            cache_hit=cache_hit,
+            session_load_ms=round(session_load_ms, 3),
+        )
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         generation_id = f"spec-{uuid.uuid4().hex}"
@@ -206,6 +336,7 @@ def register_live_chat_speculation_routes(
         )
         if completed is None:
             raise HTTPException(status_code=409, detail="speculation_accept_failed")
+        prime_live_speculation_session(completed)
         payload = {
             "ok": True,
             "generation_id": generation_id,
@@ -216,6 +347,70 @@ def register_live_chat_speculation_routes(
         with _SPECULATION_LOCK:
             speculation.accepted_payload = payload
         return payload
+
+
+async def _resolve_speculation_session(
+    store: ChatSessionStore,
+    session_id: str,
+) -> tuple[Any | None, bool, float]:
+    started = time.perf_counter()
+    cached = _get_primed_session(session_id)
+    if cached is not None:
+        return cached, True, (time.perf_counter() - started) * 1000.0
+
+    with _SPECULATION_LOCK:
+        cached = _get_primed_session_locked(session_id)
+        if cached is not None:
+            return cached, True, (time.perf_counter() - started) * 1000.0
+        load_event = _SESSION_LOADS.get(session_id)
+        owns_load = load_event is None
+        if load_event is None:
+            load_event = threading.Event()
+            _SESSION_LOADS[session_id] = load_event
+
+    if not owns_load:
+        await asyncio.to_thread(load_event.wait, _SESSION_LOAD_WAIT_SECONDS)
+        cached = _get_primed_session(session_id)
+        if cached is not None:
+            return cached, True, (time.perf_counter() - started) * 1000.0
+
+    try:
+        session = await asyncio.to_thread(store.get_session, session_id)
+        if session is not None:
+            prime_live_speculation_session(session)
+            session = _get_primed_session(session_id) or session
+        return session, False, (time.perf_counter() - started) * 1000.0
+    finally:
+        if owns_load:
+            with _SPECULATION_LOCK:
+                event = _SESSION_LOADS.pop(session_id, None)
+            if event is not None:
+                event.set()
+
+
+def _get_primed_session(session_id: str) -> Any | None:
+    with _SPECULATION_LOCK:
+        return _get_primed_session_locked(session_id)
+
+
+def _get_primed_session_locked(session_id: str) -> Any | None:
+    primed = _PRIMED_SESSIONS.get(session_id)
+    if primed is None:
+        return None
+    if time.time() - primed.primed_at > _SESSION_CACHE_TTL_SECONDS:
+        _PRIMED_SESSIONS.pop(session_id, None)
+        return None
+    return _copy_session(primed.session)
+
+
+def _copy_session(session: Any) -> Any:
+    model_copy = getattr(session, "model_copy", None)
+    if callable(model_copy):
+        return model_copy(deep=True)
+    try:
+        return copy.deepcopy(session)
+    except Exception:  # pragma: no cover - defensive fallback for custom stores.
+        return session
 
 
 def _generate_side_effect_free(
@@ -290,12 +485,38 @@ def _prune_speculations() -> None:
     expired = [key for key, value in _SPECULATIONS.items() if value.created_at < cutoff]
     for key in expired:
         _SPECULATIONS.pop(key, None)
-    if len(_SPECULATIONS) <= _MAX_SPECULATIONS:
+    if len(_SPECULATIONS) > _MAX_SPECULATIONS:
+        oldest = sorted(_SPECULATIONS.values(), key=lambda item: item.created_at)
+        for item in oldest[: len(_SPECULATIONS) - _MAX_SPECULATIONS]:
+            _SPECULATIONS.pop(item.generation_id, None)
+    _prune_primed_sessions()
+
+
+def _prune_primed_sessions() -> None:
+    cutoff = time.time() - _SESSION_CACHE_TTL_SECONDS
+    expired = [
+        key
+        for key, value in _PRIMED_SESSIONS.items()
+        if value.primed_at < cutoff
+    ]
+    for key in expired:
+        _PRIMED_SESSIONS.pop(key, None)
+    if len(_PRIMED_SESSIONS) <= _MAX_PRIMED_SESSIONS:
         return
-    oldest = sorted(_SPECULATIONS.values(), key=lambda item: item.created_at)
-    for item in oldest[: len(_SPECULATIONS) - _MAX_SPECULATIONS]:
-        _SPECULATIONS.pop(item.generation_id, None)
+    oldest = sorted(_PRIMED_SESSIONS.items(), key=lambda item: item[1].primed_at)
+    for key, _ in oldest[: len(_PRIMED_SESSIONS) - _MAX_PRIMED_SESSIONS]:
+        _PRIMED_SESSIONS.pop(key, None)
 
 
 def _sse(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, sort_keys=True)}\n\n"
+
+
+__all__ = [
+    "clear_live_speculation_session_cache",
+    "normalized_transcript_words",
+    "prime_live_speculation_session",
+    "register_live_chat_speculation_routes",
+    "transcript_is_speculation_safe",
+    "transcripts_are_compatible",
+]
