@@ -107,11 +107,12 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     )
     assert stream_response.status_code == 200
     payloads = _event_payloads(stream_response.text)
-    generation_id = next(
-        payload["generation_id"]
-        for payload in payloads
-        if payload.get("type") == "speculation_started"
+    started = next(
+        payload for payload in payloads if payload.get("type") == "speculation_started"
     )
+    generation_id = started["generation_id"]
+    assert started["provider_id"] == "fake-provider"
+    assert started["model_id"] == "fake-model"
     assert "".join(
         payload.get("text", "") for payload in payloads if payload.get("type") == "text_chunk"
     ) == "Hello there."
