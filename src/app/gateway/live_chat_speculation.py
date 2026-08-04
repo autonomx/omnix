@@ -24,6 +24,7 @@ from app.chat import (
 )
 from app.chat.store import _model_key, _provider_key
 from app.gateway.live_chat_low_latency_stream import LowLatencyTextChunker
+from app.gateway.live_chat_prompt_fast_path import build_live_provider_prompt
 from app.providers import ChatMessage as ProviderMessage
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_registered"
@@ -258,7 +259,7 @@ def _generate_side_effect_free(
             "memory_writes_allowed": False,
         },
     )
-    assembly, rendered = store.build_provider_prompt(session, user_message, [])
+    assembly, rendered = build_live_provider_prompt(store, session, user_message, [])
     messages = [ProviderMessage(role=item.role, content=item.content) for item in rendered.messages]
     response = provider.chat_completion(
         messages=messages,
@@ -295,6 +296,9 @@ def _generate_side_effect_free(
             "speculation_tools": "disabled",
             "speculation_memory_writes": "disabled",
             "prompt_source_count": len(getattr(assembly, "sources", []) or []),
+            "live_prompt_fast_path": bool(
+                getattr(assembly, "diagnostics", {}).get("live_prompt_fast_path", {}).get("enabled")
+            ),
         }
         speculation.completed = True
     yield _sse({
