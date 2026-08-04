@@ -295,6 +295,7 @@ def install_lmstudio_loaded_model_resolution_hook() -> None:
             messages,
             model=resolved_model,
             stream=stream,
+            _use_configured_model=False,
             **kwargs,
         )
 
