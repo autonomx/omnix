@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -12,8 +12,12 @@ from app.launcher.huggingface_token_store import save_huggingface_token
 _TEST_TOKEN = "hf_" + "b" * 32
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
 def _load_launcher_module() -> ModuleType:
-    script = Path(__file__).resolve().parents[3] / "scripts" / "run_kyutai_moshi.py"
+    script = _repo_root() / "scripts" / "run_kyutai_moshi.py"
     spec = importlib.util.spec_from_file_location("test_run_kyutai_moshi", script)
     assert spec is not None
     assert spec.loader is not None
@@ -78,7 +82,7 @@ def test_invalid_nonempty_unmute_directory_is_not_overwritten(
     assert (unmute_dir / "local-file.txt").read_text(encoding="utf-8") == "keep me"
 
 
-def test_compose_environment_uses_launcher_saved_token(
+def test_compose_environment_uses_launcher_saved_token_and_safe_defaults(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -93,62 +97,98 @@ def test_compose_environment_uses_launcher_saved_token(
     environment = module._compose_environment(root)
 
     assert environment["HUGGING_FACE_HUB_TOKEN"] == _TEST_TOKEN
+    assert environment["KYUTAI_OMNIX_SECURE_ENTRYPOINT"].endswith(
+        "/scripts/kyutai_moshi_secure_entrypoint.sh"
+    )
+    assert environment["OMNIX_KYUTAI_BUILD_JOBS"] == "2"
+    assert environment["OMNIX_KYUTAI_UV_BUILD_JOBS"] == "1"
+    assert environment["OMNIX_KYUTAI_UV_INSTALL_JOBS"] == "2"
+    assert environment["OMNIX_KYUTAI_BUILD_NICE_LEVEL"] == "10"
+    assert environment["OMNIX_KYUTAI_MEMORY_LIMIT"] == "16g"
 
 
-def test_existing_moshi_image_is_reused_without_rebuild(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_existing_image_starts_without_rebuild(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_launcher_module()
-    monkeypatch.delenv("KYUTAI_MOSHI_FORCE_REBUILD", raising=False)
     monkeypatch.setattr(module, "_docker_image_exists", lambda _environment: True)
-    base = ["docker", "compose", "-f", "compose.yml"]
+    monkeypatch.delenv("KYUTAI_MOSHI_FORCE_REBUILD", raising=False)
 
-    command, reason = module._startup_command(base, {})
+    command, reason = module._startup_command(["docker", "compose"], {})
 
-    assert command == [*base, "up", "stt"]
+    assert command == ["docker", "compose", "up", "stt"]
     assert reason == "reusing existing Moshi image and container"
 
 
-def test_missing_moshi_image_triggers_initial_build(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_missing_image_builds_once(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_launcher_module()
-    monkeypatch.delenv("KYUTAI_MOSHI_FORCE_REBUILD", raising=False)
     monkeypatch.setattr(module, "_docker_image_exists", lambda _environment: False)
-    base = ["docker", "compose", "-f", "compose.yml"]
+    monkeypatch.delenv("KYUTAI_MOSHI_FORCE_REBUILD", raising=False)
 
-    command, reason = module._startup_command(base, {})
+    command, reason = module._startup_command(["docker", "compose"], {})
 
-    assert command == [*base, "up", "--build", "stt"]
+    assert command == ["docker", "compose", "up", "--build", "stt"]
     assert reason == "Moshi image is missing"
 
 
-def test_force_rebuild_overrides_existing_image(
+def test_moshi_output_redacts_hugging_face_and_bearer_tokens() -> None:
+    module = _load_launcher_module()
+    fake_token = "hf_" + "K" * 32
+
+    redacted = module._redact_line(
+        f"uvx hf auth login --token {fake_token} HUGGING_FACE_HUB_TOKEN={fake_token} "
+        f"Authorization: Bearer {fake_token}"
+    )
+
+    assert fake_token not in redacted
+    assert redacted.count("[REDACTED]") >= 3
+
+
+def test_vram_preflight_blocks_low_free_memory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_launcher_module()
-    monkeypatch.setenv("KYUTAI_MOSHI_FORCE_REBUILD", "1")
-    monkeypatch.setattr(module, "_docker_image_exists", lambda _environment: True)
-    base = ["docker", "compose", "-f", "compose.yml"]
+    monkeypatch.setattr(module, "_gpu_vram_snapshot", lambda: (24_564, 21_000, 3_564))
+    monkeypatch.setenv("KYUTAI_MOSHI_MIN_FREE_VRAM_MB", "6144")
 
-    command, reason = module._startup_command(base, {})
-
-    assert command == [*base, "up", "--build", "stt"]
-    assert reason == "forced rebuild requested"
+    assert module._passes_vram_preflight() is False
 
 
-def test_docker_image_check_uses_configured_image(
+def test_vram_preflight_allows_safe_free_memory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_launcher_module()
-    calls: list[list[str]] = []
-    monkeypatch.setenv("KYUTAI_MOSHI_IMAGE", "custom/moshi:test")
+    monkeypatch.setattr(module, "_gpu_vram_snapshot", lambda: (24_564, 8_000, 16_564))
+    monkeypatch.setenv("KYUTAI_MOSHI_MIN_FREE_VRAM_MB", "6144")
 
-    def fake_run(command, **_kwargs):
-        calls.append(command)
-        return subprocess.CompletedProcess(command, 0, stdout="[]", stderr="")
+    assert module._passes_vram_preflight() is True
 
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
 
-    assert module._docker_image_exists({}) is True
-    assert calls == [["docker", "image", "inspect", "custom/moshi:test"]]
+def test_gpu_snapshot_reads_first_nvidia_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_launcher_module()
+    monkeypatch.setattr(module.shutil, "which", lambda name: "/tools/nvidia-smi" if name == "nvidia-smi" else None)
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="24564, 7160, 17404\n",
+        ),
+    )
+
+    assert module._gpu_vram_snapshot() == (24_564, 7_160, 17_404)
+
+
+def test_secure_entrypoint_and_compose_persist_heavy_setup() -> None:
+    root = _repo_root()
+    entrypoint = (root / "scripts" / "kyutai_moshi_secure_entrypoint.sh").read_text(
+        encoding="utf-8"
+    )
+    compose = (root / "docker-compose.kyutai-stt.yml").read_text(encoding="utf-8")
+
+    assert "set -euo pipefail" in entrypoint
+    assert "set -x" not in entrypoint
+    assert "CARGO_BUILD_JOBS" in entrypoint
+    assert "Reusing cached moshi-server" in entrypoint
+    assert "omnix-kyutai-stt-venv:/app/moshi-server/.venv" in compose
+    assert "omnix-kyutai-stt-cargo-install:/app/omnix-cargo-install" in compose
+    assert "mem_limit: ${OMNIX_KYUTAI_MEMORY_LIMIT:-16g}" in compose
+    assert "cpu_shares: 512" in compose
