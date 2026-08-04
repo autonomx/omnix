@@ -18,31 +18,6 @@ def _route(app: FastAPI, path: str) -> APIRoute:
     )
 
 
-def _assert_route_runs_off_event_loop(
-    route: APIRoute,
-    *,
-    values: dict[str, object] | None = None,
-) -> None:
-    entered = threading.Event()
-    release = threading.Event()
-    worker_thread_ids: list[int] = []
-    original = route.dependant.call
-
-    async def blocking_endpoint(**kwargs: object) -> dict[str, object]:
-        worker_thread_ids.append(threading.get_ident())
-        entered.set()
-        release.wait(timeout=1.0)
-        return {"ok": True, **kwargs}
-
-    route.dependant.call = blocking_endpoint
-    route.endpoint = blocking_endpoint
-    try:
-        assert offload_blocking_gateway_routes(route.app) == []  # type: ignore[arg-type]
-    finally:
-        route.dependant.call = original
-        route.endpoint = original
-
-
 def test_blocking_poll_route_runs_off_event_loop_thread() -> None:
     app = FastAPI()
     entered = threading.Event()
@@ -106,9 +81,7 @@ def test_blocking_chat_generation_post_runs_off_event_loop_thread() -> None:
         safety_release.start()
         started_at = time.perf_counter()
         try:
-            task = asyncio.create_task(
-                route.dependant.call(session_id="chat-1")
-            )
+            task = asyncio.create_task(route.dependant.call(session_id="chat-1"))
             assert await asyncio.to_thread(entered.wait, 0.20)
             await asyncio.sleep(0.02)
             assert time.perf_counter() - started_at < 0.20
