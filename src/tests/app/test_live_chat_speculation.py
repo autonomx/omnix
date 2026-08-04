@@ -26,6 +26,7 @@ class _FakeStore:
         self.get_session_calls = 0
         self.last_request = None
         self.last_metadata = None
+        self.last_prompt_metadata = None
         self.session = ChatSession(
             id="session-1",
             title="Speculation",
@@ -40,6 +41,7 @@ class _FakeStore:
         return self.session if session_id == self.session.id else None
 
     def build_provider_prompt(self, _session, user_message, _context_items):
+        self.last_prompt_metadata = dict(user_message.metadata)
         rendered = SimpleNamespace(
             messages=[SimpleNamespace(role="user", content=user_message.content)]
         )
@@ -138,6 +140,12 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
         payload for payload in payloads if payload.get("type") == "speculation_started"
     )
     generation_id = started["generation_id"]
+    assert stream_response.headers["x-omnix-speculation-generation-id"] == generation_id
+    assert stream_response.headers["x-omnix-speculation-provider-id"] == "fake-provider"
+    assert stream_response.headers["x-omnix-speculation-model-id"] == "fake-model"
+    assert stream_response.headers["x-accel-buffering"] == "no"
+    assert "no-store" in stream_response.headers["cache-control"]
+    assert len(stream_response.text) >= speculation._SPECULATION_PREAMBLE_CHARS
     assert started["provider_id"] == "fake-provider"
     assert started["model_id"] == "fake-model"
     assert "".join(
@@ -145,6 +153,11 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
         for payload in payloads
         if payload.get("type") == "text_chunk"
     ) == "Hello there."
+    assert store.last_prompt_metadata["side_effects_allowed"] is False
+    assert store.last_prompt_metadata["tools_allowed"] is False
+    assert store.last_prompt_metadata["memory_writes_allowed"] is False
+    assert store.last_prompt_metadata["user_turn_id"].startswith("voice-user-turn:spec-")
+    assert store.last_prompt_metadata["speech_segment_id"] == "voice-segment:segment-1"
     assert store.get_session_calls == 1
     assert store.begin_calls == 0
     assert store.complete_calls == 0
@@ -156,6 +169,14 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     assert mismatch.status_code == 409
     assert store.begin_calls == 0
 
+    offloaded_functions: list[str] = []
+    original_to_thread = speculation.asyncio.to_thread
+
+    async def tracked_to_thread(function, /, *args, **kwargs):
+        offloaded_functions.append(getattr(function, "__name__", "unknown"))
+        return await original_to_thread(function, *args, **kwargs)
+
+    monkeypatch.setattr(speculation.asyncio, "to_thread", tracked_to_thread)
     accepted = client.post(
         f"/api/live/speculation/sessions/session-1/{generation_id}/accept",
         json={
@@ -169,6 +190,10 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     assert accepted.json()["content"] == "Hello there."
     assert store.begin_calls == 1
     assert store.complete_calls == 1
+    assert offloaded_functions[-2:] == [
+        "begin_user_message",
+        "complete_streamed_reply",
+    ]
     assert store.last_request.user_turn_id == "voice-user-turn:test-1"
     assert store.last_request.speech_segment_id == "voice-segment:test-1"
     assert store.last_metadata["live_voice_turn_id"] == "voice-turn:test-1"
