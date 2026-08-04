@@ -190,8 +190,10 @@ def _derive_summary(
     if health and health.get("http_ready") is False and health.get("last_error_stage") == "build_info":
         return (
             "starting",
-            "Moshi is still compiling, downloading, or loading the STT model. The WebSocket probe will "
-            "start automatically after /api/build_info becomes ready.",
+            (
+                "Moshi is still compiling, downloading, or loading the STT model. The WebSocket probe will "
+                "start automatically after /api/build_info becomes ready."
+            ),
             None,
         )
     if authority and authority.get("eligible"):
