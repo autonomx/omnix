@@ -39,7 +39,7 @@ jobs:
 
       - name: Import launcher entry points on Python 3.10
         run: |
-          python -c "from app.gateway.live_chat_lmstudio_diagnostics import install_live_chat_lmstudio_diagnostics_hook; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.live_chat_speculation_handshake import register_live_chat_speculation_handshake_routes; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
+          python -c "from app.gateway.live_chat_lmstudio_diagnostics import install_live_chat_lmstudio_diagnostics_hook; from app.gateway.live_chat_prompt_window import install_live_chat_prompt_window_hook; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.live_chat_speculation_handshake import register_live_chat_speculation_handshake_routes; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
 
       - name: Validate secure Moshi entrypoint
         run: bash -n scripts/kyutai_moshi_secure_entrypoint.sh
@@ -60,6 +60,7 @@ jobs:
             src/app/gateway/blocking_route_offload.py \
             src/app/gateway/live_chat_lmstudio_diagnostics.py \
             src/app/gateway/live_chat_prompt_cache.py \
+            src/app/gateway/live_chat_prompt_window.py \
             src/app/gateway/live_chat_speculation.py \
             src/app/gateway/live_chat_speculation_handshake.py \
             src/app/gateway/tts_live_capabilities.py \
@@ -72,6 +73,7 @@ jobs:
             src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_kyutai_stt_runtime.py \
             src/tests/app/test_live_chat_lmstudio_diagnostics.py \
+            src/tests/app/test_live_chat_prompt_window.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
@@ -93,6 +95,7 @@ jobs:
             src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_kyutai_stt_runtime.py \
             src/tests/app/test_live_chat_lmstudio_diagnostics.py \
+            src/tests/app/test_live_chat_prompt_window.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
