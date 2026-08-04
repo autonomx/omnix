@@ -70,7 +70,7 @@ describe('live voice release observer', () => {
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
       detail: {
         traceId: 'live-call:s1:audio-session',
-        source: 'pcm_session',
+        source: 'audio_worklet',
         event: 'worklet_segment_started',
         details: {},
       },
