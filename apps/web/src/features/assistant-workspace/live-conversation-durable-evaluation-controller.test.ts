@@ -61,6 +61,7 @@ function activeCall() {
       first_token_to_first_audio_ms: [300, 350],
       final_to_first_audio_ms: [1_100, 1_250],
       stt_request_to_first_audio_ms: [1_500, 1_750],
+      stt_request_to_first_playback_ms: [1_700, 1_950],
       interruption_to_silence_ms: [120, 150],
     },
     releaseQuality: {
@@ -136,6 +137,7 @@ describe('durable Live Conversation evaluation controller', () => {
         first_token_to_first_audio_p95_ms: 350,
         final_to_first_audio_p95_ms: 1_250,
         stt_request_to_first_audio_p95_ms: 1_750,
+        stt_request_to_first_playback_p95_ms: 1_950,
         interruption_to_silence_p95_ms: 150,
         cancellation_p95_ms: 140,
         rejected_candidate_restore_p95_ms: 110,
@@ -172,7 +174,7 @@ describe('durable Live Conversation evaluation controller', () => {
       detail: { kind: 'latency', metricName: 'stt_finalize_ms', valueMs: 430, scenario: 'speakers-quiet' },
     }));
     window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
-      detail: { kind: 'latency', metricName: 'stt_request_to_first_audio_ms', valueMs: 1_600, scenario: 'speakers-quiet' },
+      detail: { kind: 'latency', metricName: 'stt_request_to_first_playback_ms', valueMs: 1_780, scenario: 'speakers-quiet' },
     }));
     window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
       detail: { kind: 'quality', qualityName: 'playback_echo_submission', occurred: false, scenario: 'speakers-quiet' },
@@ -190,7 +192,7 @@ describe('durable Live Conversation evaluation controller', () => {
     const body = JSON.parse(String(init?.body));
     expect(body.eos_termination_counts.natural_eos).toBe(1);
     expect(body.latency_summary.stt_finalize_p95_ms).toBe(430);
-    expect(body.latency_summary.stt_request_to_first_audio_p95_ms).toBe(1_600);
+    expect(body.latency_summary.stt_request_to_first_playback_p95_ms).toBe(1_780);
     expect(body.latency_summary.cancellation_p95_ms).toBe(125);
     expect(body.quality_metrics.playback_echo_submission_rate).toBe(0);
     expect(body.release_gate_status).toBe('insufficient');
