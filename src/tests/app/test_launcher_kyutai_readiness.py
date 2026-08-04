@@ -36,6 +36,7 @@ def _ready_health() -> dict[str, object]:
         "ok": True,
         "provider": "kyutai",
         "state": "closed",
+        "http_ready": True,
         "upstream_ready": True,
         "last_ready_at": 1_000.0,
         "last_error": None,
@@ -71,6 +72,7 @@ def test_runtime_launcher_html_exposes_kyutai_readiness_controls() -> None:
     assert response.status_code == 200
     text = response.text
     assert 'id="kyutai-readiness-panel"' in text
+    assert 'id="kyutai-build-state"' in text
     assert 'id="probe-kyutai"' in text
     assert 'id="restart-kyutai"' in text
     assert 'id="copy-kyutai-diagnostics"' in text
@@ -101,12 +103,62 @@ def test_readiness_endpoint_reports_ready_without_exposing_raw_error(
     payload = response.json()
     assert payload["state"] == "ready"
     assert payload["authority"]["eligible"] is True
+    assert payload["health"]["http_ready"] is True
     assert payload["health"]["upstream_ready"] is True
     assert "last_error" not in payload["health"]
     assert calls == [
         ("/healthz", None),
         ("/authorityz", {"language": "en", "mode": "test"}),
     ]
+
+
+def test_build_info_startup_is_not_reported_as_blocked(monkeypatch) -> None:
+    manager = _FakeManager()
+
+    def fake_fetch(path: str, *, query=None):
+        if path == "/healthz":
+            return {
+                **_ready_health(),
+                "ok": False,
+                "http_ready": False,
+                "upstream_ready": False,
+                "last_ready_at": None,
+                "last_error": "private local startup detail",
+                "last_error_code": "upstream_connection_refused",
+                "last_error_type": "ConnectError",
+                "last_error_stage": "build_info",
+                "failures_in_window": 0,
+                "attempts_in_window": 0,
+            }
+        return {
+            **_ready_authority(),
+            "ok": False,
+            "eligible": False,
+            "upstream_ready": False,
+            "model_warm": False,
+            "reasons": [
+                "upstream_not_ready",
+                "upstream_connection_refused",
+                "model_not_warm",
+            ],
+        }
+
+    monkeypatch.setattr(readiness, "get_default_manager", lambda: manager)
+    monkeypatch.setattr(readiness, "_fetch_adapter_json", fake_fetch)
+
+    response = TestClient(runtime_control_app.app).get(
+        "/api/launcher/kyutai-readiness"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["state"] == "starting"
+    assert payload["failure_code"] is None
+    assert payload["health"]["http_ready"] is False
+    assert payload["health"]["state"] == "closed"
+    assert payload["health"]["attempts_in_window"] == 0
+    assert "compiling" in payload["message"]
+    assert "private local startup detail" not in response.text
 
 
 def test_forced_probe_surfaces_safe_connection_closed_diagnostic(
