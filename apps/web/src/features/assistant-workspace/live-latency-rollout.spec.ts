@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { resolveAuthoritySelection } from './live-stt-authority-controller';
 import { resolveLiveVoiceSttSelection, shouldCommitProviderEndpoint } from './live-voice-controller';
-import { transcriptIsSpeculationSafe, transcriptsCanReuseSpeculation } from './live-speculation-controller';
+import {
+  speculativeFirstClauseBoundaryReady,
+  speculativeFirstClauseTtsCanRelease,
+  transcriptIsSpeculationSafe,
+  transcriptsCanReuseSpeculation,
+} from './live-speculation-controller';
 import {
   AdaptiveTtsBufferPolicy,
   createAdaptiveBufferSessionController,
@@ -67,6 +72,16 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(transcriptsCanReuseSpeculation('Tell me a story', 'tell me a story!')).toBe(true);
     expect(transcriptsCanReuseSpeculation('Tell me a story', 'Tell me the story')).toBe(false);
     expect(transcriptIsSpeculationSafe('Wait, no I mean tell me a story')).toBe(false);
+  });
+
+  it('releases speculative first-clause TTS only after every gate passes', () => {
+    expect(speculativeFirstClauseTtsCanRelease(true, true, true)).toBe(true);
+    expect(speculativeFirstClauseTtsCanRelease(false, true, true)).toBe(false);
+    expect(speculativeFirstClauseTtsCanRelease(true, false, true)).toBe(false);
+    expect(speculativeFirstClauseTtsCanRelease(true, true, false)).toBe(false);
+    expect(speculativeFirstClauseBoundaryReady('Too short.')).toBe(false);
+    expect(speculativeFirstClauseBoundaryReady('This clause is ready now.')).toBe(true);
+    expect(speculativeFirstClauseBoundaryReady('x'.repeat(96))).toBe(true);
   });
 
   it('uses the low-latency deadline only for the first clause', () => {

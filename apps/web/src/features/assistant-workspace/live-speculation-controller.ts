@@ -10,6 +10,9 @@ const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const INSTALLED_KEY = '__omnixLiveSpeculationInstalled';
 const CORRECTION_PATTERN = /(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)/i;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
+const FIRST_CLAUSE_BOUNDARY = /[.!?。！？][\]})"'’”]*(?:\s|$)/u;
+const FIRST_CLAUSE_MINIMUM_CHARACTERS = 12;
+const FIRST_CLAUSE_MAXIMUM_CHARACTERS = 96;
 
 type SpeculationWindow = Window & typeof globalThis & {
   __omnixLiveSpeculationInstalled?: boolean;
@@ -114,6 +117,21 @@ export function speculationRequestCanReuse(
   if (providerId && providerId !== speculativeProviderId) return false;
   if (modelId && modelId !== speculativeModelId) return false;
   return true;
+}
+
+export function speculativeFirstClauseTtsCanRelease(
+  enabled: boolean,
+  finalAccepted: boolean,
+  requestCompatible: boolean,
+): boolean {
+  return enabled && finalAccepted && requestCompatible;
+}
+
+export function speculativeFirstClauseBoundaryReady(text: string): boolean {
+  const normalized = text.trim();
+  if (normalized.length < FIRST_CLAUSE_MINIMUM_CHARACTERS) return false;
+  return FIRST_CLAUSE_BOUNDARY.test(normalized)
+    || normalized.length >= FIRST_CLAUSE_MAXIMUM_CHARACTERS;
 }
 
 export function initializeLiveSpeculationController(): () => void {
@@ -373,21 +391,53 @@ function createAcceptedSpeculationResponse(
 ): Response {
   const encoder = new TextEncoder();
   let cursor = 0;
+  const firstClauseMode = speculativeFirstClauseTtsCanRelease(
+    speculativeFirstClauseTtsEnabled(),
+    Boolean(active.finalText),
+    speculationRequestCanReuse(active.acceptBody, active.providerId, active.modelId),
+  );
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
+      let firstClauseReleased = false;
+      let firstClauseText = '';
       const emit = (payload: Record<string, unknown>): void => {
         if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
+      const emitNextChunk = (firstClauseTts: boolean): void => {
+        const text = active.chunks[cursor];
+        emit({
+          type: 'text_chunk',
+          text,
+          speculative_reuse: true,
+          speculative_first_clause_tts: firstClauseTts,
+        });
+        cursor += 1;
+      };
       const flushChunks = (): void => {
-        while (cursor < active.chunks.length) {
-          emit({ type: 'text_chunk', text: active.chunks[cursor], speculative_reuse: true });
-          cursor += 1;
+        while (cursor < active.chunks.length) emitNextChunk(false);
+      };
+      const flushFirstClause = (): void => {
+        while (!firstClauseReleased && cursor < active.chunks.length) {
+          const text = active.chunks[cursor];
+          emitNextChunk(true);
+          firstClauseText += text;
+          if (speculativeFirstClauseBoundaryReady(firstClauseText)) {
+            firstClauseReleased = true;
+            dispatchPerformance('llm_speculation_first_clause_released', {
+              sessionId: active.sessionId,
+              generationId: active.generationId,
+              clauseChars: firstClauseText.trim().length,
+            });
+          }
         }
       };
-      const update = (): void => flushChunks();
+      const update = (): void => {
+        if (firstClauseMode) flushFirstClause();
+        else flushChunks();
+      };
       active.subscribers.add(update);
-      flushChunks();
+      update();
       void active.generationPromise.then(async () => {
         flushChunks();
         if (active.error || !active.generationId || !active.finalText) {
@@ -402,6 +452,9 @@ function createAcceptedSpeculationResponse(
               final_text: active.finalText,
               provider_id: bodyString(active.providerId),
               model_id: bodyString(active.modelId),
+              agent_mode: active.acceptBody?.agent_mode === true,
+              dry_run: active.acceptBody?.dry_run === true,
+              research_mode: bodyString(active.acceptBody?.research_mode),
               user_turn_id: bodyString(active.acceptBody?.user_turn_id),
               speech_segment_id: bodyString(active.acceptBody?.speech_segment_id),
               live_voice_turn_id: bodyString(active.acceptBody?.live_voice_turn_id),
@@ -513,6 +566,11 @@ function parseSseBlock(block: string): SpeculationEvent | null {
 function speculationEnabled(): boolean {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
   return env?.VITE_LIVE_SPECULATION_ENABLED?.trim().toLowerCase() !== 'false';
+}
+
+function speculativeFirstClauseTtsEnabled(): boolean {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  return env?.VITE_LIVE_SPECULATIVE_FIRST_CLAUSE_TTS?.trim().toLowerCase() === 'true';
 }
 
 function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
