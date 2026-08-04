@@ -29,6 +29,14 @@ def _stats_payload() -> dict[str, Any]:
     }
 
 
+class _JsonResponse:
+    def __init__(self, payload: Any) -> None:
+        self.payload = payload
+
+    def json(self) -> Any:
+        return self.payload
+
+
 class _StreamResponse:
     def iter_lines(self):
         yield b'data: {"model":"qwen","choices":[{"delta":{"content":"Howdy"}}]}'
@@ -39,6 +47,21 @@ class _StreamResponse:
             b'"generation_time":0.38,"stop_reason":"eosFound"}}'
         )
         yield b'data: [DONE]'
+
+
+def _loaded_model_response() -> _JsonResponse:
+    return _JsonResponse(
+        {
+            "models": [
+                {
+                    "type": "llm",
+                    "key": "qwen",
+                    "display_name": "Qwen",
+                    "loaded_instances": [{"id": "qwen"}],
+                }
+            ]
+        }
+    )
 
 
 def _provider() -> LMStudioProvider:
@@ -55,8 +78,10 @@ def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> No
     calls: list[tuple[str, str, dict[str, Any]]] = []
     provider = _provider()
 
-    def fake_make_request(method: str, endpoint: str, **kwargs: Any) -> _StreamResponse:
+    def fake_make_request(method: str, endpoint: str, **kwargs: Any):
         calls.append((method, endpoint, kwargs))
+        if endpoint == "/api/v1/models":
+            return _loaded_model_response()
         return _StreamResponse()
 
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
@@ -69,7 +94,11 @@ def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> No
         )
     )
 
-    assert calls[0][1] == "/api/v0/chat/completions"
+    assert [call[1] for call in calls] == [
+        "/api/v1/models",
+        "/api/v0/chat/completions",
+    ]
+    assert calls[-1][2]["json"]["model"] == "qwen"
     assert chunks[0].content == "Howdy"
     assert chunks[-1].content == ""
     assert chunks[-1].usage == {
@@ -82,11 +111,13 @@ def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> No
 
 
 def test_lmstudio_regular_stream_keeps_openai_compatible_endpoint(monkeypatch) -> None:
-    calls: list[str] = []
+    calls: list[tuple[str, dict[str, Any]]] = []
     provider = _provider()
 
-    def fake_make_request(method: str, endpoint: str, **kwargs: Any) -> _StreamResponse:
-        calls.append(endpoint)
+    def fake_make_request(method: str, endpoint: str, **kwargs: Any):
+        calls.append((endpoint, kwargs))
+        if endpoint == "/api/v1/models":
+            return _loaded_model_response()
         return _StreamResponse()
 
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
@@ -98,7 +129,11 @@ def test_lmstudio_regular_stream_keeps_openai_compatible_endpoint(monkeypatch) -
         )
     )
 
-    assert calls == ["/v1/chat/completions"]
+    assert [endpoint for endpoint, _ in calls] == [
+        "/api/v1/models",
+        "/v1/chat/completions",
+    ]
+    assert calls[-1][1]["json"]["model"] == "qwen"
 
 
 def test_provider_metrics_normalize_lmstudio_stats() -> None:
