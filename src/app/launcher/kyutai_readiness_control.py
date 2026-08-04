@@ -120,10 +120,12 @@ def _service_snapshot(service_id: str) -> dict[str, Any]:
 def _safe_health(payload: dict[str, Any] | None) -> dict[str, Any] | None:
     if payload is None:
         return None
+    http_ready = payload.get("http_ready")
     return {
         "ok": bool(payload.get("ok")),
         "provider": payload.get("provider"),
         "state": payload.get("state"),
+        "http_ready": http_ready if isinstance(http_ready, bool) else None,
         "upstream_ready": bool(payload.get("upstream_ready")),
         "last_ready_at": payload.get("last_ready_at"),
         "last_error_code": payload.get("last_error_code"),
@@ -184,6 +186,13 @@ def _derive_summary(
             "unreachable",
             "The launcher cannot reach the Kyutai adapter on port 5202 yet. It may still be starting.",
             adapter_error,
+        )
+    if health and health.get("http_ready") is False and health.get("last_error_stage") == "build_info":
+        return (
+            "starting",
+            "Moshi is still compiling, downloading, or loading the STT model. The WebSocket probe will "
+            "start automatically after /api/build_info becomes ready.",
+            None,
         )
     if authority and authority.get("eligible"):
         return (
@@ -313,6 +322,7 @@ def enhance_launcher_html(source: str) -> str:
     <div class="readiness-facts">
       <div class="readiness-fact"><span>Moshi</span><strong id="kyutai-moshi-state">Checking</strong></div>
       <div class="readiness-fact"><span>Adapter</span><strong id="kyutai-adapter-state">Checking</strong></div>
+      <div class="readiness-fact"><span>Build API</span><strong id="kyutai-build-state">Checking</strong></div>
       <div class="readiness-fact"><span>Upstream</span><strong id="kyutai-upstream-state">Checking</strong></div>
       <div class="readiness-fact"><span>Model</span><strong id="kyutai-model-state">Checking</strong></div>
       <div class="readiness-fact"><span>Authority</span><strong id="kyutai-authority-state">Checking</strong></div>
@@ -354,6 +364,7 @@ def enhance_launcher_html(source: str) -> str:
     const authority = status && status.authority ? status.authority : {};
     setText('kyutai-moshi-state', services.moshi ? services.moshi.status : 'unknown');
     setText('kyutai-adapter-state', services.adapter ? services.adapter.status : 'unknown');
+    setText('kyutai-build-state', health.http_ready === true ? 'ready' : (health.http_ready === false ? 'starting' : 'unknown'));
     setText('kyutai-upstream-state', health.upstream_ready ? 'ready' : 'not ready');
     setText('kyutai-model-state', authority.model_warm ? 'warm' : 'cold');
     setText('kyutai-authority-state', authority.eligible ? 'eligible' : 'blocked');
@@ -364,6 +375,7 @@ def enhance_launcher_html(source: str) -> str:
     const detail = [
       `Language: ${status && status.language ? status.language : '-'}`,
       `Mode: ${status && status.authority_mode ? status.authority_mode : '-'}`,
+      `Build HTTP: ${health.http_ready === true ? 'ready' : (health.http_ready === false ? 'not ready' : '-')}`,
       `Probe stage: ${health.last_error_stage || '-'}`,
       `Error type: ${health.last_error_type || '-'}`,
       `Circuit: ${health.state || '-'}`,
