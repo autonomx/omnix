@@ -23,6 +23,7 @@ class _FakeStore:
     def __init__(self) -> None:
         self.begin_calls = 0
         self.complete_calls = 0
+        self.get_session_calls = 0
         self.last_request = None
         self.last_metadata = None
         self.session = ChatSession(
@@ -35,6 +36,7 @@ class _FakeStore:
         )
 
     def get_session(self, session_id: str):
+        self.get_session_calls += 1
         return self.session if session_id == self.session.id else None
 
     def build_provider_prompt(self, _session, user_message, _context_items):
@@ -108,6 +110,7 @@ def test_transcript_compatibility_is_strict_about_words() -> None:
 
 
 def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
     store = _FakeStore()
     monkeypatch.setattr(
         speculation.shared,
@@ -142,6 +145,7 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
         for payload in payloads
         if payload.get("type") == "text_chunk"
     ) == "Hello there."
+    assert store.get_session_calls == 1
     assert store.begin_calls == 0
     assert store.complete_calls == 0
 
@@ -169,3 +173,36 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     assert store.last_request.speech_segment_id == "voice-segment:test-1"
     assert store.last_metadata["live_voice_turn_id"] == "voice-turn:test-1"
     assert re.fullmatch(r"spec-[0-9a-f]{32}", generation_id)
+
+
+def test_primed_session_avoids_speculation_reload(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    store = _FakeStore()
+    speculation.prime_live_speculation_session(store.session)
+    monkeypatch.setattr(
+        speculation.shared,
+        "get_provider",
+        lambda _provider_id: _FakeProvider(),
+    )
+    app = FastAPI()
+    speculation.register_live_chat_speculation_routes(
+        app,
+        chat_store_factory=lambda: store,
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/live/speculation/sessions/session-1/stream",
+        json={
+            "content": "Tell me a story",
+            "segment_id": "segment-primed",
+            "source_sequence": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    assert store.get_session_calls == 0
+    assert any(
+        payload.get("type") == "text_chunk"
+        for payload in _event_payloads(response.text)
+    )
