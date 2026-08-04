@@ -33,7 +33,7 @@ def build_kyutai_service_specs(root: Path) -> tuple[list[ServiceSpec], str]:
         os.environ.get("KYUTAI_UNMUTE_DIR", str(root.parent / "unmute"))
     ).expanduser()
     upstream_url = os.environ.get("KYUTAI_STT_URL", "ws://127.0.0.1:8090")
-    upstream_path = os.environ.get("KYUTAI_STT_PATH", "")
+    upstream_path = os.environ.get("KYUTAI_STT_PATH", "/api/asr-streaming")
     adapter_port = int(os.environ.get("OMNIX_KYUTAI_STT_PORT", "5202"))
     language = os.environ.get("OMNIX_LIVE_STT_LANGUAGE", "en")
     endpoint_threshold = os.environ.get("KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD", "0.75")
@@ -87,7 +87,7 @@ def build_kyutai_service_specs(root: Path) -> tuple[list[ServiceSpec], str]:
             auto_start=adapter_auto_start,
             description=(
                 f"Omnix live-STT adapter on 127.0.0.1:{adapter_port}; "
-                "streams to the pinned moshi-server worker root on 127.0.0.1:8090."
+                f"streams to moshi-server on 127.0.0.1:8090{upstream_path}."
             ),
         ),
     ]
