@@ -13,6 +13,9 @@ from .image_reference_routes import install_image_reference_route_hook
 from .image_workspace_routes import install_image_workspace_route_hook
 from .live_chat_companion_context import install_live_chat_companion_context_hook
 from .live_chat_live_voice_profile import install_live_chat_live_voice_profile_hook
+from .live_chat_lmstudio_diagnostics import (
+    install_live_chat_lmstudio_diagnostics_hook,
+)
 from .live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
 from .live_chat_postgres_fast_path import install_live_chat_postgres_fast_path
 from .live_chat_prompt_cache import install_live_chat_prompt_cache_hook
@@ -112,6 +115,7 @@ install_live_chat_live_voice_profile_hook()
 install_live_voice_spoken_style_hook()
 install_live_chat_companion_context_hook()
 install_live_chat_prompt_cache_hook()
+install_live_chat_lmstudio_diagnostics_hook()
 install_live_material_context_hook()
 install_live_observation_generation_hook()
 install_memory_job_offload_hook()
