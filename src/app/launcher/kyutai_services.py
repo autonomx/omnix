@@ -33,6 +33,7 @@ def build_kyutai_service_specs(root: Path) -> tuple[list[ServiceSpec], str]:
         os.environ.get("KYUTAI_UNMUTE_DIR", str(root.parent / "unmute"))
     ).expanduser()
     upstream_url = os.environ.get("KYUTAI_STT_URL", "ws://127.0.0.1:8090")
+    upstream_path = os.environ.get("KYUTAI_STT_PATH", "")
     adapter_port = int(os.environ.get("OMNIX_KYUTAI_STT_PORT", "5202"))
     language = os.environ.get("OMNIX_LIVE_STT_LANGUAGE", "en")
     endpoint_threshold = os.environ.get("KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD", "0.75")
@@ -53,6 +54,7 @@ def build_kyutai_service_specs(root: Path) -> tuple[list[ServiceSpec], str]:
         "KYUTAI_UNMUTE_DIR": str(unmute_dir),
         "KYUTAI_OMNIX_COMPOSE_FILE": str(root / "docker-compose.kyutai-stt.yml"),
         "KYUTAI_STT_URL": upstream_url,
+        "KYUTAI_STT_PATH": upstream_path,
         "OMNIX_STT_PORT": str(adapter_port),
         "OMNIX_LIVE_STT_LANGUAGE": language,
         "KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD": endpoint_threshold,
@@ -85,7 +87,7 @@ def build_kyutai_service_specs(root: Path) -> tuple[list[ServiceSpec], str]:
             auto_start=adapter_auto_start,
             description=(
                 f"Omnix live-STT adapter on 127.0.0.1:{adapter_port}; "
-                "streams to moshi-server on 127.0.0.1:8090."
+                "streams to the pinned moshi-server worker root on 127.0.0.1:8090."
             ),
         ),
     ]
