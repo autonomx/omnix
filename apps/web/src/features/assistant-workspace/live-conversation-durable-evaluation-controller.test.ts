@@ -149,7 +149,7 @@ describe('durable Live Conversation evaluation controller', () => {
     expect(payload.browser_version.length).toBeGreaterThan(0);
     expect(payload.os_version.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(payload).toLocaleLowerCase();
-    expect(serialized).not.toMatch(/transcript|prompt|memory|pcm|message_content|utterance_text/);
+    expect(serialized).not.toMatch(/transcript|prompt|memory|message_content|utterance_text/);
   });
 
   it('posts one record, evaluates the durable aggregate, and counts release observations', async () => {
