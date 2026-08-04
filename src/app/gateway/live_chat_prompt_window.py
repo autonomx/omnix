@@ -16,10 +16,10 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
+from app.chat import prompt_store as prompt_store_runtime
 from app.chat.compaction import build_deterministic_summary
 from app.chat.models import ChatMessage, ChatSession
 from app.chat.prompt_assembly import PromptAssembly
-from app.chat import prompt_store as prompt_store_runtime
 
 from .tts_stream_diagnostics import stream_log
 
@@ -150,7 +150,7 @@ def _build_prompt_assembly_with_window(
                 eligible_messages,
                 recent_message_limit=recent_message_limit,
             )
-        except Exception as exc:  # Keep Chat available if compaction metadata is malformed.
+        except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
             summary_error_type = type(exc).__name__
 
     if summary is not None:
