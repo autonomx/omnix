@@ -472,11 +472,15 @@ def _generate_side_effect_free(
         ProviderMessage(role=item.role, content=item.content)
         for item in rendered.messages
     ]
-    raw_response = provider.chat_completion(
-        messages=messages,
-        model=_model_key(speculation.model_id),
-        stream=True,
-    )
+    live_voice_token = live_voice_profile._LIVE_VOICE_TURN.set(True)
+    try:
+        raw_response = provider.chat_completion(
+            messages=messages,
+            model=_model_key(speculation.model_id),
+            stream=True,
+        )
+    finally:
+        live_voice_profile._LIVE_VOICE_TURN.reset(live_voice_token)
     response = live_voice_profile._stream_with_live_voice_context(
         raw_response,
         is_live_voice=True,
