@@ -32,7 +32,7 @@ describe('live voice release observer', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => now);
   });
 
-  it('uses AudioWorklet playback as the first-audio boundary', () => {
+  it('uses substantive AudioWorklet speech as the first-audio boundary', () => {
     const observations: LiveVoiceReleaseObservation[] = [];
     const listener = (event: Event) => observations.push((event as CustomEvent<LiveVoiceReleaseObservation>).detail);
     window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
@@ -66,13 +66,27 @@ describe('live voice release observer', () => {
       expect.objectContaining({ metric_name: 'first_token_to_first_audio_ms' }),
       'release_observer',
     );
+    now = 1_140;
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:s1:audio-session',
+        source: 'audio_worklet',
+        event: 'worklet_segment_started',
+        details: { segment_kind: 'cue' },
+      },
+    }));
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'first_token_to_first_audio_ms' }),
+      'release_observer',
+    );
     now = 1_180;
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
       detail: {
         traceId: 'live-call:s1:audio-session',
         source: 'audio_worklet',
         event: 'worklet_segment_started',
-        details: {},
+        details: { segment_kind: 'speech' },
       },
     }));
     now = 1_200;
