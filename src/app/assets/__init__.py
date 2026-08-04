@@ -29,6 +29,7 @@ from .store import (
     _AUDIO_MIME_TYPES,
     _legacy_audio_roots,
     SharedAssetStore as ManifestSharedAssetStore,
+    default_asset_manifest_path,
 )
 from .voice_clone_assets import discover_voice_clone_assets, voice_clone_sources
 
@@ -108,17 +109,60 @@ def _voice_debug_rows(assets: Iterable[AssetRecord]) -> list[dict[str, str]]:
     return rows
 
 
+def _path_key(path: Path) -> str:
+    try:
+        return os.path.normcase(str(path.resolve()))
+    except (OSError, RuntimeError):
+        return os.path.normcase(str(path.absolute()))
+
+
 class SharedAssetStore(ManifestSharedAssetStore):
     """Shared asset store with non-mutating compatibility and curated read-through."""
 
+    def _include_canonical_voice_clones(self) -> bool:
+        """Keep custom manifest stores isolated from the application-wide library."""
+
+        try:
+            return self.manifest_path.resolve() == default_asset_manifest_path().resolve()
+        except OSError:
+            return self.manifest_path == default_asset_manifest_path()
+
     def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
-        """Read voice profiles from configured and compatibility directories."""
-        return discover_voice_clone_assets()
+        """Read voice profiles from configured and compatibility directories.
+
+        A custom manifest store is a scoped migration/test view. When legacy
+        ``app.shared`` paths are overridden, filter discovery to that explicit
+        root rather than leaking the application-wide canonical voice library.
+        """
+
+        assets = discover_voice_clone_assets()
+        if self._include_canonical_voice_clones():
+            return assets
+        try:
+            import app.shared as shared
+
+            shared_dir_value = getattr(shared, "VOICE_CLONES_DIR", None)
+        except Exception:
+            shared_dir_value = None
+        if not shared_dir_value:
+            return assets
+        expected_root = _path_key(Path(str(shared_dir_value)))
+        return [
+            asset
+            for asset in assets
+            if _path_key(Path(str(asset.compat.get("voice_clone_root") or "")))
+            == expected_root
+        ]
+
+    def _merge_canonical_voice_clones(self, assets: dict[str, AssetRecord]) -> None:
+        if self._include_canonical_voice_clones():
+            _merge_assets(
+                assets,
+                "canonical_voice_clones",
+                discover_canonical_voice_clone_assets,
+            )
 
     def list_assets(self) -> AssetListResponse:
-        # The shared manifest remains authoritative, but each compatibility source
-        # is isolated. The canonical clone directory is scanned independently so an
-        # environment override can never hide resources/voice_clones.
         LOGGER.info(
             "[Voice Library][assets] list started cwd=%s manifest=%s store=%s",
             os.getcwd(),
@@ -130,11 +174,7 @@ class SharedAssetStore(ManifestSharedAssetStore):
             "[Voice Library][assets] shared manifest loaded count=%d",
             len(assets),
         )
-        _merge_assets(
-            assets,
-            "canonical_voice_clones",
-            discover_canonical_voice_clone_assets,
-        )
+        self._merge_canonical_voice_clones(assets)
         _merge_assets(assets, "voice_clone_compatibility", self._legacy_voice_clone_assets)
         _merge_assets(assets, "generated_audio", super()._legacy_audio_assets)
         _merge_assets(
@@ -161,11 +201,7 @@ class SharedAssetStore(ManifestSharedAssetStore):
             return manifest_asset
 
         candidates: dict[str, AssetRecord] = {}
-        _merge_assets(
-            candidates,
-            "canonical_voice_clones",
-            discover_canonical_voice_clone_assets,
-        )
+        self._merge_canonical_voice_clones(candidates)
         _merge_assets(candidates, "voice_clone_compatibility", self._legacy_voice_clone_assets)
         _merge_assets(candidates, "generated_audio", super()._legacy_audio_assets)
         _merge_assets(
@@ -181,11 +217,7 @@ class SharedAssetStore(ManifestSharedAssetStore):
         """Summarize non-image legacy assets without mutating any source."""
         manifest_assets = super()._load_manifest()
         voice_assets: dict[str, AssetRecord] = {}
-        _merge_assets(
-            voice_assets,
-            "canonical_voice_clones",
-            discover_canonical_voice_clone_assets,
-        )
+        self._merge_canonical_voice_clones(voice_assets)
         _merge_assets(voice_assets, "voice_clone_compatibility", self._legacy_voice_clone_assets)
         legacy_assets = [
             *voice_assets.values(),
