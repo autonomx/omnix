@@ -129,6 +129,8 @@ def register_live_chat_speculation_routes(
                 "generation_id": generation_id,
                 "segment_id": request.segment_id,
                 "source_sequence": request.source_sequence,
+                "provider_id": speculation.provider_id,
+                "model_id": speculation.model_id,
             })
             try:
                 yield from _generate_side_effect_free(store, session, speculation)
