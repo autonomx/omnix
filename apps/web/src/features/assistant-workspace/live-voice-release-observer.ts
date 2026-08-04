@@ -5,7 +5,6 @@ const DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const QUALITY_EVENT = 'omnix:assistant-voice-release-quality';
 const SCENARIO_KEY = 'omnix.liveCall.releaseScenario';
-const MAX_PAUSE_ANCHOR_AGE_MS = 10_000;
 export const LIVE_VOICE_RELEASE_OBSERVATION_EVENT = 'omnix:live-voice-release-observation';
 
 export type LiveVoiceLatencyMetric =
@@ -19,7 +18,7 @@ export type LiveVoiceLatencyMetric =
   | 'first_pcm_to_first_playback_ms'
   | 'first_token_to_first_playback_ms'
   | 'final_to_first_playback_ms'
-  | 'local_pause_to_first_playback_ms'
+  | 'stt_request_to_first_playback_ms'
   | 'interruption_to_silence_ms';
 
 export type LiveVoiceQualityMetric =
@@ -52,12 +51,13 @@ type QualityDetail = {
 };
 
 type ReleaseState = {
-  localPauseAt: number | null;
   sttRequestedAt: number | null;
   sttFinalAt: number | null;
   responseOpenedAt: number | null;
   firstTokenAt: number | null;
   firstPcmAt: number | null;
+  firstPcmOutputId: string | null;
+  firstPcmSegmentId: string | null;
   firstPlaybackAt: number | null;
   interruptionAt: number | null;
   turnId: string | null;
@@ -100,19 +100,9 @@ function handlePerfEvent(event: Event): void {
   const detail = (event as CustomEvent<PerfDetail>).detail ?? {};
   const stage = typeof detail.stage === 'string' ? detail.stage : '';
   const now = performance.now();
-  if (stage === 'semantic_turn_assessed') {
-    state.localPauseAt = now;
-    if (typeof detail.turnId === 'string') state.turnId = detail.turnId;
-    return;
-  }
   if (stage === 'stt_final_requested') {
-    const recentPauseAt = state.localPauseAt !== null
-      && now - state.localPauseAt <= MAX_PAUSE_ANCHOR_AGE_MS
-      ? state.localPauseAt
-      : null;
     state = {
       ...emptyState(),
-      localPauseAt: recentPauseAt,
       sttRequestedAt: now,
       turnId: typeof detail.turnId === 'string' ? detail.turnId : null,
     };
@@ -152,17 +142,24 @@ function handleDiagnosticEvent(event: Event): void {
   }
   if (diagnosticEvent === 'phrase_first_frame_received' && state.firstPcmAt === null) {
     state.firstPcmAt = now;
+    state.firstPcmOutputId = diagnosticString(detail, 'output_id');
+    state.firstPcmSegmentId = diagnosticString(detail, 'segment_id');
     recordLatency('first_token_to_first_audio_ms', elapsed(state.firstTokenAt, now));
     recordLatency('final_to_first_audio_ms', elapsed(state.sttFinalAt, now));
     recordLatency('stt_request_to_first_audio_ms', elapsed(state.sttRequestedAt, now));
     return;
   }
-  if (diagnosticEvent === 'worklet_segment_started' && state.firstPlaybackAt === null) {
+  if (
+    diagnosticEvent === 'worklet_segment_started'
+    && state.firstPlaybackAt === null
+    && isSpeechPlayback(detail)
+    && playbackMatchesFirstPcm(detail)
+  ) {
     state.firstPlaybackAt = now;
     recordLatency('first_pcm_to_first_playback_ms', elapsed(state.firstPcmAt, now));
     recordLatency('first_token_to_first_playback_ms', elapsed(state.firstTokenAt, now));
     recordLatency('final_to_first_playback_ms', elapsed(state.sttFinalAt, now));
-    recordLatency('local_pause_to_first_playback_ms', elapsed(state.localPauseAt, now));
+    recordLatency('stt_request_to_first_playback_ms', elapsed(state.sttRequestedAt, now));
     return;
   }
   if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {
@@ -184,8 +181,33 @@ function diagnosticBelongsToActiveTurn(
   const crossTracePlayback = diagnosticEvent === 'worklet_segment_started'
     && detail.source === 'audio_worklet'
     && state.firstTokenAt !== null
-    && state.firstPlaybackAt === null;
+    && state.firstPcmAt !== null
+    && state.firstPlaybackAt === null
+    && isSpeechPlayback(detail)
+    && playbackMatchesFirstPcm(detail);
   return crossTraceAudio || crossTracePlayback;
+}
+
+function diagnosticString(detail: DiagnosticDetail, key: string): string | null {
+  const value = detail.details?.[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function isSpeechPlayback(detail: DiagnosticDetail): boolean {
+  const kind = diagnosticString(detail, 'segment_kind');
+  return kind === null || kind === 'speech';
+}
+
+function playbackMatchesFirstPcm(detail: DiagnosticDetail): boolean {
+  const outputId = diagnosticString(detail, 'output_id');
+  const segmentId = diagnosticString(detail, 'segment_id');
+  if (state.firstPcmOutputId !== null && outputId !== null) {
+    return state.firstPcmOutputId === outputId;
+  }
+  if (state.firstPcmSegmentId !== null && segmentId !== null) {
+    return state.firstPcmSegmentId === segmentId;
+  }
+  return state.firstPcmOutputId === null && state.firstPcmSegmentId === null;
 }
 
 function handleInterruption(): void {
@@ -248,12 +270,13 @@ function isQualityMetric(value: unknown): value is LiveVoiceQualityMetric {
 
 function emptyState(): ReleaseState {
   return {
-    localPauseAt: null,
     sttRequestedAt: null,
     sttFinalAt: null,
     responseOpenedAt: null,
     firstTokenAt: null,
     firstPcmAt: null,
+    firstPcmOutputId: null,
+    firstPcmSegmentId: null,
     firstPlaybackAt: null,
     interruptionAt: null,
     turnId: null,
