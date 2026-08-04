@@ -12,13 +12,13 @@ services:
       UV_CONCURRENT_INSTALLS: ${OMNIX_KYUTAI_UV_INSTALL_JOBS:-2}
       UV_LINK_MODE: copy
     entrypoint:
-      - uv
-      - run
-      - --locked
-      - --project
-      - ./moshi-server
       - /bin/bash
-      - /opt/omnix/start_moshi_secure.sh
+      - -lc
+      - |
+          # Normalize the Windows bind-mounted script before Bash parses it.
+          tr -d '\015' < /opt/omnix/start_moshi_secure.sh > /tmp/start_moshi_secure.sh
+          exec uv run --locked --project ./moshi-server /bin/bash /tmp/start_moshi_secure.sh "$${@}"
+      - kyutai-moshi-entrypoint
     volumes:
       - type: bind
         source: ${KYUTAI_OMNIX_SECURE_ENTRYPOINT}
