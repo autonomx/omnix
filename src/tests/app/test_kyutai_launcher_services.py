@@ -11,6 +11,7 @@ def test_kyutai_launcher_specs_auto_start_for_branch_testing(monkeypatch) -> Non
     monkeypatch.delenv("OMNIX_START_KYUTAI_MOSHI", raising=False)
     monkeypatch.delenv("OMNIX_START_KYUTAI_ADAPTER", raising=False)
     monkeypatch.delenv("VITE_ASSISTANT_STT_URL", raising=False)
+    monkeypatch.delenv("KYUTAI_STT_PATH", raising=False)
     monkeypatch.setenv("RPG_FLUX_PYTHON", "F:/Python/python.exe")
 
     root = Path("F:/LLM/omnix")
@@ -33,7 +34,9 @@ def test_kyutai_launcher_specs_auto_start_for_branch_testing(monkeypatch) -> Non
     assert adapter.optional is True
     assert adapter.ports == (5202,)
     assert adapter.env["KYUTAI_STT_URL"] == "ws://127.0.0.1:8090"
+    assert adapter.env["KYUTAI_STT_PATH"] == ""
     assert adapter.env["OMNIX_STT_PORT"] == "5202"
+    assert "worker root" in adapter.description
     assert browser_url == (
         "http://127.0.0.1:5202?language=en&authority=test"
         "&endpoint_threshold=0.75"
