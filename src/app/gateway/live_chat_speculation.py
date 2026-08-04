@@ -46,6 +46,9 @@ class LiveSpeculationRequest(BaseModel):
 
 class LiveSpeculationAcceptRequest(BaseModel):
     final_text: str = Field(min_length=1, max_length=8_000)
+    user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
+    speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
+    live_voice_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
 
 
 @dataclass
@@ -166,17 +169,13 @@ def register_live_chat_speculation_routes(
             if not transcripts_are_compatible(speculation.candidate_text, request.final_text):
                 raise HTTPException(status_code=409, detail="speculation_transcript_mismatch")
 
-        store = chat_store_factory()
-        appended = store.begin_user_message(
-            session_id,
-            SendChatMessageRequest(
-                content=request.final_text.strip(),
-                provider_id=speculation.provider_id,
-                model_id=speculation.model_id,
-                user_turn_id=f"speculation-user:{generation_id}"[:160],
-                speech_segment_id=f"speculation-segment:{speculation.segment_id}"[:160],
-            ),
+        accepted_request = _accepted_chat_request(
+            request,
+            speculation=speculation,
+            generation_id=generation_id,
         )
+        store = chat_store_factory()
+        appended = store.begin_user_message(session_id, accepted_request)
         if appended is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         _, user_message = appended
@@ -189,7 +188,11 @@ def register_live_chat_speculation_routes(
                 "generation_status": "completed",
                 "speculative_generation": True,
                 "speculation_generation_id": generation_id,
-                "speculation_candidate_words": len(normalized_transcript_words(speculation.candidate_text)),
+                "speculation_candidate_words": len(
+                    normalized_transcript_words(speculation.candidate_text)
+                ),
+                "user_turn_id": accepted_request.user_turn_id,
+                "speech_segment_id": accepted_request.speech_segment_id,
             },
         )
         if completed is None:
@@ -198,12 +201,41 @@ def register_live_chat_speculation_routes(
             "ok": True,
             "generation_id": generation_id,
             "content": speculation.content,
+            "user_turn_id": accepted_request.user_turn_id,
+            "speech_segment_id": accepted_request.speech_segment_id,
             "user_message": user_message.model_dump(mode="json"),
             "session": completed.model_dump(mode="json"),
         }
         with _SPECULATION_LOCK:
             speculation.accepted_payload = payload
         return payload
+
+
+def _accepted_chat_request(
+    request: LiveSpeculationAcceptRequest,
+    *,
+    speculation: _Speculation,
+    generation_id: str,
+) -> SendChatMessageRequest:
+    payload: dict[str, Any] = {
+        "content": request.final_text.strip(),
+        "provider_id": speculation.provider_id,
+        "model_id": speculation.model_id,
+    }
+    if request.user_turn_id:
+        payload["user_turn_id"] = request.user_turn_id
+    if request.speech_segment_id:
+        payload["speech_segment_id"] = request.speech_segment_id
+    if request.live_voice_turn_id:
+        payload["live_voice_turn_id"] = request.live_voice_turn_id
+    if not any(
+        (request.user_turn_id, request.speech_segment_id, request.live_voice_turn_id)
+    ):
+        payload["user_turn_id"] = f"speculation-user:{generation_id}"[:160]
+        payload["speech_segment_id"] = (
+            f"speculation-segment:{speculation.segment_id}"[:160]
+        )
+    return SendChatMessageRequest.model_validate(payload)
 
 
 def _generate_side_effect_free(

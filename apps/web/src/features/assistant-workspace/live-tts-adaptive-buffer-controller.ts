@@ -1,7 +1,5 @@
-import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
+import type { LiveVoicePcmSession } from './live-voice-pcm-session';
 
-const INSTALLED_KEY = '__omnixLiveTtsAdaptiveBufferInstalled';
-const PERF_EVENT = 'omnix:assistant-voice-perf';
 const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v1';
 
 export type AdaptiveBufferSnapshot = {
@@ -10,10 +8,6 @@ export type AdaptiveBufferSnapshot = {
   maxRebufferMs: number;
   stableTurns: number;
   underrunTurns: number;
-};
-
-type AdaptiveWindow = Window & typeof globalThis & {
-  __omnixLiveTtsAdaptiveBufferInstalled?: boolean;
 };
 
 export class AdaptiveTtsBufferPolicy {
@@ -99,166 +93,24 @@ export function adaptiveBufferWorkletMessage(
   };
 }
 
-export function initializeLiveTtsAdaptiveBufferController(): () => void {
-  if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as AdaptiveWindow;
-  if (liveWindow[INSTALLED_KEY] || !adaptiveBufferEnabled()) {
-    return () => undefined;
-  }
-  const NativeAudioWorkletNode = liveWindow.AudioWorkletNode;
-  if (!NativeAudioWorkletNode) return () => undefined;
-  const originalDescriptor = Object.getOwnPropertyDescriptor(
-    liveWindow,
-    'AudioWorkletNode',
-  );
-  const policy = new AdaptiveTtsBufferPolicy(loadSnapshot());
-
-  const WrappedAudioWorkletNode = new Proxy(NativeAudioWorkletNode, {
-    construct(target, argumentsList, newTarget) {
-      const [audioContext, name, options] = argumentsList as [
-        AudioContext,
-        string,
-        AudioWorkletNodeOptions | undefined,
-      ];
-      if (name !== LIVE_VOICE_PCM_WORKLET_NAME) {
-        return Reflect.construct(target, argumentsList, newTarget);
-      }
-      const snapshot = policy.snapshot();
-      const sampleRate = audioContext.sampleRate;
-      const policyMessage = adaptiveBufferWorkletMessage(
-        snapshot,
-        sampleRate,
-      );
-      const nextOptions: AudioWorkletNodeOptions = {
-        ...(options ?? {}),
-        processorOptions: {
-          ...(
-            (options?.processorOptions as
-              | Record<string, unknown>
-              | undefined) ?? {}
-          ),
-          startBufferSamples: policyMessage.startBufferSamples,
-          minimumBufferedSpeechSamples:
-            policyMessage.minimumBufferedSpeechSamples,
-          rebufferSamples: policyMessage.rebufferSamples,
-          maxRebufferSamples: policyMessage.maxRebufferSamples,
-        },
-      };
-      const node = Reflect.construct(
-        target,
-        [audioContext, name, nextOptions],
-        newTarget,
-      ) as AudioWorkletNode;
-      const originalPostMessage = node.port.postMessage.bind(node.port);
-      try {
-        node.port.postMessage = ((
-          message: unknown,
-          transfer?: Transferable[],
-        ) => {
-          if (isStartPolicyMessage(message)) {
-            const current = policy.snapshot();
-            originalPostMessage(
-              {
-                ...message,
-                minimumBufferedSpeechSamples: millisecondsToSamples(
-                  current.startBufferMs,
-                  sampleRate,
-                ),
-              },
-              transfer ?? [],
-            );
-            return;
-          }
-          originalPostMessage(message, transfer ?? []);
-        }) as MessagePort['postMessage'];
-      } catch {
-        dispatchPerformance('tts_adaptive_post_message_unavailable', {});
-      }
-      node.port.addEventListener(
-        'message',
-        (event: MessageEvent<Record<string, unknown>>) => {
-          const type = typeof event.data?.type === 'string'
-            ? event.data.type
-            : '';
-          if (type !== 'underrun' && type !== 'drained') return;
-          const next = policy.observeWorkletEvent(type);
-          saveSnapshot(next);
-          try {
-            originalPostMessage(
-              adaptiveBufferWorkletMessage(next, sampleRate),
-            );
-          } catch {
-            dispatchPerformance(
-              'tts_adaptive_runtime_update_failed',
-              { trigger: type },
-            );
-          }
-          dispatchPerformance('tts_adaptive_buffer_updated', {
-            trigger: type,
-            ...next,
-          });
-        },
-      );
-      node.port.start?.();
-      dispatchPerformance('tts_adaptive_buffer_applied', snapshot);
-      return node;
-    },
-  });
-
-  try {
-    Object.defineProperty(liveWindow, 'AudioWorkletNode', {
-      configurable: true,
-      writable: true,
-      value: WrappedAudioWorkletNode,
-    });
-  } catch (error) {
-    liveWindow[INSTALLED_KEY] = false;
-    dispatchPerformance('tts_adaptive_install_failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return () => undefined;
-  }
-  liveWindow[INSTALLED_KEY] = true;
-
-  return () => {
-    try {
-      if (originalDescriptor) {
-        Object.defineProperty(
-          liveWindow,
-          'AudioWorkletNode',
-          originalDescriptor,
-        );
-      } else {
-        Object.defineProperty(liveWindow, 'AudioWorkletNode', {
-          configurable: true,
-          writable: true,
-          value: NativeAudioWorkletNode,
-        });
-      }
-    } finally {
-      liveWindow[INSTALLED_KEY] = false;
+/**
+ * Adaptive playback is opt-in. The PCM session owns its worklet and receives
+ * policy updates through its public API; this module never patches browser
+ * constructors or MessagePort methods.
+ */
+export function adaptiveBufferEnabled(): boolean {
+  const env = (
+    import.meta as unknown as {
+      env?: Record<string, string | undefined>;
     }
-  };
+  ).env;
+  return env?.VITE_LIVE_TTS_ADAPTIVE_BUFFER
+    ?.trim()
+    .toLowerCase() === 'true';
 }
 
-function isStartPolicyMessage(
-  value: unknown,
-): value is Record<string, unknown> & { type: 'set_start_policy' } {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && (value as Record<string, unknown>).type === 'set_start_policy',
-  );
-}
-
-function millisecondsToSamples(
-  milliseconds: number,
-  sampleRate: number,
-): number {
-  return Math.max(1, Math.round(milliseconds * sampleRate / 1_000));
-}
-
-function loadSnapshot(): Partial<AdaptiveBufferSnapshot> | undefined {
+export function loadAdaptiveBufferSnapshot(): Partial<AdaptiveBufferSnapshot> | undefined {
+  if (typeof window === 'undefined') return undefined;
   try {
     const parsed = JSON.parse(
       window.localStorage.getItem(STORAGE_KEY) ?? 'null',
@@ -271,7 +123,10 @@ function loadSnapshot(): Partial<AdaptiveBufferSnapshot> | undefined {
   }
 }
 
-function saveSnapshot(snapshot: AdaptiveBufferSnapshot): void {
+export function saveAdaptiveBufferSnapshot(
+  snapshot: AdaptiveBufferSnapshot,
+): void {
+  if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(
       STORAGE_KEY,
@@ -282,28 +137,20 @@ function saveSnapshot(snapshot: AdaptiveBufferSnapshot): void {
   }
 }
 
-function adaptiveBufferEnabled(): boolean {
-  const env = (
-    import.meta as unknown as {
-      env?: Record<string, string | undefined>;
-    }
-  ).env;
-  return env?.VITE_LIVE_TTS_ADAPTIVE_BUFFER
-    ?.trim()
-    .toLowerCase() !== 'false';
+export function applyAdaptiveBufferSnapshot(
+  session: Pick<LiveVoicePcmSession, 'setStartPolicy'>,
+  snapshot: AdaptiveBufferSnapshot,
+): void {
+  session.setStartPolicy({
+    minimumBufferedSpeechMs: snapshot.startBufferMs,
+  });
 }
 
-function dispatchPerformance(
-  stage: string,
-  detail: Record<string, unknown>,
-): void {
-  window.dispatchEvent(new CustomEvent(PERF_EVENT, {
-    detail: {
-      stage,
-      timestamp: new Date().toISOString(),
-      ...detail,
-    },
-  }));
+function millisecondsToSamples(
+  milliseconds: number,
+  sampleRate: number,
+): number {
+  return Math.max(1, Math.round(milliseconds * sampleRate / 1_000));
 }
 
 function clamp(

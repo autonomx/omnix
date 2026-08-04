@@ -23,6 +23,7 @@ class _FakeStore:
     def __init__(self) -> None:
         self.begin_calls = 0
         self.complete_calls = 0
+        self.last_request = None
         self.session = ChatSession(
             id="session-1",
             title="Speculation",
@@ -44,6 +45,7 @@ class _FakeStore:
     def begin_user_message(self, session_id, request):
         assert session_id == self.session.id
         self.begin_calls += 1
+        self.last_request = request
         message = ChatMessage(
             id="accepted-user",
             role="user",
@@ -127,10 +129,20 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
 
     accepted = client.post(
         f"/api/live/speculation/sessions/session-1/{generation_id}/accept",
-        json={"final_text": "tell me a story!"},
+        json={
+            "final_text": "tell me a story!",
+            "user_turn_id": "user-turn:accepted-17",
+            "speech_segment_id": "speech-segment:accepted-17",
+            "live_voice_turn_id": "voice-turn:accepted-17",
+        },
     )
     assert accepted.status_code == 200
     assert accepted.json()["content"] == "Hello there."
+    assert accepted.json()["user_turn_id"] == "user-turn:accepted-17"
+    assert accepted.json()["speech_segment_id"] == "speech-segment:accepted-17"
     assert store.begin_calls == 1
     assert store.complete_calls == 1
+    assert store.last_request is not None
+    assert store.last_request.user_turn_id == "user-turn:accepted-17"
+    assert store.last_request.speech_segment_id == "speech-segment:accepted-17"
     assert re.fullmatch(r"spec-[0-9a-f]{32}", generation_id)
