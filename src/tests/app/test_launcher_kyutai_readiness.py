@@ -174,6 +174,9 @@ def test_restart_endpoint_restarts_moshi_before_adapter(monkeypatch) -> None:
 def test_runtime_forced_health_probe_bypasses_probe_cache(monkeypatch) -> None:
     observed: list[float] = []
 
+    async def fake_http_ready() -> tuple[bool, str | None, str | None]:
+        return True, None, None
+
     async def fake_probe(*, language: str, max_age_seconds: float) -> bool:
         assert language == "en"
         observed.append(max_age_seconds)
@@ -186,10 +189,12 @@ def test_runtime_forced_health_probe_bypasses_probe_cache(monkeypatch) -> None:
             "upstream_ready": True,
         }
 
+    monkeypatch.setattr(kyutai_stt_runtime, "_moshi_http_ready", fake_http_ready)
     monkeypatch.setattr(kyutai_stt_runtime.provider, "probe", fake_probe)
     monkeypatch.setattr(kyutai_stt_runtime.provider, "health", fake_health)
 
     payload = asyncio.run(kyutai_stt_runtime._probed_health("en", force=True))
 
     assert payload["ok"] is True
+    assert payload["http_ready"] is True
     assert observed == [0.0]
