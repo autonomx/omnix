@@ -61,6 +61,7 @@ jobs:
             src/tests/app/test_launcher_kyutai_readiness.py \
             src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_kyutai_moshi_launcher.py \
+            src/tests/app/test_kyutai_stt_runtime.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
@@ -76,6 +77,7 @@ jobs:
             src/tests/app/test_launcher_kyutai_readiness.py \
             src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_kyutai_moshi_launcher.py \
+            src/tests/app/test_kyutai_stt_runtime.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
