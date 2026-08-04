@@ -407,10 +407,7 @@ def _copy_session(session: Any) -> Any:
     model_copy = getattr(session, "model_copy", None)
     if callable(model_copy):
         return model_copy(deep=True)
-    try:
-        return copy.deepcopy(session)
-    except Exception:  # pragma: no cover - defensive fallback for custom stores.
-        return session
+    return copy.deepcopy(session)
 
 
 def _generate_side_effect_free(
