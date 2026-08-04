@@ -41,6 +41,9 @@ jobs:
         run: |
           python -c "from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
 
+      - name: Validate secure Moshi entrypoint
+        run: bash -n scripts/kyutai_moshi_secure_entrypoint.sh
+
       - name: Lint live latency and launcher modules
         run: |
           ruff check \
