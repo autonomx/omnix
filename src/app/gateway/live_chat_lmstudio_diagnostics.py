@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import Callable
 from contextvars import ContextVar
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.store import _model_key
