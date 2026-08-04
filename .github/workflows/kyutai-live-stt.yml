@@ -27,7 +27,7 @@ jobs:
           cache: pip
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -57,6 +57,7 @@ jobs:
             src/app/providers/kyutai_live_stt.py \
             src/app/providers/kyutai_stt_websocket.py \
             src/app/providers/stt_live_websocket.py \
+            src/app/gateway/live_chat_prompt_cache.py \
             src/app/gateway/live_chat_speculation.py \
             src/app/gateway/tts_live_capabilities.py \
             src/kyutai_stt_runtime.py \
@@ -69,6 +70,7 @@ jobs:
             src/tests/app/test_kyutai_authority.py \
             src/tests/app/test_kyutai_live_stt.py \
             src/tests/app/test_kyutai_stt_websocket.py \
+            src/tests/app/test_live_chat_prompt_cache.py \
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_tts_live_capabilities.py
           ruff check --ignore RUF100,TRY004 src/app/launcher/kyutai_readiness_control.py
@@ -86,6 +88,7 @@ jobs:
             src/tests/app/test_kyutai_live_stt.py \
             src/tests/app/test_kyutai_stt_websocket.py \
             src/tests/app/test_stt_streaming_audio.py \
+            src/tests/app/test_live_chat_prompt_cache.py \
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_tts_live_capabilities.py \
             -q --tb=short
