@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_FINAL,
+    CAP_CONTINUOUS_WORDS,
+    CAP_DELAYED_FLUSH,
     CAP_SEGMENTED_AUDIO,
+    CAP_SEMANTIC_ENDPOINTING,
+    CAP_WORD_TIMESTAMPS,
     CircuitState,
     LiveSttCircuitBreaker,
     LiveSttNegotiation,
@@ -30,6 +34,37 @@ def test_live_stt_negotiation_emits_stable_ready_payload() -> None:
         "configVersion": "live-stt-v1",
         "maxSegmentAudioMs": 15_000,
     }
+
+
+def test_kyutai_uses_the_same_provider_neutral_negotiation_contract() -> None:
+    negotiation = LiveSttNegotiation(
+        provider="kyutai",
+        protocol="kyutai-moshi-v1",
+        sample_rate=24_000,
+        frame_samples=1_920,
+        capabilities=frozenset(
+            {
+                CAP_AUTHORITATIVE_FINAL,
+                CAP_CONTINUOUS_WORDS,
+                CAP_DELAYED_FLUSH,
+                CAP_SEMANTIC_ENDPOINTING,
+                CAP_WORD_TIMESTAMPS,
+            }
+        ),
+    )
+
+    payload = negotiation.ready_payload(
+        connection_id="kyutai-observation-1",
+        authorityMode="observational",
+        authoritativeEndpointing=False,
+    )
+
+    assert payload["provider"] == "kyutai"
+    assert payload["sampleRate"] == 24_000
+    assert payload["frameSamples"] == 1_920
+    assert payload["authorityMode"] == "observational"
+    assert payload["authoritativeEndpointing"] is False
+    assert payload["capabilities"] == sorted(negotiation.capabilities)
 
 
 def test_live_stt_circuit_breaker_opens_and_probes_after_cooldown() -> None:

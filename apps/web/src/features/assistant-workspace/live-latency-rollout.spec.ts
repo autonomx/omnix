@@ -20,6 +20,21 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(selected.websocketUrl).toBe('ws://127.0.0.1:5202/ws/transcribe?language=en');
   });
 
+  it('keeps Kyutai observational without probing authority', async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const selected = await resolveAuthoritySelection(
+      'http://127.0.0.1:5202?language=en&authority=observational',
+      locationLike,
+      fetchImpl,
+    );
+    expect(selected.mode).toBe('observational');
+    expect(selected.authorityEnabled).toBe(false);
+    expect(selected.fallbackUsed).toBe(false);
+    expect(selected.websocketUrl).toBe('ws://127.0.0.1:5202/ws/transcribe?language=en');
+    expect(selected.reasons).toEqual(['observational_mode']);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('falls back before capture when production authority gates fail', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: false, eligible: false, reasons: ['quality_gate_not_passed'] }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
     const selected = await resolveAuthoritySelection('http://127.0.0.1:5202?language=en&authority=auto&fallback=http%3A%2F%2F127.0.0.1%3A5201', locationLike, fetchImpl);
