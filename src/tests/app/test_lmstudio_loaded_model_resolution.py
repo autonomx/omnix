@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.gateway.lmstudio_loaded_model_resolution import (
     _clear_lmstudio_model_discovery_cache,
     _resolve_lmstudio_model,
 )
-from app.providers import LMStudioProvider, ProviderConfig
+from app.providers import ChatMessage, LMStudioProvider, ProviderConfig
 
 
 class _Response:
@@ -15,6 +16,13 @@ class _Response:
 
     def json(self) -> Any:
         return self.payload
+
+
+class _CompletionResponse(_Response):
+    def __init__(self, payload: Any) -> None:
+        super().__init__(payload)
+        self.headers: dict[str, str] = {}
+        self.content = json.dumps(payload).encode("utf-8")
 
 
 def _provider(*, configured_model: str = "fallback/model") -> LMStudioProvider:
@@ -156,6 +164,40 @@ def test_discovery_failure_does_not_auto_load_stale_fallback(monkeypatch) -> Non
     assert selected is None
     assert diagnostics["source"] == "runtime_default_discovery_unavailable"
     assert diagnostics["configured_fallback"] == "stale/fallback"
+
+
+def test_discovery_failure_omits_stale_fallback_from_chat_payload(monkeypatch) -> None:
+    provider = _provider(configured_model="stale/fallback")
+    _clear_lmstudio_model_discovery_cache()
+    chat_payloads: list[dict[str, Any]] = []
+
+    def request(method: str, endpoint: str, **kwargs):
+        if endpoint in {"/api/v1/models", "/api/v0/models"}:
+            raise OSError("model discovery unavailable")
+        assert endpoint == "/v1/chat/completions"
+        chat_payloads.append(kwargs["json"])
+        return _CompletionResponse(
+            {
+                "model": "runtime-selected-model",
+                "choices": [
+                    {
+                        "message": {"content": "Hello"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(provider, "_make_request", request)
+
+    response = provider.chat_completion(
+        [ChatMessage(role="user", content="Hello")],
+        stream=False,
+    )
+
+    assert response.model == "runtime-selected-model"
+    assert len(chat_payloads) == 1
+    assert "model" not in chat_payloads[0]
 
 
 def test_v0_loaded_state_is_used_when_v1_is_unavailable(monkeypatch) -> None:
