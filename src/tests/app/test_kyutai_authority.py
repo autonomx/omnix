@@ -116,6 +116,26 @@ def test_auto_mode_requires_complete_measurement_evidence(monkeypatch) -> None:
     )
 
 
+def test_explicit_auto_approvals_cannot_bypass_measurement_gates() -> None:
+    decision = evaluate_kyutai_authority(
+        _health(),
+        language="en",
+        mode="auto",
+        now=1_000.0,
+        quality_gate_passed=True,
+        contention_gate_passed=True,
+        measurements=KyutaiReleaseMeasurements(),
+    )
+
+    assert decision.eligible is False
+    assert decision.quality_gate_passed is False
+    assert decision.contention_gate_passed is False
+    assert "quality_metrics_not_satisfied" in decision.reasons
+    assert "contention_metrics_not_satisfied" in decision.reasons
+    assert "quality_gate_not_passed" in decision.reasons
+    assert "contention_gate_not_passed" in decision.reasons
+
+
 def test_authority_rejects_cold_or_unsupported_sessions() -> None:
     decision = evaluate_kyutai_authority(
         _health(last_ready_at=100.0),

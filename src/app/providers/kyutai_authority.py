@@ -234,20 +234,18 @@ def evaluate_kyutai_authority(
         resolved_measurements,
         resolved_thresholds,
     )
-    if quality_gate_passed is None:
-        quality_passed = (
-            environment_gate("KYUTAI_STT_QUALITY_GATE_PASSED")
-            and not quality_failures
-        )
-    else:
-        quality_passed = quality_gate_passed
-    if contention_gate_passed is None:
-        contention_passed = (
-            environment_gate("KYUTAI_STT_CONTENTION_GATE_PASSED")
-            and not contention_failures
-        )
-    else:
-        contention_passed = contention_gate_passed
+    quality_approved = (
+        environment_gate("KYUTAI_STT_QUALITY_GATE_PASSED")
+        if quality_gate_passed is None
+        else bool(quality_gate_passed)
+    )
+    contention_approved = (
+        environment_gate("KYUTAI_STT_CONTENTION_GATE_PASSED")
+        if contention_gate_passed is None
+        else bool(contention_gate_passed)
+    )
+    quality_passed = quality_approved and not quality_failures
+    contention_passed = contention_approved and not contention_failures
 
     supported = {
         str(item).strip().lower()
