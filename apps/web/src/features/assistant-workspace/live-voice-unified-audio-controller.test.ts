@@ -185,7 +185,7 @@ describe('live voice unified audio controller', () => {
     await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(2));
     expect(mocks.session.setStartPolicy).toHaveBeenCalledTimes(1);
     expect(mocks.session.setStartPolicy).toHaveBeenCalledWith(expect.objectContaining({
-      minimumBufferedSpeechMs: 400,
+      minimumBufferedSpeechMs: 220,
     }));
     expect(mocks.session.enqueueSilence).toHaveBeenCalledWith(
       expect.any(Number),
@@ -213,7 +213,11 @@ describe('live voice unified audio controller', () => {
     );
     expect(mocks.recordSpy).toHaveBeenCalledWith(
       'perceived_onset_planned',
-      expect.objectContaining({ sample_rate: 48_000, source: 'fallback' }),
+      expect.objectContaining({
+        sample_rate: 48_000,
+        source: 'fallback',
+        minimum_buffered_speech_ms: 220,
+      }),
       'controller',
     );
     await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalledTimes(2));
@@ -262,7 +266,7 @@ describe('live voice unified audio controller', () => {
       onset_policy: { desired_perceived_onset_ms: 650 },
     });
     expect(mocks.session.setStartPolicy).toHaveBeenCalledWith(expect.objectContaining({
-      minimumBufferedSpeechMs: 400,
+      minimumBufferedSpeechMs: 220,
     }));
     expect(mocks.session.enqueueCue).toHaveBeenCalledWith('hmm', expect.stringMatching(/^hmm-v\d$/), 0.62);
     expect(mocks.recordSpy).toHaveBeenCalledWith(
