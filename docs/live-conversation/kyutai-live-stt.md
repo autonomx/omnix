@@ -8,9 +8,8 @@ This branch implements the complete five-PR low-latency voice rollout while keep
 Microphone
   -> Omnix negotiated /ws/transcribe protocol
   -> Kyutai adapter on port 5202
-  -> persistent MessagePack websocket
-  -> moshi-server worker root on port 8090
-  -> configured ASR module `/api/asr-streaming`
+  -> moshi-server HTTP build readiness at /api/build_info
+  -> persistent MessagePack websocket at /api/asr-streaming
   -> endpoint candidate / authoritative final
   -> side-effect-free LLM speculation
   -> accepted final transcript
@@ -38,7 +37,16 @@ Parakeet continues using 16,000 Hz PCM and its existing segmented finalize-and-t
 
 ## PR 2: Kyutai streaming adapter
 
-The pinned Unmute deployment exposes the `moshi-server worker` directly. Its own backend connects to `ws://stt:8080` without a URL path, while `configs/stt.toml` selects the ASR module at `/api/asr-streaming` inside the worker. Omnix therefore connects to the worker root (`ws://127.0.0.1:8090` after the Docker port mapping) and normalizes:
+The adapter connects to the pinned Moshi worker at `ws://127.0.0.1:8090/api/asr-streaming`, matching Kyutai's official delayed-streams client and the path configured by `configs/stt.toml`. Before attempting that MessagePack WebSocket handshake, the adapter checks `http://127.0.0.1:8090/api/build_info`.
+
+This produces a two-stage readiness contract:
+
+1. `/api/build_info` confirms that the Rust worker has finished compiling, starting, and loading enough to answer HTTP.
+2. `/api/asr-streaming` must then return the expected MessagePack `Ready` frame.
+
+While the build endpoint is unavailable, readiness is reported as `starting` and no WebSocket attempt is recorded against the circuit breaker. This matters on the first Docker build because the pinned container health check allows a startup period of up to ten minutes.
+
+After readiness, the adapter normalizes:
 
 - partial transcript updates
 - timestamped words
@@ -46,7 +54,7 @@ The pinned Unmute deployment exposes the `moshi-server worker` directly. Its own
 - delayed-state flush lifecycle
 - authoritative final transcripts
 
-`KYUTAI_STT_PATH` defaults to an empty string for this pinned worker. It remains available as an explicit override for a future server or proxy that exposes a path-based WebSocket endpoint.
+`KYUTAI_STT_PATH` defaults to `/api/asr-streaming`. It remains configurable for future Moshi or proxy variants.
 
 Kyutai decoder state is connection-local. The `client_audio_replay` capability therefore tells the browser to retain acknowledged segment audio until a final result is accepted. After reconnect, Omnix applies cached completed results and replays every still-pending segment from its original sample offset.
 
@@ -57,7 +65,7 @@ The bridge also provides:
 - bounded queues and segment sizes
 - malformed audio rejection
 - a rolling circuit breaker
-- real upstream health probing
+- two-stage HTTP and WebSocket readiness probing
 - provider and latency diagnostics without raw transcript text
 
 ## PR 3: authoritative Kyutai endpointing
@@ -72,7 +80,8 @@ GET http://127.0.0.1:5202/authorityz?language=en&mode=auto
 The gate requires:
 
 - English or French
-- reachable upstream moshi-server
+- a successful Moshi `/api/build_info` response
+- a successful `/api/asr-streaming` `Ready` handshake
 - closed circuit breaker
 - a recent successful ready handshake, indicating a warm model
 
@@ -183,7 +192,7 @@ Start the Omnix adapter from the Omnix branch:
 python src/kyutai_stt_runtime.py
 ```
 
-The adapter defaults to port `5202`, upstream URL `ws://127.0.0.1:8090`, upstream path `""` (worker root), and can run beside Parakeet on `5201`.
+The adapter defaults to port `5202`, upstream URL `ws://127.0.0.1:8090`, upstream path `/api/asr-streaming`, and can run beside Parakeet on `5201`.
 
 ## Exact local latency-test configuration
 
@@ -200,15 +209,16 @@ For French, replace `language=en` with `language=fr`.
 
 For production-gated selection, use `authority=auto` only after setting the two release-evidence environment variables on the Kyutai adapter process.
 
-Before opening Live Chat, verify:
+Before opening Live Chat, verify the stages in order:
 
 ```powershell
+Invoke-RestMethod http://127.0.0.1:8090/api/build_info
 Invoke-RestMethod http://127.0.0.1:5202/healthz
 Invoke-RestMethod "http://127.0.0.1:5202/authorityz?language=en&mode=test"
 Invoke-RestMethod http://127.0.0.1:8000/api/tts/live-call/capabilities
 ```
 
-The exact gateway port may differ in the local Omnix setup.
+The first command may fail during the initial Docker build or model startup. Do not repeatedly force the WebSocket probe while it is unavailable; the launcher panel refreshes automatically. The exact gateway port may differ in the local Omnix setup.
 
 ## Runtime diagnostics
 
@@ -243,9 +253,10 @@ These events contain timing, identities, probabilities, capabilities, and charac
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `KYUTAI_STT_URL` | `ws://127.0.0.1:8090` | Upstream moshi-server worker URL |
-| `KYUTAI_STT_PATH` | empty | Optional WebSocket path override; leave empty for the pinned worker |
+| `KYUTAI_STT_URL` | `ws://127.0.0.1:8090` | Upstream moshi-server URL |
+| `KYUTAI_STT_PATH` | `/api/asr-streaming` | Moshi MessagePack ASR WebSocket path |
 | `KYUTAI_STT_API_KEY` | `public_token` | `kyutai-api-key` header |
+| `KYUTAI_STT_BUILD_INFO_TIMEOUT_SECONDS` | `2` | Timeout for the startup `/api/build_info` probe |
 | `OMNIX_STT_PORT` | `5202` | Omnix adapter port |
 | `OMNIX_STT_CORS_ORIGINS` | local Vite origins | Allowed authority-preflight origins |
 | `OMNIX_LIVE_STT_LANGUAGE` | `en` | Default language when URL has none |
