@@ -19,8 +19,8 @@ describe('latest image result', () => {
     expect(selectLatestImageAsset([asset], [], null, 'job:test')?.id).toBe('image:test');
   });
 
-  it('builds encoded URLs', () => {
-    expect(imageAssetUrl('image:test')).toBe('/api/assets/image%3Atest/file');
+  it('builds encoded browser-preview and download URLs', () => {
+    expect(imageAssetUrl('image:test')).toBe('/api/assets/image%3Atest/file?preview=true');
     expect(imageAssetUrl('image:test', true)).toBe('/api/assets/image%3Atest/file?download=true');
   });
 });
