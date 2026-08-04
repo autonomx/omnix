@@ -28,6 +28,7 @@ from app.chat import (
 from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 
+from . import live_chat_live_voice_profile as live_voice_profile
 from .live_chat_low_latency_stream import LowLatencyTextChunker
 from .tts_stream_diagnostics import stream_log
 
@@ -39,6 +40,7 @@ _SESSION_LOAD_WAIT_SECONDS = 5.0
 _MAX_SPECULATIONS = 64
 _MAX_PRIMED_SESSIONS = 64
 _MIN_SINGLE_WORD_CHARS = 4
+_SPECULATION_PREAMBLE_CHARS = 2_048
 _WORD_PATTERN = re.compile(r"[\w]+(?:['’][\w]+)?", re.UNICODE)
 _UNRESOLVED_CORRECTION_PATTERN = re.compile(
     r"(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)",
@@ -261,14 +263,16 @@ def register_live_chat_speculation_routes(
             _SPECULATIONS[generation_id] = speculation
 
         def generate() -> Iterator[str]:
-            yield _sse({
-                "type": "speculation_started",
-                "generation_id": generation_id,
-                "segment_id": request.segment_id,
-                "source_sequence": request.source_sequence,
-                "provider_id": speculation.provider_id,
-                "model_id": speculation.model_id,
-            })
+            yield _speculation_started_sse(
+                {
+                    "type": "speculation_started",
+                    "generation_id": generation_id,
+                    "segment_id": request.segment_id,
+                    "source_sequence": request.source_sequence,
+                    "provider_id": speculation.provider_id,
+                    "model_id": speculation.model_id,
+                }
+            )
             try:
                 yield from _generate_side_effect_free(store, session, speculation)
             except Exception as exc:  # noqa: BLE001 - normalized into private speculative stream
@@ -280,7 +284,20 @@ def register_live_chat_speculation_routes(
             finally:
                 yield _sse({"type": "done", "generation_id": generation_id})
 
-        return StreamingResponse(generate(), media_type="text/event-stream")
+        headers = {
+            "Cache-Control": "no-store, no-transform",
+            "X-Accel-Buffering": "no",
+            "X-Omnix-Speculation-Generation-Id": generation_id,
+        }
+        if speculation.provider_id:
+            headers["X-Omnix-Speculation-Provider-Id"] = speculation.provider_id
+        if speculation.model_id:
+            headers["X-Omnix-Speculation-Model-Id"] = speculation.model_id
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers=headers,
+        )
 
     @app.post(
         "/api/live/speculation/sessions/{session_id}/{generation_id}/accept",
@@ -306,7 +323,10 @@ def register_live_chat_speculation_routes(
                 raise HTTPException(status_code=409, detail="speculation_transcript_mismatch")
 
         store = chat_store_factory()
-        appended = store.begin_user_message(
+        persist_started = time.perf_counter()
+        begin_started = time.perf_counter()
+        appended = await asyncio.to_thread(
+            store.begin_user_message,
             session_id,
             SendChatMessageRequest(
                 content=request.final_text.strip(),
@@ -318,10 +338,13 @@ def register_live_chat_speculation_routes(
                 or f"speculation-segment:{speculation.segment_id}"[:160],
             ),
         )
+        begin_ms = (time.perf_counter() - begin_started) * 1000.0
         if appended is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         _, user_message = appended
-        completed = store.complete_streamed_reply(
+        complete_started = time.perf_counter()
+        completed = await asyncio.to_thread(
+            store.complete_streamed_reply,
             session_id,
             user_message.id,
             speculation.content,
@@ -330,10 +353,13 @@ def register_live_chat_speculation_routes(
                 "generation_status": "completed",
                 "speculative_generation": True,
                 "speculation_generation_id": generation_id,
-                "speculation_candidate_words": len(normalized_transcript_words(speculation.candidate_text)),
+                "speculation_candidate_words": len(
+                    normalized_transcript_words(speculation.candidate_text)
+                ),
                 "live_voice_turn_id": request.live_voice_turn_id,
             },
         )
+        complete_ms = (time.perf_counter() - complete_started) * 1000.0
         if completed is None:
             raise HTTPException(status_code=409, detail="speculation_accept_failed")
         prime_live_speculation_session(completed)
@@ -346,6 +372,15 @@ def register_live_chat_speculation_routes(
         }
         with _SPECULATION_LOCK:
             speculation.accepted_payload = payload
+        stream_log(
+            "gateway-live-chat-speculation",
+            "runtime",
+            "live_chat_speculation_accept_persisted",
+            begin_ms=round(begin_ms, 3),
+            complete_ms=round(complete_ms, 3),
+            total_ms=round((time.perf_counter() - persist_started) * 1000.0, 3),
+            event_loop_offloaded=True,
+        )
         return payload
 
 
@@ -428,14 +463,23 @@ def _generate_side_effect_free(
             "side_effects_allowed": False,
             "tools_allowed": False,
             "memory_writes_allowed": False,
+            "user_turn_id": f"voice-user-turn:{speculation.generation_id}"[:160],
+            "speech_segment_id": f"voice-segment:{speculation.segment_id}"[:160],
         },
     )
     assembly, rendered = store.build_provider_prompt(session, user_message, [])
-    messages = [ProviderMessage(role=item.role, content=item.content) for item in rendered.messages]
-    response = provider.chat_completion(
+    messages = [
+        ProviderMessage(role=item.role, content=item.content)
+        for item in rendered.messages
+    ]
+    raw_response = provider.chat_completion(
         messages=messages,
         model=_model_key(speculation.model_id),
         stream=True,
+    )
+    response = live_voice_profile._stream_with_live_voice_context(
+        raw_response,
+        is_live_voice=True,
     )
     chunker = LowLatencyTextChunker()
     full_text = ""
@@ -503,6 +547,13 @@ def _prune_primed_sessions() -> None:
     oldest = sorted(_PRIMED_SESSIONS.items(), key=lambda item: item[1].primed_at)
     for key, _ in oldest[: len(_PRIMED_SESSIONS) - _MAX_PRIMED_SESSIONS]:
         _PRIMED_SESSIONS.pop(key, None)
+
+
+def _speculation_started_sse(payload: dict[str, Any]) -> str:
+    """Send enough initial SSE bytes to defeat small-chunk buffering."""
+
+    preamble = f": omnix-speculation-open {' ' * _SPECULATION_PREAMBLE_CHARS}\n\n"
+    return preamble + _sse(payload)
 
 
 def _sse(payload: dict[str, Any]) -> str:
