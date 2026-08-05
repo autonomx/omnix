@@ -54,6 +54,52 @@ export interface ProviderDescriptor {
   bindings: ProviderBinding[];
 }
 
+export interface MarketBar {
+  instrument_id: string;
+  interval: string;
+  start_time: string;
+  end_time: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string;
+  is_final: boolean;
+  adjustment_mode: string;
+  session: string;
+  provider: string;
+  provider_event_id?: string | null;
+  provider_sequence?: number | null;
+  ingestion_revision: number;
+  received_at: string;
+}
+
+export interface DatasetProvenance {
+  instrument_id: string;
+  requested_binding: string;
+  resolved_binding: string;
+  fallback_reason?: string | null;
+  dataset_fingerprint: string;
+  freshness_mode: 'live' | 'polled' | 'delayed' | 'cached' | 'fallback';
+  as_of: string;
+  received_at: string;
+  delay_seconds: number;
+  cached: boolean;
+  history_complete: boolean;
+}
+
+export interface BarsResponse {
+  instrument: CanonicalInstrument;
+  binding: ProviderBinding;
+  provenance: DatasetProvenance;
+  interval: string;
+  bars: MarketBar[];
+}
+
+export type TradingStreamMessage =
+  | { type: 'bar'; bar: Omit<MarketBar, 'adjustment_mode' | 'session' | 'provider' | 'received_at'> & { binding_id: string } }
+  | { type: 'error'; code: string; message: string };
+
 export interface TradingDocument {
   record_id: string;
   record_type: string;
