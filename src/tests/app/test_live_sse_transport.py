@@ -33,6 +33,7 @@ def test_event_stream_has_flush_preamble_and_anti_buffering_headers(monkeypatch)
     assert chunks[1] == b"data: first\n\n"
     assert response.headers["x-accel-buffering"] == "no"
     assert response.headers["connection"] == "keep-alive"
+    assert response.headers["x-omnix-sse-transport"] == "immediate-v1"
     assert "no-cache" in response.headers["cache-control"]
     assert "no-transform" in response.headers["cache-control"]
 
@@ -46,6 +47,7 @@ def test_non_event_stream_is_not_modified(monkeypatch) -> None:
 
     assert chunks == [b"plain text"]
     assert "x-accel-buffering" not in response.headers
+    assert "x-omnix-sse-transport" not in response.headers
 
 
 def test_event_stream_preamble_can_be_disabled(monkeypatch) -> None:
@@ -57,3 +59,4 @@ def test_event_stream_preamble_can_be_disabled(monkeypatch) -> None:
 
     assert chunks == [b"data: first\n\n"]
     assert response.headers["x-accel-buffering"] == "no"
+    assert response.headers["x-omnix-sse-transport"] == "immediate-v1"
