@@ -1,13 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
+import { TradingChartPanel } from './TradingChartPanel';
 import { tradingApi } from './tradingApi';
+import type { TradingChartType } from './chart/chartAdapter';
 import './TradingWorkspace.css';
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [focusMode, setFocusMode] = useState(false);
+  const [instrumentId, setInstrumentId] = useState('');
+  const [interval, setInterval] = useState('1m');
+  const [chartType, setChartType] = useState<TradingChartType>('candlestick');
   const providers = useQuery({ queryKey: ['trading', 'providers'], queryFn: tradingApi.providers });
   const instruments = useQuery({ queryKey: ['trading', 'instruments'], queryFn: () => tradingApi.instruments() });
+
+  useEffect(() => {
+    if (!instrumentId && instruments.data?.[0]) setInstrumentId(instruments.data[0].instrument_id);
+  }, [instrumentId, instruments.data]);
 
   return (
     <main className={`trading-workspace${focusMode ? ' trading-focus-mode' : ''}`} aria-labelledby="trading-title">
@@ -25,7 +34,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       <section className="trading-toolbar" aria-label="Trading toolbar">
         <label>
           Instrument
-          <select aria-label="Trading instrument" defaultValue={instruments.data?.[0]?.instrument_id ?? ''}>
+          <select aria-label="Trading instrument" value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)}>
             {(instruments.data ?? []).map((instrument) => (
               <option key={instrument.instrument_id} value={instrument.instrument_id}>
                 {instrument.display_symbol} · {instrument.venue}
@@ -35,8 +44,15 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </label>
         <label>
           Timeframe
-          <select aria-label="Trading timeframe" defaultValue="1m">
-            {['1m', '5m', '15m', '1h', '4h', '1d'].map((interval) => <option key={interval}>{interval}</option>)}
+          <select aria-label="Trading timeframe" value={interval} onChange={(event) => setInterval(event.target.value)}>
+            {['1m', '5m', '15m', '1h', '4h', '1d'].map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </label>
+        <label>
+          Chart
+          <select aria-label="Trading chart type" value={chartType} onChange={(event) => setChartType(event.target.value as TradingChartType)}>
+            <option value="candlestick">Candlestick</option>
+            <option value="line">Line</option>
           </select>
         </label>
         <button type="button">Indicators</button>
@@ -53,10 +69,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           ))}
         </aside>
         <section className="trading-chart-shell" aria-label="Trading chart workspace">
-          <div className="trading-chart-empty">
-            <strong>Charting foundation ready</strong>
-            <span>Historical and live series arrive in OTT-2 and OTT-3.</span>
-          </div>
+          {instrumentId ? <TradingChartPanel instrumentId={instrumentId} interval={interval} chartType={chartType} /> : (
+            <div className="trading-chart-empty"><strong>Loading instrument catalog…</strong></div>
+          )}
         </section>
         <aside className="trading-side-panel" aria-label="Trading side panel">
           <nav aria-label="Trading panel tabs">
@@ -69,8 +84,10 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <ul>
             {(instruments.data ?? []).map((instrument) => (
               <li key={instrument.instrument_id}>
-                <strong>{instrument.display_symbol}</strong>
-                <small>{instrument.instrument_id}</small>
+                <button type="button" onClick={() => setInstrumentId(instrument.instrument_id)}>
+                  <strong>{instrument.display_symbol}</strong>
+                  <small>{instrument.instrument_id}</small>
+                </button>
               </li>
             ))}
           </ul>
