@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 
 from starlette.responses import StreamingResponse
 
@@ -33,9 +34,34 @@ def test_event_stream_has_flush_preamble_and_anti_buffering_headers(monkeypatch)
     assert chunks[1] == b"data: first\n\n"
     assert response.headers["x-accel-buffering"] == "no"
     assert response.headers["connection"] == "keep-alive"
-    assert response.headers["x-omnix-sse-transport"] == "immediate-v1"
+    assert response.headers["x-omnix-sse-transport"] == "immediate-v2"
     assert "no-cache" in response.headers["cache-control"]
     assert "no-transform" in response.headers["cache-control"]
+
+
+def test_sync_event_stream_producer_runs_before_consumer_attaches(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_SSE_FLUSH_PREAMBLE_BYTES", "8")
+    install_live_sse_transport_hook()
+    produced_second = threading.Event()
+
+    def source():
+        yield "data: first\n\n"
+        produced_second.set()
+        yield "data: second\n\n"
+
+    async def scenario() -> list[bytes]:
+        response = StreamingResponse(source(), media_type="text/event-stream")
+        await asyncio.sleep(0.05)
+        assert produced_second.is_set()
+        chunks: list[bytes] = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode(response.charset))
+        return chunks
+
+    chunks = asyncio.run(scenario())
+
+    assert len(chunks[0]) == 8
+    assert chunks[1:] == [b"data: first\n\n", b"data: second\n\n"]
 
 
 def test_non_event_stream_is_not_modified(monkeypatch) -> None:
@@ -59,4 +85,4 @@ def test_event_stream_preamble_can_be_disabled(monkeypatch) -> None:
 
     assert chunks == [b"data: first\n\n"]
     assert response.headers["x-accel-buffering"] == "no"
-    assert response.headers["x-omnix-sse-transport"] == "immediate-v1"
+    assert response.headers["x-omnix-sse-transport"] == "immediate-v2"
