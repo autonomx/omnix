@@ -18,6 +18,8 @@ type ChatMetricsWindow = Window & typeof globalThis & {
 };
 
 const CHAT_SESSION_PATH = /^\/api\/chat\/sessions\/[^/]+$/;
+const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
+const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const METRICS_ROW_CLASS = 'assistant-response-metrics';
 
 let originalFetch: typeof window.fetch | null = null;
@@ -190,6 +192,18 @@ function scheduleMetricsRender(): void {
   });
 }
 
+function dispatchSseTransportObservation(response: Response): void {
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, {
+    detail: {
+      stage: 'chat_sse_transport_response_observed',
+      timestamp: new Date().toISOString(),
+      transportVersion: response.headers.get('x-omnix-sse-transport'),
+      contentType: response.headers.get('content-type'),
+      responseCloned: false,
+    },
+  }));
+}
+
 async function interceptChatMetricsFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
   const response = await fetchImpl(input, init);
@@ -203,6 +217,8 @@ async function interceptChatMetricsFetch(input: RequestInfo | URL, init?: Reques
     void response.clone().json()
       .then(captureChatSessionResponseMetrics)
       .catch(() => undefined);
+  } else if (method === 'POST' && CHAT_STREAM_PATH.test(url.pathname)) {
+    dispatchSseTransportObservation(response);
   }
   // Never clone or consume a live SSE response here. The session query is
   // invalidated after the stream completes and supplies the same persisted
