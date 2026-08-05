@@ -95,14 +95,25 @@ function createBridgedSpeculationResponse(
   const encoder = new TextEncoder();
   const abortController = new AbortController();
   let closed = false;
+  let cancellationSent = false;
+
+  const cancelGeneration = () => {
+    if (cancellationSent) return;
+    cancellationSent = true;
+    void requestGenerationCancellation(
+      fetchImpl,
+      sessionId,
+      handshake.generation_id,
+    );
+  };
 
   if (sourceSignal) {
-    if (sourceSignal.aborted) abortController.abort(sourceSignal.reason);
-    else sourceSignal.addEventListener(
-      'abort',
-      () => abortController.abort(sourceSignal.reason),
-      { once: true },
-    );
+    const abort = () => {
+      abortController.abort(sourceSignal.reason);
+      cancelGeneration();
+    };
+    if (sourceSignal.aborted) abort();
+    else sourceSignal.addEventListener('abort', abort, { once: true });
   }
 
   const stream = new ReadableStream<Uint8Array>({
@@ -136,26 +147,31 @@ function createBridgedSpeculationResponse(
           controller.close();
         }
       }).catch((error: unknown) => {
-        if (!closed) {
-          controller.enqueue(encoder.encode(sse({
-            type: 'error',
-            generation_id: handshake.generation_id,
-            message: error instanceof Error
-              ? error.message
-              : 'Speculative generation stream failed.',
-          })));
-          controller.enqueue(encoder.encode(sse({
-            type: 'done',
-            generation_id: handshake.generation_id,
-          })));
+        if (closed) return;
+        if (abortController.signal.aborted) {
           closed = true;
           controller.close();
+          return;
         }
+        controller.enqueue(encoder.encode(sse({
+          type: 'error',
+          generation_id: handshake.generation_id,
+          message: error instanceof Error
+            ? error.message
+            : 'Speculative generation stream failed.',
+        })));
+        controller.enqueue(encoder.encode(sse({
+          type: 'done',
+          generation_id: handshake.generation_id,
+        })));
+        closed = true;
+        controller.close();
       });
     },
     cancel(reason) {
       closed = true;
       abortController.abort(reason);
+      cancelGeneration();
     },
   });
 
@@ -196,6 +212,25 @@ async function pipeGenerationStream(
     }
   } finally {
     reader.releaseLock();
+  }
+}
+
+async function requestGenerationCancellation(
+  fetchImpl: typeof fetch,
+  sessionId: string,
+  generationId: string,
+): Promise<void> {
+  try {
+    await fetchImpl(
+      `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(generationId)}/cancel`,
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+        keepalive: true,
+      },
+    );
+  } catch {
+    // Cancellation is best effort; the server also cancels on stream detach/TTL.
   }
 }
 
