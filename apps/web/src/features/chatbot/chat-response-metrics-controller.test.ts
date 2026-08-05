@@ -98,11 +98,20 @@ describe('chat response metrics', () => {
     expect(formatLmStudioStopReason('stopStringFound')).toBe('Stop String Found');
   });
 
-  it('does not clone or consume live chat stream responses', async () => {
+  it('does not clone live streams and reports the effective transport version', async () => {
     const cloneSpy = vi.spyOn(Response.prototype, 'clone');
+    const observed: Array<Record<string, unknown>> = [];
+    const listener = (event: Event): void => {
+      const detail = (event as CustomEvent<Record<string, unknown>>).detail;
+      if (detail?.stage === 'chat_sse_transport_response_observed') observed.push(detail);
+    };
+    window.addEventListener('omnix:assistant-voice-perf', listener);
     const fetchMock = vi.fn(async () => new Response('data: {"type":"done"}\n\n', {
       status: 200,
-      headers: { 'content-type': 'text/event-stream' },
+      headers: {
+        'content-type': 'text/event-stream',
+        'x-omnix-sse-transport': 'immediate-v1',
+      },
     })) as unknown as typeof fetch;
     vi.stubGlobal('fetch', fetchMock);
     initializeChatResponseMetricsController();
@@ -111,7 +120,16 @@ describe('chat response metrics', () => {
       method: 'POST',
     });
 
+    window.removeEventListener('omnix:assistant-voice-perf', listener);
     expect(response.status).toBe(200);
     expect(cloneSpy).not.toHaveBeenCalled();
+    expect(observed).toEqual([
+      expect.objectContaining({
+        stage: 'chat_sse_transport_response_observed',
+        transportVersion: 'immediate-v1',
+        contentType: 'text/event-stream',
+        responseCloned: false,
+      }),
+    ]);
   });
 });
