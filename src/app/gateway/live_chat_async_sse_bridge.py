@@ -211,6 +211,7 @@ class _EagerAsyncSseBridge:
                 producer_alive=self._thread.is_alive(),
                 **self._diagnostic_context,
             )
+        completed = False
         try:
             while True:
                 item = await self._queue.get()
@@ -222,9 +223,18 @@ class _EagerAsyncSseBridge:
                     if isinstance(error, BaseException):
                         raise error
                     raise RuntimeError("live chat stream producer failed")
+                completed = True
+                stream_log(
+                    "gateway-live-chat-async-sse",
+                    "runtime",
+                    "live_chat_async_sse_consumer_completed",
+                    elapsed_ms=round((time.perf_counter() - self._started) * 1000.0, 3),
+                    **self._diagnostic_context,
+                )
                 return
         finally:
-            self.cancel()
+            if not completed:
+                self.cancel()
 
 
 def eager_async_sse_stream(
