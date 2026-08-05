@@ -1,10 +1,15 @@
-"""Cache stable live-prompt settings and expose dependency-level timings.
+"""Cache stable live-prompt inputs and expose dependency-level timings.
 
 The bounded live-voice prompt path previously loaded and validated the same
-assistant-memory settings several times per turn. This hook reuses settings while
-the backing file signature and relevant environment overrides remain unchanged.
-It also records content-free timings for the dependencies that previously appeared
-only as an opaque residual in ``live_chat_prompt_stages``.
+assistant-memory settings several times per turn. Some calls happened inside
+``resolve_prompt_memory`` and therefore bypassed the first cache implementation.
+The global system prompt also reloaded the complete application settings file on
+every turn. This hook reuses both values while their backing file signatures and
+relevant environment overrides remain unchanged.
+
+All caches are bounded, return defensive copies where appropriate, and preserve
+runtime overrides by bypassing the global-prompt cache when a settings loader
+override is installed.
 """
 from __future__ import annotations
 
@@ -21,6 +26,7 @@ from typing import Any
 
 from app import shared
 from app.assistant_memory import settings as memory_settings_module
+from app.chat import memory_prompt as memory_prompt_module
 
 from . import live_chat_companion_context as companion_context
 from . import live_chat_live_voice_profile as live_voice_profile
@@ -28,6 +34,7 @@ from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_prompt_dependency_stages_installed"
 _MAX_SETTINGS_CACHE_ENTRIES = 8
+_MAX_GLOBAL_PROMPT_CACHE_ENTRIES = 8
 _SETTINGS_ENV_NAMES = (
     "OMNIX_CHAT_MEMORY_ENABLED",
     "OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED",
@@ -61,9 +68,14 @@ _STAGE_NAMES = (
     "render_ms",
     "diagnostics_ms",
 )
+# Settings calls can occur inside memory resolution as well as directly in the
+# builder. Keep their aggregate visible, but exclude it from the non-overlapping
+# accounted total so nested time is not subtracted twice.
+_ACCOUNTED_STAGE_NAMES = tuple(name for name in _STAGE_NAMES if name != "settings_ms")
 
 _CACHE_LOCK = threading.RLock()
 _MEMORY_SETTINGS_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
+_GLOBAL_SYSTEM_PROMPT_CACHE: OrderedDict[tuple[str, int, int], str] = OrderedDict()
 _DEPENDENCY_TIMINGS: ContextVar[dict[str, Any] | None] = ContextVar(
     "omnix_live_prompt_dependency_timings",
     default=None,
@@ -77,7 +89,7 @@ def _clone(value: Any) -> Any:
     return copy.deepcopy(value)
 
 
-def _settings_path_signature(path: Path) -> tuple[str, int, int]:
+def _path_signature(path: Path) -> tuple[str, int, int]:
     try:
         stat = path.stat()
         return str(path), int(stat.st_mtime_ns), int(stat.st_size)
@@ -90,7 +102,11 @@ def _settings_path_signature(path: Path) -> tuple[str, int, int]:
 def _settings_cache_key() -> tuple[Any, ...]:
     path = memory_settings_module.default_memory_settings_path()
     environment = tuple((name, os.environ.get(name)) for name in _SETTINGS_ENV_NAMES)
-    return (*_settings_path_signature(path), environment)
+    return (*_path_signature(path), environment)
+
+
+def _global_prompt_cache_key() -> tuple[str, int, int]:
+    return _path_signature(Path(shared.SETTINGS_FILE))
 
 
 def _record_stage(name: str, elapsed_ms: float) -> None:
@@ -127,6 +143,36 @@ def _load_memory_runtime_settings_cached() -> Any:
     return _clone(result)
 
 
+def _get_global_system_prompt_cached() -> str:
+    started = time.perf_counter()
+    # Test/runtime loader overrides may be dynamic without touching settings.json.
+    # Preserve their semantics rather than caching an unversioned callback result.
+    if getattr(shared, "_settings_load_override", None) is not None:
+        result = str(_ORIGINAL_GET_GLOBAL_SYSTEM_PROMPT() or "")
+        _record_flag("global_prompt_cache_hit", False)
+        _record_stage("global_prompt_ms", (time.perf_counter() - started) * 1000.0)
+        return result
+
+    key = _global_prompt_cache_key()
+    with _CACHE_LOCK:
+        cached = _GLOBAL_SYSTEM_PROMPT_CACHE.get(key)
+        if cached is not None:
+            _GLOBAL_SYSTEM_PROMPT_CACHE.move_to_end(key)
+            _record_flag("global_prompt_cache_hit", True)
+            _record_stage("global_prompt_ms", (time.perf_counter() - started) * 1000.0)
+            return cached
+
+    result = str(_ORIGINAL_GET_GLOBAL_SYSTEM_PROMPT() or "")
+    with _CACHE_LOCK:
+        _GLOBAL_SYSTEM_PROMPT_CACHE[key] = result
+        _GLOBAL_SYSTEM_PROMPT_CACHE.move_to_end(key)
+        while len(_GLOBAL_SYSTEM_PROMPT_CACHE) > _MAX_GLOBAL_PROMPT_CACHE_ENTRIES:
+            _GLOBAL_SYSTEM_PROMPT_CACHE.popitem(last=False)
+    _record_flag("global_prompt_cache_hit", False)
+    _record_stage("global_prompt_ms", (time.perf_counter() - started) * 1000.0)
+    return result
+
+
 def _cached_compaction_enabled() -> bool:
     return bool(_load_memory_runtime_settings_cached().compaction_enabled)
 
@@ -146,6 +192,10 @@ def _timed_dependency(name: str, function: Callable[..., Any]) -> Callable[..., 
 def _install_dependency_wrappers() -> None:
     companion_context.load_memory_runtime_settings = _load_memory_runtime_settings_cached
     companion_context.compaction_enabled = _cached_compaction_enabled
+    # resolve_prompt_memory keeps its imported loader in memory_prompt.py globals.
+    # Patch that reference too; otherwise chat_memory_enabled() performs two full
+    # settings reads inside every measured memory stage.
+    memory_prompt_module.load_memory_runtime_settings = _load_memory_runtime_settings_cached
     companion_context.resolve_prompt_memory = _timed_dependency(
         "memory_ms",
         companion_context.resolve_prompt_memory,
@@ -202,10 +252,7 @@ def _install_dependency_wrappers() -> None:
         "diagnostics_ms",
         companion_context.record_companion_diagnostics,
     )
-    shared.get_global_system_prompt = _timed_dependency(
-        "global_prompt_ms",
-        shared.get_global_system_prompt,
-    )
+    shared.get_global_system_prompt = _get_global_system_prompt_cached
 
 
 def _install_builder_breakdown() -> None:
@@ -228,7 +275,7 @@ def _install_builder_breakdown() -> None:
             _DEPENDENCY_TIMINGS.reset(token)
             accounted_ms = sum(
                 float(timings.get(name, 0.0) or 0.0)
-                for name in _STAGE_NAMES
+                for name in _ACCOUNTED_STAGE_NAMES
             )
             stream_log(
                 "gateway-live-chat-first-token",
@@ -237,6 +284,7 @@ def _install_builder_breakdown() -> None:
                 session_message_count=len(getattr(session, "messages", []) or []),
                 total_ms=round(total_ms, 3),
                 settings_cache_hit=timings.get("settings_cache_hit"),
+                global_prompt_cache_hit=timings.get("global_prompt_cache_hit"),
                 **{
                     name: round(float(timings.get(name, 0.0) or 0.0), 3)
                     for name in _STAGE_NAMES
@@ -250,6 +298,7 @@ def _install_builder_breakdown() -> None:
 def _reset_live_prompt_dependency_state_for_tests() -> None:
     with _CACHE_LOCK:
         _MEMORY_SETTINGS_CACHE.clear()
+        _GLOBAL_SYSTEM_PROMPT_CACHE.clear()
 
 
 def install_live_chat_prompt_dependency_stage_hook() -> None:
@@ -263,6 +312,7 @@ def install_live_chat_prompt_dependency_stage_hook() -> None:
 
 
 _ORIGINAL_LOAD_MEMORY_SETTINGS = companion_context.load_memory_runtime_settings
+_ORIGINAL_GET_GLOBAL_SYSTEM_PROMPT = shared.get_global_system_prompt
 
 
 __all__ = ["install_live_chat_prompt_dependency_stage_hook"]
