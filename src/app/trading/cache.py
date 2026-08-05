@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import threading
+import time
+from collections import OrderedDict
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable
+
+
+@dataclass(slots=True)
+class CacheEntry:
+    value: dict[str, Any]
+    expires_at: float
+    source: str
+    fingerprint: str
+
+
+class TradingMarketDataCache:
+    """Bounded disposable cache with request coalescing; never user authority."""
+
+    def __init__(self, *, max_entries: int = 256, cache_dir: Path | None = None) -> None:
+        self.max_entries = max(1, int(max_entries))
+        self.cache_dir = cache_dir
+        self._entries: OrderedDict[str, CacheEntry] = OrderedDict()
+        self._locks: dict[str, threading.Lock] = {}
+        self._guard = threading.Lock()
+
+    @staticmethod
+    def key(*parts: object) -> str:
+        return ":".join(str(part).strip() for part in parts)
+
+    @staticmethod
+    def fingerprint(value: dict[str, Any]) -> str:
+        canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def get(self, key: str, *, allow_stale: bool = False) -> CacheEntry | None:
+        with self._guard:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            if entry.expires_at < time.time() and not allow_stale:
+                self._entries.pop(key, None)
+                return None
+            self._entries.move_to_end(key)
+            return entry
+
+    def put(self, key: str, value: dict[str, Any], *, ttl_seconds: float, source: str) -> CacheEntry:
+        entry = CacheEntry(
+            value=value,
+            expires_at=time.time() + max(0.0, ttl_seconds),
+            source=source,
+            fingerprint=self.fingerprint(value),
+        )
+        with self._guard:
+            self._entries[key] = entry
+            self._entries.move_to_end(key)
+            while len(self._entries) > self.max_entries:
+                self._entries.popitem(last=False)
+        if self.cache_dir is not None:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            path = self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "key": key,
+                        "value": value,
+                        "expires_at": entry.expires_at,
+                        "source": source,
+                        "fingerprint": entry.fingerprint,
+                    },
+                    sort_keys=True,
+                    default=str,
+                ),
+                encoding="utf-8",
+            )
+        return entry
+
+    def get_or_load(
+        self,
+        key: str,
+        loader: Callable[[], dict[str, Any]],
+        *,
+        ttl_seconds: float,
+        source: str,
+    ) -> tuple[dict[str, Any], CacheEntry, bool]:
+        cached = self.get(key)
+        if cached is not None:
+            return cached.value, cached, True
+        with self._guard:
+            lock = self._locks.setdefault(key, threading.Lock())
+        with lock:
+            cached = self.get(key)
+            if cached is not None:
+                return cached.value, cached, True
+            value = loader()
+            entry = self.put(key, value, ttl_seconds=ttl_seconds, source=source)
+            with self._guard:
+                self._locks.pop(key, None)
+            return value, entry, False
+
+    def clear(self) -> None:
+        with self._guard:
+            self._entries.clear()
+        if self.cache_dir and self.cache_dir.exists():
+            for path in self.cache_dir.glob("*.json"):
+                path.unlink(missing_ok=True)
