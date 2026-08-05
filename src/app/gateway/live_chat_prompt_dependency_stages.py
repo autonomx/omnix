@@ -26,6 +26,7 @@ from typing import Any
 
 from app import shared
 from app.assistant_memory import settings as memory_settings_module
+from app.chat import context_budget as context_budget_module
 from app.chat import memory_prompt as memory_prompt_module
 
 from . import live_chat_companion_context as companion_context
@@ -52,6 +53,7 @@ _SETTINGS_ENV_NAMES = (
     "OMNIX_CHAT_HISTORY_TOKEN_BUDGET",
 )
 _STAGE_NAMES = (
+    "budget_ms",
     "memory_service_ms",
     "memory_ms",
     "settings_ms",
@@ -70,9 +72,10 @@ _STAGE_NAMES = (
     "render_ms",
     "diagnostics_ms",
 )
-# Settings calls can occur inside memory resolution as well as directly in the
-# builder. Keep their aggregate visible, but exclude it from the non-overlapping
-# accounted total so nested time is not subtracted twice.
+# Settings calls can occur inside memory resolution and prompt-budget resolution,
+# as well as directly in the builder. Keep their aggregate visible, but exclude
+# it from the non-overlapping accounted total so nested time is not subtracted
+# twice.
 _ACCOUNTED_STAGE_NAMES = tuple(
     name for name in _STAGE_NAMES if name != "settings_ms"
 )
@@ -241,11 +244,18 @@ def _install_dependency_wrappers() -> None:
         _load_memory_runtime_settings_cached
     )
     companion_context.compaction_enabled = _cached_compaction_enabled
-    # resolve_prompt_memory keeps its imported loader in memory_prompt.py globals.
-    # Patch that reference too; otherwise chat_memory_enabled() performs two full
-    # settings reads inside every measured memory stage.
+    # Imported loader references are held in the consumer modules' globals.
+    # Patch every live-prompt consumer; otherwise each missed reference performs
+    # a full PostgreSQL-backed settings read despite the outer cache.
     memory_prompt_module.load_memory_runtime_settings = (
         _load_memory_runtime_settings_cached
+    )
+    context_budget_module.load_memory_runtime_settings = (
+        _load_memory_runtime_settings_cached
+    )
+    live_voice_profile._live_voice_prompt_budget = _timed_dependency(
+        "budget_ms",
+        live_voice_profile._live_voice_prompt_budget,
     )
     companion_context._create_memory_service = _timed_dependency(
         "memory_service_ms",
