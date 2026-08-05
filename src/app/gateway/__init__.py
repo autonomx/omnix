@@ -28,6 +28,7 @@ from .live_chat_provider_routing import install_live_chat_provider_routing_hook
 from .live_chat_stream_retry import install_live_chat_stream_retry_hook
 from .live_material_context import install_live_material_context_hook
 from .live_observation_generation import install_live_observation_generation_hook
+from .live_sse_transport import install_live_sse_transport_hook
 from .live_voice_cue_asset_routes import install_live_voice_cue_asset_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .live_voice_runtime_offload import install_live_voice_runtime_offload_hook
@@ -83,7 +84,7 @@ def _install_required_rpg_turn_hooks() -> None:
         raise RuntimeError("RPG fast visible dialogue hook failed to install")
     if not getattr(interactive_first_call_runtime, "_omnix_dialogue_quality_hook_installed", False):
         raise RuntimeError("RPG dialogue quality hook failed to install")
-    if not getattr(interactive_first_call_runtime, "_omnix_interaction_timeline_hook_installed", False):
+    if not getattr(interactive_first_call_runtime, "_omnix_interaction_timeline_runtime_hook_installed", False):
         raise RuntimeError("RPG interaction timeline hook failed to install")
     if not getattr(interactive_first_call_runtime, "_omnix_interaction_lifecycle_runtime_hook_installed", False):
         raise RuntimeError("RPG interaction lifecycle runtime hook failed to install")
@@ -113,6 +114,7 @@ install_rpg_session_route_hook()
 install_audiobook_websocket_hook()
 install_hermes_route_hook()
 install_realtime_route_hook()
+install_live_sse_transport_hook()
 install_live_chat_postgres_fast_path()
 install_live_chat_low_latency_stream_hook()
 install_live_chat_provider_metrics_hook()
