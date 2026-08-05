@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "typecheck": "tsc -b",
+    "typecheck:trading": "tsc -p tsconfig.trading.json",
     "api:schema": "python ../../scripts/export_gateway_openapi.py apps/web/src/api/generated/openapi.json",
     "api:types": "openapi-typescript src/api/generated/openapi.json -o src/api/generated/types.ts",
     "api:generate": "npm run api:schema && npm run api:types",
