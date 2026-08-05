@@ -1,16 +1,19 @@
 """Configure server-sent event responses for immediate incremental delivery."""
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterable, Iterable
 from typing import Any
 
 from starlette.responses import StreamingResponse
 
+from .live_chat_async_sse_bridge import eager_async_sse_stream
+
 _HOOK_SENTINEL = "_omnix_live_sse_transport_installed"
 _DEFAULT_PREAMBLE_BYTES = 2_048
 _MAX_PREAMBLE_BYTES = 8_192
-_TRANSPORT_VERSION = "immediate-v1"
+_TRANSPORT_VERSION = "immediate-v2"
 _ORIGINAL_STREAMING_RESPONSE_INIT = StreamingResponse.__init__
 
 
@@ -71,6 +74,20 @@ def _prepend_sync(content: Iterable[Any], preamble: bytes):
     yield from content
 
 
+def _sync_event_stream_content(content: Iterable[Any], preamble: bytes) -> Any:
+    """Avoid one AnyIO thread-pool handoff per SSE record when a loop is active."""
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return _prepend_sync(content, preamble)
+
+    def produce() -> Iterable[Any]:
+        return _prepend_sync(content, preamble)
+
+    return eager_async_sse_stream(produce)
+
+
 def _patched_streaming_response_init(
     self: StreamingResponse,
     content: Any,
@@ -84,7 +101,7 @@ def _patched_streaming_response_init(
         if isinstance(content, AsyncIterable):
             content = _prepend_async(content, preamble)
         else:
-            content = _prepend_sync(content, preamble)
+            content = _sync_event_stream_content(content, preamble)
         headers = _event_stream_headers(headers)
     _ORIGINAL_STREAMING_RESPONSE_INIT(
         self,
@@ -97,7 +114,7 @@ def _patched_streaming_response_init(
 
 
 def install_live_sse_transport_hook() -> None:
-    """Install one bounded flush prelude for every SSE response."""
+    """Install immediate headers and eager async delivery for every SSE response."""
     if getattr(StreamingResponse, _HOOK_SENTINEL, False):
         return
     StreamingResponse.__init__ = _patched_streaming_response_init
