@@ -5,7 +5,7 @@ import asyncio
 import concurrent.futures
 import threading
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +13,7 @@ from .tts_stream_diagnostics import stream_log
 
 _DEFAULT_QUEUE_ITEMS = 32
 _MAX_QUEUE_ITEMS = 256
+_DIAGNOSTIC_ITEM_LIMIT = 4
 
 
 @dataclass(frozen=True)
@@ -26,9 +27,10 @@ class _EagerAsyncSseBridge:
 
     def __init__(
         self,
-        factory: Callable[[], Iterator[Any]],
+        factory: Callable[[], Iterable[Any]],
         *,
         queue_items: int,
+        diagnostic_context: dict[str, Any] | None,
     ) -> None:
         self._factory = factory
         self._loop = asyncio.get_running_loop()
@@ -39,19 +41,21 @@ class _EagerAsyncSseBridge:
         self._started = time.perf_counter()
         self._consumer_attached = False
         self._first_item_enqueued = False
+        self._diagnostic_context = dict(diagnostic_context or {})
         self._thread = threading.Thread(
             target=self._run,
             name="omnix-live-chat-accepted-stream",
             daemon=True,
         )
-        self._thread.start()
         stream_log(
             "gateway-live-chat-async-sse",
             "runtime",
             "live_chat_async_sse_producer_started",
             queue_items=queue_items,
             producer_thread_name=self._thread.name,
+            **self._diagnostic_context,
         )
+        self._thread.start()
 
     def _enqueue(self, item: _BridgeItem) -> bool:
         if self._cancelled.is_set():
@@ -78,17 +82,65 @@ class _EagerAsyncSseBridge:
                 if self._pending_put is future:
                     self._pending_put = None
 
+    def _log_source_advance(
+        self,
+        event: str,
+        *,
+        item_index: int,
+        **details: Any,
+    ) -> None:
+        if item_index >= _DIAGNOSTIC_ITEM_LIMIT:
+            return
+        stream_log(
+            "gateway-live-chat-async-sse",
+            "runtime",
+            event,
+            item_index=item_index,
+            elapsed_ms=round((time.perf_counter() - self._started) * 1000.0, 3),
+            **details,
+            **self._diagnostic_context,
+        )
+
     def _run(self) -> None:
         iterator: Iterator[Any] | None = None
         item_count = 0
         failed = False
         try:
             iterator = iter(self._factory())
-            for chunk in iterator:
-                if self._cancelled.is_set():
+            while not self._cancelled.is_set():
+                source_started = time.perf_counter()
+                self._log_source_advance(
+                    "live_chat_async_sse_source_next_started",
+                    item_index=item_count,
+                )
+                try:
+                    chunk = next(iterator)
+                except StopIteration:
                     break
+                source_next_ms = (time.perf_counter() - source_started) * 1000.0
+                self._log_source_advance(
+                    "live_chat_async_sse_source_next_completed",
+                    item_index=item_count,
+                    source_next_ms=round(source_next_ms, 3),
+                    chunk_type=type(chunk).__name__,
+                    chunk_bytes=(
+                        len(chunk)
+                        if isinstance(chunk, bytes)
+                        else len(str(chunk).encode("utf-8"))
+                    ),
+                )
+
+                enqueue_started = time.perf_counter()
                 if not self._enqueue(_BridgeItem("chunk", chunk)):
                     break
+                enqueue_wait_ms = (time.perf_counter() - enqueue_started) * 1000.0
+                self._log_source_advance(
+                    "live_chat_async_sse_source_item_enqueued",
+                    item_index=item_count,
+                    source_next_ms=round(source_next_ms, 3),
+                    enqueue_wait_ms=round(enqueue_wait_ms, 3),
+                    buffered_item_count=self._queue.qsize(),
+                )
                 item_count += 1
                 if not self._first_item_enqueued:
                     self._first_item_enqueued = True
@@ -98,6 +150,7 @@ class _EagerAsyncSseBridge:
                         "live_chat_async_sse_first_item_enqueued",
                         startup_ms=round((time.perf_counter() - self._started) * 1000.0, 3),
                         buffered_item_count=self._queue.qsize(),
+                        **self._diagnostic_context,
                     )
         except Exception as exc:  # noqa: BLE001 - preserve arbitrary route failures
             failed = True
@@ -114,6 +167,7 @@ class _EagerAsyncSseBridge:
                             "runtime",
                             "live_chat_async_sse_producer_close_failed",
                             error_type=type(exc).__name__,
+                            **self._diagnostic_context,
                         )
             if not self._cancelled.is_set():
                 self._enqueue(_BridgeItem("done"))
@@ -125,6 +179,7 @@ class _EagerAsyncSseBridge:
                 item_count=item_count,
                 cancelled=self._cancelled.is_set(),
                 failed=failed,
+                **self._diagnostic_context,
             )
 
     def cancel(self) -> None:
@@ -135,6 +190,14 @@ class _EagerAsyncSseBridge:
             pending = self._pending_put
         if pending is not None:
             pending.cancel()
+        stream_log(
+            "gateway-live-chat-async-sse",
+            "runtime",
+            "live_chat_async_sse_cancel_requested",
+            elapsed_ms=round((time.perf_counter() - self._started) * 1000.0, 3),
+            producer_alive=self._thread.is_alive(),
+            **self._diagnostic_context,
+        )
 
     async def stream(self) -> AsyncIterator[Any]:
         if not self._consumer_attached:
@@ -146,6 +209,7 @@ class _EagerAsyncSseBridge:
                 attach_delay_ms=round((time.perf_counter() - self._started) * 1000.0, 3),
                 buffered_item_count=self._queue.qsize(),
                 producer_alive=self._thread.is_alive(),
+                **self._diagnostic_context,
             )
         try:
             while True:
@@ -164,14 +228,19 @@ class _EagerAsyncSseBridge:
 
 
 def eager_async_sse_stream(
-    factory: Callable[[], Iterator[Any]],
+    factory: Callable[[], Iterable[Any]],
     *,
     queue_items: int = _DEFAULT_QUEUE_ITEMS,
+    diagnostic_context: dict[str, Any] | None = None,
 ) -> AsyncIterator[Any]:
     """Start ``factory`` immediately and expose its ordered output asynchronously."""
 
     bounded_items = max(1, min(_MAX_QUEUE_ITEMS, int(queue_items)))
-    bridge = _EagerAsyncSseBridge(factory, queue_items=bounded_items)
+    bridge = _EagerAsyncSseBridge(
+        factory,
+        queue_items=bounded_items,
+        diagnostic_context=diagnostic_context,
+    )
     return bridge.stream()
 
 
