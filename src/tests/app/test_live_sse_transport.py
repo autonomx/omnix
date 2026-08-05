@@ -84,7 +84,7 @@ def test_accepted_chat_stream_runs_provider_before_consumer_read(monkeypatch) ->
         provider_entered.set()
         yield "data: provider-first-text\n\n"
 
-    gateway = FastAPI()
+    gateway = FastAPI(title="Omnix Web Gateway")
 
     @gateway.post(_LIVE_CHAT_STREAM_PATH)
     async def stream_chat_message(
@@ -94,7 +94,6 @@ def test_accepted_chat_stream_runs_provider_before_consumer_read(monkeypatch) ->
         del session_id, request
         return StreamingResponse(source(), media_type="text/event-stream")
 
-    assert install_live_chat_sse_route_execution(gateway) == [_LIVE_CHAT_STREAM_PATH]
     route = next(
         route
         for route in gateway.routes
@@ -102,20 +101,22 @@ def test_accepted_chat_stream_runs_provider_before_consumer_read(monkeypatch) ->
     )
 
     async def scenario() -> tuple[StreamingResponse, list[bytes]]:
-        response = await route.dependant.call(
-            session_id="chat:test",
-            request=SendChatMessageRequest(
-                content="hello",
-                user_turn_id="voice-user-turn:voice-turn:test",
-                speech_segment_id="voice-segment:test",
-            ),
-        )
-        await asyncio.sleep(0.05)
-        assert provider_entered.is_set()
-        chunks: list[bytes] = []
-        async for chunk in response.body_iterator:
-            chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode(response.charset))
-        return response, chunks
+        async with gateway.router.lifespan_context(gateway):
+            assert install_live_chat_sse_route_execution(gateway) == []
+            response = await route.dependant.call(
+                session_id="chat:test",
+                request=SendChatMessageRequest(
+                    content="hello",
+                    user_turn_id="voice-user-turn:voice-turn:test",
+                    speech_segment_id="voice-segment:test",
+                ),
+            )
+            await asyncio.sleep(0.05)
+            assert provider_entered.is_set()
+            chunks: list[bytes] = []
+            async for chunk in response.body_iterator:
+                chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode(response.charset))
+            return response, chunks
 
     response, chunks = asyncio.run(scenario())
 
