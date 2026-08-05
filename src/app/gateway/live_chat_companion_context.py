@@ -52,7 +52,7 @@ def _temporal_prompt_memory(result: Any) -> list[PromptMemoryItem]:
         values.append(
             PromptMemoryItem(
                 memory_id=record.id,
-                content=item.content if False else record.content,
+                content=record.content,
                 scope=record.scope,
                 category=_TEMPORAL_CATEGORY.get(record.kind, record.category),
                 revision=record.revision,
