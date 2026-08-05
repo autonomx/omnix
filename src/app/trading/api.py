@@ -9,8 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.persistence.errors import RevisionConflict
 
 from .catalog import BINANCE_POLICY, BINDINGS, search_instruments
-from .models import CanonicalInstrument, ProviderBinding, ProviderPolicy
+from .models import BarsResponse, CanonicalInstrument, ProviderBinding, ProviderPolicy
 from .repositories import TradingDocumentRepository, default_trading_repository
+from .service import TradingMarketDataService, default_market_data_service
 
 
 class ProviderDescriptor(BaseModel):
@@ -31,6 +32,22 @@ class ProviderStatusResponse(BaseModel):
 
 class InstrumentSearchResponse(BaseModel):
     instruments: list[CanonicalInstrument]
+
+
+class QuoteResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    instrument_id: str
+    binding_id: str
+    provider: str
+    price: str
+    received_at: str
+    freshness_mode: str
+
+
+class TradingDiagnosticsResponse(BaseModel):
+    ok: bool = True
+    diagnostics: dict[str, Any]
 
 
 class TradingDocumentRequest(BaseModel):
@@ -66,6 +83,7 @@ def _document_response(record: dict[str, Any]) -> TradingDocumentResponse:
 
 def create_trading_router(
     repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
+    market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading", tags=["trading"])
 
@@ -91,6 +109,32 @@ def create_trading_router(
     @router.get("/instruments/search", response_model=InstrumentSearchResponse)
     async def instruments(query: str = Query(default="", max_length=96)) -> InstrumentSearchResponse:
         return InstrumentSearchResponse(instruments=search_instruments(query))
+
+    @router.get("/bars", response_model=BarsResponse)
+    async def bars(
+        instrument_id: str = Query(min_length=3, max_length=200),
+        interval: str = Query(default="1m", max_length=16),
+        limit: int = Query(default=500, ge=1, le=5_000),
+    ) -> BarsResponse:
+        try:
+            return market_service_factory().bars(instrument_id, interval, limit)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail={"code": "market_data_failed", "message": str(exc)}) from exc
+
+    @router.get("/quotes", response_model=QuoteResponse)
+    async def quote(instrument_id: str = Query(min_length=3, max_length=200)) -> QuoteResponse:
+        try:
+            return QuoteResponse.model_validate(market_service_factory().quote(instrument_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail={"code": "quote_failed", "message": str(exc)}) from exc
+
+    @router.get("/diagnostics", response_model=TradingDiagnosticsResponse)
+    async def diagnostics() -> TradingDiagnosticsResponse:
+        return TradingDiagnosticsResponse(diagnostics=market_service_factory().diagnostics())
 
     def register_documents(path: str, record_type: str) -> None:
         @router.get(path, response_model=TradingDocumentListResponse, name=f"list_trading_{record_type}s")
