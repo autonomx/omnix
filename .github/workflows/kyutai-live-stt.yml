@@ -39,7 +39,7 @@ jobs:
 
       - name: Import launcher entry points on Python 3.10
         run: |
-          python -c "from app.gateway.live_chat_lmstudio_diagnostics import install_live_chat_lmstudio_diagnostics_hook; from app.gateway.live_chat_prompt_window import install_live_chat_prompt_window_hook; from app.gateway.live_chat_prompt_dependency_stages import install_live_chat_prompt_dependency_stage_hook; from app.gateway.lmstudio_loaded_model_resolution import install_lmstudio_loaded_model_resolution_hook; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.live_chat_speculation_handshake import register_live_chat_speculation_handshake_routes; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
+          python -c "from app.gateway.live_chat_lmstudio_diagnostics import install_live_chat_lmstudio_diagnostics_hook; from app.gateway.live_chat_prompt_window import install_live_chat_prompt_window_hook; from app.gateway.live_chat_prompt_dependency_stages import install_live_chat_prompt_dependency_stage_hook; from app.gateway.live_sse_transport import install_live_sse_transport_hook; from app.gateway.lmstudio_loaded_model_resolution import install_lmstudio_loaded_model_resolution_hook; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.live_chat_speculation_handshake import register_live_chat_speculation_handshake_routes; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
 
       - name: Validate secure Moshi entrypoint
         run: bash -n scripts/kyutai_moshi_secure_entrypoint.sh
@@ -65,6 +65,7 @@ jobs:
             src/app/gateway/live_chat_prompt_window.py \
             src/app/gateway/live_chat_speculation.py \
             src/app/gateway/live_chat_speculation_handshake.py \
+            src/app/gateway/live_sse_transport.py \
             src/app/gateway/lmstudio_loaded_model_resolution.py \
             src/app/gateway/tts_live_capabilities.py \
             src/kyutai_stt_runtime.py \
@@ -86,6 +87,7 @@ jobs:
             src/tests/app/test_live_chat_prompt_dependency_stages.py \
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_live_chat_speculation_handshake.py \
+            src/tests/app/test_live_sse_transport.py \
             src/tests/app/test_tts_live_capabilities.py
           ruff check --ignore RUF100,TRY004 src/app/launcher/kyutai_readiness_control.py
 
@@ -111,6 +113,7 @@ jobs:
             src/tests/app/test_live_chat_prompt_dependency_stages.py \
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_live_chat_speculation_handshake.py \
+            src/tests/app/test_live_sse_transport.py \
             src/tests/app/test_tts_live_capabilities.py \
             -q --tb=short
 
@@ -120,7 +123,7 @@ jobs:
           npm --workspace @omnix/web run typecheck 2>&1 | tee live-stt-typecheck.txt
           typecheck_status=${PIPESTATUS[0]}
           set -e
-          if grep -E "(live-(conversation-durable-evaluation-controller(\\.test)?|voice-websocket(\\.spec)?|voice-controller|accepted-final|stt-authority-controller|speculation-controller|speculation-eligibility-diagnostics(\\.test)?|speculation-handshake-transport(\\.test)?|tts-adaptive-buffer-controller|tts-capability-controller|voice-clause-stabilizer|voice-pcm-worklet|voice-release-observer|latency-rollout\\.spec)\\.(ts|tsx)|assistant-context-(controller|critical-path\\.test)\\.(ts|tsx)|characterClient(\\.test)?\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
+          if grep -E "(live-(conversation-durable-evaluation-controller(\\.test)?|voice-websocket(\\.spec)?|voice-controller|accepted-final|stt-authority-controller|speculation-controller|speculation-eligibility-diagnostics(\\.test)?|speculation-handshake-transport(\\.test)?|tts-adaptive-buffer-controller|tts-capability-controller|voice-clause-stabilizer|voice-pcm-worklet|voice-release-observer|latency-rollout\\.spec)\\.(ts|tsx)|assistant-context-(controller|critical-path\\.test)\\.(ts|tsx)|chat-response-metrics-controller(\\.test)?\\.ts|characterClient(\\.test)?\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
             echo "TypeScript errors were reported in the live latency rollout path."
             exit "${typecheck_status:-1}"
           fi
@@ -139,4 +142,5 @@ jobs:
             src/features/assistant-workspace/live-voice-pcm-worklet.test.ts \
             src/features/assistant-workspace/live-voice-release-observer.test.ts \
             src/features/assistant-workspace/live-conversation-durable-evaluation-controller.test.ts \
+            src/features/chatbot/chat-response-metrics-controller.test.ts \
             src/features/chatbot/characterClient.test.ts
