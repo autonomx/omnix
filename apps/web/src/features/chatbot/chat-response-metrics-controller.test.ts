@@ -106,7 +106,7 @@ describe('chat response metrics', () => {
       if (detail?.stage === 'chat_sse_transport_response_observed') observed.push(detail);
     };
     window.addEventListener('omnix:assistant-voice-perf', listener);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
       if (rawUrl.includes('/api/tts/live-call/diagnostics')) {
         return new Response(null, { status: 204 });
@@ -118,8 +118,8 @@ describe('chat response metrics', () => {
           'x-omnix-sse-transport': 'immediate-v2',
         },
       });
-    }) as unknown as typeof fetch;
-    vi.stubGlobal('fetch', fetchMock);
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
     initializeChatResponseMetricsController();
 
     const response = await window.fetch('/api/chat/sessions/session-1/messages/stream', {
@@ -140,7 +140,9 @@ describe('chat response metrics', () => {
         responseCloned: false,
       }),
     ]);
-    const diagnosticsRequest = fetchMock.mock.calls.find(([input]) => String(input).includes('/api/tts/live-call/diagnostics'));
+    const diagnosticsRequest = fetchMock.mock.calls.find(
+      (call) => String(call[0]).includes('/api/tts/live-call/diagnostics'),
+    );
     expect(diagnosticsRequest).toBeDefined();
     const diagnosticsBody = JSON.parse(String(diagnosticsRequest?.[1]?.body));
     expect(diagnosticsBody.trace_id).toBe('live-call:voice-turn:test');
