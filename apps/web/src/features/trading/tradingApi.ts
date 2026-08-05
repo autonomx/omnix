@@ -1,4 +1,10 @@
-import type { CanonicalInstrument, ProviderDescriptor, TradingDocument } from './tradingTypes';
+import type {
+  BarsResponse,
+  CanonicalInstrument,
+  ProviderDescriptor,
+  TradingDocument,
+  TradingStreamMessage,
+} from './tradingTypes';
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -13,6 +19,33 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+export function tradingStreamUrl(instrumentId: string, interval: string): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const query = new URLSearchParams({ instrument_id: instrumentId, interval });
+  return `${protocol}//${window.location.host}/api/trading/stream?${query.toString()}`;
+}
+
+export function subscribeTradingStream(
+  instrumentId: string,
+  interval: string,
+  onMessage: (message: TradingStreamMessage) => void,
+  onStatus?: (status: 'connecting' | 'live' | 'closed' | 'error') => void,
+): () => void {
+  onStatus?.('connecting');
+  const socket = new WebSocket(tradingStreamUrl(instrumentId, interval));
+  socket.addEventListener('open', () => onStatus?.('live'));
+  socket.addEventListener('message', (event) => {
+    try {
+      onMessage(JSON.parse(String(event.data)) as TradingStreamMessage);
+    } catch {
+      onMessage({ type: 'error', code: 'invalid_stream_message', message: 'Trading stream returned invalid JSON.' });
+    }
+  });
+  socket.addEventListener('error', () => onStatus?.('error'));
+  socket.addEventListener('close', () => onStatus?.('closed'));
+  return () => socket.close(1000, 'chart disposed');
+}
+
 export const tradingApi = {
   providers: async () => {
     const payload = await requestJson<{ providers: ProviderDescriptor[] }>('/api/trading/providers/status');
@@ -24,6 +57,15 @@ export const tradingApi = {
     );
     return payload.instruments;
   },
+  bars: (instrumentId: string, interval: string, limit = 1_000) => {
+    const query = new URLSearchParams({ instrument_id: instrumentId, interval, limit: String(limit) });
+    return requestJson<BarsResponse>(`/api/trading/bars?${query.toString()}`);
+  },
+  quote: (instrumentId: string) => {
+    const query = new URLSearchParams({ instrument_id: instrumentId });
+    return requestJson<Record<string, string>>(`/api/trading/quotes?${query.toString()}`);
+  },
+  diagnostics: () => requestJson<{ ok: boolean; diagnostics: Record<string, unknown> }>('/api/trading/diagnostics'),
   documents: async (kind: 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets') => {
     const payload = await requestJson<{ records: TradingDocument[] }>(`/api/trading/${kind}`);
     return payload.records;
