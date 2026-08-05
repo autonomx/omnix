@@ -18,7 +18,6 @@ type ChatMetricsWindow = Window & typeof globalThis & {
 };
 
 const CHAT_SESSION_PATH = /^\/api\/chat\/sessions\/[^/]+$/;
-const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
 const METRICS_ROW_CLASS = 'assistant-response-metrics';
 
 let originalFetch: typeof window.fetch | null = null;
@@ -191,23 +190,6 @@ function scheduleMetricsRender(): void {
   });
 }
 
-function captureSseSession(text: string): void {
-  for (const block of text.split(/\n\n+/)) {
-    const data = block
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trim())
-      .join('\n');
-    if (!data || data === '[DONE]') continue;
-    try {
-      const event = record(JSON.parse(data));
-      if (event.type === 'session') captureChatSessionResponseMetrics(event.session);
-    } catch {
-      // Ignore unrelated or partial SSE blocks; the authoritative session fetch remains available.
-    }
-  }
-}
-
 async function interceptChatMetricsFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
   const response = await fetchImpl(input, init);
@@ -221,11 +203,10 @@ async function interceptChatMetricsFetch(input: RequestInfo | URL, init?: Reques
     void response.clone().json()
       .then(captureChatSessionResponseMetrics)
       .catch(() => undefined);
-  } else if (method === 'POST' && CHAT_STREAM_PATH.test(url.pathname)) {
-    void response.clone().text()
-      .then(captureSseSession)
-      .catch(() => undefined);
   }
+  // Never clone or consume a live SSE response here. The session query is
+  // invalidated after the stream completes and supplies the same persisted
+  // metrics without teeing the latency-critical response body.
   return response;
 }
 
@@ -251,6 +232,10 @@ export function initializeChatResponseMetricsController(): () => void {
 }
 
 export function resetChatResponseMetricsForTests(): void {
+  const metricsWindow = window as ChatMetricsWindow;
+  if (window.fetch === interceptChatMetricsFetch && originalFetch) window.fetch = originalFetch;
+  originalFetch = null;
+  metricsWindow.__omnixChatResponseMetricsInstalled = false;
   assistantMessages = [];
   renderQueued = false;
   observer?.disconnect();
