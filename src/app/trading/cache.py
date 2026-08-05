@@ -92,19 +92,23 @@ class TradingMarketDataCache:
             return cached.value, cached, True
         with self._guard:
             lock = self._locks.setdefault(key, threading.Lock())
-        with lock:
-            cached = self.get(key)
-            if cached is not None:
-                return cached.value, cached, True
-            value = loader()
-            entry = self.put(key, value, ttl_seconds=ttl_seconds, source=source)
+        try:
+            with lock:
+                cached = self.get(key)
+                if cached is not None:
+                    return cached.value, cached, True
+                value = loader()
+                entry = self.put(key, value, ttl_seconds=ttl_seconds, source=source)
+                return value, entry, False
+        finally:
             with self._guard:
-                self._locks.pop(key, None)
-            return value, entry, False
+                if not lock.locked():
+                    self._locks.pop(key, None)
 
     def clear(self) -> None:
         with self._guard:
             self._entries.clear()
+            self._locks.clear()
         if self.cache_dir and self.cache_dir.exists():
             for path in self.cache_dir.glob("*.json"):
                 path.unlink(missing_ok=True)
