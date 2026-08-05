@@ -9,6 +9,7 @@ on:
       - "apps/web/src/app/router.tsx"
       - "apps/web/src/features/ModuleWorkspace.tsx"
       - "apps/web/package.json"
+      - "apps/web/tsconfig.trading.json"
       - "package-lock.json"
       - "src/app/trading/**"
       - "src/app/gateway/trading_routes.py"
@@ -49,5 +50,5 @@ jobs:
         run: python -m pytest src/tests/trading -q --tb=short
       - name: Trading frontend tests
         run: npm --workspace @omnix/web run test:trading
-      - name: Web typecheck
-        run: npm --workspace @omnix/web run typecheck
+      - name: Trading TypeScript typecheck
+        run: npm --workspace @omnix/web run typecheck:trading
