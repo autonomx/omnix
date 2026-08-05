@@ -19,6 +19,9 @@ from .live_chat_lmstudio_diagnostics import (
 from .live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
 from .live_chat_postgres_fast_path import install_live_chat_postgres_fast_path
 from .live_chat_prompt_cache import install_live_chat_prompt_cache_hook
+from .live_chat_prompt_dependency_stages import (
+    install_live_chat_prompt_dependency_stage_hook,
+)
 from .live_chat_prompt_window import install_live_chat_prompt_window_hook
 from .live_chat_provider_metrics import install_live_chat_provider_metrics_hook
 from .live_chat_provider_routing import install_live_chat_provider_routing_hook
@@ -121,6 +124,7 @@ install_lmstudio_loaded_model_resolution_hook()
 install_live_voice_spoken_style_hook()
 install_live_chat_companion_context_hook()
 install_live_chat_prompt_cache_hook()
+install_live_chat_prompt_dependency_stage_hook()
 install_live_chat_lmstudio_diagnostics_hook()
 install_live_material_context_hook()
 install_live_observation_generation_hook()
