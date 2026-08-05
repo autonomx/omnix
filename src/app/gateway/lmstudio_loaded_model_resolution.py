@@ -31,6 +31,7 @@ class _LoadedModel:
     instance_id: str
     model_key: str
     display_name: str
+    context_length: int | None = None
 
     def matches(self, value: str) -> bool:
         normalized = value.strip().casefold()
@@ -89,12 +90,20 @@ def _discovery_timeout_seconds(provider: LMStudioProvider) -> float:
     return max(0.05, min(configured, provider_timeout))
 
 
+def _positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 def _deduplicate(models: list[_LoadedModel]) -> tuple[_LoadedModel, ...]:
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     unique: list[_LoadedModel] = []
     for model in models:
-        key = model.instance_id.casefold()
-        if not key or key in seen:
+        key = (model.model_key.casefold(), model.instance_id.casefold())
+        if not any(key) or key in seen:
             continue
         seen.add(key)
         unique.append(model)
@@ -120,13 +129,21 @@ def _parse_v1_models(payload: Any) -> tuple[_LoadedModel, ...] | None:
             if not isinstance(instance, dict):
                 continue
             instance_id = str(instance.get("id") or model_key).strip()
-            if not instance_id:
+            request_model = model_key or instance_id
+            if not request_model:
                 continue
+            config = instance.get("config")
+            context_length = (
+                _positive_int(config.get("context_length"))
+                if isinstance(config, dict)
+                else None
+            )
             loaded.append(
                 _LoadedModel(
-                    instance_id=instance_id,
-                    model_key=model_key or instance_id,
-                    display_name=display_name or model_key or instance_id,
+                    instance_id=instance_id or request_model,
+                    model_key=request_model,
+                    display_name=display_name or request_model,
+                    context_length=context_length,
                 )
             )
     return _deduplicate(loaded)
@@ -154,6 +171,10 @@ def _parse_v0_models(payload: Any) -> tuple[_LoadedModel, ...] | None:
                 instance_id=model_id,
                 model_key=model_id,
                 display_name=str(model.get("name") or model_id).strip(),
+                context_length=_positive_int(
+                    model.get("context_length")
+                    or model.get("max_context_length")
+                ),
             )
         )
     return _deduplicate(loaded)
@@ -212,6 +233,9 @@ def _resolve_lmstudio_model(
         return explicit, {
             "source": "explicit_request",
             "selected_model": explicit,
+            "selected_model_key": explicit,
+            "selected_instance_id": None,
+            "selected_context_length": None,
             "configured_fallback": configured or None,
             "discovery_available": None,
             "discovery_endpoint": None,
@@ -221,18 +245,22 @@ def _resolve_lmstudio_model(
 
     discovery, cache_hit = _discover_loaded_models(provider)
     selected: str | None
+    selected_model: _LoadedModel | None = None
     source: str
     if discovery.models:
         configured_match = next(
             (model for model in discovery.models if configured and model.matches(configured)),
             None,
         )
-        chosen = configured_match or discovery.models[0]
-        selected = chosen.instance_id
+        selected_model = configured_match or discovery.models[0]
+        # The v1 model list intentionally distinguishes the model key accepted by
+        # inference APIs from the loaded instance ID used to identify that runtime
+        # instance. Sending a custom instance ID as the chat model can be rejected.
+        selected = selected_model.model_key
         source = (
-            "loaded_instance_config_match"
+            "loaded_model_key_config_match"
             if configured_match is not None
-            else "loaded_instance"
+            else "loaded_model_key"
         )
     elif discovery.available and configured:
         selected = configured
@@ -250,11 +278,21 @@ def _resolve_lmstudio_model(
     return selected, {
         "source": source,
         "selected_model": selected,
+        "selected_model_key": (
+            selected_model.model_key if selected_model is not None else selected
+        ),
+        "selected_instance_id": (
+            selected_model.instance_id if selected_model is not None else None
+        ),
+        "selected_context_length": (
+            selected_model.context_length if selected_model is not None else None
+        ),
         "configured_fallback": configured or None,
         "discovery_available": discovery.available,
         "discovery_endpoint": discovery.endpoint,
         "discovery_cache_hit": cache_hit,
         "loaded_model_count": len(discovery.models),
+        "loaded_model_keys": [model.model_key for model in discovery.models],
         "loaded_instance_ids": [model.instance_id for model in discovery.models],
     }
 
@@ -266,7 +304,7 @@ def _clear_lmstudio_model_discovery_cache() -> None:
 
 
 def install_lmstudio_loaded_model_resolution_hook() -> None:
-    """Install loaded-instance-first model selection for LM Studio requests."""
+    """Install loaded-model-first model selection for LM Studio requests."""
     if getattr(LMStudioProvider, _HOOK_SENTINEL, False):
         return
     original_chat_completion = LMStudioProvider.chat_completion
