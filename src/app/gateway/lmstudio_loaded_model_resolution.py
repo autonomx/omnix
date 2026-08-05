@@ -9,13 +9,16 @@ avoid duplicate discovery during speculative/final request pairs.
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any
 from weakref import WeakKeyDictionary
 
+from app.providers.base import ConnectionError as ProviderConnectionError
 from app.providers.lmstudio_provider import LMStudioProvider
 
 from .tts_stream_diagnostics import stream_log
@@ -23,6 +26,9 @@ from .tts_stream_diagnostics import stream_log
 _HOOK_SENTINEL = "_omnix_loaded_model_resolution_installed"
 _DEFAULT_CACHE_TTL_SECONDS = 0.25
 _DEFAULT_DISCOVERY_TIMEOUT_SECONDS = 0.75
+_DEFAULT_TRANSPORT_FALLBACK_MAX_SECONDS = 1.5
+_HTTP_STATUS_RE = re.compile(r"\bHTTP error(?:\s+|:\s*)(\d{3})\b", re.IGNORECASE)
+_NO_TRANSPORT_FALLBACK_HTTP_STATUSES = frozenset({401, 403, 408, 429})
 _CACHE_LOCK = threading.RLock()
 
 
@@ -88,6 +94,15 @@ def _discovery_timeout_seconds(provider: LMStudioProvider) -> float:
     except (TypeError, ValueError):
         provider_timeout = configured
     return max(0.05, min(configured, provider_timeout))
+
+
+def _transport_fallback_max_seconds() -> float:
+    return _float_setting(
+        "OMNIX_LMSTUDIO_TRANSPORT_FALLBACK_MAX_SECONDS",
+        _DEFAULT_TRANSPORT_FALLBACK_MAX_SECONDS,
+        minimum=0.0,
+        maximum=10.0,
+    )
 
 
 def _positive_int(value: Any) -> int | None:
@@ -303,6 +318,126 @@ def _clear_lmstudio_model_discovery_cache() -> None:
         _DISCOVERY_CACHE.clear()
 
 
+def _http_status(error: BaseException) -> int | None:
+    match = _HTTP_STATUS_RE.search(str(error or ""))
+    return int(match.group(1)) if match is not None else None
+
+
+def _should_retry_with_openai_transport(
+    error: BaseException,
+    *,
+    elapsed_seconds: float,
+) -> bool:
+    if elapsed_seconds > _transport_fallback_max_seconds():
+        return False
+    message = str(error or "")
+    if "http error" not in message.casefold():
+        return False
+    status = _http_status(error)
+    return status not in _NO_TRANSPORT_FALLBACK_HTTP_STATUSES
+
+
+def _update_active_diagnostics(
+    resolved_model: str | None,
+    diagnostics: dict[str, Any],
+    *,
+    transport_fallback: bool | None = None,
+) -> None:
+    try:
+        from . import live_chat_lmstudio_diagnostics as diagnostics_runtime
+
+        active = diagnostics_runtime._ACTIVE_CALL.get()
+    except (AttributeError, ImportError):
+        return
+    if active is None:
+        return
+    previous_model = active.get("model_id")
+    if previous_model and previous_model != resolved_model:
+        active.setdefault("configured_model_id", previous_model)
+    active.update(
+        {
+            "model_id": resolved_model,
+            "selected_instance_id": diagnostics.get("selected_instance_id"),
+            "selected_context_length": diagnostics.get("selected_context_length"),
+        }
+    )
+    if transport_fallback is not None:
+        active["transport_fallback"] = transport_fallback
+        active["transport_endpoint"] = (
+            "/v1/chat/completions"
+            if transport_fallback
+            else "/api/v0/chat/completions"
+        )
+
+
+def _log_transport_fallback(
+    *,
+    model: str | None,
+    stream: bool,
+    error: BaseException,
+    elapsed_seconds: float,
+) -> None:
+    stream_log(
+        "gateway-live-chat-first-token",
+        "runtime",
+        "live_chat_lmstudio_transport_fallback",
+        model_id=model,
+        stream=bool(stream),
+        failed_endpoint="/api/v0/chat/completions",
+        fallback_endpoint="/v1/chat/completions",
+        http_status=_http_status(error),
+        error_type=type(error).__name__,
+        elapsed_ms=round(elapsed_seconds * 1000.0, 3),
+    )
+
+
+def _stream_with_transport_fallback(
+    primary: Iterator[Any],
+    *,
+    original_chat_completion,
+    provider: LMStudioProvider,
+    messages,
+    resolved_model: str | None,
+    kwargs: dict[str, Any],
+    diagnostics: dict[str, Any],
+    started: float,
+) -> Iterator[Any]:
+    emitted = False
+    try:
+        for chunk in primary:
+            emitted = True
+            yield chunk
+    except ProviderConnectionError as exc:
+        elapsed_seconds = time.perf_counter() - started
+        if emitted or not _should_retry_with_openai_transport(
+            exc,
+            elapsed_seconds=elapsed_seconds,
+        ):
+            raise
+        _log_transport_fallback(
+            model=resolved_model,
+            stream=True,
+            error=exc,
+            elapsed_seconds=elapsed_seconds,
+        )
+        _update_active_diagnostics(
+            resolved_model,
+            diagnostics,
+            transport_fallback=True,
+        )
+        fallback_kwargs = dict(kwargs)
+        fallback_kwargs["include_metrics"] = False
+        fallback = original_chat_completion(
+            provider,
+            messages,
+            model=resolved_model,
+            stream=True,
+            _use_configured_model=False,
+            **fallback_kwargs,
+        )
+        yield from fallback
+
+
 def install_lmstudio_loaded_model_resolution_hook() -> None:
     """Install loaded-model-first model selection for LM Studio requests."""
     if getattr(LMStudioProvider, _HOOK_SENTINEL, False):
@@ -328,13 +463,62 @@ def install_lmstudio_loaded_model_resolution_hook() -> None:
             model_source=model_source,
             **log_fields,
         )
-        return original_chat_completion(
-            self,
-            messages,
-            model=resolved_model,
-            stream=stream,
-            _use_configured_model=False,
-            **kwargs,
+        _update_active_diagnostics(
+            resolved_model,
+            diagnostics,
+            transport_fallback=False,
+        )
+        call_kwargs = dict(kwargs)
+        include_metrics = bool(call_kwargs.get("include_metrics", False))
+        started = time.perf_counter()
+        try:
+            result = original_chat_completion(
+                self,
+                messages,
+                model=resolved_model,
+                stream=stream,
+                _use_configured_model=False,
+                **call_kwargs,
+            )
+        except ProviderConnectionError as exc:
+            elapsed_seconds = time.perf_counter() - started
+            if not include_metrics or not _should_retry_with_openai_transport(
+                exc,
+                elapsed_seconds=elapsed_seconds,
+            ):
+                raise
+            _log_transport_fallback(
+                model=resolved_model,
+                stream=stream,
+                error=exc,
+                elapsed_seconds=elapsed_seconds,
+            )
+            _update_active_diagnostics(
+                resolved_model,
+                diagnostics,
+                transport_fallback=True,
+            )
+            fallback_kwargs = dict(call_kwargs)
+            fallback_kwargs["include_metrics"] = False
+            return original_chat_completion(
+                self,
+                messages,
+                model=resolved_model,
+                stream=stream,
+                _use_configured_model=False,
+                **fallback_kwargs,
+            )
+        if not stream or not include_metrics:
+            return result
+        return _stream_with_transport_fallback(
+            result,
+            original_chat_completion=original_chat_completion,
+            provider=self,
+            messages=messages,
+            resolved_model=resolved_model,
+            kwargs=call_kwargs,
+            diagnostics=diagnostics,
+            started=started,
         )
 
     LMStudioProvider.chat_completion = patched_chat_completion
