@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   captureChatSessionResponseMetrics,
   formatLmStudioStopReason,
+  initializeChatResponseMetricsController,
   readChatResponseMetrics,
   renderChatResponseMetrics,
   resetChatResponseMetricsForTests,
@@ -9,6 +10,8 @@ import {
 
 afterEach(() => {
   resetChatResponseMetricsForTests();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   document.body.replaceChildren();
 });
 
@@ -93,5 +96,22 @@ describe('chat response metrics', () => {
   it('formats LM Studio stop reason identifiers for display', () => {
     expect(formatLmStudioStopReason('maxPredictedTokensReached')).toBe('Max Tokens Reached');
     expect(formatLmStudioStopReason('stopStringFound')).toBe('Stop String Found');
+  });
+
+  it('does not clone or consume live chat stream responses', async () => {
+    const cloneSpy = vi.spyOn(Response.prototype, 'clone');
+    const fetchMock = vi.fn(async () => new Response('data: {"type":"done"}\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })) as unknown as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
+    initializeChatResponseMetricsController();
+
+    const response = await window.fetch('/api/chat/sessions/session-1/messages/stream', {
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(200);
+    expect(cloneSpy).not.toHaveBeenCalled();
   });
 });
