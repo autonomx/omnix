@@ -5,6 +5,7 @@ import {
   shouldCommitProviderEndpoint,
 } from './live-voice-controller';
 import {
+  LIVE_SPECULATION_HANDSHAKE_GRACE_MS,
   transcriptIsSpeculationSafe,
   transcriptsCanReuseSpeculation,
 } from './live-speculation-controller';
@@ -81,6 +82,11 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(transcriptsCanReuseSpeculation('Tell me a story', 'tell me a story!')).toBe(true);
     expect(transcriptsCanReuseSpeculation('Tell me a story', 'Tell me the story')).toBe(false);
     expect(transcriptIsSpeculationSafe('Wait, no I mean tell me a story')).toBe(false);
+  });
+
+  it('keeps handshake grace above the measured local round trip and below the onset budget', () => {
+    expect(LIVE_SPECULATION_HANDSHAKE_GRACE_MS).toBeGreaterThanOrEqual(250);
+    expect(LIVE_SPECULATION_HANDSHAKE_GRACE_MS).toBeLessThanOrEqual(400);
   });
 
   it('commits streamed LLM text to TTS after the low-latency deadline', () => {
