@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
 from .cache import TradingMarketDataCache
 from .providers.binance import BinanceMarketDataProvider
-from .streaming.manager import SharedSubscriptionManager
+from .streaming.binance_stream import BinanceWebSocketStream
+from .streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
 
 
 class TradingMarketDataService:
@@ -16,6 +18,7 @@ class TradingMarketDataService:
         provider: BinanceMarketDataProvider | None = None,
         cache: TradingMarketDataCache | None = None,
         subscriptions: SharedSubscriptionManager | None = None,
+        stream: BinanceWebSocketStream | None = None,
     ) -> None:
         self.cache = cache or TradingMarketDataCache(
             max_entries=256,
@@ -23,12 +26,27 @@ class TradingMarketDataService:
         )
         self.provider = provider or BinanceMarketDataProvider(cache=self.cache)
         self.subscriptions = subscriptions or SharedSubscriptionManager()
+        self.stream = stream or BinanceWebSocketStream()
 
     def bars(self, instrument_id: str, interval: str, limit: int = 500):
         return self.provider.get_bars(instrument_id, interval, limit)
 
     def quote(self, instrument_id: str) -> dict[str, object]:
         return self.provider.get_quote(instrument_id)
+
+    async def stream_updates(
+        self,
+        instrument_id: str,
+        interval: str,
+    ) -> AsyncIterator[StreamingBarUpdate]:
+        binding = self.provider.get_binding(instrument_id)
+        async for update in self.stream.messages(
+            provider_symbol=binding.provider_symbol,
+            binding_id=binding.binding_id,
+            instrument_id=instrument_id,
+            interval=interval,
+        ):
+            yield update
 
     def diagnostics(self) -> dict[str, Any]:
         return {
