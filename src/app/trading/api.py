@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
+from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
@@ -12,6 +15,7 @@ from .catalog import BINANCE_POLICY, BINDINGS, search_instruments
 from .models import BarsResponse, CanonicalInstrument, ProviderBinding, ProviderPolicy
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .service import TradingMarketDataService, default_market_data_service
+from .streaming.manager import StreamingBarUpdate
 
 
 class ProviderDescriptor(BaseModel):
@@ -81,6 +85,16 @@ def _document_response(record: dict[str, Any]) -> TradingDocumentResponse:
     )
 
 
+def _stream_payload(update: StreamingBarUpdate) -> dict[str, Any]:
+    payload = asdict(update)
+    for key, value in tuple(payload.items()):
+        if isinstance(value, datetime):
+            payload[key] = value.isoformat()
+        elif isinstance(value, Decimal):
+            payload[key] = str(value)
+    return {"type": "bar", "bar": payload}
+
+
 def create_trading_router(
     repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
     market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
@@ -135,6 +149,26 @@ def create_trading_router(
     @router.get("/diagnostics", response_model=TradingDiagnosticsResponse)
     async def diagnostics() -> TradingDiagnosticsResponse:
         return TradingDiagnosticsResponse(diagnostics=market_service_factory().diagnostics())
+
+    @router.websocket("/stream")
+    async def stream(websocket: WebSocket) -> None:
+        instrument_id = websocket.query_params.get("instrument_id", "")
+        interval = websocket.query_params.get("interval", "1m")
+        if not instrument_id:
+            await websocket.close(code=1008, reason="instrument_id is required")
+            return
+        await websocket.accept()
+        try:
+            async for update in market_service_factory().stream_updates(instrument_id, interval):
+                await websocket.send_json(_stream_payload(update))
+        except WebSocketDisconnect:
+            return
+        except ValueError as exc:
+            await websocket.send_json({"type": "error", "code": "invalid_stream", "message": str(exc)})
+            await websocket.close(code=1008)
+        except Exception as exc:
+            await websocket.send_json({"type": "error", "code": "stream_failed", "message": str(exc)})
+            await websocket.close(code=1011)
 
     def register_documents(path: str, record_type: str) -> None:
         @router.get(path, response_model=TradingDocumentListResponse, name=f"list_trading_{record_type}s")
