@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
+from app.chat import context_budget as context_budget_module
 from app.chat import memory_prompt as memory_prompt_module
 from app.gateway import live_chat_companion_context as companion_context
 from app.gateway import live_chat_prompt_dependency_stages as dependency_stages
@@ -135,6 +136,49 @@ def test_memory_prompt_internal_loader_uses_the_signature_cache(
 
     assert memory_prompt_module.chat_memory_enabled() is True
     assert memory_prompt_module.chat_memory_enabled() is True
+    assert calls == 1
+
+
+def test_prompt_budget_internal_loader_uses_the_signature_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dependency_stages._reset_live_prompt_dependency_state_for_tests()
+    settings_path = tmp_path / "memory-settings.json"
+    settings_path.write_text("{}", encoding="utf-8")
+    calls = 0
+
+    def fake_load() -> AssistantMemoryRuntimeSettings:
+        nonlocal calls
+        calls += 1
+        return AssistantMemoryRuntimeSettings(
+            memory_token_budget=321,
+            history_token_budget=654,
+        )
+
+    monkeypatch.setattr(
+        dependency_stages.memory_settings_module,
+        "default_memory_settings_path",
+        lambda: settings_path,
+    )
+    monkeypatch.setattr(
+        dependency_stages,
+        "_ORIGINAL_LOAD_MEMORY_SETTINGS",
+        fake_load,
+    )
+    monkeypatch.setattr(
+        context_budget_module,
+        "load_memory_runtime_settings",
+        dependency_stages._load_memory_runtime_settings_cached,
+    )
+
+    first = context_budget_module.prompt_budget_from_env()
+    second = context_budget_module.prompt_budget_from_env()
+
+    assert first.memory_tokens == 321
+    assert first.history_tokens == 654
+    assert second.memory_tokens == 321
+    assert second.history_tokens == 654
     assert calls == 1
 
 
