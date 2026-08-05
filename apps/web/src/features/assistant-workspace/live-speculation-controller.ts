@@ -10,6 +10,7 @@ const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const INSTALLED_KEY = '__omnixLiveSpeculationInstalled';
 const CORRECTION_PATTERN = /(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)/i;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
+export const LIVE_SPECULATION_HANDSHAKE_GRACE_MS = 350;
 
 type SpeculationWindow = Window & typeof globalThis & {
   __omnixLiveSpeculationInstalled?: boolean;
@@ -255,7 +256,20 @@ async function interceptChatStream(input: RequestInfo | URL, init?: RequestInit)
     return fetchImpl(input, init);
   }
 
-  await Promise.race([active.startedPromise, delay(120)]);
+  const handshakeWaitStartedAt = performance.now();
+  await Promise.race([
+    active.startedPromise,
+    delay(LIVE_SPECULATION_HANDSHAKE_GRACE_MS),
+  ]);
+  const handshakeWaitMs = performance.now() - handshakeWaitStartedAt;
+  dispatchPerformance('llm_speculation_handshake_wait_completed', {
+    sessionId,
+    segmentId: active.segmentId,
+    generationId: active.generationId,
+    handshakeReady: Boolean(active.generationId),
+    handshakeWaitMs,
+    handshakeGraceMs: LIVE_SPECULATION_HANDSHAKE_GRACE_MS,
+  });
   if (!active.generationId || active.error) return fetchImpl(input, init);
   active.reused = true;
   active.acceptBody = body;
@@ -264,6 +278,7 @@ async function interceptChatStream(input: RequestInfo | URL, init?: RequestInit)
     segmentId: active.segmentId,
     generationId: active.generationId,
     bufferedChunks: active.chunks.length,
+    handshakeWaitMs,
   });
   return createAcceptedSpeculationResponse(active, fetchImpl);
 }
