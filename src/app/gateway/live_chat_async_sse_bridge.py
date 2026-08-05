@@ -26,7 +26,7 @@ class _EagerAsyncSseBridge:
 
     def __init__(
         self,
-        factory: Callable[[], Iterator[str]],
+        factory: Callable[[], Iterator[Any]],
         *,
         queue_items: int,
     ) -> None:
@@ -79,7 +79,7 @@ class _EagerAsyncSseBridge:
                     self._pending_put = None
 
     def _run(self) -> None:
-        iterator: Iterator[str] | None = None
+        iterator: Iterator[Any] | None = None
         item_count = 0
         failed = False
         try:
@@ -136,7 +136,7 @@ class _EagerAsyncSseBridge:
         if pending is not None:
             pending.cancel()
 
-    async def stream(self) -> AsyncIterator[str]:
+    async def stream(self) -> AsyncIterator[Any]:
         if not self._consumer_attached:
             self._consumer_attached = True
             stream_log(
@@ -151,7 +151,7 @@ class _EagerAsyncSseBridge:
             while True:
                 item = await self._queue.get()
                 if item.kind == "chunk":
-                    yield str(item.payload)
+                    yield item.payload
                     continue
                 if item.kind == "error":
                     error = item.payload
@@ -164,10 +164,10 @@ class _EagerAsyncSseBridge:
 
 
 def eager_async_sse_stream(
-    factory: Callable[[], Iterator[str]],
+    factory: Callable[[], Iterator[Any]],
     *,
     queue_items: int = _DEFAULT_QUEUE_ITEMS,
-) -> AsyncIterator[str]:
+) -> AsyncIterator[Any]:
     """Start ``factory`` immediately and expose its ordered output asynchronously."""
 
     bounded_items = max(1, min(_MAX_QUEUE_ITEMS, int(queue_items)))
