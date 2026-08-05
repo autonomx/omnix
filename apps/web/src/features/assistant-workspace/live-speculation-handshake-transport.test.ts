@@ -72,6 +72,71 @@ describe('live speculation handshake transport', () => {
     expect(remainder).toContain('"text":"Hello"');
   });
 
+  it('cancels eager server generation when the source request is aborted', async () => {
+    const sourceAbort = new AbortController();
+    let generationController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const neverEndingStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        generationController = controller;
+      },
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url.endsWith('/start')) {
+        return new Response(JSON.stringify({
+          ok: true,
+          generation_id: 'spec-cancel',
+          segment_id: 'segment-cancel',
+          source_sequence: 5,
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/spec-cancel/stream')) {
+        return new Response(neverEndingStream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      }
+      if (url.endsWith('/spec-cancel/cancel')) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as unknown as typeof fetch;
+
+    const bridged = await bridgeLiveSpeculationHandshakeRequest(
+      fetchImpl,
+      '/api/live/speculation/sessions/session-test/stream',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          content: 'Tell me a story',
+          segment_id: 'segment-cancel',
+          source_sequence: 5,
+        }),
+        signal: sourceAbort.signal,
+      },
+    );
+
+    expect(bridged).not.toBeNull();
+    const reader = bridged!.body!.getReader();
+    await reader.read();
+    sourceAbort.abort('transcript corrected');
+
+    await vi.waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledWith(
+        '/api/live/speculation/sessions/session-test/spec-cancel/cancel',
+        expect.objectContaining({ method: 'POST', keepalive: true }),
+      );
+    });
+    generationController?.close();
+    await reader.cancel();
+  });
+
   it('leaves unrelated fetch requests untouched', async () => {
     const fetchImpl = vi.fn() as unknown as typeof fetch;
     const bridged = await bridgeLiveSpeculationHandshakeRequest(
