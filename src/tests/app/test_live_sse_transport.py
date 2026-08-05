@@ -3,9 +3,17 @@ from __future__ import annotations
 import asyncio
 import threading
 
+from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from starlette.responses import StreamingResponse
 
-from app.gateway.live_sse_transport import install_live_sse_transport_hook
+from app.chat.models import SendChatMessageRequest
+from app.gateway.live_sse_transport import (
+    install_live_chat_sse_route_execution,
+    install_live_sse_transport_hook,
+)
+
+_LIVE_CHAT_STREAM_PATH = "/api/chat/sessions/{session_id}/messages/stream"
 
 
 def _collect(response: StreamingResponse) -> list[bytes]:
@@ -34,34 +42,90 @@ def test_event_stream_has_flush_preamble_and_anti_buffering_headers(monkeypatch)
     assert chunks[1] == b"data: first\n\n"
     assert response.headers["x-accel-buffering"] == "no"
     assert response.headers["connection"] == "keep-alive"
-    assert response.headers["x-omnix-sse-transport"] == "immediate-v2"
+    assert response.headers["x-omnix-sse-transport"] == "immediate-v3"
+    assert response.headers["x-omnix-sse-execution"] == "starlette-sync"
     assert "no-cache" in response.headers["cache-control"]
     assert "no-transform" in response.headers["cache-control"]
 
 
-def test_sync_event_stream_producer_runs_before_consumer_attaches(monkeypatch) -> None:
+def test_generic_sync_event_stream_remains_consumer_driven(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_SSE_FLUSH_PREAMBLE_BYTES", "8")
     install_live_sse_transport_hook()
-    produced_second = threading.Event()
+    source_started = threading.Event()
 
     def source():
+        source_started.set()
         yield "data: first\n\n"
-        produced_second.set()
         yield "data: second\n\n"
 
     async def scenario() -> list[bytes]:
         response = StreamingResponse(source(), media_type="text/event-stream")
         await asyncio.sleep(0.05)
-        assert produced_second.is_set()
+        assert not source_started.is_set()
         chunks: list[bytes] = []
         async for chunk in response.body_iterator:
             chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode(response.charset))
+        assert response.headers["x-omnix-sse-execution"] == "starlette-sync"
         return chunks
 
     chunks = asyncio.run(scenario())
 
     assert len(chunks[0]) == 8
     assert chunks[1:] == [b"data: first\n\n", b"data: second\n\n"]
+
+
+def test_accepted_chat_stream_runs_provider_before_consumer_read(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_SSE_FLUSH_PREAMBLE_BYTES", "8")
+    install_live_sse_transport_hook()
+    provider_entered = threading.Event()
+
+    def source():
+        yield b"data: user-message\n\n"
+        provider_entered.set()
+        yield "data: provider-first-text\n\n"
+
+    gateway = FastAPI()
+
+    @gateway.post(_LIVE_CHAT_STREAM_PATH)
+    async def stream_chat_message(
+        session_id: str,
+        request: SendChatMessageRequest,
+    ) -> StreamingResponse:
+        del session_id, request
+        return StreamingResponse(source(), media_type="text/event-stream")
+
+    assert install_live_chat_sse_route_execution(gateway) == [_LIVE_CHAT_STREAM_PATH]
+    route = next(
+        route
+        for route in gateway.routes
+        if isinstance(route, APIRoute) and route.path == _LIVE_CHAT_STREAM_PATH
+    )
+
+    async def scenario() -> tuple[StreamingResponse, list[bytes]]:
+        response = await route.dependant.call(
+            session_id="chat:test",
+            request=SendChatMessageRequest(
+                content="hello",
+                user_turn_id="voice-user-turn:voice-turn:test",
+                speech_segment_id="voice-segment:test",
+            ),
+        )
+        await asyncio.sleep(0.05)
+        assert provider_entered.is_set()
+        chunks: list[bytes] = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode(response.charset))
+        return response, chunks
+
+    response, chunks = asyncio.run(scenario())
+
+    assert response.headers["x-omnix-sse-transport"] == "immediate-v3"
+    assert response.headers["x-omnix-sse-execution"] == "eager-route"
+    assert len(chunks[0]) == 8
+    assert chunks[1:] == [
+        b"data: user-message\n\n",
+        b"data: provider-first-text\n\n",
+    ]
 
 
 def test_non_event_stream_is_not_modified(monkeypatch) -> None:
@@ -74,6 +138,7 @@ def test_non_event_stream_is_not_modified(monkeypatch) -> None:
     assert chunks == [b"plain text"]
     assert "x-accel-buffering" not in response.headers
     assert "x-omnix-sse-transport" not in response.headers
+    assert "x-omnix-sse-execution" not in response.headers
 
 
 def test_event_stream_preamble_can_be_disabled(monkeypatch) -> None:
@@ -85,4 +150,5 @@ def test_event_stream_preamble_can_be_disabled(monkeypatch) -> None:
 
     assert chunks == [b"data: first\n\n"]
     assert response.headers["x-accel-buffering"] == "no"
-    assert response.headers["x-omnix-sse-transport"] == "immediate-v2"
+    assert response.headers["x-omnix-sse-transport"] == "immediate-v3"
+    assert response.headers["x-omnix-sse-execution"] == "starlette-sync"
