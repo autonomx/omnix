@@ -1,61 +1,66 @@
 # Omnix Trading Terminal — Final Implementation Roadmap
 
-**Status:** Final roadmap, ready for implementation review  
+**Status:** Final roadmap, ready to merge and implement  
 **Target route:** `/trading`  
 **Target module name:** `Trading`  
 **Roadmap branch:** `agent/trading-terminal-roadmap`  
 **Reference prototype:** `autonomxDeveloper/tradingview-mcp`  
-**Primary chart renderer candidate:** TradingView Lightweight Charts  
+**Primary renderer candidate:** TradingView Lightweight Charts  
 **Product posture:** local-first market research and paper simulation; no live brokerage execution
 
 ## 1. Program objective
 
-Build a native Omnix market-analysis workspace that provides a credible TradingView-style experience for stocks and crypto while remaining consistent with Omnix architecture, persistence, design, diagnostics, and provider governance.
+Build a native Omnix market-analysis workspace that provides a credible TradingView-style experience while remaining consistent with Omnix architecture, PostgreSQL persistence, design system, diagnostics, provider governance, and test infrastructure.
 
-The product must support a dense multi-chart workspace, live crypto data, historical candles, linked charts, real drawing tools, indicators, watchlists, saved workspaces, alerts, replay, backtesting, paper simulation, and optional local-LLM research. These capabilities are delivered incrementally; the first useful release is intentionally smaller than the final workstation.
+The final product may support crypto and stocks, multi-chart workspaces, real drawings, indicators, alerts, replay, backtesting, paper simulation, and optional local-LLM research. These capabilities are delivered incrementally. The first qualified release is intentionally crypto-only so the charting, synchronization, drawing, streaming, persistence, and lifecycle architecture can be proven before equity calendars, adjusted prices, polling, and unofficial provider behavior are introduced.
 
-The existing `tradingview-mcp` repository is a validated prototype and code donor. It is not a runtime dependency. Omnix owns the UI, API contracts, PostgreSQL persistence, provider lifecycle, cache policy, streaming behavior, tests, diagnostics, and release qualification.
+The existing `tradingview-mcp` repository is a validated prototype and code donor. It is not a runtime dependency. Omnix owns the UI, API contracts, PostgreSQL persistence, provider bindings, cache policy, streaming behavior, tests, diagnostics, and release qualification.
 
 ## 2. Final product decisions
 
-1. **Native Omnix module.** Trading uses the existing React application, Omnix shell, TanStack Router, Mantine appearance system, TanStack Query, Zustand conventions, typed OpenAPI client, gateway, diagnostics, PostgreSQL authority, and test infrastructure.
+1. **Native Omnix module.** Trading uses the existing React application, Omnix shell, TanStack Router, Mantine appearance system, TanStack Query, Zustand conventions, generated OpenAPI types, gateway, diagnostics, PostgreSQL authority, and test infrastructure.
 2. **No MCP runtime dependency.** Do not embed the MCP server, standalone FastAPI workstation, standalone Vite application, Claude/OpenClaw integration, or direct LM Studio calls from the prototype.
-3. **Charting feasibility comes first.** A disposable but production-shaped spike must prove multi-chart rendering, panes, drawing interaction, streaming recovery, and lifecycle cleanup before the full architecture is frozen.
+3. **Charting feasibility comes first.** A disposable but production-shaped spike must prove multi-chart rendering, panes, drawing interaction, streaming recovery, and lifecycle cleanup before production architecture is accepted.
 4. **PostgreSQL is authoritative.** Workspaces, watchlists, drawings, indicator presets, alerts, backtest metadata, and paper state must not use mutable JSON files as production authority.
 5. **Caches are disposable.** A bounded `resources/cache/trading/` directory may hold fetched market data and recovery snapshots, but cached candles are never authoritative user data.
-6. **Provider-neutral contracts.** The frontend consumes normalized instruments, bars, quotes, and stream events. It never parses raw Yahoo, Binance, Coinbase, Kraken, Hyperliquid, or other provider payloads.
-7. **Instrument identity is explicit.** A display symbol such as `BTCUSDT` is not a canonical identifier. Venue, instrument type, provider symbol, currencies, session policy, price scale, and minimum tick are first-class fields.
+6. **Instrument identity is provider-independent.** Canonical instruments identify the traded asset at a venue. Yahoo, Stooq, Binance REST, Binance WebSocket, or another API are provider/feed bindings to that instrument, not part of its identity.
+7. **Provider-neutral frontend contracts.** The frontend consumes canonical instruments, normalized bars, quotes, and stream events. It never parses raw provider payloads.
 8. **Real features only.** Unsupported chart styles, indicators, drawing tools, live labels, or order controls are hidden or marked `Planned`; they are never simulated as functional.
 9. **Research before execution.** Initial releases support charting, alerts, replay, backtesting, and paper simulation. Live broker execution requires a separate reviewed program.
-10. **Provider use is an executable policy.** Personal-use, internal-use, external-display, official API, redistribution, authentication, delay, and terms metadata are exposed by each provider adapter and surfaced in the UI.
+10. **Provider use is executable policy.** Personal-use, internal-use, external-display, official API, redistribution, authentication, delay, and terms metadata are exposed by each adapter and surfaced in the UI.
 11. **No silent provider mixing.** A fallback may replace an entire requested dataset, but bars from different providers are never spliced into one series without an explicit reconciliation design.
-12. **Drawings are instrument-scoped by default.** Major levels survive timeframe changes unless an optional interval visibility mask restricts them.
-13. **Indicator definitions are versioned.** Frontend and backend implementations must share formula specifications and golden fixtures before indicators are used by alerts, scanners, replay, or backtesting.
-14. **Incremental delivery.** Every phase is independently reviewable and testable. The charting beta is a hard gate before alerts, scanning, replay, paper trading, or AI research.
-15. **Attribution and licensing are preserved.** Lightweight Charts attribution remains compliant, and substantial MIT-licensed code migrated from the prototype retains the required notice.
+12. **Drawings are instrument-scoped by default.** Major levels survive timeframe and provider changes unless an optional interval visibility mask restricts them.
+13. **Indicator definitions are versioned.** Frontend and backend implementations share formula specifications and golden fixtures before indicators are used by alerts, scanners, replay, or backtesting.
+14. **Charting Beta is crypto-only.** Equity support begins only after the charting foundation passes qualification.
+15. **Incremental delivery.** Every phase is independently reviewable and testable. Alerts, scanning, replay, paper trading, and AI research remain blocked until their prerequisite gates pass.
+16. **Attribution and licensing are preserved.** Lightweight Charts attribution remains compliant, and substantial MIT-licensed code migrated from the prototype retains the required notice.
 
 ## 3. Delivery milestones
 
 ### Milestone A — Architecture proven
 
-Phases `OTT-0` and `OTT-1` prove the chart renderer, drawing interaction model, live-data lifecycle, Omnix integration points, persistence ownership, and canonical contracts.
+Phases `OTT-0` and `OTT-1` prove the renderer, drawing interaction model, live-data lifecycle, Omnix integration points, persistence ownership, canonical instrument contracts, and provider-binding contracts.
 
 ### Milestone B — Charting Beta
 
-Phases `OTT-2` through `OTT-7` deliver the first useful product:
+Phases `OTT-2` through `OTT-7` deliver the first useful release:
 
-- Binance crypto data and streaming
+- Binance spot historical and live crypto data
 - one- and four-chart layouts
 - synchronized crosshair and visible range
 - watchlists and saved workspaces
 - candlestick, line, and volume
 - SMA, EMA, and RSI
 - horizontal and trend lines
-- provider provenance and reconnect recovery
+- provider/feed provenance
+- reconnect and exact gap recovery
+- measurable performance and lifecycle qualification
+
+**Charting Beta is crypto-only.** Yahoo, Stooq, equity calendars, adjustment modes, and stock polling are not part of the Beta definition of done.
 
 ### Milestone C — Technical Analysis MVP
 
-Phases `OTT-8` and `OTT-9` add experimental stocks, more providers, advanced indicators, panes, drawing tools, chart styles, and stronger data fallback.
+Phases `OTT-8` and `OTT-9` add experimental stocks, more crypto providers, advanced indicators, panes, chart types, drawing tools, and stronger provider fallback.
 
 ### Milestone D — Market Research Suite
 
@@ -73,30 +78,31 @@ Phases `OTT-14` and `OTT-15` add optional local-LLM research, accessibility, per
 - Sidebar navigation entry
 - Dedicated focus mode that can collapse the Omnix shell for maximum chart area
 - Binance spot historical and live candles
-- One experimental Yahoo-derived stock adapter, visibly labeled personal/local use
 - One-chart and four-chart layouts
 - Candlestick, line, and volume displays
-- Symbol, venue/provider, and timeframe selection
+- Instrument, venue, provider/feed, and timeframe selection
 - Explicit active chart
 - Crosshair and visible-range synchronization
 - Watchlists and saved workspaces
-- Live crypto reconnect and gap repair
+- Live reconnect and exact gap repair
 - SMA, EMA, and RSI
 - Horizontal line and trend line
+- Drawing create, select, drag/resize, delete, persist, undo, and redo
 - PostgreSQL persistence with revisions
-- Provider, source, delay, freshness, cache, and fallback status
-- Playwright, API, lifecycle, reconnect, and performance qualification
+- Provider, feed, freshness, cache, and fallback status
+- Playwright, API, lifecycle, reconnect, accessibility, and performance qualification
 
 ### 4.2 Technical Analysis MVP scope
 
-- Two-horizontal and two-vertical layouts
+- Experimental Yahoo-derived equity adapter with personal/local-use labeling
+- Stooq whole-dataset fallback for eligible daily equity data
 - Coinbase, Kraken, and optionally Hyperliquid adapters
-- Broader Yahoo/Stooq stock coverage
+- Two-horizontal and two-vertical layouts
 - Bar, area, and baseline chart types
 - MACD, Bollinger Bands, ATR, and explicitly anchored VWAP
 - Indicator panes and presets
 - Vertical line, ray, rectangle, Fibonacci retracement, text, and measurement tools
-- Drawing selection handles, snapping, locking, hiding, delete, undo, and redo
+- Advanced snapping, styles, locking, hiding, and drawing management
 - More robust provider fallback and diagnostics
 - Snapshot/export support
 
@@ -136,14 +142,16 @@ The Trading workspace follows the approved Omnix visual direction:
 - Trading is not added to the compact top mode switch initially
 - Dedicated focus-mode control for collapsing global navigation and maximizing chart space
 - Compact trading toolbar below the global Omnix top bar
-- Symbol search, provider/venue selector, timeframe selector, chart type selector, indicator menu, layout selector, link-group controls, undo/redo, snapshot, and fullscreen controls
+- Instrument search, venue/provider selector, timeframe selector, chart type selector, indicator menu, layout selector, link-group controls, undo/redo, snapshot, and fullscreen controls
 - Vertical drawing-tools rail beside the chart grid
 - One-, two-, and four-chart layouts as milestones permit
 - Right drawer with Watchlist, Indicators, Data, and Layout tabs
 - Bottom drawer added only when Alerts, Replay, Backtests, Paper, or Logs are implemented
 - Clear active-chart focus and keyboard shortcuts
-- Dense but readable dark-mode presentation that remains compatible with Omnix appearance settings
-- Every chart visibly identifies instrument, venue, provider, freshness, delay, market session, adjustment mode, cache status, and fallback state
+- Dense but readable dark-mode presentation compatible with Omnix appearance settings
+- Every chart visibly identifies canonical instrument, venue, resolved provider/feed, freshness, delay, market session, adjustment mode, cache status, and fallback state
+
+Changing a provider or fallback source reloads and relabels the dataset but does not change the canonical instrument, watchlist entry, drawing ownership, alert target, or paper position identity.
 
 The module must not add a second application header, router, query client, theme system, or navigation shell.
 
@@ -163,7 +171,7 @@ apps/web/src/features/trading/
   TradingRightDrawer.tsx
   TradingWatchlist.tsx
   TradingDataStatus.tsx
-  TradingSymbolSearch.tsx
+  TradingInstrumentSearch.tsx
   TradingIndicatorManager.tsx
   tradingApi.ts
   tradingStore.ts
@@ -208,6 +216,7 @@ src/app/trading/
   models.py
   service.py
   instruments.py
+  provider_bindings.py
   intervals.py
   sessions.py
   adjustment.py
@@ -239,7 +248,7 @@ src/tests/unit/trading/
 
 Backend responsibilities:
 
-- Resolve canonical instruments and provider symbols
+- Resolve canonical instruments independently from provider/feed bindings
 - Normalize intervals, sessions, timezones, adjustments, and numeric precision
 - Fetch and cache historical bars
 - Stream partial/final bars and recover gaps
@@ -271,34 +280,30 @@ Use dedicated relational schemas when query or transaction requirements justify 
 
 #### BlobStore
 
-Use BlobStore for:
-
-- chart snapshots
-- exported research packets
-- immutable backtest reports
-- large equity curves or trade-log artifacts
+Use BlobStore for chart snapshots, exported research packets, immutable backtest reports, and large equity-curve or trade-log artifacts.
 
 #### Disposable cache
 
-Use a bounded cache such as:
+Use a bounded cache under:
 
 ```text
 resources/cache/trading/
 ```
 
-for provider responses and recovery snapshots only. Cache entries have TTL, provider identity, dataset fingerprint, and explicit stale state. They are safe to delete at any time.
+for provider responses and recovery snapshots only. Cache entries have TTL, provider/feed identity, dataset fingerprint, and explicit stale state. They are safe to delete at any time.
 
 ## 7. Canonical contracts
 
-### 7.1 Instrument identity
+### 7.1 Canonical instrument
+
+A canonical instrument identifies the traded asset at a venue and is independent of the API that supplies data.
 
 ```text
 instrument_id
 asset_class
 instrument_type
 venue
-provider
-provider_symbol
+venue_symbol
 display_symbol
 base_currency
 quote_currency
@@ -309,18 +314,60 @@ minimum_tick
 status
 ```
 
-Examples of distinct instruments:
+Examples:
 
 ```text
-crypto:BINANCE:spot:BTCUSDT
-crypto:BINANCE:perpetual:BTCUSDT
-crypto:HYPERLIQUID:perpetual:BTC
-stock:NASDAQ:equity:AAPL
+crypto:BINANCE:spot:BTC-USDT
+crypto:HYPERLIQUID:perpetual:BTC-USD
+equity:NASDAQ:AAPL
 ```
 
-Aliases may resolve to canonical instruments, but aliases are never stored as authority.
+Aliases may resolve to canonical instruments, but aliases and provider symbols are never stored as canonical authority.
 
-### 7.2 Bar contract
+### 7.2 Provider/feed binding
+
+A provider binding maps a canonical instrument to a specific market-data source.
+
+```text
+binding_id
+instrument_id
+provider
+provider_symbol
+feed_type
+realtime_scope
+delay_seconds
+adjustment_capabilities
+supported_intervals
+usage_scope
+is_official_api
+```
+
+Examples:
+
+```text
+instrument_id: equity:NASDAQ:AAPL
+provider: yahoo
+provider_symbol: AAPL
+feed_type: historical_polling
+```
+
+```text
+instrument_id: equity:NASDAQ:AAPL
+provider: stooq
+provider_symbol: AAPL.US
+feed_type: historical_daily
+```
+
+```text
+instrument_id: crypto:BINANCE:spot:BTC-USDT
+provider: binance
+provider_symbol: BTCUSDT
+feed_type: websocket_and_rest
+```
+
+Provider switching and fallback change the binding and dataset provenance, not the canonical instrument.
+
+### 7.3 Bar contract
 
 ```text
 instrument_id
@@ -336,9 +383,13 @@ is_final
 adjustment_mode
 session
 provider
-source_revision
+provider_event_id
+provider_sequence
+ingestion_revision
 received_at
 ```
+
+`provider_event_id` and `provider_sequence` are optional because many feeds expose neither. `ingestion_revision` is Omnix-owned and records local correction/replacement ordering.
 
 Rules:
 
@@ -347,16 +398,18 @@ Rules:
 - Raw, split-adjusted, and dividend-adjusted prices are never mixed.
 - Partial streaming candles use `is_final: false`.
 - Backend calculations use `Decimal` or scaled integers where precision matters.
-- Cache keys include provider, canonical instrument, interval, adjustment mode, and session policy.
+- Cache keys include provider binding, canonical instrument, interval, adjustment mode, and session policy.
 - Bars are strictly ordered and contain no duplicate start times.
+- A corrected bar increments or replaces according to Omnix ingestion revision rules.
 
-### 7.3 Dataset provenance
+### 7.4 Dataset provenance
 
 Every historical response includes:
 
 ```text
-requested_provider
-resolved_provider
+instrument_id
+requested_binding
+resolved_binding
 fallback_reason
 dataset_fingerprint
 freshness_mode
@@ -369,7 +422,7 @@ history_complete
 
 Provider fallback replaces the complete response dataset. It does not splice bars from different providers.
 
-### 7.4 Provider policy
+### 7.5 Provider policy
 
 Each adapter declares:
 
@@ -398,7 +451,7 @@ licensed
 
 Yahoo-derived data is labeled in the UI as personal/local, unofficial, and availability-not-guaranteed.
 
-### 7.5 Drawing model
+### 7.6 Drawing model
 
 Drawings contain stable chart coordinates, never screen pixels:
 
@@ -416,9 +469,9 @@ created_at
 updated_at
 ```
 
-Drawings are instrument-scoped across intervals by default. `interval_visibility` is optional.
+Drawings are instrument-scoped across intervals and provider bindings by default. `interval_visibility` is optional.
 
-### 7.6 Indicator specification
+### 7.7 Indicator specification
 
 Every indicator definition includes:
 
@@ -480,13 +533,17 @@ The OpenAPI schema is the source for frontend API types. Hand-maintained duplica
 - No raw provider payloads in frontend contracts
 - No mutable JSON production authority
 - No live broker execution routes
+- Canonical instrument identity is independent of provider/feed identity
+- Watchlists, drawings, alerts, and paper state reference canonical instruments
+- Provider changes do not duplicate or detach instrument-owned state
 - Historical and streaming updates use the same canonical bar model
 - Partial and finalized bars are distinguishable
+- Provider sequencing fields are optional; Omnix ingestion revision is authoritative for local ordering
 - Reconnect cannot silently skip finalized bars
 - Identical chart subscriptions share one upstream subscription
 - Crosshair and visible-range synchronization are timestamp-based and loop-safe
 - Drawings use stable time/price coordinates
-- Drawings survive zoom, pan, resize, reload, and allowed interval changes
+- Drawings survive zoom, pan, resize, reload, timeframe changes, and provider changes
 - Pointer movement does not write to PostgreSQL on every frame
 - Unsupported functionality is not presented as working
 - Cached and fallback data are visibly identified
@@ -496,8 +553,6 @@ The OpenAPI schema is the source for frontend API types. Hand-maintained duplica
 - AI research remains read-only unless a later paper-simulation contract explicitly allows writes
 
 ## 10. Implementation phases
-
----
 
 ## Phase OTT-0 — ADR, source inventory, and charting feasibility spike
 
@@ -509,15 +564,17 @@ Document:
 - Lightweight Charts as renderer candidate rather than interaction framework
 - PostgreSQL authority
 - cache policy
-- canonical instrument/bar identity
+- canonical instrument versus provider-binding identity
 - no-live-execution boundary
 - prototype migration and attribution policy
+- spike success, failure, and cleanup policy
 
 Acceptance:
 
 - The ADR names the owner of every runtime concern.
 - No standalone app or MCP dependency is planned.
 - Production authority and disposable cache are explicitly separated.
+- The renderer decision is not considered final until spike evidence is recorded.
 
 ### OTT-0.2 — Prototype migration inventory
 
@@ -528,15 +585,7 @@ Classify prototype code as:
 - reference only
 - reject
 
-Review at minimum:
-
-- stock and crypto services
-- cache service
-- symbol/timeframe validators
-- React chart component
-- UI store
-- watchlist/workspace/drawing services
-- tests and fixtures
+Review at minimum stock and crypto services, cache service, symbol/timeframe validators, React chart component, UI store, watchlist/workspace/drawing services, tests, and fixtures.
 
 Acceptance:
 
@@ -566,11 +615,20 @@ Acceptance:
 - Different-interval crosshair synchronization behaves predictably.
 - No duplicate finalized bars appear after reconnect cycles.
 - No material listener, observer, or chart-instance leak is detected.
-- A written decision confirms the renderer and drawing approach are viable or selects an alternative.
+- Benchmark evidence is saved with environment and methodology.
+- A written ADR decision confirms the renderer and drawing approach are viable or selects an alternative.
 
-The spike is a go/no-go gate. Provider expansion and advanced UI work do not begin until it passes.
+### OTT-0.4 — Spike exit policy
 
----
+After the spike:
+
+- reusable adapter code may be retained only after the ADR explicitly accepts it;
+- disposable UI and benchmark scaffolding is deleted or moved under a clearly named experimental path;
+- benchmark evidence and the architecture decision are committed;
+- a failed spike blocks production `/trading` implementation and triggers renderer/interaction reassessment;
+- temporary shortcuts cannot silently become production contracts.
+
+The spike is a go/no-go gate. Provider expansion and production UI work do not begin until it passes.
 
 ## Phase OTT-1 — Omnix module shell, persistence, and canonical contracts
 
@@ -602,7 +660,7 @@ Acceptance:
 
 - Routes appear in the gateway OpenAPI document.
 - Generated TypeScript types are refreshed.
-- `npm run api:check` or equivalent drift validation passes.
+- API drift validation passes.
 - Trading provider/cache/stream status appears in diagnostics.
 
 ### OTT-1.3 — PostgreSQL repositories
@@ -619,40 +677,39 @@ Acceptance:
 
 ### OTT-1.4 — Canonical contracts and tests
 
-Define experimental but typed contracts for instruments, bars, provider policy, provenance, streams, layouts, link groups, drawings, and indicator instances.
+Define experimental but typed contracts for canonical instruments, provider bindings, bars, provider policy, provenance, streams, layouts, link groups, drawings, and indicator instances.
 
 Acceptance:
 
-- Spot and perpetual crypto instruments cannot collide.
+- Spot and perpetual instruments cannot collide.
+- One canonical instrument may have multiple provider bindings.
+- Switching bindings does not change watchlist or drawing identity.
 - Raw and adjusted equity bars cannot be mixed.
 - Partial/final bars are explicit.
+- Optional provider sequence fields and Omnix ingestion revision are distinct.
 - OpenAPI generation produces frontend types.
-- Contract fixtures cover stocks and crypto.
-
----
 
 ## Phase OTT-2 — Binance provider and market-data foundation
 
 ### OTT-2.1 — Binance historical adapter
 
-Migrate or rewrite the validated Binance candle logic.
+Migrate or rewrite validated Binance candle logic.
 
 Acceptance:
 
 - BTC, ETH, and SOL spot instruments resolve canonically.
+- REST and WebSocket bindings map to the same canonical instrument.
 - Pagination returns ordered, duplicate-free bars.
 - Responses contain provider policy and dataset provenance.
 - Cancellation, timeout, throttling, and bounded retry are covered.
 
 ### OTT-2.2 — Cache and request coalescing
 
-Implement bounded memory and disposable disk cache.
-
 Acceptance:
 
 - Concurrent identical requests share one upstream call.
 - Cached data is never labeled live.
-- Cache keys include provider, instrument, interval, adjustment, and session policy.
+- Cache keys include binding, instrument, interval, adjustment, and session policy.
 - Cache deletion does not remove user state.
 
 ### OTT-2.3 — Binance streaming
@@ -661,12 +718,10 @@ Implement shared subscriptions, partial/final bar updates, reconnect, and REST g
 
 Acceptance:
 
-- Two charts requesting the same stream create one upstream subscription.
+- Two charts requesting the same binding and stream create one upstream subscription.
 - Reconnect repairs every missing finalized bar.
-- Out-of-order and duplicate events do not corrupt the series.
+- Out-of-order, duplicate, and corrected events do not corrupt the series.
 - Subscription status is visible in diagnostics.
-
----
 
 ## Phase OTT-3 — Single historical and live chart
 
@@ -683,16 +738,14 @@ Acceptance:
 
 ### OTT-3.2 — Single-chart workflow
 
-Implement instrument search, interval selection, provider display, loading, empty, stale, cached, disconnected, and error states.
+Implement instrument search, interval selection, provider/feed display, loading, empty, stale, cached, disconnected, and error states.
 
 Acceptance:
 
-- Users can move between BTCUSDT, ETHUSDT, and SOLUSDT.
+- Users can move between canonical BTC-USDT, ETH-USDT, and SOL-USDT instruments.
 - Live and historical bars reconcile without duplicates.
 - A recoverable provider failure keeps the last valid chart visible.
-- Provider/source/freshness information is always readable.
-
----
+- Provider/feed/freshness information is always readable.
 
 ## Phase OTT-4 — Four-chart layout and synchronization
 
@@ -708,18 +761,13 @@ Acceptance:
 
 ### OTT-4.2 — Link groups
 
-Allow independent linking by:
-
-- instrument
-- interval
-- crosshair
-- visible range
+Allow independent linking by instrument, interval, crosshair, and visible range.
 
 Acceptance:
 
 - Linking one property does not force the others.
 - Synchronization is loop-safe.
-- A chart may join or leave a group without losing its local state.
+- A chart may join or leave a group without losing local state.
 
 ### OTT-4.3 — Crosshair and range mapping
 
@@ -729,8 +777,6 @@ Acceptance:
 - Different bar densities and missing timestamps do not throw.
 - Range synchronization works across compatible different intervals.
 
----
-
 ## Phase OTT-5 — Watchlists, workspaces, revisions, and recovery
 
 ### OTT-5.1 — Watchlists
@@ -738,21 +784,14 @@ Acceptance:
 Acceptance:
 
 - Create, rename, reorder, and delete watchlists.
-- Watchlist instruments use canonical IDs.
-- Quotes display provider and freshness state.
+- Watchlists reference canonical instruments, not provider symbols.
+- Quotes display provider binding and freshness state.
+- Switching a provider binding does not create a duplicate watchlist entry.
 - Revision conflicts are recoverable.
 
 ### OTT-5.2 — Saved workspaces
 
-Persist:
-
-- layout
-- chart instruments and intervals
-- link groups
-- chart types
-- panel visibility
-- indicators
-- drawings references
+Persist layout, chart instruments and bindings, intervals, link groups, chart types, panel visibility, indicators, and drawing references.
 
 Acceptance:
 
@@ -760,8 +799,6 @@ Acceptance:
 - Autosave is debounced.
 - Multiple tabs cannot silently overwrite each other.
 - IndexedDB preserves only unsaved draft recovery state.
-
----
 
 ## Phase OTT-6 — Beta indicators
 
@@ -777,28 +814,26 @@ Acceptance:
 
 Before alerts or backend research consumes these indicators, add a Python implementation passing the same fixtures.
 
----
-
 ## Phase OTT-7 — Beta drawing engine and qualification
 
 ### OTT-7.1 — Horizontal and trend lines
 
-Implement:
+Beta requires:
 
-- creation
-- selection
-- handles
+- create
+- select
 - drag and resize
-- style edit
-- lock/hide/delete
-- undo/redo
-- snap modes
+- delete
+- persist
+- undo and redo
+
+Advanced snapping, style management, locking, and hiding move to Technical Analysis MVP.
 
 Acceptance:
 
 - Pointer movement updates local draft state only.
 - Persistence occurs on pointer release or debounce.
-- Drawings survive reload, resize, zoom, pan, and timeframe changes.
+- Drawings survive reload, resize, zoom, pan, timeframe changes, and provider-binding changes.
 - Instrument-scoped visibility is the default.
 - Drawing revision conflicts are recoverable.
 
@@ -817,20 +852,21 @@ Required evidence:
 - visual regression coverage for selected drawings, handles, panes, and active-chart focus
 - synthetic tests for duplicates, corrections, out-of-order events, and partial candles
 - keyboard and screen-reader paths for core workflows
+- PostgreSQL revision-conflict coverage
 
-Passing OTT-7 produces **Charting Beta**. Alerts, scanners, replay, backtesting, paper simulation, and AI remain blocked until this gate passes.
-
----
+Passing OTT-7 produces **crypto-only Charting Beta**. Experimental stocks, alerts, scanners, replay, backtesting, paper simulation, and AI remain blocked until this gate passes.
 
 ## Phase OTT-8 — Experimental stocks and additional providers
 
-### OTT-8.1 — Yahoo-derived stock adapter
+### OTT-8.1 — Yahoo-derived equity adapter
 
 Add yfinance/direct Yahoo paths with explicit personal/local and unofficial labeling.
 
 Acceptance:
 
-- AAPL, SPY, and NVDA return session-correct bars.
+- AAPL, SPY, and NVDA resolve to provider-independent canonical equity instruments.
+- Yahoo symbols are provider bindings, not instrument IDs.
+- Session-correct bars are returned.
 - Adjustment mode is visible and cannot silently change.
 - Exchange timezone and calendar are retained.
 - Stock polling never claims consolidated real-time coverage.
@@ -841,8 +877,10 @@ Fallback may replace a complete eligible dataset.
 
 Acceptance:
 
-- Requested/resolved provider and fallback reason are visible.
+- Yahoo and Stooq bind to the same canonical instrument where appropriate.
+- Requested/resolved binding and fallback reason are visible.
 - Dataset fingerprint changes when source changes.
+- Drawings and watchlist ownership remain attached to the instrument.
 - Yahoo and Stooq bars are never silently spliced.
 
 ### OTT-8.3 — Additional crypto providers
@@ -853,9 +891,7 @@ Acceptance:
 
 - Canonical instruments prevent venue/type collisions.
 - Each provider declares policy, capability, history, and rate limits.
-- Provider-specific symbols do not reach the UI contract.
-
----
+- Provider-specific symbols do not reach the canonical instrument contract.
 
 ## Phase OTT-9 — Technical Analysis MVP
 
@@ -866,39 +902,31 @@ Add:
 - MACD, Bollinger Bands, ATR, and anchored VWAP
 - indicator presets
 - vertical line, ray, rectangle, Fibonacci retracement, text, and measurement
-- advanced snapping and drawing management
+- advanced snapping, style management, locking, hiding, and drawing management
 - snapshots and exports
 
 Acceptance:
 
 - Every feature has a real implementation and tests.
-- TypeScript/Python indicator parity exists before backend consumers use the formula.
+- TypeScript/Python indicator parity exists before backend consumers use a formula.
 - Advanced drawings pass the same coordinate-stability tests as Beta drawings.
 - Unsupported prototype chart styles remain hidden.
 
 Passing OTT-9 produces **Technical Analysis MVP**.
 
----
-
 ## Phase OTT-10 — Alerts
 
 Create dedicated PostgreSQL alert and evaluation tables.
 
-Support:
-
-- price crossing
-- percent change
-- indicator threshold/crossing
-- volume conditions
+Support price crossing, percent change, indicator threshold/crossing, and volume conditions.
 
 Acceptance:
 
+- Alerts reference canonical instruments and explicit provider/evaluation policy.
 - Alerts run server-side when the browser is closed.
 - Alert state is deduplicated and restart-safe.
 - Partial bars trigger only when policy explicitly allows them.
-- Notifications identify instrument, condition, provider, source time, and evaluation time.
-
----
+- Notifications identify instrument, condition, provider/feed, source time, and evaluation time.
 
 ## Phase OTT-11 — Scanner
 
@@ -910,8 +938,6 @@ Acceptance:
 - Progress and cancellation use Omnix jobs/events where appropriate.
 - Results show provider and freshness metadata.
 - Rate limits and scan universe sizes are bounded.
-
----
 
 ## Phase OTT-12 — Replay and deterministic backtesting
 
@@ -934,14 +960,13 @@ Acceptance:
 - Re-running the same strategy over the same dataset fingerprint produces the same result.
 - Trade log, equity curve, drawdown, win rate, and exposure are available.
 
----
-
 ## Phase OTT-13 — Paper simulation
 
 Create dedicated transactional tables for accounts, orders, fills, positions, balances, and ledger entries.
 
 Acceptance:
 
+- Paper positions reference canonical instruments, not data providers.
 - Paper state is separate from real brokerage concepts.
 - Orders validate quantity, side, type, and optional prices.
 - Fills and ledger updates are atomic.
@@ -949,30 +974,19 @@ Acceptance:
 - Reset/archive operations are explicit.
 - No route can submit a live broker order.
 
----
-
 ## Phase OTT-14 — Omnix market research
 
 Integrate optional read-only analysis through the existing Omnix provider/model registry.
 
-Model context may include:
-
-- instrument metadata
-- current interval
-- bounded recent bars
-- indicator values
-- user-selected drawings/levels
-- provider and freshness status
+Model context may include instrument metadata, current interval, bounded recent bars, indicator values, user-selected drawings/levels, and provider/freshness status.
 
 Acceptance:
 
 - No direct LM Studio-specific client is introduced.
 - Structured outputs are validated.
 - Prompt size is bounded.
-- Claims identify the source data and as-of time.
+- Claims identify source data and as-of time.
 - Invalid model output cannot create an alert, backtest, or paper order without explicit user action and contract validation.
-
----
 
 ## Phase OTT-15 — Final hardening and release certification
 
@@ -1015,21 +1029,21 @@ The program is release-ready when:
 
 ## 11. Recommended pull-request sequence
 
-1. ADR, migration inventory, and charting feasibility spike
+1. ADR, migration inventory, charting feasibility spike, benchmark evidence, and spike exit decision
 2. Trading module shell, focus mode, gateway registration, and diagnostics
-3. PostgreSQL repositories and canonical OpenAPI contracts
+3. PostgreSQL repositories and canonical instrument/provider-binding OpenAPI contracts
 4. Binance historical provider and cache/coalescing
 5. Single historical/live chart
 6. Binance shared streaming and exact gap recovery
 7. Four-chart layout and synchronization
 8. Watchlists, workspace revisions, and draft recovery
 9. SMA, EMA, RSI, and golden fixtures
-10. Horizontal/trend-line drawing engine
-11. Charting Beta qualification and release notes
-12. Experimental Yahoo stock adapter
+10. Beta horizontal/trend-line drawing engine
+11. Crypto-only Charting Beta qualification and release notes
+12. Experimental Yahoo equity adapter
 13. Stooq fallback and provider provenance
 14. Additional crypto providers
-15. Advanced indicators, panes, chart types, and drawings
+15. Advanced indicators, panes, chart types, and drawing management
 16. Technical Analysis MVP qualification
 17. Alerts
 18. Scanner
@@ -1044,13 +1058,14 @@ Each PR must be narrow, preserve existing Omnix gates, regenerate OpenAPI types 
 
 The program succeeds when Omnix provides a reliable local-first trading research workstation in which users can:
 
-- inspect stocks and crypto with explicit data provenance
+- inspect canonical crypto and equity instruments with explicit data provenance
+- switch provider bindings without duplicating watchlists or losing drawings
 - use one or four synchronized charts without instability
 - receive and recover live crypto updates without gaps or duplicates
 - save revisioned watchlists and workspaces
 - calculate trustworthy indicators
 - create and persist real chart drawings
-- add advanced analysis features without changing the underlying instrument/bar truth
+- add advanced analysis features without changing underlying instrument truth
 - run alerts, scans, replay, backtests, and paper simulations deterministically
 - optionally ask local models for bounded, read-only research
 
