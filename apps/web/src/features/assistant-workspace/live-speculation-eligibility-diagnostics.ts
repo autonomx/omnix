@@ -31,7 +31,9 @@ type EligibilityReason =
   | 'correction_shaped'
   | 'no_candidate_event'
   | 'eligible_candidate_not_started'
-  | 'speculation_started';
+  | 'speculation_active'
+  | 'speculation_cancelled_before_final'
+  | 'speculation_reused';
 
 type EligibilityClassification = {
   eligible: boolean;
@@ -48,6 +50,9 @@ type SegmentState = {
   candidateSeen: boolean;
   finalSeen: boolean;
   speculationStarted: boolean;
+  speculationActive: boolean;
+  speculationReused: boolean;
+  lastCancellationReason: string | null;
   latestClassification: EligibilityClassification | null;
   candidateProbability: number | null;
   candidateModelTimeMs: number | null;
@@ -131,15 +136,17 @@ export function initializeLiveSpeculationEligibilityDiagnostics(): () => void {
     if (!state) return;
     state.finalSeen = true;
     const finalClassification = classifySpeculationEligibility(detail.text ?? '');
-    const reason = finalReason(state);
     dispatchPerformance('llm_speculation_final_eligibility', {
       sessionId: state.sessionId,
       segmentId: state.segmentId,
       sourceSequence: state.sourceSequence,
-      reason,
+      reason: finalReason(state),
       candidateSeen: state.candidateSeen,
       partialSeen: state.partialSeen,
       speculationStarted: state.speculationStarted,
+      speculationActive: state.speculationActive,
+      speculationReused: state.speculationReused,
+      lastCancellationReason: state.lastCancellationReason,
       candidateReason: state.latestClassification?.reason ?? null,
       finalWordCount: finalClassification.wordCount,
       finalCharCount: finalClassification.charCount,
@@ -153,8 +160,8 @@ export function initializeLiveSpeculationEligibilityDiagnostics(): () => void {
     const key = segmentKey(detail);
     if (!key) return;
     const state = segments.get(key);
-    if (state && !state.speculationStarted) {
-      dispatchPerformance('llm_speculation_not_started', {
+    if (state && !state.speculationReused) {
+      const diagnostics = {
         sessionId: state.sessionId,
         segmentId: state.segmentId,
         sourceSequence: state.sourceSequence,
@@ -162,33 +169,48 @@ export function initializeLiveSpeculationEligibilityDiagnostics(): () => void {
         candidateSeen: state.candidateSeen,
         partialSeen: state.partialSeen,
         finalSeen: state.finalSeen,
+        speculationStarted: state.speculationStarted,
+        speculationActive: state.speculationActive,
+        lastCancellationReason: state.lastCancellationReason,
         candidateReason: state.latestClassification?.reason ?? null,
         wordCount: state.latestClassification?.wordCount ?? 0,
         charCount: state.latestClassification?.charCount ?? 0,
         endpointProbability: state.candidateProbability,
         modelTimeMs: state.candidateModelTimeMs,
-      });
+      };
+      dispatchPerformance('llm_speculation_not_reused', diagnostics);
+      if (!state.speculationStarted) {
+        dispatchPerformance('llm_speculation_not_started', diagnostics);
+      }
     }
     segments.delete(key);
   };
 
   const handlePerformance = (event: Event): void => {
     const detail = (event as CustomEvent<Record<string, unknown>>).detail ?? {};
-    if (detail.stage !== 'llm_speculation_started') return;
-    const segmentId = typeof detail.segmentId === 'string' ? detail.segmentId : null;
-    const sourceSequence = typeof detail.sourceSequence === 'number'
-      ? detail.sourceSequence
-      : null;
-    if (!segmentId || sourceSequence === null) return;
-    const key = `${segmentId}:${sourceSequence}`;
-    const state = segments.get(key) ?? createState({
-      chatSessionId: typeof detail.sessionId === 'string' ? detail.sessionId : undefined,
-      segmentId,
-      sourceSequence,
-    });
+    const stage = typeof detail.stage === 'string' ? detail.stage : '';
+    if (![
+      'llm_speculation_started',
+      'llm_speculation_cancelled',
+      'llm_speculation_reused',
+    ].includes(stage)) return;
+    const state = stateFromPerformanceDetail(detail);
     if (!state) return;
-    state.speculationStarted = true;
-    segments.set(key, state);
+    if (stage === 'llm_speculation_started') {
+      state.speculationStarted = true;
+      state.speculationActive = true;
+      state.speculationReused = false;
+      state.lastCancellationReason = null;
+    } else if (stage === 'llm_speculation_cancelled') {
+      state.speculationActive = false;
+      state.lastCancellationReason = typeof detail.reason === 'string'
+        ? detail.reason
+        : 'unspecified';
+    } else if (stage === 'llm_speculation_reused') {
+      state.speculationActive = false;
+      state.speculationReused = true;
+    }
+    segments.set(`${state.segmentId}:${state.sourceSequence}`, state);
   };
 
   window.addEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
@@ -220,11 +242,41 @@ function disabledClassification(
 }
 
 function finalReason(state: SegmentState): EligibilityReason {
-  if (state.speculationStarted) return 'speculation_started';
+  if (state.speculationReused) return 'speculation_reused';
+  if (state.speculationActive) return 'speculation_active';
+  if (state.speculationStarted && state.lastCancellationReason) {
+    return 'speculation_cancelled_before_final';
+  }
   if (!speculationEnabled()) return 'disabled';
   if (!state.candidateSeen) return 'no_candidate_event';
   if (state.latestClassification?.eligible) return 'eligible_candidate_not_started';
   return state.latestClassification?.reason ?? 'missing_partial';
+}
+
+function stateFromPerformanceDetail(
+  detail: Record<string, unknown>,
+): SegmentState | null {
+  const segmentId = typeof detail.segmentId === 'string' ? detail.segmentId : null;
+  if (!segmentId) return null;
+  const sourceSequence = typeof detail.sourceSequence === 'number'
+    ? detail.sourceSequence
+    : null;
+  if (sourceSequence !== null) {
+    const key = `${segmentId}:${sourceSequence}`;
+    const existing = segments.get(key);
+    if (existing) return existing;
+    const created = createState({
+      chatSessionId: typeof detail.sessionId === 'string' ? detail.sessionId : undefined,
+      segmentId,
+      sourceSequence,
+    });
+    if (created) segments.set(key, created);
+    return created;
+  }
+  for (const state of segments.values()) {
+    if (state.segmentId === segmentId) return state;
+  }
+  return null;
 }
 
 function stateFor(detail: SttDetail | undefined, create: boolean): SegmentState | null {
@@ -247,6 +299,9 @@ function createState(detail: SttDetail | undefined): SegmentState | null {
     candidateSeen: false,
     finalSeen: false,
     speculationStarted: false,
+    speculationActive: false,
+    speculationReused: false,
+    lastCancellationReason: null,
     latestClassification: null,
     candidateProbability: null,
     candidateModelTimeMs: null,
