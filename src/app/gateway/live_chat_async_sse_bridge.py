@@ -99,7 +99,7 @@ class _EagerAsyncSseBridge:
                         startup_ms=round((time.perf_counter() - self._started) * 1000.0, 3),
                         buffered_item_count=self._queue.qsize(),
                     )
-        except BaseException as exc:  # preserve route-level failure semantics
+        except Exception as exc:  # noqa: BLE001 - preserve arbitrary route failures
             failed = True
             self._enqueue(_BridgeItem("error", exc))
         finally:
@@ -108,8 +108,13 @@ class _EagerAsyncSseBridge:
                 if callable(close):
                     try:
                         close()
-                    except Exception:
-                        pass
+                    except Exception as exc:  # noqa: BLE001 - cleanup must not mask cancellation
+                        stream_log(
+                            "gateway-live-chat-async-sse",
+                            "runtime",
+                            "live_chat_async_sse_producer_close_failed",
+                            error_type=type(exc).__name__,
+                        )
             if not self._cancelled.is_set():
                 self._enqueue(_BridgeItem("done"))
             stream_log(
