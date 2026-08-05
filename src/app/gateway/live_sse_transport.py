@@ -10,6 +10,7 @@ from starlette.responses import StreamingResponse
 _HOOK_SENTINEL = "_omnix_live_sse_transport_installed"
 _DEFAULT_PREAMBLE_BYTES = 2_048
 _MAX_PREAMBLE_BYTES = 8_192
+_TRANSPORT_VERSION = "immediate-v1"
 _ORIGINAL_STREAMING_RESPONSE_INIT = StreamingResponse.__init__
 
 
@@ -53,6 +54,7 @@ def _event_stream_headers(headers: dict[str, str] | None) -> dict[str, str]:
         result["X-Accel-Buffering"] = "no"
     if not any(name.lower() == "connection" for name in result):
         result["Connection"] = "keep-alive"
+    result["X-Omnix-SSE-Transport"] = _TRANSPORT_VERSION
     return result
 
 
