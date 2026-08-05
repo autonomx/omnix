@@ -8,6 +8,7 @@ from app.gateway.lmstudio_loaded_model_resolution import (
     _resolve_lmstudio_model,
 )
 from app.providers import ChatMessage, LMStudioProvider, ProviderConfig
+from app.providers.base import ConnectionError as ProviderConnectionError
 
 
 class _Response:
@@ -25,6 +26,13 @@ class _CompletionResponse(_Response):
         self.content = json.dumps(payload).encode("utf-8")
 
 
+class _StreamResponse:
+    def iter_lines(self):
+        yield b'data: {"model":"qwen","choices":[{"delta":{"content":"Hello"}}]}'
+        yield b'data: {"model":"qwen","choices":[{"delta":{},"finish_reason":"stop"}]}'
+        yield b"data: [DONE]"
+
+
 def _provider(*, configured_model: str = "fallback/model") -> LMStudioProvider:
     return LMStudioProvider(
         ProviderConfig(
@@ -32,6 +40,26 @@ def _provider(*, configured_model: str = "fallback/model") -> LMStudioProvider:
             base_url="http://localhost:1234",
             model=configured_model,
         )
+    )
+
+
+def _loaded_qwen_response() -> _Response:
+    return _Response(
+        {
+            "models": [
+                {
+                    "type": "llm",
+                    "key": "qwen3.5-0.8b",
+                    "display_name": "Qwen 3.5 0.8B",
+                    "loaded_instances": [
+                        {
+                            "id": "qwen3.5-0.8b",
+                            "config": {"context_length": 262144},
+                        }
+                    ],
+                }
+            ]
+        }
     )
 
 
@@ -144,6 +172,86 @@ def test_loaded_model_key_is_sent_to_chat_endpoint(monkeypatch) -> None:
     assert response.model == "qwen3.5-0.8b"
     assert len(chat_payloads) == 1
     assert chat_payloads[0]["model"] == "qwen/qwen3.5-0.8b"
+
+
+def test_native_metrics_rejection_retries_openai_nonstream_transport(monkeypatch) -> None:
+    provider = _provider(configured_model="stale/fallback")
+    _clear_lmstudio_model_discovery_cache()
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def request(method: str, endpoint: str, **kwargs):
+        calls.append((endpoint, kwargs))
+        if endpoint == "/api/v1/models":
+            return _loaded_qwen_response()
+        if endpoint == "/api/v0/chat/completions":
+            raise ProviderConnectionError("HTTP error 400: legacy request rejected")
+        assert endpoint == "/v1/chat/completions"
+        return _CompletionResponse(
+            {
+                "model": "qwen3.5-0.8b",
+                "choices": [
+                    {
+                        "message": {"content": "Recovered"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 1,
+                    "total_tokens": 11,
+                },
+            }
+        )
+
+    monkeypatch.setattr(provider, "_make_request", request)
+
+    response = provider.chat_completion(
+        [ChatMessage(role="user", content="Hello")],
+        stream=False,
+        include_metrics=True,
+    )
+
+    assert response.content == "Recovered"
+    assert [endpoint for endpoint, _ in calls] == [
+        "/api/v1/models",
+        "/api/v0/chat/completions",
+        "/v1/chat/completions",
+    ]
+    assert calls[1][1]["json"]["model"] == "qwen3.5-0.8b"
+    assert calls[2][1]["json"]["model"] == "qwen3.5-0.8b"
+
+
+def test_native_metrics_rejection_retries_openai_stream_transport(monkeypatch) -> None:
+    provider = _provider(configured_model="stale/fallback")
+    _clear_lmstudio_model_discovery_cache()
+    calls: list[str] = []
+
+    def request(method: str, endpoint: str, **kwargs):
+        calls.append(endpoint)
+        if endpoint == "/api/v1/models":
+            return _loaded_qwen_response()
+        if endpoint == "/api/v0/chat/completions":
+            raise ProviderConnectionError("HTTP error 422: legacy payload rejected")
+        assert endpoint == "/v1/chat/completions"
+        return _StreamResponse()
+
+    monkeypatch.setattr(provider, "_make_request", request)
+
+    chunks = list(
+        provider.chat_completion(
+            [ChatMessage(role="user", content="Hello")],
+            stream=True,
+            include_metrics=True,
+        )
+    )
+
+    assert calls == [
+        "/api/v1/models",
+        "/api/v0/chat/completions",
+        "/v1/chat/completions",
+    ]
+    assert chunks[0].content == "Hello"
+    assert chunks[-1].finish_reason == "stop"
 
 
 def test_configured_model_is_used_only_when_no_llm_is_loaded(monkeypatch) -> None:
