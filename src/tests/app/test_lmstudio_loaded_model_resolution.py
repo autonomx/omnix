@@ -47,10 +47,12 @@ def test_explicit_request_model_wins_without_discovery(monkeypatch) -> None:
 
     assert selected == "session/model"
     assert diagnostics["source"] == "explicit_request"
+    assert diagnostics["selected_model_key"] == "session/model"
+    assert diagnostics["selected_instance_id"] is None
     assert diagnostics["loaded_model_count"] is None
 
 
-def test_single_loaded_llm_replaces_stale_configured_model(monkeypatch) -> None:
+def test_single_loaded_llm_uses_model_key_not_instance_id(monkeypatch) -> None:
     provider = _provider(configured_model="qwen/old")
     _clear_lmstudio_model_discovery_cache()
 
@@ -84,10 +86,64 @@ def test_single_loaded_llm_replaces_stale_configured_model(monkeypatch) -> None:
 
     selected, diagnostics = _resolve_lmstudio_model(provider, None)
 
-    assert selected == "gemma-current-instance"
-    assert diagnostics["source"] == "loaded_instance"
+    assert selected == "google/gemma-current"
+    assert diagnostics["source"] == "loaded_model_key"
+    assert diagnostics["selected_model_key"] == "google/gemma-current"
+    assert diagnostics["selected_instance_id"] == "gemma-current-instance"
+    assert diagnostics["selected_context_length"] == 8192
     assert diagnostics["loaded_model_count"] == 1
     assert diagnostics["configured_fallback"] == "qwen/old"
+
+
+def test_loaded_model_key_is_sent_to_chat_endpoint(monkeypatch) -> None:
+    provider = _provider(configured_model="stale/fallback")
+    _clear_lmstudio_model_discovery_cache()
+    chat_payloads: list[dict[str, Any]] = []
+
+    def request(method: str, endpoint: str, **kwargs):
+        if endpoint == "/api/v1/models":
+            return _Response(
+                {
+                    "models": [
+                        {
+                            "type": "llm",
+                            "key": "qwen/qwen3.5-0.8b",
+                            "display_name": "Qwen 3.5 0.8B",
+                            "loaded_instances": [
+                                {
+                                    "id": "qwen3.5-0.8b",
+                                    "config": {"context_length": 8192},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+        assert method == "post"
+        assert endpoint == "/v1/chat/completions"
+        chat_payloads.append(kwargs["json"])
+        return _CompletionResponse(
+            {
+                "model": "qwen3.5-0.8b",
+                "choices": [
+                    {
+                        "message": {"content": "Hello"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(provider, "_make_request", request)
+
+    response = provider.chat_completion(
+        [ChatMessage(role="user", content="Hello")],
+        stream=False,
+    )
+
+    assert response.model == "qwen3.5-0.8b"
+    assert len(chat_payloads) == 1
+    assert chat_payloads[0]["model"] == "qwen/qwen3.5-0.8b"
 
 
 def test_configured_model_is_used_only_when_no_llm_is_loaded(monkeypatch) -> None:
@@ -145,8 +201,9 @@ def test_multiple_loaded_models_prefer_configured_model_only_if_already_loaded(
 
     selected, diagnostics = _resolve_lmstudio_model(provider, None)
 
-    assert selected == "qwen-instance"
-    assert diagnostics["source"] == "loaded_instance_config_match"
+    assert selected == "qwen/selected"
+    assert diagnostics["source"] == "loaded_model_key_config_match"
+    assert diagnostics["selected_instance_id"] == "qwen-instance"
     assert diagnostics["loaded_model_count"] == 2
 
 
@@ -216,6 +273,7 @@ def test_v0_loaded_state_is_used_when_v1_is_unavailable(monkeypatch) -> None:
                         "id": "legacy-loaded-model",
                         "type": "llm",
                         "state": "loaded",
+                        "context_length": 4096,
                     },
                     {
                         "id": "downloaded-only-model",
@@ -231,7 +289,8 @@ def test_v0_loaded_state_is_used_when_v1_is_unavailable(monkeypatch) -> None:
     selected, diagnostics = _resolve_lmstudio_model(provider, None)
 
     assert selected == "legacy-loaded-model"
-    assert diagnostics["source"] == "loaded_instance"
+    assert diagnostics["source"] == "loaded_model_key"
+    assert diagnostics["selected_context_length"] == 4096
     assert diagnostics["discovery_endpoint"] == "/api/v0/models"
 
 
@@ -260,7 +319,7 @@ def test_short_discovery_cache_avoids_duplicate_model_queries(monkeypatch) -> No
     first, first_diagnostics = _resolve_lmstudio_model(provider, None)
     second, second_diagnostics = _resolve_lmstudio_model(provider, None)
 
-    assert first == second == "loaded-instance"
+    assert first == second == "loaded/model"
     assert calls == 1
     assert first_diagnostics["discovery_cache_hit"] is False
     assert second_diagnostics["discovery_cache_hit"] is True
