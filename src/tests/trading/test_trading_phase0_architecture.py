@@ -25,24 +25,26 @@ def test_phase0_decisions_and_evidence_contract_exist() -> None:
     assert "pending local benchmark execution" in benchmark
 
 
-def test_spike_is_isolated_from_production_routing() -> None:
+def test_experimental_spike_is_not_production_routed() -> None:
     assert EXPERIMENTAL.is_dir()
     modules = (ROOT / "apps/web/src/app/modules.ts").read_text(encoding="utf-8")
     router = (ROOT / "apps/web/src/app/router.tsx").read_text(encoding="utf-8")
     workspace = (ROOT / "apps/web/src/features/ModuleWorkspace.tsx").read_text(encoding="utf-8")
-    assert "'trading'" not in modules
+    assert "'trading'" in modules
+    assert "TradingWorkspace" in workspace
     assert "TradingChartSpike" not in router
     assert "TradingChartSpike" not in workspace
 
 
 def test_trading_sources_do_not_import_prototype_or_create_file_authority() -> None:
-    trading_root = ROOT / "apps/web/src/features/trading"
-    for path in trading_root.rglob("*"):
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        assert "tradingview_mcp" not in text
-        assert "resources/data/trading" not in text
+    roots = (ROOT / "apps/web/src/features/trading", ROOT / "src/app/trading")
+    for trading_root in roots:
+        for path in trading_root.rglob("*"):
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            assert "tradingview_mcp" not in text
+            assert "resources/data/trading" not in text
 
 
 def test_spike_exit_policy_is_explicit() -> None:
