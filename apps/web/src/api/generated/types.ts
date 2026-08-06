@@ -4815,6 +4815,8 @@ export interface components {
              */
             enabled: boolean;
             evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy"];
+            /** Expires At */
+            expires_at?: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Last Observed Price */
@@ -4851,6 +4853,8 @@ export interface components {
              */
             cooldown_seconds: number;
             evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy"];
+            /** Expires At */
+            expires_at?: string | null;
             /** Instrument Id */
             instrument_id: string;
             parameters?: components["schemas"]["TradingAlertParameters"];
@@ -5029,6 +5033,8 @@ export interface components {
              */
             enabled: boolean;
             evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy"];
+            /** Expires At */
+            expires_at?: string | null;
             /** Instrument Id */
             instrument_id: string;
             parameters?: components["schemas"]["TradingAlertParameters"];

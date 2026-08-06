@@ -7008,6 +7008,18 @@
           "evaluation_policy": {
             "$ref": "#/components/schemas/TradingAlertEvaluationPolicy"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "instrument_id": {
             "maxLength": 200,
             "minLength": 3,
@@ -7132,6 +7144,18 @@
           },
           "evaluation_policy": {
             "$ref": "#/components/schemas/TradingAlertEvaluationPolicy"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
           },
           "instrument_id": {
             "maxLength": 200,
@@ -7576,6 +7600,18 @@
           },
           "evaluation_policy": {
             "$ref": "#/components/schemas/TradingAlertEvaluationPolicy"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
           },
           "instrument_id": {
             "maxLength": 200,
