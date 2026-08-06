@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { subscribeTradingStream, tradingApi } from './tradingApi';
+import { tradingApi } from './tradingApi';
 import { TradingChartAdapter, type TradingChartType } from './chart/chartAdapter';
+import type { TradingChartSynchronization } from './chart/chartSynchronization';
+import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingStreamHub';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 
 function normalizeStreamBar(message: Extract<TradingStreamMessage, { type: 'bar' }>): MarketBar {
@@ -27,18 +29,26 @@ function normalizeStreamBar(message: Extract<TradingStreamMessage, { type: 'bar'
 }
 
 export function TradingChartPanel({
+  chartId,
   instrumentId,
   interval,
   chartType,
+  active,
+  onActivate,
+  synchronization,
 }: {
+  chartId: string;
   instrumentId: string;
   interval: string;
   chartType: TradingChartType;
+  active: boolean;
+  onActivate: () => void;
+  synchronization: TradingChartSynchronization;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<TradingChartAdapter | null>(null);
   const barsRef = useRef<MarketBar[]>([]);
-  const [streamStatus, setStreamStatus] = useState<'connecting' | 'live' | 'closed' | 'error'>('connecting');
+  const [streamStatus, setStreamStatus] = useState<TradingStreamStatus>('connecting');
   const [streamError, setStreamError] = useState<string | null>(null);
   const chartQuery = useQuery({
     queryKey: ['trading', 'bars', instrumentId, interval],
@@ -51,11 +61,13 @@ export function TradingChartPanel({
     if (!hostRef.current) return;
     const adapter = new TradingChartAdapter(hostRef.current, chartType);
     adapterRef.current = adapter;
+    const unregister = synchronization.register(chartId, adapter);
     return () => {
+      unregister();
       adapter.destroy();
       adapterRef.current = null;
     };
-  }, []);
+  }, [chartId, synchronization]);
 
   useEffect(() => {
     const bars = chartQuery.data?.bars ?? [];
@@ -70,7 +82,8 @@ export function TradingChartPanel({
   useEffect(() => {
     if (!instrumentId) return;
     setStreamError(null);
-    const unsubscribe = subscribeTradingStream(
+    return tradingStreamHub.subscribe(
+      chartId,
       instrumentId,
       interval,
       (message) => {
@@ -90,12 +103,17 @@ export function TradingChartPanel({
         if (status === 'closed' || status === 'error') void chartQuery.refetch();
       },
     );
-    return unsubscribe;
-  }, [instrumentId, interval]);
+  }, [chartId, instrumentId, interval]);
 
   const provenance = chartQuery.data?.provenance;
   return (
-    <article className="trading-chart-panel" data-stream-status={streamStatus}>
+    <article
+      className={`trading-chart-panel${active ? ' active' : ''}`}
+      data-chart-id={chartId}
+      data-stream-status={streamStatus}
+      onPointerDown={onActivate}
+      aria-label={`${chartId}${active ? ', active chart' : ''}`}
+    >
       <header>
         <div>
           <strong>{chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong>
