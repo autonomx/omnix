@@ -23,8 +23,10 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const tradingPaperApi = {
   accounts: async () => {
-    const payload = await requestJson<{ accounts: PaperAccount[] }>('/api/trading/paper/accounts');
-    return payload.accounts;
+    const payload = await requestJson<unknown>('/api/trading/paper/accounts');
+    if (!payload || typeof payload !== 'object') return [];
+    const accounts = (payload as Record<string, unknown>).accounts;
+    return Array.isArray(accounts) ? accounts as PaperAccount[] : [];
   },
   createAccount: (input: PaperAccountCreateInput) =>
     requestJson<PaperAccountSnapshot>('/api/trading/paper/accounts', {
