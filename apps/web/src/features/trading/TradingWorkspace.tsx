@@ -5,6 +5,9 @@ import { TradingAlertsPanel } from './TradingAlertsPanel';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
 import { TradingIndicatorPresets } from './TradingIndicatorPresets';
+import { TradingPaperPanel } from './TradingPaperPanel';
+import { TradingReplayPanel } from './TradingReplayPanel';
+import { TradingScannerPanel } from './TradingScannerPanel';
 import { TradingWatchlist } from './TradingWatchlist';
 import { tradingApi } from './tradingApi';
 import type { TradingChartType } from './chart/chartAdapter';
@@ -95,6 +98,28 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <TradingAlertsPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} />
         </aside>
       </div>
+
+      <section className="trading-research-drawer" aria-label="Trading research and simulation tools">
+        <details>
+          <summary>Scanner</summary>
+          <TradingScannerPanel instruments={instruments.data ?? []} />
+        </details>
+        <details>
+          <summary>Replay and backtests</summary>
+          <TradingReplayPanel
+            instrumentId={activeChart.instrumentId}
+            bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+            interval={activeChart.interval}
+          />
+        </details>
+        <details>
+          <summary>Paper simulation</summary>
+          <TradingPaperPanel
+            instrumentId={activeChart.instrumentId}
+            bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+          />
+        </details>
+      </section>
     </main>
   );
 }
