@@ -1,16 +1,19 @@
-import type {
-  TradingChartAdapter,
-  TradingCrosshairPoint,
-  TradingVisibleRange,
-} from './chartAdapter';
+import type { TradingCrosshairPoint, TradingVisibleRange } from './chartAdapter';
 
 export type ChartSynchronizationLinks = {
   crosshair: boolean;
   visibleRange: boolean;
 };
 
+export type SynchronizableChart = {
+  onCrosshair: (listener: (point: TradingCrosshairPoint | null) => void) => () => void;
+  setCrosshair: (point: TradingCrosshairPoint | null) => void;
+  onVisibleRange: (listener: (range: TradingVisibleRange | null) => void) => () => void;
+  setVisibleRange: (range: TradingVisibleRange) => void;
+};
+
 type RegisteredChart = {
-  adapter: TradingChartAdapter;
+  adapter: SynchronizableChart;
   disposeCrosshair: () => void;
   disposeRange: () => void;
 };
@@ -25,7 +28,7 @@ export class TradingChartSynchronization {
     this.links = { ...links };
   }
 
-  register(chartId: string, adapter: TradingChartAdapter): () => void {
+  register(chartId: string, adapter: SynchronizableChart): () => void {
     this.unregister(chartId);
     const disposeCrosshair = adapter.onCrosshair((point) => this.publishCrosshair(chartId, point));
     const disposeRange = adapter.onVisibleRange((range) => this.publishVisibleRange(chartId, range));
