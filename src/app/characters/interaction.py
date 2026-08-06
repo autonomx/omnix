@@ -156,11 +156,10 @@ def resolve_interaction_context(
     # generic assistant wording into competing model instructions. Character
     # Mode has one authoritative persona prompt: the saved personality prompt.
     _validated_identity_policy(character)
-    shared_categories: list[str] = []
     if selection.shared_memory_access != "none":
         if not character_shared_memory_enabled():
             raise CharacterInteractionError("shared character memory access is disabled")
-        shared_categories = _validate_shared_memory_policy(character)
+        _validate_shared_memory_policy(character)
     if (selection.read_memory or selection.write_memory) and not character_memory_enabled():
         raise CharacterInteractionError("character memory is disabled")
 
