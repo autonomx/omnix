@@ -22,11 +22,17 @@ export function TradingSidePanel({
   activeInstrumentId,
   indicators,
   layout,
+  chartCount,
+  minimumChartCount,
+  maximumChartCount,
   links,
   snapMode,
   onSelectInstrument,
   onSetIndicators,
   onSetLayout,
+  onSetChartCount,
+  onAddChart,
+  onRemoveChart,
   onSetLink,
   onSetSnapMode,
   onOpenResearch,
@@ -35,11 +41,17 @@ export function TradingSidePanel({
   activeInstrumentId: string;
   indicators: CoreIndicatorInstance[];
   layout: TradingLayout;
+  chartCount: number;
+  minimumChartCount: number;
+  maximumChartCount: number;
   links: TradingLinkState;
   snapMode: DrawingSnapMode;
   onSelectInstrument: (instrumentId: string) => void;
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
   onSetLayout: (layout: TradingLayout) => void;
+  onSetChartCount: (count: number) => void;
+  onAddChart: () => void;
+  onRemoveChart: () => void;
   onSetLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   onSetSnapMode: (mode: DrawingSnapMode) => void;
   onOpenResearch: () => void;
@@ -83,9 +95,15 @@ export function TradingSidePanel({
         {activeTab === 'layout' ? (
           <TradingLayoutPanel
             layout={layout}
+            chartCount={chartCount}
+            minimumChartCount={minimumChartCount}
+            maximumChartCount={maximumChartCount}
             links={links}
             snapMode={snapMode}
             onSetLayout={onSetLayout}
+            onSetChartCount={onSetChartCount}
+            onAddChart={onAddChart}
+            onRemoveChart={onRemoveChart}
             onSetLink={onSetLink}
             onSetSnapMode={onSetSnapMode}
           />
