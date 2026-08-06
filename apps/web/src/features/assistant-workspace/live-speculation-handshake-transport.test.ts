@@ -4,13 +4,55 @@ import { bridgeLiveSpeculationHandshakeRequest } from './live-speculation-handsh
 
 
 describe('live speculation handshake transport', () => {
-  it('returns the generation id before the provider stream resolves', async () => {
+  it('uses the one-request inline stream when the gateway supports it', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url.endsWith('/start-stream')) {
+        return new Response(
+          'data: {"type":"speculation_started","generation_id":"spec-inline"}\n\n'
+          + 'data: {"type":"text_chunk","text":"Hello"}\n\n'
+          + 'data: {"type":"done","generation_id":"spec-inline"}\n\n',
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'X-Omnix-Speculation-Transport': 'inline-v1',
+            },
+          },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as unknown as typeof fetch;
+
+    const bridged = await bridgeLiveSpeculationHandshakeRequest(
+      fetchImpl,
+      '/api/live/speculation/sessions/session-test/stream',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: 'Tell me a story',
+          segment_id: 'segment-test',
+          source_sequence: 4,
+        }),
+      },
+    );
+
+    expect(bridged).not.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(await bridged!.text()).toContain('"generation_id":"spec-inline"');
+  });
+
+  it('falls back to the two-request handshake on an older gateway', async () => {
     let resolveGeneration: ((response: Response) => void) | undefined;
     const generationResponse = new Promise<Response>((resolve) => {
       resolveGeneration = resolve;
     });
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url.endsWith('/start-stream')) {
+        return new Response('not found', { status: 404 });
+      }
       if (url.endsWith('/start')) {
         return new Response(JSON.stringify({
           ok: true,
@@ -43,7 +85,7 @@ describe('live speculation handshake transport', () => {
     );
 
     expect(bridged).not.toBeNull();
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     const reader = bridged!.body!.getReader();
     const decoder = new TextDecoder();
     const first = await reader.read();
@@ -72,7 +114,7 @@ describe('live speculation handshake transport', () => {
     expect(remainder).toContain('"text":"Hello"');
   });
 
-  it('cancels eager server generation when the source request is aborted', async () => {
+  it('cancels eager fallback generation when the source request is aborted', async () => {
     const sourceAbort = new AbortController();
     let generationController: ReadableStreamDefaultController<Uint8Array> | undefined;
     const neverEndingStream = new ReadableStream<Uint8Array>({
@@ -82,6 +124,9 @@ describe('live speculation handshake transport', () => {
     });
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url.endsWith('/start-stream')) {
+        return new Response('not found', { status: 404 });
+      }
       if (url.endsWith('/start')) {
         return new Response(JSON.stringify({
           ok: true,
