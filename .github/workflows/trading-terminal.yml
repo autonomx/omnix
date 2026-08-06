@@ -10,6 +10,8 @@ on:
       - "apps/web/src/app/router.tsx"
       - "apps/web/src/design/primitives.tsx"
       - "apps/web/src/features/ModuleWorkspace.tsx"
+      - "apps/web/tests/e2e/trading-terminal.spec.ts"
+      - "apps/web/playwright.config.ts"
       - "apps/web/package.json"
       - "apps/web/tsconfig.trading.json"
       - "package-lock.json"
@@ -32,7 +34,7 @@ permissions:
 jobs:
   trading-terminal:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       PYTHONPATH: src
       OMNIX_PERSISTENCE_MODE: legacy_test
@@ -60,6 +62,10 @@ jobs:
         run: npm --workspace @omnix/web run test:trading
       - name: Trading TypeScript typecheck
         run: npm --workspace @omnix/web run typecheck:trading
+      - name: Install Trading browser
+        run: npx playwright install --with-deps chromium
+      - name: Trading Playwright smoke
+        run: npm --workspace @omnix/web run test:e2e:trading
       - name: Generate shared gateway API contract
         run: npm --workspace @omnix/web run api:generate
       - name: Upload generated API contract
