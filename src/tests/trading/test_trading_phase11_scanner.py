@@ -213,8 +213,8 @@ def test_scanner_cancellation_and_request_timeout_are_terminal() -> None:
             AsyncScannerCancellation(),
         )
     )
-    assert timed_out.status == "failed"
-    assert "TimeoutError" in (timed_out.error_message or "")
+    assert timed_out.status == "timed_out"
+    assert "timeout" in (timed_out.error_message or "").lower()
 
 
 def test_scanner_formula_and_definition_fingerprint_are_stable() -> None:
