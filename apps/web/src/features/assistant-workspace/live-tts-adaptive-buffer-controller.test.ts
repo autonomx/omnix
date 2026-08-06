@@ -47,8 +47,28 @@ describe('adaptive live TTS buffering', () => {
     expect(policy.snapshot().startBufferMs).toBe(160);
 
     expect(policy.observeWorkletEvent('drained')).toMatchObject({
-      startBufferMs: 140,
+      startBufferMs: 130,
       rebufferMs: 490,
+      stableTurns: 0,
+    });
+  });
+
+  it('uses persistent-session idle events as stable turn completions', () => {
+    const policy = new AdaptiveTtsBufferPolicy({
+      startBufferMs: 230,
+      rebufferMs: 630,
+    });
+
+    policy.observeWorkletEvent('idle');
+    policy.observeWorkletEvent('idle');
+    expect(policy.snapshot()).toMatchObject({
+      startBufferMs: 230,
+      rebufferMs: 630,
+      stableTurns: 2,
+    });
+    expect(policy.observeWorkletEvent('idle')).toMatchObject({
+      startBufferMs: 200,
+      rebufferMs: 600,
       stableTurns: 0,
     });
   });
