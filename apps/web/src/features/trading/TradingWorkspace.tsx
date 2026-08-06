@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingComplianceFooter } from './TradingComplianceFooter';
@@ -15,9 +15,16 @@ import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
-import { useTradingStore, type TradingLayout } from './tradingStore';
+import {
+  MAX_TRADING_CHARTS,
+  MIN_TRADING_CHARTS,
+  useTradingStore,
+  type TradingLayout,
+} from './tradingStore';
+import type { ProviderBinding } from './tradingTypes';
 import './TradingWorkspace.css';
 import './TradingAdvanced.css';
+import './TradingFlexibleLayout.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'cursor', label: 'Cursor', glyph: '↖' },
@@ -31,14 +38,25 @@ const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'measurement', label: 'Measure', glyph: '↔' },
 ];
 
-const layoutOptions: Array<{ id: TradingLayout; label: string; glyph: string }> = [
-  { id: 'one', label: 'Single chart', glyph: '□' },
-  { id: 'two-horizontal', label: 'Two columns', glyph: '▥' },
-  { id: 'two-vertical', label: 'Two rows', glyph: '▤' },
-  { id: 'four', label: 'Four charts', glyph: '▦' },
+const gridOptions: Array<{ id: TradingLayout; label: string }> = [
+  { id: 'auto', label: 'Auto grid' },
+  { id: 'columns-1', label: '1 column' },
+  { id: 'columns-2', label: '2 columns' },
+  { id: 'columns-3', label: '3 columns' },
+  { id: 'columns-4', label: '4 columns' },
 ];
 
+const quickIntervalPriority = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1d', '1w'];
+
 type ToolPanel = 'scanner' | 'replay' | 'paper' | 'research';
+
+function preferredInterval(binding: ProviderBinding, current: string): string {
+  if (binding.supported_intervals.includes(current)) return current;
+  for (const candidate of ['1h', '2h', '4h', '1d', '15m', '5m', '1m', '1w']) {
+    if (binding.supported_intervals.includes(candidate)) return candidate;
+  }
+  return binding.supported_intervals[0] ?? current;
+}
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [focusMode, setFocusMode] = useState(false);
@@ -54,6 +72,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
   const links = useTradingStore((state) => state.links);
   const setLayout = useTradingStore((state) => state.setLayout);
+  const setChartCount = useTradingStore((state) => state.setChartCount);
+  const addChart = useTradingStore((state) => state.addChart);
+  const removeChart = useTradingStore((state) => state.removeChart);
   const setActiveChart = useTradingStore((state) => state.setActiveChart);
   const setDrawingTool = useTradingStore((state) => state.setDrawingTool);
   const setDrawingSnapMode = useTradingStore((state) => state.setDrawingSnapMode);
@@ -72,6 +93,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const selectedProvider = (providers.data ?? []).find(
     (provider) => provider.provider === selectedBinding?.provider,
   ) ?? null;
+  const supportedIntervals = selectedBinding?.supported_intervals ?? [];
+  const quickIntervals = quickIntervalPriority.filter((interval) => supportedIntervals.includes(interval));
+
+  useEffect(() => {
+    if (!selectedBinding || selectedBinding.supported_intervals.includes(activeChart.interval)) return;
+    updateChart(activeChartId, { interval: preferredInterval(selectedBinding, activeChart.interval) });
+  }, [activeChart.interval, activeChartId, selectedBinding?.binding_id, updateChart]);
 
   const exportWorkspace = () => downloadTradingWorkspaceExport(buildTradingWorkspaceExport({
     layout,
@@ -94,6 +122,15 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setSymbolQuery(match.display_symbol);
   };
 
+  const selectBinding = (bindingId: string) => {
+    const binding = availableBindings.find((candidate) => candidate.binding_id === bindingId);
+    if (!binding) return;
+    updateChart(activeChartId, {
+      bindingId: binding.binding_id,
+      interval: preferredInterval(binding, activeChart.interval),
+    });
+  };
+
   const toggleToolPanel = (panel: ToolPanel) => {
     setToolPanel((current) => current === panel ? null : panel);
   };
@@ -111,21 +148,17 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-label="Create workspace">+</button>
         </div>
 
-        <div className="trading-layout-switcher" role="group" aria-label="Chart layout">
-          {layoutOptions.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={layout === item.id ? 'active' : undefined}
-              aria-pressed={layout === item.id}
-              aria-label={item.label}
-              title={item.label}
-              onClick={() => setLayout(item.id)}
-            >
-              {item.glyph}
-            </button>
-          ))}
-          <span>{layout === 'four' ? '4 Charts' : layout === 'one' ? '1 Chart' : '2 Charts'}</span>
+        <div className="trading-layout-switcher" role="group" aria-label="Chart count and grid">
+          <button type="button" onClick={() => removeChart()} disabled={charts.length <= MIN_TRADING_CHARTS} aria-label="Remove active chart">−</button>
+          <select aria-label="Number of charts" value={charts.length} onChange={(event) => setChartCount(Number(event.target.value))}>
+            {Array.from({ length: MAX_TRADING_CHARTS }, (_, index) => index + 1).map((count) => (
+              <option key={count} value={count}>{count} chart{count === 1 ? '' : 's'}</option>
+            ))}
+          </select>
+          <button type="button" onClick={addChart} disabled={charts.length >= MAX_TRADING_CHARTS} aria-label="Add chart">+</button>
+          <select aria-label="Grid columns" value={layout} onChange={(event) => setLayout(event.target.value as TradingLayout)}>
+            {gridOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
         </div>
 
         <div className="trading-header-actions">
@@ -155,11 +188,11 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <button type="button" className="trading-favorite" aria-label="Favorite active instrument">☆</button>
 
         <select aria-label="Active Trading chart" value={activeChartId} onChange={(event) => setActiveChart(event.target.value)}>
-          {charts.map((chart) => <option key={chart.chartId} value={chart.chartId}>{chart.chartId.replace('-', ' ')}</option>)}
+          {charts.map((chart, index) => <option key={chart.chartId} value={chart.chartId}>Chart {index + 1}</option>)}
         </select>
 
         <div className="trading-timeframe-buttons" role="group" aria-label="Trading timeframe">
-          {['1m', '5m', '15m', '1h', '4h', '1d', '1w'].map((item) => (
+          {quickIntervals.map((item) => (
             <button
               key={item}
               type="button"
@@ -170,6 +203,14 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               {item.toUpperCase()}
             </button>
           ))}
+          <select
+            aria-label="All supported Trading intervals"
+            value={activeChart.interval}
+            disabled={supportedIntervals.length === 0}
+            onChange={(event) => updateChart(activeChartId, { interval: event.target.value })}
+          >
+            {supportedIntervals.map((interval) => <option key={interval} value={interval}>{interval.toUpperCase()}</option>)}
+          </select>
         </div>
 
         <select aria-label="Trading chart type" value={activeChart.chartType} onChange={(event) => updateChart(activeChartId, { chartType: event.target.value as TradingChartType })}>
@@ -178,7 +219,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
         <TradingIndicatorManager indicators={activeChart.indicators} onToggle={(id) => toggleIndicator(activeChartId, id)} />
 
-        <select aria-label="Trading data feed" value={selectedBinding?.binding_id ?? ''} onChange={(event) => updateChart(activeChartId, { bindingId: event.target.value || null })}>
+        <select aria-label="Trading data feed" value={selectedBinding?.binding_id ?? ''} onChange={(event) => selectBinding(event.target.value)}>
           {availableBindings.map((binding) => <option key={binding.binding_id} value={binding.binding_id}>{binding.provider}{binding.is_official_api ? '' : ' · unofficial'}</option>)}
         </select>
 
@@ -216,11 +257,17 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           activeInstrumentId={activeChart.instrumentId}
           indicators={activeChart.indicators}
           layout={layout}
+          chartCount={charts.length}
+          minimumChartCount={MIN_TRADING_CHARTS}
+          maximumChartCount={MAX_TRADING_CHARTS}
           links={links}
           snapMode={drawingSnapMode}
           onSelectInstrument={(instrumentId) => updateChart(activeChartId, { instrumentId, bindingId: null })}
           onSetIndicators={(next) => setIndicators(activeChartId, next)}
           onSetLayout={setLayout}
+          onSetChartCount={setChartCount}
+          onAddChart={addChart}
+          onRemoveChart={() => removeChart()}
           onSetLink={setLink}
           onSetSnapMode={(mode: DrawingSnapMode) => setDrawingSnapMode(mode)}
           onOpenResearch={() => setToolPanel('research')}
