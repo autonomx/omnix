@@ -63,6 +63,9 @@ from .rpg_world_routes import install_rpg_world_route_hook
 from .tts_live_call_pcm_diagnostics import (
     install_tts_live_call_pcm_diagnostics_hook,
 )
+from .tts_live_call_startup_frame_policy import (
+    install_tts_live_call_startup_frame_policy,
+)
 from .tts_live_call_websocket import install_tts_live_call_websocket_hook
 from .tts_pcm_websocket import install_tts_pcm_websocket_hook
 from .tts_runtime_routes import install_tts_runtime_route_hook
@@ -142,6 +145,7 @@ install_live_voice_runtime_offload_hook()
 install_tts_runtime_route_hook()
 install_tts_pcm_websocket_hook()
 install_tts_live_call_pcm_diagnostics_hook()
+install_tts_live_call_startup_frame_policy()
 install_tts_live_call_websocket_hook()
 install_voice_job_summary_hook()
 install_voice_library_route_hook()
