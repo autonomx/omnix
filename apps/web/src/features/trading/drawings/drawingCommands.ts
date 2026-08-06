@@ -1,6 +1,7 @@
 export type DrawingPoint = { time: string; price: number };
 export type DrawingTool =
   | 'cursor'
+  | 'alert'
   | 'horizontal-line'
   | 'trend-line'
   | 'vertical-line'
@@ -14,7 +15,7 @@ export type DrawingStyle = { color: string; lineWidth: number; lineStyle: 'solid
 export type TradingDrawing = {
   drawingId: string;
   instrumentId: string;
-  toolType: Exclude<DrawingTool, 'cursor'>;
+  toolType: Exclude<DrawingTool, 'cursor' | 'alert'>;
   points: DrawingPoint[];
   selected: boolean;
   revision: number;
