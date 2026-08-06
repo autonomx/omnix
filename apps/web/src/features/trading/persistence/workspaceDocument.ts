@@ -40,23 +40,30 @@ export function serializeTradingWorkspace(input: {
 function indicator(value: unknown): value is CoreIndicatorInstance {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<CoreIndicatorInstance>;
-  return (item.id === 'sma' || item.id === 'ema' || item.id === 'rsi')
-    && typeof item.period === 'number'
-    && Number.isInteger(item.period)
-    && item.period > 0
-    && typeof item.enabled === 'boolean';
+  const ids = ['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'vwap'];
+  if (!item.id || !ids.includes(item.id)) return false;
+  if (typeof item.period !== 'number' || !Number.isInteger(item.period) || item.period < 1) return false;
+  if (typeof item.enabled !== 'boolean') return false;
+  for (const optionalPeriod of [item.fastPeriod, item.slowPeriod, item.signalPeriod]) {
+    if (optionalPeriod !== undefined && (!Number.isInteger(optionalPeriod) || optionalPeriod < 1)) return false;
+  }
+  if (item.standardDeviations !== undefined && (!Number.isFinite(item.standardDeviations) || item.standardDeviations <= 0)) return false;
+  if (item.anchorTime !== undefined && item.anchorTime !== null && typeof item.anchorTime !== 'string') return false;
+  return true;
 }
 
 export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload | null {
   if (!value || typeof value !== 'object') return null;
   const payload = value as Partial<TradingWorkspacePayload>;
-  if (payload.schemaVersion !== 1 || (payload.layout !== 'one' && payload.layout !== 'four')) return null;
+  const layouts: TradingLayout[] = ['one', 'two-horizontal', 'two-vertical', 'four'];
+  if (payload.schemaVersion !== 1 || !payload.layout || !layouts.includes(payload.layout)) return null;
   if (!Array.isArray(payload.charts) || payload.charts.length < 1) return null;
   if (!payload.links || typeof payload.links !== 'object') return null;
   const charts: TradingChartState[] = [];
+  const chartTypes = ['candlestick', 'bar', 'line', 'area', 'baseline'];
   for (const raw of payload.charts) {
     if (!raw || typeof raw.chartId !== 'string' || typeof raw.instrumentId !== 'string' || typeof raw.interval !== 'string') return null;
-    if (raw.chartType !== 'candlestick' && raw.chartType !== 'line') return null;
+    if (!chartTypes.includes(raw.chartType)) return null;
     const bindingId = raw.bindingId === undefined || raw.bindingId === null
       ? null
       : typeof raw.bindingId === 'string'
@@ -65,7 +72,7 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
     if (bindingId === undefined) return null;
     const indicators = Array.isArray(raw.indicators) ? raw.indicators.filter(indicator) : [];
     if (Array.isArray(raw.indicators) && indicators.length !== raw.indicators.length) return null;
-    charts.push({ ...raw, bindingId, indicators });
+    charts.push({ ...raw, chartType: raw.chartType, bindingId, indicators } as TradingChartState);
   }
   const links = payload.links as Partial<TradingLinkState>;
   if (['instrument', 'interval', 'crosshair', 'visibleRange'].some((key) => typeof links[key as keyof TradingLinkState] !== 'boolean')) return null;
