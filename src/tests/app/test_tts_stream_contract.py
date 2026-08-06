@@ -4,8 +4,10 @@ import pytest
 
 from app.gateway.tts_stream_contract import (
     CHAT_STREAM_MAX_CODEC_CHUNK_STEPS,
+    STREAM_MAX_INITIAL_SILENCE_MS,
     TtsStreamRequest,
     audio_chunk_to_pcm16_bytes,
+    stream_pcm16_blocks,
 )
 
 
@@ -41,6 +43,52 @@ def test_non_chat_stream_preserves_requested_codec_chunk_steps() -> None:
     assert request.chunk_size == 8
     assert request.parity_mode is True
     assert request.max_new_tokens == 512
+
+
+def test_initial_silence_filter_falls_back_for_quiet_speech_within_bounded_audio() -> None:
+    sample_rate = 24_000
+    chunk_samples = 7_680
+    silence = struct.pack("<h", 0) * chunk_samples
+    quiet_speech = struct.pack("<h", 200) * chunk_samples
+
+    blocks = list(
+        stream_pcm16_blocks(
+            iter(
+                [
+                    (silence, sample_rate, {"chunk": 0}),
+                    (quiet_speech, sample_rate, {"chunk": 1}),
+                ]
+            ),
+            block_samples=2_400,
+        )
+    )
+
+    assert STREAM_MAX_INITIAL_SILENCE_MS == 400.0
+    assert blocks
+    first_samples = struct.unpack("<2400h", blocks[0][0])
+    assert any(sample != 0 for sample in first_samples)
+    assert blocks[0][2] == {"chunk": 1}
+
+
+def test_initial_silence_filter_never_discards_unbounded_provider_audio() -> None:
+    sample_rate = 24_000
+    chunk_samples = 7_680
+    silence = struct.pack("<h", 0) * chunk_samples
+
+    blocks = list(
+        stream_pcm16_blocks(
+            iter(
+                [
+                    (silence, sample_rate, {"chunk": 0}),
+                    (silence, sample_rate, {"chunk": 1}),
+                ]
+            ),
+            block_samples=2_400,
+        )
+    )
+
+    assert blocks
+    assert len(blocks[0][0]) == 4_800
 
 
 def test_torch_tensor_pcm_conversion_avoids_python_scalar_fallback() -> None:
