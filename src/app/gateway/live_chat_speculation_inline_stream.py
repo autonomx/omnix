@@ -7,12 +7,14 @@ fallback.
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.chat import ChatSessionStore, default_chat_store
@@ -22,6 +24,7 @@ from . import live_chat_speculation_handshake as handshake_runtime
 from .tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_inline_stream_registered"
+_CLIENT_GENERATION_ID = re.compile(r"^spec-client-[A-Za-z0-9_-]{8,80}$")
 
 
 def register_live_chat_speculation_inline_stream_routes(
@@ -42,6 +45,7 @@ def register_live_chat_speculation_inline_stream_routes(
     async def start_and_stream_live_speculation(
         session_id: str,
         request: speculation_runtime.LiveSpeculationRequest,
+        raw_request: Request,
     ) -> StreamingResponse:
         started = time.perf_counter()
         if not speculation_runtime.transcript_is_speculation_safe(request.content):
@@ -57,7 +61,9 @@ def register_live_chat_speculation_inline_stream_routes(
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
 
-        generation_id = f"spec-{uuid.uuid4().hex}"
+        generation_id = _requested_generation_id(await _request_payload(raw_request))
+        if generation_id is None:
+            generation_id = f"spec-{uuid.uuid4().hex}"
         pending = speculation_runtime._Speculation(
             generation_id=generation_id,
             session_id=session_id,
@@ -83,6 +89,14 @@ def register_live_chat_speculation_inline_stream_routes(
         with speculation_runtime._SPECULATION_LOCK:
             speculation_runtime._prune_speculations()
             handshake_runtime._prune_handshake_state_locked()
+            if (
+                generation_id in speculation_runtime._SPECULATIONS
+                or generation_id in handshake_runtime._HANDSHAKE_GENERATIONS
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="speculation_generation_id_conflict",
+                )
             speculation_runtime._SPECULATIONS[generation_id] = pending
             handshake_runtime._HANDSHAKE_GENERATIONS[generation_id] = generation
             generation.stream_started = True
@@ -94,6 +108,7 @@ def register_live_chat_speculation_inline_stream_routes(
             "runtime",
             "live_chat_speculation_handshake_ready",
             generation_id=generation_id,
+            client_allocated=generation_id.startswith("spec-client-"),
             cache_hit=cache_hit,
             session_load_ms=round(session_load_ms, 3),
             total_ms=round(allocation_ms, 3),
@@ -124,6 +139,7 @@ def register_live_chat_speculation_inline_stream_routes(
                     "provider_id": pending.provider_id,
                     "model_id": pending.model_id,
                     "inline_stream": True,
+                    "client_allocated": generation_id.startswith("spec-client-"),
                 }
             )
             worker.start()
@@ -137,7 +153,7 @@ def register_live_chat_speculation_inline_stream_routes(
             "Cache-Control": "no-store, no-transform",
             "X-Accel-Buffering": "no",
             "X-Omnix-Speculation-Generation-Id": generation_id,
-            "X-Omnix-Speculation-Transport": "inline-v1",
+            "X-Omnix-Speculation-Transport": "inline-v2-client-id",
         }
         if pending.provider_id:
             headers["X-Omnix-Speculation-Provider-Id"] = pending.provider_id
@@ -148,6 +164,27 @@ def register_live_chat_speculation_inline_stream_routes(
             media_type="text/event-stream",
             headers=headers,
         )
+
+
+async def _request_payload(request: Request) -> dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001 - invalid optional hint is ignored.
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _requested_generation_id(payload: dict[str, Any]) -> str | None:
+    value = payload.get("generation_id")
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not _CLIENT_GENERATION_ID.fullmatch(normalized):
+        raise HTTPException(
+            status_code=422,
+            detail="invalid_speculation_generation_id",
+        )
+    return normalized
 
 
 __all__ = ["register_live_chat_speculation_inline_stream_routes"]
