@@ -57,10 +57,8 @@ export function TradingTerminalDock({
     try {
       const nextAccounts = await tradingPaperApi.accounts();
       setAccounts(nextAccounts);
-      const nextId = preferredId
-        ?? (nextAccounts.some((account) => account.account_id === accountId) ? accountId : '')
-        || nextAccounts[0]?.account_id
-        || '';
+      const retainedId = nextAccounts.some((account) => account.account_id === accountId) ? accountId : '';
+      const nextId = preferredId || retainedId || nextAccounts[0]?.account_id || '';
       setAccountId(nextId);
       setSnapshot(nextId ? await tradingPaperApi.snapshot(nextId) : null);
       setStatus('ready');
