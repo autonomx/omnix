@@ -1,5 +1,16 @@
 export type DrawingPoint = { time: string; price: number };
-export type DrawingTool = 'cursor' | 'horizontal-line' | 'trend-line';
+export type DrawingTool =
+  | 'cursor'
+  | 'horizontal-line'
+  | 'trend-line'
+  | 'vertical-line'
+  | 'ray'
+  | 'rectangle'
+  | 'fibonacci'
+  | 'text'
+  | 'measurement';
+export type DrawingSnapMode = 'none' | 'time' | 'price' | 'ohlc';
+export type DrawingStyle = { color: string; lineWidth: number; lineStyle: 'solid' | 'dashed' };
 export type TradingDrawing = {
   drawingId: string;
   instrumentId: string;
@@ -7,6 +18,10 @@ export type TradingDrawing = {
   points: DrawingPoint[];
   selected: boolean;
   revision: number;
+  style?: DrawingStyle;
+  locked?: boolean;
+  hidden?: boolean;
+  text?: string;
 };
 
 export type DrawingState = {
@@ -16,19 +31,35 @@ export type DrawingState = {
   future: TradingDrawing[][];
 };
 
+export const DEFAULT_DRAWING_STYLE: DrawingStyle = { color: '#66d9e8', lineWidth: 2, lineStyle: 'solid' };
 export const emptyDrawingState = (): DrawingState => ({ drawings: [], selectedId: null, history: [], future: [] });
 
+function normalize(drawing: TradingDrawing): TradingDrawing {
+  return {
+    ...drawing,
+    points: drawing.points.map((point) => ({ ...point })),
+    style: { ...DEFAULT_DRAWING_STYLE, ...(drawing.style ?? {}) },
+    locked: drawing.locked ?? false,
+    hidden: drawing.hidden ?? false,
+    text: drawing.text ?? '',
+  };
+}
+
+function cloneDrawings(drawings: TradingDrawing[]): TradingDrawing[] {
+  return drawings.map(normalize);
+}
+
 function snapshot(state: DrawingState): DrawingState {
-  return { ...state, history: [...state.history, state.drawings.map((drawing) => ({ ...drawing, points: drawing.points.map((point) => ({ ...point })) }))], future: [] };
+  return { ...state, history: [...state.history, cloneDrawings(state.drawings)], future: [] };
 }
 
 export function replaceDrawings(drawings: TradingDrawing[]): DrawingState {
-  return { drawings: drawings.map((drawing) => ({ ...drawing, selected: false })), selectedId: null, history: [], future: [] };
+  return { drawings: drawings.map((drawing) => ({ ...normalize(drawing), selected: false })), selectedId: null, history: [], future: [] };
 }
 
 export function addDrawing(state: DrawingState, drawing: TradingDrawing): DrawingState {
   const next = snapshot(state);
-  return { ...next, drawings: [...next.drawings.map((item) => ({ ...item, selected: false })), { ...drawing, selected: true }], selectedId: drawing.drawingId };
+  return { ...next, drawings: [...next.drawings.map((item) => ({ ...item, selected: false })), { ...normalize(drawing), selected: true }], selectedId: drawing.drawingId };
 }
 
 export function selectDrawing(state: DrawingState, drawingId: string | null): DrawingState {
@@ -36,6 +67,8 @@ export function selectDrawing(state: DrawingState, drawingId: string | null): Dr
 }
 
 export function moveDrawingPoint(state: DrawingState, drawingId: string, pointIndex: number, point: DrawingPoint): DrawingState {
+  const target = state.drawings.find((drawing) => drawing.drawingId === drawingId);
+  if (target?.locked) return state;
   const next = snapshot(state);
   return {
     ...next,
@@ -43,6 +76,23 @@ export function moveDrawingPoint(state: DrawingState, drawingId: string, pointIn
       ...drawing,
       revision: drawing.revision + 1,
       points: drawing.points.map((existing, index) => index === pointIndex ? point : existing),
+    }),
+  };
+}
+
+export function updateSelectedDrawing(
+  state: DrawingState,
+  patch: Partial<Pick<TradingDrawing, 'style' | 'locked' | 'hidden' | 'text'>>,
+): DrawingState {
+  if (!state.selectedId) return state;
+  const next = snapshot(state);
+  return {
+    ...next,
+    drawings: next.drawings.map((drawing) => drawing.drawingId !== state.selectedId ? drawing : {
+      ...drawing,
+      ...patch,
+      style: patch.style ? { ...drawing.style, ...patch.style } as DrawingStyle : drawing.style,
+      revision: drawing.revision + 1,
     }),
   };
 }
@@ -57,10 +107,10 @@ export function undoDrawing(state: DrawingState): DrawingState {
   const previous = state.history.at(-1);
   if (!previous) return state;
   return {
-    drawings: previous,
+    drawings: cloneDrawings(previous),
     selectedId: null,
     history: state.history.slice(0, -1),
-    future: [state.drawings, ...state.future],
+    future: [cloneDrawings(state.drawings), ...state.future],
   };
 }
 
@@ -68,9 +118,21 @@ export function redoDrawing(state: DrawingState): DrawingState {
   const next = state.future[0];
   if (!next) return state;
   return {
-    drawings: next,
+    drawings: cloneDrawings(next),
     selectedId: null,
-    history: [...state.history, state.drawings],
+    history: [...state.history, cloneDrawings(state.drawings)],
     future: state.future.slice(1),
   };
+}
+
+export function snapDrawingPoint(point: DrawingPoint, mode: DrawingSnapMode): DrawingPoint {
+  if (mode === 'none') return point;
+  const milliseconds = Date.parse(point.time);
+  const snappedTime = mode === 'time' || mode === 'ohlc'
+    ? new Date(Math.round(milliseconds / 60_000) * 60_000).toISOString()
+    : point.time;
+  const snappedPrice = mode === 'price' || mode === 'ohlc'
+    ? Math.round(point.price * 100) / 100
+    : point.price;
+  return { time: snappedTime, price: snappedPrice };
 }
