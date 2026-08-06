@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
 import {
   DEFAULT_DRAWING_STYLE,
@@ -14,6 +14,21 @@ const fibonacciLevels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
 export type ChartAlertPlacement = DrawingPoint & { x: number; y: number; source: 'tool' | 'context-menu' };
 
+type HandlePreview = { drawingId: string; index: number; point: DrawingPoint };
+type TranslationPreview = { drawingId: string; from: DrawingPoint; to: DrawingPoint };
+
+function translatedPoints(points: DrawingPoint[], preview: TranslationPreview | null, drawingId: string): DrawingPoint[] {
+  if (!preview || preview.drawingId !== drawingId) return points;
+  const fromTime = Date.parse(preview.from.time);
+  const toTime = Date.parse(preview.to.time);
+  const timeDelta = toTime - fromTime;
+  const priceDelta = preview.to.price - preview.from.price;
+  return points.map((point) => ({
+    time: new Date(Date.parse(point.time) + timeDelta).toISOString(),
+    price: point.price + priceDelta,
+  }));
+}
+
 export function TradingDrawingOverlay({
   adapter,
   instrumentId,
@@ -24,6 +39,7 @@ export function TradingDrawingOverlay({
   onAdd,
   onSelect,
   onMovePoint,
+  onTranslateDrawing,
   onAlertAtPoint,
 }: {
   adapter: TradingChartAdapter | null;
@@ -35,23 +51,50 @@ export function TradingDrawingOverlay({
   onAdd: (drawing: TradingDrawing) => void;
   onSelect: (id: string | null) => void;
   onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
+  onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
   onAlertAtPoint?: (placement: ChartAlertPlacement) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draftStart, setDraftStart] = useState<DrawingPoint | null>(null);
   const [draftEnd, setDraftEnd] = useState<DrawingPoint | null>(null);
-  const projected = useMemo(() => drawings.filter((drawing) => !drawing.hidden).map((drawing) => ({
-    drawing,
-    points: drawing.points.map((point) => adapter?.projectDrawingPoint(point) ?? null),
-  })), [adapter, drawings]);
+  const [handlePreview, setHandlePreview] = useState<HandlePreview | null>(null);
+  const [translationPreview, setTranslationPreview] = useState<TranslationPreview | null>(null);
+  const [viewport, setViewport] = useState({ width: 0, height: 0, revision: 0 });
 
-  const pointFromEvent = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>): (DrawingPoint & { x: number; y: number }) | null => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
-    const y = event.clientY - bounds.top;
+  useEffect(() => {
+    if (!adapter) return;
+    const visibleRange = adapter.onVisibleRange(() => {
+      setViewport((value) => ({ ...value, revision: value.revision + 1 }));
+    });
+    const resize = new ResizeObserver((entries) => {
+      const bounds = entries[0]?.contentRect;
+      if (!bounds) return;
+      setViewport((value) => ({
+        width: bounds.width,
+        height: bounds.height,
+        revision: value.revision + 1,
+      }));
+    });
+    if (svgRef.current) resize.observe(svgRef.current);
+    return () => {
+      visibleRange();
+      resize.disconnect();
+    };
+  }, [adapter]);
+
+  const pointFromClient = (clientX: number, clientY: number): (DrawingPoint & { x: number; y: number }) | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const bounds = svg.getBoundingClientRect();
+    const x = clientX - bounds.left;
+    const y = clientY - bounds.top;
     const point = adapter?.drawingPointFromCoordinate(x, y) ?? null;
     return point ? { ...snapDrawingPoint(point, snapMode), x, y } : null;
   };
+
+  const pointFromEvent = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>): (DrawingPoint & { x: number; y: number }) | null => (
+    pointFromClient(event.clientX, event.clientY)
+  );
 
   const createDrawing = (points: DrawingPoint[]) => {
     if (tool === 'cursor' || tool === 'alert') return;
@@ -109,25 +152,66 @@ export function TradingDrawingOverlay({
   };
 
   const dragHandle = (drawing: TradingDrawing, index: number) => (event: React.PointerEvent<SVGCircleElement>) => {
+    event.preventDefault();
     event.stopPropagation();
-    if (drawing.locked) return;
-    const svg = svgRef.current;
-    if (!svg || !adapter) return;
-    svg.setPointerCapture(event.pointerId);
-    const bounds = svg.getBoundingClientRect();
+    if (drawing.locked || !adapter) return;
     const move = (pointer: PointerEvent) => {
-      const point = adapter.drawingPointFromCoordinate(pointer.clientX - bounds.left, pointer.clientY - bounds.top);
-      if (point) onMovePoint(drawing.drawingId, index, snapDrawingPoint(point, snapMode));
+      const point = pointFromClient(pointer.clientX, pointer.clientY);
+      if (point) setHandlePreview({ drawingId: drawing.drawingId, index, point });
     };
-    const up = () => {
+    const up = (pointer: PointerEvent) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      const point = pointFromClient(pointer.clientX, pointer.clientY);
+      setHandlePreview(null);
+      if (point) onMovePoint(drawing.drawingId, index, point);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
 
-  const draftCoordinates = draftStart && draftEnd ? [adapter?.projectDrawingPoint(draftStart), adapter?.projectDrawingPoint(draftEnd)] : null;
+  const dragDrawing = (drawing: TradingDrawing) => (event: React.PointerEvent<SVGGElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onSelect(drawing.drawingId);
+    if (tool !== 'cursor' || drawing.locked || !adapter) return;
+    const start = pointFromClient(event.clientX, event.clientY);
+    if (!start) return;
+    const move = (pointer: PointerEvent) => {
+      const point = pointFromClient(pointer.clientX, pointer.clientY);
+      if (point) setTranslationPreview({ drawingId: drawing.drawingId, from: start, to: point });
+    };
+    const up = (pointer: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      const point = pointFromClient(pointer.clientX, pointer.clientY);
+      setTranslationPreview(null);
+      if (point && (point.time !== start.time || point.price !== start.price)) {
+        onTranslateDrawing(drawing.drawingId, start, point);
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const projected = drawings
+    .filter((drawing) => !drawing.hidden)
+    .map((drawing) => {
+      let points = translatedPoints(drawing.points, translationPreview, drawing.drawingId);
+      if (handlePreview?.drawingId === drawing.drawingId) {
+        points = points.map((point, index) => index === handlePreview.index ? handlePreview.point : point);
+      }
+      return {
+        drawing,
+        points: points.map((point) => adapter?.projectDrawingPoint(point) ?? null),
+      };
+    });
+  void viewport.revision;
+
+  const draftCoordinates = draftStart && draftEnd
+    ? [adapter?.projectDrawingPoint(draftStart), adapter?.projectDrawingPoint(draftEnd)]
+    : null;
+
   return (
     <svg
       ref={svgRef}
@@ -150,12 +234,27 @@ export function TradingDrawingOverlay({
           strokeWidth: style.lineWidth,
           strokeDasharray: style.lineStyle === 'dashed' ? '6 4' : undefined,
         };
+        const ray = (() => {
+          if (drawing.toolType !== 'ray' || !second) return null;
+          const dx = second.x - first.x;
+          const targetX = dx >= 0 ? viewport.width : 0;
+          if (Math.abs(dx) < 0.0001) {
+            return { x: first.x, y: second.y >= first.y ? viewport.height : 0 };
+          }
+          const slope = (second.y - first.y) / dx;
+          return { x: targetX, y: first.y + slope * (targetX - first.x) };
+        })();
         return (
-          <g key={drawing.drawingId} data-locked={drawing.locked} onPointerDown={(event) => { event.stopPropagation(); onSelect(drawing.drawingId); }}>
+          <g
+            key={drawing.drawingId}
+            data-locked={drawing.locked}
+            data-selected={selected}
+            onPointerDown={dragDrawing(drawing)}
+          >
             {drawing.toolType === 'horizontal-line' ? <line {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /> : null}
             {drawing.toolType === 'vertical-line' ? <line {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /> : null}
             {(drawing.toolType === 'trend-line' || drawing.toolType === 'measurement') && second ? <line {...lineProps} x1={first.x} y1={first.y} x2={second.x} y2={second.y} /> : null}
-            {drawing.toolType === 'ray' && second ? <line {...lineProps} x1={first.x} y1={first.y} x2="100%" y2={second.y} /> : null}
+            {ray ? <line {...lineProps} x1={first.x} y1={first.y} x2={ray.x} y2={ray.y} /> : null}
             {drawing.toolType === 'rectangle' && second ? <rect {...lineProps} x={Math.min(first.x, second.x)} y={Math.min(first.y, second.y)} width={Math.abs(second.x - first.x)} height={Math.abs(second.y - first.y)} fill={`${style.color}20`} /> : null}
             {drawing.toolType === 'fibonacci' && second ? fibonacciLevels.map((level) => {
               const y = first.y + (second.y - first.y) * level;
