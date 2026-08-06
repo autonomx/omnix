@@ -25,6 +25,12 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+function arrayField<T>(payload: unknown, field: string): T[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const value = (payload as Record<string, unknown>)[field];
+  return Array.isArray(value) ? value as T[] : [];
+}
+
 export function tradingStreamUrl(instrumentId: string, interval: string, bindingId?: string | null): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const query = new URLSearchParams({ instrument_id: instrumentId, interval });
@@ -66,14 +72,14 @@ function marketQuery(
 
 export const tradingApi = {
   providers: async () => {
-    const payload = await requestJson<{ providers: ProviderDescriptor[] }>('/api/trading/providers/status');
-    return payload.providers;
+    const payload = await requestJson<unknown>('/api/trading/providers/status');
+    return arrayField<ProviderDescriptor>(payload, 'providers');
   },
   instruments: async (query = '') => {
-    const payload = await requestJson<{ instruments: CanonicalInstrument[] }>(
+    const payload = await requestJson<unknown>(
       `/api/trading/instruments/search?query=${encodeURIComponent(query)}`,
     );
-    return payload.instruments;
+    return arrayField<CanonicalInstrument>(payload, 'instruments');
   },
   bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null) =>
     requestJson<BarsResponse>(
@@ -85,8 +91,8 @@ export const tradingApi = {
     ),
   diagnostics: () => requestJson<{ ok: boolean; diagnostics: Record<string, unknown> }>('/api/trading/diagnostics'),
   documents: async (kind: TradingDocumentKind) => {
-    const payload = await requestJson<{ records: TradingDocument[] }>(`/api/trading/${kind}`);
-    return payload.records;
+    const payload = await requestJson<unknown>(`/api/trading/${kind}`);
+    return arrayField<TradingDocument>(payload, 'records');
   },
   createDocument: (kind: TradingDocumentKind, recordId: string, payload: Record<string, unknown>) =>
     requestJson<TradingDocument>(`/api/trading/${kind}`, {
@@ -105,12 +111,12 @@ export const tradingApi = {
       headers: { 'If-Match': String(record.revision) },
     }),
   alerts: async () => {
-    const payload = await requestJson<{ alerts: TradingAlert[] }>('/api/trading/alerts');
-    return payload.alerts;
+    const payload = await requestJson<unknown>('/api/trading/alerts');
+    return arrayField<TradingAlert>(payload, 'alerts');
   },
   alertTriggers: async () => {
-    const payload = await requestJson<{ triggers: TradingAlertTrigger[] }>('/api/trading/alerts/triggers');
-    return payload.triggers;
+    const payload = await requestJson<unknown>('/api/trading/alerts/triggers');
+    return arrayField<TradingAlertTrigger>(payload, 'triggers');
   },
   createAlert: (input: TradingAlertCreateInput) =>
     requestJson<TradingAlert>('/api/trading/alerts', {
@@ -129,7 +135,7 @@ export const tradingApi = {
       headers: { 'If-Match': String(alert.revision) },
     }),
   evaluateAlerts: async (instrumentId: string, observedPrice: string, observedAt?: string) => {
-    const payload = await requestJson<{ triggers: TradingAlertTrigger[] }>('/api/trading/alerts/evaluate', {
+    const payload = await requestJson<unknown>('/api/trading/alerts/evaluate', {
       method: 'POST',
       body: JSON.stringify({
         instrument_id: instrumentId,
@@ -137,6 +143,6 @@ export const tradingApi = {
         ...(observedAt ? { observed_at: observedAt } : {}),
       }),
     });
-    return payload.triggers;
+    return arrayField<TradingAlertTrigger>(payload, 'triggers');
   },
 };
