@@ -6,7 +6,9 @@ from threading import Lock
 from typing import Any
 
 from .cache import TradingMarketDataCache
+from .models import FeedType
 from .providers.binance import BinanceMarketDataProvider
+from .providers.registry import ProviderRegistry
 from .streaming.binance_stream import BinanceWebSocketStream
 from .streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
 
@@ -16,6 +18,7 @@ class TradingMarketDataService:
         self,
         *,
         provider: BinanceMarketDataProvider | None = None,
+        registry: ProviderRegistry | None = None,
         cache: TradingMarketDataCache | None = None,
         subscriptions: SharedSubscriptionManager | None = None,
         stream: BinanceWebSocketStream | None = None,
@@ -24,22 +27,40 @@ class TradingMarketDataService:
             max_entries=256,
             cache_dir=Path("resources/cache/trading"),
         )
-        self.provider = provider or BinanceMarketDataProvider(cache=self.cache)
+        self.registry = registry or ProviderRegistry(cache=self.cache)
+        if provider is not None:
+            self.registry._providers["binance"] = provider
+        self.provider = self.registry.provider("binance")
         self.subscriptions = subscriptions or SharedSubscriptionManager()
         self.stream = stream or BinanceWebSocketStream()
 
-    def bars(self, instrument_id: str, interval: str, limit: int = 500):
-        return self.provider.get_bars(instrument_id, interval, limit)
+    def bars(
+        self,
+        instrument_id: str,
+        interval: str,
+        limit: int = 500,
+        binding_id: str | None = None,
+    ):
+        return self.registry.bars(instrument_id, interval, limit, binding_id)
 
-    def quote(self, instrument_id: str) -> dict[str, object]:
-        return self.provider.get_quote(instrument_id)
+    def quote(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+    ) -> dict[str, object]:
+        return self.registry.quote(instrument_id, binding_id)
 
     async def stream_updates(
         self,
         instrument_id: str,
         interval: str,
+        binding_id: str | None = None,
     ) -> AsyncIterator[StreamingBarUpdate]:
-        binding = self.provider.get_binding(instrument_id)
+        binding = self.registry.resolve_binding(instrument_id, binding_id)
+        if binding.provider != "binance" or binding.feed_type is not FeedType.WEBSOCKET_AND_REST:
+            raise ValueError(
+                f"binding does not support Omnix live streaming: {binding.binding_id}"
+            )
         async for update in self.stream.messages(
             provider_symbol=binding.provider_symbol,
             binding_id=binding.binding_id,
@@ -48,10 +69,21 @@ class TradingMarketDataService:
         ):
             yield update
 
+    def provider_descriptors(self) -> list[dict[str, object]]:
+        return self.registry.descriptors()
+
     def diagnostics(self) -> dict[str, Any]:
         return {
-            "provider": self.provider.provider_id,
-            "provider_policy": self.provider.policy.model_dump(mode="json"),
+            "providers": [
+                {
+                    "provider": item["provider"],
+                    "status": item["status"],
+                    "binding_count": len(item["bindings"]),
+                    "official": item["policy"].is_official_api,
+                    "usage_scope": item["policy"].usage_scope,
+                }
+                for item in self.provider_descriptors()
+            ],
             "cache": {
                 "authority": False,
                 "disposable": True,
