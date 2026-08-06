@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import {
+  TRADING_ALERTS_CHANGED_EVENT,
+  alertVisualState,
+  notifyTradingAlertsChanged,
+} from './tradingChartAlerts';
 import { tradingApi } from './tradingApi';
 import type {
   TradingAlert,
@@ -30,11 +35,18 @@ function alertInput(alert: TradingAlert, enabled = alert.enabled) {
     evaluation_policy: { ...alert.evaluation_policy },
     enabled,
     cooldown_seconds: alert.cooldown_seconds,
+    expires_at: alert.expires_at ?? null,
   };
 }
 
 function conditionLabel(condition: TradingAlertCondition): string {
   return conditions.find((item) => item.value === condition)?.label ?? condition;
+}
+
+function expiryIso(value: string): string | null {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
 export function TradingAlertsPanel({
@@ -55,6 +67,7 @@ export function TradingAlertsPanel({
   const [indicator, setIndicator] = useState<TradingAlertIndicatorId>('rsi');
   const [period, setPeriod] = useState('14');
   const [component, setComponent] = useState<'value' | 'line' | 'signal' | 'histogram' | 'upper' | 'middle' | 'lower'>('value');
+  const [expiresAt, setExpiresAt] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'conflict' | 'error'>('loading');
 
   const refresh = async () => {
@@ -71,12 +84,18 @@ export function TradingAlertsPanel({
     }
   };
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    void refresh();
+    const changed = () => void refresh();
+    window.addEventListener(TRADING_ALERTS_CHANGED_EVENT, changed);
+    return () => window.removeEventListener(TRADING_ALERTS_CHANGED_EVENT, changed);
+  }, []);
 
   const runMutation = async (mutation: () => Promise<unknown>) => {
     setStatus('saving');
     try {
       await mutation();
+      notifyTradingAlertsChanged();
       await refresh();
     } catch (error) {
       setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
@@ -125,8 +144,10 @@ export function TradingAlertsPanel({
         formula_version: 'omnix-indicators-v2',
       },
       cooldown_seconds: numericCooldown,
+      expires_at: expiryIso(expiresAt),
     }));
     setThreshold('');
+    setExpiresAt('');
   };
 
   const relevantAlerts = alerts.filter((alert) => alert.instrument_id === instrumentId);
@@ -135,7 +156,7 @@ export function TradingAlertsPanel({
   return (
     <section className="trading-alerts-panel" aria-label="Server-side Trading alerts" data-status={status}>
       <header><strong>Server alerts</strong><span>{status}</span></header>
-      <p>Evaluated by the Omnix backend from normalized bars. Closing this page does not disable an alert.</p>
+      <p>Evaluated by the Omnix backend from normalized bars. Closing this page does not disable an alert. Price alerts also appear directly on matching charts.</p>
       <div className="trading-alert-form">
         <label>
           Condition
@@ -150,12 +171,16 @@ export function TradingAlertsPanel({
         <label>
           Interval
           <select value={interval} onChange={(event) => setInterval(event.target.value)}>
-            {['1m', '5m', '15m', '1h', '4h', '1d'].map((item) => <option key={item}>{item}</option>)}
+            {['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w'].map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
         <label>
           Cooldown seconds
           <input inputMode="numeric" value={cooldown} onChange={(event) => setCooldown(event.target.value)} />
+        </label>
+        <label>
+          Expires
+          <input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
         </label>
         {isPercent ? (
           <label>
@@ -193,10 +218,11 @@ export function TradingAlertsPanel({
       </div>
       <ul className="trading-alert-list">
         {relevantAlerts.map((alert) => (
-          <li key={alert.alert_id}>
+          <li key={alert.alert_id} data-alert-state={alertVisualState(alert)}>
             <div>
               <strong>{conditionLabel(alert.condition_type)} {alert.threshold}</strong>
-              <small>{alert.evaluation_policy.interval} · {alert.binding_id ?? 'default feed'} · last value {alert.last_observed_value ?? 'not evaluated'} · revision {alert.revision}</small>
+              <small>{alert.evaluation_policy.interval} · {alert.binding_id ?? 'default feed'} · {alertVisualState(alert)} · last value {alert.last_observed_value ?? 'not evaluated'} · revision {alert.revision}</small>
+              {alert.expires_at ? <small>Expires {new Date(alert.expires_at).toLocaleString()}</small> : null}
             </div>
             <button type="button" onClick={() => void runMutation(() => tradingApi.updateAlert(alert, alertInput(alert, !alert.enabled)))}>
               {alert.enabled ? 'Disable' : 'Enable'}
