@@ -123,11 +123,18 @@ export class TradingChartAdapter {
   }
 
   setIndicators(bars: readonly MarketBar[], indicators: readonly CoreIndicatorInstance[]): void {
-    this.assertActive();
     const outputs = indicators.filter((item) => item.enabled).flatMap((item) => indicatorOutputs(bars, item));
+    this.setIndicatorOutputs(outputs);
+  }
+
+  setIndicatorOutputs(outputs: readonly IndicatorOutput[]): void {
+    this.assertActive();
     const enabled = new Set(outputs.map((output) => output.key));
     for (const [key, series] of this.indicatorSeries) {
-      if (!enabled.has(key)) { this.chart.removeSeries(series); this.indicatorSeries.delete(key); }
+      if (!enabled.has(key)) {
+        this.chart.removeSeries(series);
+        this.indicatorSeries.delete(key);
+      }
     }
     for (const output of outputs) {
       let series = this.indicatorSeries.get(output.key);
