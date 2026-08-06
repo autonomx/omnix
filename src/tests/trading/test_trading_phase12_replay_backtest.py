@@ -159,12 +159,10 @@ def test_backtest_is_economically_deterministic_and_has_no_lookahead() -> None:
     assert first.dataset_fingerprint == frozen.dataset_fingerprint
     assert first.trade_count > 0
     for trade in first.trades:
-        assert trade.fill_time > trade.signal_time
-        signal_index = next(
-            index for index, bar in enumerate(frozen.bars)
-            if bar.end_time == trade.signal_time
-        )
-        assert trade.fill_time == frozen.bars[signal_index + 1].start_time
+        assert trade.fill_bar_index == trade.signal_bar_index + 1
+        assert trade.signal_time == frozen.bars[trade.signal_bar_index].end_time
+        assert trade.fill_time == frozen.bars[trade.fill_bar_index].start_time
+        assert trade.fill_time >= trade.signal_time
     source = Path("src/app/trading/backtest.py").read_text()
     assert "requests" not in source
     assert "market_service" not in source
@@ -258,3 +256,9 @@ def test_replay_migration_persists_complete_run_evidence() -> None:
         "omnix_trading_backtest_logs",
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in migration
+    sequencing = Path(
+        "src/app/persistence/migrations/0024_trading_backtest_bar_indices.sql"
+    ).read_text()
+    assert "signal_bar_index" in sequencing
+    assert "fill_bar_index" in sequencing
+    assert "fill_bar_index = signal_bar_index + 1" in sequencing
