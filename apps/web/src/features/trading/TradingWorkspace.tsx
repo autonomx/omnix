@@ -2,13 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
+import { TradingWatchlist } from './TradingWatchlist';
 import { tradingApi } from './tradingApi';
 import type { TradingChartType } from './chart/chartAdapter';
+import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { useTradingStore } from './tradingStore';
 import './TradingWorkspace.css';
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [focusMode, setFocusMode] = useState(false);
+  const persistenceStatus = useTradingWorkspacePersistence();
   const providers = useQuery({ queryKey: ['trading', 'providers'], queryFn: tradingApi.providers });
   const instruments = useQuery({ queryKey: ['trading', 'instruments'], queryFn: () => tradingApi.instruments() });
   const layout = useTradingStore((state) => state.layout);
@@ -29,9 +32,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <h2 id="trading-title">{module.label}</h2>
           <p>{module.summary}</p>
         </div>
-        <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>
-          {focusMode ? 'Exit focus mode' : 'Focus mode'}
-        </button>
+        <div className="trading-header-actions">
+          <span className={`workspace-${persistenceStatus}`}>Workspace: {persistenceStatus}</span>
+          <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>
+            {focusMode ? 'Exit focus mode' : 'Focus mode'}
+          </button>
+        </div>
       </header>
 
       <section className="trading-toolbar" aria-label="Trading toolbar">
@@ -110,17 +116,11 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             <button type="button">Data</button>
             <button type="button">Layout</button>
           </nav>
-          <h3>Canonical instruments</h3>
-          <ul>
-            {(instruments.data ?? []).map((instrument) => (
-              <li key={instrument.instrument_id}>
-                <button type="button" onClick={() => updateChart(activeChartId, { instrumentId: instrument.instrument_id })}>
-                  <strong>{instrument.display_symbol}</strong>
-                  <small>{instrument.instrument_id}</small>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <TradingWatchlist
+            instruments={instruments.data ?? []}
+            activeInstrumentId={activeChart.instrumentId}
+            onSelect={(instrumentId) => updateChart(activeChartId, { instrumentId })}
+          />
         </aside>
       </div>
     </main>
