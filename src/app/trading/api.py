@@ -122,12 +122,10 @@ def create_trading_router(
         binding_id: str | None = Query(default=None, max_length=240),
     ) -> BarsResponse:
         try:
-            return market_service_factory().bars(
-                instrument_id,
-                interval,
-                limit,
-                binding_id,
-            )
+            service = market_service_factory()
+            if binding_id is None:
+                return service.bars(instrument_id, interval, limit)
+            return service.bars(instrument_id, interval, limit, binding_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
@@ -142,9 +140,13 @@ def create_trading_router(
         binding_id: str | None = Query(default=None, max_length=240),
     ) -> QuoteResponse:
         try:
-            return QuoteResponse.model_validate(
-                market_service_factory().quote(instrument_id, binding_id)
+            service = market_service_factory()
+            result = (
+                service.quote(instrument_id)
+                if binding_id is None
+                else service.quote(instrument_id, binding_id)
             )
+            return QuoteResponse.model_validate(result)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
@@ -169,11 +171,13 @@ def create_trading_router(
             return
         await websocket.accept()
         try:
-            async for update in market_service_factory().stream_updates(
-                instrument_id,
-                interval,
-                binding_id,
-            ):
+            service = market_service_factory()
+            updates = (
+                service.stream_updates(instrument_id, interval)
+                if binding_id is None
+                else service.stream_updates(instrument_id, interval, binding_id)
+            )
+            async for update in updates:
                 await websocket.send_json(_stream_payload(update))
         except WebSocketDisconnect:
             return
