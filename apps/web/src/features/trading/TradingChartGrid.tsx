@@ -1,7 +1,18 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type CSSProperties } from 'react';
 import { TradingChartPanel } from './TradingChartPanel';
 import { TradingChartSynchronization } from './chart/chartSynchronization';
-import { useTradingStore } from './tradingStore';
+import { useTradingStore, type TradingLayout } from './tradingStore';
+
+export function tradingGridColumns(layout: TradingLayout, chartCount: number): number {
+  const forced = {
+    'columns-1': 1,
+    'columns-2': 2,
+    'columns-3': 3,
+    'columns-4': 4,
+  } as const;
+  if (layout !== 'auto') return forced[layout];
+  return Math.max(1, Math.min(4, Math.ceil(Math.sqrt(Math.max(1, chartCount)))));
+}
 
 export function TradingChartGrid() {
   const layout = useTradingStore((state) => state.layout);
@@ -10,14 +21,8 @@ export function TradingChartGrid() {
   const links = useTradingStore((state) => state.links);
   const setActiveChart = useTradingStore((state) => state.setActiveChart);
   const synchronization = useMemo(() => new TradingChartSynchronization(), []);
-  const activeIndex = Math.max(0, charts.findIndex((chart) => chart.chartId === activeChartId));
-  const visibleCharts = layout === 'one'
-    ? charts.slice(activeIndex, activeIndex + 1)
-    : layout === 'four'
-      ? charts.slice(0, 4)
-      : charts.slice(activeIndex, activeIndex + 2).length === 2
-        ? charts.slice(activeIndex, activeIndex + 2)
-        : charts.slice(0, 2);
+  const columns = tradingGridColumns(layout, charts.length);
+  const style = { '--trading-grid-columns': columns } as CSSProperties;
 
   useEffect(() => {
     synchronization.setLinks({ crosshair: links.crosshair, visibleRange: links.visibleRange });
@@ -26,8 +31,12 @@ export function TradingChartGrid() {
   useEffect(() => () => synchronization.dispose(), [synchronization]);
 
   return (
-    <section className={`trading-chart-grid layout-${layout}`} aria-label={`${layout} Trading chart layout`}>
-      {visibleCharts.map((chart) => (
+    <section
+      className={`trading-chart-grid layout-${layout}`}
+      style={style}
+      aria-label={`${charts.length}-chart Trading layout with ${columns} column${columns === 1 ? '' : 's'}`}
+    >
+      {charts.map((chart) => (
         <div key={chart.chartId} className="trading-chart-grid-cell">
           <TradingChartPanel
             chartId={chart.chartId}
