@@ -64,6 +64,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolQuery, setSymbolQuery] = useState('');
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
   const persistence = useTradingWorkspacePersistence();
+  const workspaceHydrated = persistence.status !== 'loading';
   const providers = useQuery({ queryKey: ['trading', 'providers'], queryFn: tradingApi.providers });
   const instruments = useQuery({ queryKey: ['trading', 'instruments'], queryFn: () => tradingApi.instruments() });
   const layout = useTradingStore((state) => state.layout);
@@ -89,7 +90,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const toggleFavoriteInstrument = useTradingStore((state) => state.toggleFavoriteInstrument);
   const activeChart = charts.find((chart) => chart.chartId === activeChartId) ?? charts[0];
   const availableBindings = useMemo(
-    () => (providers.data ?? []).flatMap((provider) => provider.bindings)
+    () => (providers.data ?? []).flatMap((provider) => provider.bindings ?? [])
       .filter((binding) => binding.instrument_id === activeChart.instrumentId),
     [activeChart.instrumentId, providers.data],
   );
@@ -169,15 +170,15 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             aria-label="Saved Trading workspace"
             value={persistence.activeWorkspaceId}
             onChange={(event) => void persistence.selectWorkspace(event.target.value)}
-            disabled={persistence.status === 'loading'}
+            disabled={!workspaceHydrated}
           >
             {persistence.workspaces.map((workspace) => (
               <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.name}</option>
             ))}
           </select>
-          <button type="button" aria-label="Create workspace" onClick={createWorkspace}>+</button>
-          <button type="button" aria-label="Rename workspace" onClick={renameWorkspace}>Rename</button>
-          <button type="button" aria-label="Delete workspace" onClick={deleteWorkspace} disabled={persistence.workspaces.length <= 1}>Delete</button>
+          <button type="button" aria-label="Create workspace" onClick={createWorkspace} disabled={!workspaceHydrated}>+</button>
+          <button type="button" aria-label="Rename workspace" onClick={renameWorkspace} disabled={!workspaceHydrated}>Rename</button>
+          <button type="button" aria-label="Delete workspace" onClick={deleteWorkspace} disabled={!workspaceHydrated || persistence.workspaces.length <= 1}>Delete</button>
         </div>
 
         <div className="trading-layout-switcher" role="group" aria-label="Chart count and grid">
@@ -201,8 +202,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <button type="button" onClick={() => void persistence.resolveConflict('overwrite')}>Overwrite server</button>
             </>
           ) : null}
-          <button type="button" aria-pressed={panels.right} onClick={() => setPanel('right', !panels.right)}>Right panel</button>
-          <button type="button" aria-pressed={panels.bottom} onClick={() => setPanel('bottom', !panels.bottom)}>Bottom dock</button>
+          <button type="button" aria-pressed={panels.right} onClick={() => setPanel('right', !panels.right)} disabled={!workspaceHydrated}>Right panel</button>
+          <button type="button" aria-pressed={panels.bottom} onClick={() => setPanel('bottom', !panels.bottom)} disabled={!workspaceHydrated}>Bottom dock</button>
           <button type="button" onClick={exportWorkspace}>Export</button>
           <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus'}</button>
         </div>
@@ -300,7 +301,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           ))}
         </aside>
         <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid /></section>
-        {panels.right ? (
+        {workspaceHydrated && panels.right ? (
           <TradingSidePanel
             instruments={instruments.data ?? []}
             activeInstrumentId={activeChart.instrumentId}
@@ -343,7 +344,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </section>
       ) : null}
 
-      {panels.bottom ? <TradingTerminalDock instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} /> : null}
+      {workspaceHydrated && panels.bottom ? <TradingTerminalDock instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} /> : null}
 
       <TradingComplianceFooter provider={selectedProvider} binding={selectedBinding ?? null} />
     </main>
