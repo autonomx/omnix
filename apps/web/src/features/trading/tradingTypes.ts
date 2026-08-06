@@ -109,7 +109,36 @@ export interface TradingDocument {
   updated_at?: string | null;
 }
 
-export type TradingAlertCondition = 'price_above' | 'price_below';
+export type TradingAlertCondition =
+  | 'price_above'
+  | 'price_below'
+  | 'percent_change_above'
+  | 'percent_change_below'
+  | 'indicator_above'
+  | 'indicator_below'
+  | 'indicator_cross_above'
+  | 'indicator_cross_below'
+  | 'volume_above'
+  | 'volume_below';
+
+export type TradingAlertIndicatorId = 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap';
+
+export interface TradingAlertParameters {
+  lookback_bars: number;
+  indicator_id?: TradingAlertIndicatorId | null;
+  period: number;
+  fast_period: number;
+  slow_period: number;
+  signal_period: number;
+  component: 'value' | 'line' | 'signal' | 'histogram' | 'upper' | 'middle' | 'lower';
+  anchor_bars_ago: number;
+}
+
+export interface TradingAlertEvaluationPolicy {
+  interval: string;
+  allow_partial_bars: boolean;
+  formula_version: 'omnix-indicators-v2';
+}
 
 export interface TradingAlert {
   alert_id: string;
@@ -117,9 +146,12 @@ export interface TradingAlert {
   binding_id?: string | null;
   condition_type: TradingAlertCondition;
   threshold: string;
+  parameters: TradingAlertParameters;
+  evaluation_policy: TradingAlertEvaluationPolicy;
   enabled: boolean;
   cooldown_seconds: number;
   last_observed_price?: string | null;
+  last_observed_value?: string | null;
   last_triggered_at?: string | null;
   revision: number;
   created_at?: string | null;
@@ -130,10 +162,14 @@ export interface TradingAlertTrigger {
   trigger_id: string;
   alert_id: string;
   instrument_id: string;
+  binding_id?: string | null;
+  provider?: string | null;
+  observed_value: string;
   observed_price: string;
   threshold: string;
   condition_type: TradingAlertCondition;
   observed_at: string;
+  evaluated_at: string;
   idempotency_key: string;
   payload: Record<string, unknown>;
 }
@@ -144,6 +180,8 @@ export interface TradingAlertCreateInput {
   binding_id?: string | null;
   condition_type: TradingAlertCondition;
   threshold: string;
+  parameters?: Partial<TradingAlertParameters>;
+  evaluation_policy?: Partial<TradingAlertEvaluationPolicy>;
   cooldown_seconds: number;
 }
 
@@ -152,6 +190,8 @@ export interface TradingAlertUpdateInput {
   binding_id?: string | null;
   condition_type: TradingAlertCondition;
   threshold: string;
+  parameters: TradingAlertParameters;
+  evaluation_policy: TradingAlertEvaluationPolicy;
   enabled: boolean;
   cooldown_seconds: number;
 }
