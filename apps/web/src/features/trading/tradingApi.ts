@@ -21,9 +21,10 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-export function tradingStreamUrl(instrumentId: string, interval: string): string {
+export function tradingStreamUrl(instrumentId: string, interval: string, bindingId?: string | null): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const query = new URLSearchParams({ instrument_id: instrumentId, interval });
+  if (bindingId) query.set('binding_id', bindingId);
   return `${protocol}//${window.location.host}/api/trading/stream?${query.toString()}`;
 }
 
@@ -32,9 +33,10 @@ export function subscribeTradingStream(
   interval: string,
   onMessage: (message: TradingStreamMessage) => void,
   onStatus?: (status: 'connecting' | 'live' | 'closed' | 'error') => void,
+  bindingId?: string | null,
 ): () => void {
   onStatus?.('connecting');
-  const socket = new WebSocket(tradingStreamUrl(instrumentId, interval));
+  const socket = new WebSocket(tradingStreamUrl(instrumentId, interval, bindingId));
   socket.addEventListener('open', () => onStatus?.('live'));
   socket.addEventListener('message', (event) => {
     try {
@@ -48,6 +50,16 @@ export function subscribeTradingStream(
   return () => socket.close(1000, 'chart disposed');
 }
 
+function marketQuery(
+  instrumentId: string,
+  bindingId?: string | null,
+  extra?: Record<string, string>,
+): string {
+  const query = new URLSearchParams({ instrument_id: instrumentId, ...(extra ?? {}) });
+  if (bindingId) query.set('binding_id', bindingId);
+  return query.toString();
+}
+
 export const tradingApi = {
   providers: async () => {
     const payload = await requestJson<{ providers: ProviderDescriptor[] }>('/api/trading/providers/status');
@@ -59,14 +71,14 @@ export const tradingApi = {
     );
     return payload.instruments;
   },
-  bars: (instrumentId: string, interval: string, limit = 1_000) => {
-    const query = new URLSearchParams({ instrument_id: instrumentId, interval, limit: String(limit) });
-    return requestJson<BarsResponse>(`/api/trading/bars?${query.toString()}`);
-  },
-  quote: (instrumentId: string) => {
-    const query = new URLSearchParams({ instrument_id: instrumentId });
-    return requestJson<Record<string, string>>(`/api/trading/quotes?${query.toString()}`);
-  },
+  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null) =>
+    requestJson<BarsResponse>(
+      `/api/trading/bars?${marketQuery(instrumentId, bindingId, { interval, limit: String(limit) })}`,
+    ),
+  quote: (instrumentId: string, bindingId?: string | null) =>
+    requestJson<Record<string, string>>(
+      `/api/trading/quotes?${marketQuery(instrumentId, bindingId)}`,
+    ),
   diagnostics: () => requestJson<{ ok: boolean; diagnostics: Record<string, unknown> }>('/api/trading/diagnostics'),
   documents: async (kind: TradingDocumentKind) => {
     const payload = await requestJson<{ records: TradingDocument[] }>(`/api/trading/${kind}`);
