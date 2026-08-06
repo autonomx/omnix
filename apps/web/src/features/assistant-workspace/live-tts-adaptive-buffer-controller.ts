@@ -2,7 +2,7 @@ import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
 
 const INSTALLED_KEY = '__omnixLiveTtsAdaptiveBufferInstalled';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
-const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v1';
+const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v2';
 
 export type AdaptiveBufferSnapshot = {
   startBufferMs: number;
@@ -22,7 +22,11 @@ export class AdaptiveTtsBufferPolicy {
 
   constructor(initial?: Partial<AdaptiveBufferSnapshot>) {
     this.snapshotValue = {
-      startBufferMs: clamp(initial?.startBufferMs ?? 260, 160, 650),
+      // Qwen now yields a four-codec-step first block (about 320 ms of audio).
+      // Starting after 160 ms keeps half that block in reserve while removing
+      // the previous 260 ms deliberate onset delay. Underruns still increase
+      // this value immediately and are persisted for later turns.
+      startBufferMs: clamp(initial?.startBufferMs ?? 160, 120, 650),
       rebufferMs: clamp(initial?.rebufferMs ?? 520, 300, 1_200),
       maxRebufferMs: clamp(initial?.maxRebufferMs ?? 1_400, 800, 2_000),
       stableTurns: Math.max(0, initial?.stableTurns ?? 0),
@@ -39,7 +43,7 @@ export class AdaptiveTtsBufferPolicy {
       this.turnUnderruns += 1;
       this.snapshotValue.startBufferMs = clamp(
         this.snapshotValue.startBufferMs + 70,
-        160,
+        120,
         650,
       );
       this.snapshotValue.rebufferMs = clamp(
@@ -57,7 +61,7 @@ export class AdaptiveTtsBufferPolicy {
         if (this.snapshotValue.stableTurns >= 3) {
           this.snapshotValue.startBufferMs = clamp(
             this.snapshotValue.startBufferMs - 20,
-            160,
+            120,
             650,
           );
           this.snapshotValue.rebufferMs = clamp(
