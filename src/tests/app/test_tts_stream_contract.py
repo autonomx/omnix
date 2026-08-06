@@ -1,6 +1,11 @@
+import struct
+
+import pytest
+
 from app.gateway.tts_stream_contract import (
     CHAT_STREAM_MAX_CODEC_CHUNK_STEPS,
     TtsStreamRequest,
+    audio_chunk_to_pcm16_bytes,
 )
 
 
@@ -36,3 +41,15 @@ def test_non_chat_stream_preserves_requested_codec_chunk_steps() -> None:
     assert request.chunk_size == 8
     assert request.parity_mode is True
     assert request.max_new_tokens == 512
+
+
+def test_torch_tensor_pcm_conversion_avoids_python_scalar_fallback() -> None:
+    torch = pytest.importorskip("torch")
+    audio = torch.tensor(
+        [[-1.0], [0.0], [1.0], [float("nan")], [float("inf")]],
+        dtype=torch.float32,
+    )
+
+    pcm = audio_chunk_to_pcm16_bytes(audio)
+
+    assert struct.unpack("<5h", pcm) == (-32767, 0, 32767, 0, 32767)
