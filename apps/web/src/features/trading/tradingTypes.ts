@@ -108,3 +108,50 @@ export interface TradingDocument {
   status: string;
   updated_at?: string | null;
 }
+
+export type TradingAlertCondition = 'price_above' | 'price_below';
+
+export interface TradingAlert {
+  alert_id: string;
+  instrument_id: string;
+  binding_id?: string | null;
+  condition_type: TradingAlertCondition;
+  threshold: string;
+  enabled: boolean;
+  cooldown_seconds: number;
+  last_observed_price?: string | null;
+  last_triggered_at?: string | null;
+  revision: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface TradingAlertTrigger {
+  trigger_id: string;
+  alert_id: string;
+  instrument_id: string;
+  observed_price: string;
+  threshold: string;
+  condition_type: TradingAlertCondition;
+  observed_at: string;
+  idempotency_key: string;
+  payload: Record<string, unknown>;
+}
+
+export interface TradingAlertCreateInput {
+  alert_id: string;
+  instrument_id: string;
+  binding_id?: string | null;
+  condition_type: TradingAlertCondition;
+  threshold: string;
+  cooldown_seconds: number;
+}
+
+export interface TradingAlertUpdateInput {
+  instrument_id: string;
+  binding_id?: string | null;
+  condition_type: TradingAlertCondition;
+  threshold: string;
+  enabled: boolean;
+  cooldown_seconds: number;
+}
