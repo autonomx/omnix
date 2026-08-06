@@ -10,7 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .backtest import BacktestRequest, BacktestRunResult, run_backtest
 from .replay import FrozenDatasetSnapshot, freeze_bars_response
-from .replay_repository import TradingReplayRepository, default_replay_repository
+from .replay_repository import TradingReplayRepository
+from .replay_runtime_repository import default_runtime_replay_repository
 from .service import TradingMarketDataService, default_market_data_service
 
 
@@ -45,7 +46,7 @@ MarketServiceFactory = Callable[[], TradingMarketDataService]
 
 
 def create_trading_replay_router(
-    repository_factory: RepositoryFactory = default_replay_repository,
+    repository_factory: RepositoryFactory = default_runtime_replay_repository,
     market_service_factory: MarketServiceFactory = default_market_data_service,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/replay", tags=["trading-replay"])
