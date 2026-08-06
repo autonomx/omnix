@@ -5,6 +5,9 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
+from app.gateway.tts_live_call_startup_frame_policy import (
+    install_tts_live_call_startup_frame_policy,
+)
 from app.launcher import control_app
 from app.launcher.huggingface_token_control import (
     enhance_launcher_html as enhance_huggingface_token_html,
@@ -149,6 +152,7 @@ def _enhance_runtime_launcher_html(source: str) -> str:
     )
 
 
+install_tts_live_call_startup_frame_policy()
 reset_default_manager_for_tests(LauncherServiceManager(build_runtime_service_specs()))
 control_app._HTML = _enhance_runtime_launcher_html(control_app._HTML)
 register_huggingface_token_controls(app)
