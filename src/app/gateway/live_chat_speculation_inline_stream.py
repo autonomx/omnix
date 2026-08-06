@@ -11,7 +11,6 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
-from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
