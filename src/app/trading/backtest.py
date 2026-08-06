@@ -62,8 +62,10 @@ class BacktestRequest(BaseModel):
 class BacktestTrade(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    trade_index: int
+    trade_index: int = Field(ge=0)
     side: Literal["buy", "sell"]
+    signal_bar_index: int = Field(ge=0)
+    fill_bar_index: int = Field(ge=1)
     signal_time: datetime
     fill_time: datetime
     quantity: Decimal
@@ -71,6 +73,14 @@ class BacktestTrade(BaseModel):
     commission: Decimal
     cash_after: Decimal
     position_after: Decimal
+
+    @model_validator(mode="after")
+    def validate_next_bar_fill(self):
+        if self.fill_bar_index != self.signal_bar_index + 1:
+            raise ValueError("backtest fills must occur on the bar after the signal")
+        if self.fill_time < self.signal_time:
+            raise ValueError("fill_time cannot precede signal_time")
+        return self
 
 
 class BacktestEquityPoint(BaseModel):
@@ -175,7 +185,7 @@ def run_backtest(
     slow = _aligned_sma(closes, request.strategy.slow_period)
     cash = request.initial_cash
     position = Decimal("0")
-    pending: tuple[str, datetime] | None = None
+    pending: tuple[str, int, datetime] | None = None
     trades: list[BacktestTrade] = []
     equity_curve: list[BacktestEquityPoint] = []
     logs: list[BacktestLogEntry] = []
@@ -184,7 +194,7 @@ def run_backtest(
 
     for index, bar in enumerate(bars):
         if pending is not None:
-            side, signal_time = pending
+            side, signal_bar_index, signal_time = pending
             open_price = _fill_price(bar.open, side, request.execution_policy.slippage_bps)
             if side == "buy" and position == 0:
                 budget = cash * request.execution_policy.position_size_fraction
@@ -208,6 +218,8 @@ def run_backtest(
                     BacktestTrade(
                         trade_index=len(trades),
                         side=side,
+                        signal_bar_index=signal_bar_index,
+                        fill_bar_index=index,
                         signal_time=signal_time,
                         fill_time=bar.start_time,
                         quantity=quantity,
@@ -222,7 +234,12 @@ def run_backtest(
                         log_index=len(logs),
                         bar_time=bar.start_time,
                         message=f"filled {side} at next bar open",
-                        payload={"signal_time": signal_time.isoformat(), "fill_price": str(open_price)},
+                        payload={
+                            "signal_bar_index": signal_bar_index,
+                            "fill_bar_index": index,
+                            "signal_time": signal_time.isoformat(),
+                            "fill_price": str(open_price),
+                        },
                     )
                 )
             pending = None
@@ -250,9 +267,9 @@ def run_backtest(
         crossed_above = fast[previous_index] <= slow[previous_index] and fast[index] > slow[index]
         crossed_below = fast[previous_index] >= slow[previous_index] and fast[index] < slow[index]
         if crossed_above and position == 0:
-            pending = ("buy", bar.end_time)
+            pending = ("buy", index, bar.end_time)
         elif crossed_below and position > 0:
-            pending = ("sell", bar.end_time)
+            pending = ("sell", index, bar.end_time)
 
     final_equity = equity_curve[-1].equity
     total_return = (final_equity / request.initial_cash - Decimal("1")) * Decimal("100")
