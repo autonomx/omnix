@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 
-from .catalog import BINANCE_POLICY, BINDINGS, search_instruments
+from .catalog import search_instruments
 from .models import BarsResponse, CanonicalInstrument, ProviderBinding, ProviderPolicy
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .service import TradingMarketDataService, default_market_data_service
@@ -100,18 +100,11 @@ def create_trading_router(
 
     @router.get("/providers", response_model=ProviderStatusResponse)
     async def providers() -> ProviderStatusResponse:
-        return ProviderStatusResponse(
-            providers=[
-                ProviderDescriptor(
-                    provider="binance",
-                    display_name="Binance Public Market Data",
-                    enabled=True,
-                    status="ready",
-                    policy=BINANCE_POLICY,
-                    bindings=list(BINDINGS),
-                )
-            ]
-        )
+        descriptors = [
+            ProviderDescriptor.model_validate(item)
+            for item in market_service_factory().provider_descriptors()
+        ]
+        return ProviderStatusResponse(providers=descriptors)
 
     @router.get("/providers/status", response_model=ProviderStatusResponse)
     async def provider_status() -> ProviderStatusResponse:
@@ -126,45 +119,73 @@ def create_trading_router(
         instrument_id: str = Query(min_length=3, max_length=200),
         interval: str = Query(default="1m", max_length=16),
         limit: int = Query(default=500, ge=1, le=5_000),
+        binding_id: str | None = Query(default=None, max_length=240),
     ) -> BarsResponse:
         try:
-            return market_service_factory().bars(instrument_id, interval, limit)
+            return market_service_factory().bars(
+                instrument_id,
+                interval,
+                limit,
+                binding_id,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(status_code=502, detail={"code": "market_data_failed", "message": str(exc)}) from exc
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "market_data_failed", "message": str(exc)},
+            ) from exc
 
     @router.get("/quotes", response_model=QuoteResponse)
-    async def quote(instrument_id: str = Query(min_length=3, max_length=200)) -> QuoteResponse:
+    async def quote(
+        instrument_id: str = Query(min_length=3, max_length=200),
+        binding_id: str | None = Query(default=None, max_length=240),
+    ) -> QuoteResponse:
         try:
-            return QuoteResponse.model_validate(market_service_factory().quote(instrument_id))
+            return QuoteResponse.model_validate(
+                market_service_factory().quote(instrument_id, binding_id)
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(status_code=502, detail={"code": "quote_failed", "message": str(exc)}) from exc
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "quote_failed", "message": str(exc)},
+            ) from exc
 
     @router.get("/diagnostics", response_model=TradingDiagnosticsResponse)
     async def diagnostics() -> TradingDiagnosticsResponse:
-        return TradingDiagnosticsResponse(diagnostics=market_service_factory().diagnostics())
+        return TradingDiagnosticsResponse(
+            diagnostics=market_service_factory().diagnostics()
+        )
 
     @router.websocket("/stream")
     async def stream(websocket: WebSocket) -> None:
         instrument_id = websocket.query_params.get("instrument_id", "")
         interval = websocket.query_params.get("interval", "1m")
+        binding_id = websocket.query_params.get("binding_id") or None
         if not instrument_id:
             await websocket.close(code=1008, reason="instrument_id is required")
             return
         await websocket.accept()
         try:
-            async for update in market_service_factory().stream_updates(instrument_id, interval):
+            async for update in market_service_factory().stream_updates(
+                instrument_id,
+                interval,
+                binding_id,
+            ):
                 await websocket.send_json(_stream_payload(update))
         except WebSocketDisconnect:
             return
         except ValueError as exc:
-            await websocket.send_json({"type": "error", "code": "invalid_stream", "message": str(exc)})
+            await websocket.send_json(
+                {"type": "error", "code": "invalid_stream", "message": str(exc)}
+            )
             await websocket.close(code=1008)
         except Exception as exc:
-            await websocket.send_json({"type": "error", "code": "stream_failed", "message": str(exc)})
+            await websocket.send_json(
+                {"type": "error", "code": "stream_failed", "message": str(exc)}
+            )
             await websocket.close(code=1011)
 
     def register_documents(path: str, record_type: str) -> None:
