@@ -170,6 +170,16 @@ export class TradingChartAdapter {
     return { time: new Date(time * 1_000).toISOString(), price };
   }
 
+  priceToCoordinate(price: number): number | null {
+    this.assertActive();
+    return this.priceSeries.priceToCoordinate(price);
+  }
+
+  priceFromCoordinate(y: number): number | null {
+    this.assertActive();
+    return this.priceSeries.coordinateToPrice(y);
+  }
+
   snapshotDataUrl(): string {
     this.assertActive();
     return this.chart.takeScreenshot().toDataURL('image/png');
