@@ -64,11 +64,7 @@ def _event_payloads(body: str) -> list[dict]:
     return payloads
 
 
-def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> None:
-    speculation.clear_live_speculation_session_cache()
-    handshake.clear_live_speculation_handshake_state()
-    store = _FakeStore()
-    provider = _FakeProvider()
+def _client(store: _FakeStore, provider: _FakeProvider, monkeypatch) -> TestClient:
     monkeypatch.setattr(
         speculation.shared,
         "get_provider",
@@ -83,7 +79,15 @@ def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> 
         app,
         chat_store_factory=lambda: store,
     )
-    client = TestClient(app)
+    return TestClient(app)
+
+
+def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    handshake.clear_live_speculation_handshake_state()
+    store = _FakeStore()
+    provider = _FakeProvider()
+    client = _client(store, provider, monkeypatch)
 
     streamed = client.post(
         "/api/live/speculation/sessions/session-inline/start-stream",
@@ -95,10 +99,13 @@ def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> 
     )
 
     assert streamed.status_code == 200
-    assert streamed.headers["x-omnix-speculation-transport"] == "inline-v1"
+    assert streamed.headers["x-omnix-speculation-transport"] == (
+        "inline-v2-client-id"
+    )
     payloads = _event_payloads(streamed.text)
     assert payloads[0]["type"] == "speculation_started"
     assert payloads[0]["inline_stream"] is True
+    assert payloads[0]["client_allocated"] is False
     assert "".join(
         payload.get("text", "")
         for payload in payloads
@@ -107,3 +114,50 @@ def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> 
     assert payloads[-1]["type"] == "done"
     assert provider.calls == 1
     assert store.get_session_calls == 1
+
+
+def test_inline_stream_honors_a_valid_client_generation_id(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    handshake.clear_live_speculation_handshake_state()
+    store = _FakeStore()
+    provider = _FakeProvider()
+    client = _client(store, provider, monkeypatch)
+    generation_id = "spec-client-1234567890abcdef"
+
+    streamed = client.post(
+        "/api/live/speculation/sessions/session-inline/start-stream",
+        json={
+            "content": "Tell me a story",
+            "segment_id": "segment-inline",
+            "source_sequence": 9,
+            "generation_id": generation_id,
+        },
+    )
+
+    assert streamed.status_code == 200
+    assert streamed.headers["x-omnix-speculation-generation-id"] == generation_id
+    payloads = _event_payloads(streamed.text)
+    assert payloads[0]["generation_id"] == generation_id
+    assert payloads[0]["client_allocated"] is True
+
+
+def test_inline_stream_rejects_an_invalid_client_generation_id(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    handshake.clear_live_speculation_handshake_state()
+    store = _FakeStore()
+    provider = _FakeProvider()
+    client = _client(store, provider, monkeypatch)
+
+    response = client.post(
+        "/api/live/speculation/sessions/session-inline/start-stream",
+        json={
+            "content": "Tell me a story",
+            "segment_id": "segment-inline",
+            "source_sequence": 10,
+            "generation_id": "../../not-valid",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid_speculation_generation_id"
+    assert provider.calls == 0
