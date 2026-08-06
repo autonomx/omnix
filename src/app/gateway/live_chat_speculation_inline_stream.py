@@ -97,7 +97,7 @@ def register_live_chat_speculation_inline_stream_routes(
             cache_hit=cache_hit,
             session_load_ms=round(session_load_ms, 3),
             total_ms=round(allocation_ms, 3),
-            generation_started=True,
+            generation_started=False,
             inline_stream=True,
             max_buffered_events=handshake_runtime._MAX_BUFFERED_EVENTS,
             max_buffered_bytes=handshake_runtime._MAX_BUFFERED_BYTES,
@@ -113,7 +113,6 @@ def register_live_chat_speculation_inline_stream_routes(
             attach_delay_ms=round(allocation_ms, 3),
             inline_stream=True,
         )
-        worker.start()
 
         def generate() -> Iterator[str]:
             yield speculation_runtime._speculation_started_sse(
@@ -127,6 +126,7 @@ def register_live_chat_speculation_inline_stream_routes(
                     "inline_stream": True,
                 }
             )
+            worker.start()
             yield from handshake_runtime._subscribe_generation(
                 generation_id,
                 pending,
