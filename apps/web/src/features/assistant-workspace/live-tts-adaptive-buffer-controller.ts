@@ -159,18 +159,27 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
           message: unknown,
           transfer?: Transferable[],
         ) => {
-          if (isStartPolicyMessage(message)) {
-            const current = policy.snapshot();
+          if (isBufferPolicyMessage(message)) {
+            const effective = adaptiveBufferWorkletMessage(
+              policy.snapshot(),
+              sampleRate,
+            );
             originalPostMessage(
               {
                 ...message,
-                minimumBufferedSpeechSamples: millisecondsToSamples(
-                  current.startBufferMs,
-                  sampleRate,
-                ),
+                startBufferSamples: effective.startBufferSamples,
+                minimumBufferedSpeechSamples:
+                  effective.minimumBufferedSpeechSamples,
+                rebufferSamples: effective.rebufferSamples,
+                maxRebufferSamples: effective.maxRebufferSamples,
               },
               transfer ?? [],
             );
+            dispatchPerformance('tts_adaptive_policy_message_overridden', {
+              sourceType: message.type,
+              sampleRate,
+              ...effective,
+            });
             return;
           }
           originalPostMessage(message, transfer ?? []);
@@ -187,10 +196,9 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
           if (type !== 'underrun' && type !== 'drained') return;
           const next = policy.observeWorkletEvent(type);
           saveSnapshot(next);
+          const nextMessage = adaptiveBufferWorkletMessage(next, sampleRate);
           try {
-            originalPostMessage(
-              adaptiveBufferWorkletMessage(next, sampleRate),
-            );
+            originalPostMessage(nextMessage);
           } catch {
             dispatchPerformance(
               'tts_adaptive_runtime_update_failed',
@@ -199,12 +207,18 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
           }
           dispatchPerformance('tts_adaptive_buffer_updated', {
             trigger: type,
+            sampleRate,
             ...next,
+            ...nextMessage,
           });
         },
       );
       node.port.start?.();
-      dispatchPerformance('tts_adaptive_buffer_applied', snapshot);
+      dispatchPerformance('tts_adaptive_buffer_applied', {
+        sampleRate,
+        ...snapshot,
+        ...policyMessage,
+      });
       return node;
     },
   });
@@ -245,14 +259,12 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
   };
 }
 
-function isStartPolicyMessage(
+function isBufferPolicyMessage(
   value: unknown,
-): value is Record<string, unknown> & { type: 'set_start_policy' } {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && (value as Record<string, unknown>).type === 'set_start_policy',
-  );
+): value is Record<string, unknown> & { type: string } {
+  if (!value || typeof value !== 'object') return false;
+  const type = (value as Record<string, unknown>).type;
+  return type === 'set_start_policy' || type === 'set_buffer_policy';
 }
 
 function millisecondsToSamples(
