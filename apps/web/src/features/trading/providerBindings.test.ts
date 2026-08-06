@@ -6,7 +6,7 @@ import { TradingStreamHub } from './streaming/tradingStreamHub';
 describe('provider binding ownership', () => {
   it('persists the selected binding independently from the instrument', () => {
     const payload = serializeTradingWorkspace({
-      layout: 'one',
+      layout: 'auto',
       activeChartId: 'chart-1',
       charts: [{
         chartId: 'chart-1',
