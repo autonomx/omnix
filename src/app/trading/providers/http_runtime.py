@@ -128,24 +128,28 @@ class ProviderHttpRuntime:
                         raise ProviderCancelledError(f"{self.provider_id} request cancelled")
                     try:
                         response = self._send(method, url, **kwargs)
-                        if response.status_code not in _RETRYABLE_STATUS:
-                            response.raise_for_status()
+                        status_code = int(getattr(response, "status_code", 200))
+                        if status_code not in _RETRYABLE_STATUS:
+                            raise_for_status = getattr(response, "raise_for_status", None)
+                            if callable(raise_for_status):
+                                raise_for_status()
                             self._record_success()
                             return response
-                        retry_after = response.headers.get("Retry-After")
+                        headers = getattr(response, "headers", {}) or {}
+                        retry_after = headers.get("Retry-After")
                         delay = (
                             float(retry_after)
                             if retry_after and retry_after.replace(".", "", 1).isdigit()
                             else self.initial_backoff_seconds * (2**attempt)
                         )
-                        if response.status_code == 429:
+                        if status_code == 429:
                             error = ProviderRateLimitedError(
                                 f"{self.provider_id} rate limited request: HTTP 429"
                             )
                             self._record_failure(error, rate_limited=True)
                         else:
                             error = ProviderUnavailableError(
-                                f"{self.provider_id} unavailable: HTTP {response.status_code}"
+                                f"{self.provider_id} unavailable: HTTP {status_code}"
                             )
                             self._record_failure(error)
                         last_error = error
