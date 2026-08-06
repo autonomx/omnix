@@ -1,4 +1,7 @@
 import {
+  AreaSeries,
+  BarSeries,
+  BaselineSeries,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
@@ -12,13 +15,20 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { DrawingPoint } from '../drawings/drawingCommands';
-import { indicatorPoints, type CoreIndicatorInstance } from '../indicators/coreIndicators';
+import { indicatorOutputs, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 
-export type TradingChartType = 'candlestick' | 'line';
+export type TradingChartType = 'candlestick' | 'bar' | 'line' | 'area' | 'baseline';
 export type TradingCrosshairPoint = { time: Time; price: number };
 export type TradingVisibleRange = { from: Time; to: Time };
 export type DrawingCoordinate = { x: number; y: number };
+type PriceSeries =
+  | ISeriesApi<'Candlestick'>
+  | ISeriesApi<'Bar'>
+  | ISeriesApi<'Line'>
+  | ISeriesApi<'Area'>
+  | ISeriesApi<'Baseline'>;
+type IndicatorSeries = ISeriesApi<'Line'> | ISeriesApi<'Histogram'>;
 
 function timestamp(value: string): UTCTimestamp {
   const milliseconds = Date.parse(value);
@@ -34,11 +44,24 @@ export function volumeData(bar: MarketBar): HistogramData<UTCTimestamp> {
   return { time: timestamp(bar.start_time), value: Number(bar.volume), color: Number(bar.close) >= Number(bar.open) ? 'rgba(32,201,151,.45)' : 'rgba(255,107,107,.42)' };
 }
 
+function indicatorColor(output: IndicatorOutput): string {
+  if (output.key.includes('upper')) return '#74c0fc';
+  if (output.key.includes('lower')) return '#74c0fc';
+  if (output.key.includes('middle')) return '#a5d8ff';
+  if (output.key.includes('signal')) return '#ff922b';
+  if (output.key.includes('histogram')) return '#20c997';
+  if (output.key.startsWith('atr')) return '#ffa94d';
+  if (output.key.startsWith('vwap')) return '#ffd43b';
+  if (output.key.startsWith('sma')) return '#ffd43b';
+  if (output.key.startsWith('ema')) return '#e599f7';
+  return '#5c7cfa';
+}
+
 export class TradingChartAdapter {
   private readonly chart: IChartApi;
-  private priceSeries: ISeriesApi<'Candlestick'> | ISeriesApi<'Line'>;
+  private priceSeries: PriceSeries;
   private readonly volumeSeries: ISeriesApi<'Histogram'>;
-  private readonly indicatorSeries = new Map<string, ISeriesApi<'Line'>>();
+  private readonly indicatorSeries = new Map<string, IndicatorSeries>();
   private chartType: TradingChartType;
   private readonly revisions = new Map<number, number>();
   private destroyed = false;
@@ -57,9 +80,28 @@ export class TradingChartAdapter {
     this.volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   }
 
-  private createPriceSeries(type: TradingChartType): ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> {
+  private createPriceSeries(type: TradingChartType): PriceSeries {
     if (type === 'line') return this.chart.addSeries(LineSeries, { color: '#4dabf7', lineWidth: 2 });
+    if (type === 'area') return this.chart.addSeries(AreaSeries, { lineColor: '#4dabf7', topColor: 'rgba(77,171,247,.35)', bottomColor: 'rgba(77,171,247,.02)', lineWidth: 2 });
+    if (type === 'baseline') return this.chart.addSeries(BaselineSeries, { baseValue: { type: 'price', price: 0 }, topLineColor: '#20c997', bottomLineColor: '#ff6b6b', lineWidth: 2 });
+    if (type === 'bar') return this.chart.addSeries(BarSeries, { upColor: '#20c997', downColor: '#ff6b6b', openVisible: true, thinBars: false });
     return this.chart.addSeries(CandlestickSeries, { upColor: '#20c997', downColor: '#ff6b6b', borderVisible: false, wickUpColor: '#20c997', wickDownColor: '#ff6b6b' });
+  }
+
+  private setPriceData(bars: readonly MarketBar[]): void {
+    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).setData(bars.map(candlestickData));
+    else if (this.chartType === 'bar') (this.priceSeries as ISeriesApi<'Bar'>).setData(bars.map(candlestickData));
+    else if (this.chartType === 'area') (this.priceSeries as ISeriesApi<'Area'>).setData(bars.map(lineData));
+    else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).setData(bars.map(lineData));
+    else (this.priceSeries as ISeriesApi<'Line'>).setData(bars.map(lineData));
+  }
+
+  private updatePriceData(bar: MarketBar): void {
+    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).update(candlestickData(bar));
+    else if (this.chartType === 'bar') (this.priceSeries as ISeriesApi<'Bar'>).update(candlestickData(bar));
+    else if (this.chartType === 'area') (this.priceSeries as ISeriesApi<'Area'>).update(lineData(bar));
+    else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).update(lineData(bar));
+    else (this.priceSeries as ISeriesApi<'Line'>).update(lineData(bar));
   }
 
   setChartType(type: TradingChartType, bars: readonly MarketBar[]): void {
@@ -75,28 +117,30 @@ export class TradingChartAdapter {
     this.assertActive();
     this.revisions.clear();
     for (const bar of bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
-    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).setData(bars.map(candlestickData));
-    else (this.priceSeries as ISeriesApi<'Line'>).setData(bars.map(lineData));
+    this.setPriceData(bars);
     this.volumeSeries.setData(bars.map(volumeData));
     if (fit) this.chart.timeScale().fitContent();
   }
 
   setIndicators(bars: readonly MarketBar[], indicators: readonly CoreIndicatorInstance[]): void {
     this.assertActive();
-    const enabled = new Set(indicators.filter((item) => item.enabled).map((item) => `${item.id}:${item.period}`));
+    const outputs = indicators.filter((item) => item.enabled).flatMap((item) => indicatorOutputs(bars, item));
+    const enabled = new Set(outputs.map((output) => output.key));
     for (const [key, series] of this.indicatorSeries) {
       if (!enabled.has(key)) { this.chart.removeSeries(series); this.indicatorSeries.delete(key); }
     }
-    for (const instance of indicators.filter((item) => item.enabled)) {
-      const key = `${instance.id}:${instance.period}`;
-      let series = this.indicatorSeries.get(key);
+    for (const output of outputs) {
+      let series = this.indicatorSeries.get(output.key);
       if (!series) {
-        const paneIndex = instance.id === 'rsi' ? 1 : 0;
-        const color = instance.id === 'sma' ? '#ffd43b' : instance.id === 'ema' ? '#e599f7' : '#5c7cfa';
-        series = this.chart.addSeries(LineSeries, { color, lineWidth: 2, title: `${instance.id.toUpperCase()} ${instance.period}`, priceScaleId: instance.id === 'rsi' ? 'rsi' : 'right' }, paneIndex);
-        this.indicatorSeries.set(key, series);
+        const color = indicatorColor(output);
+        series = output.kind === 'histogram'
+          ? this.chart.addSeries(HistogramSeries, { color, title: output.title, priceScaleId: `indicator:${output.key}` }, output.pane)
+          : this.chart.addSeries(LineSeries, { color, lineWidth: 2, title: output.title, priceScaleId: output.pane === 1 ? `indicator:${output.key}` : 'right' }, output.pane);
+        this.indicatorSeries.set(output.key, series);
       }
-      series.setData(indicatorPoints(bars, instance).map((point) => ({ time: timestamp(point.time), value: point.value })));
+      const data = output.points.map((point) => ({ time: timestamp(point.time), value: point.value }));
+      if (output.kind === 'histogram') (series as ISeriesApi<'Histogram'>).setData(data);
+      else (series as ISeriesApi<'Line'>).setData(data);
     }
   }
 
@@ -106,8 +150,7 @@ export class TradingChartAdapter {
     const previousRevision = this.revisions.get(time) ?? 0;
     if (bar.ingestion_revision < previousRevision) return false;
     this.revisions.set(time, bar.ingestion_revision);
-    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).update(candlestickData(bar));
-    else (this.priceSeries as ISeriesApi<'Line'>).update(lineData(bar));
+    this.updatePriceData(bar);
     this.volumeSeries.update(volumeData(bar));
     return true;
   }
@@ -125,6 +168,11 @@ export class TradingChartAdapter {
     const price = this.priceSeries.coordinateToPrice(y);
     if (typeof time !== 'number' || price === null) return null;
     return { time: new Date(time * 1_000).toISOString(), price };
+  }
+
+  snapshotDataUrl(): string {
+    this.assertActive();
+    return this.chart.takeScreenshot().toDataURL('image/png');
   }
 
   onCrosshair(listener: (point: TradingCrosshairPoint | null) => void): () => void {
