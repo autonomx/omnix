@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 from threading import Lock
@@ -40,15 +41,23 @@ class TradingMarketDataService:
         interval: str,
         limit: int = 500,
         binding_id: str | None = None,
+        cancellation: threading.Event | None = None,
     ):
-        return self.registry.bars(instrument_id, interval, limit, binding_id)
+        return self.registry.bars(
+            instrument_id,
+            interval,
+            limit,
+            binding_id,
+            cancellation,
+        )
 
     def quote(
         self,
         instrument_id: str,
         binding_id: str | None = None,
+        cancellation: threading.Event | None = None,
     ) -> dict[str, object]:
-        return self.registry.quote(instrument_id, binding_id)
+        return self.registry.quote(instrument_id, binding_id, cancellation)
 
     async def stream_updates(
         self,
@@ -73,6 +82,7 @@ class TradingMarketDataService:
         return self.registry.descriptors()
 
     def diagnostics(self) -> dict[str, Any]:
+        providers = self.provider_descriptors()
         return {
             "providers": [
                 {
@@ -81,14 +91,17 @@ class TradingMarketDataService:
                     "binding_count": len(item["bindings"]),
                     "official": item["policy"].is_official_api,
                     "usage_scope": item["policy"].usage_scope,
+                    "runtime": item.get("runtime", {}),
                 }
-                for item in self.provider_descriptors()
+                for item in providers
             ],
             "cache": {
                 "authority": False,
                 "disposable": True,
                 "directory": str(self.cache.cache_dir) if self.cache.cache_dir else None,
                 "max_entries": self.cache.max_entries,
+                "disk_bounded": True,
+                "atomic_writes": True,
             },
             "streams": self.subscriptions.status(),
             "upstream_subscription_count": self.subscriptions.upstream_subscription_count,
