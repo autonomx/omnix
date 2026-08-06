@@ -18,6 +18,20 @@ from .service import TradingMarketDataService, default_market_data_service
 from .streaming.manager import StreamingBarUpdate
 
 
+class ProviderRuntimeStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    consecutive_failures: int = 0
+    rate_limit_count: int = 0
+    in_flight: int = 0
+    max_concurrency: int = 0
+    last_success_at: str | None = None
+    last_failure_at: str | None = None
+    last_error: str | None = None
+
+
 class ProviderDescriptor(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider: str
@@ -26,6 +40,7 @@ class ProviderDescriptor(BaseModel):
     status: Literal["ready", "degraded", "unavailable"]
     policy: ProviderPolicy
     bindings: list[ProviderBinding]
+    runtime: ProviderRuntimeStatus = Field(default_factory=ProviderRuntimeStatus)
 
 
 class ProviderStatusResponse(BaseModel):
