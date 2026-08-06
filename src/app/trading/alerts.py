@@ -41,7 +41,9 @@ class TradingAlertParameters(BaseModel):
     fast_period: int = Field(default=12, ge=1, le=500)
     slow_period: int = Field(default=26, ge=1, le=500)
     signal_period: int = Field(default=9, ge=1, le=500)
-    component: Literal["value", "line", "signal", "histogram", "upper", "middle", "lower"] = "value"
+    component: Literal[
+        "value", "line", "signal", "histogram", "upper", "middle", "lower"
+    ] = "value"
     anchor_bars_ago: int = Field(default=0, ge=0, le=499)
 
 
@@ -68,7 +70,10 @@ class _AlertContract(BaseModel):
 
     @model_validator(mode="after")
     def validate_condition_contract(self):
-        if self.condition_type.startswith("indicator_") and self.parameters.indicator_id is None:
+        if (
+            self.condition_type.startswith("indicator_")
+            and self.parameters.indicator_id is None
+        ):
             raise ValueError("indicator conditions require parameters.indicator_id")
         if self.evaluation_policy.formula_version != CORE_INDICATOR_FORMULA_VERSION:
             raise ValueError(
@@ -106,6 +111,7 @@ class TradingAlertEvaluation(BaseModel):
 
     instrument_id: str
     binding_id: str | None = None
+    resolved_binding_id: str | None = None
     provider: str | None = None
     interval: str = "1m"
     observed_price: Decimal
@@ -412,13 +418,17 @@ class TradingAlertRepository:
                         alert.condition_type,
                     )
                     trigger_id = key[:32]
+                    resolved_binding_id = (
+                        evaluation.resolved_binding_id or evaluation.binding_id
+                    )
                     payload = {
                         "instrument_id": alert.instrument_id,
                         "condition_type": alert.condition_type,
                         "condition_parameters": alert.parameters.model_dump(mode="json"),
                         "evaluation_policy": alert.evaluation_policy.model_dump(mode="json"),
                         "provider": evaluation.provider,
-                        "binding_id": evaluation.binding_id,
+                        "requested_binding_id": evaluation.binding_id,
+                        "resolved_binding_id": resolved_binding_id,
                         "source_time": evaluation.observed_at.isoformat(),
                         "evaluation_time": evaluation.evaluated_at.isoformat(),
                         "previous_value": str(alert.last_observed_value),
@@ -444,7 +454,7 @@ class TradingAlertRepository:
                             trigger_id,
                             alert.alert_id,
                             alert.instrument_id,
-                            evaluation.binding_id,
+                            resolved_binding_id,
                             evaluation.provider,
                             observed_value,
                             evaluation.observed_price,
