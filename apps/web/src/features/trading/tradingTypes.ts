@@ -150,6 +150,7 @@ export interface TradingAlert {
   evaluation_policy: TradingAlertEvaluationPolicy;
   enabled: boolean;
   cooldown_seconds: number;
+  expires_at?: string | null;
   last_observed_price?: string | null;
   last_observed_value?: string | null;
   last_triggered_at?: string | null;
@@ -183,6 +184,7 @@ export interface TradingAlertCreateInput {
   parameters?: Partial<TradingAlertParameters>;
   evaluation_policy?: Partial<TradingAlertEvaluationPolicy>;
   cooldown_seconds: number;
+  expires_at?: string | null;
 }
 
 export interface TradingAlertUpdateInput {
@@ -194,4 +196,5 @@ export interface TradingAlertUpdateInput {
   evaluation_policy: TradingAlertEvaluationPolicy;
   enabled: boolean;
   cooldown_seconds: number;
+  expires_at?: string | null;
 }
