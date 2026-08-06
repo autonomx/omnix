@@ -4076,6 +4076,7 @@ export interface components {
             policy: components["schemas"]["ProviderPolicy"];
             /** Provider */
             provider: string;
+            runtime?: components["schemas"]["ProviderRuntimeStatus"];
             /**
              * Status
              * @enum {string}
@@ -4194,6 +4195,50 @@ export interface components {
              */
             terms_reference: string;
             usage_scope: components["schemas"]["UsageScope"];
+        };
+        /** ProviderRuntimeStatus */
+        ProviderRuntimeStatus: {
+            /**
+             * Consecutive Failures
+             * @default 0
+             */
+            consecutive_failures: number;
+            /**
+             * Failure Count
+             * @default 0
+             */
+            failure_count: number;
+            /**
+             * In Flight
+             * @default 0
+             */
+            in_flight: number;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Failure At */
+            last_failure_at?: string | null;
+            /** Last Success At */
+            last_success_at?: string | null;
+            /**
+             * Max Concurrency
+             * @default 0
+             */
+            max_concurrency: number;
+            /**
+             * Rate Limit Count
+             * @default 0
+             */
+            rate_limit_count: number;
+            /**
+             * Request Count
+             * @default 0
+             */
+            request_count: number;
+            /**
+             * Success Count
+             * @default 0
+             */
+            success_count: number;
         };
         /** ProviderStatusResponse */
         ProviderStatusResponse: {

@@ -5345,6 +5345,9 @@
             "title": "Provider",
             "type": "string"
           },
+          "runtime": {
+            "$ref": "#/components/schemas/ProviderRuntimeStatus"
+          },
           "status": {
             "enum": [
               "ready",
@@ -5581,6 +5584,81 @@
           "usage_scope"
         ],
         "title": "ProviderPolicy",
+        "type": "object"
+      },
+      "ProviderRuntimeStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "consecutive_failures": {
+            "default": 0,
+            "title": "Consecutive Failures",
+            "type": "integer"
+          },
+          "failure_count": {
+            "default": 0,
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "in_flight": {
+            "default": 0,
+            "title": "In Flight",
+            "type": "integer"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_failure_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure At"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "max_concurrency": {
+            "default": 0,
+            "title": "Max Concurrency",
+            "type": "integer"
+          },
+          "rate_limit_count": {
+            "default": 0,
+            "title": "Rate Limit Count",
+            "type": "integer"
+          },
+          "request_count": {
+            "default": 0,
+            "title": "Request Count",
+            "type": "integer"
+          },
+          "success_count": {
+            "default": 0,
+            "title": "Success Count",
+            "type": "integer"
+          }
+        },
+        "title": "ProviderRuntimeStatus",
         "type": "object"
       },
       "ProviderStatusResponse": {
