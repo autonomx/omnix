@@ -39,7 +39,7 @@ jobs:
 
       - name: Import launcher entry points on Python 3.10
         run: |
-          python -c "from app.gateway.live_call_prewarm import register_live_call_prewarm_routes; from app.gateway.live_chat_async_sse_bridge import eager_async_sse_stream; from app.gateway.live_chat_lmstudio_diagnostics import install_live_chat_lmstudio_diagnostics_hook; from app.gateway.live_chat_prompt_window import install_live_chat_prompt_window_hook; from app.gateway.live_chat_prompt_dependency_stages import install_live_chat_prompt_dependency_stage_hook; from app.gateway.live_sse_transport import install_live_sse_transport_hook; from app.gateway.lmstudio_loaded_model_resolution import install_lmstudio_loaded_model_resolution_hook; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.live_chat_speculation_handshake import register_live_chat_speculation_handshake_routes; from app.gateway.live_chat_speculation_inline_stream import register_live_chat_speculation_inline_stream_routes; from app.gateway.tts_live_call_startup_frame_policy import install_tts_live_call_startup_frame_policy; from app.gateway.tts_stream_contract import TtsStreamRequest; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
+          python -c "from app.gateway.live_call_prewarm import register_live_call_prewarm_routes; from app.gateway.live_chat_async_sse_bridge import eager_async_sse_stream; from app.gateway.live_chat_lmstudio_diagnostics import install_live_chat_lmstudio_diagnostics_hook; from app.gateway.live_chat_prompt_window import install_live_chat_prompt_window_hook; from app.gateway.live_chat_prompt_dependency_stages import install_live_chat_prompt_dependency_stage_hook; from app.gateway.live_sse_transport import install_live_sse_transport_hook; from app.gateway.lmstudio_loaded_model_resolution import install_lmstudio_loaded_model_resolution_hook; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.live_chat_speculation_handshake import register_live_chat_speculation_handshake_routes; from app.gateway.live_chat_speculation_inline_stream import register_live_chat_speculation_inline_stream_routes; from app.gateway.tts_live_call_pcm_diagnostics import install_tts_live_call_pcm_diagnostics_hook; from app.gateway.tts_live_call_startup_frame_policy import install_tts_live_call_startup_frame_policy; from app.gateway.tts_stream_contract import TtsStreamRequest; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
 
       - name: Validate secure Moshi entrypoint
         run: bash -n scripts/kyutai_moshi_secure_entrypoint.sh
@@ -70,6 +70,7 @@ jobs:
             src/app/gateway/live_chat_speculation_inline_stream.py \
             src/app/gateway/live_sse_transport.py \
             src/app/gateway/lmstudio_loaded_model_resolution.py \
+            src/app/gateway/tts_live_call_pcm_diagnostics.py \
             src/app/gateway/tts_live_call_startup_frame_policy.py \
             src/app/gateway/tts_live_capabilities.py \
             src/app/gateway/tts_stream_contract.py \
@@ -95,6 +96,7 @@ jobs:
             src/tests/app/test_live_chat_speculation_handshake.py \
             src/tests/app/test_live_chat_speculation_inline_stream.py \
             src/tests/app/test_live_sse_transport.py \
+            src/tests/app/test_tts_live_call_pcm_diagnostics.py \
             src/tests/app/test_tts_live_call_startup_frame_policy.py \
             src/tests/app/test_tts_live_capabilities.py \
             src/tests/app/test_tts_stream_contract.py
@@ -125,6 +127,7 @@ jobs:
             src/tests/app/test_live_chat_speculation_handshake.py \
             src/tests/app/test_live_chat_speculation_inline_stream.py \
             src/tests/app/test_live_sse_transport.py \
+            src/tests/app/test_tts_live_call_pcm_diagnostics.py \
             src/tests/app/test_tts_live_call_startup_frame_policy.py \
             src/tests/app/test_tts_live_capabilities.py \
             src/tests/app/test_tts_stream_contract.py \
