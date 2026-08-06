@@ -70,10 +70,11 @@ def test_initial_silence_filter_falls_back_for_quiet_speech_within_bounded_audio
     assert blocks[0][2] == {"chunk": 1}
 
 
-def test_initial_silence_filter_never_discards_unbounded_provider_audio() -> None:
+def test_initial_silence_filter_retains_preroll_until_real_signal_arrives() -> None:
     sample_rate = 24_000
     chunk_samples = 7_680
     silence = struct.pack("<h", 0) * chunk_samples
+    extremely_quiet_speech = struct.pack("<h", 1) * chunk_samples
 
     blocks = list(
         stream_pcm16_blocks(
@@ -81,6 +82,7 @@ def test_initial_silence_filter_never_discards_unbounded_provider_audio() -> Non
                 [
                     (silence, sample_rate, {"chunk": 0}),
                     (silence, sample_rate, {"chunk": 1}),
+                    (extremely_quiet_speech, sample_rate, {"chunk": 2}),
                 ]
             ),
             block_samples=2_400,
@@ -88,7 +90,9 @@ def test_initial_silence_filter_never_discards_unbounded_provider_audio() -> Non
     )
 
     assert blocks
-    assert len(blocks[0][0]) == 4_800
+    first_samples = struct.unpack("<2400h", blocks[0][0])
+    assert any(sample != 0 for sample in first_samples)
+    assert blocks[0][2] == {"chunk": 2}
 
 
 def test_torch_tensor_pcm_conversion_avoids_python_scalar_fallback() -> None:
