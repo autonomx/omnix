@@ -1,4 +1,5 @@
 import type { ProviderBinding, ProviderDescriptor } from './tradingTypes';
+import './TradingCompliance.css';
 
 function safeExternalReference(reference: string): string | null {
   try {
