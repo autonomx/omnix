@@ -250,10 +250,20 @@ async function installTradingMocks(page: Page): Promise<MockState> {
 
 test('Trading terminal smoke covers flexible layout, saved workspaces, drawings, and chart alerts', async ({ page }) => {
   const state = await installTradingMocks(page);
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => {
+    const message = error.stack ?? error.message;
+    pageErrors.push(message);
+    console.error(`[trading-pageerror] ${message}`);
+  });
+  page.on('console', (message) => {
+    if (message.type() === 'error') console.error(`[trading-console] ${message.text()}`);
+  });
   await page.goto('/trading');
 
   await expect(page.getByRole('main', { name: /Trading/i })).toBeVisible();
   await expect(page.locator('.trading-chart-panel').first()).toBeVisible();
+  await expect.poll(() => pageErrors, { message: 'Trading must initialize without browser exceptions' }).toEqual([]);
   await expect(page.locator('.trading-chart-ohlc').first()).toBeVisible();
 
   await page.getByLabel('Number of charts').selectOption('3');
