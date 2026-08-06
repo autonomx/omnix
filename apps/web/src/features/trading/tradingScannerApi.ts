@@ -17,10 +17,16 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+function arrayField<T>(payload: unknown, field: string): T[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const value = (payload as Record<string, unknown>)[field];
+  return Array.isArray(value) ? value as T[] : [];
+}
+
 export const tradingScannerApi = {
   definitions: async () => {
-    const payload = await requestJson<{ scanners: TradingScannerDefinition[] }>('/api/trading/scanners');
-    return payload.scanners;
+    const payload = await requestJson<unknown>('/api/trading/scanners');
+    return arrayField<TradingScannerDefinition>(payload, 'scanners');
   },
   create: (definition: TradingScannerDefinition) =>
     requestJson<TradingScannerDefinition>('/api/trading/scanners', {
@@ -39,13 +45,13 @@ export const tradingScannerApi = {
     requestJson<{ ok: boolean; run_id: string; status: string }>(`/api/trading/scanners/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }),
   runs: async (scannerId?: string) => {
     const query = scannerId ? `?scanner_id=${encodeURIComponent(scannerId)}` : '';
-    const payload = await requestJson<{ runs: TradingScannerRun[] }>(`/api/trading/scanners/runs${query}`);
-    return payload.runs;
+    const payload = await requestJson<unknown>(`/api/trading/scanners/runs${query}`);
+    return arrayField<TradingScannerRun>(payload, 'runs');
   },
   results: async (runId: string) => {
-    const payload = await requestJson<{ results: TradingScannerResult[] }>(
+    const payload = await requestJson<unknown>(
       `/api/trading/scanners/runs/${encodeURIComponent(runId)}/results`,
     );
-    return payload.results;
+    return arrayField<TradingScannerResult>(payload, 'results');
   },
 };
