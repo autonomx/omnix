@@ -63,6 +63,7 @@ type LiveVoiceSession = {
   speechDetected: boolean;
   finalRequested: boolean;
   silenceTimer: ReturnType<typeof setTimeout> | null;
+  pauseStartedAt: number | null;
   finalResponseTimer: ReturnType<typeof setTimeout> | null;
   voiceLevel: number;
   speechFrameCount: number;
@@ -91,6 +92,7 @@ type EndpointCommitState = {
   speechDetected: boolean;
   finalRequested: boolean;
   pausePending: boolean;
+  pauseElapsedMs: number;
 };
 
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
@@ -100,6 +102,7 @@ const DEFAULT_CONVERSATION_PACE: ConversationPace = 'balanced';
 const MIN_SPEECH_RMS_THRESHOLD = 0.012;
 const MAX_SPEECH_RMS_THRESHOLD = 0.06;
 const INTERRUPT_CONFIRMATION_FRAMES = 3;
+const PROVIDER_ENDPOINT_MIN_SILENCE_MS = 160;
 const FINAL_RESPONSE_TIMEOUT_MS = 8_000;
 const FINALIZATION_BUFFER_MS = FINAL_RESPONSE_TIMEOUT_MS;
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
@@ -141,7 +144,8 @@ export function shouldCommitProviderEndpoint(state: EndpointCommitState): boolea
     && state.probability >= state.endpointThreshold
     && state.speechDetected
     && !state.finalRequested
-    && state.pausePending;
+    && state.pausePending
+    && state.pauseElapsedMs >= PROVIDER_ENDPOINT_MIN_SILENCE_MS;
 }
 
 export function initializeLiveVoiceController(root: ParentNode = document): void {
@@ -409,6 +413,7 @@ capture_epoch: identity.captureEpoch,
       speechDetected: false,
       finalRequested: false,
       silenceTimer: null,
+      pauseStartedAt: null,
       finalResponseTimer: null,
       voiceLevel: 0,
       speechFrameCount: 0,
@@ -563,6 +568,7 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
   }
   if (confirmedSpeech) {
     session.speechDetected = true;
+    session.pauseStartedAt = null;
     if (!assistantOwnsFloor) {
       session.overlapIntent = null;
       session.floorState = reduceUserFloor(session.floorState, {
@@ -576,6 +582,7 @@ function processAudioFrame(session: LiveVoiceSession, audio: Float32Array): void
       session.floorState = reduceUserFloor(session.floorState, { type: 'resume' });
     }
   } else if (session.speechDetected && !session.silenceTimer) {
+    session.pauseStartedAt = performance.now();
     session.floorState = reduceUserFloor(session.floorState, { type: 'pause' });
     scheduleSemanticFinalization(session);
   }
@@ -608,6 +615,9 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
   const session = activeSession;
   if (!session || session.card !== card) return;
   const candidateText = session.partialTranscript.trim();
+  const pauseElapsedMs = session.pauseStartedAt === null
+    ? 0
+    : Math.max(0, performance.now() - session.pauseStartedAt);
   session.speculationSegmentId = event.segmentId;
   session.speculationSourceSequence = event.sequence;
   session.reporter.record('stt_endpoint_candidate', {
@@ -618,6 +628,8 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
     model_time_ms: event.modelTimeMs,
     transcript_chars: candidateText.length,
     authority_enabled: session.sttAuthority.authorityEnabled,
+    pause_elapsed_ms: Math.round(pauseElapsedMs),
+    endpoint_min_silence_ms: PROVIDER_ENDPOINT_MIN_SILENCE_MS,
   }, 'live_voice_controller');
   dispatchLiveVoicePerfEvent({
     stage: 'stt_endpoint_candidate',
@@ -629,6 +641,8 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
     modelTimeMs: event.modelTimeMs,
     transcriptChars: candidateText.length,
     authorityEnabled: session.sttAuthority.authorityEnabled,
+    pauseElapsedMs: Math.round(pauseElapsedMs),
+    endpointMinSilenceMs: PROVIDER_ENDPOINT_MIN_SILENCE_MS,
   });
   if (session.sttAuthority.authorityEnabled && candidateText) {
     const detail = {
@@ -651,6 +665,7 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
     speechDetected: session.speechDetected,
     finalRequested: session.finalRequested,
     pausePending: session.silenceTimer !== null,
+    pauseElapsedMs,
   })) return;
   requestFinalTranscript(session, 'provider_endpoint', event);
 }
@@ -745,6 +760,7 @@ function requestFinalTranscript(
 ): void {
   if (session.silenceTimer) clearTimeout(session.silenceTimer);
   session.silenceTimer = null;
+  session.pauseStartedAt = null;
   if (activeSession !== session || session.finalRequested) return;
   if (session.floorState === 'overlap_candidate' && session.partialTranscript) assessOverlapCandidate(session);
   session.floorState = reduceUserFloor(session.floorState, { type: 'commit' });
@@ -759,6 +775,7 @@ function requestFinalTranscript(
       probability: endpoint.probability,
       model_time_ms: endpoint.modelTimeMs,
       endpoint_threshold: session.sttAuthority.endpointThreshold,
+      endpoint_min_silence_ms: PROVIDER_ENDPOINT_MIN_SILENCE_MS,
     }, 'live_voice_controller');
     dispatchLiveVoicePerfEvent({
       stage: 'stt_endpoint_committed',
@@ -770,6 +787,7 @@ function requestFinalTranscript(
       probability: endpoint.probability,
       modelTimeMs: endpoint.modelTimeMs,
       endpointThreshold: session.sttAuthority.endpointThreshold,
+      endpointMinSilenceMs: PROVIDER_ENDPOINT_MIN_SILENCE_MS,
     });
   }
   dispatchLiveVoicePerfEvent({
@@ -985,6 +1003,7 @@ function resetTurnState(session: LiveVoiceSession): void {
   if (session.silenceTimer) clearTimeout(session.silenceTimer);
   if (session.finalResponseTimer) clearTimeout(session.finalResponseTimer);
   session.silenceTimer = null;
+  session.pauseStartedAt = null;
   session.finalResponseTimer = null;
   session.speechDetected = false;
   session.speechFrameCount = 0;
