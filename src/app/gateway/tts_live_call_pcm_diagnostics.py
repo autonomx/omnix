@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from . import tts_live_call_websocket
 from .tts_stream_diagnostics import stream_log
