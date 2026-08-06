@@ -48,15 +48,15 @@ export const defaultTradingIndicators = (): CoreIndicatorInstance[] => [
 ];
 
 export const useTradingStore = create<TradingWorkspaceState>((set) => ({
-  layout: 'one',
+  layout: 'four',
   activeChartId: 'chart-1',
   drawingTool: 'cursor',
   drawingSnapMode: 'ohlc',
   charts: [
-    { chartId: 'chart-1', instrumentId: defaultInstrument, bindingId: null, interval: '1m', chartType: 'candlestick', indicators: defaultTradingIndicators() },
-    { chartId: 'chart-2', instrumentId: 'crypto:BINANCE:spot:ETH-USDT', bindingId: null, interval: '5m', chartType: 'candlestick', indicators: defaultTradingIndicators() },
-    { chartId: 'chart-3', instrumentId: 'crypto:BINANCE:spot:SOL-USDT', bindingId: null, interval: '15m', chartType: 'candlestick', indicators: defaultTradingIndicators() },
-    { chartId: 'chart-4', instrumentId: defaultInstrument, bindingId: null, interval: '1h', chartType: 'line', indicators: defaultTradingIndicators() },
+    { chartId: 'chart-1', instrumentId: defaultInstrument, bindingId: null, interval: '1d', chartType: 'candlestick', indicators: defaultTradingIndicators() },
+    { chartId: 'chart-2', instrumentId: 'crypto:BINANCE:spot:ETH-USDT', bindingId: null, interval: '1d', chartType: 'candlestick', indicators: defaultTradingIndicators() },
+    { chartId: 'chart-3', instrumentId: 'crypto:BINANCE:spot:SOL-USDT', bindingId: null, interval: '1d', chartType: 'candlestick', indicators: defaultTradingIndicators() },
+    { chartId: 'chart-4', instrumentId: defaultInstrument, bindingId: null, interval: '1d', chartType: 'line', indicators: defaultTradingIndicators() },
   ],
   links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
   setLayout: (layout) => set({ layout }),
