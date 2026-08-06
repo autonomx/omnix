@@ -140,6 +140,45 @@ describe('live voice release observer', () => {
     );
   });
 
+  it('does not charge an unmatched late STT final to the previous turn', () => {
+    now = 100;
+    perf('stt_final_requested', 'voice-turn:one');
+    now = 165;
+    perf('stt_final_received', 'voice-turn:one', { sttFinalizeMs: 65 });
+    diagnostic('turn_intercepted', 'live-call:voice-turn:one');
+    now = 500;
+    diagnostic('turn_finished', 'live-call:voice-turn:one');
+
+    mocks.record.mockClear();
+    now = 24_000;
+    perf('stt_final_received', 'voice-turn:two');
+
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'stt_finalize_ms' }),
+      'release_observer',
+    );
+    expect(mocks.record).toHaveBeenCalledWith('release_metric_skipped', {
+      metric_name: 'stt_finalize_ms',
+      reason: 'missing_matching_stt_final_requested',
+      incoming_turn_id: 'voice-turn:two',
+      requested_turn_id: null,
+    }, 'release_observer');
+  });
+
+  it('uses an explicit finalize duration for a new turn without stale fallback time', () => {
+    now = 100;
+    perf('stt_final_requested', 'voice-turn:one');
+    now = 10_000;
+    perf('stt_final_received', 'voice-turn:two', { sttFinalizeMs: 72 });
+
+    expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
+      metric_name: 'stt_finalize_ms',
+      value_ms: 72,
+      turn_id: 'voice-turn:two',
+    }), 'release_observer');
+  });
+
   it('records manually labelled quality trials', () => {
     recordLiveVoiceReleaseQuality('false_interruption', false, 'system-noise');
     expect(mocks.record).toHaveBeenCalledWith('release_quality', {
