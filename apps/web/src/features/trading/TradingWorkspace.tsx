@@ -28,6 +28,7 @@ import './TradingFlexibleLayout.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'cursor', label: 'Cursor', glyph: '↖' },
+  { id: 'alert', label: 'Place price alert', glyph: '⏰' },
   { id: 'trend-line', label: 'Trend line', glyph: '╱' },
   { id: 'horizontal-line', label: 'Horizontal line', glyph: '─' },
   { id: 'vertical-line', label: 'Vertical line', glyph: '│' },
@@ -236,7 +237,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </section>
 
       <div className="trading-body">
-        <aside className="trading-tools" aria-label="Chart drawing tools">
+        <aside className="trading-tools" aria-label="Chart drawing and alert tools">
           {drawingTools.map((tool) => (
             <button
               key={tool.id}
