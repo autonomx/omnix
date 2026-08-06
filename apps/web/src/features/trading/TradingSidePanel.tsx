@@ -1,34 +1,48 @@
 import { useState } from 'react';
-import { TradingAlertsPanel } from './TradingAlertsPanel';
-import { TradingDiagnosticsPanel } from './TradingDiagnosticsPanel';
 import { TradingIndicatorPresets } from './TradingIndicatorPresets';
+import { TradingLayoutPanel } from './TradingLayoutPanel';
+import { TradingNewsPanel } from './TradingNewsPanel';
 import { TradingWatchlist } from './TradingWatchlist';
+import type { DrawingSnapMode } from './drawings/drawingCommands';
 import type { CoreIndicatorInstance } from './indicators/coreIndicators';
+import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument } from './tradingTypes';
 
-type SideTab = 'watchlist' | 'indicators' | 'alerts' | 'data';
+type SideTab = 'watchlist' | 'indicators' | 'news' | 'layout';
 
 const tabs: Array<{ id: SideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
   { id: 'indicators', label: 'Indicators' },
-  { id: 'alerts', label: 'Alerts' },
-  { id: 'data', label: 'Data' },
+  { id: 'news', label: 'News' },
+  { id: 'layout', label: 'Layout' },
 ];
 
 export function TradingSidePanel({
   instruments,
   activeInstrumentId,
-  bindingId,
   indicators,
+  layout,
+  links,
+  snapMode,
   onSelectInstrument,
   onSetIndicators,
+  onSetLayout,
+  onSetLink,
+  onSetSnapMode,
+  onOpenResearch,
 }: {
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
-  bindingId: string | null;
   indicators: CoreIndicatorInstance[];
+  layout: TradingLayout;
+  links: TradingLinkState;
+  snapMode: DrawingSnapMode;
   onSelectInstrument: (instrumentId: string) => void;
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
+  onSetLayout: (layout: TradingLayout) => void;
+  onSetLink: (key: keyof TradingLinkState, enabled: boolean) => void;
+  onSetSnapMode: (mode: DrawingSnapMode) => void;
+  onOpenResearch: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<SideTab>('watchlist');
   return (
@@ -65,10 +79,17 @@ export function TradingSidePanel({
         {activeTab === 'indicators' ? (
           <TradingIndicatorPresets indicators={indicators} onApply={onSetIndicators} />
         ) : null}
-        {activeTab === 'alerts' ? (
-          <TradingAlertsPanel instrumentId={activeInstrumentId} bindingId={bindingId} />
+        {activeTab === 'news' ? <TradingNewsPanel onOpenResearch={onOpenResearch} /> : null}
+        {activeTab === 'layout' ? (
+          <TradingLayoutPanel
+            layout={layout}
+            links={links}
+            snapMode={snapMode}
+            onSetLayout={onSetLayout}
+            onSetLink={onSetLink}
+            onSetSnapMode={onSetSnapMode}
+          />
         ) : null}
-        {activeTab === 'data' ? <TradingDiagnosticsPanel /> : null}
       </section>
     </aside>
   );
