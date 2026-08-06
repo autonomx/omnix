@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
+import { TradingAlertsPanel } from './TradingAlertsPanel';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
 import { TradingIndicatorPresets } from './TradingIndicatorPresets';
@@ -87,7 +88,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       <div className="trading-body">
         <aside className="trading-tools" aria-label="Chart drawing tools">{drawingTools.map((tool) => <button key={tool.id} type="button" className={drawingTool === tool.id ? 'active' : undefined} aria-pressed={drawingTool === tool.id} title={tool.label} aria-label={tool.label} onClick={() => setDrawingTool(tool.id)}>{tool.glyph}</button>)}</aside>
         <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid /></section>
-        <aside className="trading-side-panel" aria-label="Trading side panel"><nav aria-label="Trading panel tabs"><button type="button" className="active">Watchlist</button><button type="button">Indicators</button><button type="button">Data</button><button type="button">Layout</button></nav><TradingWatchlist instruments={instruments.data ?? []} activeInstrumentId={activeChart.instrumentId} onSelect={(instrumentId) => updateChart(activeChartId, { instrumentId })} /><TradingIndicatorPresets indicators={activeChart.indicators} onApply={(next) => setIndicators(activeChartId, next)} /></aside>
+        <aside className="trading-side-panel" aria-label="Trading side panel">
+          <nav aria-label="Trading panel tabs"><button type="button" className="active">Watchlist</button><button type="button">Indicators</button><button type="button">Alerts</button><button type="button">Data</button></nav>
+          <TradingWatchlist instruments={instruments.data ?? []} activeInstrumentId={activeChart.instrumentId} onSelect={(instrumentId) => updateChart(activeChartId, { instrumentId })} />
+          <TradingIndicatorPresets indicators={activeChart.indicators} onApply={(next) => setIndicators(activeChartId, next)} />
+          <TradingAlertsPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} />
+        </aside>
       </div>
     </main>
   );
