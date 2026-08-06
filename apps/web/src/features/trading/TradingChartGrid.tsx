@@ -10,9 +10,14 @@ export function TradingChartGrid() {
   const links = useTradingStore((state) => state.links);
   const setActiveChart = useTradingStore((state) => state.setActiveChart);
   const synchronization = useMemo(() => new TradingChartSynchronization(), []);
+  const activeIndex = Math.max(0, charts.findIndex((chart) => chart.chartId === activeChartId));
   const visibleCharts = layout === 'one'
-    ? charts.filter((chart) => chart.chartId === activeChartId).slice(0, 1)
-    : charts.slice(0, 4);
+    ? charts.slice(activeIndex, activeIndex + 1)
+    : layout === 'four'
+      ? charts.slice(0, 4)
+      : charts.slice(activeIndex, activeIndex + 2).length === 2
+        ? charts.slice(activeIndex, activeIndex + 2)
+        : charts.slice(0, 2);
 
   useEffect(() => {
     synchronization.setLinks({ crosshair: links.crosshair, visibleRange: links.visibleRange });
