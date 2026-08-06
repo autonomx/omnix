@@ -28,9 +28,25 @@ function resolveGitSha(): string {
   }
 }
 
+function resolveGitDirty(): string {
+  const configured = process.env.VITE_GIT_DIRTY?.trim();
+  if (configured) return configured;
+  try {
+    const status = execFileSync(
+      'git',
+      ['status', '--porcelain', '--untracked-files=normal'],
+      { encoding: 'utf8' },
+    ).trim();
+    return status ? 'true' : 'false';
+  } catch {
+    return 'unknown';
+  }
+}
+
 export default defineConfig(({ command, mode }) => {
   const gitSha = resolveGitSha();
   process.env.VITE_GIT_SHA ??= gitSha;
+  process.env.VITE_GIT_DIRTY ??= resolveGitDirty();
   process.env.VITE_BUILD_ID ??= `${command}-${mode}-${gitSha.slice(0, 12)}`;
   return ({
   plugins: [
