@@ -119,13 +119,13 @@ def stream_pcm16_blocks(
     max_initial_silence_ms: float = STREAM_MAX_INITIAL_SILENCE_MS,
     fallback_threshold: float = STREAM_INITIAL_FALLBACK_THRESHOLD,
 ) -> Iterator[tuple[bytes, int, Any]]:
-    """Repack provider chunks into steady PCM16 blocks without unbounded startup filtering.
+    """Repack provider chunks into steady PCM16 blocks with bounded startup scanning.
 
-    Initial speech detection first uses the normal amplitude threshold. If the
-    provider has generated ``max_initial_silence_ms`` without crossing it, the
-    buffered audio is rescanned at a quiet-speech threshold. A final bounded
-    fallback keeps a small preroll and begins transport rather than discarding
-    an arbitrary number of provider chunks.
+    Initial speech detection first uses the normal amplitude threshold. After
+    ``max_initial_silence_ms`` of generated audio, each new chunk is rescanned
+    at a quiet-speech threshold and then for any nonzero signal. Until genuine
+    signal appears, only a small preroll tail is retained; all-zero PCM is not
+    mislabeled as audible output.
     """
     block_bytes = max(1, int(block_samples)) * 2
     leftover = b""
@@ -135,6 +135,7 @@ def stream_pcm16_blocks(
     initial_rate = DEFAULT_SAMPLE_RATE
     initial_timing: Any = {}
     found_speech = False
+    fallback_armed = False
 
     for pcm_bytes, sample_rate, timing in chunks:
         sample_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
@@ -149,6 +150,7 @@ def stream_pcm16_blocks(
         if not found_speech:
             if initial_pcm and sample_rate != initial_rate:
                 initial_pcm = b""
+                fallback_armed = False
             initial_pcm += pcm_bytes
             initial_rate = sample_rate
             initial_timing = timing
@@ -163,8 +165,9 @@ def stream_pcm16_blocks(
                     0,
                     int(sample_rate * max(0.0, max_initial_silence_ms) / 1000.0),
                 )
-                if len(initial_pcm) // 2 < max_initial_samples:
+                if not fallback_armed and len(initial_pcm) // 2 < max_initial_samples:
                     continue
+                fallback_armed = True
                 quiet_threshold = min(
                     max(0.0, silence_threshold),
                     max(0.0, fallback_threshold),
@@ -176,15 +179,24 @@ def stream_pcm16_blocks(
                     preroll_ms,
                 )
                 if start_byte is None:
+                    start_byte = initial_speech_start_byte(
+                        initial_pcm,
+                        sample_rate,
+                        0.0,
+                        preroll_ms,
+                    )
+                if start_byte is None:
                     preroll_samples = max(
                         0,
                         int(sample_rate * max(0.0, preroll_ms) / 1000.0),
                     )
-                    bounded_start_sample = max(
-                        0,
-                        min(len(initial_pcm) // 2, max_initial_samples) - preroll_samples,
+                    retained_bytes = preroll_samples * 2
+                    initial_pcm = (
+                        initial_pcm[-retained_bytes:]
+                        if retained_bytes > 0
+                        else b""
                     )
-                    start_byte = bounded_start_sample * 2
+                    continue
             pcm_bytes = initial_pcm[start_byte:]
             sample_rate = initial_rate
             timing = initial_timing
