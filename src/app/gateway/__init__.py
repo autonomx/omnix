@@ -87,7 +87,7 @@ def _install_required_rpg_turn_hooks() -> None:
         raise RuntimeError("RPG fast visible dialogue hook failed to install")
     if not getattr(interactive_first_call_runtime, "_omnix_dialogue_quality_hook_installed", False):
         raise RuntimeError("RPG dialogue quality hook failed to install")
-    if not getattr(interactive_first_call_runtime, "_omnix_interaction_timeline_runtime_hook_installed", False):
+    if not getattr(interactive_first_call_runtime, "_omnix_interaction_timeline_hook_installed", False):
         raise RuntimeError("RPG interaction timeline hook failed to install")
     if not getattr(interactive_first_call_runtime, "_omnix_interaction_lifecycle_runtime_hook_installed", False):
         raise RuntimeError("RPG interaction lifecycle runtime hook failed to install")
