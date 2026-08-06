@@ -1,7 +1,7 @@
 import type { TradingChartState, TradingLayout, TradingLinkState } from './tradingStore';
 
 export type TradingWorkspaceExport = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   exportedAt: string;
   layout: TradingLayout;
   activeChartId: string;
@@ -11,7 +11,7 @@ export type TradingWorkspaceExport = {
 
 export function buildTradingWorkspaceExport(input: Omit<TradingWorkspaceExport, 'schemaVersion' | 'exportedAt'>): TradingWorkspaceExport {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
     layout: input.layout,
     activeChartId: input.activeChartId,
