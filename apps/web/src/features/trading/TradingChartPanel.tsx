@@ -244,6 +244,13 @@ export function TradingChartPanel({
             <button type="button" onClick={() => drawings.undo()} aria-label="Undo drawing">↶</button>
             <button type="button" onClick={() => drawings.redo()} aria-label="Redo drawing">↷</button>
             <button type="button" onClick={() => adapterRef.current && downloadDataUrl(adapterRef.current.snapshotDataUrl(), `${chartId}.png`)} aria-label="Snapshot chart">PNG</button>
+            {drawings.hasConflict ? (
+              <>
+                <span role="status">Drawing conflict</span>
+                <button type="button" onClick={() => void drawings.resolveConflict('reload')}>Reload server</button>
+                <button type="button" onClick={() => void drawings.resolveConflict('overwrite')}>Overwrite server</button>
+              </>
+            ) : null}
             {selectedDrawing ? (
               <>
                 <input aria-label="Drawing color" type="color" value={selectedDrawing.style?.color ?? '#66d9e8'} onChange={(event) => drawings.updateSelected({ style: { ...(selectedDrawing.style ?? { lineWidth: 2, lineStyle: 'solid' }), color: event.target.value } })} />
@@ -268,6 +275,7 @@ export function TradingChartPanel({
           onAdd={drawings.add}
           onSelect={drawings.select}
           onMovePoint={drawings.movePoint}
+          onTranslateDrawing={drawings.translate}
           onAlertAtPoint={active ? setAlertPlacement : undefined}
         />
         <TradingChartAlertOverlay
