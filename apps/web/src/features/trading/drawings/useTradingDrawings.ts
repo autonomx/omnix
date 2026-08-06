@@ -10,8 +10,10 @@ import {
   replaceDrawings,
   selectDrawing,
   undoDrawing,
+  updateSelectedDrawing,
   type DrawingPoint,
   type DrawingState,
+  type DrawingStyle,
   type TradingDrawing,
 } from './drawingCommands';
 
@@ -38,7 +40,10 @@ export function useTradingDrawings(instrumentId: string) {
       setState(replaceDrawings(drawings));
       setStatus('saved');
     }).catch(() => !cancelled && setStatus('error'));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [instrumentId]);
 
   const persist = (next: DrawingState) => {
@@ -66,6 +71,7 @@ export function useTradingDrawings(instrumentId: string) {
     add: (drawing: TradingDrawing) => persist(addDrawing(state, drawing)),
     select: (id: string | null) => setState(selectDrawing(state, id)),
     movePoint: (id: string, index: number, point: DrawingPoint) => persist(moveDrawingPoint(state, id, index, point)),
+    updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string }) => persist(updateSelectedDrawing(state, patch)),
     removeSelected: () => persist(deleteSelectedDrawing(state)),
     undo: () => persist(undoDrawing(state)),
     redo: () => persist(redoDrawing(state)),
