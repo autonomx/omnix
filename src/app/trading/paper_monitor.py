@@ -12,7 +12,8 @@ from typing import Any
 from fastapi import FastAPI
 
 from .paper import PaperMarketObservation
-from .paper_repository import TradingPaperRepository, default_paper_repository
+from .paper_repository import TradingPaperRepository
+from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
 
 
@@ -41,7 +42,7 @@ class TradingPaperMonitor:
     def __init__(
         self,
         *,
-        repository_factory: Callable[[], TradingPaperRepository] = default_paper_repository,
+        repository_factory: Callable[[], TradingPaperRepository] = default_runtime_paper_repository,
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         interval_seconds: float | None = None,
     ) -> None:
