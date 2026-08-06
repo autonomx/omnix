@@ -21,6 +21,10 @@ export type TradingLinkState = {
   crosshair: boolean;
   visibleRange: boolean;
 };
+export type TradingPanelState = {
+  right: boolean;
+  bottom: boolean;
+};
 
 type TradingWorkspaceState = {
   layout: TradingLayout;
@@ -29,6 +33,8 @@ type TradingWorkspaceState = {
   drawingSnapMode: DrawingSnapMode;
   charts: TradingChartState[];
   links: TradingLinkState;
+  panels: TradingPanelState;
+  favoriteInstrumentIds: string[];
   setLayout: (layout: TradingLayout) => void;
   setActiveChart: (chartId: string) => void;
   addChart: () => void;
@@ -40,6 +46,8 @@ type TradingWorkspaceState = {
   toggleIndicator: (chartId: string, id: CoreIndicatorId, period?: number) => void;
   setIndicators: (chartId: string, indicators: CoreIndicatorInstance[]) => void;
   setLink: (key: keyof TradingLinkState, enabled: boolean) => void;
+  setPanel: (key: keyof TradingPanelState, open: boolean) => void;
+  toggleFavoriteInstrument: (instrumentId: string) => void;
 };
 
 const defaultInstrument = 'crypto:BINANCE:spot:BTC-USDT';
@@ -91,6 +99,8 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   drawingSnapMode: 'ohlc',
   charts: [initialChart()],
   links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
+  panels: { right: true, bottom: true },
+  favoriteInstrumentIds: [],
   setLayout: (layout) => set({ layout }),
   setActiveChart: (activeChartId) => set((state) => (
     state.charts.some((chart) => chart.chartId === activeChartId) ? { activeChartId } : state
@@ -170,4 +180,10 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
       : chart),
   })),
   setLink: (key, enabled) => set((state) => ({ links: { ...state.links, [key]: enabled } })),
+  setPanel: (key, open) => set((state) => ({ panels: { ...state.panels, [key]: open } })),
+  toggleFavoriteInstrument: (instrumentId) => set((state) => ({
+    favoriteInstrumentIds: state.favoriteInstrumentIds.includes(instrumentId)
+      ? state.favoriteInstrumentIds.filter((item) => item !== instrumentId)
+      : [...state.favoriteInstrumentIds, instrumentId],
+  })),
 }));
