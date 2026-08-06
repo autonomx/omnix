@@ -16,6 +16,7 @@ from app import shared
 from app.chat import ChatSessionStore, default_chat_store
 from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
+from app.providers.lmstudio_provider import LMStudioProvider
 from app.shared import get_tts_provider
 
 from .tts_stream_contract import audio_chunk_to_pcm16_bytes
@@ -84,6 +85,7 @@ def register_live_call_prewarm_routes(
         if session is None:
             return {
                 "ok": False,
+                "fully_warmed": False,
                 "status": "session_not_found",
                 "cached": False,
                 "elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
@@ -100,6 +102,7 @@ def register_live_call_prewarm_routes(
         if cached:
             return {
                 "ok": True,
+                "fully_warmed": True,
                 "status": "cached",
                 "cached": True,
                 "elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
@@ -110,6 +113,7 @@ def register_live_call_prewarm_routes(
                 completed = _recently_warmed_locked(key)
             return {
                 "ok": completed,
+                "fully_warmed": completed,
                 "status": "shared" if completed else "wait_timeout",
                 "cached": completed,
                 "elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
@@ -133,16 +137,20 @@ def register_live_call_prewarm_routes(
                     request.language,
                 ),
             )
-            successful = any(
+            results = (llm_result, tts_result)
+            fully_warmed = all(result.status == "warmed" for result in results)
+            no_failures = all(
                 result.status in {"warmed", "unavailable"}
-                for result in (llm_result, tts_result)
+                for result in results
             )
-            if successful:
+            if fully_warmed:
                 with _PREWARM_LOCK:
                     _PREWARMED_AT[key] = time.time()
+            status = _combined_status(results, fully_warmed=fully_warmed)
             payload = {
-                "ok": successful,
-                "status": "completed" if successful else "failed",
+                "ok": no_failures,
+                "fully_warmed": fully_warmed,
+                "status": status,
                 "cached": False,
                 "llm": llm_result.payload(),
                 "tts": tts_result.payload(),
@@ -158,6 +166,21 @@ def register_live_call_prewarm_routes(
             return payload
         finally:
             _release_prewarm(key)
+
+
+def _combined_status(
+    results: tuple[_WarmResult, _WarmResult],
+    *,
+    fully_warmed: bool,
+) -> str:
+    if fully_warmed:
+        return "completed"
+    statuses = {result.status for result in results}
+    if "warmed" in statuses:
+        return "partial"
+    if statuses == {"unavailable"}:
+        return "unavailable"
+    return "failed"
 
 
 def _claim_prewarm(key: str) -> tuple[bool, bool, threading.Event | None]:
@@ -223,6 +246,14 @@ def _warm_llm(session: Any) -> _WarmResult:
 
     response: Iterator[Any] | None = None
     try:
+        # A session may retain a stale configured LM Studio model identifier.
+        # Passing no explicit model lets the installed loaded-model resolver use
+        # the model that is actually resident in LM Studio at call time.
+        model = (
+            None
+            if isinstance(provider, LMStudioProvider)
+            else _model_key(getattr(session, "model_id", None))
+        )
         response = provider.chat_completion(
             messages=[
                 ProviderMessage(
@@ -230,7 +261,7 @@ def _warm_llm(session: Any) -> _WarmResult:
                     content="Reply with exactly one word: ready.",
                 )
             ],
-            model=_model_key(getattr(session, "model_id", None)),
+            model=model,
             stream=True,
         )
         for chunk in response:
