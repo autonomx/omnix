@@ -60,6 +60,9 @@ from .rpg_world_generation_review_routes import (
 from .rpg_world_image_routes import install_rpg_world_image_route_hook
 from .rpg_world_profile_routes import install_rpg_world_profile_route_hook
 from .rpg_world_routes import install_rpg_world_route_hook
+from .tts_live_call_pcm_diagnostics import (
+    install_tts_live_call_pcm_diagnostics_hook,
+)
 from .tts_live_call_websocket import install_tts_live_call_websocket_hook
 from .tts_pcm_websocket import install_tts_pcm_websocket_hook
 from .tts_runtime_routes import install_tts_runtime_route_hook
@@ -84,7 +87,7 @@ def _install_required_rpg_turn_hooks() -> None:
         raise RuntimeError("RPG fast visible dialogue hook failed to install")
     if not getattr(interactive_first_call_runtime, "_omnix_dialogue_quality_hook_installed", False):
         raise RuntimeError("RPG dialogue quality hook failed to install")
-    if not getattr(interactive_first_call_runtime, "_omnix_interaction_timeline_hook_installed", False):
+    if not getattr(interactive_first_call_runtime, "_omnix_interaction_timeline_runtime_hook_installed", False):
         raise RuntimeError("RPG interaction timeline hook failed to install")
     if not getattr(interactive_first_call_runtime, "_omnix_interaction_lifecycle_runtime_hook_installed", False):
         raise RuntimeError("RPG interaction lifecycle runtime hook failed to install")
@@ -138,6 +141,7 @@ install_blocking_route_offload_hook()
 install_live_voice_runtime_offload_hook()
 install_tts_runtime_route_hook()
 install_tts_pcm_websocket_hook()
+install_tts_live_call_pcm_diagnostics_hook()
 install_tts_live_call_websocket_hook()
 install_voice_job_summary_hook()
 install_voice_library_route_hook()
