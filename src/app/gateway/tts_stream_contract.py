@@ -16,6 +16,11 @@ try:
 except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
     np = None
 
+try:
+    torch = importlib.import_module("torch")
+except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
+    torch = None
+
 DEFAULT_SAMPLE_RATE = 24_000
 STREAM_OUTPUT_BLOCK_SAMPLES = 2_048
 STREAM_INITIAL_SILENCE_THRESHOLD = 0.01
@@ -157,13 +162,21 @@ def stream_pcm16_blocks(
 
 
 def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
-    """Convert float-like mono audio to little-endian PCM16 using a vectorized fast path."""
+    """Convert float-like mono audio to little-endian PCM16 using vectorized fast paths."""
     if audio_chunk is None:
         return b""
     if isinstance(audio_chunk, bytes):
         return audio_chunk
     if isinstance(audio_chunk, (bytearray, memoryview)):
         return bytes(audio_chunk)
+
+    # Qwen commonly yields torch tensors, including CUDA tensors. NumPy cannot
+    # directly coerce a CUDA tensor, and the old fallback called ``tolist()``,
+    # forcing a device sync plus thousands of Python scalar conversions. Keep
+    # clipping and int16 quantization on the tensor device, then transfer only
+    # the compact int16 buffer to CPU.
+    if torch is not None and torch.is_tensor(audio_chunk):
+        return _torch_audio_chunk_to_pcm16_bytes(audio_chunk)
 
     if np is None:
         return _audio_chunk_to_pcm16_bytes_fallback(audio_chunk)
@@ -181,6 +194,29 @@ def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
     np.nan_to_num(values, copy=False, nan=0.0, posinf=1.0, neginf=-1.0)
     np.clip(values, -1.0, 1.0, out=values)
     return (values * 32767.0).astype("<i2", copy=False).tobytes()
+
+
+def _torch_audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
+    values = audio_chunk.detach()
+    if int(values.numel()) == 0:
+        return b""
+    if int(values.ndim) > 1:
+        values = values[..., 0]
+    values = values.reshape(-1).to(dtype=torch.float32)
+    values = torch.nan_to_num(
+        values,
+        nan=0.0,
+        posinf=1.0,
+        neginf=-1.0,
+    )
+    pcm = values.clamp(-1.0, 1.0).mul(32767.0).to(dtype=torch.int16)
+    if getattr(pcm.device, "type", "cpu") != "cpu":
+        pcm = pcm.to(device="cpu", non_blocking=False)
+    pcm = pcm.contiguous()
+    array = pcm.numpy()
+    if np is not None:
+        array = array.astype("<i2", copy=False)
+    return array.tobytes()
 
 
 def _audio_chunk_to_pcm16_bytes_fallback(audio_chunk: Any) -> bytes:
