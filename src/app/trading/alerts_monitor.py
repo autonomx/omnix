@@ -170,8 +170,9 @@ class TradingAlertMonitor:
         repository = self.repository_factory()
         alerts = await asyncio.to_thread(repository.list_alerts, 500)
         targets: dict[tuple[str, str | None, str], list[TradingAlert]] = defaultdict(list)
+        now = datetime.now(timezone.utc)
         for alert in alerts:
-            if alert.enabled:
+            if alert.enabled and not alert.is_expired(now):
                 targets[
                     (
                         alert.instrument_id,
