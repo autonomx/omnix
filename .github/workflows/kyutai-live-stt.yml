@@ -48,6 +48,7 @@ jobs:
         run: |
           ruff check \
             scripts/run_kyutai_moshi.py \
+            src/app/chat/live_agent_store.py \
             src/app/launcher/huggingface_token_control.py \
             src/app/launcher/huggingface_token_store.py \
             src/app/launcher/kyutai_services.py \
@@ -99,7 +100,8 @@ jobs:
             src/tests/app/test_tts_live_call_pcm_diagnostics.py \
             src/tests/app/test_tts_live_call_startup_frame_policy.py \
             src/tests/app/test_tts_live_capabilities.py \
-            src/tests/app/test_tts_stream_contract.py
+            src/tests/app/test_tts_stream_contract.py \
+            src/tests/unit/chat/test_live_agent_store.py
           ruff check --ignore RUF100,TRY004 src/app/launcher/kyutai_readiness_control.py
 
       - name: Run live latency and launcher tests
@@ -131,6 +133,7 @@ jobs:
             src/tests/app/test_tts_live_call_startup_frame_policy.py \
             src/tests/app/test_tts_live_capabilities.py \
             src/tests/app/test_tts_stream_contract.py \
+            src/tests/unit/chat/test_live_agent_store.py \
             -q --tb=short
 
       - name: Typecheck live latency browser path
