@@ -67,6 +67,7 @@ class _AlertContract(BaseModel):
         default_factory=TradingAlertEvaluationPolicy
     )
     cooldown_seconds: int = Field(default=0, ge=0, le=31_536_000)
+    expires_at: datetime | None = None
 
     @model_validator(mode="after")
     def validate_condition_contract(self):
@@ -84,6 +85,8 @@ class _AlertContract(BaseModel):
             and self.parameters.fast_period >= self.parameters.slow_period
         ):
             raise ValueError("MACD fast_period must be smaller than slow_period")
+        if self.expires_at is not None and self.expires_at.tzinfo is None:
+            raise ValueError("expires_at must include a timezone")
         return self
 
 
@@ -96,6 +99,12 @@ class TradingAlert(_AlertContract):
     revision: int = Field(default=1, ge=1)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    def is_expired(self, at: datetime | None = None) -> bool:
+        if self.expires_at is None:
+            return False
+        moment = at or datetime.now(timezone.utc)
+        return self.expires_at <= moment
 
 
 class TradingAlertCreate(_AlertContract):
@@ -209,12 +218,13 @@ def _alert(row) -> TradingAlert:
         evaluation_policy=dict(row[6] or {}),
         enabled=bool(row[7]),
         cooldown_seconds=int(row[8]),
-        last_observed_price=Decimal(row[9]) if row[9] is not None else None,
-        last_observed_value=Decimal(row[10]) if row[10] is not None else None,
-        last_triggered_at=row[11],
-        revision=int(row[12]),
-        created_at=row[13],
-        updated_at=row[14],
+        expires_at=row[9],
+        last_observed_price=Decimal(row[10]) if row[10] is not None else None,
+        last_observed_value=Decimal(row[11]) if row[11] is not None else None,
+        last_triggered_at=row[12],
+        revision=int(row[13]),
+        created_at=row[14],
+        updated_at=row[15],
     )
 
 
@@ -239,7 +249,7 @@ def _trigger(row) -> TradingAlertTrigger:
 _ALERT_COLUMNS = """
     alert_id, instrument_id, binding_id, condition_type, threshold,
     condition_parameters, evaluation_policy, enabled, cooldown_seconds,
-    last_observed_price, last_observed_value, last_triggered_at,
+    expires_at, last_observed_price, last_observed_value, last_triggered_at,
     revision, created_at, updated_at
 """
 _TRIGGER_COLUMNS = """
@@ -280,8 +290,8 @@ class TradingAlertRepository:
                 INSERT INTO omnix_trading_alerts (
                     workspace_id, alert_id, owner_user_id, instrument_id, binding_id,
                     condition_type, threshold, condition_parameters, evaluation_policy,
-                    cooldown_seconds
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                    cooldown_seconds, expires_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
                 RETURNING {_ALERT_COLUMNS}
                 """,
                 (
@@ -295,6 +305,7 @@ class TradingAlertRepository:
                     request.parameters.model_dump_json(),
                     request.evaluation_policy.model_dump_json(),
                     request.cooldown_seconds,
+                    request.expires_at,
                 ),
             ).fetchone()
             uow.commit()
@@ -313,9 +324,10 @@ class TradingAlertRepository:
                    SET instrument_id = %s, binding_id = %s, condition_type = %s,
                        threshold = %s, condition_parameters = %s::jsonb,
                        evaluation_policy = %s::jsonb, enabled = %s,
-                       cooldown_seconds = %s, last_observed_price = NULL,
-                       last_observed_value = NULL, last_triggered_at = NULL,
-                       revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                       cooldown_seconds = %s, expires_at = %s,
+                       last_observed_price = NULL, last_observed_value = NULL,
+                       last_triggered_at = NULL, revision = revision + 1,
+                       updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND alert_id = %s AND revision = %s
                 RETURNING {_ALERT_COLUMNS}
                 """,
@@ -328,6 +340,7 @@ class TradingAlertRepository:
                     request.evaluation_policy.model_dump_json(),
                     request.enabled,
                     request.cooldown_seconds,
+                    request.expires_at,
                     self.context.workspace_id,
                     alert_id,
                     expected_revision,
@@ -381,9 +394,14 @@ class TradingAlertRepository:
                 SELECT {_ALERT_COLUMNS}
                   FROM omnix_trading_alerts
                  WHERE workspace_id = %s AND instrument_id = %s AND enabled = TRUE
+                   AND (expires_at IS NULL OR expires_at > %s)
                  FOR UPDATE
                 """,
-                (self.context.workspace_id, evaluation.instrument_id),
+                (
+                    self.context.workspace_id,
+                    evaluation.instrument_id,
+                    evaluation.evaluated_at,
+                ),
             ).fetchall()
             for row in rows:
                 alert = _alert(row)
@@ -434,6 +452,7 @@ class TradingAlertRepository:
                         "previous_value": str(alert.last_observed_value),
                         "observed_value": str(observed_value),
                         "threshold": str(alert.threshold),
+                        "expires_at": alert.expires_at.isoformat() if alert.expires_at else None,
                     }
                     inserted = uow.connection.execute(
                         f"""
