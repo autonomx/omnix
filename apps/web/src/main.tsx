@@ -29,6 +29,7 @@ import { initializeChatMessageAudioControllerV2 } from './features/assistant-wor
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import { initializeDesktopCompanionDeliveryController } from './features/assistant-workspace/desktop-companion-delivery';
 import { initializeLiveAvatarPresenceController } from './features/assistant-workspace/live-avatar-presence';
+import { initializeLiveCallPrewarmController } from './features/assistant-workspace/live-call-prewarm-controller';
 import { initializeLiveConversationDurableEvaluationController } from './features/assistant-workspace/live-conversation-durable-evaluation-controller';
 import { initializeLiveConversationEvaluationController } from './features/assistant-workspace/live-conversation-evaluation-controller';
 import { initializeLiveConversationInitiativeController } from './features/assistant-workspace/live-conversation-initiative-controller';
@@ -84,6 +85,7 @@ initializeLiveSpeculationDiagnosticsBridge();
 initializeLiveSpeculationEligibilityDiagnostics();
 initializeLiveSpeculationHandshakeTransport();
 initializeLiveSpeculationController();
+initializeLiveCallPrewarmController();
 emitLiveRuntimeProvenance();
 initializeLiveVoiceController();
 initializeLiveOutputCoordinator();
