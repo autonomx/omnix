@@ -97,20 +97,24 @@ def build_prompt_assembly(
 ) -> PromptAssembly:
     """Build one stable structure for streaming and non-streaming generation."""
 
-    system_messages = [
+    interaction = resolve_system_session_identity(session)
+    session_system_messages = [
         neutralize_legacy_system_prompt(message.content)
         for message in session.messages
         if message.role == "system"
         and (not session.active_segment_id or message.metadata.get("segment_id") == session.active_segment_id)
     ]
-    system_instructions = system_messages or [neutralize_legacy_system_prompt(global_system_prompt)]
-    interaction = resolve_system_session_identity(session)
-    if assistant_identity is not None:
-        resolved_identity = assistant_identity
-    elif interaction.interaction_mode == "character":
+    if interaction.interaction_mode == "character":
+        # Character Mode has one authoritative persona source. Do not combine it
+        # with the global System Assistant prompt, legacy Maya prompt, session
+        # system prompts, or a caller-supplied assistant identity override.
+        system_instructions: list[str] = []
         resolved_identity = interaction.assistant_identity
     else:
-        resolved_identity = []
+        system_instructions = session_system_messages or [
+            neutralize_legacy_system_prompt(global_system_prompt)
+        ]
+        resolved_identity = assistant_identity if assistant_identity is not None else []
     eligible_recent_messages = [
         message
         for message in session.messages
@@ -127,6 +131,7 @@ def build_prompt_assembly(
             recent_messages.append(PromptTurn(role=message.role, content=content, message_id=message.id))
     external_context = [_external_item(payload, index) for index, payload in enumerate(context_items or [], start=1)]
     resolved_summary = session_summary if session_summary is not None else _active_segment_summary(session)
+    character_personality_only = interaction.interaction_mode == "character"
     return PromptAssembly(
         system_instructions=system_instructions,
         assistant_identity=resolved_identity,
@@ -142,10 +147,19 @@ def build_prompt_assembly(
             "active_segment_id": session.active_segment_id,
             "system_instruction_count": len(system_instructions),
             "assistant_identity_count": len(resolved_identity),
+            "assistant_identity_chars": sum(len(value) for value in resolved_identity),
             "approved_memory_count": len(approved_memory or []),
             "recent_message_count": len(recent_messages),
             "retrieved_history_count": len(retrieved_history or []),
             "external_context_count": len(external_context),
+            "character_personality_only": character_personality_only,
+            "global_system_prompt_suppressed": character_personality_only,
+            "session_system_prompt_count_suppressed": (
+                len(session_system_messages) if character_personality_only else 0
+            ),
+            "caller_identity_override_suppressed": (
+                character_personality_only and assistant_identity is not None
+            ),
             "interaction": interaction.model_dump(mode="json"),
         },
     )
