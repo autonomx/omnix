@@ -2,26 +2,49 @@ import { describe, expect, it } from 'vitest';
 import { parseTradingWorkspace, serializeTradingWorkspace } from './workspaceDocument';
 
 const state = {
-  layout: 'four' as const,
-  activeChartId: 'chart-3',
+  layout: 'auto' as const,
+  activeChartId: 'chart-2',
   charts: [
-    { chartId: 'chart-1', instrumentId: 'btc', interval: '1m', chartType: 'candlestick' as const },
-    { chartId: 'chart-2', instrumentId: 'eth', interval: '5m', chartType: 'line' as const },
+    { chartId: 'chart-1', instrumentId: 'btc', interval: '2h', chartType: 'candlestick' as const },
+    { chartId: 'chart-2', instrumentId: 'eth', interval: '1w', chartType: 'line' as const },
+    { chartId: 'chart-3', instrumentId: 'sol', interval: '4h', chartType: 'area' as const },
   ],
   links: { instrument: false, interval: true, crosshair: true, visibleRange: false },
 };
 
 describe('Trading workspace document', () => {
-  it('round trips exact layout, charts, active chart, and links', () => {
+  it('round trips exact chart count, grid, intervals, active chart, and links', () => {
     const serialized = serializeTradingWorkspace(state);
+    expect(serialized.schemaVersion).toBe(2);
     expect(parseTradingWorkspace(serialized)).toEqual(serialized);
   });
 
-  it('rejects unknown schema versions and malformed charts', () => {
-    expect(parseTradingWorkspace({ schemaVersion: 2, layout: 'four', charts: [] })).toBeNull();
-    expect(parseTradingWorkspace({
+  it('migrates fixed version-one layouts without exposing hidden charts', () => {
+    const migrated = parseTradingWorkspace({
       schemaVersion: 1,
       layout: 'one',
+      activeChartId: 'chart-3',
+      charts: [
+        { chartId: 'chart-1', instrumentId: 'btc', bindingId: null, interval: '1m', chartType: 'candlestick', indicators: [] },
+        { chartId: 'chart-2', instrumentId: 'eth', bindingId: null, interval: '5m', chartType: 'candlestick', indicators: [] },
+        { chartId: 'chart-3', instrumentId: 'sol', bindingId: null, interval: '15m', chartType: 'candlestick', indicators: [] },
+        { chartId: 'chart-4', instrumentId: 'spy', bindingId: null, interval: '1d', chartType: 'line', indicators: [] },
+      ],
+      links: state.links,
+      panels: {},
+    });
+    expect(migrated?.schemaVersion).toBe(2);
+    expect(migrated?.layout).toBe('columns-1');
+    expect(migrated?.charts.map((chart) => chart.chartId)).toEqual(['chart-3']);
+    expect(migrated?.activeChartId).toBe('chart-3');
+  });
+
+  it('rejects unknown schema versions, layouts, and malformed charts', () => {
+    expect(parseTradingWorkspace({ schemaVersion: 3, layout: 'auto', charts: [], links: state.links })).toBeNull();
+    expect(parseTradingWorkspace({ schemaVersion: 2, layout: 'four', charts: state.charts, links: state.links })).toBeNull();
+    expect(parseTradingWorkspace({
+      schemaVersion: 2,
+      layout: 'auto',
       charts: [{ chartId: 42 }],
       links: state.links,
     })).toBeNull();
