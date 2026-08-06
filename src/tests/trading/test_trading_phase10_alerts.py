@@ -54,8 +54,9 @@ class FakeAlertRepository:
         current = self.alerts[alert_id]
         if current.revision != expected_revision:
             raise RevisionConflict("stale alert")
-        updated = current.model_copy(
-            update={
+        updated = TradingAlert.model_validate(
+            {
+                **current.model_dump(),
                 **request.model_dump(),
                 "revision": current.revision + 1,
                 "updated_at": NOW + timedelta(minutes=1),
