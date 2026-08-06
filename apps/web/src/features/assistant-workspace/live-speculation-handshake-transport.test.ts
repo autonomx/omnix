@@ -2,24 +2,32 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { bridgeLiveSpeculationHandshakeRequest } from './live-speculation-handshake-transport';
 
+function startBody(segmentId = 'segment-test', sourceSequence = 4): string {
+  return JSON.stringify({
+    content: 'Tell me a story',
+    segment_id: segmentId,
+    source_sequence: sourceSequence,
+  });
+}
+
+function generationIdFrom(text: string): string {
+  const match = text.match(/"generation_id":"([^"]+)"/);
+  if (!match) throw new Error(`No generation id in ${text}`);
+  return match[1];
+}
 
 describe('live speculation handshake transport', () => {
-  it('uses the one-request inline stream when the gateway supports it', async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+  it('opens locally before the inline gateway response and reuses the client generation id', async () => {
+    let resolveInline: ((response: Response) => void) | undefined;
+    let forwardedBody = '';
+    const inlineResponse = new Promise<Response>((resolve) => {
+      resolveInline = resolve;
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
       if (url.endsWith('/start-stream')) {
-        return new Response(
-          'data: {"type":"speculation_started","generation_id":"spec-inline"}\n\n'
-          + 'data: {"type":"text_chunk","text":"Hello"}\n\n'
-          + 'data: {"type":"done","generation_id":"spec-inline"}\n\n',
-          {
-            status: 200,
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'X-Omnix-Speculation-Transport': 'inline-v1',
-            },
-          },
-        );
+        forwardedBody = String(init?.body ?? '');
+        return inlineResponse;
       }
       throw new Error(`Unexpected fetch: ${url}`);
     }) as unknown as typeof fetch;
@@ -27,27 +35,51 @@ describe('live speculation handshake transport', () => {
     const bridged = await bridgeLiveSpeculationHandshakeRequest(
       fetchImpl,
       '/api/live/speculation/sessions/session-test/stream',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: 'Tell me a story',
-          segment_id: 'segment-test',
-          source_sequence: 4,
-        }),
-      },
+      { method: 'POST', body: startBody() },
     );
 
     expect(bridged).not.toBeNull();
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(await bridged!.text()).toContain('"generation_id":"spec-inline"');
+    const reader = bridged!.body!.getReader();
+    const decoder = new TextDecoder();
+    const first = await reader.read();
+    const firstText = decoder.decode(first.value);
+    const clientGenerationId = generationIdFrom(firstText);
+    expect(clientGenerationId).toMatch(/^spec-client-/);
+    expect(firstText).toContain('"optimistic_transport":true');
+
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(forwardedBody)).toMatchObject({
+      generation_id: clientGenerationId,
+      segment_id: 'segment-test',
+      source_sequence: 4,
+    });
+
+    resolveInline?.(new Response(
+      `data: {"type":"speculation_started","generation_id":"${clientGenerationId}"}\n\n`
+      + 'data: {"type":"text_chunk","text":"Hello"}\n\n'
+      + `data: {"type":"done","generation_id":"${clientGenerationId}"}\n\n`,
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'X-Omnix-Speculation-Generation-Id': clientGenerationId,
+          'X-Omnix-Speculation-Transport': 'inline-v2-client-id',
+        },
+      },
+    ));
+
+    let remainder = '';
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      remainder += decoder.decode(next.value, { stream: true });
+    }
+    remainder += decoder.decode();
+    expect(remainder).toContain('"type":"text_chunk"');
+    expect(remainder).toContain('"text":"Hello"');
   });
 
   it('falls back to the two-request handshake on an older gateway', async () => {
-    let resolveGeneration: ((response: Response) => void) | undefined;
-    const generationResponse = new Promise<Response>((resolve) => {
-      resolveGeneration = resolve;
-    });
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url.endsWith('/start-stream')) {
@@ -66,52 +98,32 @@ describe('live speculation handshake transport', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      if (url.endsWith('/spec-test/stream')) return generationResponse;
+      if (url.endsWith('/spec-test/stream')) {
+        return new Response(
+          'data: {"type":"text_chunk","text":"Hello"}\n\n'
+          + 'data: {"type":"done","generation_id":"spec-test"}\n\n',
+          {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          },
+        );
+      }
       throw new Error(`Unexpected fetch: ${url}`);
     }) as unknown as typeof fetch;
 
     const bridged = await bridgeLiveSpeculationHandshakeRequest(
       fetchImpl,
       '/api/live/speculation/sessions/session-test/stream',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: 'Tell me a story',
-          segment_id: 'segment-test',
-          source_sequence: 4,
-        }),
-      },
+      { method: 'POST', body: startBody() },
     );
 
     expect(bridged).not.toBeNull();
+    const text = await bridged!.text();
+    expect(text).toContain('"generation_id":"spec-client-');
+    expect(text).toContain('"generation_id":"spec-test"');
+    expect(text).toContain('"type":"text_chunk"');
+    expect(text).toContain('"text":"Hello"');
     expect(fetchImpl).toHaveBeenCalledTimes(3);
-    const reader = bridged!.body!.getReader();
-    const decoder = new TextDecoder();
-    const first = await reader.read();
-    const firstText = decoder.decode(first.value);
-    expect(first.done).toBe(false);
-    expect(firstText).toContain('"type":"speculation_started"');
-    expect(firstText).toContain('"generation_id":"spec-test"');
-
-    resolveGeneration?.(new Response(
-      'data: {"type":"text_chunk","text":"Hello"}\n\n'
-      + 'data: {"type":"done","generation_id":"spec-test"}\n\n',
-      {
-        status: 200,
-        headers: { 'Content-Type': 'text/event-stream' },
-      },
-    ));
-
-    let remainder = '';
-    while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      remainder += decoder.decode(next.value, { stream: true });
-    }
-    remainder += decoder.decode();
-    expect(remainder).toContain('"type":"text_chunk"');
-    expect(remainder).toContain('"text":"Hello"');
   });
 
   it('cancels eager fallback generation when the source request is aborted', async () => {
@@ -144,7 +156,7 @@ describe('live speculation handshake transport', () => {
           headers: { 'Content-Type': 'text/event-stream' },
         });
       }
-      if (url.endsWith('/spec-cancel/cancel')) {
+      if (url.endsWith('/cancel')) {
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -158,11 +170,7 @@ describe('live speculation handshake transport', () => {
       '/api/live/speculation/sessions/session-test/stream',
       {
         method: 'POST',
-        body: JSON.stringify({
-          content: 'Tell me a story',
-          segment_id: 'segment-cancel',
-          source_sequence: 5,
-        }),
+        body: startBody('segment-cancel', 5),
         signal: sourceAbort.signal,
       },
     );
@@ -170,6 +178,12 @@ describe('live speculation handshake transport', () => {
     expect(bridged).not.toBeNull();
     const reader = bridged!.body!.getReader();
     await reader.read();
+    await vi.waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledWith(
+        '/api/live/speculation/sessions/session-test/spec-cancel/stream',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
     sourceAbort.abort('transcript corrected');
 
     await vi.waitFor(() => {
