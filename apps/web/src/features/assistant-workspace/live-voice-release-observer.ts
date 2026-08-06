@@ -147,6 +147,7 @@ function handleDiagnosticEvent(event: Event): void {
   const now = performance.now();
 
   if (diagnosticEvent === 'turn_intercepted') {
+    if (!traceMatchesCurrentVoiceTurn(traceId)) return;
     state.activeTraceId = traceId;
     return;
   }
@@ -199,6 +200,9 @@ function diagnosticBelongsToActiveTurn(
   diagnosticEvent: string,
   traceId: string,
 ): boolean {
+  if (isTurnBoundDiagnostic(diagnosticEvent) && !traceMatchesCurrentVoiceTurn(traceId)) {
+    return false;
+  }
   if (!state.activeTraceId || traceId === state.activeTraceId) return true;
   const crossTraceAudio = diagnosticEvent === 'phrase_first_frame_received'
     && detail.source === 'pcm_session'
@@ -212,6 +216,17 @@ function diagnosticBelongsToActiveTurn(
     && isSpeechPlayback(detail)
     && playbackMatchesFirstPcm(detail);
   return crossTraceAudio || crossTracePlayback;
+}
+
+function isTurnBoundDiagnostic(event: string): boolean {
+  return event === 'chat_response_opened'
+    || event === 'llm_text_chunk_received'
+    || event === 'turn_finished'
+    || event === 'turn_stopped';
+}
+
+function traceMatchesCurrentVoiceTurn(traceId: string): boolean {
+  return state.turnId === null || traceId === `live-call:${state.turnId}`;
 }
 
 function diagnosticString(detail: DiagnosticDetail, key: string): string | null {
