@@ -20,7 +20,9 @@ except ImportError:  # pragma: no cover - exercised in minimal dependency enviro
 DEFAULT_SAMPLE_RATE = 24_000
 STREAM_OUTPUT_BLOCK_SAMPLES = 2_048
 STREAM_INITIAL_SILENCE_THRESHOLD = 0.01
+STREAM_INITIAL_FALLBACK_THRESHOLD = 0.0025
 STREAM_INITIAL_PREROLL_MS = 40.0
+STREAM_MAX_INITIAL_SILENCE_MS = 400.0
 CHAT_STREAM_MIN_NEW_TOKENS = 96
 CHAT_STREAM_MAX_NEW_TOKENS = 1_024
 CHAT_STREAM_TOKEN_NUMERATOR = 9
@@ -114,12 +116,24 @@ def stream_pcm16_blocks(
     block_samples: int = STREAM_OUTPUT_BLOCK_SAMPLES,
     silence_threshold: float = STREAM_INITIAL_SILENCE_THRESHOLD,
     preroll_ms: float = STREAM_INITIAL_PREROLL_MS,
+    max_initial_silence_ms: float = STREAM_MAX_INITIAL_SILENCE_MS,
+    fallback_threshold: float = STREAM_INITIAL_FALLBACK_THRESHOLD,
 ) -> Iterator[tuple[bytes, int, Any]]:
-    """Repack provider chunks into steady PCM16 blocks without altering joins."""
+    """Repack provider chunks into steady PCM16 blocks without unbounded startup filtering.
+
+    Initial speech detection first uses the normal amplitude threshold. If the
+    provider has generated ``max_initial_silence_ms`` without crossing it, the
+    buffered audio is rescanned at a quiet-speech threshold. A final bounded
+    fallback keeps a small preroll and begins transport rather than discarding
+    an arbitrary number of provider chunks.
+    """
     block_bytes = max(1, int(block_samples)) * 2
     leftover = b""
     leftover_rate = DEFAULT_SAMPLE_RATE
     leftover_timing: Any = {}
+    initial_pcm = b""
+    initial_rate = DEFAULT_SAMPLE_RATE
+    initial_timing: Any = {}
     found_speech = False
 
     for pcm_bytes, sample_rate, timing in chunks:
@@ -133,15 +147,48 @@ def stream_pcm16_blocks(
             leftover = b""
 
         if not found_speech:
+            if initial_pcm and sample_rate != initial_rate:
+                initial_pcm = b""
+            initial_pcm += pcm_bytes
+            initial_rate = sample_rate
+            initial_timing = timing
             start_byte = initial_speech_start_byte(
-                pcm_bytes,
+                initial_pcm,
                 sample_rate,
                 silence_threshold,
                 preroll_ms,
             )
             if start_byte is None:
-                continue
-            pcm_bytes = pcm_bytes[start_byte:]
+                max_initial_samples = max(
+                    0,
+                    int(sample_rate * max(0.0, max_initial_silence_ms) / 1000.0),
+                )
+                if len(initial_pcm) // 2 < max_initial_samples:
+                    continue
+                quiet_threshold = min(
+                    max(0.0, silence_threshold),
+                    max(0.0, fallback_threshold),
+                )
+                start_byte = initial_speech_start_byte(
+                    initial_pcm,
+                    sample_rate,
+                    quiet_threshold,
+                    preroll_ms,
+                )
+                if start_byte is None:
+                    preroll_samples = max(
+                        0,
+                        int(sample_rate * max(0.0, preroll_ms) / 1000.0),
+                    )
+                    bounded_start_sample = max(
+                        0,
+                        min(len(initial_pcm) // 2, max_initial_samples) - preroll_samples,
+                    )
+                    start_byte = bounded_start_sample * 2
+            pcm_bytes = initial_pcm[start_byte:]
+            sample_rate = initial_rate
+            timing = initial_timing
+            initial_pcm = b""
             found_speech = True
 
         audio = leftover + pcm_bytes
