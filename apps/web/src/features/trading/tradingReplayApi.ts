@@ -13,10 +13,16 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+function arrayField<T>(payload: unknown, field: string): T[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const value = (payload as Record<string, unknown>)[field];
+  return Array.isArray(value) ? value as T[] : [];
+}
+
 export const tradingReplayApi = {
   datasets: async () => {
-    const payload = await requestJson<{ datasets: FrozenDatasetSnapshot[] }>('/api/trading/replay/datasets');
-    return payload.datasets;
+    const payload = await requestJson<unknown>('/api/trading/replay/datasets');
+    return arrayField<FrozenDatasetSnapshot>(payload, 'datasets');
   },
   freeze: (input: {
     dataset_id: string;
@@ -30,8 +36,8 @@ export const tradingReplayApi = {
     body: JSON.stringify(input),
   }),
   backtests: async () => {
-    const payload = await requestJson<{ runs: Array<Record<string, unknown>> }>('/api/trading/replay/backtests');
-    return payload.runs;
+    const payload = await requestJson<unknown>('/api/trading/replay/backtests');
+    return arrayField<Record<string, unknown>>(payload, 'runs');
   },
   runBacktest: (datasetId: string, input: {
     fast_period: number;
