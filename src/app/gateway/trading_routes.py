@@ -7,6 +7,7 @@ from typing import Any, Callable
 from fastapi import FastAPI
 
 from app.trading.alerts_api import create_trading_alert_router
+from app.trading.alerts_monitor import register_trading_alert_monitor
 from app.trading.api import create_trading_router
 
 _ROUTE_SENTINEL = "_omnix_trading_routes_registered"
@@ -18,6 +19,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
         return
     gateway.include_router(create_trading_router())
     gateway.include_router(create_trading_alert_router())
+    register_trading_alert_monitor(gateway)
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
 
