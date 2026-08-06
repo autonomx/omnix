@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   trading-terminal:
@@ -64,16 +64,6 @@ jobs:
         run: npm --workspace @omnix/web run typecheck:trading
       - name: Generate shared gateway API contract
         run: npm --workspace @omnix/web run api:generate
-      - name: Commit generated API contract
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent/implement-omnix-trading-terminal'
-        run: |
-          if ! git diff --quiet -- apps/web/src/api/generated/openapi.json apps/web/src/api/generated/types.ts; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add apps/web/src/api/generated/openapi.json apps/web/src/api/generated/types.ts
-            git commit -m "Regenerate Trading API contracts"
-            git push origin "HEAD:${{ github.head_ref }}"
-          fi
       - name: Upload generated API contract
         if: always()
         uses: actions/upload-artifact@v4
