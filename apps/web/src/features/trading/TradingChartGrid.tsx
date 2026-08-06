@@ -1,0 +1,40 @@
+import { useEffect, useMemo } from 'react';
+import { TradingChartPanel } from './TradingChartPanel';
+import { TradingChartSynchronization } from './chart/chartSynchronization';
+import { useTradingStore } from './tradingStore';
+
+export function TradingChartGrid() {
+  const layout = useTradingStore((state) => state.layout);
+  const charts = useTradingStore((state) => state.charts);
+  const activeChartId = useTradingStore((state) => state.activeChartId);
+  const links = useTradingStore((state) => state.links);
+  const setActiveChart = useTradingStore((state) => state.setActiveChart);
+  const synchronization = useMemo(() => new TradingChartSynchronization(), []);
+  const visibleCharts = layout === 'one'
+    ? charts.filter((chart) => chart.chartId === activeChartId).slice(0, 1)
+    : charts.slice(0, 4);
+
+  useEffect(() => {
+    synchronization.setLinks({ crosshair: links.crosshair, visibleRange: links.visibleRange });
+  }, [links.crosshair, links.visibleRange, synchronization]);
+
+  useEffect(() => () => synchronization.dispose(), [synchronization]);
+
+  return (
+    <section className={`trading-chart-grid layout-${layout}`} aria-label={`${layout} Trading chart layout`}>
+      {visibleCharts.map((chart) => (
+        <div key={chart.chartId} className="trading-chart-grid-cell">
+          <TradingChartPanel
+            chartId={chart.chartId}
+            instrumentId={chart.instrumentId}
+            interval={chart.interval}
+            chartType={chart.chartType}
+            active={chart.chartId === activeChartId}
+            onActivate={() => setActiveChart(chart.chartId)}
+            synchronization={synchronization}
+          />
+        </div>
+      ))}
+    </section>
+  );
+}
