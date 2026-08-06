@@ -281,7 +281,7 @@ export function TradingChartPanel({
         <TradingChartAlertOverlay
           adapter={adapter}
           instrumentId={instrumentId}
-          bindingId={resolvedBinding?.binding_id ?? bindingId}
+          bindingId={provenance?.requested_binding ?? bindingId ?? resolvedBinding?.binding_id ?? null}
           interval={interval}
           latestPrice={latestClose}
           placement={alertPlacement}
