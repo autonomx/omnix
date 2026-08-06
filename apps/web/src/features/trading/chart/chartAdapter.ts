@@ -8,11 +8,14 @@ import {
   type IChartApi,
   type ISeriesApi,
   type LineData,
+  type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { MarketBar } from '../tradingTypes';
 
 export type TradingChartType = 'candlestick' | 'line';
+export type TradingCrosshairPoint = { time: Time; price: number };
+export type TradingVisibleRange = { from: Time; to: Time };
 
 function timestamp(value: string): UTCTimestamp {
   const milliseconds = Date.parse(value);
@@ -71,9 +74,7 @@ export class TradingChartAdapter {
   }
 
   private createPriceSeries(type: TradingChartType): ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> {
-    if (type === 'line') {
-      return this.chart.addSeries(LineSeries, { color: '#4dabf7', lineWidth: 2 });
-    }
+    if (type === 'line') return this.chart.addSeries(LineSeries, { color: '#4dabf7', lineWidth: 2 });
     return this.chart.addSeries(CandlestickSeries, {
       upColor: '#20c997',
       downColor: '#ff6b6b',
@@ -118,6 +119,42 @@ export class TradingChartAdapter {
     }
     this.volumeSeries.update(volumeData(bar));
     return true;
+  }
+
+  onCrosshair(listener: (point: TradingCrosshairPoint | null) => void): () => void {
+    this.assertActive();
+    const handler = (parameter: { time?: Time; seriesData: Map<unknown, unknown> }) => {
+      if (parameter.time === undefined) {
+        listener(null);
+        return;
+      }
+      const datum = parameter.seriesData.get(this.priceSeries) as { close?: number; value?: number } | undefined;
+      const price = datum?.close ?? datum?.value;
+      listener(typeof price === 'number' ? { time: parameter.time, price } : null);
+    };
+    this.chart.subscribeCrosshairMove(handler);
+    return () => this.chart.unsubscribeCrosshairMove(handler);
+  }
+
+  setCrosshair(point: TradingCrosshairPoint | null): void {
+    this.assertActive();
+    if (point === null) {
+      this.chart.clearCrosshairPosition();
+      return;
+    }
+    this.chart.setCrosshairPosition(point.price, point.time, this.priceSeries);
+  }
+
+  onVisibleRange(listener: (range: TradingVisibleRange | null) => void): () => void {
+    this.assertActive();
+    const handler = (range: TradingVisibleRange | null) => listener(range);
+    this.chart.timeScale().subscribeVisibleTimeRangeChange(handler);
+    return () => this.chart.timeScale().unsubscribeVisibleTimeRangeChange(handler);
+  }
+
+  setVisibleRange(range: TradingVisibleRange): void {
+    this.assertActive();
+    this.chart.timeScale().setVisibleRange(range);
   }
 
   fitContent(): void {
