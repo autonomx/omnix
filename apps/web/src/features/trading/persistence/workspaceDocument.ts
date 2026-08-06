@@ -11,7 +11,10 @@ export type TradingWorkspacePayload = {
   panels: Record<string, boolean>;
 };
 
-type PersistableChart = Omit<TradingChartState, 'indicators'> & { indicators?: CoreIndicatorInstance[] };
+type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId'> & {
+  indicators?: CoreIndicatorInstance[];
+  bindingId?: string | null;
+};
 
 export function serializeTradingWorkspace(input: {
   layout: TradingLayout;
@@ -26,6 +29,7 @@ export function serializeTradingWorkspace(input: {
     activeChartId: input.activeChartId,
     charts: input.charts.map((chart) => ({
       ...chart,
+      bindingId: chart.bindingId ?? null,
       indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
     })),
     links: { ...input.links },
@@ -53,9 +57,15 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
   for (const raw of payload.charts) {
     if (!raw || typeof raw.chartId !== 'string' || typeof raw.instrumentId !== 'string' || typeof raw.interval !== 'string') return null;
     if (raw.chartType !== 'candlestick' && raw.chartType !== 'line') return null;
+    const bindingId = raw.bindingId === undefined || raw.bindingId === null
+      ? null
+      : typeof raw.bindingId === 'string'
+        ? raw.bindingId
+        : undefined;
+    if (bindingId === undefined) return null;
     const indicators = Array.isArray(raw.indicators) ? raw.indicators.filter(indicator) : [];
     if (Array.isArray(raw.indicators) && indicators.length !== raw.indicators.length) return null;
-    charts.push({ ...raw, indicators });
+    charts.push({ ...raw, bindingId, indicators });
   }
   const links = payload.links as Partial<TradingLinkState>;
   if (['instrument', 'interval', 'crosshair', 'visibleRange'].some((key) => typeof links[key as keyof TradingLinkState] !== 'boolean')) return null;
