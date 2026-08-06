@@ -118,13 +118,21 @@ export function TradingReplayPanel({
         <button type="button" disabled={!selected || status === 'saving'} onClick={() => void run()}>Run backtest</button>
       </div>
       {backtest ? (
-        <dl className="trading-backtest-summary">
+        <dl className="trading-backtest-summary" aria-label="Backtest evidence summary">
           <div><dt>Status</dt><dd>{backtest.status}</dd></div>
           <div><dt>Final equity</dt><dd>{backtest.final_equity}</dd></div>
           <div><dt>Return</dt><dd>{backtest.total_return_percent}%</dd></div>
           <div><dt>Max drawdown</dt><dd>{backtest.max_drawdown_percent}%</dd></div>
+          <div><dt>Win rate</dt><dd>{backtest.win_rate_percent}%</dd></div>
+          <div><dt>Exposure</dt><dd>{backtest.exposure_percent}%</dd></div>
           <div><dt>Trades</dt><dd>{backtest.trade_count}</dd></div>
           <div><dt>Dataset</dt><dd title={backtest.dataset_fingerprint}>{backtest.dataset_fingerprint.slice(0, 10)}</dd></div>
+          {backtest.artifact ? (
+            <div>
+              <dt>Artifact</dt>
+              <dd title={backtest.artifact.storage_key}>{backtest.artifact.storage_provider} · {backtest.artifact.checksum_sha256.slice(0, 10)} · {backtest.artifact.byte_size} bytes</dd>
+            </div>
+          ) : null}
         </dl>
       ) : null}
     </section>
