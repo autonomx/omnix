@@ -62,6 +62,35 @@ export async function bridgeLiveSpeculationHandshakeRequest(
 
   const sessionId = decodeURIComponent(match[1]);
   const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+  const inlineStartedAt = now();
+  const inlineResponse = await fetchImpl(
+    `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/start-stream`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: requestBody,
+      signal,
+    },
+  );
+  if (
+    inlineResponse.ok
+    && responseContentType(inlineResponse).startsWith('text/event-stream')
+  ) {
+    dispatchPerformance('llm_speculation_inline_stream_opened', {
+      sessionId,
+      openMs: now() - inlineStartedAt,
+      transport: inlineResponse.headers.get('X-Omnix-Speculation-Transport')
+        ?? 'inline-v1',
+    });
+    return inlineResponse;
+  }
+  if (inlineResponse.status !== 404 && inlineResponse.status !== 405) {
+    return inlineResponse;
+  }
+
   const handshakeStartedAt = now();
   const startResponse = await fetchImpl(
     `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/start`,
@@ -72,15 +101,16 @@ export async function bridgeLiveSpeculationHandshakeRequest(
       signal,
     },
   );
-  if (!startResponse.ok) return null;
+  if (!startResponse.ok) return startResponse;
 
   const handshake = await readHandshake(startResponse);
-  if (!validHandshake(handshake)) return null;
+  if (!validHandshake(handshake)) return startResponse;
 
   dispatchPerformance('llm_speculation_handshake_ready', {
     sessionId,
     generationId: handshake.generation_id,
     handshakeMs: now() - handshakeStartedAt,
+    transport: 'two-request-fallback',
   });
   return createBridgedSpeculationResponse(fetchImpl, sessionId, handshake, signal);
 }
@@ -141,6 +171,7 @@ function createBridgedSpeculationResponse(
           sessionId,
           generationId: handshake.generation_id,
           streamLifetimeMs: now() - attachStartedAt,
+          transport: 'two-request-fallback',
         });
         if (!closed) {
           closed = true;
@@ -180,6 +211,7 @@ function createBridgedSpeculationResponse(
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-store',
+      'X-Omnix-Speculation-Transport': 'two-request-fallback',
     },
   });
 }
@@ -273,6 +305,10 @@ function validHandshake(
     && handshake.segment_id.length > 0
     && typeof handshake.source_sequence === 'number',
   );
+}
+
+function responseContentType(response: Response): string {
+  return (response.headers.get('Content-Type') ?? '').toLowerCase();
 }
 
 function sse(payload: Record<string, unknown>): string {
