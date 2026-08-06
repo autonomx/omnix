@@ -32,7 +32,7 @@ describe('live voice release observer', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => now);
   });
 
-  it('correlates STT, model, audio, and interruption latency without transcript content', () => {
+  it('uses substantive AudioWorklet speech as the first-audio boundary', () => {
     const observations: LiveVoiceReleaseObservation[] = [];
     const listener = (event: Event) => observations.push((event as CustomEvent<LiveVoiceReleaseObservation>).detail);
     window.addEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
@@ -54,7 +54,40 @@ describe('live voice release observer', () => {
     }));
     now = 1_100;
     window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
-      detail: { traceId: 'live-call:s1:1', event: 'phrase_first_frame_received', details: {} },
+      detail: {
+        traceId: 'live-call:s1:audio-session',
+        source: 'pcm_session',
+        event: 'phrase_first_frame_received',
+        details: {},
+      },
+    }));
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'first_token_to_first_audio_ms' }),
+      'release_observer',
+    );
+    now = 1_140;
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:s1:audio-session',
+        source: 'audio_worklet',
+        event: 'worklet_segment_started',
+        details: { segment_kind: 'cue' },
+      },
+    }));
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'first_token_to_first_audio_ms' }),
+      'release_observer',
+    );
+    now = 1_180;
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: {
+        traceId: 'live-call:s1:audio-session',
+        source: 'audio_worklet',
+        event: 'worklet_segment_started',
+        details: { segment_kind: 'speech' },
+      },
     }));
     now = 1_200;
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-interrupt'));
@@ -70,7 +103,12 @@ describe('live voice release observer', () => {
       metric_name: 'final_to_first_token_ms', value_ms: 500,
     }), 'release_observer');
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
-      metric_name: 'first_token_to_first_audio_ms', value_ms: 300,
+      metric_name: 'first_token_to_first_audio_ms', value_ms: 380,
+    }), 'release_observer');
+    expect(mocks.record).toHaveBeenCalledWith('release_audio_boundary', expect.objectContaining({
+      first_pcm_to_first_audible_ms: 80,
+      final_to_first_audible_ms: 880,
+      stt_request_to_first_audible_ms: 1080,
     }), 'release_observer');
     expect(mocks.record).toHaveBeenCalledWith('release_metric', expect.objectContaining({
       metric_name: 'interruption_to_silence_ms', value_ms: 250,

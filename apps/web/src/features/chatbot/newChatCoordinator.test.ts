@@ -30,7 +30,7 @@ describe('new chat coordinator', () => {
   });
 
   it('creates and selects a real empty session instead of falling back to the first existing chat', async () => {
-    const fetchMock = vi.fn(async () => Response.json({
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({
       id: 'chat:new-session',
       title: 'New chat',
       messages: [],
@@ -57,7 +57,9 @@ describe('new chat coordinator', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(selectedSessions).toEqual(['chat:new-session']));
 
-    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    const firstCall = fetchMock.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const [url, init] = firstCall;
     expect(url).toBe('/api/chat/sessions');
     expect(init).toMatchObject({
       method: 'POST',

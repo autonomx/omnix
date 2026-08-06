@@ -77,6 +77,28 @@ describe('stable live voice clauses', () => {
     expect(accumulator.pendingText()).toBe('split');
   });
 
+  it('uses the fast deadline only for the first clause', () => {
+    const accumulator = new StableClauseAccumulator({
+      firstClauseMinimumCharacters: 12,
+      firstClauseDeadlineMs: 160,
+      minimumClauseCharacters: 24,
+      deadlineMs: 420,
+    });
+
+    expect(accumulator.append('This response starts early', 1_000)).toEqual([]);
+    expect(accumulator.takeReady(1_161)).toEqual([
+      { text: 'This response starts', reason: 'deadline' },
+    ]);
+    expect(accumulator.pendingText()).toBe('early');
+
+    expect(accumulator.append('with enough material for the later clause', 1_162)).toEqual([]);
+    expect(accumulator.takeReady(1_323)).toEqual([]);
+    expect(accumulator.takeReady(1_583)).toEqual([
+      { text: 'early with enough material for the later', reason: 'deadline' },
+    ]);
+    expect(accumulator.pendingText()).toBe('clause');
+  });
+
   it('flushes the unspoken tail only at stream end', () => {
     const accumulator = new StableClauseAccumulator();
     accumulator.append('A final short tail', 0);
