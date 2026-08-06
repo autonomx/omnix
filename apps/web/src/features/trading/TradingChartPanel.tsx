@@ -8,6 +8,7 @@ import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/Trad
 import './drawings/TradingDrawingOverlay.css';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
 import type { CoreIndicatorInstance } from './indicators/coreIndicators';
+import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore } from './tradingStore';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
@@ -98,6 +99,9 @@ export function TradingChartPanel({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<TradingChartAdapter | null>(null);
   const barsRef = useRef<MarketBar[]>([]);
+  const indicatorsRef = useRef<CoreIndicatorInstance[]>(indicators);
+  const indicatorSchedulerRef = useRef<TradingIndicatorScheduler | null>(null);
+  const indicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drawingTool = useTradingStore((state) => state.drawingTool);
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
   const drawings = useTradingDrawings(instrumentId);
@@ -105,8 +109,26 @@ export function TradingChartPanel({
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
   const [streamStatus, setStreamStatus] = useState<TradingStreamStatus>('connecting');
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [indicatorError, setIndicatorError] = useState<string | null>(null);
   const [alertPlacement, setAlertPlacement] = useState<ChartAlertPlacement | null>(null);
   const clearAlertPlacement = useCallback(() => setAlertPlacement(null), []);
+  const scheduleIndicators = useCallback((delay = 0) => {
+    if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
+    indicatorTimerRef.current = setTimeout(() => {
+      indicatorTimerRef.current = null;
+      const scheduler = indicatorSchedulerRef.current;
+      const targetAdapter = adapterRef.current;
+      if (!scheduler || !targetAdapter) return;
+      void scheduler.calculate(barsRef.current, indicatorsRef.current)
+        .then((outputs) => {
+          if (outputs && adapterRef.current === targetAdapter) {
+            targetAdapter.setIndicatorOutputs(outputs);
+            setIndicatorError(null);
+          }
+        })
+        .catch((error) => setIndicatorError(error instanceof Error ? error.message : String(error)));
+    }, delay);
+  }, []);
   const chartQuery = useQuery({
     queryKey: ['trading', 'bars', instrumentId, bindingId, interval],
     queryFn: () => tradingApi.bars(instrumentId, interval, 1_000, bindingId),
@@ -117,12 +139,18 @@ export function TradingChartPanel({
   useEffect(() => {
     if (!hostRef.current) return;
     const next = new TradingChartAdapter(hostRef.current, chartType);
+    const scheduler = new TradingIndicatorScheduler();
     adapterRef.current = next;
+    indicatorSchedulerRef.current = scheduler;
     setAdapter(next);
     const unregister = synchronization.register(chartId, next);
     return () => {
       unregister();
+      if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
+      indicatorTimerRef.current = null;
+      scheduler.destroy();
       next.destroy();
+      indicatorSchedulerRef.current = null;
       adapterRef.current = null;
       setAdapter(null);
     };
@@ -132,16 +160,17 @@ export function TradingChartPanel({
     const bars = chartQuery.data?.bars ?? [];
     barsRef.current = bars;
     adapterRef.current?.setBars(bars);
-    adapterRef.current?.setIndicators(bars, indicators);
-  }, [chartQuery.data]);
+    scheduleIndicators();
+  }, [chartQuery.data, scheduleIndicators]);
 
   useEffect(() => {
     adapterRef.current?.setChartType(chartType, barsRef.current);
   }, [chartType]);
 
   useEffect(() => {
-    adapterRef.current?.setIndicators(barsRef.current, indicators);
-  }, [indicators]);
+    indicatorsRef.current = indicators;
+    scheduleIndicators();
+  }, [indicators, scheduleIndicators]);
 
   useEffect(() => {
     const resolved = chartQuery.data?.binding;
@@ -166,7 +195,7 @@ export function TradingChartPanel({
           const index = barsRef.current.findIndex((item) => item.start_time === bar.start_time);
           if (index >= 0) barsRef.current[index] = bar;
           else barsRef.current = [...barsRef.current, bar];
-          adapterRef.current.setIndicators(barsRef.current, indicators);
+          scheduleIndicators(bar.is_final ? 0 : 100);
         }
       },
       (status) => {
@@ -175,7 +204,7 @@ export function TradingChartPanel({
       },
       resolved.binding_id,
     );
-  }, [chartId, instrumentId, interval, indicators, chartQuery.data?.binding.binding_id]);
+  }, [chartId, instrumentId, interval, chartQuery.data?.binding.binding_id, scheduleIndicators]);
 
   const provenance = chartQuery.data?.provenance;
   const resolvedBinding = chartQuery.data?.binding;
@@ -291,6 +320,7 @@ export function TradingChartPanel({
       {chartQuery.isLoading ? <div className="trading-chart-state">Loading historical bars…</div> : null}
       {chartQuery.error ? <div className="trading-chart-state error">{chartQuery.error.message}</div> : null}
       {streamError ? <div className="trading-chart-state error">{streamError}</div> : null}
+      {indicatorError ? <div className="trading-chart-state error">Indicator calculation failed: {indicatorError}</div> : null}
       <footer>
         <nav aria-label={`${chartId} visible range`} onPointerDown={(event) => event.stopPropagation()}>
           {ranges.map((range) => (
