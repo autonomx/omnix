@@ -3,8 +3,8 @@ import { TradingAlertsPanel } from './TradingAlertsPanel';
 import { TradingDiagnosticsPanel } from './TradingDiagnosticsPanel';
 import { TradingIndicatorPresets } from './TradingIndicatorPresets';
 import { TradingWatchlist } from './TradingWatchlist';
+import type { CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { CanonicalInstrument } from './tradingTypes';
-import type { IndicatorId } from './indicators/indicatorRegistry';
 
 type SideTab = 'watchlist' | 'indicators' | 'alerts' | 'data';
 
@@ -26,9 +26,9 @@ export function TradingSidePanel({
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
   bindingId: string | null;
-  indicators: IndicatorId[];
+  indicators: CoreIndicatorInstance[];
   onSelectInstrument: (instrumentId: string) => void;
-  onSetIndicators: (indicators: IndicatorId[]) => void;
+  onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
 }) {
   const [activeTab, setActiveTab] = useState<SideTab>('watchlist');
   return (
