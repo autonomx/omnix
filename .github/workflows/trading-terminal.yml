@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "apps/web/src/features/trading/**"
+      - "apps/web/src/api/generated/**"
       - "apps/web/src/app/modules.ts"
       - "apps/web/src/app/router.tsx"
       - "apps/web/src/design/primitives.tsx"
@@ -12,12 +13,17 @@ on:
       - "apps/web/package.json"
       - "apps/web/tsconfig.trading.json"
       - "package-lock.json"
+      - "scripts/export_gateway_openapi.py"
       - "src/app/trading/**"
       - "src/app/gateway/trading_routes.py"
       - "src/app/gateway/__init__.py"
+      - "src/app/persistence/migrations/0024_trading_backtest_bar_indices.sql"
+      - "src/app/persistence/migrations/0025_trading_backtest_artifacts.sql"
       - "src/tests/trading/**"
       - "docs/architecture/ADR-0004-omnix-trading-terminal.md"
       - "docs/architecture/OMNIX_TRADING_**"
+      - "docs/plans/omnix_trading_terminal_roadmap_review.md"
+      - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
@@ -27,7 +33,7 @@ permissions:
 jobs:
   trading-terminal:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PYTHONPATH: src
       OMNIX_PERSISTENCE_MODE: legacy_test
@@ -53,3 +59,17 @@ jobs:
         run: npm --workspace @omnix/web run test:trading
       - name: Trading TypeScript typecheck
         run: npm --workspace @omnix/web run typecheck:trading
+      - name: Generate shared gateway API contract
+        run: npm --workspace @omnix/web run api:generate
+      - name: Upload generated API contract
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-generated-api
+          path: |
+            apps/web/src/api/generated/openapi.json
+            apps/web/src/api/generated/types.ts
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify generated API contract is committed
+        run: git diff --exit-code -- apps/web/src/api/generated/openapi.json apps/web/src/api/generated/types.ts
