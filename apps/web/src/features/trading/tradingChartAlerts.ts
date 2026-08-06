@@ -6,6 +6,7 @@ import type {
 } from './tradingTypes';
 
 export const TRADING_ALERTS_CHANGED_EVENT = 'omnix:trading-alerts-changed';
+export const TRADING_ALERT_TRIGGER_HIGHLIGHT_MS = 15_000;
 
 export type TradingChartAlertState = 'active' | 'triggered' | 'disabled' | 'expired';
 export type TradingAlertExpiration = 'never' | '1h' | '1d' | '1w';
@@ -17,8 +18,16 @@ export function notifyTradingAlertsChanged(): void {
 export function alertVisualState(alert: TradingAlert, now = Date.now()): TradingChartAlertState {
   if (alert.expires_at && Date.parse(alert.expires_at) <= now) return 'expired';
   if (!alert.enabled) return 'disabled';
-  if (alert.last_triggered_at) return 'triggered';
+  if (
+    alert.last_triggered_at
+    && now - Date.parse(alert.last_triggered_at) >= 0
+    && now - Date.parse(alert.last_triggered_at) <= TRADING_ALERT_TRIGGER_HIGHLIGHT_MS
+  ) return 'triggered';
   return 'active';
+}
+
+export function alertLastTriggeredLabel(alert: TradingAlert): string | null {
+  return alert.last_triggered_at ? new Date(alert.last_triggered_at).toLocaleString() : null;
 }
 
 export function expirationTimestamp(expiration: TradingAlertExpiration, now = Date.now()): string | null {
