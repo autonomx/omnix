@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseTradingWorkspace, serializeTradingWorkspace } from './workspaceDocument';
 
 const state = {
+  name: 'Research desk',
   layout: 'auto' as const,
   activeChartId: 'chart-2',
   charts: [
@@ -10,12 +11,16 @@ const state = {
     { chartId: 'chart-3', instrumentId: 'sol', interval: '4h', chartType: 'area' as const },
   ],
   links: { instrument: false, interval: true, crosshair: true, visibleRange: false },
+  panels: { right: false, bottom: true },
+  favoriteInstrumentIds: ['eth', 'btc', 'eth'],
 };
 
 describe('Trading workspace document', () => {
-  it('round trips exact chart count, grid, intervals, active chart, and links', () => {
+  it('round trips exact charts, panels, favorites, active chart, and links', () => {
     const serialized = serializeTradingWorkspace(state);
     expect(serialized.schemaVersion).toBe(2);
+    expect(serialized.panels).toEqual({ right: false, bottom: true });
+    expect(serialized.favoriteInstrumentIds).toEqual(['eth', 'btc']);
     expect(parseTradingWorkspace(serialized)).toEqual(serialized);
   });
 
@@ -31,12 +36,15 @@ describe('Trading workspace document', () => {
         { chartId: 'chart-4', instrumentId: 'spy', bindingId: null, interval: '1d', chartType: 'line', indicators: [] },
       ],
       links: state.links,
-      panels: {},
+      panels: { right: false },
+      favoriteInstrumentIds: ['sol'],
     });
     expect(migrated?.schemaVersion).toBe(2);
     expect(migrated?.layout).toBe('columns-1');
     expect(migrated?.charts.map((chart) => chart.chartId)).toEqual(['chart-3']);
     expect(migrated?.activeChartId).toBe('chart-3');
+    expect(migrated?.panels).toEqual({ right: false, bottom: true });
+    expect(migrated?.favoriteInstrumentIds).toEqual(['sol']);
   });
 
   it('rejects unknown schema versions, layouts, and malformed charts', () => {
@@ -54,7 +62,7 @@ describe('Trading workspace document', () => {
     const serialized = serializeTradingWorkspace(state);
     const text = JSON.stringify(serialized);
     expect(text).not.toContain('setLayout');
-    expect(text).not.toContain('raw');
+    expect(text).not.toContain('rawProviderPayload');
     expect(serialized.charts[0].instrumentId).toBe('btc');
   });
 });
