@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
@@ -34,6 +34,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const toggleIndicator = useTradingStore((state) => state.toggleIndicator);
   const setLink = useTradingStore((state) => state.setLink);
   const activeChart = charts.find((chart) => chart.chartId === activeChartId) ?? charts[0];
+  const availableBindings = useMemo(
+    () => (providers.data ?? []).flatMap((provider) => provider.bindings)
+      .filter((binding) => binding.instrument_id === activeChart.instrumentId),
+    [activeChart.instrumentId, providers.data],
+  );
+  const selectedBinding = availableBindings.find((binding) => binding.binding_id === activeChart.bindingId)
+    ?? availableBindings[0];
 
   return (
     <main className={`trading-workspace${focusMode ? ' trading-focus-mode' : ''}`} aria-labelledby="trading-title">
@@ -45,11 +52,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       <section className="trading-toolbar" aria-label="Trading toolbar">
         <label>Active chart<select aria-label="Active Trading chart" value={activeChartId} onChange={(event) => setActiveChart(event.target.value)}>{charts.map((chart) => <option key={chart.chartId} value={chart.chartId}>{chart.chartId}</option>)}</select></label>
         <label>Instrument<select aria-label="Trading instrument" value={activeChart.instrumentId} onChange={(event) => updateChart(activeChartId, { instrumentId: event.target.value })}>{(instruments.data ?? []).map((instrument) => <option key={instrument.instrument_id} value={instrument.instrument_id}>{instrument.display_symbol} · {instrument.venue}</option>)}</select></label>
+        <label>Data feed<select aria-label="Trading data feed" value={selectedBinding?.binding_id ?? ''} onChange={(event) => updateChart(activeChartId, { bindingId: event.target.value || null })}>{availableBindings.map((binding) => <option key={binding.binding_id} value={binding.binding_id}>{binding.provider} · {binding.feed_type}{binding.is_official_api ? '' : ' · unofficial'}</option>)}</select></label>
         <label>Timeframe<select aria-label="Trading timeframe" value={activeChart.interval} onChange={(event) => updateChart(activeChartId, { interval: event.target.value })}>{['1m', '5m', '15m', '1h', '4h', '1d'].map((item) => <option key={item}>{item}</option>)}</select></label>
         <label>Chart<select aria-label="Trading chart type" value={activeChart.chartType} onChange={(event) => updateChart(activeChartId, { chartType: event.target.value as TradingChartType })}><option value="candlestick">Candlestick</option><option value="line">Line</option></select></label>
         <TradingIndicatorManager indicators={activeChart.indicators} onToggle={(id) => toggleIndicator(activeChartId, id)} />
         <button type="button" onClick={() => setLayout(layout === 'one' ? 'four' : 'one')}>Layout: {layout === 'one' ? '1 chart' : '4 charts'}</button>
-        <span className="trading-provider-status" data-status={providers.data?.[0]?.status ?? 'unavailable'}>{providers.isLoading ? 'Loading data provider…' : `${providers.data?.[0]?.display_name ?? 'Provider unavailable'} · ${providers.data?.[0]?.status ?? 'unavailable'}`}</span>
+        <span className="trading-provider-status" data-status={selectedBinding ? 'ready' : 'unavailable'}>{selectedBinding ? `${selectedBinding.provider} · ${selectedBinding.usage_scope} · ${selectedBinding.is_official_api ? 'official' : 'unofficial'}` : 'No compatible feed'}</span>
       </section>
 
       <section className="trading-link-toolbar" aria-label="Chart link controls">{(Object.keys(links) as Array<keyof typeof links>).map((key) => <label key={key}><input type="checkbox" checked={links[key]} onChange={(event) => setLink(key, event.target.checked)} />Link {key === 'visibleRange' ? 'visible range' : key}</label>)}</section>
