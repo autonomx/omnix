@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib
 import math
 import re
+import sys
 from typing import Any, Iterator
 
 from pydantic import BaseModel, Field, model_validator
@@ -15,11 +16,6 @@ try:
     np = importlib.import_module("numpy")
 except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
     np = None
-
-try:
-    torch = importlib.import_module("torch")
-except ImportError:  # pragma: no cover - exercised in minimal dependency environments.
-    torch = None
 
 DEFAULT_SAMPLE_RATE = 24_000
 STREAM_OUTPUT_BLOCK_SAMPLES = 2_048
@@ -174,9 +170,11 @@ def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
     # directly coerce a CUDA tensor, and the old fallback called ``tolist()``,
     # forcing a device sync plus thousands of Python scalar conversions. Keep
     # clipping and int16 quantization on the tensor device, then transfer only
-    # the compact int16 buffer to CPU.
-    if torch is not None and torch.is_tensor(audio_chunk):
-        return _torch_audio_chunk_to_pcm16_bytes(audio_chunk)
+    # the compact int16 buffer to CPU. Use the already-loaded torch module so
+    # lightweight gateway imports do not eagerly initialize torch.
+    torch_module = sys.modules.get("torch")
+    if torch_module is not None and torch_module.is_tensor(audio_chunk):
+        return _torch_audio_chunk_to_pcm16_bytes(audio_chunk, torch_module)
 
     if np is None:
         return _audio_chunk_to_pcm16_bytes_fallback(audio_chunk)
@@ -196,20 +194,20 @@ def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
     return (values * 32767.0).astype("<i2", copy=False).tobytes()
 
 
-def _torch_audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
+def _torch_audio_chunk_to_pcm16_bytes(audio_chunk: Any, torch_module: Any) -> bytes:
     values = audio_chunk.detach()
     if int(values.numel()) == 0:
         return b""
     if int(values.ndim) > 1:
         values = values[..., 0]
-    values = values.reshape(-1).to(dtype=torch.float32)
-    values = torch.nan_to_num(
+    values = values.reshape(-1).to(dtype=torch_module.float32)
+    values = torch_module.nan_to_num(
         values,
         nan=0.0,
         posinf=1.0,
         neginf=-1.0,
     )
-    pcm = values.clamp(-1.0, 1.0).mul(32767.0).to(dtype=torch.int16)
+    pcm = values.clamp(-1.0, 1.0).mul(32767.0).to(dtype=torch_module.int16)
     if getattr(pcm.device, "type", "cpu") != "cpu":
         pcm = pcm.to(device="cpu", non_blocking=False)
     pcm = pcm.contiguous()
