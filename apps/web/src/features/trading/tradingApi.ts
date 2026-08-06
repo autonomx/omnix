@@ -6,6 +6,8 @@ import type {
   TradingStreamMessage,
 } from './tradingTypes';
 
+export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets';
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -66,23 +68,24 @@ export const tradingApi = {
     return requestJson<Record<string, string>>(`/api/trading/quotes?${query.toString()}`);
   },
   diagnostics: () => requestJson<{ ok: boolean; diagnostics: Record<string, unknown> }>('/api/trading/diagnostics'),
-  documents: async (kind: 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets') => {
+  documents: async (kind: TradingDocumentKind) => {
     const payload = await requestJson<{ records: TradingDocument[] }>(`/api/trading/${kind}`);
     return payload.records;
   },
-  createDocument: (kind: 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets', recordId: string, payload: Record<string, unknown>) =>
+  createDocument: (kind: TradingDocumentKind, recordId: string, payload: Record<string, unknown>) =>
     requestJson<TradingDocument>(`/api/trading/${kind}`, {
       method: 'POST',
       body: JSON.stringify({ record_id: recordId, payload }),
     }),
-  updateDocument: (
-    kind: 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets',
-    record: TradingDocument,
-    payload: Record<string, unknown>,
-  ) =>
+  updateDocument: (kind: TradingDocumentKind, record: TradingDocument, payload: Record<string, unknown>) =>
     requestJson<TradingDocument>(`/api/trading/${kind}/${encodeURIComponent(record.record_id)}`, {
       method: 'PUT',
       headers: { 'If-Match': String(record.revision) },
       body: JSON.stringify({ record_id: record.record_id, payload }),
+    }),
+  archiveDocument: (kind: TradingDocumentKind, record: TradingDocument) =>
+    requestJson<TradingDocument>(`/api/trading/${kind}/${encodeURIComponent(record.record_id)}`, {
+      method: 'DELETE',
+      headers: { 'If-Match': String(record.revision) },
     }),
 };
