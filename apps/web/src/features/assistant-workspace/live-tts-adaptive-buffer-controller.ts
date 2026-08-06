@@ -3,6 +3,7 @@ import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
 const INSTALLED_KEY = '__omnixLiveTtsAdaptiveBufferInstalled';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v2';
+const MAX_TRACKED_ANCILLARY_SEGMENTS = 128;
 
 export type AdaptiveBufferSnapshot = {
   startBufferMs: number;
@@ -12,8 +13,18 @@ export type AdaptiveBufferSnapshot = {
   underrunTurns: number;
 };
 
+export type AncillaryCancellationDecision = {
+  forward: boolean;
+  cancelSegmentIds: string[];
+  reason?: string;
+};
+
 type AdaptiveWindow = Window & typeof globalThis & {
   __omnixLiveTtsAdaptiveBufferInstalled?: boolean;
+};
+
+type WorkletOutboundMessage = Record<string, unknown> & {
+  type?: unknown;
 };
 
 export class AdaptiveTtsBufferPolicy {
@@ -78,6 +89,99 @@ export class AdaptiveTtsBufferPolicy {
   }
 }
 
+/**
+ * Tracks pause/cue segments that predate output ownership.
+ *
+ * Speech output already carries output_id + generation_epoch and is removed by
+ * cancel_output. Planned silence and response cues currently do not, so an
+ * interrupted turn can otherwise leave a stale pause in the persistent
+ * worklet queue. The guard removes queued ancillary segments on turn-level
+ * cancellation and rejects late ancillary messages until a replacement turn
+ * establishes a fresh start policy or owned speech frame.
+ */
+export class LiveTtsAncillaryCancellationGuard {
+  private suppressUnownedAncillary = false;
+  private readonly trackedSegmentIds = new Set<string>();
+
+  handleOutbound(message: unknown): AncillaryCancellationDecision {
+    const outbound = asOutboundMessage(message);
+    if (!outbound) return { forward: true, cancelSegmentIds: [] };
+    const type = typeof outbound.type === 'string' ? outbound.type : '';
+
+    if (type === 'stop') {
+      this.reset();
+      return { forward: true, cancelSegmentIds: [] };
+    }
+
+    if (type === 'set_start_policy') {
+      this.suppressUnownedAncillary = false;
+      this.trackedSegmentIds.clear();
+      return { forward: true, cancelSegmentIds: [] };
+    }
+
+    if (type === 'cancel_output' && isTurnTerminalCancellation(outbound.reason)) {
+      const cancelSegmentIds = [...this.trackedSegmentIds];
+      this.trackedSegmentIds.clear();
+      this.suppressUnownedAncillary = true;
+      return {
+        forward: true,
+        cancelSegmentIds,
+        reason: normalizedReason(outbound.reason) || 'turn-superseded',
+      };
+    }
+
+    if (type === 'cancel_segment' || type === 'segment_end') {
+      const segmentId = normalizedSegmentId(outbound.segmentId);
+      if (segmentId) this.trackedSegmentIds.delete(segmentId);
+      return { forward: true, cancelSegmentIds: [] };
+    }
+
+    if (isOwnedSpeechMessage(outbound)) {
+      this.suppressUnownedAncillary = false;
+      this.trackedSegmentIds.clear();
+      return { forward: true, cancelSegmentIds: [] };
+    }
+
+    if (!isUnownedAncillaryMessage(outbound)) {
+      return { forward: true, cancelSegmentIds: [] };
+    }
+
+    const segmentId = normalizedSegmentId(outbound.segmentId);
+    if (this.suppressUnownedAncillary) {
+      return {
+        forward: false,
+        cancelSegmentIds: [],
+        reason: 'superseded-unowned-ancillary',
+      };
+    }
+    if (segmentId) {
+      this.trackedSegmentIds.add(segmentId);
+      while (this.trackedSegmentIds.size > MAX_TRACKED_ANCILLARY_SEGMENTS) {
+        const oldest = this.trackedSegmentIds.values().next().value;
+        if (typeof oldest !== 'string') break;
+        this.trackedSegmentIds.delete(oldest);
+      }
+    }
+    return { forward: true, cancelSegmentIds: [] };
+  }
+
+  observeWorkletEvent(message: unknown): void {
+    const event = asOutboundMessage(message);
+    if (!event) return;
+    const type = typeof event.type === 'string' ? event.type : '';
+    if (type !== 'segment_completed'
+      && type !== 'segment_cancelled'
+      && type !== 'segment_interrupted') return;
+    const segmentId = normalizedSegmentId(event.segment_id ?? event.segmentId);
+    if (segmentId) this.trackedSegmentIds.delete(segmentId);
+  }
+
+  reset(): void {
+    this.suppressUnownedAncillary = false;
+    this.trackedSegmentIds.clear();
+  }
+}
+
 export function adaptiveBufferWorkletMessage(
   snapshot: AdaptiveBufferSnapshot,
   sampleRate: number,
@@ -106,15 +210,14 @@ export function adaptiveBufferWorkletMessage(
 export function initializeLiveTtsAdaptiveBufferController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const liveWindow = window as AdaptiveWindow;
-  if (liveWindow[INSTALLED_KEY] || !adaptiveBufferEnabled()) {
-    return () => undefined;
-  }
+  if (liveWindow[INSTALLED_KEY]) return () => undefined;
   const NativeAudioWorkletNode = liveWindow.AudioWorkletNode;
   if (!NativeAudioWorkletNode) return () => undefined;
   const originalDescriptor = Object.getOwnPropertyDescriptor(
     liveWindow,
     'AudioWorkletNode',
   );
+  const adaptiveEnabled = adaptiveBufferEnabled();
   const policy = new AdaptiveTtsBufferPolicy(loadSnapshot());
 
   const WrappedAudioWorkletNode = new Proxy(NativeAudioWorkletNode, {
@@ -133,33 +236,59 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
         snapshot,
         sampleRate,
       );
-      const nextOptions: AudioWorkletNodeOptions = {
-        ...(options ?? {}),
-        processorOptions: {
-          ...(
-            (options?.processorOptions as
-              | Record<string, unknown>
-              | undefined) ?? {}
-          ),
-          startBufferSamples: policyMessage.startBufferSamples,
-          minimumBufferedSpeechSamples:
-            policyMessage.minimumBufferedSpeechSamples,
-          rebufferSamples: policyMessage.rebufferSamples,
-          maxRebufferSamples: policyMessage.maxRebufferSamples,
-        },
-      };
+      const nextOptions: AudioWorkletNodeOptions = adaptiveEnabled
+        ? {
+            ...(options ?? {}),
+            processorOptions: {
+              ...(
+                (options?.processorOptions as
+                  | Record<string, unknown>
+                  | undefined) ?? {}
+              ),
+              startBufferSamples: policyMessage.startBufferSamples,
+              minimumBufferedSpeechSamples:
+                policyMessage.minimumBufferedSpeechSamples,
+              rebufferSamples: policyMessage.rebufferSamples,
+              maxRebufferSamples: policyMessage.maxRebufferSamples,
+            },
+          }
+        : { ...(options ?? {}) };
       const node = Reflect.construct(
         target,
         [audioContext, name, nextOptions],
         newTarget,
       ) as AudioWorkletNode;
       const originalPostMessage = node.port.postMessage.bind(node.port);
+      const ancillaryGuard = new LiveTtsAncillaryCancellationGuard();
       try {
         node.port.postMessage = ((
           message: unknown,
           transfer?: Transferable[],
         ) => {
-          if (isBufferPolicyMessage(message)) {
+          const decision = ancillaryGuard.handleOutbound(message);
+          for (const segmentId of decision.cancelSegmentIds) {
+            originalPostMessage({
+              type: 'cancel_segment',
+              segmentId,
+              reason: decision.reason ?? 'turn-superseded',
+            });
+          }
+          if (decision.cancelSegmentIds.length > 0) {
+            dispatchPerformance('tts_stale_ancillary_cancelled', {
+              reason: decision.reason,
+              segmentCount: decision.cancelSegmentIds.length,
+            });
+          }
+          if (!decision.forward) {
+            const outbound = asOutboundMessage(message);
+            dispatchPerformance('tts_stale_ancillary_dropped', {
+              reason: decision.reason,
+              messageType: typeof outbound?.type === 'string' ? outbound.type : undefined,
+              segmentId: normalizedSegmentId(outbound?.segmentId),
+            });
+            return;
+          }
+          if (adaptiveEnabled && isBufferPolicyMessage(message)) {
             const effective = adaptiveBufferWorkletMessage(
               policy.snapshot(),
               sampleRate,
@@ -190,6 +319,8 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
       node.port.addEventListener(
         'message',
         (event: MessageEvent<Record<string, unknown>>) => {
+          ancillaryGuard.observeWorkletEvent(event.data);
+          if (!adaptiveEnabled) return;
           const type = typeof event.data?.type === 'string'
             ? event.data.type
             : '';
@@ -214,11 +345,13 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
         },
       );
       node.port.start?.();
-      dispatchPerformance('tts_adaptive_buffer_applied', {
-        sampleRate,
-        ...snapshot,
-        ...policyMessage,
-      });
+      if (adaptiveEnabled) {
+        dispatchPerformance('tts_adaptive_buffer_applied', {
+          sampleRate,
+          ...snapshot,
+          ...policyMessage,
+        });
+      }
       return node;
     },
   });
@@ -259,12 +392,50 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
   };
 }
 
+function asOutboundMessage(value: unknown): WorkletOutboundMessage | null {
+  return value && typeof value === 'object'
+    ? value as WorkletOutboundMessage
+    : null;
+}
+
 function isBufferPolicyMessage(
   value: unknown,
 ): value is Record<string, unknown> & { type: string } {
-  if (!value || typeof value !== 'object') return false;
-  const type = (value as Record<string, unknown>).type;
+  const outbound = asOutboundMessage(value);
+  const type = outbound?.type;
   return type === 'set_start_policy' || type === 'set_buffer_policy';
+}
+
+function isUnownedAncillaryMessage(message: WorkletOutboundMessage): boolean {
+  if (normalizedSegmentId(message.outputId)) return false;
+  if (message.type === 'push_segment_silence') return true;
+  return message.type === 'push_segment_samples' && message.segmentKind === 'cue';
+}
+
+function isOwnedSpeechMessage(message: WorkletOutboundMessage): boolean {
+  return message.type === 'push_segment_samples'
+    && message.segmentKind === 'speech'
+    && Boolean(normalizedSegmentId(message.outputId));
+}
+
+function isTurnTerminalCancellation(value: unknown): boolean {
+  const reason = normalizedReason(value).toLowerCase();
+  return reason.includes('interrupt')
+    || reason.includes('superseded')
+    || reason.includes('user-spoke')
+    || reason === 'turn-failed'
+    || reason === 'audio-recovery'
+    || reason === 'stopped';
+}
+
+function normalizedReason(value: unknown): string {
+  return typeof value === 'string' ? value.trim().slice(0, 120) : '';
+}
+
+function normalizedSegmentId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().slice(0, 200)
+    : null;
 }
 
 function millisecondsToSamples(
