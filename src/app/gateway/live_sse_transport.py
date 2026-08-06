@@ -3,14 +3,19 @@ from __future__ import annotations
 
 import inspect
 import os
+import time
+import uuid
 from collections.abc import AsyncIterable, Iterable
 from contextvars import ContextVar
+from datetime import datetime, timezone
 from functools import wraps
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.responses import StreamingResponse
+
+from app.chat.assistant_turns import AssistantTurnCoordinator, AssistantTurnRecord
 
 from .live_chat_async_sse_bridge import eager_async_sse_stream
 from .tts_stream_diagnostics import stream_log
@@ -19,9 +24,10 @@ _HOOK_SENTINEL = "_omnix_live_sse_transport_installed"
 _FASTAPI_HOOK_SENTINEL = "_omnix_live_chat_sse_route_hook_installed"
 _ROUTE_SENTINEL = "_omnix_live_chat_sse_route_registered"
 _CALL_SENTINEL = "_omnix_live_chat_sse_route_wrapped"
+_ASSISTANT_TURN_HOOK_SENTINEL = "_omnix_live_chat_assistant_turn_start_installed"
 _DEFAULT_PREAMBLE_BYTES = 2_048
 _MAX_PREAMBLE_BYTES = 8_192
-_TRANSPORT_VERSION = "immediate-v3"
+_TRANSPORT_VERSION = "immediate-v4"
 _LIVE_CHAT_STREAM_PATH = "/api/chat/sessions/{session_id}/messages/stream"
 _ORIGINAL_STREAMING_RESPONSE_INIT = StreamingResponse.__init__
 _LIVE_CHAT_STREAM_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
@@ -97,7 +103,7 @@ def _voice_turn_id(request: Any) -> str | None:
     prefix = "voice-user-turn:"
     if not user_turn_id.startswith(prefix):
         return None
-    value = user_turn_id[len(prefix):].strip()
+    value = user_turn_id[len(prefix) :].strip()
     return value or None
 
 
@@ -110,6 +116,145 @@ def _route_context(values: dict[str, Any]) -> dict[str, Any]:
         "speech_segment_id": str(getattr(request, "speech_segment_id", "") or "").strip() or None,
         "voice_turn_id": _voice_turn_id(request),
     }
+
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _find_turn_by_user_turn(
+    coordinator: AssistantTurnCoordinator,
+    session_id: str,
+    user_turn_id: str,
+) -> AssistantTurnRecord | None:
+    return next(
+        (
+            record
+            for record in coordinator._records.values()
+            if record.session_id == session_id and record.user_turn_id == user_turn_id
+        ),
+        None,
+    )
+
+
+def install_live_chat_assistant_turn_start_hook() -> None:
+    """Persist accepted streamed turns as running in their initial durable write."""
+
+    if getattr(AssistantTurnCoordinator, _ASSISTANT_TURN_HOOK_SENTINEL, False):
+        return
+
+    original_start = AssistantTurnCoordinator.start
+    original_mark_streaming = AssistantTurnCoordinator.mark_streaming
+
+    @wraps(original_start)
+    def patched_start(
+        self: AssistantTurnCoordinator,
+        *,
+        session_id: str,
+        user_message_id: str,
+        user_turn_id: str,
+        speech_segment_id: str | None = None,
+    ) -> AssistantTurnRecord:
+        route_context = _LIVE_CHAT_STREAM_CONTEXT.get()
+        if route_context is None:
+            return original_start(
+                self,
+                session_id=session_id,
+                user_message_id=user_message_id,
+                user_turn_id=user_turn_id,
+                speech_segment_id=speech_segment_id,
+            )
+
+        started = time.perf_counter()
+        persisted = False
+        reused_existing = False
+        with self._lock:
+            record = _find_turn_by_user_turn(self, session_id, user_turn_id)
+            if record is None:
+                record = AssistantTurnRecord(
+                    assistant_turn_id=f"assistant-turn:{uuid.uuid4().hex}",
+                    session_id=session_id,
+                    user_message_id=user_message_id,
+                    user_turn_id=user_turn_id,
+                    speech_segment_id=speech_segment_id,
+                    lifecycle="streaming",
+                    provider_execution="running",
+                )
+                self._records[record.assistant_turn_id] = record
+                self._save()
+                persisted = True
+            else:
+                reused_existing = True
+                if (
+                    not record.terminal
+                    and (
+                        record.lifecycle != "streaming"
+                        or record.provider_execution != "running"
+                    )
+                ):
+                    record.lifecycle = "streaming"
+                    record.provider_execution = "running"
+                    record.updated_at = _utcnow()
+                    self._save()
+                    persisted = True
+            result = record.model_copy(deep=True)
+
+        stream_log(
+            "gateway-live-chat-first-token",
+            "runtime",
+            "live_chat_assistant_turn_started_running",
+            assistant_turn_id=result.assistant_turn_id,
+            lifecycle=result.lifecycle,
+            provider_execution=result.provider_execution,
+            reused_existing=reused_existing,
+            persisted=persisted,
+            elapsed_ms=round((time.perf_counter() - started) * 1000.0, 3),
+            **route_context,
+        )
+        return result
+
+    @wraps(original_mark_streaming)
+    def patched_mark_streaming(
+        self: AssistantTurnCoordinator,
+        assistant_turn_id: str,
+    ) -> AssistantTurnRecord | None:
+        started = time.perf_counter()
+        with self._lock:
+            record = self._records.get(assistant_turn_id)
+            if (
+                record is not None
+                and record.lifecycle == "streaming"
+                and record.provider_execution == "running"
+            ):
+                result = record.model_copy(deep=True)
+            else:
+                result = None
+
+        if result is not None:
+            stream_log(
+                "gateway-live-chat-first-token",
+                "runtime",
+                "live_chat_assistant_turn_stream_state_reused",
+                assistant_turn_id=assistant_turn_id,
+                elapsed_ms=round((time.perf_counter() - started) * 1000.0, 3),
+            )
+            return result
+
+        result = original_mark_streaming(self, assistant_turn_id)
+        stream_log(
+            "gateway-live-chat-first-token",
+            "runtime",
+            "live_chat_assistant_turn_stream_state_transitioned",
+            assistant_turn_id=assistant_turn_id,
+            lifecycle=(result.lifecycle if result is not None else None),
+            provider_execution=(result.provider_execution if result is not None else None),
+            elapsed_ms=round((time.perf_counter() - started) * 1000.0, 3),
+        )
+        return result
+
+    AssistantTurnCoordinator.start = patched_start
+    AssistantTurnCoordinator.mark_streaming = patched_mark_streaming
+    setattr(AssistantTurnCoordinator, _ASSISTANT_TURN_HOOK_SENTINEL, True)
 
 
 def _wrap_live_chat_stream_route(route: APIRoute) -> bool:
@@ -222,6 +367,8 @@ def _patched_streaming_response_init(
 def install_live_sse_transport_hook() -> None:
     """Install immediate SSE headers and route-scoped eager chat execution."""
 
+    install_live_chat_assistant_turn_start_hook()
+
     if not getattr(StreamingResponse, _HOOK_SENTINEL, False):
         StreamingResponse.__init__ = _patched_streaming_response_init
         setattr(StreamingResponse, _HOOK_SENTINEL, True)
@@ -242,6 +389,7 @@ def install_live_sse_transport_hook() -> None:
 
 
 __all__ = [
+    "install_live_chat_assistant_turn_start_hook",
     "install_live_chat_sse_route_execution",
     "install_live_sse_transport_hook",
 ]
