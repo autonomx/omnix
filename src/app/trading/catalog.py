@@ -265,7 +265,7 @@ def search_instruments(query: str = "") -> list[CanonicalInstrument]:
 
 
 def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
-    return next(item for item in INSTRUMENTS if item.instrument_id == instrument_id)
+    return next((item for item in INSTRUMENTS if item.instrument_id == instrument_id), None)
 
 
 def binding_by_id(binding_id: str) -> ProviderBinding | None:
