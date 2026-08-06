@@ -38,6 +38,8 @@ export interface FrozenDatasetSnapshot {
 export interface BacktestTrade {
   trade_index: number;
   side: 'buy' | 'sell';
+  signal_bar_index: number;
+  fill_bar_index: number;
   signal_time: string;
   fill_time: string;
   quantity: string;
@@ -56,6 +58,13 @@ export interface BacktestEquityPoint {
   drawdown_percent: string;
 }
 
+export interface BacktestArtifactReference {
+  storage_provider: string;
+  storage_key: string;
+  checksum_sha256: string;
+  byte_size: number;
+}
+
 export interface BacktestRunResult {
   run_id: string;
   dataset_id: string;
@@ -69,11 +78,14 @@ export interface BacktestRunResult {
   final_equity: string;
   total_return_percent: string;
   max_drawdown_percent: string;
+  win_rate_percent: string;
+  exposure_percent: string;
   trade_count: number;
   started_at: string;
   finished_at: string;
   trades: BacktestTrade[];
   equity_curve: BacktestEquityPoint[];
   logs: Array<{ log_index: number; bar_time?: string | null; level: string; message: string; payload: Record<string, unknown> }>;
+  artifact?: BacktestArtifactReference | null;
   error_message?: string | null;
 }
