@@ -63,15 +63,19 @@ export class AdaptiveTtsBufferPolicy {
         1_200,
       );
     }
-    if (type === 'drained') {
+    if (type === 'drained' || type === 'idle') {
       if (this.turnUnderruns > 0) {
         this.snapshotValue.underrunTurns += 1;
         this.snapshotValue.stableTurns = 0;
       } else {
         this.snapshotValue.stableTurns += 1;
         if (this.snapshotValue.stableTurns >= 3) {
+          // The live-call transport hands off a 200 ms startup frame. Returning
+          // a post-underrun reserve from 230 ms to 200 ms after three stable
+          // turns avoids waiting for a second frame while retaining one full
+          // startup frame before playback.
           this.snapshotValue.startBufferMs = clamp(
-            this.snapshotValue.startBufferMs - 20,
+            this.snapshotValue.startBufferMs - 30,
             120,
             650,
           );
@@ -324,7 +328,7 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
           const type = typeof event.data?.type === 'string'
             ? event.data.type
             : '';
-          if (type !== 'underrun' && type !== 'drained') return;
+          if (type !== 'underrun' && type !== 'drained' && type !== 'idle') return;
           const next = policy.observeWorkletEvent(type);
           saveSnapshot(next);
           const nextMessage = adaptiveBufferWorkletMessage(next, sampleRate);
