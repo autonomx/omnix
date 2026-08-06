@@ -100,20 +100,42 @@ function handlePerfEvent(event: Event): void {
   const detail = (event as CustomEvent<PerfDetail>).detail ?? {};
   const stage = typeof detail.stage === 'string' ? detail.stage : '';
   const now = performance.now();
+  const incomingTurnId = normalizedTurnId(detail.turnId);
   if (stage === 'stt_final_requested') {
     state = {
       ...emptyState(),
       sttRequestedAt: now,
-      turnId: typeof detail.turnId === 'string' ? detail.turnId : null,
+      turnId: incomingTurnId,
     };
     return;
   }
   if (stage === 'stt_final_received') {
-    const observed = finiteNonnegative(detail.sttFinalizeMs)
-      ?? elapsed(state.sttRequestedAt, now);
+    const requestedAt = state.sttRequestedAt;
+    const requestedTurnId = state.turnId;
+    const matchingRequest = requestedAt !== null
+      && (incomingTurnId === null || requestedTurnId === incomingTurnId);
+    const explicitFinalizeMs = finiteNonnegative(detail.sttFinalizeMs);
+
+    if (incomingTurnId !== null && incomingTurnId !== requestedTurnId) {
+      state = { ...emptyState(), turnId: incomingTurnId };
+    } else if (incomingTurnId !== null) {
+      state.turnId = incomingTurnId;
+    }
+
+    const observed = explicitFinalizeMs
+      ?? (matchingRequest ? elapsed(requestedAt, now) : null);
+    if (observed === null) {
+      reporter?.record('release_metric_skipped', {
+        metric_name: 'stt_finalize_ms',
+        reason: 'missing_matching_stt_final_requested',
+        incoming_turn_id: incomingTurnId,
+        requested_turn_id: requestedTurnId,
+      }, 'release_observer');
+      return;
+    }
+
     recordLatency('stt_finalize_ms', observed);
     state.sttFinalAt = now;
-    if (typeof detail.turnId === 'string') state.turnId = detail.turnId;
   }
 }
 
@@ -129,6 +151,10 @@ function handleDiagnosticEvent(event: Event): void {
     return;
   }
   if (!diagnosticBelongsToActiveTurn(detail, diagnosticEvent, traceId)) return;
+  if (diagnosticEvent === 'turn_finished') {
+    state = emptyState();
+    return;
+  }
   if (diagnosticEvent === 'chat_response_opened' && state.responseOpenedAt === null) {
     state.responseOpenedAt = now;
     recordLatency('final_to_response_open_ms', elapsed(state.sttFinalAt, now));
@@ -250,6 +276,10 @@ function elapsed(start: number | null, end: number): number | null {
 
 function finiteNonnegative(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function normalizedTurnId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function currentScenario(): string {
