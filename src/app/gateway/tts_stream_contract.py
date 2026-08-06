@@ -26,6 +26,11 @@ CHAT_STREAM_TOKEN_NUMERATOR = 9
 CHAT_STREAM_TOKEN_DENOMINATOR = 8
 CHAT_STREAM_TOKEN_OVERHEAD = 24
 CHAT_STREAM_MIN_REPETITION_PENALTY = 1.05
+# Qwen3-TTS emits roughly 80 ms of 24 kHz audio per codec step. The prior
+# live-chat value of eight therefore withheld about 640 ms of waveform before
+# the provider could yield its first chunk. Four retains useful decoder
+# batching while allowing the first ~320 ms of speech to become available.
+CHAT_STREAM_MAX_CODEC_CHUNK_STEPS = 4
 
 
 class TtsPronunciationEntry(BaseModel):
@@ -91,6 +96,7 @@ class TtsStreamRequest(BaseModel):
         if not stream_id.startswith("chat-"):
             return self
         self.parity_mode = False
+        self.chunk_size = min(self.chunk_size, CHAT_STREAM_MAX_CODEC_CHUNK_STEPS)
         token_budget = estimate_chat_stream_max_new_tokens(self.text)
         if self.max_new_tokens is None or self.max_new_tokens > token_budget:
             self.max_new_tokens = token_budget
