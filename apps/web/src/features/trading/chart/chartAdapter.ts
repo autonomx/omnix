@@ -11,6 +11,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
+import { indicatorPoints, type CoreIndicatorInstance } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 
 export type TradingChartType = 'candlestick' | 'line';
@@ -49,6 +50,7 @@ export class TradingChartAdapter {
   private readonly chart: IChartApi;
   private priceSeries: ISeriesApi<'Candlestick'> | ISeriesApi<'Line'>;
   private readonly volumeSeries: ISeriesApi<'Histogram'>;
+  private readonly indicatorSeries = new Map<string, ISeriesApi<'Line'>>();
   private chartType: TradingChartType;
   private readonly revisions = new Map<number, number>();
   private destroyed = false;
@@ -76,11 +78,8 @@ export class TradingChartAdapter {
   private createPriceSeries(type: TradingChartType): ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> {
     if (type === 'line') return this.chart.addSeries(LineSeries, { color: '#4dabf7', lineWidth: 2 });
     return this.chart.addSeries(CandlestickSeries, {
-      upColor: '#20c997',
-      downColor: '#ff6b6b',
-      borderVisible: false,
-      wickUpColor: '#20c997',
-      wickDownColor: '#ff6b6b',
+      upColor: '#20c997', downColor: '#ff6b6b', borderVisible: false,
+      wickUpColor: '#20c997', wickDownColor: '#ff6b6b',
     });
   }
 
@@ -106,6 +105,37 @@ export class TradingChartAdapter {
     if (fit) this.chart.timeScale().fitContent();
   }
 
+  setIndicators(bars: readonly MarketBar[], indicators: readonly CoreIndicatorInstance[]): void {
+    this.assertActive();
+    const enabled = new Set(indicators.filter((item) => item.enabled).map((item) => `${item.id}:${item.period}`));
+    for (const [key, series] of this.indicatorSeries) {
+      if (!enabled.has(key)) {
+        this.chart.removeSeries(series);
+        this.indicatorSeries.delete(key);
+      }
+    }
+    for (const instance of indicators.filter((item) => item.enabled)) {
+      const key = `${instance.id}:${instance.period}`;
+      let series = this.indicatorSeries.get(key);
+      if (!series) {
+        const paneIndex = instance.id === 'rsi' ? 1 : 0;
+        const color = instance.id === 'sma' ? '#ffd43b' : instance.id === 'ema' ? '#e599f7' : '#5c7cfa';
+        series = this.chart.addSeries(LineSeries, {
+          color,
+          lineWidth: 2,
+          title: `${instance.id.toUpperCase()} ${instance.period}`,
+          priceScaleId: instance.id === 'rsi' ? 'rsi' : 'right',
+        }, paneIndex);
+        if (instance.id === 'rsi') series.priceScale().applyOptions({ autoScale: false, mode: 0 });
+        this.indicatorSeries.set(key, series);
+      }
+      series.setData(indicatorPoints(bars, instance).map((point) => ({
+        time: timestamp(point.time),
+        value: point.value,
+      })));
+    }
+  }
+
   updateBar(bar: MarketBar): boolean {
     this.assertActive();
     const time = timestamp(bar.start_time);
@@ -124,10 +154,7 @@ export class TradingChartAdapter {
   onCrosshair(listener: (point: TradingCrosshairPoint | null) => void): () => void {
     this.assertActive();
     const handler = (parameter: { time?: Time; seriesData: Map<unknown, unknown> }) => {
-      if (parameter.time === undefined) {
-        listener(null);
-        return;
-      }
+      if (parameter.time === undefined) { listener(null); return; }
       const datum = parameter.seriesData.get(this.priceSeries) as { close?: number; value?: number } | undefined;
       const price = datum?.close ?? datum?.value;
       listener(typeof price === 'number' ? { time: parameter.time, price } : null);
@@ -138,10 +165,7 @@ export class TradingChartAdapter {
 
   setCrosshair(point: TradingCrosshairPoint | null): void {
     this.assertActive();
-    if (point === null) {
-      this.chart.clearCrosshairPosition();
-      return;
-    }
+    if (point === null) { this.chart.clearCrosshairPosition(); return; }
     this.chart.setCrosshairPosition(point.price, point.time, this.priceSeries);
   }
 
@@ -152,25 +176,15 @@ export class TradingChartAdapter {
     return () => this.chart.timeScale().unsubscribeVisibleTimeRangeChange(handler);
   }
 
-  setVisibleRange(range: TradingVisibleRange): void {
-    this.assertActive();
-    this.chart.timeScale().setVisibleRange(range);
-  }
-
-  fitContent(): void {
-    this.assertActive();
-    this.chart.timeScale().fitContent();
-  }
-
-  api(): IChartApi {
-    this.assertActive();
-    return this.chart;
-  }
+  setVisibleRange(range: TradingVisibleRange): void { this.assertActive(); this.chart.timeScale().setVisibleRange(range); }
+  fitContent(): void { this.assertActive(); this.chart.timeScale().fitContent(); }
+  api(): IChartApi { this.assertActive(); return this.chart; }
 
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
     this.revisions.clear();
+    this.indicatorSeries.clear();
     this.chart.remove();
   }
 
