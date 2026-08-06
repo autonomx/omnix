@@ -188,40 +188,40 @@ export function indicatorOutputs(
   }
   if (instance.id === 'bollinger') {
     const deviation = instance.standardDeviations ?? 2;
-    const values = bollingerBands(closes(bars), instance.period, deviation);
+    const bandValues = bollingerBands(values, instance.period, deviation);
     const start = instance.period - 1;
     return [
-      { key: `bollinger:${instance.period}:upper`, title: 'BB Upper', pane: 0, kind: 'line', points: points(bars, start, values.map((item) => item.upper)) },
-      { key: `bollinger:${instance.period}:middle`, title: 'BB Middle', pane: 0, kind: 'line', points: points(bars, start, values.map((item) => item.middle)) },
-      { key: `bollinger:${instance.period}:lower`, title: 'BB Lower', pane: 0, kind: 'line', points: points(bars, start, values.map((item) => item.lower)) },
+      { key: `bollinger:${instance.period}:upper`, title: 'BB Upper', pane: 0, kind: 'line', points: points(bars, start, bandValues.map((item) => item.upper)) },
+      { key: `bollinger:${instance.period}:middle`, title: 'BB Middle', pane: 0, kind: 'line', points: points(bars, start, bandValues.map((item) => item.middle)) },
+      { key: `bollinger:${instance.period}:lower`, title: 'BB Lower', pane: 0, kind: 'line', points: points(bars, start, bandValues.map((item) => item.lower)) },
     ];
   }
   if (instance.id === 'atr') {
-    const values = averageTrueRange(
+    const atrValues = averageTrueRange(
       bars.map((bar) => Number(bar.high)),
       bars.map((bar) => Number(bar.low)),
-      closes(bars),
+      values,
       instance.period,
     );
-    return [{ key: `atr:${instance.period}`, title: `ATR ${instance.period}`, pane: 1, kind: 'line', points: points(bars, instance.period - 1, values) }];
+    return [{ key: `atr:${instance.period}`, title: `ATR ${instance.period}`, pane: 1, kind: 'line', points: points(bars, instance.period - 1, atrValues) }];
   }
   if (instance.id === 'macd') {
     const fast = instance.fastPeriod ?? 12;
     const slow = instance.slowPeriod ?? 26;
     const signal = instance.signalPeriod ?? 9;
-    const values = movingAverageConvergenceDivergence(closes(bars), fast, slow, signal);
+    const macdValues = movingAverageConvergenceDivergence(values, fast, slow, signal);
     const start = slow + signal - 2;
     return [
-      { key: `macd:${fast}:${slow}:line`, title: 'MACD', pane: 1, kind: 'line', points: points(bars, start, values.map((item) => item.macd)) },
-      { key: `macd:${fast}:${slow}:signal`, title: 'Signal', pane: 1, kind: 'line', points: points(bars, start, values.map((item) => item.signal)) },
-      { key: `macd:${fast}:${slow}:histogram`, title: 'Histogram', pane: 1, kind: 'histogram', points: points(bars, start, values.map((item) => item.histogram)) },
+      { key: `macd:${fast}:${slow}:line`, title: 'MACD', pane: 1, kind: 'line', points: points(bars, start, macdValues.map((item) => item.macd)) },
+      { key: `macd:${fast}:${slow}:signal`, title: 'Signal', pane: 1, kind: 'line', points: points(bars, start, macdValues.map((item) => item.signal)) },
+      { key: `macd:${fast}:${slow}:histogram`, title: 'Histogram', pane: 1, kind: 'histogram', points: points(bars, start, macdValues.map((item) => item.histogram)) },
     ];
   }
   const anchorIndex = instance.anchorTime
     ? bars.findIndex((bar) => Date.parse(bar.start_time) >= Date.parse(instance.anchorTime as string))
     : 0;
-  const values = anchoredVolumeWeightedAveragePrice(bars, instance.anchorTime);
-  return [{ key: `vwap:${instance.anchorTime ?? 'dataset'}`, title: 'Anchored VWAP', pane: 0, kind: 'line', points: points(bars, Math.max(anchorIndex, 0), values) }];
+  const vwapValues = anchoredVolumeWeightedAveragePrice(bars, instance.anchorTime);
+  return [{ key: `vwap:${instance.anchorTime ?? 'dataset'}`, title: 'Anchored VWAP', pane: 0, kind: 'line', points: points(bars, Math.max(anchorIndex, 0), vwapValues) }];
 }
 
 export function indicatorPoints(
