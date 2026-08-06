@@ -35,7 +35,9 @@ def _policy(
         supported_asset_classes=assets,
         supported_intervals=intervals,
         history_depth="provider_defined",
-        rate_limit_policy="bounded Omnix concurrency and provider-specific throttling",
+        rate_limit_policy=(
+            "Omnix bounded provider semaphore with retry-after-aware exponential backoff"
+        ),
     )
 
 
@@ -44,16 +46,31 @@ BINANCE_POLICY = _policy(
     official=True,
     realtime="public spot market data",
     assets=(AssetClass.CRYPTO,),
-    intervals=("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w"),
-    terms="Binance public market-data API terms",
+    intervals=(
+        "1m",
+        "3m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "4h",
+        "6h",
+        "8h",
+        "12h",
+        "1d",
+        "3d",
+        "1w",
+    ),
+    terms="https://www.binance.com/en/terms",
 )
 YAHOO_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
     official=False,
-    realtime="unofficial polling; availability not guaranteed",
+    realtime="unofficial regular-session polling; availability not guaranteed",
     assets=(AssetClass.EQUITY,),
     intervals=("1m", "5m", "15m", "1h", "1d", "1w"),
-    terms="Yahoo-derived data; personal/local use only",
+    terms="https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html",
 )
 STOOQ_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
@@ -61,7 +78,7 @@ STOOQ_POLICY = _policy(
     realtime="historical daily only",
     assets=(AssetClass.EQUITY,),
     intervals=("1d",),
-    terms="Stooq historical CSV terms",
+    terms="https://stooq.com/",
 )
 COINBASE_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
@@ -69,7 +86,7 @@ COINBASE_POLICY = _policy(
     realtime="public spot REST market data",
     assets=(AssetClass.CRYPTO,),
     intervals=("1m", "5m", "15m", "1h", "1d"),
-    terms="Coinbase Exchange public API terms",
+    terms="https://docs.cdp.coinbase.com/exchange/docs/welcome",
 )
 KRAKEN_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
@@ -77,7 +94,7 @@ KRAKEN_POLICY = _policy(
     realtime="public spot REST market data",
     assets=(AssetClass.CRYPTO,),
     intervals=("1m", "5m", "15m", "1h", "4h", "1d"),
-    terms="Kraken public API terms",
+    terms="https://docs.kraken.com/api/",
 )
 HYPERLIQUID_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
@@ -85,7 +102,7 @@ HYPERLIQUID_POLICY = _policy(
     realtime="public perpetual candle snapshots",
     assets=(AssetClass.CRYPTO,),
     intervals=("1m", "5m", "15m", "1h", "4h", "1d"),
-    terms="Hyperliquid public API terms",
+    terms="https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api",
 )
 
 POLICIES = {
@@ -98,7 +115,12 @@ POLICIES = {
 }
 
 
-def _crypto(venue: str, base: str, quote: str, instrument_type: InstrumentType = InstrumentType.SPOT) -> CanonicalInstrument:
+def _crypto(
+    venue: str,
+    base: str,
+    quote: str,
+    instrument_type: InstrumentType = InstrumentType.SPOT,
+) -> CanonicalInstrument:
     return CanonicalInstrument(
         instrument_id=f"crypto:{venue}:{instrument_type.value}:{base}-{quote}",
         asset_class=AssetClass.CRYPTO,
@@ -136,7 +158,10 @@ INSTRUMENTS = (
     *tuple(_crypto("BINANCE", base, "USDT") for base in ("BTC", "ETH", "SOL")),
     *tuple(_crypto("COINBASE", base, "USD") for base in ("BTC", "ETH")),
     *tuple(_crypto("KRAKEN", base, "USD") for base in ("BTC", "ETH")),
-    *tuple(_crypto("HYPERLIQUID", base, "USD", InstrumentType.PERPETUAL) for base in ("BTC", "ETH")),
+    *tuple(
+        _crypto("HYPERLIQUID", base, "USD", InstrumentType.PERPETUAL)
+        for base in ("BTC", "ETH")
+    ),
     _equity("NASDAQ", "AAPL"),
     _equity("NASDAQ", "NVDA"),
     _equity("ARCA", "SPY"),
@@ -171,17 +196,56 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
     binding
     for instrument in INSTRUMENTS
     for binding in (
-        (_binding(instrument, "binance", instrument.display_symbol, FeedType.WEBSOCKET_AND_REST),)
+        (
+            _binding(
+                instrument,
+                "binance",
+                instrument.display_symbol,
+                FeedType.WEBSOCKET_AND_REST,
+            ),
+        )
         if instrument.venue == "BINANCE"
-        else (_binding(instrument, "coinbase", instrument.venue_symbol, FeedType.REST),)
+        else (
+            _binding(
+                instrument,
+                "coinbase",
+                instrument.venue_symbol,
+                FeedType.REST,
+            ),
+        )
         if instrument.venue == "COINBASE"
-        else (_binding(instrument, "kraken", instrument.venue_symbol.replace("BTC", "XBT"), FeedType.REST),)
+        else (
+            _binding(
+                instrument,
+                "kraken",
+                instrument.venue_symbol.replace("BTC", "XBT"),
+                FeedType.REST,
+            ),
+        )
         if instrument.venue == "KRAKEN"
-        else (_binding(instrument, "hyperliquid", instrument.base_currency or "", FeedType.REST),)
+        else (
+            _binding(
+                instrument,
+                "hyperliquid",
+                instrument.base_currency or "",
+                FeedType.REST,
+            ),
+        )
         if instrument.venue == "HYPERLIQUID"
         else (
-            _binding(instrument, "yahoo", instrument.display_symbol, FeedType.HISTORICAL_POLLING, adjustments=(AdjustmentMode.RAW, AdjustmentMode.SPLIT, AdjustmentMode.DIVIDEND)),
-            _binding(instrument, "stooq", f"{instrument.display_symbol}.US", FeedType.HISTORICAL_DAILY),
+            _binding(
+                instrument,
+                "yahoo",
+                instrument.display_symbol,
+                FeedType.HISTORICAL_POLLING,
+                adjustments=(AdjustmentMode.RAW,),
+            ),
+            _binding(
+                instrument,
+                "stooq",
+                f"{instrument.display_symbol}.US",
+                FeedType.HISTORICAL_DAILY,
+            ),
         )
     )
 )
@@ -191,11 +255,17 @@ def search_instruments(query: str = "") -> list[CanonicalInstrument]:
     clean = query.strip().upper()
     if not clean:
         return list(INSTRUMENTS)
-    return [item for item in INSTRUMENTS if clean in item.display_symbol or clean in item.venue_symbol or clean in item.instrument_id.upper()]
+    return [
+        item
+        for item in INSTRUMENTS
+        if clean in item.display_symbol
+        or clean in item.venue_symbol
+        or clean in item.instrument_id.upper()
+    ]
 
 
 def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
-    return next((item for item in INSTRUMENTS if item.instrument_id == instrument_id), None)
+    return next(item for item in INSTRUMENTS if item.instrument_id == instrument_id)
 
 
 def binding_by_id(binding_id: str) -> ProviderBinding | None:
