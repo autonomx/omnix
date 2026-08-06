@@ -7,13 +7,14 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from app import shared
-from app.chat import ChatSessionStore, default_chat_store
+from app.chat import ChatMessage, ChatSessionStore, default_chat_store
 from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.lmstudio_provider import LMStudioProvider
@@ -28,6 +29,7 @@ _PREWARM_WAIT_SECONDS = 8.0
 _PREWARM_LOCK = threading.RLock()
 _PREWARMED_AT: dict[str, float] = {}
 _PREWARM_INFLIGHT: dict[str, threading.Event] = {}
+_WARM_USER_CONTENT = "Reply with one short acknowledgement."
 
 
 class LiveCallPrewarmRequest(BaseModel):
@@ -40,13 +42,20 @@ class _WarmResult:
     status: str
     elapsed_ms: float
     detail: str | None = None
+    prompt_message_count: int | None = None
+    prompt_chars: int | None = None
 
     def payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "status": self.status,
             "elapsed_ms": round(self.elapsed_ms, 3),
             "detail": self.detail,
         }
+        if self.prompt_message_count is not None:
+            payload["prompt_message_count"] = self.prompt_message_count
+        if self.prompt_chars is not None:
+            payload["prompt_chars"] = self.prompt_chars
+        return payload
 
 
 def clear_live_call_prewarm_state() -> None:
@@ -92,9 +101,7 @@ def register_live_call_prewarm_routes(
             }
 
         key = _prewarm_key(
-            session_id=session_id,
-            provider_id=getattr(session, "provider_id", None),
-            model_id=getattr(session, "model_id", None),
+            session=session,
             speaker=request.speaker,
             language=request.language,
         )
@@ -126,11 +133,19 @@ def register_live_call_prewarm_routes(
             session_id=session_id,
             provider_id=getattr(session, "provider_id", None),
             model_id=getattr(session, "model_id", None),
+            interaction_mode=getattr(session, "interaction_mode", None),
+            character_id=getattr(session, "character_id", None),
+            character_profile_version=getattr(
+                session,
+                "character_profile_version",
+                None,
+            ),
+            session_message_count=len(getattr(session, "messages", []) or []),
             speaker=request.speaker,
         )
         try:
             llm_result, tts_result = await asyncio.gather(
-                asyncio.to_thread(_warm_llm, session),
+                asyncio.to_thread(_warm_llm, store, session),
                 asyncio.to_thread(
                     _warm_tts,
                     request.speaker,
@@ -217,24 +232,29 @@ def _prune_prewarm_locked() -> None:
 
 def _prewarm_key(
     *,
-    session_id: str,
-    provider_id: str | None,
-    model_id: str | None,
+    session: Any,
     speaker: str | None,
     language: str,
 ) -> str:
     return "|".join(
         (
-            session_id,
-            str(provider_id or ""),
-            str(model_id or ""),
+            str(getattr(session, "id", "") or ""),
+            str(getattr(session, "provider_id", "") or ""),
+            str(getattr(session, "model_id", "") or ""),
+            str(getattr(session, "interaction_mode", "") or ""),
+            str(getattr(session, "character_id", "") or ""),
+            str(getattr(session, "character_profile_version", "") or ""),
+            str(getattr(session, "effective_identity_hash", "") or ""),
+            str(getattr(session, "active_segment_id", "") or ""),
+            str(getattr(session, "message_count", "") or ""),
+            str(getattr(session, "updated_at", "") or ""),
             str(speaker or ""),
             language.casefold(),
         )
     )
 
 
-def _warm_llm(session: Any) -> _WarmResult:
+def _warm_llm(store: Any, session: Any) -> _WarmResult:
     started = time.perf_counter()
     provider = shared.get_provider(_provider_key(getattr(session, "provider_id", None)))
     if provider is None or not hasattr(provider, "chat_completion"):
@@ -245,24 +265,22 @@ def _warm_llm(session: Any) -> _WarmResult:
         )
 
     response: Iterator[Any] | None = None
+    prompt_messages: list[ProviderMessage] = []
     try:
+        prompt_messages = _live_voice_warm_messages(store, session)
         # A session may retain a stale configured LM Studio model identifier.
-        # Passing no explicit model lets the installed loaded-model resolver use
-        # the model that is actually resident in LM Studio at call time.
+        # Passing no explicit model lets the loaded-model resolver use the model
+        # that is actually resident in LM Studio at call time.
         model = (
             None
             if isinstance(provider, LMStudioProvider)
             else _model_key(getattr(session, "model_id", None))
         )
         response = provider.chat_completion(
-            messages=[
-                ProviderMessage(
-                    role="user",
-                    content="Reply with exactly one word: ready.",
-                )
-            ],
+            messages=prompt_messages,
             model=model,
             stream=True,
+            chat_template_kwargs={"enable_thinking": False},
         )
         for chunk in response:
             if str(getattr(chunk, "content", "") or "").strip():
@@ -270,18 +288,51 @@ def _warm_llm(session: Any) -> _WarmResult:
         return _WarmResult(
             status="warmed",
             elapsed_ms=(time.perf_counter() - started) * 1000.0,
+            prompt_message_count=len(prompt_messages),
+            prompt_chars=sum(len(message.content) for message in prompt_messages),
         )
     except Exception as exc:  # noqa: BLE001 - warm-up must never block live calls.
         return _WarmResult(
             status="failed",
             elapsed_ms=(time.perf_counter() - started) * 1000.0,
             detail=f"{type(exc).__name__}:{exc}",
+            prompt_message_count=len(prompt_messages) or None,
+            prompt_chars=(
+                sum(len(message.content) for message in prompt_messages)
+                if prompt_messages
+                else None
+            ),
         )
     finally:
         close = getattr(response, "close", None)
         if callable(close):
             with suppress(Exception):
                 close()
+
+
+def _live_voice_warm_messages(store: Any, session: Any) -> list[ProviderMessage]:
+    warm_message = ChatMessage(
+        id=f"live-call-prewarm:{getattr(session, 'id', 'session')}",
+        role="user",
+        content=_WARM_USER_CONTENT,
+        created_at=datetime.now(timezone.utc).isoformat(),
+        metadata={
+            "prewarm": True,
+            "side_effects_allowed": False,
+            "tools_allowed": False,
+            "memory_writes_allowed": False,
+            "user_turn_id": "voice-user-turn:live-call-prewarm",
+            "speech_segment_id": "voice-segment:live-call-prewarm",
+        },
+    )
+    builder = getattr(store, "build_provider_prompt", None)
+    if not callable(builder):
+        return [ProviderMessage(role="user", content=_WARM_USER_CONTENT)]
+    _, rendered = builder(session, warm_message, [])
+    return [
+        ProviderMessage(role=message.role, content=message.content)
+        for message in rendered.messages
+    ]
 
 
 def _warm_tts(speaker: str | None, language: str) -> _WarmResult:
