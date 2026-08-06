@@ -22,7 +22,8 @@ from .paper_lifecycle import (
     TradingPaperLifecycle,
     default_paper_lifecycle,
 )
-from .paper_repository import TradingPaperRepository, default_paper_repository
+from .paper_repository import TradingPaperRepository
+from .paper_runtime_repository import default_runtime_paper_repository
 
 
 class PaperAccountListResponse(BaseModel):
@@ -43,7 +44,7 @@ LifecycleFactory = Callable[[], TradingPaperLifecycle]
 
 
 def create_trading_paper_router(
-    repository_factory: RepositoryFactory = default_paper_repository,
+    repository_factory: RepositoryFactory = default_runtime_paper_repository,
     lifecycle_factory: LifecycleFactory = default_paper_lifecycle,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/paper", tags=["trading-paper"])
