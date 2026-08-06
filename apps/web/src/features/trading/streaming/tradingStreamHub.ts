@@ -1,7 +1,7 @@
 import { tradingStreamUrl } from '../tradingApi';
 import type { TradingStreamMessage } from '../tradingTypes';
 
-export type TradingStreamStatus = 'connecting' | 'live' | 'closed' | 'error';
+export type TradingStreamStatus = 'connecting' | 'live' | 'polling' | 'closed' | 'error';
 
 type MessageListener = (message: TradingStreamMessage) => void;
 type StatusListener = (status: TradingStreamStatus) => void;
@@ -21,8 +21,8 @@ export class TradingStreamHub {
 
   constructor(private readonly socketFactory: SocketFactory = (url) => new WebSocket(url)) {}
 
-  static key(instrumentId: string, interval: string): string {
-    return `${instrumentId}|${interval}`;
+  static key(instrumentId: string, interval: string, bindingId?: string | null): string {
+    return `${instrumentId}|${interval}|${bindingId ?? 'default'}`;
   }
 
   subscribe(
@@ -31,11 +31,12 @@ export class TradingStreamHub {
     interval: string,
     onMessage: MessageListener,
     onStatus?: StatusListener,
+    bindingId?: string | null,
   ): () => void {
-    const key = TradingStreamHub.key(instrumentId, interval);
+    const key = TradingStreamHub.key(instrumentId, interval, bindingId);
     let entry = this.entries.get(key);
     if (!entry) {
-      const socket = this.socketFactory(tradingStreamUrl(instrumentId, interval));
+      const socket = this.socketFactory(tradingStreamUrl(instrumentId, interval, bindingId));
       entry = { socket, messages: new Map(), statuses: new Map(), status: 'connecting' };
       this.entries.set(key, entry);
       const current = entry;
@@ -79,8 +80,8 @@ export class TradingStreamHub {
     return this.entries.size;
   }
 
-  listenerCount(instrumentId: string, interval: string): number {
-    return this.entries.get(TradingStreamHub.key(instrumentId, interval))?.messages.size ?? 0;
+  listenerCount(instrumentId: string, interval: string, bindingId?: string | null): number {
+    return this.entries.get(TradingStreamHub.key(instrumentId, interval, bindingId))?.messages.size ?? 0;
   }
 
   dispose(): void {
