@@ -28,6 +28,8 @@ beforeEach(() => {
       chart('chart-4', 'btc', '1h'),
     ],
     links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
+    panels: { right: true, bottom: true },
+    favoriteInstrumentIds: [],
   });
 });
 
@@ -79,5 +81,14 @@ describe('Trading multi-chart store', () => {
     useTradingStore.getState().setLink('interval', true);
     useTradingStore.getState().updateChart('chart-4', { interval: '2h' });
     expect(useTradingStore.getState().charts.every((item) => item.interval === '2h')).toBe(true);
+  });
+
+  it('stores panel visibility and canonical instrument favorites', () => {
+    useTradingStore.getState().setPanel('right', false);
+    useTradingStore.getState().toggleFavoriteInstrument('equity:NASDAQ:AAPL');
+    expect(useTradingStore.getState().panels).toEqual({ right: false, bottom: true });
+    expect(useTradingStore.getState().favoriteInstrumentIds).toEqual(['equity:NASDAQ:AAPL']);
+    useTradingStore.getState().toggleFavoriteInstrument('equity:NASDAQ:AAPL');
+    expect(useTradingStore.getState().favoriteInstrumentIds).toEqual([]);
   });
 });
