@@ -32,6 +32,7 @@ type DrawingEntry = DrawingSnapshot & {
   timer: ReturnType<typeof setTimeout> | null;
   listeners: Set<() => void>;
   loadPromise: Promise<void> | null;
+  loaded: boolean;
 };
 
 const entries = new Map<string, DrawingEntry>();
@@ -52,6 +53,7 @@ function entryFor(instrumentId: string): DrawingEntry {
     timer: null,
     listeners: new Set(),
     loadPromise: null,
+    loaded: false,
   };
   entries.set(instrumentId, created);
   return created;
@@ -73,6 +75,7 @@ function drawingsFrom(record: TradingDocument | null, instrumentId: string): Tra
 }
 
 async function loadEntry(entry: DrawingEntry): Promise<void> {
+  if (entry.loaded) return;
   if (entry.loadPromise) return entry.loadPromise;
   entry.loadPromise = (async () => {
     entry.status = 'loading';
@@ -84,6 +87,7 @@ async function loadEntry(entry: DrawingEntry): Promise<void> {
       entry.state = replaceDrawings(drawingsFrom(record, entry.instrumentId));
       entry.serverState = null;
       entry.status = 'saved';
+      entry.loaded = true;
     } catch {
       entry.status = 'error';
     } finally {
@@ -109,6 +113,7 @@ async function saveEntry(entry: DrawingEntry): Promise<void> {
     entry.record = saved;
     entry.serverState = null;
     entry.status = 'saved';
+    entry.loaded = true;
   } catch (error) {
     const conflict = error instanceof Error && error.message.includes('(409)');
     if (conflict) {
@@ -141,6 +146,7 @@ async function resolveConflict(entry: DrawingEntry, resolution: 'reload' | 'over
     entry.state = entry.serverState ?? emptyDrawingState();
     entry.serverState = null;
     entry.status = 'saved';
+    entry.loaded = true;
     emit(entry);
     return;
   }
