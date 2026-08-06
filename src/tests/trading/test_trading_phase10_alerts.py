@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -19,6 +20,7 @@ from app.trading.alerts import (
     crossed_threshold,
 )
 from app.trading.alerts_api import create_trading_alert_router
+from app.trading.alerts_monitor import TradingAlertMonitor, trading_alert_monitor_enabled
 
 
 NOW = datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc)
@@ -28,6 +30,7 @@ class FakeAlertRepository:
     def __init__(self) -> None:
         self.alerts: dict[str, TradingAlert] = {}
         self.triggers: list[TradingAlertTrigger] = []
+        self.evaluations: list[TradingAlertEvaluation] = []
 
     def list_alerts(self, limit: int = 200):
         return list(self.alerts.values())[:limit]
@@ -71,19 +74,36 @@ class FakeAlertRepository:
         return self.triggers[:limit]
 
     def evaluate(self, evaluation: TradingAlertEvaluation):
+        self.evaluations.append(evaluation)
         trigger = TradingAlertTrigger(
-            trigger_id="trigger-1",
+            trigger_id=f"trigger-{len(self.evaluations)}",
             alert_id="alert-1",
             instrument_id=evaluation.instrument_id,
             observed_price=evaluation.observed_price,
             threshold=Decimal("100"),
             condition_type="price_above",
             observed_at=evaluation.observed_at,
-            idempotency_key="key-1",
+            idempotency_key=f"key-{len(self.evaluations)}",
             payload={},
         )
-        self.triggers = [trigger]
+        self.triggers = [trigger, *self.triggers]
         return [trigger]
+
+
+class FakeMarketService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+
+    def quote(self, instrument_id: str, binding_id: str | None = None):
+        self.calls.append((instrument_id, binding_id))
+        return {
+            "instrument_id": instrument_id,
+            "binding_id": binding_id or "default",
+            "provider": "fixture",
+            "price": "101",
+            "received_at": NOW.isoformat(),
+            "freshness_mode": "polled",
+        }
 
 
 def test_alert_migration_uses_dedicated_authority_tables() -> None:
@@ -110,6 +130,42 @@ def test_cooldown_and_idempotency_boundaries_are_deterministic() -> None:
     first = alert_trigger_key("alert-1", NOW, Decimal("101.25"))
     assert first == alert_trigger_key("alert-1", NOW, Decimal("101.25"))
     assert first != alert_trigger_key("alert-1", NOW, Decimal("101.26"))
+
+
+def test_alert_monitor_groups_targets_and_runs_without_browser() -> None:
+    repository = FakeAlertRepository()
+    repository.alerts = {
+        alert_id: TradingAlert(
+            alert_id=alert_id,
+            instrument_id="crypto:BINANCE:spot:BTC-USDT",
+            binding_id="binance:fixture",
+            condition_type="price_above",
+            threshold=Decimal("100"),
+            enabled=True,
+            cooldown_seconds=0,
+            revision=1,
+        )
+        for alert_id in ("alert-1", "alert-2")
+    }
+    market = FakeMarketService()
+    monitor = TradingAlertMonitor(
+        repository_factory=lambda: repository,
+        market_service_factory=lambda: market,
+        interval_seconds=5,
+    )
+
+    assert asyncio.run(monitor.run_once()) == 1
+    assert market.calls == [
+        ("crypto:BINANCE:spot:BTC-USDT", "binance:fixture")
+    ]
+    assert len(repository.evaluations) == 1
+    assert monitor.diagnostics()["evaluation_count"] == 1
+
+
+def test_alert_monitor_is_disabled_in_legacy_tests_by_default(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.delenv("OMNIX_TRADING_ALERT_MONITOR_IN_TESTS", raising=False)
+    assert trading_alert_monitor_enabled() is False
 
 
 def test_alert_routes_support_revisioned_management_and_trigger_history() -> None:
