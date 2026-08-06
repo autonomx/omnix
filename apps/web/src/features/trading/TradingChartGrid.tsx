@@ -29,6 +29,7 @@ export function TradingChartGrid() {
             instrumentId={chart.instrumentId}
             interval={chart.interval}
             chartType={chart.chartType}
+            indicators={chart.indicators}
             active={chart.chartId === activeChartId}
             onActivate={() => setActiveChart(chart.chartId)}
             synchronization={synchronization}
