@@ -2,6 +2,10 @@ import type {
   BarsResponse,
   CanonicalInstrument,
   ProviderDescriptor,
+  TradingAlert,
+  TradingAlertCreateInput,
+  TradingAlertTrigger,
+  TradingAlertUpdateInput,
   TradingDocument,
   TradingStreamMessage,
 } from './tradingTypes';
@@ -100,4 +104,39 @@ export const tradingApi = {
       method: 'DELETE',
       headers: { 'If-Match': String(record.revision) },
     }),
+  alerts: async () => {
+    const payload = await requestJson<{ alerts: TradingAlert[] }>('/api/trading/alerts');
+    return payload.alerts;
+  },
+  alertTriggers: async () => {
+    const payload = await requestJson<{ triggers: TradingAlertTrigger[] }>('/api/trading/alerts/triggers');
+    return payload.triggers;
+  },
+  createAlert: (input: TradingAlertCreateInput) =>
+    requestJson<TradingAlert>('/api/trading/alerts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateAlert: (alert: TradingAlert, input: TradingAlertUpdateInput) =>
+    requestJson<TradingAlert>(`/api/trading/alerts/${encodeURIComponent(alert.alert_id)}`, {
+      method: 'PUT',
+      headers: { 'If-Match': String(alert.revision) },
+      body: JSON.stringify(input),
+    }),
+  archiveAlert: (alert: TradingAlert) =>
+    requestJson<TradingAlert>(`/api/trading/alerts/${encodeURIComponent(alert.alert_id)}`, {
+      method: 'DELETE',
+      headers: { 'If-Match': String(alert.revision) },
+    }),
+  evaluateAlerts: async (instrumentId: string, observedPrice: string, observedAt?: string) => {
+    const payload = await requestJson<{ triggers: TradingAlertTrigger[] }>('/api/trading/alerts/evaluate', {
+      method: 'POST',
+      body: JSON.stringify({
+        instrument_id: instrumentId,
+        observed_price: observedPrice,
+        ...(observedAt ? { observed_at: observedAt } : {}),
+      }),
+    });
+    return payload.triggers;
+  },
 };
