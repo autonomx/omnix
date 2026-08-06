@@ -36,6 +36,13 @@ function normalizeStreamBar(
   };
 }
 
+function downloadDataUrl(dataUrl: string, filename: string): void {
+  const anchor = document.createElement('a');
+  anchor.href = dataUrl;
+  anchor.download = filename;
+  anchor.click();
+}
+
 export function TradingChartPanel({
   chartId,
   instrumentId,
@@ -61,7 +68,9 @@ export function TradingChartPanel({
   const adapterRef = useRef<TradingChartAdapter | null>(null);
   const barsRef = useRef<MarketBar[]>([]);
   const drawingTool = useTradingStore((state) => state.drawingTool);
+  const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
   const drawings = useTradingDrawings(instrumentId);
+  const selectedDrawing = drawings.state.drawings.find((drawing) => drawing.drawingId === drawings.state.selectedId) ?? null;
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
   const [streamStatus, setStreamStatus] = useState<TradingStreamStatus>('connecting');
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -159,10 +168,19 @@ export function TradingChartPanel({
           <span>{drawings.status}</span>
         </div>
         {active ? (
-          <div className="trading-drawing-actions">
-            <button type="button" onClick={(event) => { event.stopPropagation(); drawings.undo(); }} aria-label="Undo drawing">↶</button>
-            <button type="button" onClick={(event) => { event.stopPropagation(); drawings.redo(); }} aria-label="Redo drawing">↷</button>
-            <button type="button" onClick={(event) => { event.stopPropagation(); drawings.removeSelected(); }} aria-label="Delete selected drawing">×</button>
+          <div className="trading-drawing-manager" onPointerDown={(event) => event.stopPropagation()}>
+            <button type="button" onClick={() => drawings.undo()} aria-label="Undo drawing">↶</button>
+            <button type="button" onClick={() => drawings.redo()} aria-label="Redo drawing">↷</button>
+            <button type="button" onClick={() => adapterRef.current && downloadDataUrl(adapterRef.current.snapshotDataUrl(), `${chartId}.png`)} aria-label="Snapshot chart">PNG</button>
+            {selectedDrawing ? (
+              <>
+                <input aria-label="Drawing color" type="color" value={selectedDrawing.style?.color ?? '#66d9e8'} onChange={(event) => drawings.updateSelected({ style: { ...(selectedDrawing.style ?? { lineWidth: 2, lineStyle: 'solid' }), color: event.target.value } })} />
+                <button type="button" aria-pressed={Boolean(selectedDrawing.locked)} onClick={() => drawings.updateSelected({ locked: !selectedDrawing.locked })}>{selectedDrawing.locked ? 'Unlock' : 'Lock'}</button>
+                <button type="button" aria-pressed={Boolean(selectedDrawing.hidden)} onClick={() => drawings.updateSelected({ hidden: !selectedDrawing.hidden })}>{selectedDrawing.hidden ? 'Show' : 'Hide'}</button>
+                {selectedDrawing.toolType === 'text' ? <input aria-label="Drawing text" type="text" value={selectedDrawing.text ?? ''} onChange={(event) => drawings.updateSelected({ text: event.target.value })} /> : null}
+                <button type="button" onClick={() => drawings.removeSelected()} aria-label="Delete selected drawing">×</button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -172,6 +190,7 @@ export function TradingChartPanel({
           adapter={adapter}
           instrumentId={instrumentId}
           tool={active ? drawingTool : 'cursor'}
+          snapMode={drawingSnapMode}
           drawings={drawings.state.drawings}
           selectedId={drawings.state.selectedId}
           onAdd={drawings.add}
