@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -13,8 +14,10 @@ from app.trading.alerts import (
     TradingAlert,
     TradingAlertCreate,
     TradingAlertEvaluation,
+    TradingAlertEvaluationPolicy,
     TradingAlertTrigger,
     TradingAlertUpdate,
+    alert_condition_value,
     alert_trigger_key,
     cooldown_elapsed,
     crossed_threshold,
@@ -24,6 +27,7 @@ from app.trading.alerts_monitor import TradingAlertMonitor, trading_alert_monito
 
 
 NOW = datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc)
+INSTRUMENT = "crypto:BINANCE:spot:BTC-USDT"
 
 
 class FakeAlertRepository:
@@ -77,14 +81,21 @@ class FakeAlertRepository:
         self.evaluations.append(evaluation)
         trigger = TradingAlertTrigger(
             trigger_id=f"trigger-{len(self.evaluations)}",
-            alert_id="alert-1",
+            alert_id="price-alert",
             instrument_id=evaluation.instrument_id,
+            binding_id=evaluation.resolved_binding_id,
+            provider=evaluation.provider,
+            observed_value=evaluation.observed_price,
             observed_price=evaluation.observed_price,
             threshold=Decimal("100"),
             condition_type="price_above",
             observed_at=evaluation.observed_at,
+            evaluated_at=evaluation.evaluated_at,
             idempotency_key=f"key-{len(self.evaluations)}",
-            payload={},
+            payload={
+                "requested_binding_id": evaluation.binding_id,
+                "resolved_binding_id": evaluation.resolved_binding_id,
+            },
         )
         self.triggers = [trigger, *self.triggers]
         return [trigger]
@@ -92,60 +103,140 @@ class FakeAlertRepository:
 
 class FakeMarketService:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str | None]] = []
+        self.calls: list[tuple[str, str, int, str | None]] = []
 
-    def quote(self, instrument_id: str, binding_id: str | None = None):
-        self.calls.append((instrument_id, binding_id))
-        return {
-            "instrument_id": instrument_id,
-            "binding_id": binding_id or "default",
-            "provider": "fixture",
-            "price": "101",
-            "received_at": NOW.isoformat(),
-            "freshness_mode": "polled",
-        }
+    def bars(
+        self,
+        instrument_id: str,
+        interval: str,
+        limit: int,
+        binding_id: str | None = None,
+    ):
+        self.calls.append((instrument_id, interval, limit, binding_id))
+        bars = [
+            SimpleNamespace(
+                close=Decimal(90 + index),
+                high=Decimal(91 + index),
+                low=Decimal(89 + index),
+                volume=Decimal(1_000 + index),
+                is_final=True,
+                end_time=NOW + timedelta(minutes=index),
+            )
+            for index in range(40)
+        ]
+        return SimpleNamespace(
+            bars=bars,
+            binding=SimpleNamespace(
+                binding_id="fixture:resolved",
+                provider="fixture-provider",
+            ),
+        )
 
 
-def test_alert_migration_uses_dedicated_authority_tables() -> None:
-    migration = Path(
-        "src/app/persistence/migrations/0020_trading_alerts.sql"
-    ).read_text()
+def alert(alert_id: str, condition_type: str, **parameters) -> TradingAlert:
+    return TradingAlert(
+        alert_id=alert_id,
+        instrument_id=INSTRUMENT,
+        binding_id="fixture:requested",
+        condition_type=condition_type,
+        threshold=Decimal("100"),
+        parameters=parameters,
+        evaluation_policy={"interval": "1m", "allow_partial_bars": False},
+        enabled=True,
+        cooldown_seconds=0,
+        revision=1,
+    )
+
+
+def test_alert_migration_uses_dedicated_complete_authority_tables() -> None:
+    migration = Path("src/app/persistence/migrations/0020_trading_alerts.sql").read_text()
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_alerts" in migration
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_alert_triggers" in migration
+    assert "percent_change_above" in migration
+    assert "indicator_cross_below" in migration
+    assert "volume_above" in migration
+    assert "evaluation_policy JSONB" in migration
+    assert "evaluated_at TIMESTAMPTZ" in migration
     assert "UNIQUE (workspace_id, idempotency_key)" in migration
     assert "omnix_module_records" not in migration
 
 
-def test_price_alerts_trigger_only_on_threshold_crossings() -> None:
-    assert crossed_threshold("price_above", Decimal("99"), Decimal("100"), Decimal("100"))
-    assert not crossed_threshold("price_above", Decimal("100"), Decimal("101"), Decimal("100"))
-    assert crossed_threshold("price_below", Decimal("101"), Decimal("100"), Decimal("100"))
-    assert not crossed_threshold("price_below", Decimal("100"), Decimal("99"), Decimal("100"))
-    assert not crossed_threshold("price_above", None, Decimal("101"), Decimal("100"))
+def test_all_alert_families_use_restart_safe_threshold_crossings() -> None:
+    for condition_type in (
+        "price_above",
+        "percent_change_above",
+        "indicator_above",
+        "indicator_cross_above",
+        "volume_above",
+    ):
+        assert crossed_threshold(
+            condition_type,
+            Decimal("99"),
+            Decimal("100"),
+            Decimal("100"),
+        )
+        assert not crossed_threshold(
+            condition_type,
+            None,
+            Decimal("101"),
+            Decimal("100"),
+        )
+    for condition_type in (
+        "price_below",
+        "percent_change_below",
+        "indicator_below",
+        "indicator_cross_below",
+        "volume_below",
+    ):
+        assert crossed_threshold(
+            condition_type,
+            Decimal("101"),
+            Decimal("100"),
+            Decimal("100"),
+        )
+
+
+def test_condition_values_and_finalized_bar_policy_are_explicit() -> None:
+    evaluation = TradingAlertEvaluation(
+        instrument_id=INSTRUMENT,
+        observed_price=Decimal("101"),
+        observed_volume=Decimal("5000"),
+        percent_changes={"percent": Decimal("2.5")},
+        indicator_values={"indicator": Decimal("71")},
+        is_final=False,
+    )
+    assert alert_condition_value(alert("price", "price_above"), evaluation) == 101
+    assert alert_condition_value(alert("volume", "volume_above"), evaluation) == 5000
+    assert alert_condition_value(alert("percent", "percent_change_above"), evaluation) == Decimal("2.5")
+    assert alert_condition_value(
+        alert("indicator", "indicator_cross_above", indicator_id="rsi"),
+        evaluation,
+    ) == 71
+    assert TradingAlertEvaluationPolicy().allow_partial_bars is False
+    assert TradingAlertEvaluationPolicy(allow_partial_bars=True).allow_partial_bars is True
+    source = Path("src/app/trading/alerts.py").read_text()
+    assert "not evaluation.is_final" in source
+    assert "allow_partial_bars" in source
 
 
 def test_cooldown_and_idempotency_boundaries_are_deterministic() -> None:
     assert not cooldown_elapsed(NOW, NOW + timedelta(seconds=59), 60)
     assert cooldown_elapsed(NOW, NOW + timedelta(seconds=60), 60)
-    first = alert_trigger_key("alert-1", NOW, Decimal("101.25"))
-    assert first == alert_trigger_key("alert-1", NOW, Decimal("101.25"))
-    assert first != alert_trigger_key("alert-1", NOW, Decimal("101.26"))
+    first = alert_trigger_key("alert-1", NOW, Decimal("101.25"), "price_above")
+    assert first == alert_trigger_key("alert-1", NOW, Decimal("101.25"), "price_above")
+    assert first != alert_trigger_key("alert-1", NOW, Decimal("101.25"), "volume_above")
 
 
-def test_alert_monitor_groups_targets_and_runs_without_browser() -> None:
+def test_alert_monitor_groups_targets_and_calculates_all_condition_inputs() -> None:
     repository = FakeAlertRepository()
     repository.alerts = {
-        alert_id: TradingAlert(
-            alert_id=alert_id,
-            instrument_id="crypto:BINANCE:spot:BTC-USDT",
-            binding_id="binance:fixture",
-            condition_type="price_above",
-            threshold=Decimal("100"),
-            enabled=True,
-            cooldown_seconds=0,
-            revision=1,
+        item.alert_id: item
+        for item in (
+            alert("price-alert", "price_above"),
+            alert("percent-alert", "percent_change_above", lookback_bars=5),
+            alert("indicator-alert", "indicator_cross_above", indicator_id="rsi", period=14),
+            alert("volume-alert", "volume_above"),
         )
-        for alert_id in ("alert-1", "alert-2")
     }
     market = FakeMarketService()
     monitor = TradingAlertMonitor(
@@ -155,10 +246,16 @@ def test_alert_monitor_groups_targets_and_runs_without_browser() -> None:
     )
 
     assert asyncio.run(monitor.run_once()) == 1
-    assert market.calls == [
-        ("crypto:BINANCE:spot:BTC-USDT", "binance:fixture")
-    ]
-    assert len(repository.evaluations) == 1
+    assert len(market.calls) == 1
+    assert market.calls[0][0:2] == (INSTRUMENT, "1m")
+    evaluation = repository.evaluations[0]
+    assert evaluation.binding_id == "fixture:requested"
+    assert evaluation.resolved_binding_id == "fixture:resolved"
+    assert evaluation.provider == "fixture-provider"
+    assert evaluation.is_final is True
+    assert evaluation.observed_volume == Decimal("1039")
+    assert "percent-alert" in evaluation.percent_changes
+    assert "indicator-alert" in evaluation.indicator_values
     assert monitor.diagnostics()["evaluation_count"] == 1
 
 
@@ -168,7 +265,7 @@ def test_alert_monitor_is_disabled_in_legacy_tests_by_default(monkeypatch) -> No
     assert trading_alert_monitor_enabled() is False
 
 
-def test_alert_routes_support_revisioned_management_and_trigger_history() -> None:
+def test_alert_routes_support_revisioned_policy_and_trigger_history() -> None:
     repository = FakeAlertRepository()
     app = FastAPI()
     app.include_router(create_trading_alert_router(repository_factory=lambda: repository))
@@ -178,28 +275,38 @@ def test_alert_routes_support_revisioned_management_and_trigger_history() -> Non
         "/api/trading/alerts",
         json={
             "alert_id": "alert-1",
-            "instrument_id": "crypto:BINANCE:spot:BTC-USDT",
-            "binding_id": None,
-            "condition_type": "price_above",
-            "threshold": "100",
+            "instrument_id": INSTRUMENT,
+            "binding_id": "fixture:requested",
+            "condition_type": "indicator_cross_above",
+            "threshold": "70",
+            "parameters": {"indicator_id": "rsi", "period": 14},
+            "evaluation_policy": {
+                "interval": "5m",
+                "allow_partial_bars": False,
+                "formula_version": "omnix-indicators-v2",
+            },
             "cooldown_seconds": 60,
         },
     )
     assert created.status_code == 201
-    assert created.json()["revision"] == 1
+    assert created.json()["parameters"]["indicator_id"] == "rsi"
+    assert created.json()["evaluation_policy"]["interval"] == "5m"
 
     listed = client.get("/api/trading/alerts")
     assert listed.status_code == 200
     assert [item["alert_id"] for item in listed.json()["alerts"]] == ["alert-1"]
 
+    current = created.json()
     updated = client.put(
         "/api/trading/alerts/alert-1",
         headers={"If-Match": "1"},
         json={
-            "instrument_id": "crypto:BINANCE:spot:BTC-USDT",
-            "binding_id": None,
-            "condition_type": "price_below",
-            "threshold": "90",
+            "instrument_id": INSTRUMENT,
+            "binding_id": "fixture:requested",
+            "condition_type": "percent_change_below",
+            "threshold": "-5",
+            "parameters": {"lookback_bars": 10},
+            "evaluation_policy": current["evaluation_policy"],
             "enabled": True,
             "cooldown_seconds": 120,
         },
@@ -211,8 +318,7 @@ def test_alert_routes_support_revisioned_management_and_trigger_history() -> Non
         "/api/trading/alerts/alert-1",
         headers={"If-Match": "1"},
         json={
-            "instrument_id": "crypto:BINANCE:spot:BTC-USDT",
-            "binding_id": None,
+            "instrument_id": INSTRUMENT,
             "condition_type": "price_below",
             "threshold": "80",
             "enabled": True,
@@ -224,13 +330,22 @@ def test_alert_routes_support_revisioned_management_and_trigger_history() -> Non
     evaluated = client.post(
         "/api/trading/alerts/evaluate",
         json={
-            "instrument_id": "crypto:BINANCE:spot:BTC-USDT",
+            "instrument_id": INSTRUMENT,
+            "binding_id": "fixture:requested",
+            "resolved_binding_id": "fixture:resolved",
+            "provider": "fixture-provider",
+            "interval": "5m",
             "observed_price": "101",
+            "observed_volume": "5000",
             "observed_at": NOW.isoformat(),
+            "evaluated_at": (NOW + timedelta(seconds=1)).isoformat(),
         },
     )
     assert evaluated.status_code == 200
-    assert evaluated.json()["triggers"][0]["trigger_id"] == "trigger-1"
+    trigger = evaluated.json()["triggers"][0]
+    assert trigger["binding_id"] == "fixture:resolved"
+    assert trigger["provider"] == "fixture-provider"
+    assert trigger["evaluated_at"]
     assert client.get("/api/trading/alerts/triggers").json()["triggers"][0]["idempotency_key"] == "key-1"
 
     archived = client.delete(
