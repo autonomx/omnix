@@ -85,7 +85,7 @@ describe('CharacterModePanel', () => {
 
     renderPanel();
     const selector = await screen.findByRole('combobox', { name: 'Character' });
-    expect(selector).toHaveValue('maya');
+    await waitFor(() => expect(selector).toHaveValue('maya'));
 
     fireEvent.change(selector, { target: { value: 'jinx' } });
     expect(selector).toHaveValue('jinx');
