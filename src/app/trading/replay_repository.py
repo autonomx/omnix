@@ -151,16 +151,19 @@ class TradingReplayRepository:
                 uow.connection.execute(
                     """
                     INSERT INTO omnix_trading_backtest_trades (
-                        workspace_id, run_id, trade_index, side, signal_time,
+                        workspace_id, run_id, trade_index, side,
+                        signal_bar_index, fill_bar_index, signal_time,
                         fill_time, quantity, fill_price, commission, cash_after,
                         position_after
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         self.context.workspace_id,
                         result.run_id,
                         trade.trade_index,
                         trade.side,
+                        trade.signal_bar_index,
+                        trade.fill_bar_index,
                         trade.signal_time,
                         trade.fill_time,
                         trade.quantity,
@@ -264,8 +267,9 @@ class TradingReplayRepository:
                 return None
             trade_rows = uow.connection.execute(
                 """
-                SELECT trade_index, side, signal_time, fill_time, quantity,
-                       fill_price, commission, cash_after, position_after
+                SELECT trade_index, side, signal_bar_index, fill_bar_index,
+                       signal_time, fill_time, quantity, fill_price,
+                       commission, cash_after, position_after
                   FROM omnix_trading_backtest_trades
                  WHERE workspace_id = %s AND run_id = %s ORDER BY trade_index
                 """,
@@ -308,13 +312,15 @@ class TradingReplayRepository:
                     BacktestTrade(
                         trade_index=int(row[0]),
                         side=str(row[1]),
-                        signal_time=row[2],
-                        fill_time=row[3],
-                        quantity=Decimal(row[4]),
-                        fill_price=Decimal(row[5]),
-                        commission=Decimal(row[6]),
-                        cash_after=Decimal(row[7]),
-                        position_after=Decimal(row[8]),
+                        signal_bar_index=int(row[2]),
+                        fill_bar_index=int(row[3]),
+                        signal_time=row[4],
+                        fill_time=row[5],
+                        quantity=Decimal(row[6]),
+                        fill_price=Decimal(row[7]),
+                        commission=Decimal(row[8]),
+                        cash_after=Decimal(row[9]),
+                        position_after=Decimal(row[10]),
                     )
                     for row in trade_rows
                 ),
