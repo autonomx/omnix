@@ -31,6 +31,12 @@ class EmptyJobStore:
         return []
 
 
+def test_gateway_import_installs_startup_frame_policy() -> None:
+    from app.gateway import tts_live_call_websocket
+
+    assert tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES == 4_800
+
+
 def test_startup_policy_hands_off_200ms_before_provider_resumes(monkeypatch) -> None:
     from app.gateway import tts_live_call_websocket
 
