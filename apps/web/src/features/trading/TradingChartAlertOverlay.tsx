@@ -141,23 +141,10 @@ export function TradingChartAlertOverlay({
   };
 
   const saveEditor = async () => {
-    if (!editor) return;
+    if (!editor || editor.mode !== 'edit') return;
     const threshold = Number(editor.threshold);
     if (!Number.isFinite(threshold)) {
       setStatus('error');
-      return;
-    }
-    if (editor.mode === 'create') {
-      await runMutation(() => tradingApi.createAlert(chartAlertCreateInput({
-        alertId: `chart-alert-${crypto.randomUUID()}`,
-        instrumentId,
-        bindingId,
-        interval,
-        threshold,
-        latestPrice,
-        condition: editor.condition,
-        expiration: 'never',
-      }).then((input) => input));
       return;
     }
     const alert = alerts.find((item) => item.alert_id === editor.alertId);
