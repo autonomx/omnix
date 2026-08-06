@@ -294,5 +294,6 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await expect(page.getByText('Add alert at price')).toBeVisible();
   await page.getByRole('button', { name: 'Create alert' }).click();
   await expect.poll(() => state.alerts.length).toBe(1);
-  await expect(page.locator('.trading-alert-price-label')).toHaveCount(1);
+  await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);
+  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);
 });
