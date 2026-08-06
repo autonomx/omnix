@@ -19,6 +19,7 @@ on:
       - "src/app/gateway/__init__.py"
       - "src/app/persistence/migrations/0024_trading_backtest_bar_indices.sql"
       - "src/app/persistence/migrations/0025_trading_backtest_artifacts.sql"
+      - "src/app/persistence/migrations/0026_trading_alert_expiration.sql"
       - "src/tests/trading/**"
       - "docs/architecture/ADR-0004-omnix-trading-terminal.md"
       - "docs/architecture/OMNIX_TRADING_**"
@@ -28,7 +29,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   trading-terminal:
@@ -63,6 +64,16 @@ jobs:
         run: npm --workspace @omnix/web run typecheck:trading
       - name: Generate shared gateway API contract
         run: npm --workspace @omnix/web run api:generate
+      - name: Commit generated Trading API contract
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/implement-omnix-trading-terminal'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/api/generated/openapi.json apps/web/src/api/generated/types.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "Trading API: regenerate alert expiration contracts"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
       - name: Upload generated API contract
         if: always()
         uses: actions/upload-artifact@v4
