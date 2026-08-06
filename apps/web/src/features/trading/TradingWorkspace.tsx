@@ -7,6 +7,7 @@ import { TradingIndicatorManager } from './TradingIndicatorManager';
 import { TradingIndicatorPresets } from './TradingIndicatorPresets';
 import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingReplayPanel } from './TradingReplayPanel';
+import { TradingResearchPanel } from './TradingResearchPanel';
 import { TradingScannerPanel } from './TradingScannerPanel';
 import { TradingWatchlist } from './TradingWatchlist';
 import { tradingApi } from './tradingApi';
@@ -117,6 +118,14 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <TradingPaperPanel
             instrumentId={activeChart.instrumentId}
             bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+          />
+        </details>
+        <details>
+          <summary>AI research</summary>
+          <TradingResearchPanel
+            instrumentId={activeChart.instrumentId}
+            bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+            interval={activeChart.interval}
           />
         </details>
       </section>
