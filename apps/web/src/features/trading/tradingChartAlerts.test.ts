@@ -35,10 +35,11 @@ const baseAlert: TradingAlert = {
 };
 
 describe('chart-native Trading alerts', () => {
-  it('distinguishes active, triggered, disabled, and expired line states', () => {
+  it('distinguishes lifecycle state from a transient trigger highlight', () => {
     const now = Date.parse('2026-08-06T07:00:00Z');
     expect(alertVisualState(baseAlert, now)).toBe('active');
-    expect(alertVisualState({ ...baseAlert, last_triggered_at: '2026-08-06T06:59:00Z' }, now)).toBe('triggered');
+    expect(alertVisualState({ ...baseAlert, last_triggered_at: '2026-08-06T06:59:50Z' }, now)).toBe('triggered');
+    expect(alertVisualState({ ...baseAlert, last_triggered_at: '2026-08-06T06:59:00Z' }, now)).toBe('active');
     expect(alertVisualState({ ...baseAlert, enabled: false }, now)).toBe('disabled');
     expect(alertVisualState({ ...baseAlert, enabled: false, expires_at: '2026-08-06T06:00:00Z' }, now)).toBe('expired');
   });
