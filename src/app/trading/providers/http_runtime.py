@@ -98,6 +98,17 @@ class ProviderHttpRuntime:
         with self._guard:
             self._in_flight = max(0, self._in_flight - 1)
 
+    def _send(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        request = getattr(self.session, "request", None)
+        if callable(request):
+            return request(method, url, **kwargs)
+        method_call = getattr(self.session, method.lower(), None)
+        if not callable(method_call):
+            raise AttributeError(
+                f"{type(self.session).__name__} supports neither request() nor {method.lower()}()"
+            )
+        return method_call(url, **kwargs)
+
     def request(
         self,
         method: str,
@@ -116,7 +127,7 @@ class ProviderHttpRuntime:
                     if self._cancelled(cancellation):
                         raise ProviderCancelledError(f"{self.provider_id} request cancelled")
                     try:
-                        response = self.session.request(method, url, **kwargs)
+                        response = self._send(method, url, **kwargs)
                         if response.status_code not in _RETRYABLE_STATUS:
                             response.raise_for_status()
                             self._record_success()
@@ -148,7 +159,6 @@ class ProviderHttpRuntime:
                         last_error = error
                         delay = self.initial_backoff_seconds * (2**attempt)
                     except requests.RequestException:
-                        # Non-retryable HTTP and request contract failures remain visible.
                         raise
                     if attempt + 1 < self.max_attempts:
                         self._sleep(delay, cancellation)
@@ -168,7 +178,7 @@ class ProviderHttpRuntime:
         with self._guard:
             if self._consecutive_failures >= 3:
                 status = "unavailable"
-            elif self._consecutive_failures > 0 or self._rate_limit_count > 0:
+            elif self._consecutive_failures > 0:
                 status = "degraded"
             else:
                 status = "ready"
