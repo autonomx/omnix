@@ -11,6 +11,18 @@ import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingS
 import { useTradingStore } from './tradingStore';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 
+const ranges = [
+  { label: '1D', days: 1 },
+  { label: '5D', days: 5 },
+  { label: '1M', days: 30 },
+  { label: '3M', days: 90 },
+  { label: '6M', days: 180 },
+  { label: 'YTD', days: 250 },
+  { label: '1Y', days: 365 },
+  { label: '5Y', days: 1_825 },
+  { label: 'All', days: null },
+] as const;
+
 function normalizeStreamBar(
   message: Extract<TradingStreamMessage, { type: 'bar' }>,
   provider: string,
@@ -41,6 +53,24 @@ function downloadDataUrl(dataUrl: string, filename: string): void {
   anchor.href = dataUrl;
   anchor.download = filename;
   anchor.click();
+}
+
+function price(value?: string | null): string {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) return String(value ?? '—');
+  const digits = Math.abs(parsed) >= 1_000 ? 2 : Math.abs(parsed) >= 1 ? 4 : 6;
+  return parsed.toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
+function intervalMinutes(interval: string): number {
+  const match = interval.match(/^(\d+)(m|h|d|w)$/i);
+  if (!match) return 1_440;
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  if (unit === 'm') return amount;
+  if (unit === 'h') return amount * 60;
+  if (unit === 'w') return amount * 10_080;
+  return amount * 1_440;
 }
 
 export function TradingChartPanel({
@@ -146,6 +176,32 @@ export function TradingChartPanel({
 
   const provenance = chartQuery.data?.provenance;
   const resolvedBinding = chartQuery.data?.binding;
+  const bars = chartQuery.data?.bars ?? [];
+  const latest = bars[bars.length - 1];
+  const previous = bars[bars.length - 2];
+  const latestClose = Number(latest?.close ?? 0);
+  const previousClose = Number(previous?.close ?? latest?.open ?? 0);
+  const change = latestClose - previousClose;
+  const changePercent = previousClose === 0 ? 0 : change / previousClose * 100;
+  const direction = change < 0 ? 'negative' : 'positive';
+
+  const showRange = (days: number | null) => {
+    const chart = adapterRef.current?.api();
+    if (!chart) return;
+    if (days === null) {
+      chart.timeScale().fitContent();
+      return;
+    }
+    const total = barsRef.current.length;
+    if (total === 0) return;
+    const requested = Math.max(1, Math.ceil(days * 1_440 / intervalMinutes(interval)));
+    const count = Math.min(total, requested);
+    chart.timeScale().setVisibleLogicalRange({
+      from: Math.max(-0.5, total - count - 0.5),
+      to: total - 0.5,
+    });
+  };
+
   return (
     <article
       className={`trading-chart-panel${active ? ' active' : ''}`}
@@ -154,19 +210,32 @@ export function TradingChartPanel({
       onPointerDown={onActivate}
       aria-label={`${chartId}${active ? ', active chart' : ''}`}
     >
-      <header>
-        <div>
-          <strong>{chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong>
-          <span>{interval} · {chartType}</span>
-          <span>{indicators.filter((item) => item.enabled).map((item) => item.id.toUpperCase()).join(' · ')}</span>
+      <header className="trading-chart-header">
+        <div className="trading-chart-heading">
+          <div className="trading-chart-title-row">
+            <strong>{chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong>
+            <span>· {interval.toUpperCase()} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
+            <i className={`trading-stream-dot ${streamStatus}`} aria-label={`Feed ${streamStatus}`} />
+          </div>
+          {latest ? (
+            <div className="trading-chart-ohlc">
+              <span>O <b>{price(latest.open)}</b></span>
+              <span>H <b>{price(latest.high)}</b></span>
+              <span>L <b>{price(latest.low)}</b></span>
+              <span>C <b>{price(latest.close)}</b></span>
+              <span className={direction}>{change >= 0 ? '+' : ''}{price(String(change))} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+            </div>
+          ) : null}
         </div>
-        <div className="trading-chart-provenance">
+
+        <div
+          className="trading-chart-provenance"
+          title={`${resolvedBinding?.provider ?? 'Resolving provider'} · ${resolvedBinding?.is_official_api ? 'official API' : 'unofficial API'} · ${provenance?.freshness_mode ?? 'loading'}`}
+        >
           <span>{resolvedBinding?.provider ?? 'resolving'}</span>
-          <span>{resolvedBinding?.is_official_api ? 'official' : 'unofficial'}</span>
-          <span>{provenance?.freshness_mode ?? 'loading'}</span>
           <span className={`stream-${streamStatus}`}>{streamStatus}</span>
-          <span>{drawings.status}</span>
         </div>
+
         {active ? (
           <div className="trading-drawing-manager" onPointerDown={(event) => event.stopPropagation()}>
             <button type="button" onClick={() => drawings.undo()} aria-label="Undo drawing">↶</button>
@@ -202,10 +271,16 @@ export function TradingChartPanel({
       {chartQuery.error ? <div className="trading-chart-state error">{chartQuery.error.message}</div> : null}
       {streamError ? <div className="trading-chart-state error">{streamError}</div> : null}
       <footer>
-        <span>{provenance?.cached ? 'Cached dataset' : 'Provider dataset'}</span>
-        <span>{provenance?.fallback_reason ?? resolvedBinding?.realtime_scope ?? ''}</span>
-        <span>{provenance?.as_of ? `As of ${new Date(provenance.as_of).toLocaleString()}` : ''}</span>
-        <span>{provenance?.dataset_fingerprint ? provenance.dataset_fingerprint.slice(0, 10) : ''}</span>
+        <nav aria-label={`${chartId} visible range`} onPointerDown={(event) => event.stopPropagation()}>
+          {ranges.map((range) => (
+            <button key={range.label} type="button" onClick={() => showRange(range.days)}>{range.label}</button>
+          ))}
+        </nav>
+        <div className="trading-chart-footer-meta">
+          <span>{provenance?.as_of ? new Date(provenance.as_of).toLocaleTimeString() : 'Awaiting data'}</span>
+          <span>{provenance?.cached ? 'cached' : 'live source'}</span>
+          <span>{drawings.status}</span>
+        </div>
       </footer>
     </article>
   );
