@@ -58,6 +58,7 @@ jobs:
             src/app/providers/kyutai_authority.py \
             src/app/providers/kyutai_live_stt.py \
             src/app/providers/kyutai_stt_websocket.py \
+            src/app/providers/kyutai_transcript_normalization.py \
             src/app/providers/stt_live_websocket.py \
             src/app/gateway/blocking_route_offload.py \
             src/app/gateway/live_call_prewarm.py \
@@ -83,6 +84,7 @@ jobs:
             src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_kyutai_stt_runtime.py \
+            src/tests/app/test_kyutai_transcript_normalization.py \
             src/tests/app/test_live_call_prewarm.py \
             src/tests/app/test_live_chat_lmstudio_diagnostics.py \
             src/tests/app/test_live_chat_prompt_window.py \
@@ -114,6 +116,7 @@ jobs:
             src/tests/app/test_kyutai_launcher_services.py \
             src/tests/app/test_kyutai_moshi_launcher.py \
             src/tests/app/test_kyutai_stt_runtime.py \
+            src/tests/app/test_kyutai_transcript_normalization.py \
             src/tests/app/test_live_call_prewarm.py \
             src/tests/app/test_live_chat_lmstudio_diagnostics.py \
             src/tests/app/test_live_chat_prompt_window.py \
