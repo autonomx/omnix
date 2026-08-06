@@ -81,6 +81,34 @@ export function moveDrawingPoint(state: DrawingState, drawingId: string, pointIn
   };
 }
 
+export function translateDrawing(
+  state: DrawingState,
+  drawingId: string,
+  from: DrawingPoint,
+  to: DrawingPoint,
+): DrawingState {
+  const target = state.drawings.find((drawing) => drawing.drawingId === drawingId);
+  if (!target || target.locked) return state;
+  const fromTime = Date.parse(from.time);
+  const toTime = Date.parse(to.time);
+  if (!Number.isFinite(fromTime) || !Number.isFinite(toTime)) return state;
+  const timeDelta = toTime - fromTime;
+  const priceDelta = to.price - from.price;
+  if (timeDelta === 0 && priceDelta === 0) return state;
+  const next = snapshot(state);
+  return {
+    ...next,
+    drawings: next.drawings.map((drawing) => drawing.drawingId !== drawingId ? drawing : {
+      ...drawing,
+      revision: drawing.revision + 1,
+      points: drawing.points.map((point) => ({
+        time: new Date(Date.parse(point.time) + timeDelta).toISOString(),
+        price: point.price + priceDelta,
+      })),
+    }),
+  };
+}
+
 export function updateSelectedDrawing(
   state: DrawingState,
   patch: Partial<Pick<TradingDrawing, 'style' | 'locked' | 'hidden' | 'text'>>,
