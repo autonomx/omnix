@@ -7,9 +7,11 @@ from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
 from app.gateway.tts_live_call_startup_frame_policy import (
+    TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD,
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
     install_tts_live_call_startup_frame_policy,
 )
+from app.gateway.tts_stream_contract import STREAM_INITIAL_FALLBACK_THRESHOLD
 
 
 class BlockingAfterInitialQwenChunkProvider:
@@ -18,10 +20,11 @@ class BlockingAfterInitialQwenChunkProvider:
         self.finished = threading.Event()
 
     def generate_audio_stream(self, **_kwargs: Any):
-        # Four Qwen codec steps currently materialize 7,680 samples. The first
-        # transport frame must cross the browser's 3,840-sample start threshold
-        # before generation resumes and competes for the event loop again.
-        yield [0.25] * 7_680, 24_000, {"chunk_index": 0}
+        # Four Qwen codec steps currently materialize 7,680 samples. This quiet
+        # speech amplitude is below the transport-neutral 1% startup threshold
+        # but above the established fallback threshold. The live-call policy
+        # must hand off its first frame before generation resumes.
+        yield [0.006] * 7_680, 24_000, {"chunk_index": 0}
         self.allow_finish.wait(timeout=1.0)
         self.finished.set()
 
@@ -35,9 +38,10 @@ def test_gateway_import_installs_startup_frame_policy() -> None:
     from app.gateway import tts_live_call_websocket
 
     assert tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES == 4_800
+    assert TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD == STREAM_INITIAL_FALLBACK_THRESHOLD
 
 
-def test_startup_policy_hands_off_200ms_before_provider_resumes(monkeypatch) -> None:
+def test_startup_policy_hands_off_quiet_200ms_frame_before_provider_resumes(monkeypatch) -> None:
     from app.gateway import tts_live_call_websocket
 
     provider = BlockingAfterInitialQwenChunkProvider()
