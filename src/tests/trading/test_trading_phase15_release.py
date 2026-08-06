@@ -8,12 +8,17 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 
-from app.gateway.trading_routes import register_trading_routes
 from app.persistence.blob_store import BlobIntegrityError, LocalBlobStore
 from app.persistence.tenant import local_tenant_context
+from app.trading.alerts_api import create_trading_alert_router
+from app.trading.api import create_trading_router
 from app.trading.backtest import BacktestLogEntry, BacktestRunResult
+from app.trading.paper_api import create_trading_paper_router
+from app.trading.replay_api import create_trading_replay_router
 from app.trading.replay_repository import TradingReplayRepository
 from app.trading.replay_runtime_repository import TradingReplayRuntimeRepository
+from app.trading.research_api import create_trading_research_router
+from app.trading.scanner_api import create_trading_scanner_router
 
 
 NOW = datetime(2026, 8, 6, tzinfo=timezone.utc)
@@ -70,11 +75,19 @@ def minimal_backtest() -> BacktestRunResult:
 
 def test_all_trading_product_routes_are_registered_in_openapi() -> None:
     app = FastAPI()
-    register_trading_routes(app)
+    for router in (
+        create_trading_router(),
+        create_trading_alert_router(),
+        create_trading_scanner_router(),
+        create_trading_replay_router(),
+        create_trading_paper_router(),
+        create_trading_research_router(),
+    ):
+        app.include_router(router)
     paths = set(app.openapi()["paths"])
     required = {
-        "/api/trading/instruments",
-        "/api/trading/providers",
+        "/api/trading/instruments/search",
+        "/api/trading/providers/status",
         "/api/trading/alerts",
         "/api/trading/scanners",
         "/api/trading/replay/datasets",
@@ -83,6 +96,19 @@ def test_all_trading_product_routes_are_registered_in_openapi() -> None:
         "/api/trading/research",
     }
     assert required <= paths
+
+    gateway = Path("src/app/gateway/trading_routes.py").read_text()
+    for registration in (
+        "create_trading_router",
+        "create_trading_alert_router",
+        "create_trading_scanner_router",
+        "create_trading_replay_router",
+        "create_trading_paper_router",
+        "create_trading_research_router",
+        "register_trading_alert_monitor",
+        "register_trading_paper_monitor",
+    ):
+        assert registration in gateway
 
 
 def test_backtest_artifact_is_checksummed_and_corruption_is_detected(
