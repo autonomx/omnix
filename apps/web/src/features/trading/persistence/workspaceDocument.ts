@@ -4,6 +4,7 @@ import {
   type TradingChartState,
   type TradingLayout,
   type TradingLinkState,
+  type TradingPanelState,
 } from '../tradingStore';
 
 export type TradingWorkspacePayload = {
@@ -13,7 +14,8 @@ export type TradingWorkspacePayload = {
   activeChartId: string;
   charts: TradingChartState[];
   links: TradingLinkState;
-  panels: Record<string, boolean>;
+  panels: TradingPanelState;
+  favoriteInstrumentIds: string[];
 };
 
 type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId'> & {
@@ -27,14 +29,17 @@ const layouts: TradingLayout[] = ['auto', 'columns-1', 'columns-2', 'columns-3',
 const legacyLayouts: LegacyLayout[] = ['one', 'two-horizontal', 'two-vertical', 'four'];
 
 export function serializeTradingWorkspace(input: {
+  name?: string;
   layout: TradingLayout;
   activeChartId: string;
   charts: PersistableChart[];
   links: TradingLinkState;
+  panels?: TradingPanelState;
+  favoriteInstrumentIds?: string[];
 }): TradingWorkspacePayload {
   return {
     schemaVersion: 2,
-    name: 'Main workspace',
+    name: input.name?.trim() || 'Main Workspace',
     layout: input.layout,
     activeChartId: input.activeChartId,
     charts: input.charts.map((chart) => ({
@@ -43,7 +48,8 @@ export function serializeTradingWorkspace(input: {
       indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
     })),
     links: { ...input.links },
-    panels: { right: true, bottom: true },
+    panels: { ...(input.panels ?? { right: true, bottom: true }) },
+    favoriteInstrumentIds: [...new Set(input.favoriteInstrumentIds ?? [])],
   };
 }
 
@@ -99,6 +105,20 @@ function parseLinks(value: unknown): TradingLinkState | null {
   return links as TradingLinkState;
 }
 
+function parsePanels(value: unknown): TradingPanelState {
+  if (!value || typeof value !== 'object') return { right: true, bottom: true };
+  const panels = value as Partial<TradingPanelState>;
+  return {
+    right: typeof panels.right === 'boolean' ? panels.right : true,
+    bottom: typeof panels.bottom === 'boolean' ? panels.bottom : true,
+  };
+}
+
+function parseFavorites(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length > 0))].slice(0, 500);
+}
+
 function migrateLegacyCharts(
   charts: TradingChartState[],
   layout: LegacyLayout,
@@ -135,12 +155,13 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
       : visibleCharts[0].chartId;
     return {
       schemaVersion: 2,
-      name: typeof payload.name === 'string' ? payload.name : 'Main workspace',
+      name: typeof payload.name === 'string' ? payload.name : 'Main Workspace',
       layout: migrateLegacyLayout(legacyLayout),
       activeChartId,
       charts: visibleCharts,
       links,
-      panels: payload.panels && typeof payload.panels === 'object' ? payload.panels as Record<string, boolean> : {},
+      panels: parsePanels(payload.panels),
+      favoriteInstrumentIds: parseFavorites(payload.favoriteInstrumentIds),
     };
   }
 
@@ -148,11 +169,12 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
   const requestedActive = typeof payload.activeChartId === 'string' ? payload.activeChartId : charts[0].chartId;
   return {
     schemaVersion: 2,
-    name: typeof payload.name === 'string' ? payload.name : 'Main workspace',
+    name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : 'Main Workspace',
     layout: payload.layout as TradingLayout,
     activeChartId: charts.some((chart) => chart.chartId === requestedActive) ? requestedActive : charts[0].chartId,
     charts,
     links,
-    panels: payload.panels && typeof payload.panels === 'object' ? payload.panels as Record<string, boolean> : {},
+    panels: parsePanels(payload.panels),
+    favoriteInstrumentIds: parseFavorites(payload.favoriteInstrumentIds),
   };
 }
