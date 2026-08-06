@@ -1,9 +1,9 @@
-"""Stage-level diagnostics for live-call audio tensor to PCM conversion."""
+"""Stage-level diagnostics for live-call audio conversion and PCM packing."""
 from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import wraps
 from typing import Any
 
@@ -38,9 +38,8 @@ def measured_pcm_converter(
     """Wrap a PCM converter with one normal event per producer thread.
 
     Each live TTS phrase has its own producer thread, so the first conversion
-    event identifies the previously unmeasured tensor synchronization and
-    quantization stage without logging every subsequent codec chunk. Slow
-    conversions are always emitted.
+    event identifies tensor synchronization and quantization without logging
+    every subsequent codec chunk. Slow conversions are always emitted.
     """
 
     @wraps(converter)
@@ -70,18 +69,72 @@ def measured_pcm_converter(
     return measured
 
 
+def measured_pcm_block_streamer(
+    streamer: Callable[..., Iterator[tuple[bytes, int, Any]]],
+) -> Callable[..., Iterator[tuple[bytes, int, Any]]]:
+    """Measure conversion-to-first-audible-block packing delay.
+
+    The existing ``first_raw_chunk_ready`` event occurs before leading-silence
+    filtering. This wrapper records when the first transportable speech block
+    actually emerges, separating silence filtering/provider cadence from
+    event-loop queue and WebSocket send time.
+    """
+
+    @wraps(streamer)
+    def measured(
+        chunks: Iterator[tuple[bytes, int, Any]],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Iterator[tuple[bytes, int, Any]]:
+        first_raw_at: float | None = None
+        raw_chunks_seen = 0
+
+        def observed_chunks() -> Iterator[tuple[bytes, int, Any]]:
+            nonlocal first_raw_at, raw_chunks_seen
+            for chunk in chunks:
+                raw_chunks_seen += 1
+                if first_raw_at is None:
+                    first_raw_at = time.perf_counter()
+                yield chunk
+
+        for block_index, block in enumerate(streamer(observed_chunks(), *args, **kwargs)):
+            if block_index == 0:
+                ready_at = time.perf_counter()
+                pcm_bytes, sample_rate, _timing = block
+                stream_log(
+                    _DIAGNOSTIC_STREAM_ID,
+                    "provider",
+                    "first_audible_pcm_block_ready",
+                    raw_to_audible_block_ms=(
+                        round((ready_at - first_raw_at) * 1000.0, 3)
+                        if first_raw_at is not None
+                        else None
+                    ),
+                    raw_chunks_before_audible_block=raw_chunks_seen,
+                    block_samples=len(pcm_bytes) // 2,
+                    sample_rate=sample_rate,
+                )
+            yield block
+
+    return measured
+
+
 def install_tts_live_call_pcm_diagnostics_hook() -> None:
-    """Measure the conversion function imported by the persistent WS route."""
+    """Measure conversion and block packing imported by the persistent route."""
 
     if getattr(tts_live_call_websocket, _HOOK_SENTINEL, False):
         return
     tts_live_call_websocket._audio_chunk_to_pcm16_bytes = measured_pcm_converter(
         tts_live_call_websocket._audio_chunk_to_pcm16_bytes
     )
+    tts_live_call_websocket._stream_pcm16_blocks = measured_pcm_block_streamer(
+        tts_live_call_websocket._stream_pcm16_blocks
+    )
     setattr(tts_live_call_websocket, _HOOK_SENTINEL, True)
 
 
 __all__ = [
     "install_tts_live_call_pcm_diagnostics_hook",
+    "measured_pcm_block_streamer",
     "measured_pcm_converter",
 ]
