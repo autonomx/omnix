@@ -140,6 +140,44 @@ describe('live voice release observer', () => {
     );
   });
 
+  it('rejects response diagnostics relabelled as a newer rapid turn', () => {
+    now = 100;
+    perf('stt_final_requested', 'voice-turn:old');
+    now = 170;
+    perf('stt_final_received', 'voice-turn:old', { sttFinalizeMs: 70 });
+    diagnostic('turn_intercepted', 'live-call:voice-turn:old');
+
+    mocks.record.mockClear();
+    now = 300;
+    diagnostic(
+      'chat_response_opened',
+      'live-call:voice-turn:new',
+      'chatbot_workspace',
+    );
+
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'final_to_response_open_ms' }),
+      'release_observer',
+    );
+
+    now = 320;
+    diagnostic(
+      'chat_response_opened',
+      'live-call:voice-turn:old',
+      'chatbot_workspace',
+    );
+    expect(mocks.record).toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({
+        metric_name: 'final_to_response_open_ms',
+        value_ms: 150,
+        turn_id: 'voice-turn:old',
+      }),
+      'release_observer',
+    );
+  });
+
   it('does not charge an unmatched late STT final to the previous turn', () => {
     now = 100;
     perf('stt_final_requested', 'voice-turn:one');
