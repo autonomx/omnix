@@ -1,41 +1,83 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useTradingStore } from './tradingStore';
+import {
+  MAX_TRADING_CHARTS,
+  defaultTradingIndicators,
+  useTradingStore,
+  type TradingChartState,
+} from './tradingStore';
+
+function chart(chartId: string, instrumentId: string, interval: string): TradingChartState {
+  return {
+    chartId,
+    instrumentId,
+    bindingId: null,
+    interval,
+    chartType: 'candlestick',
+    indicators: defaultTradingIndicators(),
+  };
+}
 
 beforeEach(() => {
   useTradingStore.setState({
-    layout: 'one',
+    layout: 'auto',
     activeChartId: 'chart-1',
     charts: [
-      { chartId: 'chart-1', instrumentId: 'btc', interval: '1m', chartType: 'candlestick' },
-      { chartId: 'chart-2', instrumentId: 'eth', interval: '5m', chartType: 'candlestick' },
-      { chartId: 'chart-3', instrumentId: 'sol', interval: '15m', chartType: 'candlestick' },
-      { chartId: 'chart-4', instrumentId: 'btc', interval: '1h', chartType: 'line' },
+      chart('chart-1', 'btc', '1m'),
+      chart('chart-2', 'eth', '5m'),
+      chart('chart-3', 'sol', '15m'),
+      chart('chart-4', 'btc', '1h'),
     ],
     links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
   });
 });
 
 describe('Trading multi-chart store', () => {
-  it('keeps active chart explicit across layout changes', () => {
+  it('keeps active chart explicit across grid changes', () => {
     useTradingStore.getState().setActiveChart('chart-3');
-    useTradingStore.getState().setLayout('four');
+    useTradingStore.getState().setLayout('columns-3');
     expect(useTradingStore.getState().activeChartId).toBe('chart-3');
-    expect(useTradingStore.getState().layout).toBe('four');
+    expect(useTradingStore.getState().layout).toBe('columns-3');
+  });
+
+  it('supports one, two, three, four, and more charts', () => {
+    useTradingStore.getState().setChartCount(3);
+    expect(useTradingStore.getState().charts).toHaveLength(3);
+
+    useTradingStore.getState().setChartCount(7);
+    expect(useTradingStore.getState().charts).toHaveLength(7);
+    expect(new Set(useTradingStore.getState().charts.map((item) => item.chartId)).size).toBe(7);
+
+    useTradingStore.getState().setChartCount(MAX_TRADING_CHARTS + 20);
+    expect(useTradingStore.getState().charts).toHaveLength(MAX_TRADING_CHARTS);
+  });
+
+  it('adds and removes the active chart without allowing an empty workspace', () => {
+    useTradingStore.getState().setChartCount(1);
+    useTradingStore.getState().addChart();
+    const added = useTradingStore.getState().activeChartId;
+    expect(useTradingStore.getState().charts).toHaveLength(2);
+
+    useTradingStore.getState().removeChart(added);
+    expect(useTradingStore.getState().charts).toHaveLength(1);
+    expect(useTradingStore.getState().activeChartId).toBe('chart-1');
+
+    useTradingStore.getState().removeChart('chart-1');
+    expect(useTradingStore.getState().charts).toHaveLength(1);
   });
 
   it('updates only one instrument while linking is disabled', () => {
     useTradingStore.getState().updateChart('chart-1', { instrumentId: 'sol' });
-    expect(useTradingStore.getState().charts.map((chart) => chart.instrumentId)).toEqual(['sol', 'eth', 'sol', 'btc']);
+    expect(useTradingStore.getState().charts.map((item) => item.instrumentId)).toEqual(['sol', 'eth', 'sol', 'btc']);
   });
 
   it('propagates linked instrument and interval independently', () => {
     useTradingStore.getState().setLink('instrument', true);
     useTradingStore.getState().updateChart('chart-2', { instrumentId: 'btc' });
-    expect(useTradingStore.getState().charts.every((chart) => chart.instrumentId === 'btc')).toBe(true);
-    expect(useTradingStore.getState().charts.map((chart) => chart.interval)).toEqual(['1m', '5m', '15m', '1h']);
+    expect(useTradingStore.getState().charts.every((item) => item.instrumentId === 'btc')).toBe(true);
+    expect(useTradingStore.getState().charts.map((item) => item.interval)).toEqual(['1m', '5m', '15m', '1h']);
 
     useTradingStore.getState().setLink('interval', true);
-    useTradingStore.getState().updateChart('chart-4', { interval: '4h' });
-    expect(useTradingStore.getState().charts.every((chart) => chart.interval === '4h')).toBe(true);
+    useTradingStore.getState().updateChart('chart-4', { interval: '2h' });
+    expect(useTradingStore.getState().charts.every((item) => item.interval === '2h')).toBe(true);
   });
 });
