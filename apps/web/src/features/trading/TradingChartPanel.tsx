@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { tradingApi } from './tradingApi';
 import { TradingChartAdapter, type TradingChartType } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
-import { TradingDrawingOverlay } from './drawings/TradingDrawingOverlay';
+import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
 import type { CoreIndicatorInstance } from './indicators/coreIndicators';
@@ -104,6 +105,8 @@ export function TradingChartPanel({
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
   const [streamStatus, setStreamStatus] = useState<TradingStreamStatus>('connecting');
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [alertPlacement, setAlertPlacement] = useState<ChartAlertPlacement | null>(null);
+  const clearAlertPlacement = useCallback(() => setAlertPlacement(null), []);
   const chartQuery = useQuery({
     queryKey: ['trading', 'bars', instrumentId, bindingId, interval],
     queryFn: () => tradingApi.bars(instrumentId, interval, 1_000, bindingId),
@@ -265,6 +268,16 @@ export function TradingChartPanel({
           onAdd={drawings.add}
           onSelect={drawings.select}
           onMovePoint={drawings.movePoint}
+          onAlertAtPoint={active ? setAlertPlacement : undefined}
+        />
+        <TradingChartAlertOverlay
+          adapter={adapter}
+          instrumentId={instrumentId}
+          bindingId={resolvedBinding?.binding_id ?? bindingId}
+          interval={interval}
+          latestPrice={latestClose}
+          placement={alertPlacement}
+          onPlacementConsumed={clearAlertPlacement}
         />
       </div>
       {chartQuery.isLoading ? <div className="trading-chart-state">Loading historical bars…</div> : null}
