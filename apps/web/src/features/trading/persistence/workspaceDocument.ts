@@ -11,10 +11,12 @@ export type TradingWorkspacePayload = {
   panels: Record<string, boolean>;
 };
 
+type PersistableChart = Omit<TradingChartState, 'indicators'> & { indicators?: CoreIndicatorInstance[] };
+
 export function serializeTradingWorkspace(input: {
   layout: TradingLayout;
   activeChartId: string;
-  charts: TradingChartState[];
+  charts: PersistableChart[];
   links: TradingLinkState;
 }): TradingWorkspacePayload {
   return {
@@ -24,7 +26,7 @@ export function serializeTradingWorkspace(input: {
     activeChartId: input.activeChartId,
     charts: input.charts.map((chart) => ({
       ...chart,
-      indicators: chart.indicators.map((indicator) => ({ ...indicator })),
+      indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
     })),
     links: { ...input.links },
     panels: { right: true, bottom: false },
