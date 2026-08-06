@@ -7,10 +7,12 @@ const LIVE_CHAT_SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const CHAT_SESSION_CREATED_EVENT = 'omnix:chat-session-created';
 const NEW_CHAT_FAILED_EVENT = 'omnix:new-chat-failed';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const GENERATED_BUTTON_ATTRIBUTE = 'data-omnix-new-chat-coordinator';
 
 let installed = false;
 let inFlight = false;
 let disposeListener: (() => void) | null = null;
+let sessionsObserver: MutationObserver | null = null;
 
 function normalizedButtonLabel(button: HTMLButtonElement): string {
   return String(button.getAttribute('aria-label') || button.textContent || '')
@@ -19,15 +21,37 @@ function normalizedButtonLabel(button: HTMLButtonElement): string {
     .toLocaleLowerCase();
 }
 
+function isNewChatButton(button: HTMLButtonElement): boolean {
+  const label = normalizedButtonLabel(button);
+  const explicitAction = button.dataset.action === 'new-chat' || button.dataset.newChat === 'true';
+  const recognizableLabel = label === '+ new' || label === 'new' || label === 'new chat' || label === '+ new chat';
+  return explicitAction || recognizableLabel;
+}
+
 function newChatButton(target: EventTarget | null): HTMLButtonElement | null {
   if (!(target instanceof Element)) return null;
   const button = target.closest<HTMLButtonElement>('button');
   if (!button || !button.closest('.assistant-sidebar-sessions')) return null;
+  return isNewChatButton(button) ? button : null;
+}
 
-  const label = normalizedButtonLabel(button);
-  const explicitAction = button.dataset.action === 'new-chat' || button.dataset.newChat === 'true';
-  const recognizableLabel = label === '+ new' || label === 'new' || label === 'new chat' || label === '+ new chat';
-  return explicitAction || recognizableLabel ? button : null;
+function ensureNewChatButton(): HTMLButtonElement | null {
+  const header = document.querySelector<HTMLElement>('.assistant-sidebar-sessions > header');
+  if (!header) return null;
+
+  const existing = [...header.querySelectorAll<HTMLButtonElement>('button')]
+    .find((button) => isNewChatButton(button));
+  if (existing) return existing;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.dataset.action = 'new-chat';
+  button.dataset.newChat = 'true';
+  button.setAttribute(GENERATED_BUTTON_ATTRIBUTE, 'true');
+  button.setAttribute('aria-label', 'New chat');
+  button.textContent = '+ New';
+  header.appendChild(button);
+  return button;
 }
 
 function clearMessageComposer(): void {
@@ -102,8 +126,21 @@ export function initializeNewChatCoordinator(): () => void {
   };
 
   document.addEventListener('click', handleClick, true);
+  ensureNewChatButton();
+  if (typeof MutationObserver !== 'undefined') {
+    sessionsObserver = new MutationObserver(() => ensureNewChatButton());
+    sessionsObserver.observe(document.body ?? document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
   disposeListener = () => {
     document.removeEventListener('click', handleClick, true);
+    sessionsObserver?.disconnect();
+    sessionsObserver = null;
+    document.querySelectorAll<HTMLElement>(`[${GENERATED_BUTTON_ATTRIBUTE}="true"]`)
+      .forEach((button) => button.remove());
     installed = false;
     inFlight = false;
     disposeListener = null;
@@ -114,6 +151,8 @@ export function initializeNewChatCoordinator(): () => void {
 /** Test-only reset. Runtime callers should keep the coordinator installed. */
 export function resetNewChatCoordinatorForTests(): void {
   disposeListener?.();
+  sessionsObserver?.disconnect();
+  sessionsObserver = null;
   installed = false;
   inFlight = false;
   disposeListener = null;
