@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -7,8 +8,12 @@ from typing import Any
 import requests
 
 from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import BINANCE_POLICY, BINDINGS, INSTRUMENTS, binding_by_id, instrument_by_id, search_instruments
+from app.trading.catalog import BINANCE_POLICY, BINDINGS, instrument_by_id, search_instruments
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
+
+from .bar_semantics import is_final_bar
+from .errors import ProviderContractError, ProviderDataUnavailableError
+from .http_runtime import ProviderHttpRuntime
 
 
 INTERVAL_SECONDS = {
@@ -38,10 +43,16 @@ class BinanceMarketDataProvider:
         *,
         session: requests.Session | None = None,
         cache: TradingMarketDataCache | None = None,
+        runtime: ProviderHttpRuntime | None = None,
         base_url: str = "https://api.binance.com",
         timeout_seconds: float = 15.0,
     ) -> None:
-        self.session = session or requests.Session()
+        self.runtime = runtime or ProviderHttpRuntime(
+            self.provider_id,
+            session=session,
+            max_concurrency=4,
+        )
+        self.session = self.runtime.session
         self.cache = cache or TradingMarketDataCache()
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
@@ -50,32 +61,57 @@ class BinanceMarketDataProvider:
         return search_instruments(query)
 
     def get_binding(self, instrument_id: str) -> ProviderBinding:
-        binding = next((item for item in BINDINGS if item.instrument_id == instrument_id), None)
+        binding = next(
+            (item for item in BINDINGS if item.instrument_id == instrument_id and item.provider == self.provider_id),
+            None,
+        )
         if binding is None:
             raise ValueError(f"unsupported Binance instrument: {instrument_id}")
         return binding
 
-    def _get_json(self, path: str, params: dict[str, Any]) -> Any:
-        response = self.session.get(
+    def _get_json(
+        self,
+        path: str,
+        params: dict[str, Any],
+        cancellation: threading.Event | None = None,
+    ) -> Any:
+        response = self.runtime.get(
             f"{self.base_url}{path}",
             params=params,
             timeout=self.timeout_seconds,
+            cancellation=cancellation,
         )
-        response.raise_for_status()
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ProviderContractError("Binance returned invalid JSON") from exc
 
-    def _history_rows(self, symbol: str, interval: str, limit: int) -> list[list[Any]]:
+    def _history_rows(
+        self,
+        symbol: str,
+        interval: str,
+        limit: int,
+        cancellation: threading.Event | None = None,
+    ) -> list[list[Any]]:
         remaining = max(1, min(int(limit), 5_000))
         end_time: int | None = None
         rows: list[list[Any]] = []
         while remaining > 0:
             page_limit = min(1_000, remaining)
-            params: dict[str, Any] = {"symbol": symbol, "interval": interval, "limit": page_limit}
+            params: dict[str, Any] = {
+                "symbol": symbol,
+                "interval": interval,
+                "limit": page_limit,
+            }
             if end_time is not None:
                 params["endTime"] = end_time
-            page = self._get_json("/api/v3/klines", params)
-            if not isinstance(page, list) or not page:
+            page = self._get_json("/api/v3/klines", params, cancellation)
+            if not isinstance(page, list):
+                raise ProviderContractError("Binance klines payload must be a list")
+            if not page:
                 break
+            if any(not isinstance(row, list) or len(row) < 7 for row in page):
+                raise ProviderContractError("Binance returned a malformed kline")
             rows = page + rows
             remaining -= len(page)
             if len(page) < page_limit:
@@ -87,7 +123,13 @@ class BinanceMarketDataProvider:
         deduplicated = {int(row[0]): row for row in rows}
         return [deduplicated[key] for key in sorted(deduplicated)][-limit:]
 
-    def get_bars(self, instrument_id: str, interval: str, limit: int = 500) -> BarsResponse:
+    def get_bars(
+        self,
+        instrument_id: str,
+        interval: str,
+        limit: int = 500,
+        cancellation: threading.Event | None = None,
+    ) -> BarsResponse:
         if interval not in INTERVAL_SECONDS:
             raise ValueError(f"unsupported Binance interval: {interval}")
         instrument = instrument_by_id(instrument_id)
@@ -95,10 +137,26 @@ class BinanceMarketDataProvider:
             raise ValueError(f"unknown instrument: {instrument_id}")
         binding = self.get_binding(instrument_id)
         clean_limit = max(1, min(int(limit), 5_000))
-        cache_key = self.cache.key(binding.binding_id, instrument_id, interval, "raw", instrument.session_calendar, clean_limit)
+        cache_key = self.cache.key(
+            binding.binding_id,
+            instrument_id,
+            interval,
+            "raw",
+            instrument.session_calendar,
+            clean_limit,
+        )
 
         def load() -> dict[str, Any]:
-            rows = self._history_rows(binding.provider_symbol, interval, clean_limit)
+            rows = self._history_rows(
+                binding.provider_symbol,
+                interval,
+                clean_limit,
+                cancellation,
+            )
+            if not rows:
+                raise ProviderDataUnavailableError(
+                    f"Binance returned no bars for {instrument_id} {interval}"
+                )
             return {"rows": rows, "history_complete": len(rows) < clean_limit}
 
         payload, entry, cached = self.cache.get_or_load(
@@ -123,7 +181,8 @@ class BinanceMarketDataProvider:
                     low=Decimal(str(row[3])),
                     close=Decimal(str(row[4])),
                     volume=Decimal(str(row[5])),
-                    is_final=end <= received_at,
+                    is_final=is_final_bar(end, received_at),
+                    session="24x7",
                     provider=self.provider_id,
                     provider_event_id=str(row[0]),
                     ingestion_revision=1,
@@ -150,12 +209,22 @@ class BinanceMarketDataProvider:
             bars=bars,
         )
 
-    def get_quote(self, instrument_id: str) -> dict[str, object]:
+    def get_quote(
+        self,
+        instrument_id: str,
+        cancellation: threading.Event | None = None,
+    ) -> dict[str, object]:
         instrument = instrument_by_id(instrument_id)
         if instrument is None:
             raise ValueError(f"unknown instrument: {instrument_id}")
         binding = self.get_binding(instrument_id)
-        payload = self._get_json("/api/v3/ticker/24hr", {"symbol": binding.provider_symbol})
+        payload = self._get_json(
+            "/api/v3/ticker/24hr",
+            {"symbol": binding.provider_symbol},
+            cancellation,
+        )
+        if not isinstance(payload, dict) or "lastPrice" not in payload:
+            raise ProviderContractError("Binance returned a malformed quote")
         return {
             "instrument_id": instrument_id,
             "binding_id": binding.binding_id,
