@@ -16,6 +16,7 @@ from app.trading.catalog import (
     instrument_by_id,
 )
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar
+from app.trading.providers.errors import ProviderUnavailableError
 from app.trading.providers.registry import ProviderRegistry
 from app.trading.service import TradingMarketDataService
 
@@ -54,7 +55,7 @@ def bars_response(instrument_id: str, provider_id: str) -> BarsResponse:
             requested_binding=binding.binding_id,
             resolved_binding=binding.binding_id,
             dataset_fingerprint=f"{provider_id}-fingerprint",
-            freshness_mode="polled" if provider_id == "yahoo" else "fallback",
+            freshness_mode="polled",
             as_of=now,
             received_at=now,
             cached=False,
@@ -75,7 +76,7 @@ class FixtureProvider:
     def get_bars(self, instrument_id: str, interval: str, limit: int = 500):
         self.calls += 1
         if self.fail:
-            raise RuntimeError(f"{self.provider_id} unavailable")
+            raise ProviderUnavailableError(f"{self.provider_id} unavailable")
         return bars_response(instrument_id, self.provider_id)
 
     def get_quote(self, instrument_id: str):
@@ -110,6 +111,7 @@ def test_equity_bindings_preserve_one_canonical_instrument() -> None:
     assert {item.instrument_id for item in bindings} == {AAPL}
     assert POLICIES["yahoo"].is_official_api is False
     assert POLICIES["yahoo"].usage_scope.value == "personal_local"
+    assert next(item for item in bindings if item.provider == "yahoo").adjustment_capabilities == ("raw",)
 
 
 def test_yahoo_failure_uses_a_whole_stooq_dataset() -> None:
@@ -124,6 +126,24 @@ def test_yahoo_failure_uses_a_whole_stooq_dataset() -> None:
     assert result.provenance.freshness_mode == "fallback"
     assert result.provenance.fallback_reason
     assert {bar.provider for bar in result.bars} == {"stooq"}
+
+
+def test_programming_failure_does_not_silently_fallback() -> None:
+    class BrokenProvider(FixtureProvider):
+        def get_bars(self, instrument_id: str, interval: str, limit: int = 500):
+            raise TypeError("adapter bug")
+
+    providers = {provider_id: FixtureProvider(provider_id) for provider_id in POLICIES}
+    providers["yahoo"] = BrokenProvider("yahoo")
+    registry = ProviderRegistry(
+        factories={
+            provider_id: (lambda provider=provider: provider)
+            for provider_id, provider in providers.items()
+        }
+    )
+    yahoo = next(item for item in bindings_for_instrument(AAPL) if item.provider == "yahoo")
+    with pytest.raises(TypeError, match="adapter bug"):
+        registry.bars(AAPL, "1d", 100, yahoo.binding_id)
 
 
 def test_provider_routes_forward_binding_and_expose_policy() -> None:
