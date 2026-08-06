@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { tradingApi } from './tradingApi';
 import { TradingChartAdapter, type TradingChartType } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
+import type { CoreIndicatorInstance } from './indicators/coreIndicators';
 import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingStreamHub';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 
@@ -33,6 +34,7 @@ export function TradingChartPanel({
   instrumentId,
   interval,
   chartType,
+  indicators,
   active,
   onActivate,
   synchronization,
@@ -41,6 +43,7 @@ export function TradingChartPanel({
   instrumentId: string;
   interval: string;
   chartType: TradingChartType;
+  indicators: CoreIndicatorInstance[];
   active: boolean;
   onActivate: () => void;
   synchronization: TradingChartSynchronization;
@@ -73,11 +76,16 @@ export function TradingChartPanel({
     const bars = chartQuery.data?.bars ?? [];
     barsRef.current = bars;
     adapterRef.current?.setBars(bars);
+    adapterRef.current?.setIndicators(bars, indicators);
   }, [chartQuery.data]);
 
   useEffect(() => {
     adapterRef.current?.setChartType(chartType, barsRef.current);
   }, [chartType]);
+
+  useEffect(() => {
+    adapterRef.current?.setIndicators(barsRef.current, indicators);
+  }, [indicators]);
 
   useEffect(() => {
     if (!instrumentId) return;
@@ -96,6 +104,7 @@ export function TradingChartPanel({
           const index = barsRef.current.findIndex((item) => item.start_time === bar.start_time);
           if (index >= 0) barsRef.current[index] = bar;
           else barsRef.current = [...barsRef.current, bar];
+          adapterRef.current.setIndicators(barsRef.current, indicators);
         }
       },
       (status) => {
@@ -103,7 +112,7 @@ export function TradingChartPanel({
         if (status === 'closed' || status === 'error') void chartQuery.refetch();
       },
     );
-  }, [chartId, instrumentId, interval]);
+  }, [chartId, instrumentId, interval, indicators]);
 
   const provenance = chartQuery.data?.provenance;
   return (
@@ -118,6 +127,7 @@ export function TradingChartPanel({
         <div>
           <strong>{chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong>
           <span>{interval} · {chartType}</span>
+          <span>{indicators.filter((item) => item.enabled).map((item) => item.id.toUpperCase()).join(' · ')}</span>
         </div>
         <div className="trading-chart-provenance">
           <span>{chartQuery.data?.binding.provider ?? 'binance'}</span>
