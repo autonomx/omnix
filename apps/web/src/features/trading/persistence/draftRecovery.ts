@@ -6,7 +6,7 @@ const KEY = 'main';
 
 function openDatabase(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
-  return new Promise((resolve, reject) => {
+  return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DATABASE, 1);
     request.onupgradeneeded = () => {
       const database = request.result;
@@ -21,7 +21,7 @@ export const tradingDraftRecovery = {
   async load(): Promise<TradingWorkspacePayload | null> {
     const database = await openDatabase();
     if (!database) return null;
-    return new Promise((resolve, reject) => {
+    return new Promise<TradingWorkspacePayload | null>((resolve, reject) => {
       const request = database.transaction(STORE, 'readonly').objectStore(STORE).get(KEY);
       request.onsuccess = () => resolve((request.result as TradingWorkspacePayload | undefined) ?? null);
       request.onerror = () => reject(request.error ?? new Error('Unable to read Trading draft'));
