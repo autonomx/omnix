@@ -1,17 +1,39 @@
+import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
 
 export const TRADING_ALERTS_QUERY_KEY = ['trading', 'alerts'] as const;
 
+let pollSubscribers = 0;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
 export function useTradingAlerts(options: { poll?: boolean } = {}) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: TRADING_ALERTS_QUERY_KEY,
     queryFn: tradingApi.alerts,
     staleTime: 5_000,
-    refetchInterval: options.poll ? 10_000 : false,
-    refetchIntervalInBackground: options.poll ?? false,
   });
+
+  useEffect(() => {
+    if (!options.poll) return;
+    pollSubscribers += 1;
+    if (!pollTimer) {
+      pollTimer = setInterval(() => {
+        void queryClient.invalidateQueries({ queryKey: TRADING_ALERTS_QUERY_KEY });
+      }, 10_000);
+    }
+    return () => {
+      pollSubscribers = Math.max(0, pollSubscribers - 1);
+      if (pollSubscribers === 0 && pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+  }, [options.poll, queryClient]);
+
+  return query;
 }
 
 export function useTradingAlertMutations() {
@@ -30,11 +52,5 @@ export function useTradingAlertMutations() {
     });
   };
 
-  const remove = (alertId: string) => {
-    queryClient.setQueryData<TradingAlert[]>(TRADING_ALERTS_QUERY_KEY, (current = []) => (
-      current.filter((item) => item.alert_id !== alertId)
-    ));
-  };
-
-  return { refresh, replace, remove };
+  return { refresh, replace };
 }
