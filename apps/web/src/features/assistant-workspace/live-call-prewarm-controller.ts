@@ -2,8 +2,10 @@ import { liveConversationStore } from './live-conversation-store';
 
 const INSTALLED_KEY = '__omnixLiveCallPrewarmInstalled';
 const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
+const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const PREWARM_TTL_MS = 5 * 60_000;
+const PREWARM_RETRY_MS = 5_000;
 
 type PrewarmWindow = Window & typeof globalThis & {
   __omnixLiveCallPrewarmInstalled?: boolean;
@@ -21,6 +23,7 @@ type RuntimePayload = {
 };
 
 const warmedAt = new Map<string, number>();
+const attemptedAt = new Map<string, number>();
 const inflight = new Map<string, Promise<void>>();
 
 export function initializeLiveCallPrewarmController(): () => void {
@@ -29,15 +32,17 @@ export function initializeLiveCallPrewarmController(): () => void {
   if (liveWindow[INSTALLED_KEY]) return () => undefined;
   liveWindow[INSTALLED_KEY] = true;
 
-  const handleCallStart = () => {
+  const prewarmActiveSession = () => {
     const sessionId = liveConversationStore.getState().sessionId;
     if (!sessionId) return;
     void prewarmLiveCall(sessionId);
   };
-  window.addEventListener(LIVE_VOICE_CALL_START_EVENT, handleCallStart);
+  window.addEventListener(LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
+  window.addEventListener(LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
 
   return () => {
-    window.removeEventListener(LIVE_VOICE_CALL_START_EVENT, handleCallStart);
+    window.removeEventListener(LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
+    window.removeEventListener(LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
     liveWindow[INSTALLED_KEY] = false;
   };
 }
@@ -49,8 +54,12 @@ export async function prewarmLiveCall(
   const existing = inflight.get(sessionId);
   if (existing) return existing;
 
+  const currentTime = Date.now();
   const lastWarm = warmedAt.get(sessionId) ?? 0;
-  if (Date.now() - lastWarm <= PREWARM_TTL_MS) return;
+  if (currentTime - lastWarm <= PREWARM_TTL_MS) return;
+  const lastAttempt = attemptedAt.get(sessionId) ?? 0;
+  if (currentTime - lastAttempt <= PREWARM_RETRY_MS) return;
+  attemptedAt.set(sessionId, currentTime);
 
   const task = runPrewarm(sessionId, fetchImpl)
     .finally(() => inflight.delete(sessionId));
@@ -78,23 +87,35 @@ async function runPrewarm(
       },
     );
     const payload = await readJson(response);
-    if (!response.ok || payload?.ok === false) {
+    if (!response.ok) {
       throw new Error(
         typeof payload?.status === 'string'
           ? payload.status
           : `prewarm_failed_${response.status}`,
       );
     }
-    warmedAt.set(sessionId, Date.now());
-    dispatchPerformance('live_call_prewarm_completed', {
+
+    const llmStatus = nestedStatus(payload?.llm);
+    const ttsStatus = nestedStatus(payload?.tts);
+    const fullyWarmed = payload?.fully_warmed === true
+      || payload?.cached === true
+      || (llmStatus === 'warmed' && ttsStatus === 'warmed');
+    const details = {
       sessionId,
       speaker,
       language,
       elapsedMs: now() - startedAt,
       cached: payload?.cached === true,
-      llmStatus: nestedStatus(payload?.llm),
-      ttsStatus: nestedStatus(payload?.tts),
-    });
+      status: typeof payload?.status === 'string' ? payload.status : null,
+      llmStatus,
+      ttsStatus,
+    };
+    if (fullyWarmed) {
+      warmedAt.set(sessionId, Date.now());
+      dispatchPerformance('live_call_prewarm_completed', details);
+      return;
+    }
+    dispatchPerformance('live_call_prewarm_partial', details);
   } catch (error) {
     dispatchPerformance('live_call_prewarm_failed', {
       sessionId,
