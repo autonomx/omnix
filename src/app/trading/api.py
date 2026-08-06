@@ -20,7 +20,6 @@ from .streaming.manager import StreamingBarUpdate
 
 class ProviderDescriptor(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     provider: str
     display_name: str
     enabled: bool
@@ -40,7 +39,6 @@ class InstrumentSearchResponse(BaseModel):
 
 class QuoteResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
-
     instrument_id: str
     binding_id: str
     provider: str
@@ -56,7 +54,6 @@ class TradingDiagnosticsResponse(BaseModel):
 
 class TradingDocumentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     record_id: str = Field(min_length=1, max_length=200)
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -204,6 +201,29 @@ def create_trading_router(
                     record_type,
                     record_id,
                     request.payload,
+                    expected_revision=if_match,
+                )
+            except RevisionConflict as exc:
+                current = repository_factory().get(record_type, record_id)
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "revision_conflict",
+                        "message": str(exc),
+                        "current_revision": current.get("revision") if current else None,
+                    },
+                ) from exc
+            return _document_response(record)
+
+        @router.delete(f"{path}/{{record_id}}", response_model=TradingDocumentResponse, name=f"archive_trading_{record_type}")
+        async def archive_document(
+            record_id: str,
+            if_match: int = Header(alias="If-Match", ge=1),
+        ) -> TradingDocumentResponse:
+            try:
+                record = repository_factory().archive(
+                    record_type,
+                    record_id,
                     expected_revision=if_match,
                 )
             except RevisionConflict as exc:
