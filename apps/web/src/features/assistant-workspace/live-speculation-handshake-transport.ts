@@ -1,6 +1,7 @@
 const LEGACY_SPECULATION_STREAM_PATH = /^\/api\/live\/speculation\/sessions\/([^/]+)\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const INSTALLED_KEY = '__omnixLiveSpeculationHandshakeTransportInstalled';
+const CLIENT_GENERATION_PREFIX = 'spec-client-';
 
 type HandshakeTransportWindow = Window & typeof globalThis & {
   __omnixLiveSpeculationHandshakeTransportInstalled?: boolean;
@@ -11,6 +12,14 @@ type SpeculationHandshake = {
   generation_id?: string;
   segment_id?: string;
   source_sequence?: number;
+  provider_id?: string | null;
+  model_id?: string | null;
+};
+
+type SpeculationStartPayload = Record<string, unknown> & {
+  content: string;
+  segment_id: string;
+  source_sequence: number;
   provider_id?: string | null;
   model_id?: string | null;
 };
@@ -58,83 +67,41 @@ export async function bridgeLiveSpeculationHandshakeRequest(
   if (!match) return null;
 
   const requestBody = await requestBodyText(input, init);
-  if (!requestBody) return null;
+  const payload = parseStartPayload(requestBody);
+  if (!payload) return null;
 
   const sessionId = decodeURIComponent(match[1]);
   const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-  const inlineStartedAt = now();
-  const inlineResponse = await fetchImpl(
-    `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/start-stream`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-      },
-      body: requestBody,
-      signal,
-    },
-  );
-  if (
-    inlineResponse.ok
-    && responseContentType(inlineResponse).startsWith('text/event-stream')
-  ) {
-    dispatchPerformance('llm_speculation_inline_stream_opened', {
-      sessionId,
-      openMs: now() - inlineStartedAt,
-      transport: inlineResponse.headers.get('X-Omnix-Speculation-Transport')
-        ?? 'inline-v1',
-    });
-    return inlineResponse;
-  }
-  if (inlineResponse.status !== 404 && inlineResponse.status !== 405) {
-    return inlineResponse;
-  }
-
-  const handshakeStartedAt = now();
-  const startResponse = await fetchImpl(
-    `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/start`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: requestBody,
-      signal,
-    },
-  );
-  if (!startResponse.ok) return startResponse;
-
-  const handshake = await readHandshake(startResponse);
-  if (!validHandshake(handshake)) return startResponse;
-
-  dispatchPerformance('llm_speculation_handshake_ready', {
+  const generationId = createClientGenerationId();
+  return createOptimisticSpeculationResponse(
+    fetchImpl,
     sessionId,
-    generationId: handshake.generation_id,
-    handshakeMs: now() - handshakeStartedAt,
-    transport: 'two-request-fallback',
-  });
-  return createBridgedSpeculationResponse(fetchImpl, sessionId, handshake, signal);
+    payload,
+    generationId,
+    signal,
+  );
 }
 
-function createBridgedSpeculationResponse(
+function createOptimisticSpeculationResponse(
   fetchImpl: typeof fetch,
   sessionId: string,
-  handshake: Required<Pick<SpeculationHandshake, 'generation_id' | 'segment_id' | 'source_sequence'>>
-    & SpeculationHandshake,
+  payload: SpeculationStartPayload,
+  clientGenerationId: string,
   sourceSignal?: AbortSignal | null,
 ): Response {
   const encoder = new TextEncoder();
   const abortController = new AbortController();
   let closed = false;
   let cancellationSent = false;
+  let serverGenerationId = clientGenerationId;
 
   const cancelGeneration = () => {
     if (cancellationSent) return;
     cancellationSent = true;
-    void requestGenerationCancellation(
-      fetchImpl,
-      sessionId,
-      handshake.generation_id,
-    );
+    const generationIds = new Set([clientGenerationId, serverGenerationId]);
+    generationIds.forEach((generationId) => {
+      void requestGenerationCancellation(fetchImpl, sessionId, generationId);
+    });
   };
 
   if (sourceSignal) {
@@ -148,31 +115,38 @@ function createBridgedSpeculationResponse(
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      controller.enqueue(encoder.encode(sse({
-        type: 'speculation_started',
-        generation_id: handshake.generation_id,
-        segment_id: handshake.segment_id,
-        source_sequence: handshake.source_sequence,
-        provider_id: handshake.provider_id ?? null,
-        model_id: handshake.model_id ?? null,
-      })));
+      const emit = (value: string | Uint8Array): void => {
+        if (closed) return;
+        controller.enqueue(typeof value === 'string' ? encoder.encode(value) : value);
+      };
 
-      const attachStartedAt = now();
-      void pipeGenerationStream(
+      // The controller can route an accepted final immediately. The server uses
+      // the same collision-checked generation ID once the background request
+      // arrives, so no network handshake is required on the final-turn path.
+      emit(sse({
+        type: 'speculation_started',
+        generation_id: clientGenerationId,
+        segment_id: payload.segment_id,
+        source_sequence: payload.source_sequence,
+        provider_id: bodyString(payload.provider_id) ?? null,
+        model_id: bodyString(payload.model_id) ?? null,
+        optimistic_transport: true,
+      }));
+      dispatchPerformance('llm_speculation_client_generation_allocated', {
+        sessionId,
+        generationId: clientGenerationId,
+        transport: 'optimistic-inline-v2',
+      });
+
+      void openAndPipeSpeculation(
         fetchImpl,
         sessionId,
-        handshake.generation_id,
+        payload,
+        clientGenerationId,
         abortController.signal,
-        (chunk) => {
-          if (!closed) controller.enqueue(chunk);
-        },
+        (generationId) => { serverGenerationId = generationId; },
+        emit,
       ).then(() => {
-        dispatchPerformance('llm_speculation_stream_attached', {
-          sessionId,
-          generationId: handshake.generation_id,
-          streamLifetimeMs: now() - attachStartedAt,
-          transport: 'two-request-fallback',
-        });
         if (!closed) {
           closed = true;
           controller.close();
@@ -184,17 +158,14 @@ function createBridgedSpeculationResponse(
           controller.close();
           return;
         }
-        controller.enqueue(encoder.encode(sse({
+        emit(sse({
           type: 'error',
-          generation_id: handshake.generation_id,
+          generation_id: serverGenerationId,
           message: error instanceof Error
             ? error.message
             : 'Speculative generation stream failed.',
-        })));
-        controller.enqueue(encoder.encode(sse({
-          type: 'done',
-          generation_id: handshake.generation_id,
-        })));
+        }));
+        emit(sse({ type: 'done', generation_id: serverGenerationId }));
         closed = true;
         controller.close();
       });
@@ -211,30 +182,114 @@ function createBridgedSpeculationResponse(
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-store',
-      'X-Omnix-Speculation-Transport': 'two-request-fallback',
+      'X-Omnix-Speculation-Generation-Id': clientGenerationId,
+      'X-Omnix-Speculation-Transport': 'optimistic-inline-v2',
     },
   });
 }
 
-async function pipeGenerationStream(
+async function openAndPipeSpeculation(
   fetchImpl: typeof fetch,
   sessionId: string,
-  generationId: string,
+  payload: SpeculationStartPayload,
+  clientGenerationId: string,
   signal: AbortSignal,
-  emit: (chunk: Uint8Array) => void,
+  setServerGenerationId: (generationId: string) => void,
+  emit: (value: Uint8Array | string) => void,
 ): Promise<void> {
-  const response = await fetchImpl(
-    `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(generationId)}/stream`,
+  const inlineStartedAt = now();
+  const inlineResponse = await fetchImpl(
+    `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/start-stream`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({ ...payload, generation_id: clientGenerationId }),
+      signal,
+    },
+  );
+  if (
+    inlineResponse.ok
+    && responseContentType(inlineResponse).startsWith('text/event-stream')
+  ) {
+    const serverGenerationId = inlineResponse.headers.get(
+      'X-Omnix-Speculation-Generation-Id',
+    ) ?? clientGenerationId;
+    if (serverGenerationId !== clientGenerationId) {
+      throw new Error('Inline speculation generation id did not match the client allocation.');
+    }
+    setServerGenerationId(serverGenerationId);
+    dispatchPerformance('llm_speculation_inline_stream_opened', {
+      sessionId,
+      generationId: serverGenerationId,
+      openMs: now() - inlineStartedAt,
+      optimistic: true,
+      transport: inlineResponse.headers.get('X-Omnix-Speculation-Transport')
+        ?? 'inline-v2-client-id',
+    });
+    await pipeResponseBody(inlineResponse, signal, emit);
+    return;
+  }
+  if (inlineResponse.status !== 404 && inlineResponse.status !== 405) {
+    throw new Error(`Inline speculation stream failed with status ${inlineResponse.status}.`);
+  }
+
+  const handshakeStartedAt = now();
+  const startResponse = await fetchImpl(
+    `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/start`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+  if (!startResponse.ok) {
+    throw new Error(`Speculation handshake failed with status ${startResponse.status}.`);
+  }
+
+  const handshake = await readHandshake(startResponse);
+  if (!validHandshake(handshake)) {
+    throw new Error('Speculation handshake response was invalid.');
+  }
+  setServerGenerationId(handshake.generation_id);
+  emit(sse({
+    type: 'speculation_started',
+    generation_id: handshake.generation_id,
+    segment_id: handshake.segment_id,
+    source_sequence: handshake.source_sequence,
+    provider_id: handshake.provider_id ?? null,
+    model_id: handshake.model_id ?? null,
+    optimistic_transport: false,
+  }));
+  dispatchPerformance('llm_speculation_handshake_ready', {
+    sessionId,
+    generationId: handshake.generation_id,
+    handshakeMs: now() - handshakeStartedAt,
+    transport: 'two-request-fallback',
+  });
+  const generationResponse = await fetchImpl(
+    `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(handshake.generation_id)}/stream`,
     {
       method: 'POST',
       headers: { Accept: 'text/event-stream' },
       signal,
     },
   );
-  if (!response.ok || !response.body) {
-    throw new Error(`Speculation generation stream failed with status ${response.status}.`);
+  if (!generationResponse.ok || !generationResponse.body) {
+    throw new Error(`Speculation generation stream failed with status ${generationResponse.status}.`);
   }
+  await pipeResponseBody(generationResponse, signal, emit);
+}
 
+async function pipeResponseBody(
+  response: Response,
+  signal: AbortSignal,
+  emit: (chunk: Uint8Array) => void,
+): Promise<void> {
+  if (!response.body) throw new Error('Speculation stream response body was empty.');
   const reader = response.body.getReader();
   try {
     while (!signal.aborted) {
@@ -281,6 +336,36 @@ async function requestBodyText(
   return null;
 }
 
+function parseStartPayload(body: string | null): SpeculationStartPayload | null {
+  if (!body) return null;
+  try {
+    const value = JSON.parse(body) as unknown;
+    if (!value || typeof value !== 'object') return null;
+    const payload = value as Record<string, unknown>;
+    if (
+      typeof payload.content !== 'string'
+      || !payload.content.trim()
+      || typeof payload.segment_id !== 'string'
+      || !payload.segment_id.trim()
+      || typeof payload.source_sequence !== 'number'
+      || !Number.isInteger(payload.source_sequence)
+      || payload.source_sequence < 0
+    ) {
+      return null;
+    }
+    return {
+      ...payload,
+      content: payload.content,
+      segment_id: payload.segment_id,
+      source_sequence: payload.source_sequence,
+      provider_id: bodyString(payload.provider_id) ?? null,
+      model_id: bodyString(payload.model_id) ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function readHandshake(response: Response): Promise<SpeculationHandshake | null> {
   try {
     const payload = await response.json() as unknown;
@@ -307,8 +392,19 @@ function validHandshake(
   );
 }
 
+function createClientGenerationId(): string {
+  const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID().replaceAll('-', '')
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  return `${CLIENT_GENERATION_PREFIX}${random}`;
+}
+
 function responseContentType(response: Response): string {
   return (response.headers.get('Content-Type') ?? '').toLowerCase();
+}
+
+function bodyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function sse(payload: Record<string, unknown>): string {
