@@ -14,7 +14,7 @@ export function useTradingWorkspacePersistence(): WorkspacePersistenceStatus {
   useEffect(() => {
     let cancelled = false;
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
-    let unsubscribe = () => undefined;
+    let unsubscribe: () => void = () => {};
 
     const currentPayload = () => {
       const state = useTradingStore.getState();
