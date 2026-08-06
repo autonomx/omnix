@@ -62,7 +62,7 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('allows provider endpoint commitment only through the controller pause state', () => {
+  it('allows provider endpoint commitment only after sustained local silence', () => {
     const ready = {
       authorityEnabled: true,
       probability: 0.86,
@@ -70,11 +70,13 @@ describe('live latency PR3-PR5 rollout policies', () => {
       speechDetected: true,
       finalRequested: false,
       pausePending: true,
+      pauseElapsedMs: 180,
     };
     expect(shouldCommitProviderEndpoint(ready)).toBe(true);
     expect(shouldCommitProviderEndpoint({ ...ready, authorityEnabled: false })).toBe(false);
     expect(shouldCommitProviderEndpoint({ ...ready, probability: 0.7 })).toBe(false);
     expect(shouldCommitProviderEndpoint({ ...ready, pausePending: false })).toBe(false);
+    expect(shouldCommitProviderEndpoint({ ...ready, pauseElapsedMs: 80 })).toBe(false);
     expect(shouldCommitProviderEndpoint({ ...ready, finalRequested: true })).toBe(false);
   });
 
