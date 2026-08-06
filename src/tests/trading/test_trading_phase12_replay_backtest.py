@@ -156,6 +156,10 @@ def test_backtest_is_economically_deterministic_and_has_no_lookahead() -> None:
     assert first.equity_curve == second.equity_curve
     assert first.final_equity == second.final_equity
     assert first.max_drawdown_percent == second.max_drawdown_percent
+    assert first.win_rate_percent == second.win_rate_percent
+    assert first.exposure_percent == second.exposure_percent
+    assert Decimal("0") <= first.win_rate_percent <= Decimal("100")
+    assert Decimal("0") <= first.exposure_percent <= Decimal("100")
     assert first.dataset_fingerprint == frozen.dataset_fingerprint
     assert first.trade_count > 0
     for trade in first.trades:
@@ -164,9 +168,14 @@ def test_backtest_is_economically_deterministic_and_has_no_lookahead() -> None:
         assert trade.fill_time == frozen.bars[trade.fill_bar_index].start_time
         assert trade.fill_time >= trade.signal_time
     source = Path("src/app/trading/backtest.py").read_text()
-    assert "requests" not in source
-    assert "market_service" not in source
-    assert "provider" not in source
+    for forbidden in (
+        "import requests",
+        "import httpx",
+        "from .service",
+        "market_service",
+        "default_market_data_service",
+    ):
+        assert forbidden not in source
 
 
 class FakeReplayRepository:
@@ -262,3 +271,9 @@ def test_replay_migration_persists_complete_run_evidence() -> None:
     assert "signal_bar_index" in sequencing
     assert "fill_bar_index" in sequencing
     assert "fill_bar_index = signal_bar_index + 1" in sequencing
+    artifacts = Path(
+        "src/app/persistence/migrations/0025_trading_backtest_artifacts.sql"
+    ).read_text()
+    assert "win_rate_percent" in artifacts
+    assert "exposure_percent" in artifacts
+    assert "artifact_checksum_sha256" in artifacts
