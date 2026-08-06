@@ -15,22 +15,25 @@ export function CharacterModePanel({ sessionId, onSessionResolved }: { sessionId
     queryKey: ['feature', 'chatbot', 'interaction', sessionId],
     queryFn: () => characterClient.session(sessionId),
   });
-  const characters = charactersQuery.data?.characters.filter((item) => item.enabled && item.status === 'active') ?? [];
+  const characters = useMemo(
+    () => charactersQuery.data?.characters.filter((item) => item.enabled && item.status === 'active') ?? [],
+    [charactersQuery.data?.characters],
+  );
   const interaction = interactionQuery.data;
-  const effectiveSelectedCharacterId = selectedCharacterId || characters[0]?.id || '';
+  const defaultCharacterId = characters[0]?.id ?? '';
+  const effectiveSelectedCharacterId = selectedCharacterId || defaultCharacterId;
   const activeCharacter = useMemo(
     () => characters.find((item) => item.id === interaction?.character_id),
     [characters, interaction?.character_id],
   );
 
   useEffect(() => {
-    if (interaction?.character_id) setSelectedCharacterId(interaction.character_id);
-    else if (!selectedCharacterId && characters[0]) setSelectedCharacterId(characters[0].id);
+    setSelectedCharacterId(interaction?.character_id || defaultCharacterId);
     if (interaction) {
       setReadMemory(interaction.read_memory);
       setWriteMemory(interaction.write_memory);
     }
-  }, [characters, interaction?.character_id, interaction?.read_memory, interaction?.write_memory, selectedCharacterId]);
+  }, [defaultCharacterId, interaction?.character_id, interaction?.read_memory, interaction?.write_memory, sessionId]);
 
   const mutation = useMutation({
     mutationFn: async (mode: 'system' | 'character') => {
@@ -50,11 +53,13 @@ export function CharacterModePanel({ sessionId, onSessionResolved }: { sessionId
         if (mode !== 'character' || !message.includes('chat session not found')) throw error;
         const created = await omnixApiClient.createChatSession({ title: `Live Chat with ${character?.display_name ?? 'character'}` });
         const next = await characterClient.setSession(created.id, input);
-        onSessionResolved?.(created.id);
         return { next, resolvedSessionId: created.id };
       }
     },
     onSuccess: async ({ next, resolvedSessionId }) => {
+      queryClient.setQueryData(['feature', 'chatbot', 'interaction', resolvedSessionId], next);
+      if (next.character_id) setSelectedCharacterId(next.character_id);
+      if (resolvedSessionId !== sessionId) onSessionResolved?.(resolvedSessionId);
       const memoryLabel = next.read_memory && next.write_memory
         ? 'Memory read/write on'
         : next.read_memory
@@ -70,6 +75,7 @@ export function CharacterModePanel({ sessionId, onSessionResolved }: { sessionId
         queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'interaction', resolvedSessionId] }),
         queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'session', resolvedSessionId] }),
         queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'sessions'] }),
+        queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'live-call-runtime'] }),
         queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory'] }),
         queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'memory-state'] }),
       ]);
