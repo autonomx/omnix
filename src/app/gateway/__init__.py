@@ -25,6 +25,7 @@ from .live_chat_prompt_dependency_stages import (
 from .live_chat_prompt_window import install_live_chat_prompt_window_hook
 from .live_chat_provider_metrics import install_live_chat_provider_metrics_hook
 from .live_chat_provider_routing import install_live_chat_provider_routing_hook
+from .live_chat_speculative_tts import install_live_speculative_tts_prefetch_hook
 from .live_chat_stream_retry import install_live_chat_stream_retry_hook
 from .live_material_context import install_live_material_context_hook
 from .live_observation_generation import install_live_observation_generation_hook
@@ -41,7 +42,7 @@ from .realtime_routes import install_realtime_route_hook
 from .research_mode_routes import install_research_mode_route_hook
 from .rpg_debug_routes import install_rpg_debug_route_hook
 from .rpg_geometry_patch_routes import install_rpg_geometry_patch_route_hook
-from .rpg_grid_performance_routes import install_rpg_grid_performance_route_hook
+from .rpg_grid_performance_routes import install_rpg_grid_performance_hook
 from .rpg_map_editor_routes import install_rpg_map_editor_route_hook
 from .rpg_map_routes import install_rpg_map_route_hook
 from .rpg_npc_spatial_routes import install_rpg_npc_spatial_route_hook
@@ -101,7 +102,7 @@ install_assistant_context_route_hook()
 install_research_mode_route_hook()
 install_rpg_debug_route_hook()
 install_rpg_geometry_patch_route_hook()
-install_rpg_grid_performance_route_hook()
+install_rpg_grid_performance_hook()
 install_rpg_map_editor_route_hook()
 install_rpg_map_route_hook()
 install_rpg_world_bundle_route_hook()
@@ -147,6 +148,7 @@ install_tts_pcm_websocket_hook()
 install_tts_live_call_pcm_diagnostics_hook()
 install_tts_live_call_startup_frame_policy()
 install_tts_live_call_websocket_hook()
+install_live_speculative_tts_prefetch_hook()
 install_voice_job_summary_hook()
 install_voice_library_route_hook()
 install_image_asset_file_hook()
