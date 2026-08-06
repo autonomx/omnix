@@ -27,6 +27,7 @@ export function TradingChartGrid() {
           <TradingChartPanel
             chartId={chart.chartId}
             instrumentId={chart.instrumentId}
+            bindingId={chart.bindingId}
             interval={chart.interval}
             chartType={chart.chartType}
             indicators={chart.indicators}
