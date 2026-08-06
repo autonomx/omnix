@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AdaptiveTtsBufferPolicy,
+  LiveTtsAncillaryCancellationGuard,
   adaptiveBufferWorkletMessage,
 } from './live-tts-adaptive-buffer-controller';
 
@@ -50,5 +51,86 @@ describe('adaptive live TTS buffering', () => {
       rebufferMs: 490,
       stableTurns: 0,
     });
+  });
+
+  it('cancels queued unowned pauses when a turn is interrupted', () => {
+    const guard = new LiveTtsAncillaryCancellationGuard();
+
+    expect(guard.handleOutbound({
+      type: 'push_segment_silence',
+      segmentId: 'silence-old-reflection',
+      durationSamples: 7_200,
+      reason: 'reflection',
+    })).toEqual({ forward: true, cancelSegmentIds: [] });
+    expect(guard.handleOutbound({
+      type: 'push_segment_samples',
+      segmentId: 'cue-old-hmm',
+      segmentKind: 'cue',
+      samples: new Float32Array([0.1]),
+    })).toEqual({ forward: true, cancelSegmentIds: [] });
+
+    expect(guard.handleOutbound({
+      type: 'cancel_output',
+      outputId: 'old-output',
+      generationEpoch: 6,
+      reason: 'voice-interrupt',
+    })).toEqual({
+      forward: true,
+      cancelSegmentIds: ['silence-old-reflection', 'cue-old-hmm'],
+      reason: 'voice-interrupt',
+    });
+  });
+
+  it('drops late stale pauses until the replacement turn establishes a new start policy', () => {
+    const guard = new LiveTtsAncillaryCancellationGuard();
+
+    guard.handleOutbound({
+      type: 'cancel_output',
+      outputId: 'old-output',
+      generationEpoch: 6,
+      reason: 'superseded-by-real-response',
+    });
+
+    expect(guard.handleOutbound({
+      type: 'push_segment_silence',
+      segmentId: 'silence-late',
+      durationSamples: 6_000,
+    })).toEqual({
+      forward: false,
+      cancelSegmentIds: [],
+      reason: 'superseded-unowned-ancillary',
+    });
+
+    expect(guard.handleOutbound({
+      type: 'set_start_policy',
+      notBeforeRenderSample: 0,
+      minimumBufferedSpeechSamples: 3_840,
+    })).toEqual({ forward: true, cancelSegmentIds: [] });
+    expect(guard.handleOutbound({
+      type: 'push_segment_silence',
+      segmentId: 'silence-new-turn',
+      durationSamples: 1_920,
+    })).toEqual({ forward: true, cancelSegmentIds: [] });
+  });
+
+  it('preserves ancillary audio for non-terminal selective cancellation', () => {
+    const guard = new LiveTtsAncillaryCancellationGuard();
+
+    guard.handleOutbound({
+      type: 'push_segment_silence',
+      segmentId: 'silence-preserved',
+      durationSamples: 1_920,
+    });
+    expect(guard.handleOutbound({
+      type: 'cancel_output',
+      outputId: 'self-corrected-output',
+      generationEpoch: 4,
+      reason: 'self_corrected',
+    })).toEqual({ forward: true, cancelSegmentIds: [] });
+    expect(guard.handleOutbound({
+      type: 'push_segment_silence',
+      segmentId: 'silence-still-allowed',
+      durationSamples: 1_920,
+    })).toEqual({ forward: true, cancelSegmentIds: [] });
   });
 });
