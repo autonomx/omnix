@@ -6,6 +6,7 @@ import {
   moveDrawingPoint,
   redoDrawing,
   selectDrawing,
+  translateDrawing,
   undoDrawing,
   type TradingDrawing,
 } from './drawingCommands';
@@ -36,6 +37,33 @@ describe('Trading drawing command engine', () => {
     expect(state.drawings).toHaveLength(1);
     state = redoDrawing(state);
     expect(state.drawings).toEqual([]);
+  });
+
+  it('translates an entire unlocked drawing in time and price', () => {
+    let state = addDrawing(emptyDrawingState(), drawing);
+    state = translateDrawing(
+      state,
+      drawing.drawingId,
+      { time: '2026-08-05T00:00:00Z', price: 100 },
+      { time: '2026-08-05T02:00:00Z', price: 125 },
+    );
+    expect(state.drawings[0].points).toEqual([
+      { time: '2026-08-05T02:00:00.000Z', price: 125 },
+      { time: '2026-08-05T03:00:00.000Z', price: 135 },
+    ]);
+    expect(state.drawings[0].revision).toBe(2);
+    expect(state.history).toHaveLength(2);
+  });
+
+  it('does not translate a locked drawing', () => {
+    const locked = { ...drawing, locked: true };
+    const state = addDrawing(emptyDrawingState(), locked);
+    expect(translateDrawing(
+      state,
+      locked.drawingId,
+      locked.points[0],
+      { time: '2026-08-05T02:00:00Z', price: 125 },
+    )).toBe(state);
   });
 
   it('keeps authority in time and price coordinates', () => {
