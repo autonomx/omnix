@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingApi } from './tradingApi';
 import type { CanonicalInstrument, TradingDocument } from './tradingTypes';
+import './TradingWatchlist.css';
 
 type WatchlistPayload = { name: string; instrumentIds: string[] };
 
