@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
+import { TradingComplianceFooter } from './TradingComplianceFooter';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
 import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingReplayPanel } from './TradingReplayPanel';
@@ -56,6 +57,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   );
   const selectedBinding = availableBindings.find((binding) => binding.binding_id === activeChart.bindingId)
     ?? availableBindings[0];
+  const selectedProvider = (providers.data ?? []).find(
+    (provider) => provider.provider === selectedBinding?.provider,
+  ) ?? null;
 
   const exportWorkspace = () => downloadTradingWorkspaceExport(buildTradingWorkspaceExport({
     layout,
@@ -129,6 +133,11 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           />
         </details>
       </section>
+
+      <TradingComplianceFooter
+        provider={selectedProvider}
+        binding={selectedBinding ?? null}
+      />
     </main>
   );
 }
