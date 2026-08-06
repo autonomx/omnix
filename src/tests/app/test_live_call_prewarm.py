@@ -10,11 +10,19 @@ from app.gateway import live_call_prewarm as prewarm
 class _FakeStore:
     def __init__(self) -> None:
         self.calls = 0
+        self.prompt_calls = 0
+        self.warm_user_message = None
         self.session = ChatSession(
             id="session-prewarm",
             title="Prewarm",
             provider_id="fake-provider",
             model_id="fake-model",
+            interaction_mode="character",
+            character_id="jinx",
+            character_profile_version=5,
+            effective_identity_hash="a" * 64,
+            active_segment_id="segment-jinx",
+            message_count=2,
             created_at="2026-08-05T00:00:00+00:00",
             updated_at="2026-08-05T00:00:00+00:00",
         )
@@ -23,15 +31,35 @@ class _FakeStore:
         self.calls += 1
         return self.session if session_id == self.session.id else None
 
+    def build_provider_prompt(self, session, user_message, context_items):
+        assert session is self.session
+        assert context_items == []
+        self.prompt_calls += 1
+        self.warm_user_message = user_message
+        rendered = SimpleNamespace(messages=[
+            SimpleNamespace(
+                role="system",
+                content="You are Jinx. Stay chaotic, theatrical, and in character.",
+            ),
+            SimpleNamespace(role="assistant", content="Make it interesting."),
+            SimpleNamespace(role="user", content=user_message.content),
+        ])
+        return SimpleNamespace(), rendered
+
 
 class _FakeLlmProvider:
     def __init__(self) -> None:
         self.calls = 0
+        self.last_kwargs = None
 
     def chat_completion(self, **kwargs):
         self.calls += 1
+        self.last_kwargs = kwargs
         assert kwargs["stream"] is True
         assert kwargs["model"] == "fake-model"
+        assert kwargs["chat_template_kwargs"] == {"enable_thinking": False}
+        assert kwargs["messages"][0].role == "system"
+        assert "You are Jinx" in kwargs["messages"][0].content
         return iter([SimpleNamespace(content="ready")])
 
 
@@ -64,7 +92,7 @@ def _client(store: _FakeStore) -> TestClient:
     return TestClient(app)
 
 
-def test_live_call_prewarm_warms_llm_and_tts_once(monkeypatch) -> None:
+def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) -> None:
     prewarm.clear_live_call_prewarm_state()
     store = _FakeStore()
     llm = _FakeLlmProvider()
@@ -86,12 +114,17 @@ def test_live_call_prewarm_warms_llm_and_tts_once(monkeypatch) -> None:
     assert first.json()["ok"] is True
     assert first.json()["fully_warmed"] is True
     assert first.json()["llm"]["status"] == "warmed"
+    assert first.json()["llm"]["prompt_message_count"] == 3
+    assert first.json()["llm"]["prompt_chars"] > 60
     assert first.json()["tts"]["status"] == "warmed"
     assert second.status_code == 200
     assert second.json()["status"] == "cached"
     assert second.json()["fully_warmed"] is True
     assert llm.calls == 1
     assert tts.calls == 1
+    assert store.prompt_calls == 1
+    assert store.warm_user_message.metadata["side_effects_allowed"] is False
+    assert store.warm_user_message.metadata["memory_writes_allowed"] is False
     assert store.calls == 2
 
 
@@ -123,6 +156,7 @@ def test_live_call_prewarm_does_not_cache_partial_success(monkeypatch) -> None:
     assert second.json()["status"] == "partial"
     assert llm.calls == 2
     assert tts.calls == 2
+    assert store.prompt_calls == 2
 
 
 def test_live_call_prewarm_is_best_effort_when_providers_are_unavailable(
@@ -145,3 +179,4 @@ def test_live_call_prewarm_is_best_effort_when_providers_are_unavailable(
     assert response.json()["status"] == "unavailable"
     assert response.json()["llm"]["status"] == "unavailable"
     assert response.json()["tts"]["status"] == "unavailable"
+    assert store.prompt_calls == 0
