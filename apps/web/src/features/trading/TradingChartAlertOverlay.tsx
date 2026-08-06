@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import type { ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import {
-  TRADING_ALERTS_CHANGED_EVENT,
+  alertLastTriggeredLabel,
   alertVisualState,
   chartAlertCreateInput,
   chartAlertUpdateInput,
@@ -11,6 +11,7 @@ import {
 } from './tradingChartAlerts';
 import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
+import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
 import './TradingChartAlertOverlay.css';
 
 type EditorState = {
@@ -69,32 +70,18 @@ export function TradingChartAlertOverlay({
   onPlacementConsumed: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [alerts, setAlerts] = useState<TradingAlert[]>([]);
+  const alertsQuery = useTradingAlerts({ poll: true });
+  const alertMutations = useTradingAlertMutations();
+  const alerts = alertsQuery.data ?? [];
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'conflict' | 'error'>('loading');
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [, setCoordinateRevision] = useState(0);
 
-  const refresh = useCallback(async () => {
-    try {
-      const next = await tradingApi.alerts();
-      setAlerts(next);
-      setStatus('ready');
-    } catch {
-      setStatus('error');
-    }
-  }, []);
-
   useEffect(() => {
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 10_000);
-    const changed = () => void refresh();
-    window.addEventListener(TRADING_ALERTS_CHANGED_EVENT, changed);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener(TRADING_ALERTS_CHANGED_EVENT, changed);
-    };
-  }, [refresh]);
+    if (alertsQuery.isError) setStatus('error');
+    else if (alertsQuery.isSuccess && status !== 'saving' && status !== 'conflict') setStatus('ready');
+  }, [alertsQuery.isError, alertsQuery.isSuccess, status]);
 
   useEffect(() => {
     if (!adapter) return;
@@ -127,16 +114,18 @@ export function TradingChartAlertOverlay({
     && alert.condition_type.startsWith('price_')
   )), [alerts, bindingId, instrumentId]);
 
-  const runMutation = async (mutation: () => Promise<unknown>) => {
+  const runMutation = async (mutation: () => Promise<TradingAlert>) => {
     setStatus('saving');
     try {
-      await mutation();
+      const updated = await mutation();
+      alertMutations.replace(updated);
       notifyTradingAlertsChanged();
-      await refresh();
+      await alertMutations.refresh();
       setEditor(null);
+      setStatus('ready');
     } catch (error) {
       setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
-      await refresh();
+      await alertMutations.refresh();
     }
   };
 
@@ -244,13 +233,14 @@ export function TradingChartAlertOverlay({
         const y = adapter?.priceToCoordinate(threshold);
         if (y === null || y === undefined) return null;
         const state = alertVisualState(alert);
+        const lastTriggered = alertLastTriggeredLabel(alert);
         return (
           <button
             key={`${alert.alert_id}:label`}
             type="button"
             className={`trading-alert-price-label state-${state}`}
             style={{ top: y }}
-            title={`${state} alert · ${alert.condition_type.replace('price_', 'crosses ')} · revision ${alert.revision}`}
+            title={`${state} alert · ${alert.condition_type.replace('price_', 'crosses ')} · requested feed ${alert.binding_id ?? 'default'}${lastTriggered ? ` · last triggered ${lastTriggered}` : ''} · revision ${alert.revision}`}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => openEditor(alert, y)}
           >
