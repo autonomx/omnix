@@ -12,6 +12,8 @@ import {
 const twoPointTools = new Set<DrawingTool>(['trend-line', 'ray', 'rectangle', 'fibonacci', 'measurement']);
 const fibonacciLevels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
+export type ChartAlertPlacement = DrawingPoint & { x: number; y: number; source: 'tool' | 'context-menu' };
+
 export function TradingDrawingOverlay({
   adapter,
   instrumentId,
@@ -22,6 +24,7 @@ export function TradingDrawingOverlay({
   onAdd,
   onSelect,
   onMovePoint,
+  onAlertAtPoint,
 }: {
   adapter: TradingChartAdapter | null;
   instrumentId: string;
@@ -32,6 +35,7 @@ export function TradingDrawingOverlay({
   onAdd: (drawing: TradingDrawing) => void;
   onSelect: (id: string | null) => void;
   onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
+  onAlertAtPoint?: (placement: ChartAlertPlacement) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draftStart, setDraftStart] = useState<DrawingPoint | null>(null);
@@ -41,14 +45,16 @@ export function TradingDrawingOverlay({
     points: drawing.points.map((point) => adapter?.projectDrawingPoint(point) ?? null),
   })), [adapter, drawings]);
 
-  const pointFromEvent = (event: React.PointerEvent<SVGSVGElement>): DrawingPoint | null => {
+  const pointFromEvent = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>): (DrawingPoint & { x: number; y: number }) | null => {
     const bounds = event.currentTarget.getBoundingClientRect();
-    const point = adapter?.drawingPointFromCoordinate(event.clientX - bounds.left, event.clientY - bounds.top) ?? null;
-    return point ? snapDrawingPoint(point, snapMode) : null;
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const point = adapter?.drawingPointFromCoordinate(x, y) ?? null;
+    return point ? { ...snapDrawingPoint(point, snapMode), x, y } : null;
   };
 
   const createDrawing = (points: DrawingPoint[]) => {
-    if (tool === 'cursor') return;
+    if (tool === 'cursor' || tool === 'alert') return;
     onAdd({
       drawingId: crypto.randomUUID(),
       instrumentId,
@@ -70,6 +76,10 @@ export function TradingDrawingOverlay({
     }
     const point = pointFromEvent(event);
     if (!point) return;
+    if (tool === 'alert') {
+      onAlertAtPoint?.({ ...point, source: 'tool' });
+      return;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     if (!twoPointTools.has(tool)) {
       createDrawing([point]);
@@ -89,6 +99,13 @@ export function TradingDrawingOverlay({
     if (draftStart && draftEnd && twoPointTools.has(tool)) createDrawing([draftStart, draftEnd]);
     setDraftStart(null);
     setDraftEnd(null);
+  };
+
+  const onContextMenu = (event: React.MouseEvent<SVGSVGElement>) => {
+    const point = pointFromEvent(event);
+    if (!point || !onAlertAtPoint) return;
+    event.preventDefault();
+    onAlertAtPoint({ ...point, source: 'context-menu' });
   };
 
   const dragHandle = (drawing: TradingDrawing, index: number) => (event: React.PointerEvent<SVGCircleElement>) => {
@@ -112,7 +129,15 @@ export function TradingDrawingOverlay({
 
   const draftCoordinates = draftStart && draftEnd ? [adapter?.projectDrawingPoint(draftStart), adapter?.projectDrawingPoint(draftEnd)] : null;
   return (
-    <svg ref={svgRef} className={`trading-drawing-overlay tool-${tool}`} aria-label="Interactive chart drawings" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+    <svg
+      ref={svgRef}
+      className={`trading-drawing-overlay tool-${tool}`}
+      aria-label="Interactive chart drawings and alert placement"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onContextMenu={onContextMenu}
+    >
       {projected.map(({ drawing, points }) => {
         const first = points[0];
         const second = points[1];
