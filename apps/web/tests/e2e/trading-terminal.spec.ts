@@ -253,7 +253,8 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await page.goto('/trading');
 
   await expect(page.getByRole('main', { name: /Trading/i })).toBeVisible();
-  await expect(page.getByText('BTCUSDT').first()).toBeVisible();
+  await expect(page.locator('.trading-chart-panel').first()).toBeVisible();
+  await expect(page.locator('.trading-chart-ohlc').first()).toBeVisible();
 
   await page.getByLabel('Number of charts').selectOption('3');
   await expect(page.locator('.trading-chart-panel')).toHaveCount(3);
