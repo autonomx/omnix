@@ -63,7 +63,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [focusMode, setFocusMode] = useState(false);
   const [symbolQuery, setSymbolQuery] = useState('');
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
-  const persistenceStatus = useTradingWorkspacePersistence();
+  const persistence = useTradingWorkspacePersistence();
   const providers = useQuery({ queryKey: ['trading', 'providers'], queryFn: tradingApi.providers });
   const instruments = useQuery({ queryKey: ['trading', 'instruments'], queryFn: () => tradingApi.instruments() });
   const layout = useTradingStore((state) => state.layout);
@@ -72,6 +72,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const drawingTool = useTradingStore((state) => state.drawingTool);
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
   const links = useTradingStore((state) => state.links);
+  const panels = useTradingStore((state) => state.panels);
+  const favoriteInstrumentIds = useTradingStore((state) => state.favoriteInstrumentIds);
   const setLayout = useTradingStore((state) => state.setLayout);
   const setChartCount = useTradingStore((state) => state.setChartCount);
   const addChart = useTradingStore((state) => state.addChart);
@@ -83,6 +85,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const toggleIndicator = useTradingStore((state) => state.toggleIndicator);
   const setIndicators = useTradingStore((state) => state.setIndicators);
   const setLink = useTradingStore((state) => state.setLink);
+  const setPanel = useTradingStore((state) => state.setPanel);
+  const toggleFavoriteInstrument = useTradingStore((state) => state.toggleFavoriteInstrument);
   const activeChart = charts.find((chart) => chart.chartId === activeChartId) ?? charts[0];
   const availableBindings = useMemo(
     () => (providers.data ?? []).flatMap((provider) => provider.bindings)
@@ -96,6 +100,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   ) ?? null;
   const supportedIntervals = selectedBinding?.supported_intervals ?? [];
   const quickIntervals = quickIntervalPriority.filter((interval) => supportedIntervals.includes(interval));
+  const favorite = favoriteInstrumentIds.includes(activeChart.instrumentId);
 
   useEffect(() => {
     if (!selectedBinding || selectedBinding.supported_intervals.includes(activeChart.interval)) return;
@@ -136,6 +141,21 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setToolPanel((current) => current === panel ? null : panel);
   };
 
+  const createWorkspace = () => {
+    const name = window.prompt('Workspace name', `Workspace ${persistence.workspaces.length + 1}`);
+    if (name) void persistence.createWorkspace(name);
+  };
+
+  const renameWorkspace = () => {
+    const name = window.prompt('Rename workspace', persistence.activeWorkspaceName);
+    if (name) void persistence.renameWorkspace(name);
+  };
+
+  const deleteWorkspace = () => {
+    if (persistence.workspaces.length <= 1) return;
+    if (window.confirm(`Delete ${persistence.activeWorkspaceName}?`)) void persistence.deleteWorkspace();
+  };
+
   return (
     <main className={`trading-workspace${focusMode ? ' trading-focus-mode' : ''}`} aria-labelledby="trading-title">
       <header className="trading-terminal-header">
@@ -145,8 +165,19 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </div>
 
         <div className="trading-workspace-switcher">
-          <button type="button">Main Workspace <span aria-hidden="true">⌄</span></button>
-          <button type="button" aria-label="Create workspace">+</button>
+          <select
+            aria-label="Saved Trading workspace"
+            value={persistence.activeWorkspaceId}
+            onChange={(event) => void persistence.selectWorkspace(event.target.value)}
+            disabled={persistence.status === 'loading'}
+          >
+            {persistence.workspaces.map((workspace) => (
+              <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.name}</option>
+            ))}
+          </select>
+          <button type="button" aria-label="Create workspace" onClick={createWorkspace}>+</button>
+          <button type="button" aria-label="Rename workspace" onClick={renameWorkspace}>Rename</button>
+          <button type="button" aria-label="Delete workspace" onClick={deleteWorkspace} disabled={persistence.workspaces.length <= 1}>Delete</button>
         </div>
 
         <div className="trading-layout-switcher" role="group" aria-label="Chart count and grid">
@@ -163,7 +194,15 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </div>
 
         <div className="trading-header-actions">
-          <span className={`workspace-${persistenceStatus}`}>Workspace {persistenceStatus}</span>
+          <span className={`workspace-${persistence.status}`}>Workspace {persistence.status}</span>
+          {persistence.hasConflict ? (
+            <>
+              <button type="button" onClick={() => void persistence.resolveConflict('reload')}>Reload server</button>
+              <button type="button" onClick={() => void persistence.resolveConflict('overwrite')}>Overwrite server</button>
+            </>
+          ) : null}
+          <button type="button" aria-pressed={panels.right} onClick={() => setPanel('right', !panels.right)}>Right panel</button>
+          <button type="button" aria-pressed={panels.bottom} onClick={() => setPanel('bottom', !panels.bottom)}>Bottom dock</button>
           <button type="button" onClick={exportWorkspace}>Export</button>
           <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus'}</button>
         </div>
@@ -186,7 +225,15 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             {(instruments.data ?? []).map((instrument) => <option key={instrument.instrument_id} value={instrument.display_symbol}>{instrument.venue}</option>)}
           </datalist>
         </div>
-        <button type="button" className="trading-favorite" aria-label="Favorite active instrument">☆</button>
+        <button
+          type="button"
+          className="trading-favorite"
+          aria-label={favorite ? 'Remove active instrument from favorites' : 'Favorite active instrument'}
+          aria-pressed={favorite}
+          onClick={() => toggleFavoriteInstrument(activeChart.instrumentId)}
+        >
+          {favorite ? '★' : '☆'}
+        </button>
 
         <select aria-label="Active Trading chart" value={activeChartId} onChange={(event) => setActiveChart(event.target.value)}>
           {charts.map((chart, index) => <option key={chart.chartId} value={chart.chartId}>Chart {index + 1}</option>)}
@@ -253,26 +300,28 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           ))}
         </aside>
         <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid /></section>
-        <TradingSidePanel
-          instruments={instruments.data ?? []}
-          activeInstrumentId={activeChart.instrumentId}
-          indicators={activeChart.indicators}
-          layout={layout}
-          chartCount={charts.length}
-          minimumChartCount={MIN_TRADING_CHARTS}
-          maximumChartCount={MAX_TRADING_CHARTS}
-          links={links}
-          snapMode={drawingSnapMode}
-          onSelectInstrument={(instrumentId) => updateChart(activeChartId, { instrumentId, bindingId: null })}
-          onSetIndicators={(next) => setIndicators(activeChartId, next)}
-          onSetLayout={setLayout}
-          onSetChartCount={setChartCount}
-          onAddChart={addChart}
-          onRemoveChart={() => removeChart()}
-          onSetLink={setLink}
-          onSetSnapMode={(mode: DrawingSnapMode) => setDrawingSnapMode(mode)}
-          onOpenResearch={() => setToolPanel('research')}
-        />
+        {panels.right ? (
+          <TradingSidePanel
+            instruments={instruments.data ?? []}
+            activeInstrumentId={activeChart.instrumentId}
+            indicators={activeChart.indicators}
+            layout={layout}
+            chartCount={charts.length}
+            minimumChartCount={MIN_TRADING_CHARTS}
+            maximumChartCount={MAX_TRADING_CHARTS}
+            links={links}
+            snapMode={drawingSnapMode}
+            onSelectInstrument={(instrumentId) => updateChart(activeChartId, { instrumentId, bindingId: null })}
+            onSetIndicators={(next) => setIndicators(activeChartId, next)}
+            onSetLayout={setLayout}
+            onSetChartCount={setChartCount}
+            onAddChart={addChart}
+            onRemoveChart={() => removeChart()}
+            onSetLink={setLink}
+            onSetSnapMode={(mode: DrawingSnapMode) => setDrawingSnapMode(mode)}
+            onOpenResearch={() => setToolPanel('research')}
+          />
+        ) : null}
       </div>
 
       {toolPanel ? (
@@ -294,7 +343,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </section>
       ) : null}
 
-      <TradingTerminalDock instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} />
+      {panels.bottom ? <TradingTerminalDock instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} /> : null}
 
       <TradingComplianceFooter provider={selectedProvider} binding={selectedBinding ?? null} />
     </main>
