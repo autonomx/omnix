@@ -27,10 +27,16 @@ class _CompletionResponse(_Response):
 
 
 class _StreamResponse:
+    def __init__(self) -> None:
+        self.closed = False
+
     def iter_lines(self):
         yield b'data: {"model":"qwen","choices":[{"delta":{"content":"Hello"}}]}'
         yield b'data: {"model":"qwen","choices":[{"delta":{},"finish_reason":"stop"}]}'
         yield b"data: [DONE]"
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _provider(*, configured_model: str = "fallback/model") -> LMStudioProvider:
