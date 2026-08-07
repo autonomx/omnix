@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from app.chat import ChatSessionStore, default_chat_store
 
 from . import live_chat_speculation as speculation_runtime
+from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_handshake_registered"
@@ -98,16 +99,21 @@ def register_live_chat_speculation_handshake_routes(
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
 
+        provider_id, model_id, execution_lane = resolve_live_voice_chat_route(
+            request.provider_id or session.provider_id,
+            request.model_id or session.model_id,
+        )
         generation_id = f"spec-{uuid.uuid4().hex}"
         pending = speculation_runtime._Speculation(
             generation_id=generation_id,
             session_id=session_id,
             candidate_text=request.content.strip(),
-            provider_id=request.provider_id or session.provider_id,
-            model_id=request.model_id or session.model_id,
+            provider_id=provider_id,
+            model_id=model_id,
             segment_id=request.segment_id,
             source_sequence=request.source_sequence,
             created_at=time.time(),
+            execution_lane=execution_lane,
         )
         generation = _HandshakeGeneration(store=store, session=session)
         worker = threading.Thread(
@@ -134,6 +140,9 @@ def register_live_chat_speculation_handshake_routes(
             session_load_ms=round(session_load_ms, 3),
             total_ms=round(total_ms, 3),
             generation_started=True,
+            execution_lane=execution_lane,
+            provider_id=provider_id,
+            model_id=model_id,
             max_buffered_events=_MAX_BUFFERED_EVENTS,
             max_buffered_bytes=_MAX_BUFFERED_BYTES,
         )
@@ -144,6 +153,7 @@ def register_live_chat_speculation_handshake_routes(
             "source_sequence": request.source_sequence,
             "provider_id": pending.provider_id,
             "model_id": pending.model_id,
+            "execution_lane": pending.execution_lane,
         }
 
     @app.post(
@@ -182,6 +192,7 @@ def register_live_chat_speculation_handshake_routes(
             buffered_event_count=len(generation.events),
             buffered_bytes=generation.buffered_bytes,
             generation_completed=generation.completed,
+            execution_lane=pending.execution_lane,
             attach_delay_ms=round(
                 max(0.0, (time.time() - generation.created_at) * 1000.0),
                 3,
@@ -193,6 +204,7 @@ def register_live_chat_speculation_handshake_routes(
             headers={
                 "Cache-Control": "no-store, no-transform",
                 "X-Accel-Buffering": "no",
+                "X-Omnix-Live-Execution-Lane": pending.execution_lane,
             },
         )
 
@@ -228,6 +240,7 @@ def register_live_chat_speculation_handshake_routes(
             generation_id=generation_id,
             already_completed=already_completed,
             stream_started=bool(generation and generation.stream_started),
+            execution_lane=pending.execution_lane,
         )
         return {
             "ok": True,
@@ -247,6 +260,7 @@ def _run_generation(
         "live_chat_speculation_generation_started",
         generation_id=pending.generation_id,
         eager=True,
+        execution_lane=getattr(pending, "execution_lane", "session"),
     )
     try:
         for event in speculation_runtime._generate_side_effect_free(
@@ -288,6 +302,7 @@ def _run_generation(
             cancelled=generation.cancel_event.is_set(),
             failed=bool(pending.error),
             stream_started=generation.stream_started,
+            execution_lane=getattr(pending, "execution_lane", "session"),
         )
 
 
