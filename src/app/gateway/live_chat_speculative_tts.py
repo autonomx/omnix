@@ -36,7 +36,6 @@ _CACHE_KEY_KWARGS = frozenset(
         "repetition_penalty",
         "append_silence",
         "non_streaming_mode",
-        "max_new_tokens",
         "parity_mode",
     }
 )
