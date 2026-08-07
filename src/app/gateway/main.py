@@ -411,7 +411,7 @@ def create_gateway_app(
     @gateway.post("/api/chat/sessions/{session_id}/messages/stream", tags=["chat"])
     async def stream_chat_message(session_id: str, request: SendChatMessageRequest) -> StreamingResponse:
         chat_store = get_chat_store()
-        appended = chat_store.begin_user_message(session_id, request)
+        appended = await asyncio.to_thread(chat_store.begin_user_message, session_id, request)
         if appended is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         session, user_message = appended
