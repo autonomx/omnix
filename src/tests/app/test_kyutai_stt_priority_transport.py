@@ -37,10 +37,11 @@ def test_partial_overtakes_coalesced_endpoint_telemetry() -> None:
 
         assert [item["type"] for item in sent] == [
             "partial",
-            "endpoint_candidate",
             "endpoint_score",
+            "endpoint_candidate",
         ]
-        assert sent[-1]["probability"] == 0.94
+        assert sent[1]["probability"] == 0.94
+        assert sent[2]["probability"] == 0.94
 
     asyncio.run(scenario())
 
@@ -66,8 +67,8 @@ def test_endpoint_telemetry_eventually_flushes_without_a_partial() -> None:
         await asyncio.sleep(0.02)
 
         assert [item["type"] for item in sent] == [
-            "endpoint_candidate",
             "endpoint_score",
+            "endpoint_candidate",
         ]
 
     asyncio.run(scenario())
