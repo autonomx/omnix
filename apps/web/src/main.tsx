@@ -39,6 +39,7 @@ import { initializeLiveOutputCoordinator } from './features/assistant-workspace/
 import { initializeLivePresencePolicyController } from './features/assistant-workspace/live-presence-policy-controller';
 import { initializeLiveSessionCoordinator } from './features/assistant-workspace/live-session-coordinator';
 import { initializeLiveSpeculationDiagnosticsBridge } from './features/assistant-workspace/live-speculation-diagnostics-bridge';
+import { initializeLiveSpeculationDirectGatewayTransport } from './features/assistant-workspace/live-speculation-direct-gateway-transport';
 import { initializeLiveSpeculationEarlyTrigger } from './features/assistant-workspace/live-speculation-early-trigger';
 import { initializeLiveSpeculationEligibilityDiagnostics } from './features/assistant-workspace/live-speculation-eligibility-diagnostics';
 import { initializeLiveSpeculationHandshakeTransport } from './features/assistant-workspace/live-speculation-handshake-transport';
@@ -86,6 +87,10 @@ initializeLiveSttAuthorityController();
 initializeLiveVoiceTurnCoordinator();
 initializeLiveSpeculationDiagnosticsBridge();
 initializeLiveSpeculationEligibilityDiagnostics();
+// Install the local direct-gateway transport before the speculation wrappers so
+// their captured fetch implementations can bypass the Vite :5173 proxy for the
+// private hot path. Non-local and failed direct requests fall back to same-origin.
+initializeLiveSpeculationDirectGatewayTransport();
 initializeLiveSpeculationHandshakeTransport();
 initializeLiveSpeculationEarlyTrigger();
 initializeLiveSpeculationRuntime();
