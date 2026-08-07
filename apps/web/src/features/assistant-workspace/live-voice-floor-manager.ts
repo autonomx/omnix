@@ -44,9 +44,12 @@ export type UserFloorEvent =
   | { type: 'commit' }
   | { type: 'reset' };
 
+// Clear questions and commands use a deliberately narrow fast path. Ambiguous
+// clauses retain substantially longer waits, so the latency improvement does
+// not come from globally shortening the user's floor.
 const PROFILES: Record<ConversationPace, FloorTimingProfile> = {
-  quick: { minimumPauseMs: 220, clearTurnWaitMs: 320, ambiguousWaitMs: 700, maximumWaitMs: 1_050 },
-  balanced: { minimumPauseMs: 320, clearTurnWaitMs: 450, ambiguousWaitMs: 1_100, maximumWaitMs: 1_700 },
+  quick: { minimumPauseMs: 160, clearTurnWaitMs: 180, ambiguousWaitMs: 650, maximumWaitMs: 1_050 },
+  balanced: { minimumPauseMs: 180, clearTurnWaitMs: 220, ambiguousWaitMs: 1_000, maximumWaitMs: 1_700 },
   reflective: { minimumPauseMs: 450, clearTurnWaitMs: 650, ambiguousWaitMs: 1_800, maximumWaitMs: 2_800 },
 };
 
@@ -102,7 +105,11 @@ export function assessSemanticTurn(
   if (COMPLETE_COMMAND_PATTERN.test(text)) {
     return { probabilityDone: 0.94, reason: 'complete_command', recommendedWaitMs: profile.clearTurnWaitMs };
   }
-  return { probabilityDone: 0.78, reason: 'definitive_statement', recommendedWaitMs: profile.clearTurnWaitMs };
+  return {
+    probabilityDone: 0.78,
+    reason: 'definitive_statement',
+    recommendedWaitMs: definitiveStatementWaitMs(pace, profile),
+  };
 }
 
 export function semanticFinalizeDelay(
@@ -115,4 +122,13 @@ export function semanticFinalizeDelay(
     profile.maximumWaitMs,
     Math.max(profile.minimumPauseMs, assessment.recommendedWaitMs),
   );
+}
+
+function definitiveStatementWaitMs(
+  pace: ConversationPace,
+  profile: FloorTimingProfile,
+): number {
+  if (pace === 'quick') return Math.max(profile.clearTurnWaitMs, 260);
+  if (pace === 'balanced') return Math.max(profile.clearTurnWaitMs, 360);
+  return profile.clearTurnWaitMs;
 }
