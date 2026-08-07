@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  directGatewayEnabled,
+  resolveDirectSpeculationUrl,
+} from './live-speculation-direct-gateway-transport';
 import { bridgeLiveSpeculationHandshakeRequest } from './live-speculation-handshake-transport';
 
 function startBody(segmentId = 'segment-test', sourceSequence = 4): string {
@@ -15,6 +19,44 @@ function generationIdFrom(text: string): string {
   if (!match) throw new Error(`No generation id in ${text}`);
   return match[1];
 }
+
+describe('live speculation direct gateway transport', () => {
+  const viteLocation = {
+    hostname: 'localhost',
+    port: '5173',
+    origin: 'http://localhost:5173',
+  } as Pick<Location, 'hostname' | 'port' | 'origin'>;
+
+  it('routes only private speculation requests directly to the local gateway', () => {
+    expect(directGatewayEnabled(viteLocation, {})).toBe(true);
+    expect(resolveDirectSpeculationUrl(
+      '/api/live/speculation/sessions/session-test/start-stream?x=1',
+      viteLocation,
+      {},
+    )).toBe('http://localhost:8000/api/live/speculation/sessions/session-test/start-stream?x=1');
+    expect(resolveDirectSpeculationUrl(
+      '/api/live/speculation/tts-prefetch',
+      viteLocation,
+      { VITE_LIVE_SPECULATION_GATEWAY_ORIGIN: 'http://127.0.0.1:8123' },
+    )).toBe('http://127.0.0.1:8123/api/live/speculation/tts-prefetch');
+    expect(resolveDirectSpeculationUrl(
+      '/api/chat/sessions/session-test/messages/stream',
+      viteLocation,
+      {},
+    )).toBeNull();
+  });
+
+  it('fails closed outside local Vite and honors the explicit opt-out', () => {
+    expect(directGatewayEnabled({
+      hostname: 'omnix.example',
+      port: '443',
+      origin: 'https://omnix.example',
+    }, {})).toBe(false);
+    expect(directGatewayEnabled(viteLocation, {
+      VITE_LIVE_SPECULATION_DIRECT_GATEWAY: 'false',
+    })).toBe(false);
+  });
+});
 
 describe('live speculation handshake transport', () => {
   it('opens locally before the inline gateway response and reuses the client generation id', async () => {
