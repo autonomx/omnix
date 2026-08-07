@@ -7,7 +7,7 @@ the provider transcript is already updated, but the browser has not yet received
 partial that corresponds to it.
 
 This module keeps endpoint telemetry lossy/coalesced while preserving transcript,
-finalization, replay, and error messages exactly. A pending endpoint candidate is
+finalization, replay, and error messages exactly. Pending endpoint telemetry is
 flushed immediately after a partial so browser-side speculation never observes a
 candidate before the transcript that made the candidate eligible.
 """
@@ -75,7 +75,7 @@ class KyutaiPrioritySender:
 
         # Transcript delivery is authoritative for downstream semantic assessment
         # and speculative generation. Send it first, then release the newest
-        # candidate/score that may have been queued ahead of the provider Word.
+        # score/candidate pair that may have been queued ahead of the provider Word.
         sent = await self._send_immediately(websocket, lock, payload)
         if message_type == "partial" and sent:
             telemetry_sent = await self._flush_now(websocket, lock, state)
@@ -114,12 +114,12 @@ class KyutaiPrioritySender:
             timer.cancel()
         state.flush_task = None
 
-        # Candidate first: after a partial is visible, it is the latency-critical
-        # control message. Endpoint scores are diagnostics/continuous authority input
-        # and may safely be coalesced to the newest value.
-        pending = (state.latest_candidate, state.latest_score)
-        state.latest_candidate = None
+        # Preserve the bridge's established score-before-candidate wire ordering,
+        # while guaranteeing that a fresh partial overtakes both when it was queued
+        # behind faster-than-real-time model Step events.
+        pending = (state.latest_score, state.latest_candidate)
         state.latest_score = None
+        state.latest_candidate = None
         ok = True
         for item in pending:
             if item is not None:
