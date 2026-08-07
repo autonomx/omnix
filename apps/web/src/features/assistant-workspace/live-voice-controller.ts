@@ -163,6 +163,17 @@ export function shouldCommitProviderEndpoint(state: EndpointCommitState): boolea
   }) === 'commit';
 }
 
+export function semanticFinalizationRemainingMs(
+  text: string,
+  pace: ConversationPace,
+  pauseElapsedMs: number,
+): number {
+  return Math.max(
+    0,
+    semanticFinalizeDelay(text, pace) - Math.max(0, pauseElapsedMs),
+  );
+}
+
 export function initializeLiveVoiceController(root: ParentNode = document): void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
   const liveWindow = window as LiveVoiceWindow;
@@ -718,9 +729,17 @@ function handlePartialTranscript(card: HTMLElement, text: string): void {
   const session = activeSession;
   if (session?.card === card) {
     const normalized = text.trim();
-    if (normalized !== session.partialTranscript) {
+    const transcriptChanged = normalized !== session.partialTranscript;
+    if (transcriptChanged) {
       session.partialTranscript = normalized;
       session.partialTranscriptUpdatedAt = performance.now();
+      if (
+        session.silenceTimer
+        && session.pauseStartedAt !== null
+        && !session.finalRequested
+      ) {
+        rescheduleSemanticFinalization(session);
+      }
     }
     if (
       session.sttAuthority.authorityEnabled
@@ -759,22 +778,48 @@ function assessOverlapCandidate(session: LiveVoiceSession): void {
 }
 
 function scheduleSemanticFinalization(session: LiveVoiceSession): void {
-  const pace = readConversationPace();
-  const assessment = assessSemanticTurn(session.partialTranscript, pace);
-  const delayMs = semanticFinalizeDelay(session.partialTranscript, pace);
   session.perfTurnId ??= `voice-turn:${Date.now()}`;
   session.floorState = reduceUserFloor(session.floorState, { type: 'completion_check' });
+  armSemanticFinalizationTimer(session, 'semantic_turn_assessed');
+}
+
+function rescheduleSemanticFinalization(session: LiveVoiceSession): void {
+  armSemanticFinalizationTimer(session, 'semantic_turn_rescheduled');
+}
+
+function armSemanticFinalizationTimer(
+  session: LiveVoiceSession,
+  stage: 'semantic_turn_assessed' | 'semantic_turn_rescheduled',
+): void {
+  const now = performance.now();
+  const pace = readConversationPace();
+  const assessment = assessSemanticTurn(session.partialTranscript, pace);
+  const targetDelayMs = semanticFinalizeDelay(session.partialTranscript, pace);
+  const pauseElapsedMs = session.pauseStartedAt === null
+    ? 0
+    : Math.max(0, now - session.pauseStartedAt);
+  const remainingMs = semanticFinalizationRemainingMs(
+    session.partialTranscript,
+    pace,
+    pauseElapsedMs,
+  );
+  if (session.silenceTimer) clearTimeout(session.silenceTimer);
   dispatchLiveVoicePerfEvent({
-    stage: 'semantic_turn_assessed',
+    stage,
     turnId: session.perfTurnId,
     timestamp: new Date().toISOString(),
     pace,
     probabilityDone: assessment.probabilityDone,
     reason: assessment.reason,
-    delayMs,
+    delayMs: targetDelayMs,
+    pauseElapsedMs: Math.round(pauseElapsedMs),
+    remainingMs: Math.round(remainingMs),
     transcriptChars: session.partialTranscript.length,
   });
-  session.silenceTimer = setTimeout(() => requestFinalTranscript(session, 'semantic_timeout'), delayMs);
+  session.silenceTimer = setTimeout(
+    () => requestFinalTranscript(session, 'semantic_timeout'),
+    remainingMs,
+  );
 }
 
 function handleExternalStop(): void {
