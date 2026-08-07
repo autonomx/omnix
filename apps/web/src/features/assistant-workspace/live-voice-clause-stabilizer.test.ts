@@ -16,6 +16,29 @@ describe('stable live voice clauses', () => {
     expect(accumulator.pendingText()).toBe('');
   });
 
+  it('uses a bounded 55 ms deadline for the first spoken clause by default', () => {
+    const accumulator = new StableClauseAccumulator();
+
+    expect(accumulator.append('Start speaking now with enough text', 0)).toEqual([]);
+    expect(accumulator.takeReady(54)).toEqual([]);
+    expect(accumulator.takeReady(56)).toEqual([
+      { text: 'Start speaking now with enough text', reason: 'deadline' },
+    ]);
+  });
+
+  it('returns to the 140 ms policy after the first clause', () => {
+    const accumulator = new StableClauseAccumulator();
+
+    expect(accumulator.append('First clause.', 0)).toEqual([
+      { text: 'First clause.', reason: 'strong-boundary' },
+    ]);
+    expect(accumulator.append('The second clause has enough words to split', 10)).toEqual([]);
+    expect(accumulator.takeReady(149)).toEqual([]);
+    expect(accumulator.takeReady(151)).toEqual([
+      { text: 'The second clause has enough words to split', reason: 'deadline' },
+    ]);
+  });
+
   it('uses lookahead before committing weaker punctuation', () => {
     const accumulator = new StableClauseAccumulator({
       minimumClauseCharacters: 12,
