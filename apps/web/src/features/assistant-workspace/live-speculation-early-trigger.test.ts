@@ -20,9 +20,12 @@ describe('early live speculation trigger', () => {
     expect(earlySpeculationCandidateEligible(0.6, 'Stop now')).toBe(true);
   });
 
-  it('does not speculate from one-word fragments', () => {
-    expect(earlySpeculationProbabilityFloor('What')).toBeNull();
-    expect(earlySpeculationCandidateEligible(0.95, 'What')).toBe(false);
+  it('allows only guarded one-word complete utterances at very high confidence', () => {
+    expect(earlySpeculationProbabilityFloor('Why?')).toBe(0.9);
+    expect(earlySpeculationCandidateEligible(0.89, 'Why?')).toBe(false);
+    expect(earlySpeculationCandidateEligible(0.9, 'Why?')).toBe(true);
+    expect(earlySpeculationProbabilityFloor('because')).toBeNull();
+    expect(earlySpeculationCandidateEligible(0.99, 'because')).toBe(false);
   });
 
   it('does not speculate below the bounded long-candidate probability floor', () => {
