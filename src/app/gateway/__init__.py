@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import tts_live_call_websocket as _tts_live_call_websocket
 from .assistant_context_routes import install_assistant_context_route_hook
 from .audiobook_streaming import install_audiobook_websocket_hook
 from .blocking_route_offload import install_blocking_route_offload_hook
@@ -31,7 +32,10 @@ from .live_observation_generation import install_live_observation_generation_hoo
 from .live_sse_transport import install_live_sse_transport_hook
 from .live_voice_cue_asset_routes import install_live_voice_cue_asset_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
-from .live_voice_runtime_offload import install_live_voice_runtime_offload_hook
+from .live_voice_runtime_offload import (
+    get_cached_live_tts_provider,
+    install_live_voice_runtime_offload_hook,
+)
 from .live_voice_speculative_tts import install_live_voice_execution_lane_hook
 from .live_voice_spoken_style import install_live_voice_spoken_style_hook
 from .lmstudio_loaded_model_resolution import (
@@ -143,6 +147,10 @@ install_live_voice_cue_asset_hook()
 install_event_loop_lag_monitor_hook()
 install_blocking_route_offload_hook()
 install_live_voice_runtime_offload_hook()
+# The persistent live-call websocket exposes a dependency seam for tests and
+# alternate gateway composition. Bind that seam to the provider already warmed
+# by the live-voice runtime so each phrase avoids a settings/provider lookup.
+_tts_live_call_websocket.get_tts_provider = get_cached_live_tts_provider
 install_tts_runtime_route_hook()
 install_tts_pcm_websocket_hook()
 install_tts_live_call_pcm_diagnostics_hook()
