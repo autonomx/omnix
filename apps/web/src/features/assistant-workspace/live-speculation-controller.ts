@@ -704,6 +704,7 @@ function createAcceptedSpeculationResponse(
     start(controller) {
       let closed = false;
       let chunksReleased = false;
+      let releasePending = false;
       const emit = (payload: Record<string, unknown>): void => {
         if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
@@ -714,14 +715,25 @@ function createAcceptedSpeculationResponse(
           cursor += 1;
         }
       };
-      const update = (): void => flushChunks();
-      active.subscribers.add(update);
-      void waitForSpeculativeTtsAcceptance(active).then(() => {
-        chunksReleased = true;
+      const releaseChunksAfterTtsGate = (): void => {
+        if (chunksReleased || releasePending || cursor >= active.chunks.length) return;
+        releasePending = true;
+        void waitForSpeculativeTtsAcceptance(active).then(() => {
+          releasePending = false;
+          chunksReleased = true;
+          flushChunks();
+        });
+      };
+      const update = (): void => {
+        releaseChunksAfterTtsGate();
         flushChunks();
-      });
+      };
+      active.subscribers.add(update);
+      releaseChunksAfterTtsGate();
       void active.generationPromise.then(async () => {
-        await waitForSpeculativeTtsAcceptance(active);
+        if (!chunksReleased && cursor < active.chunks.length) {
+          await waitForSpeculativeTtsAcceptance(active);
+        }
         chunksReleased = true;
         flushChunks();
         if (active.error || !active.generationId || !active.finalText) {
@@ -782,10 +794,17 @@ function createAcceptedSpeculationResponse(
 }
 
 async function waitForSpeculativeTtsAcceptance(active: ActiveSpeculation): Promise<void> {
-  if (!active.prefetchAcceptPromise) return;
+  const deadline = performance.now() + SPECULATIVE_TTS_ACCEPT_WAIT_MS;
+  while (!active.prefetchAcceptPromise && !active.error && performance.now() < deadline) {
+    await delay(Math.min(5, Math.max(1, deadline - performance.now())));
+  }
+  const acceptance = active.prefetchAcceptPromise;
+  if (!acceptance) return;
+  const remainingMs = deadline - performance.now();
+  if (remainingMs <= 0) return;
   await Promise.race([
-    active.prefetchAcceptPromise,
-    delay(SPECULATIVE_TTS_ACCEPT_WAIT_MS),
+    acceptance,
+    delay(remainingMs),
   ]);
 }
 
