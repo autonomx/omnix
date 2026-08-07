@@ -23,7 +23,11 @@ STREAM_INITIAL_SILENCE_THRESHOLD = 0.01
 STREAM_INITIAL_FALLBACK_THRESHOLD = 0.0025
 STREAM_INITIAL_PREROLL_MS = 40.0
 STREAM_MAX_INITIAL_SILENCE_MS = 400.0
-CHAT_STREAM_MIN_NEW_TOKENS = 96
+# Qwen3-TTS emits roughly 80 ms of audio per codec step. A 96-step minimum
+# allowed a 14-character tail that missed EOS to produce about 7 seconds of
+# speech. Keep only enough floor for very short acknowledgements; ordinary
+# clauses continue to receive per-character headroom from the estimator below.
+CHAT_STREAM_MIN_NEW_TOKENS = 32
 CHAT_STREAM_MAX_NEW_TOKENS = 1_024
 CHAT_STREAM_TOKEN_NUMERATOR = 9
 CHAT_STREAM_TOKEN_DENOMINATOR = 8
