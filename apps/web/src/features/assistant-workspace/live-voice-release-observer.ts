@@ -111,7 +111,9 @@ function handleTurnTimeline(event: Event): void {
   } else {
     state.turnId = detail.turnId;
   }
-  if (state.speechEndedAt === null) state.speechEndedAt = detail.atMs;
+  // Repeated speech-end events represent pause/resume cycles within the same
+  // utterance. The latest pause is the one that should anchor release latency.
+  state.speechEndedAt = detail.atMs;
 }
 
 function handlePerfEvent(event: Event): void {
