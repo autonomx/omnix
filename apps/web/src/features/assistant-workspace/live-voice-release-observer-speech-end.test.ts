@@ -49,17 +49,23 @@ describe('speech-end release metric', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => now);
   });
 
-  it('preserves speech end across finalization and measures first audible playback', () => {
+  it('uses the final pause after pause/resume cycles and measures first audible playback', () => {
     timeline({
       turnId: 'voice-turn:metric',
       event: 'speech_ended',
       atMs: 100,
       state: 'endpoint_candidate',
     });
-    now = 180;
+    timeline({
+      turnId: 'voice-turn:metric',
+      event: 'speech_ended',
+      atMs: 220,
+      state: 'endpoint_candidate',
+    });
+    now = 240;
     perf('stt_final_requested', 'voice-turn:metric');
-    now = 260;
-    perf('stt_final_received', 'voice-turn:metric', { sttFinalizeMs: 80 });
+    now = 300;
+    perf('stt_final_received', 'voice-turn:metric', { sttFinalizeMs: 60 });
     diagnostic('turn_intercepted', 'live-call:voice-turn:metric');
     now = 400;
     diagnostic('llm_text_chunk_received', 'live-call:voice-turn:metric');
@@ -82,7 +88,7 @@ describe('speech-end release metric', () => {
       'release_metric',
       expect.objectContaining({
         metric_name: 'speech_end_to_first_playback_ms',
-        value_ms: 420,
+        value_ms: 300,
         turn_id: 'voice-turn:metric',
       }),
       'release_observer',
