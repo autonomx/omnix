@@ -1,15 +1,21 @@
+import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import {
   LIVE_STT_SPECULATION_CANDIDATE_EVENT,
   LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
   LIVE_STT_SPECULATION_FINAL_EVENT,
   LIVE_STT_SPECULATION_PARTIAL_EVENT,
 } from './live-stt-authority-controller';
+import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const INSTALLED_KEY = '__omnixLiveSpeculationInstalled';
+const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const CORRECTION_PATTERN = /(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)/i;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
+const MAX_ACTIVE_HYPOTHESES = 2;
+const MIN_EXTENSION_WORDS = 2;
+const SPECULATIVE_TTS_ACCEPT_WAIT_MS = 80;
 export const LIVE_SPECULATION_HANDSHAKE_GRACE_MS = 350;
 
 type SpeculationWindow = Window & typeof globalThis & {
@@ -63,6 +69,8 @@ type ActiveSpeculation = {
   segmentId: string;
   sourceSequence: number;
   candidateText: string;
+  endpointProbability: number | undefined;
+  createdAtMs: number;
   providerId: string | null;
   modelId: string | null;
   generationId: string | null;
@@ -78,10 +86,16 @@ type ActiveSpeculation = {
   error: string | null;
   reused: boolean;
   acceptBody: ChatStreamRequestBody | null;
+  firstClause: StableClauseAccumulator;
+  firstClauseTimer: ReturnType<typeof window.setTimeout> | null;
+  prefetchedClause: string | null;
+  prefetchStarted: boolean;
+  prefetchPromise: Promise<void> | null;
+  prefetchAcceptPromise: Promise<void> | null;
 };
 
 let originalFetch: typeof window.fetch | null = null;
-let activeSpeculation: ActiveSpeculation | null = null;
+let activeSpeculations: ActiveSpeculation[] = [];
 const partials = new Map<string, string>();
 
 export function normalizeSpeculationWords(text: string): string[] {
@@ -99,6 +113,24 @@ export function transcriptsCanReuseSpeculation(candidate: string, final: string)
   const left = normalizeSpeculationWords(candidate);
   const right = normalizeSpeculationWords(final);
   return left.length === right.length && left.every((word, index) => word === right[index]);
+}
+
+export function transcriptExtendsSpeculation(candidate: string, next: string): boolean {
+  const left = normalizeSpeculationWords(candidate);
+  const right = normalizeSpeculationWords(next);
+  return left.length <= right.length && left.every((word, index) => word === right[index]);
+}
+
+export function shouldStartExtendedHypothesis(
+  previousCandidate: string,
+  nextCandidate: string,
+  endpointProbability = 0,
+): boolean {
+  if (!transcriptIsSpeculationSafe(nextCandidate)) return false;
+  if (!transcriptExtendsSpeculation(previousCandidate, nextCandidate)) return true;
+  const previousWords = normalizeSpeculationWords(previousCandidate).length;
+  const nextWords = normalizeSpeculationWords(nextCandidate).length;
+  return nextWords - previousWords >= MIN_EXTENSION_WORDS || endpointProbability >= 0.85;
 }
 
 export function speculationRequestCanReuse(
@@ -129,12 +161,31 @@ export function initializeLiveSpeculationController(): () => void {
     const detail = (event as CustomEvent<SttPartialDetail>).detail;
     const key = partialKey(detail);
     const text = detail?.text?.trim();
-    if (!key || !text) return;
+    if (!key || !text || !detail?.chatSessionId || !detail.segmentId
+      || typeof detail.sourceSequence !== 'number') return;
     partials.set(key, text);
-    const active = activeSpeculation;
-    if (!active || active.segmentId !== detail.segmentId || active.sourceSequence !== detail.sourceSequence) return;
-    if (normalizeComparable(text) !== normalizeComparable(active.candidateText)) {
-      cancelSpeculation('transcript_resumed_or_corrected');
+
+    const matching = segmentSpeculations(detail.segmentId, detail.sourceSequence);
+    matching.forEach((active) => {
+      if (!transcriptExtendsSpeculation(active.candidateText, text)) {
+        cancelSpeculation(active, 'transcript_corrected');
+      }
+    });
+
+    const latest = newestSegmentSpeculation(detail.segmentId, detail.sourceSequence);
+    if (latest && shouldStartExtendedHypothesis(
+      latest.candidateText,
+      text,
+      latest.endpointProbability ?? 0,
+    )) {
+      startHypothesis(
+        detail.chatSessionId,
+        detail.segmentId,
+        detail.sourceSequence,
+        text,
+        latest.endpointProbability,
+        'partial_extension',
+      );
     }
   };
 
@@ -142,63 +193,67 @@ export function initializeLiveSpeculationController(): () => void {
     if (!speculationEnabled()) return;
     const detail = (event as CustomEvent<SttCandidateDetail>).detail;
     const key = partialKey(detail);
-    if (!key || !detail.chatSessionId || !detail.segmentId || typeof detail.sourceSequence !== 'number') return;
-    const candidateText = partials.get(key)?.trim() ?? '';
+    if (!key || !detail.chatSessionId || !detail.segmentId
+      || typeof detail.sourceSequence !== 'number') return;
+    const candidateText = partials.get(key)?.trim() || detail.text?.trim() || '';
     if (!transcriptIsSpeculationSafe(candidateText)) return;
-    if (activeSpeculation
-      && activeSpeculation.segmentId === detail.segmentId
-      && activeSpeculation.sourceSequence === detail.sourceSequence) return;
-    cancelSpeculation('superseded_candidate');
-    activeSpeculation = createSpeculation(
+    const latest = newestSegmentSpeculation(detail.segmentId, detail.sourceSequence);
+    if (latest && normalizeComparable(latest.candidateText) === normalizeComparable(candidateText)) {
+      latest.endpointProbability = detail.probability;
+      return;
+    }
+    if (latest && !shouldStartExtendedHypothesis(
+      latest.candidateText,
+      candidateText,
+      detail.probability ?? 0,
+    )) return;
+    startHypothesis(
       detail.chatSessionId,
       detail.segmentId,
       detail.sourceSequence,
       candidateText,
+      detail.probability,
+      'endpoint_candidate',
     );
-    consumeSpeculation(activeSpeculation, detail.probability).catch((error: unknown) => {
-      const active = activeSpeculation;
-      if (!active || active.segmentId !== detail.segmentId) return;
-      active.error = error instanceof Error ? error.message : 'Speculative generation failed.';
-      active.completed = true;
-      active.resolveStarted();
-      active.resolveGeneration();
-      notify(active);
-    });
   };
 
   const handleFinal = (event: Event): void => {
     const detail = (event as CustomEvent<SttPartialDetail>).detail;
-    const active = activeSpeculation;
     const finalText = detail?.text?.trim() ?? '';
-    if (!active || active.segmentId !== detail.segmentId || active.sourceSequence !== detail.sourceSequence) return;
-    if (!transcriptsCanReuseSpeculation(active.candidateText, finalText)) {
-      cancelSpeculation('final_transcript_mismatch');
+    if (!detail?.segmentId || typeof detail.sourceSequence !== 'number') return;
+    const matching = segmentSpeculations(detail.segmentId, detail.sourceSequence)
+      .filter((active) => transcriptsCanReuseSpeculation(active.candidateText, finalText))
+      .sort((left, right) => right.createdAtMs - left.createdAtMs);
+    const accepted = matching[0];
+    if (!accepted) {
+      cancelSegmentSpeculations(detail.segmentId, detail.sourceSequence, 'final_transcript_mismatch');
       return;
     }
-    active.finalText = finalText;
+    accepted.finalText = finalText;
+    segmentSpeculations(detail.segmentId, detail.sourceSequence)
+      .filter((active) => active !== accepted)
+      .forEach((active) => cancelSpeculation(active, 'final_hypothesis_not_selected'));
+    acceptSpeculativeTts(accepted);
     dispatchPerformance('llm_speculation_final_accepted', {
-      sessionId: active.sessionId,
-      segmentId: active.segmentId,
-      sourceSequence: active.sourceSequence,
-      candidateChars: active.candidateText.length,
+      sessionId: accepted.sessionId,
+      segmentId: accepted.segmentId,
+      sourceSequence: accepted.sourceSequence,
+      candidateChars: accepted.candidateText.length,
       finalChars: finalText.length,
+      retainedHypotheses: matching.length,
+      speculativeTtsStarted: accepted.prefetchStarted,
     });
-    notify(active);
+    notify(accepted);
   };
 
   const handleDeliverySettled = (event: Event): void => {
     const detail = (event as CustomEvent<SttPartialDetail>).detail;
-    const active = activeSpeculation;
     const key = partialKey(detail);
     if (key) partials.delete(key);
-    if (
-      active
-      && active.segmentId === detail?.segmentId
-      && active.sourceSequence === detail.sourceSequence
-      && !active.reused
-    ) {
-      cancelSpeculation('accepted_final_not_routed_to_chat');
-    }
+    if (!detail?.segmentId || typeof detail.sourceSequence !== 'number') return;
+    segmentSpeculations(detail.segmentId, detail.sourceSequence)
+      .filter((active) => !active.reused)
+      .forEach((active) => cancelSpeculation(active, 'accepted_final_not_routed_to_chat'));
   };
 
   window.addEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
@@ -212,7 +267,7 @@ export function initializeLiveSpeculationController(): () => void {
   return () => {
     if (originalFetch) window.fetch = originalFetch;
     originalFetch = null;
-    cancelSpeculation('controller_uninstalled');
+    [...activeSpeculations].forEach((active) => cancelSpeculation(active, 'controller_uninstalled'));
     partials.clear();
     window.removeEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
     window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, handleCandidate);
@@ -236,23 +291,22 @@ async function interceptChatStream(input: RequestInfo | URL, init?: RequestInit)
   const body = await parseRequestBody(input, init);
   const finalText = typeof body?.content === 'string' ? body.content.trim() : '';
   const sessionId = decodeURIComponent(match[1]);
-  const active = activeSpeculation;
-  const transcriptMatches = Boolean(
-    active
-    && active.sessionId === sessionId
-    && active.finalText
-    && transcriptsCanReuseSpeculation(active.candidateText, finalText),
-  );
+  const active = activeSpeculations
+    .filter((candidate) => (
+      candidate.sessionId === sessionId
+      && candidate.finalText
+      && !candidate.reused
+      && transcriptsCanReuseSpeculation(candidate.candidateText, finalText)
+    ))
+    .sort((left, right) => right.createdAtMs - left.createdAtMs)[0];
   if (
     !active
-    || active.reused
-    || !transcriptMatches
     || active.error
     || !speculationRequestCanReuse(body, active.providerId, active.modelId)
   ) {
-    if (active && active.sessionId === sessionId && active.finalText) {
-      cancelSpeculation('final_request_not_compatible');
-    }
+    activeSpeculations
+      .filter((candidate) => candidate.sessionId === sessionId && candidate.finalText)
+      .forEach((candidate) => cancelSpeculation(candidate, 'final_request_not_compatible'));
     return fetchImpl(input, init);
   }
 
@@ -273,14 +327,75 @@ async function interceptChatStream(input: RequestInfo | URL, init?: RequestInit)
   if (!active.generationId || active.error) return fetchImpl(input, init);
   active.reused = true;
   active.acceptBody = body;
+  activeSpeculations
+    .filter((candidate) => candidate !== active && candidate.sessionId === sessionId)
+    .forEach((candidate) => cancelSpeculation(candidate, 'accepted_hypothesis_selected'));
   dispatchPerformance('llm_speculation_reused', {
     sessionId,
     segmentId: active.segmentId,
     generationId: active.generationId,
     bufferedChunks: active.chunks.length,
     handshakeWaitMs,
+    speculativeTtsStarted: active.prefetchStarted,
+    speculativeTtsClauseChars: active.prefetchedClause?.length ?? 0,
   });
   return createAcceptedSpeculationResponse(active, fetchImpl);
+}
+
+function startHypothesis(
+  sessionId: string,
+  segmentId: string,
+  sourceSequence: number,
+  candidateText: string,
+  probability: number | undefined,
+  trigger: string,
+): void {
+  if (!speculationEnabled() || !transcriptIsSpeculationSafe(candidateText)) return;
+  const duplicate = segmentSpeculations(segmentId, sourceSequence).find(
+    (active) => normalizeComparable(active.candidateText) === normalizeComparable(candidateText),
+  );
+  if (duplicate) return;
+
+  const active = createSpeculation(
+    sessionId,
+    segmentId,
+    sourceSequence,
+    candidateText,
+    probability,
+  );
+  activeSpeculations.push(active);
+
+  // Only the newest candidate prefetches audio. The previous LLM hypothesis is
+  // retained for exact-final reuse, but duplicate Qwen work is cancelled.
+  segmentSpeculations(segmentId, sourceSequence)
+    .filter((candidate) => candidate !== active)
+    .forEach((candidate) => cancelSpeculativeTts(candidate, 'newer_hypothesis'));
+
+  const ordered = segmentSpeculations(segmentId, sourceSequence)
+    .sort((left, right) => left.createdAtMs - right.createdAtMs);
+  while (ordered.length > MAX_ACTIVE_HYPOTHESES) {
+    const oldest = ordered.shift();
+    if (oldest) cancelSpeculation(oldest, 'hypothesis_budget_exceeded');
+  }
+
+  dispatchPerformance('llm_speculation_hypothesis_started', {
+    sessionId,
+    segmentId,
+    sourceSequence,
+    candidateChars: candidateText.length,
+    candidateWords: normalizeSpeculationWords(candidateText).length,
+    endpointProbability: probability,
+    trigger,
+    activeHypotheses: segmentSpeculations(segmentId, sourceSequence).length,
+  });
+  consumeSpeculation(active, probability).catch((error: unknown) => {
+    if (!activeSpeculations.includes(active)) return;
+    active.error = error instanceof Error ? error.message : 'Speculative generation failed.';
+    active.completed = true;
+    active.resolveStarted();
+    active.resolveGeneration();
+    notify(active);
+  });
 }
 
 function createSpeculation(
@@ -288,6 +403,7 @@ function createSpeculation(
   segmentId: string,
   sourceSequence: number,
   candidateText: string,
+  endpointProbability: number | undefined,
 ): ActiveSpeculation {
   let resolveStarted: () => void = () => {};
   let resolveGeneration: () => void = () => {};
@@ -298,6 +414,8 @@ function createSpeculation(
     segmentId,
     sourceSequence,
     candidateText,
+    endpointProbability,
+    createdAtMs: performance.now(),
     providerId: null,
     modelId: null,
     generationId: null,
@@ -313,6 +431,12 @@ function createSpeculation(
     error: null,
     reused: false,
     acceptBody: null,
+    firstClause: new StableClauseAccumulator(),
+    firstClauseTimer: null,
+    prefetchedClause: null,
+    prefetchStarted: false,
+    prefetchPromise: null,
+    prefetchAcceptPromise: null,
   };
 }
 
@@ -369,17 +493,153 @@ function applySpeculationEvent(active: ActiveSpeculation, event: SpeculationEven
     active.providerId = event.provider_id ?? null;
     active.modelId = event.model_id ?? null;
     active.resolveStarted();
+    if (active.prefetchedClause) startSpeculativeTtsPrefetch(active, active.prefetchedClause);
     return;
   }
   if (event.type === 'text_chunk' && typeof event.text === 'string') {
     active.chunks.push(event.text);
+    collectSpeculativeFirstClause(active, event.text);
     notify(active);
     return;
   }
   if (event.type === 'error') {
     active.error = event.message || 'Speculative generation failed.';
+    cancelSpeculativeTts(active, 'llm_speculation_error');
     notify(active);
   }
+}
+
+function collectSpeculativeFirstClause(active: ActiveSpeculation, text: string): void {
+  if (active.prefetchedClause) return;
+  const ready = active.firstClause.append(text, performance.now());
+  if (ready.length) {
+    active.prefetchedClause = ready[0].text;
+    clearFirstClauseTimer(active);
+    startSpeculativeTtsPrefetch(active, active.prefetchedClause);
+    return;
+  }
+  scheduleFirstClauseTimer(active);
+}
+
+function scheduleFirstClauseTimer(active: ActiveSpeculation): void {
+  clearFirstClauseTimer(active);
+  const remaining = active.firstClause.deadlineRemainingMs();
+  if (remaining === null) return;
+  active.firstClauseTimer = window.setTimeout(() => {
+    active.firstClauseTimer = null;
+    if (!activeSpeculations.includes(active) || active.abortController.signal.aborted) return;
+    const ready = active.firstClause.takeReady(performance.now());
+    if (ready.length) {
+      active.prefetchedClause = ready[0].text;
+      startSpeculativeTtsPrefetch(active, active.prefetchedClause);
+      return;
+    }
+    scheduleFirstClauseTimer(active);
+  }, Math.max(1, Math.ceil(remaining + 1)));
+}
+
+function clearFirstClauseTimer(active: ActiveSpeculation): void {
+  if (active.firstClauseTimer !== null) window.clearTimeout(active.firstClauseTimer);
+  active.firstClauseTimer = null;
+}
+
+function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string): void {
+  if (active.prefetchStarted || !active.generationId || !clause.trim()) return;
+  active.prefetchStarted = true;
+  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  const synthesis = createLiveSpeechSynthesisOptions(clause, {
+    scopeKey: active.sessionId,
+    enablePerformancePlan: true,
+    enableVocalContinuity: false,
+  });
+  const startedAt = performance.now();
+  active.prefetchPromise = fetchImpl('/api/live/speculation/tts-prefetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      generation_id: active.generationId,
+      request: {
+        text: clause,
+        speaker: selectedVoiceId(),
+        language: 'English',
+        chunk_size: 8,
+        temperature: 0.6,
+        top_k: 20,
+        top_p: 0.85,
+        repetition_penalty: 1.0,
+        append_silence: false,
+        non_streaming_mode: false,
+        parity_mode: true,
+        diagnostics_stream_id: `chat-speculative-tts-${active.generationId}`,
+        delivery_plan: synthesis.performancePlan,
+        pronunciation_lexicon: synthesis.pronunciationLexicon ?? [],
+      },
+    }),
+    signal: active.abortController.signal,
+  }).then((response) => {
+    if (!response.ok) throw new Error(`Speculative TTS prefetch failed with status ${response.status}.`);
+    dispatchPerformance('tts_speculative_prefetch_started', {
+      sessionId: active.sessionId,
+      segmentId: active.segmentId,
+      generationId: active.generationId,
+      clauseChars: clause.length,
+      requestMs: performance.now() - startedAt,
+    });
+  }).catch((error: unknown) => {
+    if (active.abortController.signal.aborted) return;
+    dispatchPerformance('tts_speculative_prefetch_failed', {
+      sessionId: active.sessionId,
+      segmentId: active.segmentId,
+      generationId: active.generationId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+  if (active.finalText) acceptSpeculativeTts(active);
+}
+
+function acceptSpeculativeTts(active: ActiveSpeculation): void {
+  if (!active.prefetchStarted || !active.generationId || active.prefetchAcceptPromise) return;
+  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  active.prefetchAcceptPromise = (active.prefetchPromise ?? Promise.resolve())
+    .then(async () => {
+      const response = await fetchImpl(
+        `/api/live/speculation/tts-prefetch/${encodeURIComponent(active.generationId as string)}/accept`,
+        { method: 'POST', headers: { Accept: 'application/json' } },
+      );
+      if (!response.ok) throw new Error(`Speculative TTS accept failed with status ${response.status}.`);
+      const payload = await response.json() as { buffered_chunk_count?: number; completed?: boolean };
+      dispatchPerformance('tts_speculative_prefetch_accepted', {
+        sessionId: active.sessionId,
+        segmentId: active.segmentId,
+        generationId: active.generationId,
+        bufferedChunks: payload.buffered_chunk_count ?? 0,
+        completed: payload.completed ?? false,
+      });
+    })
+    .catch((error: unknown) => {
+      dispatchPerformance('tts_speculative_prefetch_accept_failed', {
+        sessionId: active.sessionId,
+        segmentId: active.segmentId,
+        generationId: active.generationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+}
+
+function cancelSpeculativeTts(active: ActiveSpeculation, reason: string): void {
+  if (!active.prefetchStarted || !active.generationId) return;
+  active.prefetchStarted = false;
+  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  void fetchImpl(
+    `/api/live/speculation/tts-prefetch/${encodeURIComponent(active.generationId)}/cancel`,
+    { method: 'POST', headers: { Accept: 'application/json' } },
+  ).catch(() => undefined);
+  dispatchPerformance('tts_speculative_prefetch_cancelled', {
+    sessionId: active.sessionId,
+    segmentId: active.segmentId,
+    generationId: active.generationId,
+    reason,
+  });
 }
 
 function createAcceptedSpeculationResponse(
@@ -391,10 +651,12 @@ function createAcceptedSpeculationResponse(
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
+      let chunksReleased = false;
       const emit = (payload: Record<string, unknown>): void => {
         if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
       const flushChunks = (): void => {
+        if (!chunksReleased) return;
         while (cursor < active.chunks.length) {
           emit({ type: 'text_chunk', text: active.chunks[cursor], speculative_reuse: true });
           cursor += 1;
@@ -402,8 +664,13 @@ function createAcceptedSpeculationResponse(
       };
       const update = (): void => flushChunks();
       active.subscribers.add(update);
-      flushChunks();
+      void waitForSpeculativeTtsAcceptance(active).then(() => {
+        chunksReleased = true;
+        flushChunks();
+      });
       void active.generationPromise.then(async () => {
+        await waitForSpeculativeTtsAcceptance(active);
+        chunksReleased = true;
         flushChunks();
         if (active.error || !active.generationId || !active.finalText) {
           throw new Error(active.error || 'Speculation could not be accepted.');
@@ -432,10 +699,11 @@ function createAcceptedSpeculationResponse(
           sessionId: active.sessionId,
           generationId: active.generationId,
           responseChars: accepted.content.length,
+          speculativeTts: active.prefetchStarted,
         });
         closed = true;
         active.subscribers.delete(update);
-        if (activeSpeculation === active) activeSpeculation = null;
+        removeSpeculation(active);
         partials.delete(`${active.segmentId}:${active.sourceSequence}`);
         controller.close();
       }).catch((error: unknown) => {
@@ -451,14 +719,29 @@ function createAcceptedSpeculationResponse(
   });
   return new Response(stream, {
     status: 200,
-    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' },
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+      ...(active.generationId
+        ? { 'X-Omnix-Speculation-Generation-Id': active.generationId }
+        : {}),
+    },
   });
 }
 
-function cancelSpeculation(reason: string): void {
-  const active = activeSpeculation;
-  activeSpeculation = null;
-  if (!active) return;
+async function waitForSpeculativeTtsAcceptance(active: ActiveSpeculation): Promise<void> {
+  if (!active.prefetchAcceptPromise) return;
+  await Promise.race([
+    active.prefetchAcceptPromise,
+    delay(SPECULATIVE_TTS_ACCEPT_WAIT_MS),
+  ]);
+}
+
+function cancelSpeculation(active: ActiveSpeculation, reason: string): void {
+  if (!activeSpeculations.includes(active)) return;
+  removeSpeculation(active);
+  clearFirstClauseTimer(active);
+  cancelSpeculativeTts(active, reason);
   active.abortController.abort(reason);
   active.resolveStarted();
   active.resolveGeneration();
@@ -467,8 +750,36 @@ function cancelSpeculation(reason: string): void {
     sessionId: active.sessionId,
     segmentId: active.segmentId,
     generationId: active.generationId,
+    candidateChars: active.candidateText.length,
     reason,
   });
+}
+
+function cancelSegmentSpeculations(
+  segmentId: string,
+  sourceSequence: number,
+  reason: string,
+): void {
+  segmentSpeculations(segmentId, sourceSequence)
+    .forEach((active) => cancelSpeculation(active, reason));
+}
+
+function removeSpeculation(active: ActiveSpeculation): void {
+  activeSpeculations = activeSpeculations.filter((candidate) => candidate !== active);
+}
+
+function segmentSpeculations(segmentId: string, sourceSequence: number): ActiveSpeculation[] {
+  return activeSpeculations.filter(
+    (active) => active.segmentId === segmentId && active.sourceSequence === sourceSequence,
+  );
+}
+
+function newestSegmentSpeculation(
+  segmentId: string,
+  sourceSequence: number,
+): ActiveSpeculation | null {
+  return segmentSpeculations(segmentId, sourceSequence)
+    .sort((left, right) => right.createdAtMs - left.createdAtMs)[0] ?? null;
 }
 
 function notify(active: ActiveSpeculation): void {
@@ -523,6 +834,25 @@ function parseSseBlock(block: string): SpeculationEvent | null {
     .join('\n');
   if (!data) return null;
   try { return JSON.parse(data) as SpeculationEvent; } catch { return null; }
+}
+
+function selectedVoiceId(): string | null {
+  if (typeof document !== 'undefined') {
+    const liveCallVoice = document.querySelector<HTMLElement>('.assistant-live-card')
+      ?.dataset.liveVoiceId?.trim();
+    if (liveCallVoice) return liveCallVoice;
+    const mounted = document.querySelector<HTMLSelectElement>('select[aria-label="Cloned voice"]')
+      ?.value.trim();
+    if (mounted) return mounted;
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(VOICE_SETTINGS_KEY) || '{}') as { voiceId?: unknown };
+    return typeof parsed.voiceId === 'string' && parsed.voiceId.trim()
+      ? parsed.voiceId.trim()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function speculationEnabled(): boolean {
