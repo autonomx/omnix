@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -39,6 +40,7 @@ _CACHE_KEY_KWARGS = frozenset(
         "parity_mode",
     }
 )
+_ONLY_PUNCTUATION = re.compile(r"^[\W_]+$", re.UNICODE)
 
 # Faster Qwen3 TTS explicitly declares that it does not support concurrent
 # generation. Wrong hypotheses may still be winding down when the final answer
@@ -64,6 +66,10 @@ class _SpeculativeTtsEntry:
     generation_id: str
     key: str
     created_at: float
+    text: str
+    speaker: str
+    language: str
+    stable_kwargs: dict[str, Any]
     chunks: list[_CachedPcmChunk] = field(default_factory=list)
     accepted: bool = False
     claimed: bool = False
@@ -73,6 +79,12 @@ class _SpeculativeTtsEntry:
     condition: threading.Condition = field(
         default_factory=lambda: threading.Condition(threading.RLock())
     )
+
+
+@dataclass(frozen=True)
+class _CacheClaim:
+    entry: _SpeculativeTtsEntry
+    remainder_text: str
 
 
 _ENTRIES: dict[str, _SpeculativeTtsEntry] = {}
@@ -96,9 +108,8 @@ class _PrefetchingProviderProxy:
         language: str = "en",
         **kwargs: Any,
     ) -> Iterator[tuple[bytes, int, Any]]:
-        key = _stream_key(text, speaker, language, kwargs)
-        entry = _claim_entry(key)
-        if entry is None:
+        claim = _claim_entry(text, speaker, language, kwargs)
+        if claim is None:
             yield from _locked_provider_stream(
                 self._provider,
                 text=text,
@@ -108,6 +119,7 @@ class _PrefetchingProviderProxy:
             )
             return
 
+        entry = claim.entry
         stream_log(
             "gateway-live-speculative-tts",
             "provider",
@@ -115,6 +127,8 @@ class _PrefetchingProviderProxy:
             generation_id=entry.generation_id,
             buffered_chunk_count=len(entry.chunks),
             completed=entry.completed,
+            prefix_match=bool(claim.remainder_text),
+            remainder_text_length=len(claim.remainder_text),
         )
         index = 0
         emitted = 0
@@ -158,6 +172,15 @@ class _PrefetchingProviderProxy:
             )
             return
 
+        if claim.remainder_text:
+            yield from _locked_provider_stream(
+                self._provider,
+                text=claim.remainder_text,
+                speaker=speaker,
+                language=language,
+                kwargs=kwargs,
+            )
+
         stream_log(
             "gateway-live-speculative-tts",
             "provider",
@@ -167,6 +190,8 @@ class _PrefetchingProviderProxy:
             completed=entry.completed,
             cancelled=entry.cancelled,
             error=entry.error,
+            prefix_match=bool(claim.remainder_text),
+            remainder_text_length=len(claim.remainder_text),
         )
 
 
@@ -192,6 +217,7 @@ def speculative_tts_cache_snapshot() -> list[dict[str, Any]]:
                 "cancelled": entry.cancelled,
                 "error": entry.error,
                 "chunk_count": len(entry.chunks),
+                "text_length": len(entry.text),
             }
             for entry in _ENTRIES.values()
         ]
@@ -238,16 +264,22 @@ def _start_prefetch(
     request: TtsStreamRequest,
     provider: Any,
 ) -> _SpeculativeTtsEntry:
-    text = remove_emojis(request.text or "").strip()
+    text = _normalized_text(remove_emojis(request.text or ""))
     if not text:
         raise HTTPException(status_code=422, detail="text_required")
-    language = request.language or "en"
+    speaker = _normalized_speaker(request.speaker)
+    language = _normalized_language(request.language or "en")
     kwargs = _stream_kwargs(request, provider)
-    key = _stream_key(text, request.speaker, language, kwargs)
+    stable_kwargs = _stable_kwargs(kwargs)
+    key = _stream_key(text, speaker, language, stable_kwargs)
     entry = _SpeculativeTtsEntry(
         generation_id=generation_id,
         key=key,
         created_at=time.time(),
+        text=text,
+        speaker=speaker,
+        language=language,
+        stable_kwargs=stable_kwargs,
     )
     with _CACHE_LOCK:
         _prune_entries_locked()
@@ -266,7 +298,7 @@ def _start_prefetch(
                 provider,
                 text=text,
                 speaker=request.speaker,
-                language=language,
+                language=request.language or "en",
                 kwargs=kwargs,
             )
             for audio_chunk, sample_rate, timing in stream:
@@ -337,44 +369,86 @@ def _cancel_entry(generation_id: str) -> bool:
     return True
 
 
-def _claim_entry(key: str) -> _SpeculativeTtsEntry | None:
-    with _CACHE_LOCK:
-        _prune_entries_locked()
-        candidates = [
-            entry
-            for entry in _ENTRIES.values()
-            if entry.key == key
-            and entry.accepted
-            and not entry.claimed
-            and not entry.cancelled
-            and entry.error is None
-        ]
-        if not candidates:
-            return None
-        entry = max(candidates, key=lambda item: item.created_at)
-        entry.claimed = True
-        return entry
-
-
-def _stream_key(
+def _claim_entry(
     text: str,
     speaker: str | None,
     language: str,
     kwargs: dict[str, Any],
-) -> str:
-    # Performance controls that the current provider ignores must not turn an
-    # otherwise identical first-clause request into a cache miss. Only actual
-    # waveform-affecting sampling and stream controls participate in identity.
-    stable_kwargs = {
-        key: value
+) -> _CacheClaim | None:
+    actual_text = _normalized_text(text)
+    actual_speaker = _normalized_speaker(speaker)
+    actual_language = _normalized_language(language)
+    actual_kwargs = _stable_kwargs(kwargs)
+    with _CACHE_LOCK:
+        _prune_entries_locked()
+        matches: list[tuple[int, float, _SpeculativeTtsEntry, str]] = []
+        for entry in _ENTRIES.values():
+            if (
+                not entry.accepted
+                or entry.claimed
+                or entry.cancelled
+                or entry.error is not None
+                or entry.speaker != actual_speaker
+                or entry.language != actual_language
+                or entry.stable_kwargs != actual_kwargs
+            ):
+                continue
+            remainder = _prefix_remainder(entry.text, actual_text)
+            if remainder is None:
+                continue
+            matches.append((len(entry.text), entry.created_at, entry, remainder))
+        if not matches:
+            return None
+        _, _, entry, remainder = max(matches, key=lambda item: (item[0], item[1]))
+        entry.claimed = True
+        return _CacheClaim(entry=entry, remainder_text=remainder)
+
+
+def _prefix_remainder(cached_text: str, actual_text: str) -> str | None:
+    if actual_text == cached_text:
+        return ""
+    if not actual_text.startswith(cached_text):
+        return None
+    boundary = actual_text[len(cached_text) : len(cached_text) + 1]
+    if cached_text[-1:].isalnum() and boundary.isalnum():
+        return None
+    remainder = actual_text[len(cached_text) :].strip()
+    if not remainder or _ONLY_PUNCTUATION.fullmatch(remainder):
+        return ""
+    return remainder.lstrip(" ,;:—–-").strip()
+
+
+def _normalized_text(text: str) -> str:
+    return " ".join((text or "").split())
+
+
+def _normalized_speaker(speaker: str | None) -> str:
+    return (speaker or "").strip()
+
+
+def _normalized_language(language: str | None) -> str:
+    return (language or "en").strip().casefold()
+
+
+def _stable_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: _json_safe(value)
         for key, value in kwargs.items()
         if key in _CACHE_KEY_KWARGS
     }
+
+
+def _stream_key(
+    text: str,
+    speaker: str,
+    language: str,
+    stable_kwargs: dict[str, Any],
+) -> str:
     payload = {
-        "text": " ".join((text or "").split()),
-        "speaker": (speaker or "").strip(),
-        "language": (language or "en").strip().casefold(),
-        "kwargs": _json_safe(stable_kwargs),
+        "text": text,
+        "speaker": speaker,
+        "language": language,
+        "kwargs": stable_kwargs,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
