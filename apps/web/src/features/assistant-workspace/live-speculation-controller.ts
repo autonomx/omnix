@@ -233,6 +233,9 @@ export function initializeLiveSpeculationController(): () => void {
     segmentSpeculations(detail.segmentId, detail.sourceSequence)
       .filter((active) => active !== accepted)
       .forEach((active) => cancelSpeculation(active, 'final_hypothesis_not_selected'));
+    const speculativeTtsRestarted = Boolean(
+      accepted.prefetchedClause && !accepted.prefetchStarted,
+    );
     if (accepted.prefetchedClause && !accepted.prefetchStarted) {
       startSpeculativeTtsPrefetch(accepted, accepted.prefetchedClause);
     }
@@ -245,9 +248,7 @@ export function initializeLiveSpeculationController(): () => void {
       finalChars: finalText.length,
       retainedHypotheses: matching.length,
       speculativeTtsStarted: accepted.prefetchStarted,
-      speculativeTtsRestarted: Boolean(
-        accepted.prefetchedClause && accepted.prefetchStarted,
-      ),
+      speculativeTtsRestarted,
     });
     notify(accepted);
   };
@@ -550,7 +551,13 @@ function clearFirstClauseTimer(active: ActiveSpeculation): void {
 }
 
 function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string): void {
-  if (active.prefetchStarted || !active.generationId || !clause.trim()) return;
+  const newest = newestSegmentSpeculation(active.segmentId, active.sourceSequence);
+  if (
+    active.prefetchStarted
+    || !active.generationId
+    || !clause.trim()
+    || (newest !== active && !active.finalText)
+  ) return;
   active.prefetchStarted = true;
   active.prefetchAcceptPromise = null;
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
