@@ -1,4 +1,8 @@
 import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+import {
+  LIVE_VOICE_TURN_TIMELINE_EVENT,
+  type LiveVoiceTurnTimelineDetail,
+} from './live-voice-turn-coordinator';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
@@ -8,6 +12,7 @@ const SCENARIO_KEY = 'omnix.liveCall.releaseScenario';
 export const LIVE_VOICE_RELEASE_OBSERVATION_EVENT = 'omnix:live-voice-release-observation';
 
 export type LiveVoiceLatencyMetric =
+  | 'speech_end_to_first_playback_ms'
   | 'stt_finalize_ms'
   | 'final_to_response_open_ms'
   | 'response_open_to_first_token_ms'
@@ -51,6 +56,7 @@ type QualityDetail = {
 };
 
 type ReleaseState = {
+  speechEndedAt: number | null;
   sttRequestedAt: number | null;
   sttFinalAt: number | null;
   responseOpenedAt: number | null;
@@ -77,6 +83,7 @@ export function initializeLiveVoiceReleaseObserver(): void {
   window.addEventListener(DIAGNOSTIC_EVENT, handleDiagnosticEvent);
   window.addEventListener(INTERRUPT_EVENT, handleInterruption);
   window.addEventListener(QUALITY_EVENT, handleQualityEvent);
+  window.addEventListener(LIVE_VOICE_TURN_TIMELINE_EVENT, handleTurnTimeline);
 }
 
 export function recordLiveVoiceReleaseQuality(
@@ -96,14 +103,30 @@ export function resetLiveVoiceReleaseObserver(): void {
   state = emptyState();
 }
 
+function handleTurnTimeline(event: Event): void {
+  const detail = (event as CustomEvent<LiveVoiceTurnTimelineDetail>).detail;
+  if (!detail?.turnId || detail.event !== 'speech_ended') return;
+  if (state.turnId !== null && state.turnId !== detail.turnId) {
+    state = { ...emptyState(), turnId: detail.turnId };
+  } else {
+    state.turnId = detail.turnId;
+  }
+  if (state.speechEndedAt === null) state.speechEndedAt = detail.atMs;
+}
+
 function handlePerfEvent(event: Event): void {
   const detail = (event as CustomEvent<PerfDetail>).detail ?? {};
   const stage = typeof detail.stage === 'string' ? detail.stage : '';
   const now = performance.now();
   const incomingTurnId = normalizedTurnId(detail.turnId);
   if (stage === 'stt_final_requested') {
+    const preserveSpeechEnd = incomingTurnId !== null
+      && state.turnId === incomingTurnId
+      ? state.speechEndedAt
+      : null;
     state = {
       ...emptyState(),
+      speechEndedAt: preserveSpeechEnd,
       sttRequestedAt: now,
       turnId: incomingTurnId,
     };
@@ -183,6 +206,7 @@ function handleDiagnosticEvent(event: Event): void {
     && playbackMatchesFirstPcm(detail)
   ) {
     state.firstPlaybackAt = now;
+    recordLatency('speech_end_to_first_playback_ms', elapsed(state.speechEndedAt, now));
     recordLatency('first_pcm_to_first_playback_ms', elapsed(state.firstPcmAt, now));
     recordLatency('first_token_to_first_playback_ms', elapsed(state.firstTokenAt, now));
     recordLatency('final_to_first_playback_ms', elapsed(state.sttFinalAt, now));
@@ -315,6 +339,7 @@ function isQualityMetric(value: unknown): value is LiveVoiceQualityMetric {
 
 function emptyState(): ReleaseState {
   return {
+    speechEndedAt: null,
     sttRequestedAt: null,
     sttFinalAt: null,
     responseOpenedAt: null,
