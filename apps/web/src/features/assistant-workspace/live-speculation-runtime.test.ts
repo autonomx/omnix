@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
+  LIVE_STT_SPECULATION_FINAL_EVENT,
+  LIVE_STT_SPECULATION_PARTIAL_EVENT,
+} from './live-stt-authority-controller';
+import {
   initializeLiveSpeculationRuntime,
   liveSubmissionRequestMatches,
 } from './live-speculation-runtime';
@@ -64,6 +69,50 @@ describe('live speculation runtime routing', () => {
       expect(order).toEqual(['audio', 'application']);
       expect(applicationFetch).toHaveBeenCalledOnce();
     } finally {
+      cleanup();
+      window.fetch = priorFetch;
+    }
+  });
+
+  it('suppresses stale partial and candidate events after authoritative final', () => {
+    const priorFetch = window.fetch;
+    window.fetch = vi.fn(async () => new Response('ok')) as typeof window.fetch;
+    const cleanup = initializeLiveSpeculationRuntime();
+    const partialListener = vi.fn();
+    const candidateListener = vi.fn();
+    window.addEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, partialListener);
+    window.addEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, candidateListener);
+    const finalized = {
+      chatSessionId: 'chat:one',
+      segmentId: 'segment-final',
+      sourceSequence: 7,
+      text: 'Final transcript',
+    };
+
+    try {
+      window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_FINAL_EVENT, {
+        detail: finalized,
+      }));
+      window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
+        detail: { ...finalized, text: 'Stale corrected partial' },
+      }));
+      window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_CANDIDATE_EVENT, {
+        detail: { ...finalized, text: 'Stale corrected partial', probability: 0.99 },
+      }));
+      window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
+        detail: {
+          chatSessionId: 'chat:one',
+          segmentId: 'segment-next',
+          sourceSequence: 8,
+          text: 'Fresh partial',
+        },
+      }));
+
+      expect(partialListener).toHaveBeenCalledOnce();
+      expect(candidateListener).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, partialListener);
+      window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, candidateListener);
       cleanup();
       window.fetch = priorFetch;
     }
