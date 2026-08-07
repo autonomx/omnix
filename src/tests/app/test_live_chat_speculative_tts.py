@@ -4,8 +4,8 @@ import threading
 from typing import Any
 
 from app.gateway.live_chat_speculative_tts import (
-    _PrefetchingProviderProxy,
     _accept_entry,
+    _PrefetchingProviderProxy,
     _start_prefetch,
     _stream_kwargs,
     clear_speculative_tts_cache,
