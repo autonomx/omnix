@@ -29,6 +29,7 @@ MAX_SEGMENT_BYTES = int(KYUTAI_SAMPLE_RATE * 2 * MAX_SEGMENT_AUDIO_MS / 1_000)
 MAX_AUDIO_FRAME_MS = 2_000
 MAX_AUDIO_FRAME_BYTES = int(KYUTAI_SAMPLE_RATE * 2 * MAX_AUDIO_FRAME_MS / 1_000)
 MAX_QUEUED_ACTIONS = 512
+DEFAULT_SPECULATION_CANDIDATE_THRESHOLD = 0.35
 
 
 @dataclass
@@ -185,7 +186,15 @@ def install_kyutai_stt_websocket(
         action_queue: asyncio.Queue[KyutaiAction | None] = asyncio.Queue(MAX_QUEUED_ACTIONS)
         current_segment_id: str | None = None
         closed = False
-        endpoint_candidate_threshold = float(os.environ.get("KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD", "0.75"))
+        # Speculative candidate emission is deliberately independent from the
+        # browser's authoritative commit threshold. Candidates may be early;
+        # only the browser endpoint-fusion policy is allowed to commit a turn.
+        endpoint_candidate_threshold = float(
+            os.environ.get(
+                "KYUTAI_SPECULATION_CANDIDATE_THRESHOLD",
+                str(DEFAULT_SPECULATION_CANDIDATE_THRESHOLD),
+            )
+        )
 
         async def forward_events() -> None:
             nonlocal closed
