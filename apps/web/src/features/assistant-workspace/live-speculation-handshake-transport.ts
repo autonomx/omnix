@@ -24,6 +24,10 @@ type SpeculationStartPayload = Record<string, unknown> & {
   model_id?: string | null;
 };
 
+type PriorityRequestInit = RequestInit & {
+  priority?: 'high' | 'low' | 'auto';
+};
+
 let previousFetch: typeof window.fetch | null = null;
 
 export function initializeLiveSpeculationHandshakeTransport(): () => void {
@@ -200,7 +204,7 @@ async function openAndPipeSpeculation(
   const inlineStartedAt = now();
   const inlineResponse = await fetchImpl(
     `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/start-stream`,
-    {
+    highPriorityRequest({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -208,7 +212,7 @@ async function openAndPipeSpeculation(
       },
       body: JSON.stringify({ ...payload, generation_id: clientGenerationId }),
       signal,
-    },
+    }),
   );
   if (
     inlineResponse.ok
@@ -239,12 +243,12 @@ async function openAndPipeSpeculation(
   const handshakeStartedAt = now();
   const startResponse = await fetchImpl(
     `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/start`,
-    {
+    highPriorityRequest({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal,
-    },
+    }),
   );
   if (!startResponse.ok) {
     throw new Error(`Speculation handshake failed with status ${startResponse.status}.`);
@@ -272,11 +276,11 @@ async function openAndPipeSpeculation(
   });
   const generationResponse = await fetchImpl(
     `/api/live/speculation/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(handshake.generation_id)}/stream`,
-    {
+    highPriorityRequest({
       method: 'POST',
       headers: { Accept: 'text/event-stream' },
       signal,
-    },
+    }),
   );
   if (!generationResponse.ok || !generationResponse.body) {
     throw new Error(`Speculation generation stream failed with status ${generationResponse.status}.`);
@@ -319,6 +323,10 @@ async function requestGenerationCancellation(
   } catch {
     // Cancellation is best effort; the server also cancels on stream detach/TTL.
   }
+}
+
+function highPriorityRequest(init: RequestInit): PriorityRequestInit {
+  return { ...init, priority: 'high' };
 }
 
 async function requestBodyText(
