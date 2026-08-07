@@ -13,6 +13,8 @@ const INSTALLED_KEY = '__omnixLiveSpeculationInstalled';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const CORRECTION_PATTERN = /(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)/i;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
+const SHORT_COMPLETE_PATTERN = /^(?:yes|no|why|how|when|where|who|what|stop|continue|repeat|explain|start|cancel|hello|hi|hey|thanks)[?!.…]*$/i;
+const SINGLE_WORD_SPECULATION_MIN_PROBABILITY = 0.88;
 const MAX_ACTIVE_HYPOTHESES = 2;
 const MIN_EXTENSION_WORDS = 2;
 const SPECULATIVE_TTS_ACCEPT_WAIT_MS = 80;
@@ -105,7 +107,20 @@ export function normalizeSpeculationWords(text: string): string[] {
 }
 
 export function transcriptIsSpeculationSafe(text: string): boolean {
-  return normalizeSpeculationWords(text).length >= 2 && !CORRECTION_PATTERN.test(text);
+  if (CORRECTION_PATTERN.test(text)) return false;
+  const words = normalizeSpeculationWords(text);
+  return words.length >= 2
+    || (words.length === 1 && SHORT_COMPLETE_PATTERN.test(text.trim()));
+}
+
+export function speculationCandidateCanStart(
+  text: string,
+  endpointProbability = 0,
+): boolean {
+  if (!transcriptIsSpeculationSafe(text)) return false;
+  const words = normalizeSpeculationWords(text);
+  return words.length >= 2
+    || endpointProbability >= SINGLE_WORD_SPECULATION_MIN_PROBABILITY;
 }
 
 export function transcriptsCanReuseSpeculation(candidate: string, final: string): boolean {
@@ -126,7 +141,7 @@ export function shouldStartExtendedHypothesis(
   nextCandidate: string,
   endpointProbability = 0,
 ): boolean {
-  if (!transcriptIsSpeculationSafe(nextCandidate)) return false;
+  if (!speculationCandidateCanStart(nextCandidate, endpointProbability)) return false;
   if (!transcriptExtendsSpeculation(previousCandidate, nextCandidate)) return true;
   const previousWords = normalizeSpeculationWords(previousCandidate).length;
   const nextWords = normalizeSpeculationWords(nextCandidate).length;
@@ -196,7 +211,7 @@ export function initializeLiveSpeculationController(): () => void {
     if (!key || !detail.chatSessionId || !detail.segmentId
       || typeof detail.sourceSequence !== 'number') return;
     const candidateText = partials.get(key)?.trim() || detail.text?.trim() || '';
-    if (!transcriptIsSpeculationSafe(candidateText)) return;
+    if (!speculationCandidateCanStart(candidateText, detail.probability ?? 0)) return;
     const latest = newestSegmentSpeculation(detail.segmentId, detail.sourceSequence);
     if (latest && normalizeComparable(latest.candidateText) === normalizeComparable(candidateText)) {
       latest.endpointProbability = detail.probability;
@@ -233,6 +248,10 @@ export function initializeLiveSpeculationController(): () => void {
     segmentSpeculations(detail.segmentId, detail.sourceSequence)
       .filter((active) => active !== accepted)
       .forEach((active) => cancelSpeculation(active, 'final_hypothesis_not_selected'));
+    if (!accepted.prefetchedClause) {
+      const flushed = accepted.firstClause.flush();
+      if (flushed.length) accepted.prefetchedClause = flushed[0].text;
+    }
     const speculativeTtsRestarted = Boolean(
       accepted.prefetchedClause && !accepted.prefetchStarted,
     );
@@ -249,6 +268,7 @@ export function initializeLiveSpeculationController(): () => void {
       retainedHypotheses: matching.length,
       speculativeTtsStarted: accepted.prefetchStarted,
       speculativeTtsRestarted,
+      speculativeTtsClauseChars: accepted.prefetchedClause?.length ?? 0,
     });
     notify(accepted);
   };
@@ -357,7 +377,7 @@ function startHypothesis(
   probability: number | undefined,
   trigger: string,
 ): void {
-  if (!speculationEnabled() || !transcriptIsSpeculationSafe(candidateText)) return;
+  if (!speculationEnabled() || !speculationCandidateCanStart(candidateText, probability ?? 0)) return;
   const duplicate = segmentSpeculations(segmentId, sourceSequence).find(
     (active) => normalizeComparable(active.candidateText) === normalizeComparable(candidateText),
   );
@@ -438,7 +458,12 @@ function createSpeculation(
     error: null,
     reused: false,
     acceptBody: null,
-    firstClause: new StableClauseAccumulator(),
+    firstClause: new StableClauseAccumulator({
+      firstClauseMinimumCharacters: 4,
+      firstClauseStableLookaheadCharacters: 2,
+      firstClauseMaximumCharacters: 40,
+      firstClauseDeadlineMs: 20,
+    }),
     firstClauseTimer: null,
     prefetchedClause: null,
     prefetchStarted: false,
