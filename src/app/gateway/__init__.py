@@ -1,7 +1,11 @@
 """Thin FastAPI gateway foundation for the Omnix web app redesign."""
 from __future__ import annotations
 
+from functools import wraps
 from typing import Any
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from . import tts_live_call_websocket as _tts_live_call_websocket
 from .assistant_context_routes import install_assistant_context_route_hook
@@ -79,6 +83,41 @@ from .voice_library_routes import install_voice_library_route_hook
 
 __all__ = ["app", "create_gateway_app"]
 
+_LOCAL_BROWSER_CORS_HOOK = "_omnix_local_browser_cors_hook_installed"
+_LOCAL_BROWSER_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+)
+
+
+def _install_local_browser_cors_hook() -> None:
+    """Allow the local Vite UI to reach the gateway without the dev proxy."""
+    if getattr(FastAPI, _LOCAL_BROWSER_CORS_HOOK, False):
+        return
+    original_init = FastAPI.__init__
+
+    @wraps(original_init)
+    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
+        original_init(self, *args, **kwargs)
+        title = kwargs.get("title")
+        if title is None and args:
+            title = args[0]
+        if title != "Omnix Web Gateway":
+            return
+        self.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(_LOCAL_BROWSER_ORIGINS),
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["*"],
+            max_age=86_400,
+        )
+
+    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
+    setattr(FastAPI, _LOCAL_BROWSER_CORS_HOOK, True)
+
 
 def _install_required_rpg_turn_hooks() -> None:
     from app.rpg.session import interactive_first_call_runtime
@@ -102,6 +141,7 @@ def _install_required_rpg_turn_hooks() -> None:
     install_rpg_turn_job_mirror_hook()
 
 
+_install_local_browser_cors_hook()
 install_assistant_context_route_hook()
 install_research_mode_route_hook()
 install_rpg_debug_route_hook()
