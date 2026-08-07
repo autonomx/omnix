@@ -138,12 +138,15 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
     const probability = numberValue(detail?.probability);
     if (!segmentId || sourceSequence === null || probability === null) return;
 
+    // Never combine a score for one Kyutai segment with transcript state from
+    // another segment. The controller forwards authoritative STT partials with
+    // the same segment/sequence identity; wait for that exact text if needed.
     const key = `${segmentId}:${sourceSequence}`;
     const cachedPartial = partialBySegment.get(key);
-    const conversation = liveConversationStore.getState();
-    const sessionId = cachedPartial?.chatSessionId || conversation.sessionId;
-    const text = (cachedPartial?.text || conversation.transcript.partial).trim();
-    if (!sessionId || !earlySpeculationCandidateEligible(probability, text)) return;
+    if (!cachedPartial) return;
+    const sessionId = cachedPartial.chatSessionId;
+    const text = cachedPartial.text.trim();
+    if (!earlySpeculationCandidateEligible(probability, text)) return;
 
     const fingerprint = normalizedWords(text);
     const now = performance.now();
