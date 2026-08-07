@@ -14,12 +14,16 @@ from app.providers.kyutai_authority import (
     parse_authority_mode,
 )
 from app.providers.kyutai_live_stt import KyutaiLiveSttProvider
+from app.providers.kyutai_stt_priority_transport import (
+    install_kyutai_stt_priority_transport,
+)
 from app.providers.kyutai_stt_websocket import install_kyutai_stt_websocket
 from app.providers.kyutai_transcript_normalization import (
     install_kyutai_transcript_normalization,
 )
 
 install_kyutai_transcript_normalization()
+install_kyutai_stt_priority_transport()
 
 app = FastAPI(title="Omnix Kyutai Live STT", version="1.0")
 origins = [
