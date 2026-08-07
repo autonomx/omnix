@@ -19,15 +19,6 @@ from app.providers.kyutai_transcript_normalization import (
     install_kyutai_transcript_normalization,
 )
 
-# Endpoint candidates are hints, not commits. Expose them below the 0.75
-# authoritative commit threshold so the browser can start private LLM/TTS work
-# while its endpoint-fusion policy still decides whether to continue or commit.
-DEFAULT_ENDPOINT_CANDIDATE_THRESHOLD = 0.35
-os.environ.setdefault(
-    "KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD",
-    str(DEFAULT_ENDPOINT_CANDIDATE_THRESHOLD),
-)
-
 install_kyutai_transcript_normalization()
 
 app = FastAPI(title="Omnix Kyutai Live STT", version="1.0")
@@ -144,10 +135,6 @@ def main() -> None:
     print(f"[STT] Starting Kyutai adapter on http://0.0.0.0:{port}")
     print(f"[STT] Upstream Kyutai service: {provider.base_url}")
     print(f"[STT] Upstream Kyutai path: {provider.path}")
-    print(
-        "[STT] Endpoint candidate threshold: "
-        f"{os.environ.get('KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD')}"
-    )
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 
