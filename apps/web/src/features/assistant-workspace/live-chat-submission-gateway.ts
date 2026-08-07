@@ -108,7 +108,9 @@ export class LiveChatSubmissionGateway {
         // from a superseded turn cannot poison the new submission.
         if (!submissionFetchObserved) accept();
       },
-      (error) => reject(error),
+      (error) => {
+        if (!submissionFetchObserved) reject(error);
+      },
     );
 
     await acceptance;
