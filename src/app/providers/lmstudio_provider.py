@@ -335,6 +335,8 @@ class LMStudioProvider(BaseProvider):
             )
         except Exception as exc:
             raise ConnectionError(f"Stream error: {exc}") from exc
+        finally:
+            response.close()
 
     def get_models(self) -> List[ModelInfo]:
         try:
