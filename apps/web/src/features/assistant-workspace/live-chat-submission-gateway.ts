@@ -8,6 +8,16 @@ export type LiveChatSubmissionInput = {
 };
 
 export type LiveChatSubmissionHandler = (input: LiveChatSubmissionInput) => Promise<void>;
+export type LiveChatSubmissionFetchNext = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
+export type LiveChatSubmissionFetchInterceptor = (
+  submission: LiveChatSubmissionInput,
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  next: LiveChatSubmissionFetchNext,
+) => Promise<Response>;
 
 type LiveCallDiagnosticDetail = {
   event?: string;
@@ -20,11 +30,19 @@ const CHAT_STREAM_FAILED_EVENT = 'chat_stream_failed';
 
 export class LiveChatSubmissionGateway {
   private handler: LiveChatSubmissionHandler | null = null;
+  private fetchInterceptor: LiveChatSubmissionFetchInterceptor | null = null;
 
   register(handler: LiveChatSubmissionHandler): () => void {
     this.handler = handler;
     return () => {
       if (this.handler === handler) this.handler = null;
+    };
+  }
+
+  registerFetchInterceptor(interceptor: LiveChatSubmissionFetchInterceptor): () => void {
+    this.fetchInterceptor = interceptor;
+    return () => {
+      if (this.fetchInterceptor === interceptor) this.fetchInterceptor = null;
     };
   }
 
@@ -68,7 +86,7 @@ export class LiveChatSubmissionGateway {
     window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, observeDiagnostic);
     let completion: Promise<void>;
     try {
-      completion = Promise.resolve(handler(input));
+      completion = this.invokeHandler(input, handler);
     } catch (error) {
       completion = Promise.reject(error);
     }
@@ -85,6 +103,30 @@ export class LiveChatSubmissionGateway {
       await acceptance;
     } finally {
       window.removeEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, observeDiagnostic);
+    }
+  }
+
+  private invokeHandler(
+    input: LiveChatSubmissionInput,
+    handler: LiveChatSubmissionHandler,
+  ): Promise<void> {
+    const interceptor = this.fetchInterceptor;
+    if (!interceptor || typeof window.fetch !== 'function') {
+      return Promise.resolve(handler(input));
+    }
+
+    // The workspace handler starts its chat fetch synchronously before its first
+    // await. Scope interception to that call only, instead of replacing
+    // window.fetch for the lifetime of the application.
+    const originalFetch = window.fetch;
+    const next: LiveChatSubmissionFetchNext = originalFetch.bind(window);
+    window.fetch = ((request: RequestInfo | URL, init?: RequestInit) => (
+      interceptor(input, request, init, next)
+    )) as typeof window.fetch;
+    try {
+      return Promise.resolve(handler(input));
+    } finally {
+      window.fetch = originalFetch;
     }
   }
 }
