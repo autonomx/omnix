@@ -82,4 +82,29 @@ describe('live chat submission gateway', () => {
 
     await expect(gateway.submit(input)).resolves.toBeUndefined();
   });
+
+  it('scopes a fetch interceptor to the synchronous submission handoff', async () => {
+    const gateway = new LiveChatSubmissionGateway();
+    const originalFetch = window.fetch;
+    const fallback = vi.fn(async () => new Response('fallback'));
+    window.fetch = fallback as typeof window.fetch;
+    const intercepted = vi.fn(async (_submission, request) => (
+      new Response(`intercepted:${String(request)}`)
+    ));
+    gateway.registerFetchInterceptor(intercepted);
+    let responseText = '';
+    gateway.register(async () => {
+      responseText = await (await window.fetch('/api/chat/sessions/chat:test/messages/stream')).text();
+    });
+
+    try {
+      await gateway.submit(input);
+      expect(responseText).toBe('intercepted:/api/chat/sessions/chat:test/messages/stream');
+      expect(intercepted).toHaveBeenCalledOnce();
+      expect(fallback).not.toHaveBeenCalled();
+      expect(window.fetch).toBe(fallback);
+    } finally {
+      window.fetch = originalFetch;
+    }
+  });
 });
