@@ -240,6 +240,8 @@ def live_voice_tts_scheduler() -> PriorityTtsScheduler:
 
 def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
     """Return an optional separately instantiated provider for the live lane."""
+    global _DEDICATED_TTS_KEY, _DEDICATED_TTS_PROVIDER, _DEDICATED_TTS_PROVIDER_NAME
+
     config = live_voice_execution_lane_config()
     provider_name = config.tts_provider_name
     if not config.dedicated_tts or not provider_name:
@@ -263,7 +265,6 @@ def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
         sort_keys=True,
         default=str,
     )
-    global _DEDICATED_TTS_KEY, _DEDICATED_TTS_PROVIDER, _DEDICATED_TTS_PROVIDER_NAME
     with _DEDICATED_TTS_LOCK:
         if (
             _DEDICATED_TTS_PROVIDER is not None
