@@ -131,6 +131,51 @@ def test_stale_accepted_prefetch_cannot_be_claimed_by_a_later_turn() -> None:
         _reset()
 
 
+def test_prefetch_route_uses_warmed_provider_and_reports_hot_path_timing(monkeypatch) -> None:
+    _reset()
+    provider = _BlockingProvider()
+    lookup_calls = 0
+    logs: list[tuple[str, dict[str, Any]]] = []
+
+    def cached_provider() -> _BlockingProvider:
+        nonlocal lookup_calls
+        lookup_calls += 1
+        return provider
+
+    monkeypatch.setattr(speculative_tts, "get_cached_live_tts_provider", cached_provider)
+    monkeypatch.setattr(
+        speculative_tts,
+        "stream_log",
+        lambda _stream_id, _source, event, **fields: logs.append((event, fields)),
+    )
+    app = FastAPI()
+    register_live_voice_execution_lane_routes(app)
+
+    try:
+        response = TestClient(app).post(
+            "/api/live/speculation/tts-prefetch",
+            json={
+                "generation_id": "spec-route-hot-path",
+                "request": _request("Prefetch this immediately.").model_dump(mode="json"),
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["execution_lane"] == "shared"
+        assert lookup_calls == 1
+        started = next(
+            fields
+            for event, fields in logs
+            if event == "speculative_tts_prefetch_started"
+        )
+        assert started["cached_provider_lookup_ms"] >= 0
+        assert started["lane_provider_resolution_ms"] >= 0
+        assert started["route_to_prefetch_thread_ms"] >= 0
+    finally:
+        provider.allow_finish.set()
+        _reset()
+
+
 def test_execution_lane_status_reports_dedicated_configuration(monkeypatch) -> None:
     _reset()
     monkeypatch.setenv("OMNIX_LIVE_VOICE_EXECUTION_MODE", "dedicated")
