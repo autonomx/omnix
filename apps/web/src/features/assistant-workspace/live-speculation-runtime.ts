@@ -1,7 +1,4 @@
-import {
-  liveChatSubmissionGateway,
-  type LiveChatSubmissionInput,
-} from './live-chat-submission-gateway';
+import type { LiveChatSubmissionInput } from './live-chat-submission-gateway';
 import { initializeLiveSpeculationController } from './live-speculation-controller';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
@@ -29,11 +26,19 @@ export function liveSubmissionRequestMatches(
 }
 
 /**
- * Install the existing speculation engine behind the explicit live submission
- * gateway. The legacy controller still owns hypothesis/cancellation semantics,
- * but its fetch interception is captured and immediately removed from the
- * application-wide window. It is invoked only for the synchronous chat request
- * started by a coordinated live-voice submission.
+ * Install speculation as the inner chat-stream transport.
+ *
+ * The unified live-audio controller is initialized later in main.tsx and wraps
+ * this transport. That ordering is intentional: every normal or synthetic
+ * speculative chat response must pass through unified audio before reaching the
+ * application so its SSE text can be teed into the TTS phrase pipeline.
+ *
+ * A previous partial migration registered speculation as a scoped submission
+ * interceptor while unified audio remained a window.fetch middleware. The
+ * scoped interceptor then returned speculative/fallback responses before the
+ * audio middleware could observe them, producing valid LLM text with zero TTS
+ * phrases. Keep one composed chain until both middlewares are migrated together
+ * to an explicit transport stack.
  */
 export function initializeLiveSpeculationRuntime(): () => void {
   if (typeof window === 'undefined') return () => undefined;
@@ -41,24 +46,10 @@ export function initializeLiveSpeculationRuntime(): () => void {
   if (liveWindow.__omnixLiveSpeculationRuntimeInstalled) return () => undefined;
   liveWindow.__omnixLiveSpeculationRuntimeInstalled = true;
 
-  const applicationFetch = window.fetch;
   const cleanupController = initializeLiveSpeculationController();
-  const speculationFetch = window.fetch.bind(window);
-  window.fetch = applicationFetch;
-
-  const unregisterInterceptor = liveChatSubmissionGateway.registerFetchInterceptor(
-    (submission, input, init, next) => {
-      if (!liveSubmissionRequestMatches(submission, input, init)) {
-        return next(input, init);
-      }
-      return speculationFetch(input, init);
-    },
-  );
 
   return () => {
-    unregisterInterceptor();
     cleanupController();
-    window.fetch = applicationFetch;
     liveWindow.__omnixLiveSpeculationRuntimeInstalled = false;
   };
 }
