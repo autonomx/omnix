@@ -113,6 +113,29 @@ describe('live chat submission gateway', () => {
     }
   });
 
+  it('ignores a handler failure after its exact chat fetch has started', async () => {
+    const gateway = new LiveChatSubmissionGateway();
+    const originalFetch = window.fetch;
+    let resolveFetch!: (response: Response) => void;
+    const pendingFetch = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    window.fetch = vi.fn(() => pendingFetch) as typeof window.fetch;
+    gateway.register(async () => {
+      void window.fetch('/api/chat/sessions/chat%3Atest/messages/stream', { method: 'POST' });
+      throw new Error('Speculation accept failed with status 409.');
+    });
+
+    try {
+      const submission = gateway.submit(input);
+      await Promise.resolve();
+      resolveFetch(new Response('ok', { status: 200 }));
+      await expect(submission).resolves.toBeUndefined();
+    } finally {
+      window.fetch = originalFetch;
+    }
+  });
+
   it('ignores a superseded turn diagnostic while the new submission is waiting for its own fetch', async () => {
     const gateway = new LiveChatSubmissionGateway();
     const originalFetch = window.fetch;
