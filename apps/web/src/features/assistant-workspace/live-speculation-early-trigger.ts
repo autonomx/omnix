@@ -99,8 +99,9 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
       detail?.sourceSequence ?? detail?.source_sequence,
     );
     const probability = numberValue(detail?.probability);
-    const sessionId = liveConversationStore.getState().sessionId;
-    const text = currentDraftTranscript();
+    const conversation = liveConversationStore.getState();
+    const sessionId = conversation.sessionId;
+    const text = conversation.transcript.partial.trim();
     if (!segmentId || sourceSequence === null || probability === null || !sessionId) return;
     if (!earlySpeculationCandidateEligible(probability, text)) return;
 
@@ -160,20 +161,6 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
     authoritativeKyutai = false;
     liveWindow[INSTALLED_KEY] = false;
   };
-}
-
-function currentDraftTranscript(): string {
-  const draft = document.querySelector<HTMLElement>(
-    '.assistant-voice-transcript [data-live-voice-id="live-voice-draft"]',
-  );
-  if (draft) {
-    const textNode = Array.from(draft.childNodes).find(
-      (node) => node.nodeType === Node.TEXT_NODE,
-    );
-    const text = textNode?.textContent?.trim() ?? '';
-    if (text) return text;
-  }
-  return liveConversationStore.getState().transcript.partial.trim();
 }
 
 function normalizedWords(text: string): string {
