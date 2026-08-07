@@ -25,7 +25,6 @@ from .live_chat_prompt_dependency_stages import (
 from .live_chat_prompt_window import install_live_chat_prompt_window_hook
 from .live_chat_provider_metrics import install_live_chat_provider_metrics_hook
 from .live_chat_provider_routing import install_live_chat_provider_routing_hook
-from .live_chat_speculative_tts import install_live_speculative_tts_prefetch_hook
 from .live_chat_stream_retry import install_live_chat_stream_retry_hook
 from .live_material_context import install_live_material_context_hook
 from .live_observation_generation import install_live_observation_generation_hook
@@ -33,6 +32,7 @@ from .live_sse_transport import install_live_sse_transport_hook
 from .live_voice_cue_asset_routes import install_live_voice_cue_asset_hook
 from .live_voice_diagnostics_routes import install_live_voice_diagnostics_hook
 from .live_voice_runtime_offload import install_live_voice_runtime_offload_hook
+from .live_voice_speculative_tts import install_live_voice_execution_lane_hook
 from .live_voice_spoken_style import install_live_voice_spoken_style_hook
 from .lmstudio_loaded_model_resolution import (
     install_lmstudio_loaded_model_resolution_hook,
@@ -148,7 +148,7 @@ install_tts_pcm_websocket_hook()
 install_tts_live_call_pcm_diagnostics_hook()
 install_tts_live_call_startup_frame_policy()
 install_tts_live_call_websocket_hook()
-install_live_speculative_tts_prefetch_hook()
+install_live_voice_execution_lane_hook()
 install_voice_job_summary_hook()
 install_voice_library_route_hook()
 install_image_asset_file_hook()
