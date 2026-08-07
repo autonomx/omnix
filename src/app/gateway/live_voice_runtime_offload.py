@@ -20,7 +20,7 @@ _HOOK_SENTINEL = "_omnix_live_voice_runtime_offload_hook_installed"
 _STATE_SENTINEL = "_omnix_live_voice_runtime_offload_registered"
 _DEFAULT_PROVIDER_REFRESH_SECONDS = 5.0
 _DEFAULT_DELIVERY_QUEUE_SIZE = 128
-_PROVIDER_RESOLVER: "CachedTtsProviderResolver | None" = None
+_PROVIDER_RESOLVER: CachedTtsProviderResolver | None = None
 
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
