@@ -38,6 +38,11 @@ TTS_LIVE_CALL_WEBSOCKET_PATH = "/api/tts/live-call/websocket"
 TTS_PCM_FRAME_SAMPLES = 2_400
 FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS = 0.050
 
+# Explicit dependency seam retained for focused tests and alternate gateway
+# composition. Runtime lane selection still happens below; this is not a
+# process-wide provider monkey-patch.
+get_tts_provider = shared.get_tts_provider
+
 
 @dataclass(frozen=True)
 class FrameMessage:
@@ -317,7 +322,7 @@ async def _stream_phrase(
             )
             return
 
-        provider = resolve_live_call_tts_provider(shared.get_tts_provider())
+        provider = resolve_live_call_tts_provider(get_tts_provider())
         if provider is None or not hasattr(provider, "generate_audio_stream"):
             message = "tts_provider_unavailable" if provider is None else "tts_provider_streaming_unavailable"
             stream_log(stream_id, "server", "request_rejected", reason=message)
