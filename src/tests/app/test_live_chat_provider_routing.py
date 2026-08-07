@@ -77,6 +77,7 @@ def test_implicit_turn_overrides_stale_session_provider_and_model(monkeypatch) -
     assert remembered is route
     assert route.provider_explicit is False
     assert route.model_explicit is False
+    assert route.execution_lane == "session"
 
 
 def test_explicit_provider_and_model_routing_is_preserved(monkeypatch) -> None:
@@ -102,6 +103,40 @@ def test_explicit_provider_and_model_routing_is_preserved(monkeypatch) -> None:
     assert remembered is route
     assert route.provider_explicit is True
     assert route.model_explicit is True
+    assert route.execution_lane == "session"
+
+
+def test_live_turn_uses_opt_in_dedicated_provider_and_model(monkeypatch) -> None:
+    monkeypatch.setattr(shared, "load_settings", lambda: {"provider": "lmstudio"})
+    monkeypatch.setenv("OMNIX_LIVE_VOICE_EXECUTION_MODE", "dedicated")
+    monkeypatch.setenv("OMNIX_LIVE_VOICE_PROVIDER_ID", "lmstudio")
+    monkeypatch.setenv("OMNIX_LIVE_VOICE_MODEL_ID", "qwen-live-fast")
+    request = SendChatMessageRequest(
+        content="Hello",
+        user_turn_id="voice-user-turn:one",
+        speech_segment_id="segment-one",
+    )
+
+    routed_request, route = route_chat_request(request)
+
+    assert routed_request.provider_id == "lmstudio"
+    assert routed_request.model_id == "qwen-live-fast"
+    assert route.execution_lane == "dedicated"
+    assert route.provider_explicit is False
+    assert route.model_explicit is False
+
+
+def test_text_turn_does_not_use_dedicated_live_lane(monkeypatch) -> None:
+    monkeypatch.setattr(shared, "load_settings", lambda: {"provider": "lmstudio"})
+    monkeypatch.setenv("OMNIX_LIVE_VOICE_EXECUTION_MODE", "dedicated")
+    monkeypatch.setenv("OMNIX_LIVE_VOICE_MODEL_ID", "qwen-live-fast")
+
+    routed_request, route = route_chat_request(
+        SendChatMessageRequest(content="This is a normal text turn")
+    )
+
+    assert routed_request.model_id is None
+    assert route.execution_lane == "session"
 
 
 def test_empty_configured_provider_falls_back_to_lmstudio(monkeypatch) -> None:
