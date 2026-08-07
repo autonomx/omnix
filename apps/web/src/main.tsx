@@ -52,6 +52,7 @@ import { initializeLiveVoiceCuePackLoader } from './features/assistant-workspace
 import { initializeLiveVoiceDuplexGate } from './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-form-sync';
 import { initializeLiveVoiceController } from './features/assistant-workspace/live-voice-controller';
+import { initializeLiveVoiceTurnCoordinator } from './features/assistant-workspace/live-voice-turn-coordinator';
 import { emitLiveRuntimeProvenance } from './features/assistant-workspace/live-runtime-provenance';
 import './features/assistant-workspace/live-voice-transcript-autoscroll';
 import { initializeLiveVoiceUnifiedAudioController } from './features/assistant-workspace/live-voice-unified-audio-controller';
@@ -82,6 +83,7 @@ installVoiceLibraryFetchDiagnostics();
 initializeLiveConversationStoreBridge();
 initializeLiveSessionCoordinator();
 initializeLiveSttAuthorityController();
+initializeLiveVoiceTurnCoordinator();
 initializeLiveSpeculationDiagnosticsBridge();
 initializeLiveSpeculationEligibilityDiagnostics();
 initializeLiveSpeculationHandshakeTransport();
