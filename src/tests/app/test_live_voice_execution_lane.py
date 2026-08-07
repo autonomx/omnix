@@ -3,11 +3,14 @@ from __future__ import annotations
 import threading
 import time
 
+from app.gateway import live_voice_execution_lane as execution_lane
 from app.gateway.live_voice_execution_lane import (
     PriorityTtsScheduler,
     TtsLanePriority,
     live_voice_execution_lane_config,
+    reset_live_voice_execution_lane_for_tests,
     resolve_live_voice_chat_route,
+    resolve_live_voice_tts_provider,
 )
 
 
@@ -23,6 +26,22 @@ class _BlockingProvider:
             self.speculative_started.set()
             self.release_speculative.wait(timeout=2)
         yield b"\x01\x00", 24_000, {"text": text}
+
+
+class _DedicatedProvider:
+    def start(self):
+        return {"running": True}
+
+
+class _DedicatedRegistry:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.provider = _DedicatedProvider()
+
+    def create_tts_provider(self, _provider_name: str, *, config):
+        self.calls += 1
+        assert isinstance(config, dict)
+        return self.provider
 
 
 def test_dedicated_chat_route_is_opt_in(monkeypatch) -> None:
@@ -49,6 +68,34 @@ def test_session_route_remains_default(monkeypatch) -> None:
         "session-model",
         "session",
     )
+
+
+def test_dedicated_tts_reuses_started_provider_without_reloading_settings(monkeypatch) -> None:
+    reset_live_voice_execution_lane_for_tests()
+    monkeypatch.setenv("OMNIX_LIVE_TTS_DEDICATED", "true")
+    monkeypatch.setenv("OMNIX_LIVE_TTS_PROVIDER_NAME", "faster-qwen3-tts")
+    registry = _DedicatedRegistry()
+    settings_calls = 0
+
+    def load_settings():
+        nonlocal settings_calls
+        settings_calls += 1
+        return {"faster-qwen3-tts": {"device": "cuda"}}
+
+    monkeypatch.setattr(execution_lane.shared, "load_settings", load_settings)
+    monkeypatch.setattr(execution_lane, "get_audio_registry", lambda: registry)
+
+    try:
+        first, first_lane = resolve_live_voice_tts_provider(object())
+        second, second_lane = resolve_live_voice_tts_provider(object())
+
+        assert first is registry.provider
+        assert second is first
+        assert first_lane == second_lane == "dedicated"
+        assert settings_calls == 1
+        assert registry.calls == 1
+    finally:
+        reset_live_voice_execution_lane_for_tests()
 
 
 def test_accepted_tts_preempts_active_speculative_stream() -> None:
