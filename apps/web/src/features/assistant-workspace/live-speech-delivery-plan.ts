@@ -20,6 +20,7 @@ export function createSpeechDeliveryPlan(
   else if (normalized.split(/\s+/).filter(Boolean).length <= 4) speechAct = 'acknowledgement';
 
   const reflective = serious || speechAct === 'reassurance' || speechAct === 'reflection';
+  const onsetStyle = profile.response_onset_style;
   return {
     schema_version: SPEECH_PERFORMANCE_SCHEMA_VERSION,
     speech_act: speechAct,
@@ -30,10 +31,15 @@ export function createSpeechDeliveryPlan(
     clause_pause: serious ? 'long' : speechAct === 'acknowledgement' ? 'short' : 'medium',
     emphasis: normalized.split(/\s+/).map((word) => word.replace(/[.,!?;:]/g, '')).filter((word) => word.length > 1 && word === word.toLocaleUpperCase()).slice(0, 6),
     onset_policy: {
-      desired_perceived_onset_ms: profile.response_onset_style === 'immediate'
-        ? 220
-        : profile.response_onset_style === 'reflective' ? 650 : 450,
-      maximum_additional_delay_ms: profile.response_onset_style === 'immediate' ? 120 : 350,
+      // STT finalization and first-token generation already provide a natural
+      // conversational gap. Keep only a small adaptive/reflective allowance so
+      // accepted speculative text or PCM is not deliberately held for 450 ms.
+      desired_perceived_onset_ms: onsetStyle === 'immediate'
+        ? 0
+        : onsetStyle === 'reflective' ? 280 : 120,
+      maximum_additional_delay_ms: onsetStyle === 'immediate'
+        ? 0
+        : onsetStyle === 'reflective' ? 120 : 80,
     },
     nonverbal_eligibility: {
       breath: profile.emotional_attunement !== 'off',
