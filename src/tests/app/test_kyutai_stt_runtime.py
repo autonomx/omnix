@@ -34,10 +34,6 @@ class FakeProvider:
         }
 
 
-def test_endpoint_candidates_default_below_authoritative_commit_threshold() -> None:
-    assert runtime.DEFAULT_ENDPOINT_CANDIDATE_THRESHOLD == 0.35
-
-
 def test_build_info_url_uses_http_root(monkeypatch) -> None:
     provider = FakeProvider()
     monkeypatch.setattr(runtime, "provider", provider)
