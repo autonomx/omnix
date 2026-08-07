@@ -140,6 +140,75 @@ describe('live voice release observer', () => {
     );
   });
 
+  it('does not treat residual playback as the new turn before its first PCM arrives', () => {
+    now = 100;
+    perf('stt_final_requested', 'voice-turn:fresh');
+    now = 150;
+    perf('stt_final_received', 'voice-turn:fresh', { sttFinalizeMs: 50 });
+    diagnostic('turn_intercepted', 'live-call:voice-turn:fresh');
+    now = 200;
+    diagnostic('llm_text_chunk_received', 'live-call:voice-turn:fresh');
+    now = 220;
+    diagnostic(
+      'worklet_segment_started',
+      'live-call:audio-session:old',
+      'audio_worklet',
+      { output_id: 'old-output', segment_id: 'old-segment', segment_kind: 'speech' },
+    );
+
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'final_to_first_playback_ms' }),
+      'release_observer',
+    );
+
+    now = 250;
+    diagnostic(
+      'phrase_first_frame_received',
+      'live-call:audio-session:fresh',
+      'pcm_session',
+      { output_id: 'fresh-output', segment_id: 'fresh-segment', segment_kind: 'speech' },
+    );
+    now = 270;
+    diagnostic(
+      'worklet_segment_started',
+      'live-call:audio-session:fresh',
+      'audio_worklet',
+      { output_id: 'fresh-output', segment_id: 'fresh-segment', segment_kind: 'speech' },
+    );
+
+    expect(mocks.record).toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({
+        metric_name: 'final_to_first_playback_ms',
+        value_ms: 120,
+        turn_id: 'voice-turn:fresh',
+      }),
+      'release_observer',
+    );
+  });
+
+  it('drops empty STT finals from release latency accounting', () => {
+    now = 100;
+    perf('stt_final_requested', 'voice-turn:empty');
+    now = 160;
+    perf('stt_final_received', 'voice-turn:empty', {
+      sttFinalizeMs: 60,
+      inputChars: 0,
+    });
+
+    expect(mocks.record).toHaveBeenCalledWith('release_metric_skipped', {
+      metric_name: 'turn_latency',
+      reason: 'empty_final_transcript',
+      incoming_turn_id: 'voice-turn:empty',
+    }, 'release_observer');
+    expect(mocks.record).not.toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({ metric_name: 'stt_finalize_ms' }),
+      'release_observer',
+    );
+  });
+
   it('rejects response diagnostics relabelled as a newer rapid turn', () => {
     now = 100;
     perf('stt_final_requested', 'voice-turn:old');
