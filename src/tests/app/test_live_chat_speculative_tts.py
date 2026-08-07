@@ -5,7 +5,9 @@ from typing import Any
 
 from app.gateway.live_chat_speculative_tts import (
     _accept_entry,
+    _cancel_entry,
     _PrefetchingProviderProxy,
+    _PROVIDER_GENERATION_LOCK,
     _start_prefetch,
     _stream_kwargs,
     clear_speculative_tts_cache,
@@ -20,12 +22,14 @@ class BlockingTwoChunkProvider:
     def __init__(self) -> None:
         self.calls = 0
         self.texts: list[str] = []
+        self.generation_started = threading.Event()
         self.first_chunk_ready = threading.Event()
         self.allow_finish = threading.Event()
 
     def generate_audio_stream(self, **kwargs: Any):
         self.calls += 1
         self.texts.append(str(kwargs.get("text") or ""))
+        self.generation_started.set()
         yield b"\x01\x00" * 7_680, 24_000, {"chunk": 0}
         self.first_chunk_ready.set()
         self.allow_finish.wait(timeout=2.0)
@@ -123,6 +127,58 @@ def test_cached_first_clause_can_prefix_a_larger_normal_phrase() -> None:
             "That starts much faster",
             "and keeps the voice natural.",
         ]
+    finally:
+        provider.allow_finish.set()
+        clear_speculative_tts_cache()
+
+
+def test_cancelled_prefetch_does_not_start_after_waiting_for_qwen_lock() -> None:
+    clear_speculative_tts_cache()
+    provider = BlockingTwoChunkProvider()
+    request = live_request(
+        "This hypothesis was superseded.",
+        "chat-speculative-tts-cancel-before-lock",
+    )
+
+    _PROVIDER_GENERATION_LOCK.acquire()
+    try:
+        _start_prefetch("spec-cancel-before-lock", request, provider)
+        assert _cancel_entry("spec-cancel-before-lock") is True
+    finally:
+        _PROVIDER_GENERATION_LOCK.release()
+
+    try:
+        assert not provider.generation_started.wait(timeout=0.25)
+        assert provider.calls == 0
+    finally:
+        provider.allow_finish.set()
+        clear_speculative_tts_cache()
+
+
+def test_aborted_cache_replay_cancels_background_generation() -> None:
+    clear_speculative_tts_cache()
+    provider = BlockingTwoChunkProvider()
+    request = live_request(
+        "Stop this interrupted response.",
+        "chat-speculative-tts-replay-cancel",
+    )
+
+    try:
+        _start_prefetch("spec-replay-cancel", request, provider)
+        assert provider.first_chunk_ready.wait(timeout=1.0)
+        _accept_entry("spec-replay-cancel")
+        replay = _PrefetchingProviderProxy(provider).generate_audio_stream(
+            text=request.text,
+            speaker=request.speaker,
+            language=request.language or "en",
+            **_stream_kwargs(request, provider),
+        )
+
+        assert next(replay)[2]["speculative_tts_cache"] is True
+        replay.close()
+
+        snapshot = speculative_tts_cache_snapshot()
+        assert snapshot[0]["cancelled"] is True
     finally:
         provider.allow_finish.set()
         clear_speculative_tts_cache()
