@@ -1,4 +1,5 @@
 import { liveConversationStore } from './live-conversation-store';
+import { speculationCandidateCanStart } from './live-speculation-controller';
 import {
   LIVE_STT_SPECULATION_CANDIDATE_EVENT,
   LIVE_STT_SPECULATION_PARTIAL_EVENT,
@@ -9,7 +10,7 @@ const INSTALLED_KEY = '__omnixLiveSpeculationEarlyTriggerInstalled';
 const EARLY_SPECULATION_LONG_PROBABILITY = 0.35;
 const EARLY_SPECULATION_MEDIUM_PROBABILITY = 0.45;
 const EARLY_SPECULATION_SHORT_PROBABILITY = 0.6;
-const EARLY_SPECULATION_MIN_WORDS = 2;
+const EARLY_SPECULATION_SINGLE_WORD_PROBABILITY = 0.9;
 const DUPLICATE_SUPPRESSION_MS = 160;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
 
@@ -40,7 +41,15 @@ type LastDispatch = {
 
 export function earlySpeculationProbabilityFloor(text: string): number | null {
   const wordCount = [...text.matchAll(WORD_PATTERN)].length;
-  if (wordCount < EARLY_SPECULATION_MIN_WORDS) return null;
+  if (wordCount === 1) {
+    return speculationCandidateCanStart(
+      text,
+      EARLY_SPECULATION_SINGLE_WORD_PROBABILITY,
+    )
+      ? EARLY_SPECULATION_SINGLE_WORD_PROBABILITY
+      : null;
+  }
+  if (wordCount < 2) return null;
   if (wordCount >= 4) return EARLY_SPECULATION_LONG_PROBABILITY;
   if (wordCount === 3) return EARLY_SPECULATION_MEDIUM_PROBABILITY;
   return EARLY_SPECULATION_SHORT_PROBABILITY;
@@ -53,7 +62,8 @@ export function earlySpeculationCandidateEligible(
   const probabilityFloor = earlySpeculationProbabilityFloor(text);
   return probabilityFloor !== null
     && Number.isFinite(probability)
-    && probability >= probabilityFloor;
+    && probability >= probabilityFloor
+    && speculationCandidateCanStart(text, probability);
 }
 
 export function initializeLiveSpeculationEarlyTrigger(): () => void {
