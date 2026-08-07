@@ -8,7 +8,7 @@ import {
 } from './live-voice-turn-coordinator';
 
 describe('live voice turn coordinator', () => {
-  it('keeps one immutable speech-end timestamp per turn', () => {
+  it('keeps the latest speech-end timestamp before finalization', () => {
     const coordinator = new LiveVoiceTurnCoordinator();
     const events: LiveVoiceTurnTimelineDetail[] = [];
     const listener = (event: Event) => events.push(
@@ -19,13 +19,15 @@ describe('live voice turn coordinator', () => {
     coordinator.speechEnded('voice-turn:one', 100);
     coordinator.speechEnded('voice-turn:one', 150);
     coordinator.finalReceived('voice-turn:one', 220);
+    coordinator.speechEnded('voice-turn:one', 240);
 
     expect(coordinator.snapshot('voice-turn:one')).toMatchObject({
       state: 'committed',
-      speechEndedAt: 100,
+      speechEndedAt: 150,
       finalReceivedAt: 220,
     });
     expect(events.map((event) => event.event)).toEqual([
+      'speech_ended',
       'speech_ended',
       'final_received',
     ]);
