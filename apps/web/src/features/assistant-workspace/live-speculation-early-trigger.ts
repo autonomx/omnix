@@ -18,6 +18,8 @@ type EarlyTriggerWindow = Window & typeof globalThis & {
 type PerfDetail = Record<string, unknown> & {
   stage?: unknown;
   provider?: unknown;
+  selectedProvider?: unknown;
+  authorityEnabled?: unknown;
   segmentId?: unknown;
   sourceSequence?: unknown;
   probability?: unknown;
@@ -44,16 +46,23 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
   if (liveWindow[INSTALLED_KEY]) return () => undefined;
   liveWindow[INSTALLED_KEY] = true;
   const lastBySegment = new Map<string, LastDispatch>();
+  let authoritativeKyutai = false;
 
   const handlePerformance = (event: Event): void => {
     const detail = (event as CustomEvent<PerfDetail>).detail;
     const stage = stringValue(detail?.stage);
+    if (stage === 'stt_authority_selected') {
+      authoritativeKyutai = detail?.authorityEnabled === true
+        && stringValue(detail?.selectedProvider).toLowerCase() === 'kyutai';
+      lastBySegment.clear();
+      return;
+    }
     if (stage === 'stt_final_received') {
       const key = identityKey(detail);
       if (key) lastBySegment.delete(key);
       return;
     }
-    if (stage !== 'stt_endpoint_score') return;
+    if (stage !== 'stt_endpoint_score' || !authoritativeKyutai) return;
     if (stringValue(detail?.provider).toLowerCase() !== 'kyutai') return;
 
     const segmentId = stringValue(detail?.segmentId);
@@ -114,6 +123,7 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
   return () => {
     window.removeEventListener(PERF_EVENT, handlePerformance);
     lastBySegment.clear();
+    authoritativeKyutai = false;
     liveWindow[INSTALLED_KEY] = false;
   };
 }
