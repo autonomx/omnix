@@ -19,11 +19,16 @@ type PerfDetail = Record<string, unknown> & {
   stage?: unknown;
   provider?: unknown;
   selectedProvider?: unknown;
+  selected_provider?: unknown;
   authorityEnabled?: unknown;
+  authority_enabled?: unknown;
   segmentId?: unknown;
+  segment_id?: unknown;
   sourceSequence?: unknown;
+  source_sequence?: unknown;
   probability?: unknown;
   modelTimeMs?: unknown;
+  model_time_ms?: unknown;
 };
 
 type LastDispatch = {
@@ -52,8 +57,11 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
     const detail = (event as CustomEvent<PerfDetail>).detail;
     const stage = stringValue(detail?.stage);
     if (stage === 'stt_authority_selected') {
-      authoritativeKyutai = detail?.authorityEnabled === true
-        && stringValue(detail?.selectedProvider).toLowerCase() === 'kyutai';
+      authoritativeKyutai = booleanValue(
+        detail?.authorityEnabled ?? detail?.authority_enabled,
+      ) && stringValue(
+        detail?.selectedProvider ?? detail?.selected_provider,
+      ).toLowerCase() === 'kyutai';
       lastBySegment.clear();
       return;
     }
@@ -65,8 +73,10 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
     if (stage !== 'stt_endpoint_score' || !authoritativeKyutai) return;
     if (stringValue(detail?.provider).toLowerCase() !== 'kyutai') return;
 
-    const segmentId = stringValue(detail?.segmentId);
-    const sourceSequence = numberValue(detail?.sourceSequence);
+    const segmentId = stringValue(detail?.segmentId ?? detail?.segment_id);
+    const sourceSequence = numberValue(
+      detail?.sourceSequence ?? detail?.source_sequence,
+    );
     const probability = numberValue(detail?.probability);
     const sessionId = liveConversationStore.getState().sessionId;
     const text = currentDraftTranscript();
@@ -102,7 +112,9 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
       detail: {
         ...candidate,
         probability,
-        modelTimeMs: numberValue(detail?.modelTimeMs) ?? undefined,
+        modelTimeMs: numberValue(
+          detail?.modelTimeMs ?? detail?.model_time_ms,
+        ) ?? undefined,
         earlyTrigger: true,
       },
     }));
@@ -149,8 +161,10 @@ function normalizedWords(text: string): string {
 }
 
 function identityKey(detail: PerfDetail | undefined): string | null {
-  const segmentId = stringValue(detail?.segmentId);
-  const sourceSequence = numberValue(detail?.sourceSequence);
+  const segmentId = stringValue(detail?.segmentId ?? detail?.segment_id);
+  const sourceSequence = numberValue(
+    detail?.sourceSequence ?? detail?.source_sequence,
+  );
   return segmentId && sourceSequence !== null
     ? `${segmentId}:${sourceSequence}`
     : null;
@@ -163,4 +177,9 @@ function stringValue(value: unknown): string {
 function numberValue(value: unknown): number | null {
   const number = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function booleanValue(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  return String(value).trim().toLowerCase() === 'true';
 }
