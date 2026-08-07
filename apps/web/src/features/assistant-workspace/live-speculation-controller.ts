@@ -233,6 +233,9 @@ export function initializeLiveSpeculationController(): () => void {
     segmentSpeculations(detail.segmentId, detail.sourceSequence)
       .filter((active) => active !== accepted)
       .forEach((active) => cancelSpeculation(active, 'final_hypothesis_not_selected'));
+    if (accepted.prefetchedClause && !accepted.prefetchStarted) {
+      startSpeculativeTtsPrefetch(accepted, accepted.prefetchedClause);
+    }
     acceptSpeculativeTts(accepted);
     dispatchPerformance('llm_speculation_final_accepted', {
       sessionId: accepted.sessionId,
@@ -242,6 +245,9 @@ export function initializeLiveSpeculationController(): () => void {
       finalChars: finalText.length,
       retainedHypotheses: matching.length,
       speculativeTtsStarted: accepted.prefetchStarted,
+      speculativeTtsRestarted: Boolean(
+        accepted.prefetchedClause && accepted.prefetchStarted,
+      ),
     });
     notify(accepted);
   };
@@ -546,6 +552,7 @@ function clearFirstClauseTimer(active: ActiveSpeculation): void {
 function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string): void {
   if (active.prefetchStarted || !active.generationId || !clause.trim()) return;
   active.prefetchStarted = true;
+  active.prefetchAcceptPromise = null;
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
   const synthesis = createLiveSpeechSynthesisOptions(clause, {
     scopeKey: active.sessionId,
@@ -553,47 +560,54 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
     enableVocalContinuity: false,
   });
   const startedAt = performance.now();
-  active.prefetchPromise = fetchImpl('/api/live/speculation/tts-prefetch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      generation_id: active.generationId,
-      request: {
-        text: clause,
-        speaker: selectedVoiceId(),
-        language: 'English',
-        chunk_size: 8,
-        temperature: 0.6,
-        top_k: 20,
-        top_p: 0.85,
-        repetition_penalty: 1.0,
-        append_silence: false,
-        non_streaming_mode: false,
-        parity_mode: true,
-        diagnostics_stream_id: `chat-speculative-tts-${active.generationId}`,
-        delivery_plan: synthesis.performancePlan,
-        pronunciation_lexicon: synthesis.pronunciationLexicon ?? [],
-      },
-    }),
-    signal: active.abortController.signal,
-  }).then((response) => {
-    if (!response.ok) throw new Error(`Speculative TTS prefetch failed with status ${response.status}.`);
-    dispatchPerformance('tts_speculative_prefetch_started', {
-      sessionId: active.sessionId,
-      segmentId: active.segmentId,
-      generationId: active.generationId,
-      clauseChars: clause.length,
-      requestMs: performance.now() - startedAt,
+  const priorOperation = active.prefetchPromise ?? Promise.resolve();
+  active.prefetchPromise = priorOperation
+    .catch(() => undefined)
+    .then(async () => {
+      const response = await fetchImpl('/api/live/speculation/tts-prefetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          generation_id: active.generationId,
+          request: {
+            text: clause,
+            speaker: selectedVoiceId(),
+            language: 'English',
+            chunk_size: 8,
+            temperature: 0.6,
+            top_k: 20,
+            top_p: 0.85,
+            repetition_penalty: 1.0,
+            append_silence: false,
+            non_streaming_mode: false,
+            parity_mode: true,
+            diagnostics_stream_id: `chat-speculative-tts-${active.generationId}`,
+            delivery_plan: synthesis.performancePlan,
+            pronunciation_lexicon: synthesis.pronunciationLexicon ?? [],
+          },
+        }),
+        signal: active.abortController.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`Speculative TTS prefetch failed with status ${response.status}.`);
+      }
+      dispatchPerformance('tts_speculative_prefetch_started', {
+        sessionId: active.sessionId,
+        segmentId: active.segmentId,
+        generationId: active.generationId,
+        clauseChars: clause.length,
+        requestMs: performance.now() - startedAt,
+      });
+    })
+    .catch((error: unknown) => {
+      if (active.abortController.signal.aborted) return;
+      dispatchPerformance('tts_speculative_prefetch_failed', {
+        sessionId: active.sessionId,
+        segmentId: active.segmentId,
+        generationId: active.generationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
-  }).catch((error: unknown) => {
-    if (active.abortController.signal.aborted) return;
-    dispatchPerformance('tts_speculative_prefetch_failed', {
-      sessionId: active.sessionId,
-      segmentId: active.segmentId,
-      generationId: active.generationId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  });
   if (active.finalText) acceptSpeculativeTts(active);
 }
 
@@ -629,17 +643,23 @@ function acceptSpeculativeTts(active: ActiveSpeculation): void {
 function cancelSpeculativeTts(active: ActiveSpeculation, reason: string): void {
   if (!active.prefetchStarted || !active.generationId) return;
   active.prefetchStarted = false;
+  active.prefetchAcceptPromise = null;
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
-  void fetchImpl(
-    `/api/live/speculation/tts-prefetch/${encodeURIComponent(active.generationId)}/cancel`,
-    { method: 'POST', headers: { Accept: 'application/json' } },
-  ).catch(() => undefined);
-  dispatchPerformance('tts_speculative_prefetch_cancelled', {
-    sessionId: active.sessionId,
-    segmentId: active.segmentId,
-    generationId: active.generationId,
-    reason,
-  });
+  const priorOperation = active.prefetchPromise ?? Promise.resolve();
+  active.prefetchPromise = priorOperation
+    .catch(() => undefined)
+    .then(async () => {
+      await fetchImpl(
+        `/api/live/speculation/tts-prefetch/${encodeURIComponent(active.generationId as string)}/cancel`,
+        { method: 'POST', headers: { Accept: 'application/json' } },
+      ).catch(() => undefined);
+      dispatchPerformance('tts_speculative_prefetch_cancelled', {
+        sessionId: active.sessionId,
+        segmentId: active.segmentId,
+        generationId: active.generationId,
+        reason,
+      });
+    });
 }
 
 function createAcceptedSpeculationResponse(
