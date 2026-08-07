@@ -131,67 +131,95 @@ class _PrefetchingProviderProxy:
         )
         index = 0
         emitted = 0
-        while True:
-            with entry.condition:
-                while (
-                    index >= len(entry.chunks)
-                    and not entry.completed
-                    and not entry.cancelled
-                    and entry.error is None
-                ):
-                    entry.condition.wait(_WAIT_SLICE_SECONDS)
-                available = list(entry.chunks[index:])
-                index += len(available)
-                terminal = entry.completed or entry.cancelled or entry.error is not None
-                error = entry.error
-            for chunk in available:
-                emitted += 1
-                yield chunk.pcm_bytes, chunk.sample_rate, {
-                    **(chunk.timing if isinstance(chunk.timing, dict) else {}),
-                    "speculative_tts_cache": True,
-                    "speculation_generation_id": entry.generation_id,
-                }
-            if terminal:
-                break
+        replay_completed = False
+        try:
+            while True:
+                with entry.condition:
+                    while (
+                        index >= len(entry.chunks)
+                        and not entry.completed
+                        and not entry.cancelled
+                        and entry.error is None
+                    ):
+                        entry.condition.wait(_WAIT_SLICE_SECONDS)
+                    available = list(entry.chunks[index:])
+                    index += len(available)
+                    terminal = (
+                        entry.completed
+                        or entry.cancelled
+                        or entry.error is not None
+                    )
+                    error = entry.error
+                for chunk in available:
+                    emitted += 1
+                    yield chunk.pcm_bytes, chunk.sample_rate, {
+                        **(
+                            chunk.timing
+                            if isinstance(chunk.timing, dict)
+                            else {}
+                        ),
+                        "speculative_tts_cache": True,
+                        "speculation_generation_id": entry.generation_id,
+                    }
+                if terminal:
+                    break
 
-        if emitted == 0 and error:
+            if emitted == 0 and error:
+                stream_log(
+                    "gateway-live-speculative-tts",
+                    "provider",
+                    "speculative_tts_cache_fallback",
+                    generation_id=entry.generation_id,
+                    error=error,
+                )
+                yield from _locked_provider_stream(
+                    self._provider,
+                    text=text,
+                    speaker=speaker,
+                    language=language,
+                    kwargs=kwargs,
+                )
+                replay_completed = True
+                return
+
+            if claim.remainder_text:
+                yield from _locked_provider_stream(
+                    self._provider,
+                    text=claim.remainder_text,
+                    speaker=speaker,
+                    language=language,
+                    kwargs=kwargs,
+                )
+
+            replay_completed = True
             stream_log(
                 "gateway-live-speculative-tts",
                 "provider",
-                "speculative_tts_cache_fallback",
+                "speculative_tts_cache_replayed",
                 generation_id=entry.generation_id,
-                error=error,
+                emitted_chunk_count=emitted,
+                completed=entry.completed,
+                cancelled=entry.cancelled,
+                error=entry.error,
+                prefix_match=bool(claim.remainder_text),
+                remainder_text_length=len(claim.remainder_text),
             )
-            yield from _locked_provider_stream(
-                self._provider,
-                text=text,
-                speaker=speaker,
-                language=language,
-                kwargs=kwargs,
-            )
-            return
-
-        if claim.remainder_text:
-            yield from _locked_provider_stream(
-                self._provider,
-                text=claim.remainder_text,
-                speaker=speaker,
-                language=language,
-                kwargs=kwargs,
-            )
-
-        stream_log(
-            "gateway-live-speculative-tts",
-            "provider",
-            "speculative_tts_cache_replayed",
-            generation_id=entry.generation_id,
-            emitted_chunk_count=emitted,
-            completed=entry.completed,
-            cancelled=entry.cancelled,
-            error=entry.error,
-            prefix_match=bool(claim.remainder_text),
-            remainder_text_length=len(claim.remainder_text),
-        )
+        finally:
+            if replay_completed:
+                return
+            with entry.condition:
+                background_active = not entry.completed and not entry.cancelled
+                if background_active:
+                    entry.cancelled = True
+                    entry.condition.notify_all()
+            if background_active:
+                stream_log(
+                    "gateway-live-speculative-tts",
+                    "provider",
+                    "speculative_tts_replay_consumer_cancelled",
+                    generation_id=entry.generation_id,
+                    emitted_chunk_count=emitted,
+                )
 
 
 def clear_speculative_tts_cache() -> None:
@@ -223,7 +251,10 @@ def speculative_tts_cache_snapshot() -> list[dict[str, Any]]:
 
 
 def _stream_kwargs(request: TtsStreamRequest, provider: Any) -> dict[str, Any]:
-    performance = apply_performance_plan_to_provider(provider, request.delivery_plan)
+    performance = apply_performance_plan_to_provider(
+        provider,
+        request.delivery_plan,
+    )
     kwargs: dict[str, Any] = {
         "chunk_size": request.chunk_size,
         "temperature": request.temperature,
@@ -248,14 +279,21 @@ def _locked_provider_stream(
     speaker: str | None,
     language: str,
     kwargs: dict[str, Any],
+    should_stop: Callable[[], bool] | None = None,
 ) -> Iterator[tuple[Any, int, Any]]:
     with _PROVIDER_GENERATION_LOCK:
-        yield from provider.generate_audio_stream(
+        if should_stop is not None and should_stop():
+            return
+        stream = provider.generate_audio_stream(
             text=text,
             speaker=speaker,
             language=language,
             **kwargs,
         )
+        for chunk in stream:
+            if should_stop is not None and should_stop():
+                return
+            yield chunk
 
 
 def _start_prefetch(
@@ -290,6 +328,10 @@ def _start_prefetch(
             previous.cancelled = True
             previous.condition.notify_all()
 
+    def stopped() -> bool:
+        with entry.condition:
+            return entry.cancelled
+
     def produce() -> None:
         started = time.perf_counter()
         try:
@@ -299,11 +341,9 @@ def _start_prefetch(
                 speaker=request.speaker,
                 language=request.language or "en",
                 kwargs=kwargs,
+                should_stop=stopped,
             )
             for audio_chunk, sample_rate, timing in stream:
-                with entry.condition:
-                    if entry.cancelled:
-                        break
                 pcm_bytes = audio_chunk_to_pcm16_bytes(audio_chunk)
                 if not pcm_bytes:
                     continue
@@ -336,7 +376,10 @@ def _start_prefetch(
                 claimed=entry.claimed,
                 cancelled=entry.cancelled,
                 error=entry.error,
-                elapsed_ms=round((time.perf_counter() - started) * 1000.0, 3),
+                elapsed_ms=round(
+                    (time.perf_counter() - started) * 1000.0,
+                    3,
+                ),
             )
 
     threading.Thread(
@@ -352,7 +395,10 @@ def _accept_entry(generation_id: str) -> _SpeculativeTtsEntry:
         _prune_entries_locked()
         entry = _ENTRIES.get(generation_id)
         if entry is None:
-            raise HTTPException(status_code=404, detail="speculative_tts_not_found")
+            raise HTTPException(
+                status_code=404,
+                detail="speculative_tts_not_found",
+            )
         entry.accepted = True
         return entry
 
@@ -395,10 +441,15 @@ def _claim_entry(
             remainder = _prefix_remainder(entry.text, actual_text)
             if remainder is None:
                 continue
-            matches.append((len(entry.text), entry.created_at, entry, remainder))
+            matches.append(
+                (len(entry.text), entry.created_at, entry, remainder)
+            )
         if not matches:
             return None
-        _, _, entry, remainder = max(matches, key=lambda item: (item[0], item[1]))
+        _, _, entry, remainder = max(
+            matches,
+            key=lambda item: (item[0], item[1]),
+        )
         entry.claimed = True
         return _CacheClaim(entry=entry, remainder_text=remainder)
 
@@ -449,7 +500,12 @@ def _stream_key(
         "language": language,
         "kwargs": stable_kwargs,
     }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
@@ -457,7 +513,13 @@ def _json_safe(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, dict):
-        return {str(key): _json_safe(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
+        return {
+            str(key): _json_safe(item)
+            for key, item in sorted(
+                value.items(),
+                key=lambda pair: str(pair[0]),
+            )
+        }
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
     model_dump = getattr(value, "model_dump", None)
@@ -499,9 +561,19 @@ def register_live_speculative_tts_routes(app: FastAPI) -> None:
         payload: SpeculativeTtsPrefetchRequest,
     ) -> dict[str, Any]:
         provider = shared.get_tts_provider()
-        if provider is None or not hasattr(provider, "generate_audio_stream"):
-            raise HTTPException(status_code=503, detail="tts_provider_unavailable")
-        entry = _start_prefetch(payload.generation_id, payload.request, provider)
+        if provider is None or not hasattr(
+            provider,
+            "generate_audio_stream",
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="tts_provider_unavailable",
+            )
+        entry = _start_prefetch(
+            payload.generation_id,
+            payload.request,
+            provider,
+        )
         stream_log(
             "gateway-live-speculative-tts",
             "runtime",
@@ -554,7 +626,7 @@ def register_live_speculative_tts_routes(app: FastAPI) -> None:
 
 
 def install_live_speculative_tts_prefetch_hook() -> None:
-    """Install speculative routes and wrap only the persistent live-call provider lookup."""
+    """Install speculative routes and wrap the live-call provider lookup."""
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
 
@@ -563,7 +635,10 @@ def install_live_speculative_tts_prefetch_hook() -> None:
     @wraps(original_get_provider)
     def prefetched_provider() -> Any:
         provider = original_get_provider()
-        if provider is None or isinstance(provider, _PrefetchingProviderProxy):
+        if provider is None or isinstance(
+            provider,
+            _PrefetchingProviderProxy,
+        ):
             return provider
         return _PrefetchingProviderProxy(provider)
 
