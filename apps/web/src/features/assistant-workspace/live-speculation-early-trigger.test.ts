@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { liveConversationStore } from './live-conversation-store';
 import {
   earlySpeculationCandidateEligible,
   earlySpeculationProbabilityFloor,
@@ -38,6 +39,42 @@ describe('early live speculation trigger', () => {
       0.34,
       'What kind of nonsense is this',
     )).toBe(false);
+  });
+
+  it('does not combine a new segment score with stale store transcript state', () => {
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:stale' });
+    liveConversationStore.dispatch({
+      type: 'transcript_partial',
+      text: 'This stale transcript would otherwise be eligible',
+    });
+    const candidateListener = vi.fn();
+    window.addEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, candidateListener);
+    const cleanup = initializeLiveSpeculationEarlyTrigger();
+
+    try {
+      window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+        detail: {
+          stage: 'stt_authority_selected',
+          authorityEnabled: true,
+          selectedProvider: 'kyutai',
+        },
+      }));
+      window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+        detail: {
+          stage: 'stt_endpoint_score',
+          provider: 'kyutai',
+          segmentId: 'segment-new',
+          sourceSequence: 9,
+          probability: 0.95,
+        },
+      }));
+
+      expect(candidateListener).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, candidateListener);
+      liveConversationStore.dispatch({ type: 'reset_all' });
+    }
   });
 
   it('uses the exact STT partial for the scored segment instead of waiting for store mirroring', () => {
@@ -94,6 +131,7 @@ describe('early live speculation trigger', () => {
       cleanup();
       window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, candidateListener);
       window.removeEventListener('omnix:assistant-voice-perf', perfListener);
+      liveConversationStore.dispatch({ type: 'reset_all' });
     }
   });
 });
