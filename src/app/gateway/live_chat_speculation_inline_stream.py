@@ -92,6 +92,7 @@ def register_live_chat_speculation_inline_stream_routes(
         )
         generation.worker = worker
 
+        superseded_generation_ids: list[str] = []
         with speculation_runtime._SPECULATION_LOCK:
             speculation_runtime._prune_speculations()
             handshake_runtime._prune_handshake_state_locked()
@@ -103,10 +104,24 @@ def register_live_chat_speculation_inline_stream_routes(
                     status_code=409,
                     detail="speculation_generation_id_conflict",
                 )
+            superseded_generation_ids = _supersede_prior_generations_locked(pending)
             speculation_runtime._SPECULATIONS[generation_id] = pending
             handshake_runtime._HANDSHAKE_GENERATIONS[generation_id] = generation
             generation.stream_started = True
             handshake_runtime._STREAM_STARTED.add(generation_id)
+
+        if superseded_generation_ids:
+            stream_log(
+                "gateway-live-chat-speculation",
+                "runtime",
+                "live_chat_speculation_superseded",
+                generation_id=generation_id,
+                superseded_generation_ids=superseded_generation_ids,
+                superseded_count=len(superseded_generation_ids),
+                segment_id=request.segment_id,
+                source_sequence=request.source_sequence,
+                execution_lane=execution_lane,
+            )
 
         allocation_ms = (time.perf_counter() - started) * 1000.0
         stream_log(
@@ -176,6 +191,33 @@ def register_live_chat_speculation_inline_stream_routes(
             media_type="text/event-stream",
             headers=headers,
         )
+
+
+def _supersede_prior_generations_locked(pending: Any) -> list[str]:
+    """Cancel older inline hypotheses for the exact same utterance identity."""
+
+    superseded: list[str] = []
+    for generation_id, existing in tuple(speculation_runtime._SPECULATIONS.items()):
+        if generation_id == pending.generation_id or existing.completed:
+            continue
+        if (
+            existing.session_id != pending.session_id
+            or existing.segment_id != pending.segment_id
+            or existing.source_sequence != pending.source_sequence
+        ):
+            continue
+        generation = handshake_runtime._HANDSHAKE_GENERATIONS.get(generation_id)
+        if generation is None:
+            continue
+        generation.cancel_event.set()
+        handshake_runtime._finish_with_error(
+            existing,
+            generation,
+            code="speculation_superseded",
+            message="A newer speculative hypothesis superseded this generation.",
+        )
+        superseded.append(generation_id)
+    return superseded
 
 
 async def _request_payload(request: Request) -> dict[str, Any]:
