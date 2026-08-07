@@ -205,21 +205,22 @@ class _PrefetchingProviderProxy:
                 remainder_text_length=len(claim.remainder_text),
             )
         finally:
-            if replay_completed:
-                return
-            with entry.condition:
-                background_active = not entry.completed and not entry.cancelled
+            if not replay_completed:
+                with entry.condition:
+                    background_active = (
+                        not entry.completed and not entry.cancelled
+                    )
+                    if background_active:
+                        entry.cancelled = True
+                        entry.condition.notify_all()
                 if background_active:
-                    entry.cancelled = True
-                    entry.condition.notify_all()
-            if background_active:
-                stream_log(
-                    "gateway-live-speculative-tts",
-                    "provider",
-                    "speculative_tts_replay_consumer_cancelled",
-                    generation_id=entry.generation_id,
-                    emitted_chunk_count=emitted,
-                )
+                    stream_log(
+                        "gateway-live-speculative-tts",
+                        "provider",
+                        "speculative_tts_replay_consumer_cancelled",
+                        generation_id=entry.generation_id,
+                        emitted_chunk_count=emitted,
+                    )
 
 
 def clear_speculative_tts_cache() -> None:
