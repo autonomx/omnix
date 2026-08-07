@@ -4,9 +4,11 @@ import pytest
 
 from app.gateway.tts_stream_contract import (
     CHAT_STREAM_MAX_CODEC_CHUNK_STEPS,
+    CHAT_STREAM_MIN_NEW_TOKENS,
     STREAM_MAX_INITIAL_SILENCE_MS,
     TtsStreamRequest,
     audio_chunk_to_pcm16_bytes,
+    estimate_chat_stream_max_new_tokens,
     stream_pcm16_blocks,
 )
 
@@ -27,6 +29,23 @@ def test_chat_stream_caps_codec_chunk_steps_for_lower_first_audio_latency() -> N
     assert request.parity_mode is False
     assert request.max_new_tokens is not None
     assert request.max_new_tokens < 512
+
+
+def test_short_chat_clause_does_not_receive_eight_second_token_floor() -> None:
+    text = "That works too"
+    assert len(text) == 14
+    assert CHAT_STREAM_MIN_NEW_TOKENS == 32
+    assert estimate_chat_stream_max_new_tokens(text) == 40
+
+    request = TtsStreamRequest.model_validate(
+        {
+            "text": text,
+            "diagnostics_stream_id": "chat-live-short-tail",
+            "max_new_tokens": 512,
+        }
+    )
+
+    assert request.max_new_tokens == 40
 
 
 def test_non_chat_stream_preserves_requested_codec_chunk_steps() -> None:
