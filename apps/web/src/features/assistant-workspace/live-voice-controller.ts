@@ -38,6 +38,7 @@ import {
   type StreamingSttWebSocketCtor,
 } from './live-voice-websocket';
 import { liveVoiceVisualScales, smoothLiveVoiceLevel } from './live-voice-level';
+import { endpointFusionAction } from './live-voice-turn-coordinator';
 import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
 
 type LiveVoiceWindow = Window & typeof globalThis & {
@@ -70,6 +71,7 @@ type LiveVoiceSession = {
   perfTurnId: string | null;
   sttFinalRequestedAt: number | null;
   partialTranscript: string;
+  partialTranscriptUpdatedAt: number;
   floorState: UserFloorState;
   overlapIntent: OverlapIntent | null;
   interruptionDispatched: boolean;
@@ -93,6 +95,10 @@ type EndpointCommitState = {
   finalRequested: boolean;
   pausePending: boolean;
   pauseElapsedMs: number;
+  transcriptStableMs?: number;
+  semanticProbabilityDone?: number;
+  transcriptWords?: number;
+  correctionPending?: boolean;
 };
 
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
@@ -139,13 +145,22 @@ export async function resolveLiveVoiceSttSelection(
 }
 
 export function shouldCommitProviderEndpoint(state: EndpointCommitState): boolean {
-  return state.authorityEnabled
-    && Number.isFinite(state.probability)
-    && state.probability >= state.endpointThreshold
-    && state.speechDetected
-    && !state.finalRequested
-    && state.pausePending
-    && state.pauseElapsedMs >= PROVIDER_ENDPOINT_MIN_SILENCE_MS;
+  if (
+    !state.authorityEnabled
+    || !Number.isFinite(state.probability)
+    || !state.speechDetected
+    || state.finalRequested
+    || !state.pausePending
+  ) return false;
+  return endpointFusionAction({
+    endpointProbability: state.probability,
+    endpointThreshold: state.endpointThreshold,
+    silenceMs: state.pauseElapsedMs,
+    transcriptStableMs: state.transcriptStableMs ?? 80,
+    semanticProbabilityDone: state.semanticProbabilityDone ?? 1,
+    transcriptWords: state.transcriptWords ?? 2,
+    correctionPending: state.correctionPending ?? false,
+  }) === 'commit';
 }
 
 export function initializeLiveVoiceController(root: ParentNode = document): void {
@@ -307,66 +322,66 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       chatSessionId: sessionId,
       onNegotiated: (negotiation) => {
         reporter.record('stt_negotiated', {
-provider: negotiation.provider,
-protocol: negotiation.protocol,
-sample_rate: negotiation.sampleRate,
-frame_samples: negotiation.frameSamples,
-encoding: negotiation.encoding,
-capabilities: negotiation.capabilities,
-config_version: negotiation.configVersion,
-language: negotiation.language,
+          provider: negotiation.provider,
+          protocol: negotiation.protocol,
+          sample_rate: negotiation.sampleRate,
+          frame_samples: negotiation.frameSamples,
+          encoding: negotiation.encoding,
+          capabilities: negotiation.capabilities,
+          config_version: negotiation.configVersion,
+          language: negotiation.language,
         }, 'live_voice_controller');
         dispatchLiveVoicePerfEvent({
-stage: 'stt_negotiated',
-timestamp: new Date().toISOString(),
-provider: negotiation.provider,
-protocol: negotiation.protocol,
-sampleRate: negotiation.sampleRate,
-frameSamples: negotiation.frameSamples,
-encoding: negotiation.encoding,
-capabilities: negotiation.capabilities,
-configVersion: negotiation.configVersion,
-language: negotiation.language,
+          stage: 'stt_negotiated',
+          timestamp: new Date().toISOString(),
+          provider: negotiation.provider,
+          protocol: negotiation.protocol,
+          sampleRate: negotiation.sampleRate,
+          frameSamples: negotiation.frameSamples,
+          encoding: negotiation.encoding,
+          capabilities: negotiation.capabilities,
+          configVersion: negotiation.configVersion,
+          language: negotiation.language,
         });
       },
       onEndpointScore: (event) => {
         reporter.record('stt_endpoint_score', {
-provider: event.provider,
-segment_id: event.segmentId,
-source_sequence: event.sequence,
-probability: event.probability,
-model_time_ms: event.modelTimeMs,
-signal: event.signal,
+          provider: event.provider,
+          segment_id: event.segmentId,
+          source_sequence: event.sequence,
+          probability: event.probability,
+          model_time_ms: event.modelTimeMs,
+          signal: event.signal,
         }, 'live_voice_controller');
         dispatchLiveVoicePerfEvent({
-stage: 'stt_endpoint_score',
-timestamp: new Date().toISOString(),
-provider: event.provider,
-segmentId: event.segmentId,
-sourceSequence: event.sequence,
-probability: event.probability,
-modelTimeMs: event.modelTimeMs,
-signal: event.signal,
+          stage: 'stt_endpoint_score',
+          timestamp: new Date().toISOString(),
+          provider: event.provider,
+          segmentId: event.segmentId,
+          sourceSequence: event.sequence,
+          probability: event.probability,
+          modelTimeMs: event.modelTimeMs,
+          signal: event.signal,
         });
       },
       onEndpointCandidate: (event) => handleProviderEndpointCandidate(card, event),
       onProviderEvent: (event) => {
         const stage = `stt_${event.type}`;
         reporter.record(stage, {
-provider: event.provider,
-attempt_id: event.attemptId,
-wall_ms: event.wall_ms,
-model_ms: event.model_ms,
-realtime_factor: event.realtime_factor,
+          provider: event.provider,
+          attempt_id: event.attemptId,
+          wall_ms: event.wall_ms,
+          model_ms: event.model_ms,
+          realtime_factor: event.realtime_factor,
         }, 'live_voice_controller');
         dispatchLiveVoicePerfEvent({
-stage,
-timestamp: new Date().toISOString(),
-provider: event.provider,
-attemptId: event.attemptId,
-wallMs: event.wall_ms,
-modelMs: event.model_ms,
-realtimeFactor: event.realtime_factor,
+          stage,
+          timestamp: new Date().toISOString(),
+          provider: event.provider,
+          attemptId: event.attemptId,
+          wallMs: event.wall_ms,
+          modelMs: event.model_ms,
+          realtimeFactor: event.realtime_factor,
         });
       },
       onStatusChange: (status) => {
@@ -376,12 +391,12 @@ realtimeFactor: event.realtime_factor,
       onAcceptedFinal: (final) => handleAcceptedFinal(card, final),
       onFinalRejected: (reason, identity) => {
         reporter.record('stt_final_rejected', {
-reason,
-segment_id: identity.segmentId,
-result_id: identity.resultId,
-finalize_request_id: identity.finalizeRequestId,
-source_sequence: identity.sourceSequence,
-capture_epoch: identity.captureEpoch,
+          reason,
+          segment_id: identity.segmentId,
+          result_id: identity.resultId,
+          finalize_request_id: identity.finalizeRequestId,
+          source_sequence: identity.sourceSequence,
+          capture_epoch: identity.captureEpoch,
         }, 'live_voice_controller');
         dispatchLiveVoicePerfEvent({ stage: 'stt_final_rejected', timestamp: new Date().toISOString(), reason, segmentId: identity.segmentId, sourceSequence: identity.sourceSequence });
         setPanelStatus(card, 'error');
@@ -420,6 +435,7 @@ capture_epoch: identity.captureEpoch,
       perfTurnId: null,
       sttFinalRequestedAt: null,
       partialTranscript: '',
+      partialTranscriptUpdatedAt: performance.now(),
       floorState: reduceUserFloor('idle', { type: 'listen' }),
       overlapIntent: null,
       interruptionDispatched: false,
@@ -614,10 +630,24 @@ function dispatchLiveSttSpeculationEvent(type: string, detail: Record<string, un
 function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpointCandidate): void {
   const session = activeSession;
   if (!session || session.card !== card) return;
+  const now = performance.now();
   const candidateText = session.partialTranscript.trim();
   const pauseElapsedMs = session.pauseStartedAt === null
     ? 0
-    : Math.max(0, performance.now() - session.pauseStartedAt);
+    : Math.max(0, now - session.pauseStartedAt);
+  const assessment = assessSemanticTurn(candidateText, readConversationPace());
+  const transcriptStableMs = Math.max(0, now - session.partialTranscriptUpdatedAt);
+  const transcriptWords = candidateText ? candidateText.split(/\s+/u).length : 0;
+  const correctionPending = assessment.reason === 'self_correction';
+  const fusionAction = endpointFusionAction({
+    endpointProbability: event.probability,
+    endpointThreshold: session.sttAuthority.endpointThreshold,
+    silenceMs: pauseElapsedMs,
+    transcriptStableMs,
+    semanticProbabilityDone: assessment.probabilityDone,
+    transcriptWords,
+    correctionPending,
+  });
   session.speculationSegmentId = event.segmentId;
   session.speculationSourceSequence = event.sequence;
   session.reporter.record('stt_endpoint_candidate', {
@@ -627,6 +657,11 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
     probability: event.probability,
     model_time_ms: event.modelTimeMs,
     transcript_chars: candidateText.length,
+    transcript_words: transcriptWords,
+    transcript_stable_ms: Math.round(transcriptStableMs),
+    semantic_probability_done: assessment.probabilityDone,
+    semantic_reason: assessment.reason,
+    endpoint_fusion_action: fusionAction,
     authority_enabled: session.sttAuthority.authorityEnabled,
     pause_elapsed_ms: Math.round(pauseElapsedMs),
     endpoint_min_silence_ms: PROVIDER_ENDPOINT_MIN_SILENCE_MS,
@@ -640,11 +675,16 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
     probability: event.probability,
     modelTimeMs: event.modelTimeMs,
     transcriptChars: candidateText.length,
+    transcriptWords,
+    transcriptStableMs: Math.round(transcriptStableMs),
+    semanticProbabilityDone: assessment.probabilityDone,
+    semanticReason: assessment.reason,
+    endpointFusionAction: fusionAction,
     authorityEnabled: session.sttAuthority.authorityEnabled,
     pauseElapsedMs: Math.round(pauseElapsedMs),
     endpointMinSilenceMs: PROVIDER_ENDPOINT_MIN_SILENCE_MS,
   });
-  if (session.sttAuthority.authorityEnabled && candidateText) {
+  if (session.sttAuthority.authorityEnabled && candidateText && fusionAction !== 'continue') {
     const detail = {
       chatSessionId: liveConversationStore.getState().sessionId,
       segmentId: event.segmentId,
@@ -666,6 +706,10 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
     finalRequested: session.finalRequested,
     pausePending: session.silenceTimer !== null,
     pauseElapsedMs,
+    transcriptStableMs,
+    semanticProbabilityDone: assessment.probabilityDone,
+    transcriptWords,
+    correctionPending,
   })) return;
   requestFinalTranscript(session, 'provider_endpoint', event);
 }
@@ -673,7 +717,11 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
 function handlePartialTranscript(card: HTMLElement, text: string): void {
   const session = activeSession;
   if (session?.card === card) {
-    session.partialTranscript = text.trim();
+    const normalized = text.trim();
+    if (normalized !== session.partialTranscript) {
+      session.partialTranscript = normalized;
+      session.partialTranscriptUpdatedAt = performance.now();
+    }
     if (
       session.sttAuthority.authorityEnabled
       && session.speculationSegmentId
@@ -1011,6 +1059,7 @@ function resetTurnState(session: LiveVoiceSession): void {
   session.perfTurnId = null;
   session.sttFinalRequestedAt = null;
   session.partialTranscript = '';
+  session.partialTranscriptUpdatedAt = performance.now();
   session.speculationSegmentId = null;
   session.speculationSourceSequence = null;
   session.overlapIntent = null;
