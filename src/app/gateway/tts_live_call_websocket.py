@@ -13,9 +13,11 @@ from typing import Any, Callable
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from app import shared
 from app.live_speech.performance_contract import apply_performance_plan_to_provider
-from app.shared import get_tts_provider, remove_emojis
+from app.shared import remove_emojis
 
+from .live_voice_speculative_tts import resolve_live_call_tts_provider
 from .tts_stream_diagnostics import (
     begin_stream,
     diagnostics_log_path,
@@ -315,7 +317,7 @@ async def _stream_phrase(
             )
             return
 
-        provider = get_tts_provider()
+        provider = resolve_live_call_tts_provider(shared.get_tts_provider())
         if provider is None or not hasattr(provider, "generate_audio_stream"):
             message = "tts_provider_unavailable" if provider is None else "tts_provider_streaming_unavailable"
             stream_log(stream_id, "server", "request_rejected", reason=message)
@@ -342,6 +344,7 @@ async def _stream_phrase(
             provider_class=f"{type(provider).__module__}.{type(provider).__qualname__}",
             provider_name=getattr(provider, "provider_name", None),
             provider_object_id=id(provider),
+            live_execution_lane=getattr(provider, "execution_lane", "shared"),
             provider_capabilities=capability_payload,
             performance_controls_applied=applied_controls,
             performance_controls_ignored=ignored_controls,
