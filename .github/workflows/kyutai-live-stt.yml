@@ -159,7 +159,7 @@ jobs:
           npm --workspace @omnix/web run typecheck 2>&1 | tee live-stt-typecheck.txt
           typecheck_status=${PIPESTATUS[0]}
           set -e
-          if grep -E "(live-(call-prewarm-controller(\\.test)?|chat-submission-gateway(\\.test)?|conversation-durable-evaluation-controller(\\.test)?|runtime-provenance|voice-websocket(\\.spec)?|voice-controller|voice-turn-coordinator(\\.test)?|accepted-final|stt-authority-controller|speculation-controller(\\.test)?|speculation-early-trigger(\\.test)?|speculation-runtime(\\.test)?|speculation-eligibility-diagnostics(\\.test)?|speculation-handshake-transport(\\.test)?|tts-adaptive-buffer-controller(\\.test)?|tts-capability-controller|voice-clause-stabilizer(\\.test)?|speech-delivery-plan(\\.test)?|voice-pcm-worklet|voice-release-observer(-speech-end)?(\\.test)?|latency-rollout\\.spec)\\.(ts|tsx)|assistant-context-(controller|critical-path\\.test)\\.(ts|tsx)|chat-response-metrics-controller(\\.test)?\\.ts|characterClient(\\.test)?\\.ts|vite\\.config\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
+          if grep -E "(live-(call-prewarm-controller(\\.test)?|chat-submission-gateway(\\.test)?|conversation-durable-evaluation-controller(\\.test)?|runtime-provenance|voice-websocket(\\.spec)?|voice-controller|voice-turn-coordinator(\\.test)?|accepted-final|stt-authority-controller|speculation-controller(\\.test)?|speculation-early-trigger(\\.test)?|speculation-runtime(\\.test)?|speculation-eligibility-diagnostics(\\.test)?|speculation-handshake-transport(\\.test)?|speculative-tts-request-contract(\\.test)?|tts-adaptive-buffer-controller(\\.test)?|tts-capability-controller|voice-clause-stabilizer(\\.test)?|speech-delivery-plan(\\.test)?|voice-pcm-worklet|voice-release-observer(-speech-end)?(\\.test)?|latency-rollout\\.spec)\\.(ts|tsx)|assistant-context-(controller|critical-path\\.test)\\.(ts|tsx)|chat-response-metrics-controller(\\.test)?\\.ts|characterClient(\\.test)?\\.ts|vite\\.config\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
             echo "TypeScript errors were reported in the live latency rollout path."
             exit "${typecheck_status:-1}"
           fi
@@ -179,6 +179,7 @@ jobs:
             src/features/assistant-workspace/live-speculation-runtime.test.ts \
             src/features/assistant-workspace/live-speculation-eligibility-diagnostics.test.ts \
             src/features/assistant-workspace/live-speculation-handshake-transport.test.ts \
+            src/features/assistant-workspace/live-speculative-tts-request-contract.test.ts \
             src/features/assistant-workspace/live-voice-turn-coordinator.test.ts \
             src/features/assistant-workspace/live-voice-clause-stabilizer.test.ts \
             src/features/assistant-workspace/live-speech-delivery-plan.test.ts \
