@@ -23,6 +23,10 @@ type PrefetchPayload = Record<string, unknown> & {
   request?: Record<string, unknown>;
 };
 
+type PriorityRequestInit = RequestInit & {
+  priority?: 'high' | 'low' | 'auto';
+};
+
 let previousFetch: typeof window.fetch | null = null;
 
 export function initializeLiveSpeculativeTtsRequestContract(): () => void {
@@ -78,26 +82,18 @@ export async function normalizeSpeculativeTtsRequest(
       ...ACCEPTED_LIVE_TTS_CONTRACT,
     },
   });
+  const normalizedInit: PriorityRequestInit = {
+    ...init,
+    body: normalizedBody,
+    // Keep this latency-critical control request eligible for the browser's
+    // highest fetch priority without changing transport semantics.
+    priority: 'high',
+  };
 
   if (input instanceof Request) {
-    const request = new Request(input, {
-      ...init,
-      body: normalizedBody,
-      // Keep this latency-critical control request eligible for the browser's
-      // highest fetch priority without changing transport semantics.
-      priority: 'high' as RequestPriority,
-    });
-    return { input: request };
+    return { input: new Request(input, normalizedInit) };
   }
-
-  return {
-    input,
-    init: {
-      ...init,
-      body: normalizedBody,
-      priority: 'high' as RequestPriority,
-    },
-  };
+  return { input, init: normalizedInit };
 }
 
 function parsePrefetchPayload(body: string | null): PrefetchPayload | null {
