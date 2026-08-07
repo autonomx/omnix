@@ -1,6 +1,6 @@
 const SPECULATION_PATH = /^\/api\/live\/speculation(?:\/|$)/;
 const INSTALLED_KEY = '__omnixLiveSpeculationDirectGatewayTransportInstalled';
-const DEFAULT_DIRECT_GATEWAY_ORIGIN = 'http://localhost:8000';
+const DEFAULT_DIRECT_GATEWAY_ORIGIN = 'http://127.0.0.1:8000';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 
 type DirectGatewayWindow = Window & typeof globalThis & {
@@ -48,6 +48,7 @@ export async function directSpeculationFetch(
     });
     return response;
   } catch (error: unknown) {
+    if (init?.signal?.aborted) throw error;
     dispatchPerformance(stageFor(input, 'fallback'), {
       directGateway: true,
       elapsedMs: now() - startedAt,
