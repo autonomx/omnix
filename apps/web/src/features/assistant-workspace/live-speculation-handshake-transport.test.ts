@@ -48,6 +48,10 @@ describe('live speculation handshake transport', () => {
     expect(firstText).toContain('"optimistic_transport":true');
 
     await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/live/speculation/sessions/session-test/start-stream',
+      expect.objectContaining({ method: 'POST', priority: 'high' }),
+    );
     expect(JSON.parse(forwardedBody)).toMatchObject({
       generation_id: clientGenerationId,
       segment_id: 'segment-test',
@@ -124,6 +128,14 @@ describe('live speculation handshake transport', () => {
     expect(text).toContain('"type":"text_chunk"');
     expect(text).toContain('"text":"Hello"');
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/live/speculation/sessions/session-test/start',
+      expect.objectContaining({ method: 'POST', priority: 'high' }),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/live/speculation/sessions/session-test/spec-test/stream',
+      expect.objectContaining({ method: 'POST', priority: 'high' }),
+    );
   });
 
   it('cancels eager fallback generation when the source request is aborted', async () => {
@@ -181,7 +193,7 @@ describe('live speculation handshake transport', () => {
     await vi.waitFor(() => {
       expect(fetchImpl).toHaveBeenCalledWith(
         '/api/live/speculation/sessions/session-test/spec-cancel/stream',
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({ method: 'POST', priority: 'high' }),
       );
     });
     sourceAbort.abort('transcript corrected');
