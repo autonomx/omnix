@@ -219,7 +219,7 @@ def test_inline_stream_supersedes_older_hypothesis_for_same_utterance(monkeypatc
         model_id="fake-model",
         segment_id="segment-supersede",
         source_sequence=12,
-        created_at=0.0,
+        created_at=speculation.time.time(),
         execution_lane="session",
     )
     old_generation = handshake._HandshakeGeneration(
