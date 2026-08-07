@@ -28,6 +28,12 @@ from .tts_stream_diagnostics import stream_log
 _ROUTE_SENTINEL = "_omnix_live_voice_speculative_tts_routes_registered"
 _HOOK_SENTINEL = "_omnix_live_voice_execution_lane_hook_installed"
 _CACHE_TTL_SECONDS = 45.0
+# Accepted speculative PCM is useful only for the immediately following
+# authoritative TTS request. Keeping an unclaimed accepted entry around for the
+# full cache TTL can let a later turn with the same text prefix replay stale
+# audio. Five seconds leaves ample contention headroom while failing safely to
+# fresh TTS if the originating turn never claims its cache.
+_ACCEPTED_UNCLAIMED_TTL_SECONDS = 5.0
 _MAX_CACHE_ENTRIES = 16
 _WAIT_SLICE_SECONDS = 0.025
 _CACHE_KEY_KWARGS = frozenset(
@@ -68,6 +74,7 @@ class _SpeculativeTtsEntry:
     lane: str
     chunks: list[_CachedPcmChunk] = field(default_factory=list)
     accepted: bool = False
+    accepted_at: float | None = None
     claimed: bool = False
     completed: bool = False
     cancelled: bool = False
@@ -407,6 +414,8 @@ def _accept_entry(generation_id: str) -> _SpeculativeTtsEntry:
         entry = _ENTRIES.get(generation_id)
         if entry is None:
             raise HTTPException(status_code=404, detail="speculative_tts_not_found")
+        if not entry.accepted:
+            entry.accepted_at = time.time()
         entry.accepted = True
         entry.promotion_event.set()
     live_voice_tts_scheduler().notify_priority_change()
@@ -510,11 +519,19 @@ def _json_safe(value: Any) -> Any:
 
 
 def _prune_entries_locked() -> None:
-    cutoff = time.time() - _CACHE_TTL_SECONDS
+    now = time.time()
+    cutoff = now - _CACHE_TTL_SECONDS
+    accepted_cutoff = now - _ACCEPTED_UNCLAIMED_TTL_SECONDS
     expired = [
         generation_id
         for generation_id, entry in _ENTRIES.items()
         if entry.created_at < cutoff
+        or (
+            entry.accepted
+            and not entry.claimed
+            and entry.accepted_at is not None
+            and entry.accepted_at < accepted_cutoff
+        )
     ]
     for generation_id in expired:
         entry = _ENTRIES.pop(generation_id, None)
