@@ -82,6 +82,38 @@ def _client(store: _FakeStore, provider: _FakeProvider, monkeypatch) -> TestClie
     return TestClient(app)
 
 
+def test_local_vite_origin_can_preflight_direct_gateway_speculation() -> None:
+    app = FastAPI(title="Omnix Web Gateway")
+    response = TestClient(app).options(
+        "/api/live/speculation/sessions/session-inline/start-stream",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "POST" in response.headers["access-control-allow-methods"]
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
+
+
+def test_nonlocal_origin_is_not_allowed_by_direct_gateway_cors() -> None:
+    app = FastAPI(title="Omnix Web Gateway")
+    response = TestClient(app).options(
+        "/api/live/speculation/sessions/session-inline/start-stream",
+        headers={
+            "Origin": "https://example.invalid",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.headers.get("access-control-allow-origin") is None
+
+
 def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     handshake.clear_live_speculation_handshake_state()
