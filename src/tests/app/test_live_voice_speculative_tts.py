@@ -10,8 +10,8 @@ from app.gateway.live_voice_execution_lane import (
     reset_live_voice_execution_lane_for_tests,
 )
 from app.gateway.live_voice_speculative_tts import (
-    _LiveLaneProviderProxy,
     _accept_entry,
+    _LiveLaneProviderProxy,
     _start_prefetch,
     _stream_kwargs,
     clear_speculative_tts_cache,
@@ -85,7 +85,7 @@ def test_accepted_prefetch_is_promoted_and_replayed_without_second_generation() 
         assert provider.calls == 1
 
         provider.allow_finish.set()
-        assert list(replay)[0][0] == b"\x02\x00" * 4_800
+        assert next(replay)[0] == b"\x02\x00" * 4_800
         assert provider.calls == 1
         assert speculative_tts_cache_snapshot()[0]["claimed"] is True
     finally:
@@ -94,6 +94,7 @@ def test_accepted_prefetch_is_promoted_and_replayed_without_second_generation() 
 
 
 def test_execution_lane_status_reports_dedicated_configuration(monkeypatch) -> None:
+    _reset()
     monkeypatch.setenv("OMNIX_LIVE_VOICE_EXECUTION_MODE", "dedicated")
     monkeypatch.setenv("OMNIX_LIVE_VOICE_PROVIDER_ID", "lmstudio")
     monkeypatch.setenv("OMNIX_LIVE_VOICE_MODEL_ID", "qwen-live-fast")
