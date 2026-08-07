@@ -30,6 +30,7 @@ from app.providers import ChatMessage as ProviderMessage
 
 from . import live_chat_live_voice_profile as live_voice_profile
 from .live_chat_low_latency_stream import LowLatencyTextChunker
+from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_registered"
@@ -73,6 +74,7 @@ class _Speculation:
     segment_id: str
     source_sequence: int
     created_at: float
+    execution_lane: str = "session"
     content: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     completed: bool = False
@@ -238,25 +240,33 @@ def register_live_chat_speculation_routes(
             store,
             session_id,
         )
+        if session is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        provider_id, model_id, execution_lane = resolve_live_voice_chat_route(
+            request.provider_id or session.provider_id,
+            request.model_id or session.model_id,
+        )
         stream_log(
             "gateway-live-chat-speculation",
             "runtime",
             "live_chat_speculation_session_resolved",
             cache_hit=cache_hit,
             session_load_ms=round(session_load_ms, 3),
+            execution_lane=execution_lane,
+            provider_id=provider_id,
+            model_id=model_id,
         )
-        if session is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
         generation_id = f"spec-{uuid.uuid4().hex}"
         speculation = _Speculation(
             generation_id=generation_id,
             session_id=session_id,
             candidate_text=request.content.strip(),
-            provider_id=request.provider_id or session.provider_id,
-            model_id=request.model_id or session.model_id,
+            provider_id=provider_id,
+            model_id=model_id,
             segment_id=request.segment_id,
             source_sequence=request.source_sequence,
             created_at=time.time(),
+            execution_lane=execution_lane,
         )
         with _SPECULATION_LOCK:
             _prune_speculations()
@@ -271,6 +281,7 @@ def register_live_chat_speculation_routes(
                     "source_sequence": request.source_sequence,
                     "provider_id": speculation.provider_id,
                     "model_id": speculation.model_id,
+                    "execution_lane": speculation.execution_lane,
                 }
             )
             try:
@@ -288,6 +299,7 @@ def register_live_chat_speculation_routes(
             "Cache-Control": "no-store, no-transform",
             "X-Accel-Buffering": "no",
             "X-Omnix-Speculation-Generation-Id": generation_id,
+            "X-Omnix-Live-Execution-Lane": speculation.execution_lane,
         }
         if speculation.provider_id:
             headers["X-Omnix-Speculation-Provider-Id"] = speculation.provider_id
@@ -357,6 +369,7 @@ def register_live_chat_speculation_routes(
                     normalized_transcript_words(speculation.candidate_text)
                 ),
                 "live_voice_turn_id": request.live_voice_turn_id,
+                "live_execution_lane": speculation.execution_lane,
             },
         )
         complete_ms = (time.perf_counter() - complete_started) * 1000.0
@@ -367,6 +380,7 @@ def register_live_chat_speculation_routes(
             "ok": True,
             "generation_id": generation_id,
             "content": speculation.content,
+            "execution_lane": speculation.execution_lane,
             "user_message": user_message.model_dump(mode="json"),
             "session": completed.model_dump(mode="json"),
         }
@@ -380,6 +394,7 @@ def register_live_chat_speculation_routes(
             complete_ms=round(complete_ms, 3),
             total_ms=round((time.perf_counter() - persist_started) * 1000.0, 3),
             event_loop_offloaded=True,
+            execution_lane=speculation.execution_lane,
         )
         return payload
 
@@ -465,6 +480,7 @@ def _generate_side_effect_free(
             "memory_writes_allowed": False,
             "user_turn_id": f"voice-user-turn:{speculation.generation_id}"[:160],
             "speech_segment_id": f"voice-segment:{speculation.segment_id}"[:160],
+            "live_execution_lane": speculation.execution_lane,
         },
     )
     assembly, rendered = store.build_provider_prompt(session, user_message, [])
@@ -511,6 +527,7 @@ def _generate_side_effect_free(
             "provider_id": speculation.provider_id,
             "model_id": speculation.model_id,
             "resolved_model": speculation.model_id,
+            "live_execution_lane": speculation.execution_lane,
             "speculation_side_effects": "disabled",
             "speculation_tools": "disabled",
             "speculation_memory_writes": "disabled",
