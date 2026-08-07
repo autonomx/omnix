@@ -43,6 +43,7 @@ import { initializeLiveSpeculationEarlyTrigger } from './features/assistant-work
 import { initializeLiveSpeculationEligibilityDiagnostics } from './features/assistant-workspace/live-speculation-eligibility-diagnostics';
 import { initializeLiveSpeculationHandshakeTransport } from './features/assistant-workspace/live-speculation-handshake-transport';
 import { initializeLiveSpeculationRuntime } from './features/assistant-workspace/live-speculation-runtime';
+import { initializeLiveSpeculativeTtsRequestContract } from './features/assistant-workspace/live-speculative-tts-request-contract';
 import { initializeLiveSttAuthorityController } from './features/assistant-workspace/live-stt-authority-controller';
 import { initializeLiveTtsAdaptiveBufferController } from './features/assistant-workspace/live-tts-adaptive-buffer-controller';
 import { initializeLiveTtsCapabilityController } from './features/assistant-workspace/live-tts-capability-controller';
@@ -87,6 +88,7 @@ initializeLiveVoiceTurnCoordinator();
 initializeLiveSpeculationDiagnosticsBridge();
 initializeLiveSpeculationEligibilityDiagnostics();
 initializeLiveSpeculationHandshakeTransport();
+initializeLiveSpeculativeTtsRequestContract();
 initializeLiveSpeculationEarlyTrigger();
 initializeLiveSpeculationRuntime();
 initializeLiveCallPrewarmController();
