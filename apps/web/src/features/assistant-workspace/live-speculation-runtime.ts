@@ -1,10 +1,21 @@
 import type { LiveChatSubmissionInput } from './live-chat-submission-gateway';
 import { initializeLiveSpeculationController } from './live-speculation-controller';
+import {
+  LIVE_STT_SPECULATION_CANDIDATE_EVENT,
+  LIVE_STT_SPECULATION_FINAL_EVENT,
+  LIVE_STT_SPECULATION_PARTIAL_EVENT,
+} from './live-stt-authority-controller';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
+const FINALIZED_SEGMENT_LIMIT = 64;
 
 type SpeculationRuntimeWindow = Window & typeof globalThis & {
   __omnixLiveSpeculationRuntimeInstalled?: boolean;
+};
+
+type SpeculationSegmentDetail = {
+  segmentId?: string;
+  sourceSequence?: number;
 };
 
 export function liveSubmissionRequestMatches(
@@ -46,10 +57,60 @@ export function initializeLiveSpeculationRuntime(): () => void {
   if (liveWindow.__omnixLiveSpeculationRuntimeInstalled) return () => undefined;
   liveWindow.__omnixLiveSpeculationRuntimeInstalled = true;
 
+  const finalizedSegments = new Map<string, true>();
+  const segmentKey = (event: Event): string | null => {
+    const detail = (event as CustomEvent<SpeculationSegmentDetail>).detail;
+    if (!detail?.segmentId || typeof detail.sourceSequence !== 'number') return null;
+    return `${detail.segmentId}:${detail.sourceSequence}`;
+  };
+  const rememberFinal = (event: Event): void => {
+    const key = segmentKey(event);
+    if (!key) return;
+    finalizedSegments.delete(key);
+    finalizedSegments.set(key, true);
+    while (finalizedSegments.size > FINALIZED_SEGMENT_LIMIT) {
+      const oldest = finalizedSegments.keys().next().value;
+      if (typeof oldest !== 'string') break;
+      finalizedSegments.delete(oldest);
+    }
+  };
+  const suppressPostFinalUpdate = (event: Event): void => {
+    const key = segmentKey(event);
+    if (key && finalizedSegments.has(key)) event.stopImmediatePropagation();
+  };
+
+  // Kyutai can emit a delayed partial immediately after its authoritative final.
+  // Capture the final before the speculation controller sees it, then suppress
+  // only later partial/candidate events for that exact segment+sequence. This
+  // prevents an accepted speculation from being cancelled by stale STT state.
+  window.addEventListener(LIVE_STT_SPECULATION_FINAL_EVENT, rememberFinal, true);
+  window.addEventListener(
+    LIVE_STT_SPECULATION_PARTIAL_EVENT,
+    suppressPostFinalUpdate,
+    true,
+  );
+  window.addEventListener(
+    LIVE_STT_SPECULATION_CANDIDATE_EVENT,
+    suppressPostFinalUpdate,
+    true,
+  );
+
   const cleanupController = initializeLiveSpeculationController();
 
   return () => {
     cleanupController();
+    window.removeEventListener(LIVE_STT_SPECULATION_FINAL_EVENT, rememberFinal, true);
+    window.removeEventListener(
+      LIVE_STT_SPECULATION_PARTIAL_EVENT,
+      suppressPostFinalUpdate,
+      true,
+    );
+    window.removeEventListener(
+      LIVE_STT_SPECULATION_CANDIDATE_EVENT,
+      suppressPostFinalUpdate,
+      true,
+    );
+    finalizedSegments.clear();
     liveWindow.__omnixLiveSpeculationRuntimeInstalled = false;
   };
 }
