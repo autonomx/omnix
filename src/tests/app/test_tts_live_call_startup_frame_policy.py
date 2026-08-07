@@ -41,6 +41,13 @@ def test_gateway_import_installs_startup_frame_policy() -> None:
     assert TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD == STREAM_INITIAL_FALLBACK_THRESHOLD
 
 
+def test_gateway_composition_binds_warmed_live_tts_provider() -> None:
+    from app.gateway import tts_live_call_websocket
+    from app.gateway.live_voice_runtime_offload import get_cached_live_tts_provider
+
+    assert tts_live_call_websocket.get_tts_provider is get_cached_live_tts_provider
+
+
 def test_startup_policy_hands_off_quiet_200ms_frame_before_provider_resumes(monkeypatch) -> None:
     from app.gateway import tts_live_call_websocket
 
