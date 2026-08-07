@@ -34,6 +34,21 @@ type PerfDetail = Record<string, unknown> & {
   model_time_ms?: unknown;
 };
 
+type SpeculationPartialDetail = Record<string, unknown> & {
+  chatSessionId?: unknown;
+  chat_session_id?: unknown;
+  segmentId?: unknown;
+  segment_id?: unknown;
+  sourceSequence?: unknown;
+  source_sequence?: unknown;
+  text?: unknown;
+};
+
+type CachedPartial = {
+  chatSessionId: string;
+  text: string;
+};
+
 type LastDispatch = {
   fingerprint: string;
   atMs: number;
@@ -72,7 +87,25 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
   if (liveWindow[INSTALLED_KEY]) return () => undefined;
   liveWindow[INSTALLED_KEY] = true;
   const lastBySegment = new Map<string, LastDispatch>();
+  const partialBySegment = new Map<string, CachedPartial>();
   let authoritativeKyutai = false;
+
+  const handlePartial = (event: Event): void => {
+    const detail = (event as CustomEvent<SpeculationPartialDetail>).detail;
+    const segmentId = stringValue(detail?.segmentId ?? detail?.segment_id);
+    const sourceSequence = numberValue(
+      detail?.sourceSequence ?? detail?.source_sequence,
+    );
+    const text = stringValue(detail?.text);
+    if (!segmentId || sourceSequence === null || !text) return;
+    const chatSessionId = stringValue(
+      detail?.chatSessionId ?? detail?.chat_session_id,
+    ) || liveConversationStore.getState().sessionId || '';
+    if (!chatSessionId) return;
+    const key = `${segmentId}:${sourceSequence}`;
+    partialBySegment.set(key, { chatSessionId, text });
+    trimOldest(partialBySegment, 16);
+  };
 
   const handlePerformance = (event: Event): void => {
     const detail = (event as CustomEvent<PerfDetail>).detail;
@@ -84,11 +117,15 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
         detail?.selectedProvider ?? detail?.selected_provider,
       ).toLowerCase() === 'kyutai';
       lastBySegment.clear();
+      partialBySegment.clear();
       return;
     }
     if (stage === 'stt_final_received') {
       const key = identityKey(detail);
-      if (key) lastBySegment.delete(key);
+      if (key) {
+        lastBySegment.delete(key);
+        partialBySegment.delete(key);
+      }
       return;
     }
     if (stage !== 'stt_endpoint_score' || !authoritativeKyutai) return;
@@ -99,13 +136,15 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
       detail?.sourceSequence ?? detail?.source_sequence,
     );
     const probability = numberValue(detail?.probability);
-    const conversation = liveConversationStore.getState();
-    const sessionId = conversation.sessionId;
-    const text = conversation.transcript.partial.trim();
-    if (!segmentId || sourceSequence === null || probability === null || !sessionId) return;
-    if (!earlySpeculationCandidateEligible(probability, text)) return;
+    if (!segmentId || sourceSequence === null || probability === null) return;
 
     const key = `${segmentId}:${sourceSequence}`;
+    const cachedPartial = partialBySegment.get(key);
+    const conversation = liveConversationStore.getState();
+    const sessionId = cachedPartial?.chatSessionId || conversation.sessionId;
+    const text = (cachedPartial?.text || conversation.transcript.partial).trim();
+    if (!sessionId || !earlySpeculationCandidateEligible(probability, text)) return;
+
     const fingerprint = normalizedWords(text);
     const now = performance.now();
     const previous = lastBySegment.get(key);
@@ -115,11 +154,7 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
       && now - previous.atMs < DUPLICATE_SUPPRESSION_MS
     ) return;
     lastBySegment.set(key, { fingerprint, atMs: now });
-    while (lastBySegment.size > 16) {
-      const oldest = lastBySegment.keys().next().value;
-      if (typeof oldest !== 'string') break;
-      lastBySegment.delete(oldest);
-    }
+    trimOldest(lastBySegment, 16);
 
     const candidate = {
       chatSessionId: sessionId,
@@ -154,10 +189,13 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
     }));
   };
 
+  window.addEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
   window.addEventListener(PERF_EVENT, handlePerformance);
   return () => {
+    window.removeEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
     window.removeEventListener(PERF_EVENT, handlePerformance);
     lastBySegment.clear();
+    partialBySegment.clear();
     authoritativeKyutai = false;
     liveWindow[INSTALLED_KEY] = false;
   };
@@ -177,6 +215,14 @@ function identityKey(detail: PerfDetail | undefined): string | null {
   return segmentId && sourceSequence !== null
     ? `${segmentId}:${sourceSequence}`
     : null;
+}
+
+function trimOldest<T>(map: Map<string, T>, maxSize: number): void {
+  while (map.size > maxSize) {
+    const oldest = map.keys().next().value;
+    if (typeof oldest !== 'string') break;
+    map.delete(oldest);
+  }
 }
 
 function stringValue(value: unknown): string {
