@@ -38,6 +38,9 @@ class _JsonResponse:
 
 
 class _StreamResponse:
+    def __init__(self) -> None:
+        self.closed = False
+
     def iter_lines(self):
         yield b'data: {"model":"qwen","choices":[{"delta":{"content":"Howdy"}}]}'
         yield (
@@ -47,6 +50,9 @@ class _StreamResponse:
             b'"generation_time":0.38,"stop_reason":"eosFound"}}'
         )
         yield b'data: [DONE]'
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _loaded_model_response() -> _JsonResponse:
@@ -77,12 +83,13 @@ def _provider() -> LMStudioProvider:
 def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> None:
     calls: list[tuple[str, str, dict[str, Any]]] = []
     provider = _provider()
+    stream_response = _StreamResponse()
 
     def fake_make_request(method: str, endpoint: str, **kwargs: Any):
         calls.append((method, endpoint, kwargs))
         if endpoint == "/api/v1/models":
             return _loaded_model_response()
-        return _StreamResponse()
+        return stream_response
 
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
 
@@ -108,17 +115,19 @@ def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> No
     }
     assert chunks[-1].finish_reason == "stop"
     assert chunks[-1].raw_response["stats"]["tokens_per_second"] == 127.26
+    assert stream_response.closed is True
 
 
 def test_lmstudio_regular_stream_keeps_openai_compatible_endpoint(monkeypatch) -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
     provider = _provider()
+    stream_response = _StreamResponse()
 
     def fake_make_request(method: str, endpoint: str, **kwargs: Any):
         calls.append((endpoint, kwargs))
         if endpoint == "/api/v1/models":
             return _loaded_model_response()
-        return _StreamResponse()
+        return stream_response
 
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
 
@@ -134,6 +143,28 @@ def test_lmstudio_regular_stream_keeps_openai_compatible_endpoint(monkeypatch) -
         "/v1/chat/completions",
     ]
     assert calls[-1][1]["json"]["model"] == "qwen"
+    assert stream_response.closed is True
+
+
+def test_lmstudio_cancelled_stream_closes_http_response(monkeypatch) -> None:
+    provider = _provider()
+    stream_response = _StreamResponse()
+    monkeypatch.setattr(
+        provider,
+        "_make_chat_completion_request",
+        lambda *_args, **_kwargs: stream_response,
+    )
+
+    stream = provider.chat_completion(
+        [ChatMessage(role="user", content="Hello")],
+        stream=True,
+    )
+    assert next(stream).content == "Howdy"
+    assert stream_response.closed is False
+
+    stream.close()
+
+    assert stream_response.closed is True
 
 
 def test_provider_metrics_normalize_lmstudio_stats() -> None:
