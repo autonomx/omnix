@@ -40,6 +40,10 @@ type PerfDetail = {
   stage?: unknown;
   turnId?: unknown;
   sttFinalizeMs?: unknown;
+  inputChars?: unknown;
+  input_chars?: unknown;
+  transcriptChars?: unknown;
+  transcript_chars?: unknown;
 };
 
 type DiagnosticDetail = {
@@ -135,6 +139,22 @@ function handlePerfEvent(event: Event): void {
     return;
   }
   if (stage === 'stt_final_received') {
+    const transcriptChars = finiteNonnegative(
+      detail.inputChars
+      ?? detail.input_chars
+      ?? detail.transcriptChars
+      ?? detail.transcript_chars,
+    );
+    if (transcriptChars === 0) {
+      reporter?.record('release_metric_skipped', {
+        metric_name: 'turn_latency',
+        reason: 'empty_final_transcript',
+        incoming_turn_id: incomingTurnId,
+      }, 'release_observer');
+      state = emptyState();
+      return;
+    }
+
     const requestedAt = state.sttRequestedAt;
     const requestedTurnId = state.turnId;
     const matchingRequest = requestedAt !== null
@@ -192,7 +212,12 @@ function handleDiagnosticEvent(event: Event): void {
     recordLatency('final_to_first_token_ms', elapsed(state.sttFinalAt, now));
     return;
   }
-  if (diagnosticEvent === 'phrase_first_frame_received' && state.firstPcmAt === null) {
+  if (
+    diagnosticEvent === 'phrase_first_frame_received'
+    && state.firstPcmAt === null
+    && state.sttFinalAt !== null
+    && state.firstTokenAt !== null
+  ) {
     state.firstPcmAt = now;
     state.firstPcmOutputId = diagnosticString(detail, 'output_id');
     state.firstPcmSegmentId = diagnosticString(detail, 'segment_id');
@@ -204,6 +229,9 @@ function handleDiagnosticEvent(event: Event): void {
   if (
     diagnosticEvent === 'worklet_segment_started'
     && state.firstPlaybackAt === null
+    && state.sttFinalAt !== null
+    && state.firstTokenAt !== null
+    && state.firstPcmAt !== null
     && isSpeechPlayback(detail)
     && playbackMatchesFirstPcm(detail)
   ) {
