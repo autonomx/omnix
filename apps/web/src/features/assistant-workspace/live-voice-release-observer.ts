@@ -215,6 +215,7 @@ function handleDiagnosticEvent(event: Event): void {
   if (
     diagnosticEvent === 'phrase_first_frame_received'
     && state.firstPcmAt === null
+    && state.activeTraceId !== null
     && state.sttFinalAt !== null
     && state.firstTokenAt !== null
   ) {
@@ -229,6 +230,7 @@ function handleDiagnosticEvent(event: Event): void {
   if (
     diagnosticEvent === 'worklet_segment_started'
     && state.firstPlaybackAt === null
+    && state.activeTraceId !== null
     && state.sttFinalAt !== null
     && state.firstTokenAt !== null
     && state.firstPcmAt !== null
