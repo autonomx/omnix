@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.gateway import live_voice_speculative_tts as speculative_tts
 from app.gateway.live_voice_execution_lane import (
     reset_live_voice_execution_lane_for_tests,
 )
@@ -88,6 +90,42 @@ def test_accepted_prefetch_is_promoted_and_replayed_without_second_generation() 
         assert next(replay)[0] == b"\x02\x00" * 4_800
         assert provider.calls == 1
         assert speculative_tts_cache_snapshot()[0]["claimed"] is True
+    finally:
+        provider.allow_finish.set()
+        _reset()
+
+
+def test_stale_accepted_prefetch_cannot_be_claimed_by_a_later_turn() -> None:
+    _reset()
+    provider = _BlockingProvider()
+    request = _request("A phrase that might appear again.")
+
+    try:
+        _start_prefetch("spec-stale", request, provider, "shared")
+        assert provider.first_chunk_ready.wait(timeout=1)
+        entry = _accept_entry("spec-stale")
+        provider.allow_finish.set()
+        with entry.condition:
+            deadline = time.monotonic() + 1.0
+            while not entry.completed and time.monotonic() < deadline:
+                entry.condition.wait(timeout=0.025)
+            assert entry.completed
+            assert entry.accepted_at is not None
+            entry.accepted_at -= speculative_tts._ACCEPTED_UNCLAIMED_TTL_SECONDS + 0.1
+
+        replay = _LiveLaneProviderProxy(provider, "shared").generate_audio_stream(
+            text=request.text,
+            speaker=request.speaker,
+            language=request.language or "en",
+            **_stream_kwargs(request, provider),
+        )
+        first_pcm, first_rate, timing = next(replay)
+
+        assert first_pcm == b"\x01\x00" * 4_800
+        assert first_rate == 24_000
+        assert "speculative_tts_cache" not in timing
+        assert provider.calls == 2
+        assert speculative_tts_cache_snapshot() == []
     finally:
         provider.allow_finish.set()
         _reset()
