@@ -20,6 +20,16 @@ describe('live voice floor manager', () => {
     expect(unfinished.recommendedWaitMs).toBeGreaterThan(command.recommendedWaitMs);
   });
 
+  it('uses a bounded 220 ms balanced fast path for clear questions and commands', () => {
+    expect(semanticFinalizeDelay('Where are we going?', 'balanced')).toBe(220);
+    expect(semanticFinalizeDelay('Open the inventory', 'balanced')).toBe(220);
+  });
+
+  it('does not apply the clear-turn fast path to ordinary statements', () => {
+    expect(semanticFinalizeDelay('The road looks dangerous', 'balanced')).toBe(360);
+    expect(semanticFinalizeDelay('We should take the road because', 'balanced')).toBe(1_000);
+  });
+
   it('provides bounded quick balanced and reflective profiles', () => {
     expect(semanticFinalizeDelay('Open the inventory', 'quick')).toBeLessThan(
       semanticFinalizeDelay('Open the inventory', 'reflective'),
