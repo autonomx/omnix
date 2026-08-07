@@ -102,10 +102,12 @@ def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> 
     assert streamed.headers["x-omnix-speculation-transport"] == (
         "inline-v2-client-id"
     )
+    assert streamed.headers["x-omnix-live-execution-lane"] == "session"
     payloads = _event_payloads(streamed.text)
     assert payloads[0]["type"] == "speculation_started"
     assert payloads[0]["inline_stream"] is True
     assert payloads[0]["client_allocated"] is False
+    assert payloads[0]["execution_lane"] == "session"
     assert "".join(
         payload.get("text", "")
         for payload in payloads
@@ -114,6 +116,35 @@ def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> 
     assert payloads[-1]["type"] == "done"
     assert provider.calls == 1
     assert store.get_session_calls == 1
+
+
+def test_inline_stream_uses_dedicated_live_model_lane(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    handshake.clear_live_speculation_handshake_state()
+    monkeypatch.setenv("OMNIX_LIVE_VOICE_EXECUTION_MODE", "dedicated")
+    monkeypatch.setenv("OMNIX_LIVE_VOICE_PROVIDER_ID", "fast-provider")
+    monkeypatch.setenv("OMNIX_LIVE_VOICE_MODEL_ID", "fast-live-model")
+    store = _FakeStore()
+    provider = _FakeProvider()
+    client = _client(store, provider, monkeypatch)
+
+    streamed = client.post(
+        "/api/live/speculation/sessions/session-inline/start-stream",
+        json={
+            "content": "Tell me a story",
+            "segment_id": "segment-inline",
+            "source_sequence": 11,
+        },
+    )
+
+    assert streamed.status_code == 200
+    assert streamed.headers["x-omnix-live-execution-lane"] == "dedicated"
+    assert streamed.headers["x-omnix-speculation-provider-id"] == "fast-provider"
+    assert streamed.headers["x-omnix-speculation-model-id"] == "fast-live-model"
+    payloads = _event_payloads(streamed.text)
+    assert payloads[0]["execution_lane"] == "dedicated"
+    assert payloads[0]["provider_id"] == "fast-provider"
+    assert payloads[0]["model_id"] == "fast-live-model"
 
 
 def test_inline_stream_honors_a_valid_client_generation_id(monkeypatch) -> None:
