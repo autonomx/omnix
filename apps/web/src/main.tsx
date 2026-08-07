@@ -40,6 +40,7 @@ import { initializeLivePresencePolicyController } from './features/assistant-wor
 import { initializeLiveSessionCoordinator } from './features/assistant-workspace/live-session-coordinator';
 import { initializeLiveSpeculationController } from './features/assistant-workspace/live-speculation-controller';
 import { initializeLiveSpeculationDiagnosticsBridge } from './features/assistant-workspace/live-speculation-diagnostics-bridge';
+import { initializeLiveSpeculationEarlyTrigger } from './features/assistant-workspace/live-speculation-early-trigger';
 import { initializeLiveSpeculationEligibilityDiagnostics } from './features/assistant-workspace/live-speculation-eligibility-diagnostics';
 import { initializeLiveSpeculationHandshakeTransport } from './features/assistant-workspace/live-speculation-handshake-transport';
 import { initializeLiveSttAuthorityController } from './features/assistant-workspace/live-stt-authority-controller';
@@ -84,6 +85,7 @@ initializeLiveSttAuthorityController();
 initializeLiveSpeculationDiagnosticsBridge();
 initializeLiveSpeculationEligibilityDiagnostics();
 initializeLiveSpeculationHandshakeTransport();
+initializeLiveSpeculationEarlyTrigger();
 initializeLiveSpeculationController();
 initializeLiveCallPrewarmController();
 emitLiveRuntimeProvenance();
