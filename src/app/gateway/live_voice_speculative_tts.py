@@ -12,7 +12,6 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app import shared
 from app.live_speech.performance_contract import apply_performance_plan_to_provider
 from app.shared import remove_emojis
 
@@ -22,6 +21,7 @@ from .live_voice_execution_lane import (
     live_voice_tts_scheduler,
     resolve_live_voice_tts_provider,
 )
+from .live_voice_runtime_offload import get_cached_live_tts_provider
 from .tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
 from .tts_stream_diagnostics import stream_log
 
@@ -572,8 +572,11 @@ def register_live_voice_execution_lane_routes(app: FastAPI) -> None:
     async def prefetch_speculative_tts(
         payload: SpeculativeTtsPrefetchRequest,
     ) -> dict[str, Any]:
-        default_provider = shared.get_tts_provider()
+        route_started = time.perf_counter()
+        default_provider = get_cached_live_tts_provider()
+        cached_provider_resolved = time.perf_counter()
         provider, lane = resolve_live_voice_tts_provider(default_provider)
+        lane_provider_resolved = time.perf_counter()
         if provider is None or not hasattr(provider, "generate_audio_stream"):
             raise HTTPException(status_code=503, detail="tts_provider_unavailable")
         entry = _start_prefetch(
@@ -582,6 +585,7 @@ def register_live_voice_execution_lane_routes(app: FastAPI) -> None:
             provider,
             lane,
         )
+        prefetch_started = time.perf_counter()
         stream_log(
             "gateway-live-speculative-tts",
             "runtime",
@@ -590,6 +594,18 @@ def register_live_voice_execution_lane_routes(app: FastAPI) -> None:
             text_length=len(payload.request.text or ""),
             speaker=payload.request.speaker,
             execution_lane=lane,
+            cached_provider_lookup_ms=round(
+                (cached_provider_resolved - route_started) * 1000.0,
+                3,
+            ),
+            lane_provider_resolution_ms=round(
+                (lane_provider_resolved - cached_provider_resolved) * 1000.0,
+                3,
+            ),
+            route_to_prefetch_thread_ms=round(
+                (prefetch_started - route_started) * 1000.0,
+                3,
+            ),
         )
         return {
             "ok": True,
