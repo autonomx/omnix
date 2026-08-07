@@ -21,6 +21,7 @@ from app.chat import ChatSessionStore, default_chat_store
 
 from . import live_chat_speculation as speculation_runtime
 from . import live_chat_speculation_handshake as handshake_runtime
+from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_inline_stream_registered"
@@ -61,6 +62,10 @@ def register_live_chat_speculation_inline_stream_routes(
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
 
+        provider_id, model_id, execution_lane = resolve_live_voice_chat_route(
+            request.provider_id or session.provider_id,
+            request.model_id or session.model_id,
+        )
         generation_id = _requested_generation_id(await _request_payload(raw_request))
         if generation_id is None:
             generation_id = f"spec-{uuid.uuid4().hex}"
@@ -68,8 +73,8 @@ def register_live_chat_speculation_inline_stream_routes(
             generation_id=generation_id,
             session_id=session_id,
             candidate_text=request.content.strip(),
-            provider_id=request.provider_id or session.provider_id,
-            model_id=request.model_id or session.model_id,
+            provider_id=provider_id,
+            model_id=model_id,
             segment_id=request.segment_id,
             source_sequence=request.source_sequence,
             created_at=time.time(),
@@ -114,6 +119,9 @@ def register_live_chat_speculation_inline_stream_routes(
             total_ms=round(allocation_ms, 3),
             generation_started=False,
             inline_stream=True,
+            execution_lane=execution_lane,
+            provider_id=provider_id,
+            model_id=model_id,
             max_buffered_events=handshake_runtime._MAX_BUFFERED_EVENTS,
             max_buffered_bytes=handshake_runtime._MAX_BUFFERED_BYTES,
         )
@@ -127,6 +135,7 @@ def register_live_chat_speculation_inline_stream_routes(
             generation_completed=False,
             attach_delay_ms=round(allocation_ms, 3),
             inline_stream=True,
+            execution_lane=execution_lane,
         )
 
         def generate() -> Iterator[str]:
@@ -138,6 +147,7 @@ def register_live_chat_speculation_inline_stream_routes(
                     "source_sequence": request.source_sequence,
                     "provider_id": pending.provider_id,
                     "model_id": pending.model_id,
+                    "execution_lane": execution_lane,
                     "inline_stream": True,
                     "client_allocated": generation_id.startswith("spec-client-"),
                 }
@@ -154,6 +164,7 @@ def register_live_chat_speculation_inline_stream_routes(
             "X-Accel-Buffering": "no",
             "X-Omnix-Speculation-Generation-Id": generation_id,
             "X-Omnix-Speculation-Transport": "inline-v2-client-id",
+            "X-Omnix-Live-Execution-Lane": execution_lane,
         }
         if pending.provider_id:
             headers["X-Omnix-Speculation-Provider-Id"] = pending.provider_id
