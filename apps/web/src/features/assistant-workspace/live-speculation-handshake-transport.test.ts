@@ -33,7 +33,7 @@ describe('live speculation direct gateway transport', () => {
       '/api/live/speculation/sessions/session-test/start-stream?x=1',
       viteLocation,
       {},
-    )).toBe('http://localhost:8000/api/live/speculation/sessions/session-test/start-stream?x=1');
+    )).toBe('http://127.0.0.1:8000/api/live/speculation/sessions/session-test/start-stream?x=1');
     expect(resolveDirectSpeculationUrl(
       '/api/live/speculation/tts-prefetch',
       viteLocation,
