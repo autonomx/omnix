@@ -41,10 +41,16 @@ class FakeLiveSession:
         ),
     )
 
-    def __init__(self, *, block_flush: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        block_flush: bool = False,
+        endpoint_probability: float | None = None,
+    ) -> None:
         self.sent_audio: list[bytes] = []
         self.transcript = ""
         self.block_flush = block_flush
+        self.endpoint_probability = endpoint_probability
         self.cancelled: set[str] = set()
         self._events: asyncio.Queue[LiveSttEvent | None] = asyncio.Queue()
 
@@ -55,6 +61,14 @@ class FakeLiveSession:
         await self._events.put(
             LiveSttEvent(type="word", text="hello", start_ms=10.0, end_ms=210.0)
         )
+        if self.endpoint_probability is not None:
+            await self._events.put(
+                LiveSttEvent(
+                    type="endpoint_score",
+                    probability=self.endpoint_probability,
+                    model_time_ms=240.0,
+                )
+            )
 
     async def flush(self, attempt_id: str) -> LiveSttFlushResult:
         await self._events.put(LiveSttEvent(type="flush_started", attempt_id=attempt_id))
@@ -95,6 +109,7 @@ class FakeLiveSession:
 @dataclass
 class FakeProvider:
     block_flush: bool = False
+    endpoint_probability: float | None = None
 
     def __post_init__(self) -> None:
         self.sessions: list[FakeLiveSession] = []
@@ -102,7 +117,10 @@ class FakeProvider:
 
     async def create_live_session(self, *, language: str | None = None) -> FakeLiveSession:
         assert language in {"en", "fr"}
-        session = FakeLiveSession(block_flush=self.block_flush)
+        session = FakeLiveSession(
+            block_flush=self.block_flush,
+            endpoint_probability=self.endpoint_probability,
+        )
         self.sessions.append(session)
         return session
 
@@ -184,6 +202,41 @@ def test_bridge_forwards_words_and_publishes_normalized_result() -> None:
         assert result["text"] == "hello"
         assert result["provider"] == "kyutai"
         assert result["providerMetrics"]["flushRealtimeFactor"] == 0.1
+
+
+def test_bridge_emits_speculation_candidate_without_lowering_commit_threshold(monkeypatch) -> None:
+    # The old shared environment name belongs to the authoritative browser gate.
+    # It must not suppress the provider's earlier private speculation hints.
+    monkeypatch.setenv("KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD", "0.95")
+    monkeypatch.delenv("KYUTAI_SPECULATION_CANDIDATE_THRESHOLD", raising=False)
+    provider = FakeProvider(endpoint_probability=0.4)
+    client, connection = _open_socket(provider)
+
+    with client, connection as websocket:
+        websocket.receive_json()
+        session_id = "session-speculation"
+        capture_epoch = "capture-speculation"
+        websocket.send_json(
+            {
+                "type": "hello",
+                "sessionId": session_id,
+                "captureEpoch": capture_epoch,
+                "sampleRate": 24_000,
+            }
+        )
+        websocket.receive_json()
+        websocket.send_json(_audio_message(session_id, capture_epoch))
+
+        messages: list[dict[str, Any]] = []
+        while not any(message.get("type") == "endpoint_candidate" for message in messages):
+            messages.append(websocket.receive_json())
+
+        score = next(message for message in messages if message["type"] == "endpoint_score")
+        candidate = next(message for message in messages if message["type"] == "endpoint_candidate")
+        assert score["probability"] == 0.4
+        assert candidate["probability"] == 0.4
+        assert candidate["segmentId"] == "segment-0"
+        assert candidate["sequence"] == 0
 
 
 def test_bridge_reads_cancel_flush_while_worker_is_flushing() -> None:
