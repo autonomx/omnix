@@ -38,6 +38,7 @@ class LiveVoiceExecutionLaneConfig:
 class _TtsTicket:
     priority: TtsLanePriority
     sequence: int
+    promotion_event: threading.Event | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event)
     started: bool = False
 
@@ -45,9 +46,9 @@ class _TtsTicket:
 class PriorityTtsScheduler:
     """Serialize non-concurrent TTS providers with accepted turns first.
 
-    A newly accepted request cancels an active speculative stream. Providers are
-    still cooperatively cancellable at their next yielded chunk, but queued
-    speculative work can never run ahead of accepted speech.
+    A newly accepted request cancels an active unaccepted speculative stream.
+    A speculative first clause that becomes authoritative can be promoted in
+    place and is then protected from later accepted-turn preemption.
     """
 
     def __init__(self) -> None:
@@ -66,8 +67,9 @@ class PriorityTtsScheduler:
         kwargs: dict[str, Any],
         priority: TtsLanePriority,
         should_stop: Callable[[], bool] | None = None,
+        promotion_event: threading.Event | None = None,
     ) -> Iterator[tuple[Any, int, Any]]:
-        ticket = self._acquire(priority)
+        ticket = self._acquire(priority, promotion_event)
         stream: Any = None
         try:
             if self._stopped(ticket, should_stop):
@@ -92,12 +94,17 @@ class PriorityTtsScheduler:
         with self._condition:
             return {
                 "active_priority": (
-                    int(self._active.priority) if self._active is not None else None
+                    int(self._effective_priority(self._active))
+                    if self._active is not None
+                    else None
                 ),
                 "active_cancelled": bool(
                     self._active and self._active.cancel_event.is_set()
                 ),
-                "waiting": [int(ticket.priority) for ticket in self._waiting],
+                "waiting": [
+                    int(self._effective_priority(ticket))
+                    for ticket in self._waiting
+                ],
             }
 
     def clear(self) -> None:
@@ -109,15 +116,28 @@ class PriorityTtsScheduler:
             self._waiting.clear()
             self._condition.notify_all()
 
-    def _acquire(self, priority: TtsLanePriority) -> _TtsTicket:
+    def notify_priority_change(self) -> None:
+        with self._condition:
+            self._condition.notify_all()
+
+    def _acquire(
+        self,
+        priority: TtsLanePriority,
+        promotion_event: threading.Event | None,
+    ) -> _TtsTicket:
         with self._condition:
             self._sequence += 1
-            ticket = _TtsTicket(priority=priority, sequence=self._sequence)
+            ticket = _TtsTicket(
+                priority=priority,
+                sequence=self._sequence,
+                promotion_event=promotion_event,
+            )
             self._waiting.append(ticket)
             if (
                 priority == TtsLanePriority.ACCEPTED
                 and self._active is not None
-                and self._active.priority == TtsLanePriority.SPECULATIVE
+                and self._effective_priority(self._active)
+                == TtsLanePriority.SPECULATIVE
             ):
                 self._active.cancel_event.set()
                 stream_log(
@@ -133,7 +153,10 @@ class PriorityTtsScheduler:
                     raise RuntimeError("tts_lane_ticket_cancelled")
                 next_ticket = min(
                     self._waiting,
-                    key=lambda item: (int(item.priority), item.sequence),
+                    key=lambda item: (
+                        int(self._effective_priority(item)),
+                        item.sequence,
+                    ),
                 )
                 if self._active is None and next_ticket is ticket:
                     self._waiting.remove(ticket)
@@ -148,6 +171,12 @@ class PriorityTtsScheduler:
                 self._active = None
             self._waiting = [item for item in self._waiting if item is not ticket]
             self._condition.notify_all()
+
+    @staticmethod
+    def _effective_priority(ticket: _TtsTicket) -> TtsLanePriority:
+        if ticket.promotion_event is not None and ticket.promotion_event.is_set():
+            return TtsLanePriority.ACCEPTED
+        return ticket.priority
 
     @staticmethod
     def _stopped(
