@@ -1,7 +1,6 @@
 """Accepted-first speculative TTS cache for the dedicated live execution lane."""
 from __future__ import annotations
 
-import json
 import re
 import threading
 import time
@@ -17,7 +16,6 @@ from app import shared
 from app.live_speech.performance_contract import apply_performance_plan_to_provider
 from app.shared import remove_emojis
 
-from . import tts_live_call_websocket
 from .live_voice_execution_lane import (
     TtsLanePriority,
     live_voice_execution_lane_config,
@@ -95,7 +93,7 @@ class _LiveLaneProviderProxy:
 
     def __init__(self, provider: Any, lane: str) -> None:
         self._provider = provider
-        self._lane = lane
+        self.execution_lane = lane
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._provider, name)
@@ -175,7 +173,7 @@ class _LiveLaneProviderProxy:
                     "speculative_tts_cache_fallback",
                     generation_id=entry.generation_id,
                     error=error,
-                    execution_lane=self._lane,
+                    execution_lane=self.execution_lane,
                 )
                 yield from _scheduled_provider_stream(
                     self._provider,
@@ -227,6 +225,16 @@ class _LiveLaneProviderProxy:
                         generation_id=entry.generation_id,
                         emitted_chunk_count=emitted,
                     )
+
+
+def resolve_live_call_tts_provider(default_provider: Any) -> Any:
+    """Resolve the explicit live-call TTS lane without patching provider lookup."""
+    if default_provider is None or isinstance(default_provider, _LiveLaneProviderProxy):
+        return default_provider
+    provider, lane = resolve_live_voice_tts_provider(default_provider)
+    if provider is None:
+        return None
+    return _LiveLaneProviderProxy(provider, lane)
 
 
 def _scheduled_provider_stream(
@@ -603,23 +611,9 @@ def register_live_voice_execution_lane_routes(app: FastAPI) -> None:
 
 
 def install_live_voice_execution_lane_hook() -> None:
-    """Compose live TTS routes and provider selection at gateway creation."""
+    """Register live execution-lane routes on gateway app construction."""
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
-
-    original_get_provider = tts_live_call_websocket.get_tts_provider
-
-    @wraps(original_get_provider)
-    def live_lane_provider() -> Any:
-        default_provider = original_get_provider()
-        if isinstance(default_provider, _LiveLaneProviderProxy):
-            return default_provider
-        provider, lane = resolve_live_voice_tts_provider(default_provider)
-        if provider is None:
-            return None
-        return _LiveLaneProviderProxy(provider, lane)
-
-    tts_live_call_websocket.get_tts_provider = live_lane_provider
 
     original_init: Callable[..., None] = FastAPI.__init__
 
@@ -639,5 +633,6 @@ __all__ = [
     "clear_speculative_tts_cache",
     "install_live_voice_execution_lane_hook",
     "register_live_voice_execution_lane_routes",
+    "resolve_live_call_tts_provider",
     "speculative_tts_cache_snapshot",
 ]
