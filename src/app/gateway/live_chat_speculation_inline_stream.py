@@ -78,6 +78,7 @@ def register_live_chat_speculation_inline_stream_routes(
             segment_id=request.segment_id,
             source_sequence=request.source_sequence,
             created_at=time.time(),
+            execution_lane=execution_lane,
         )
         generation = handshake_runtime._HandshakeGeneration(
             store=store,
@@ -147,7 +148,7 @@ def register_live_chat_speculation_inline_stream_routes(
                     "source_sequence": request.source_sequence,
                     "provider_id": pending.provider_id,
                     "model_id": pending.model_id,
-                    "execution_lane": execution_lane,
+                    "execution_lane": pending.execution_lane,
                     "inline_stream": True,
                     "client_allocated": generation_id.startswith("spec-client-"),
                 }
@@ -164,7 +165,7 @@ def register_live_chat_speculation_inline_stream_routes(
             "X-Accel-Buffering": "no",
             "X-Omnix-Speculation-Generation-Id": generation_id,
             "X-Omnix-Speculation-Transport": "inline-v2-client-id",
-            "X-Omnix-Live-Execution-Lane": execution_lane,
+            "X-Omnix-Live-Execution-Lane": pending.execution_lane,
         }
         if pending.provider_id:
             headers["X-Omnix-Speculation-Provider-Id"] = pending.provider_id
