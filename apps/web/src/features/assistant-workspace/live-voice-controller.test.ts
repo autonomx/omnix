@@ -4,6 +4,7 @@ import { liveConversationStore } from './live-conversation-store';
 import {
   liveVoiceAssistantOwnsFloor,
   liveVoiceSpeechThreshold,
+  semanticFinalizationRemainingMs,
 } from './live-voice-controller';
 
 const SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
@@ -25,6 +26,19 @@ describe('live voice controller sensitivity', () => {
     expect(lowSensitivityThreshold).toBeGreaterThan(highSensitivityThreshold);
     expect(lowSensitivityThreshold).toBeGreaterThan(0.03);
     expect(highSensitivityThreshold).toBeLessThan(0.03);
+  });
+});
+
+describe('live voice semantic finalization deadline', () => {
+  it('shortens a stale insufficient-text timer from the original pause boundary', () => {
+    expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(880);
+    expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 120)).toBe(100);
+    expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 260)).toBe(0);
+  });
+
+  it('can lengthen the remaining wait again when the transcript becomes incomplete', () => {
+    expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 150)).toBe(70);
+    expect(semanticFinalizationRemainingMs('Where are we going to', 'balanced', 150)).toBe(850);
   });
 });
 
