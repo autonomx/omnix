@@ -26,6 +26,25 @@ _HOOK_SENTINEL = "_omnix_live_speculative_tts_hook_installed"
 _CACHE_TTL_SECONDS = 45.0
 _MAX_CACHE_ENTRIES = 16
 _WAIT_SLICE_SECONDS = 0.05
+_CACHE_KEY_KWARGS = frozenset(
+    {
+        "chunk_size",
+        "temperature",
+        "top_k",
+        "top_p",
+        "repetition_penalty",
+        "append_silence",
+        "non_streaming_mode",
+        "max_new_tokens",
+        "parity_mode",
+    }
+)
+
+# Faster Qwen3 TTS explicitly declares that it does not support concurrent
+# generation. Wrong hypotheses may still be winding down when the final answer
+# begins, so all real provider calls share one lock. Accepted cache replay never
+# takes this lock and therefore remains immediate.
+_PROVIDER_GENERATION_LOCK = threading.RLock()
 
 
 class SpeculativeTtsPrefetchRequest(BaseModel):
@@ -80,11 +99,12 @@ class _PrefetchingProviderProxy:
         key = _stream_key(text, speaker, language, kwargs)
         entry = _claim_entry(key)
         if entry is None:
-            yield from self._provider.generate_audio_stream(
+            yield from _locked_provider_stream(
+                self._provider,
                 text=text,
                 speaker=speaker,
                 language=language,
-                **kwargs,
+                kwargs=kwargs,
             )
             return
 
@@ -129,11 +149,12 @@ class _PrefetchingProviderProxy:
                 generation_id=entry.generation_id,
                 error=error,
             )
-            yield from self._provider.generate_audio_stream(
+            yield from _locked_provider_stream(
+                self._provider,
                 text=text,
                 speaker=speaker,
                 language=language,
-                **kwargs,
+                kwargs=kwargs,
             )
             return
 
@@ -195,6 +216,23 @@ def _stream_kwargs(request: TtsStreamRequest, provider: Any) -> dict[str, Any]:
     return kwargs
 
 
+def _locked_provider_stream(
+    provider: Any,
+    *,
+    text: str,
+    speaker: str | None,
+    language: str,
+    kwargs: dict[str, Any],
+) -> Iterator[tuple[Any, int, Any]]:
+    with _PROVIDER_GENERATION_LOCK:
+        yield from provider.generate_audio_stream(
+            text=text,
+            speaker=speaker,
+            language=language,
+            **kwargs,
+        )
+
+
 def _start_prefetch(
     generation_id: str,
     request: TtsStreamRequest,
@@ -224,11 +262,12 @@ def _start_prefetch(
     def produce() -> None:
         started = time.perf_counter()
         try:
-            stream = provider.generate_audio_stream(
+            stream = _locked_provider_stream(
+                provider,
                 text=text,
                 speaker=request.speaker,
                 language=language,
-                **kwargs,
+                kwargs=kwargs,
             )
             for audio_chunk, sample_rate, timing in stream:
                 with entry.condition:
@@ -323,11 +362,19 @@ def _stream_key(
     language: str,
     kwargs: dict[str, Any],
 ) -> str:
+    # Performance controls that the current provider ignores must not turn an
+    # otherwise identical first-clause request into a cache miss. Only actual
+    # waveform-affecting sampling and stream controls participate in identity.
+    stable_kwargs = {
+        key: value
+        for key, value in kwargs.items()
+        if key in _CACHE_KEY_KWARGS
+    }
     payload = {
         "text": " ".join((text or "").split()),
         "speaker": (speaker or "").strip(),
         "language": (language or "en").strip().casefold(),
-        "kwargs": _json_safe(kwargs),
+        "kwargs": _json_safe(stable_kwargs),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
