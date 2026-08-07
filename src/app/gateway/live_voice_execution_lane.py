@@ -190,6 +190,7 @@ _TTS_SCHEDULER = PriorityTtsScheduler()
 _DEDICATED_TTS_LOCK = threading.RLock()
 _DEDICATED_TTS_PROVIDER: Any = None
 _DEDICATED_TTS_KEY: str | None = None
+_DEDICATED_TTS_PROVIDER_NAME: str | None = None
 
 
 def _normalized(value: str | None) -> str | None:
@@ -244,6 +245,17 @@ def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
     if not config.dedicated_tts or not provider_name:
         return default_provider, "shared"
 
+    # Dedicated live TTS is an explicit process-level configuration. Once that
+    # provider is started, return it directly on the phrase hot path instead of
+    # reloading application settings for every clause. A process restart/reset
+    # remains the boundary for changing the dedicated provider configuration.
+    with _DEDICATED_TTS_LOCK:
+        if (
+            _DEDICATED_TTS_PROVIDER is not None
+            and _DEDICATED_TTS_PROVIDER_NAME == provider_name
+        ):
+            return _DEDICATED_TTS_PROVIDER, "dedicated"
+
     settings = shared.load_settings()
     provider_settings = dict(settings.get(provider_name, {}) or {})
     cache_key = json.dumps(
@@ -251,12 +263,13 @@ def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
         sort_keys=True,
         default=str,
     )
-    global _DEDICATED_TTS_KEY, _DEDICATED_TTS_PROVIDER
+    global _DEDICATED_TTS_KEY, _DEDICATED_TTS_PROVIDER, _DEDICATED_TTS_PROVIDER_NAME
     with _DEDICATED_TTS_LOCK:
         if (
             _DEDICATED_TTS_PROVIDER is not None
             and _DEDICATED_TTS_KEY == cache_key
         ):
+            _DEDICATED_TTS_PROVIDER_NAME = provider_name
             return _DEDICATED_TTS_PROVIDER, "dedicated"
 
         previous = _DEDICATED_TTS_PROVIDER
@@ -289,16 +302,18 @@ def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
                 )
         _DEDICATED_TTS_PROVIDER = provider
         _DEDICATED_TTS_KEY = cache_key
+        _DEDICATED_TTS_PROVIDER_NAME = provider_name
         return provider, "dedicated"
 
 
 def reset_live_voice_execution_lane_for_tests() -> None:
-    global _DEDICATED_TTS_KEY, _DEDICATED_TTS_PROVIDER
+    global _DEDICATED_TTS_KEY, _DEDICATED_TTS_PROVIDER, _DEDICATED_TTS_PROVIDER_NAME
     _TTS_SCHEDULER.clear()
     with _DEDICATED_TTS_LOCK:
         provider = _DEDICATED_TTS_PROVIDER
         _DEDICATED_TTS_PROVIDER = None
         _DEDICATED_TTS_KEY = None
+        _DEDICATED_TTS_PROVIDER_NAME = None
     stop = getattr(provider, "stop", None)
     if callable(stop):
         stop()
