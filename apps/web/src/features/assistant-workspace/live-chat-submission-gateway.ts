@@ -19,14 +19,26 @@ export type LiveChatSubmissionFetchInterceptor = (
   next: LiveChatSubmissionFetchNext,
 ) => Promise<Response>;
 
-type LiveCallDiagnosticDetail = {
-  event?: string;
-  details?: Record<string, unknown>;
-};
+type SubmissionFetchObserver = (
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  response: Promise<Response>,
+) => void;
 
-const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
-const CHAT_RESPONSE_OPENED_EVENT = 'chat_response_opened';
-const CHAT_STREAM_FAILED_EVENT = 'chat_stream_failed';
+const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
+
+export function liveSubmissionFetchMatches(
+  submission: LiveChatSubmissionInput,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): boolean {
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  if (method !== 'POST') return false;
+  const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+  const url = new URL(rawUrl, window.location.origin);
+  const match = CHAT_STREAM_PATH.exec(url.pathname);
+  return Boolean(match && decodeURIComponent(match[1]) === submission.sessionId);
+}
 
 export class LiveChatSubmissionGateway {
   private handler: LiveChatSubmissionHandler | null = null;
@@ -51,7 +63,7 @@ export class LiveChatSubmissionGateway {
     if (!handler) throw new Error('live_chat_submission_gateway_unavailable');
 
     let settled = false;
-    let streamFailureCode: string | null = null;
+    let submissionFetchObserved = false;
     let resolveAcceptance!: () => void;
     let rejectAcceptance!: (error: Error) => void;
     const acceptance = new Promise<void>((resolve, reject) => {
@@ -69,60 +81,60 @@ export class LiveChatSubmissionGateway {
       settled = true;
       rejectAcceptance(error instanceof Error ? error : new Error(String(error)));
     };
-    const observeDiagnostic = (event: Event): void => {
-      const detail = (event as CustomEvent<LiveCallDiagnosticDetail>).detail;
-      if (detail?.event === CHAT_RESPONSE_OPENED_EVENT) {
-        accept();
-        return;
-      }
-      if (detail?.event !== CHAT_STREAM_FAILED_EVENT) return;
-      const errorCode = detail.details?.error_code;
-      streamFailureCode = typeof errorCode === 'string' && errorCode.trim()
-        ? errorCode
-        : 'live_chat_stream_failed';
-      reject(new Error(streamFailureCode));
+    const observeFetch: SubmissionFetchObserver = (request, init, response) => {
+      if (!liveSubmissionFetchMatches(input, request, init)) return;
+      submissionFetchObserved = true;
+      void response.then(
+        (opened) => {
+          if (opened.ok) accept();
+          else reject(new Error(`live_chat_stream_status_${opened.status}`));
+        },
+        (error) => reject(error),
+      );
     };
 
-    window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, observeDiagnostic);
     let completion: Promise<void>;
     try {
-      completion = this.invokeHandler(input, handler);
+      completion = this.invokeHandler(input, handler, observeFetch);
     } catch (error) {
       completion = Promise.reject(error);
     }
 
     void completion.then(
       () => {
-        if (streamFailureCode) reject(new Error(streamFailureCode));
-        else accept();
+        // Handlers without a chat-stream fetch retain the original completion
+        // semantics. Once the exact submission fetch has been observed, only
+        // that fetch may accept or reject this coordination attempt; failures
+        // from a superseded turn cannot poison the new submission.
+        if (!submissionFetchObserved) accept();
       },
       (error) => reject(error),
     );
 
-    try {
-      await acceptance;
-    } finally {
-      window.removeEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, observeDiagnostic);
-    }
+    await acceptance;
   }
 
   private invokeHandler(
     input: LiveChatSubmissionInput,
     handler: LiveChatSubmissionHandler,
+    observeFetch: SubmissionFetchObserver,
   ): Promise<void> {
-    const interceptor = this.fetchInterceptor;
-    if (!interceptor || typeof window.fetch !== 'function') {
-      return Promise.resolve(handler(input));
-    }
+    if (typeof window.fetch !== 'function') return Promise.resolve(handler(input));
 
     // The workspace handler starts its chat fetch synchronously before its first
     // await. Scope interception to that call only, instead of replacing
-    // window.fetch for the lifetime of the application.
+    // window.fetch for the lifetime of the application. The exact response
+    // promise is also the submission identity used for early acceptance.
+    const interceptor = this.fetchInterceptor;
     const originalFetch = window.fetch;
     const next: LiveChatSubmissionFetchNext = originalFetch.bind(window);
-    window.fetch = ((request: RequestInfo | URL, init?: RequestInit) => (
-      interceptor(input, request, init, next)
-    )) as typeof window.fetch;
+    window.fetch = ((request: RequestInfo | URL, init?: RequestInit) => {
+      const response = interceptor
+        ? interceptor(input, request, init, next)
+        : next(request, init);
+      observeFetch(request, init, response);
+      return response;
+    }) as typeof window.fetch;
     try {
       return Promise.resolve(handler(input));
     } finally {
