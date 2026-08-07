@@ -6,7 +6,12 @@ from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from typing import Any
 
-from app.assist_core.live_agent_planner import LiveAgentUnavailable, plan_live_agent_proposal
+from pydantic import ValidationError
+
+from app.assist_core.live_agent_planner import (
+    LiveAgentUnavailable,
+    plan_live_agent_proposal,
+)
 from app.assist_core.live_agent_router import (
     LiveAgentRouteDecision,
     live_agent_runtime_config,
@@ -28,11 +33,11 @@ from .store import _pop_ready_sentences
 _HOOK = "_omnix_live_agent_stream_installed"
 _CONFIRM = re.compile(
     r"^(?:yes|yes[, ]+do it|confirm|confirmed|approve|go ahead|proceed|do it)[.!\s]*$",
-    re.I,
+    re.IGNORECASE,
 )
 _REJECT = re.compile(
     r"^(?:no|nope|cancel|reject|do not|don't do it|never mind|nevermind)[.!\s]*$",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -121,6 +126,7 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                         ),
                     )
                 except LiveAgentUnavailable as exc:
+                    fallback_error = str(exc)
                     fallback = decision.model_copy(
                         update={
                             "route": "direct_chat",
@@ -138,13 +144,13 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                             context_items=context_items,
                         ),
                         fallback,
-                        error=str(exc),
-                        persist_route=lambda: _persist_route(
+                        error=fallback_error,
+                        persist_route=lambda fallback_error=fallback_error: _persist_route(
                             self,
                             session.id,
                             user_message.id,
                             fallback,
-                            error=str(exc),
+                            error=fallback_error,
                         ),
                     )
                     return
@@ -344,7 +350,7 @@ def _pending_kasa_proposal(
             continue
         try:
             request = AssistantToolRequest.model_validate(raw)
-        except Exception:
+        except ValidationError:
             continue
         if request.tool_id == "kasa" and request.action_id in {
             "kasa.turn_on",
