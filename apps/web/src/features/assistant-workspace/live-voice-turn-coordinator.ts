@@ -69,7 +69,14 @@ export class LiveVoiceTurnCoordinator {
 
   speechEnded(turnId: string, atMs = performance.now()): void {
     const turn = this.record(turnId);
-    if (turn.speechEndedAt !== null) return;
+    if (
+      turn.finalReceivedAt !== null
+      || turn.playbackStartedAt !== null
+      || turn.state === 'cancelled'
+    ) return;
+    // A user may pause and then resume within one utterance. Keep the latest
+    // speech-to-silence transition so release latency is measured from the
+    // pause that actually led to finalization, not an earlier internal pause.
     turn.speechEndedAt = atMs;
     turn.state = 'endpoint_candidate';
     this.emit(turn, 'speech_ended', atMs);
