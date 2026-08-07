@@ -6,7 +6,9 @@ import {
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const INSTALLED_KEY = '__omnixLiveSpeculationEarlyTriggerInstalled';
-const EARLY_SPECULATION_MIN_PROBABILITY = 0.5;
+const EARLY_SPECULATION_LONG_PROBABILITY = 0.35;
+const EARLY_SPECULATION_MEDIUM_PROBABILITY = 0.45;
+const EARLY_SPECULATION_SHORT_PROBABILITY = 0.6;
 const EARLY_SPECULATION_MIN_WORDS = 2;
 const DUPLICATE_SUPPRESSION_MS = 160;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
@@ -36,13 +38,22 @@ type LastDispatch = {
   atMs: number;
 };
 
+export function earlySpeculationProbabilityFloor(text: string): number | null {
+  const wordCount = [...text.matchAll(WORD_PATTERN)].length;
+  if (wordCount < EARLY_SPECULATION_MIN_WORDS) return null;
+  if (wordCount >= 4) return EARLY_SPECULATION_LONG_PROBABILITY;
+  if (wordCount === 3) return EARLY_SPECULATION_MEDIUM_PROBABILITY;
+  return EARLY_SPECULATION_SHORT_PROBABILITY;
+}
+
 export function earlySpeculationCandidateEligible(
   probability: number,
   text: string,
 ): boolean {
-  return Number.isFinite(probability)
-    && probability >= EARLY_SPECULATION_MIN_PROBABILITY
-    && [...text.matchAll(WORD_PATTERN)].length >= EARLY_SPECULATION_MIN_WORDS;
+  const probabilityFloor = earlySpeculationProbabilityFloor(text);
+  return probabilityFloor !== null
+    && Number.isFinite(probability)
+    && probability >= probabilityFloor;
 }
 
 export function initializeLiveSpeculationEarlyTrigger(): () => void {
@@ -125,6 +136,7 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
         segmentId,
         sourceSequence,
         probability,
+        probabilityFloor: earlySpeculationProbabilityFloor(text),
         transcriptChars: text.length,
         transcriptWords: fingerprint ? fingerprint.split(' ').length : 0,
       },
