@@ -62,7 +62,7 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('allows provider endpoint commitment only after sustained local silence', () => {
+  it('allows provider endpoint commitment only after fused confidence, silence, and stability gates', () => {
     const ready = {
       authorityEnabled: true,
       probability: 0.86,
@@ -71,13 +71,40 @@ describe('live latency PR3-PR5 rollout policies', () => {
       finalRequested: false,
       pausePending: true,
       pauseElapsedMs: 180,
+      transcriptStableMs: 100,
+      semanticProbabilityDone: 0.94,
+      transcriptWords: 4,
+      correctionPending: false,
     };
     expect(shouldCommitProviderEndpoint(ready)).toBe(true);
     expect(shouldCommitProviderEndpoint({ ...ready, authorityEnabled: false })).toBe(false);
     expect(shouldCommitProviderEndpoint({ ...ready, probability: 0.7 })).toBe(false);
     expect(shouldCommitProviderEndpoint({ ...ready, pausePending: false })).toBe(false);
     expect(shouldCommitProviderEndpoint({ ...ready, pauseElapsedMs: 80 })).toBe(false);
+    expect(shouldCommitProviderEndpoint({ ...ready, transcriptStableMs: 30 })).toBe(false);
     expect(shouldCommitProviderEndpoint({ ...ready, finalRequested: true })).toBe(false);
+    expect(shouldCommitProviderEndpoint({ ...ready, correctionPending: true })).toBe(false);
+  });
+
+  it('requires more silence for semantically ambiguous statements', () => {
+    const ambiguous = {
+      authorityEnabled: true,
+      probability: 0.9,
+      endpointThreshold: 0.75,
+      speechDetected: true,
+      finalRequested: false,
+      pausePending: true,
+      pauseElapsedMs: 180,
+      transcriptStableMs: 100,
+      semanticProbabilityDone: 0.78,
+      transcriptWords: 5,
+      correctionPending: false,
+    };
+    expect(shouldCommitProviderEndpoint(ambiguous)).toBe(false);
+    expect(shouldCommitProviderEndpoint({
+      ...ambiguous,
+      pauseElapsedMs: 280,
+    })).toBe(true);
   });
 
   it('reuses speculation only when normalized words are unchanged', () => {
