@@ -39,7 +39,7 @@ jobs:
 
       - name: Import launcher entry points on Python 3.10
         run: |
-          python -c "from app.gateway.live_call_prewarm import register_live_call_prewarm_routes; from app.gateway.live_chat_async_sse_bridge import eager_async_sse_stream; from app.gateway.live_chat_lmstudio_diagnostics import install_live_chat_lmstudio_diagnostics_hook; from app.gateway.live_chat_prompt_window import install_live_chat_prompt_window_hook; from app.gateway.live_chat_prompt_dependency_stages import install_live_chat_prompt_dependency_stage_hook; from app.gateway.live_sse_transport import install_live_sse_transport_hook; from app.gateway.lmstudio_loaded_model_resolution import install_lmstudio_loaded_model_resolution_hook; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.live_chat_speculation_handshake import register_live_chat_speculation_handshake_routes; from app.gateway.live_chat_speculation_inline_stream import register_live_chat_speculation_inline_stream_routes; from app.gateway.tts_live_call_pcm_diagnostics import install_tts_live_call_pcm_diagnostics_hook; from app.gateway.tts_live_call_startup_frame_policy import install_tts_live_call_startup_frame_policy; from app.gateway.tts_stream_contract import TtsStreamRequest; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
+          python -c "from app.gateway.live_call_prewarm import register_live_call_prewarm_routes; from app.gateway.live_chat_async_sse_bridge import eager_async_sse_stream; from app.gateway.live_chat_lmstudio_diagnostics import install_live_chat_lmstudio_diagnostics_hook; from app.gateway.live_chat_prompt_window import install_live_chat_prompt_window_hook; from app.gateway.live_chat_prompt_dependency_stages import install_live_chat_prompt_dependency_stage_hook; from app.gateway.live_sse_transport import install_live_sse_transport_hook; from app.gateway.lmstudio_loaded_model_resolution import install_lmstudio_loaded_model_resolution_hook; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.live_chat_speculative_tts import SpeculativeTtsPrefetchRequest; from app.gateway.live_chat_speculation_handshake import register_live_chat_speculation_handshake_routes; from app.gateway.live_chat_speculation_inline_stream import register_live_chat_speculation_inline_stream_routes; from app.gateway.tts_live_call_pcm_diagnostics import install_tts_live_call_pcm_diagnostics_hook; from app.gateway.tts_live_call_startup_frame_policy import install_tts_live_call_startup_frame_policy; from app.gateway.tts_stream_contract import TtsStreamRequest; from app.providers.kyutai_authority import KyutaiAuthorityMode; from app.launcher.runtime_control_app import app; import kyutai_stt_runtime"
 
       - name: Validate secure Moshi entrypoint
         run: bash -n scripts/kyutai_moshi_secure_entrypoint.sh
@@ -68,6 +68,7 @@ jobs:
             src/app/gateway/live_chat_prompt_dependency_stages.py \
             src/app/gateway/live_chat_prompt_window.py \
             src/app/gateway/live_chat_speculation.py \
+            src/app/gateway/live_chat_speculative_tts.py \
             src/app/gateway/live_chat_speculation_handshake.py \
             src/app/gateway/live_chat_speculation_inline_stream.py \
             src/app/gateway/live_sse_transport.py \
@@ -88,6 +89,7 @@ jobs:
             src/tests/app/test_live_call_prewarm.py \
             src/tests/app/test_live_chat_lmstudio_diagnostics.py \
             src/tests/app/test_live_chat_prompt_window.py \
+            src/tests/app/test_live_chat_speculative_tts.py \
             src/tests/app/test_lmstudio_loaded_model_resolution.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
@@ -120,6 +122,7 @@ jobs:
             src/tests/app/test_live_call_prewarm.py \
             src/tests/app/test_live_chat_lmstudio_diagnostics.py \
             src/tests/app/test_live_chat_prompt_window.py \
+            src/tests/app/test_live_chat_speculative_tts.py \
             src/tests/app/test_lmstudio_loaded_model_resolution.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_kyutai_authority.py \
@@ -145,7 +148,7 @@ jobs:
           npm --workspace @omnix/web run typecheck 2>&1 | tee live-stt-typecheck.txt
           typecheck_status=${PIPESTATUS[0]}
           set -e
-          if grep -E "(live-(call-prewarm-controller(\\.test)?|chat-submission-gateway(\\.test)?|conversation-durable-evaluation-controller(\\.test)?|runtime-provenance|voice-websocket(\\.spec)?|voice-controller|accepted-final|stt-authority-controller|speculation-controller|speculation-eligibility-diagnostics(\\.test)?|speculation-handshake-transport(\\.test)?|tts-adaptive-buffer-controller(\\.test)?|tts-capability-controller|voice-clause-stabilizer|voice-pcm-worklet|voice-release-observer|latency-rollout\\.spec)\\.(ts|tsx)|assistant-context-(controller|critical-path\\.test)\\.(ts|tsx)|chat-response-metrics-controller(\\.test)?\\.ts|characterClient(\\.test)?\\.ts|vite\\.config\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
+          if grep -E "(live-(call-prewarm-controller(\\.test)?|chat-submission-gateway(\\.test)?|conversation-durable-evaluation-controller(\\.test)?|runtime-provenance|voice-websocket(\\.spec)?|voice-controller|accepted-final|stt-authority-controller|speculation-controller(\\.test)?|speculation-eligibility-diagnostics(\\.test)?|speculation-handshake-transport(\\.test)?|tts-adaptive-buffer-controller(\\.test)?|tts-capability-controller|voice-clause-stabilizer(\\.test)?|speech-delivery-plan(\\.test)?|voice-pcm-worklet|voice-release-observer|latency-rollout\\.spec)\\.(ts|tsx)|assistant-context-(controller|critical-path\\.test)\\.(ts|tsx)|chat-response-metrics-controller(\\.test)?\\.ts|characterClient(\\.test)?\\.ts|vite\\.config\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
             echo "TypeScript errors were reported in the live latency rollout path."
             exit "${typecheck_status:-1}"
           fi
@@ -160,8 +163,11 @@ jobs:
             src/features/assistant-workspace/live-chat-submission-gateway.test.ts \
             src/features/assistant-workspace/live-voice-websocket.spec.ts \
             src/features/assistant-workspace/live-latency-rollout.spec.ts \
+            src/features/assistant-workspace/live-speculation-controller.test.ts \
             src/features/assistant-workspace/live-speculation-eligibility-diagnostics.test.ts \
             src/features/assistant-workspace/live-speculation-handshake-transport.test.ts \
+            src/features/assistant-workspace/live-voice-clause-stabilizer.test.ts \
+            src/features/assistant-workspace/live-speech-delivery-plan.test.ts \
             src/features/assistant-workspace/assistant-context-critical-path.test.ts \
             src/features/assistant-workspace/live-tts-adaptive-buffer-controller.test.ts \
             src/features/assistant-workspace/live-voice-pcm-worklet.test.ts \
