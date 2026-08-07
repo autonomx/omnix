@@ -157,7 +157,9 @@ describe('live chat submission gateway', () => {
 
     try {
       await gateway.submit(input);
-      expect(responseText).toBe('intercepted:/api/chat/sessions/chat%3Atest/messages/stream');
+      await vi.waitFor(() => {
+        expect(responseText).toBe('intercepted:/api/chat/sessions/chat%3Atest/messages/stream');
+      });
       expect(intercepted).toHaveBeenCalledOnce();
       expect(fallback).not.toHaveBeenCalled();
       expect(window.fetch).toBe(fallback);
