@@ -204,6 +204,48 @@ def test_inline_stream_honors_a_valid_client_generation_id(monkeypatch) -> None:
     assert payloads[0]["client_allocated"] is True
 
 
+def test_inline_stream_supersedes_older_hypothesis_for_same_utterance(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    handshake.clear_live_speculation_handshake_state()
+    store = _FakeStore()
+    provider = _FakeProvider()
+    client = _client(store, provider, monkeypatch)
+    old_id = "spec-client-oldhypothesis123"
+    old_pending = speculation._Speculation(
+        generation_id=old_id,
+        session_id=store.session.id,
+        candidate_text="Tell me a",
+        provider_id="fake-provider",
+        model_id="fake-model",
+        segment_id="segment-supersede",
+        source_sequence=12,
+        created_at=0.0,
+        execution_lane="session",
+    )
+    old_generation = handshake._HandshakeGeneration(
+        store=store,
+        session=store.session,
+    )
+    with speculation._SPECULATION_LOCK:
+        speculation._SPECULATIONS[old_id] = old_pending
+        handshake._HANDSHAKE_GENERATIONS[old_id] = old_generation
+
+    streamed = client.post(
+        "/api/live/speculation/sessions/session-inline/start-stream",
+        json={
+            "content": "Tell me a story",
+            "segment_id": "segment-supersede",
+            "source_sequence": 12,
+            "generation_id": "spec-client-newhypothesis456",
+        },
+    )
+
+    assert streamed.status_code == 200
+    assert old_generation.cancel_event.is_set()
+    assert old_pending.completed is True
+    assert old_pending.error == "speculation_superseded"
+
+
 def test_inline_stream_rejects_an_invalid_client_generation_id(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     handshake.clear_live_speculation_handshake_state()
