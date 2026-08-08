@@ -64,6 +64,18 @@ describe('live voice turn coordinator', () => {
     })).toBe('continue');
   });
 
+  it('never commits an acoustically strong endpoint while semantics say the clause is unfinished', () => {
+    expect(endpointFusionAction({
+      endpointProbability: 0.999,
+      endpointThreshold: 0.75,
+      silenceMs: 300,
+      transcriptStableMs: 6_000,
+      semanticProbabilityDone: 0.18,
+      transcriptWords: 1,
+      correctionPending: false,
+    })).toBe('speculate');
+  });
+
   it('emits timeline events using the supplied monotonic timestamp', () => {
     const coordinator = new LiveVoiceTurnCoordinator();
     const listener = vi.fn();
