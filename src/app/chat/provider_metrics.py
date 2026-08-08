@@ -60,6 +60,8 @@ def merge_provider_response_metrics(
     raw = _mapping(getattr(response, "raw_response", None))
     stats = _mapping(raw.get("stats"))
     usage = _mapping(getattr(response, "usage", None)) or _mapping(raw.get("usage"))
+    prompt_token_details = _mapping(usage.get("prompt_tokens_details"))
+    input_token_details = _mapping(usage.get("input_tokens_details"))
     provider_key = str(provider_id or "").strip().lower().removeprefix("llm:")
 
     # The normalized row is currently intended for LM Studio. Still accept an
@@ -93,6 +95,24 @@ def merge_provider_response_metrics(
     if input_tokens is not None:
         metrics["input_tokens"] = input_tokens
 
+    cached_input_tokens = _first_integer(
+        prompt_token_details.get("cached_tokens"),
+        input_token_details.get("cached_tokens"),
+        usage.get("cached_input_tokens"),
+        usage.get("cached_prompt_tokens"),
+        stats.get("cached_input_tokens"),
+        stats.get("cached_prompt_tokens"),
+    )
+    if cached_input_tokens is not None:
+        metrics["cached_input_tokens"] = cached_input_tokens
+        if input_tokens is not None:
+            metrics["uncached_input_tokens"] = max(0, input_tokens - cached_input_tokens)
+            if input_tokens > 0:
+                metrics["prompt_cache_hit_ratio"] = min(
+                    1.0,
+                    cached_input_tokens / input_tokens,
+                )
+
     total_tokens = _first_integer(
         usage.get("total_tokens"),
         stats.get("total_tokens"),
@@ -113,6 +133,28 @@ def merge_provider_response_metrics(
     )
     if time_to_first_token is not None:
         metrics["time_to_first_token_seconds"] = time_to_first_token
+
+    draft_model = _first_text(stats.get("draft_model"))
+    if draft_model is not None:
+        metrics["draft_model"] = draft_model
+
+    total_draft_tokens = _first_integer(stats.get("total_draft_tokens_count"))
+    accepted_draft_tokens = _first_integer(stats.get("accepted_draft_tokens_count"))
+    rejected_draft_tokens = _first_integer(stats.get("rejected_draft_tokens_count"))
+    ignored_draft_tokens = _first_integer(stats.get("ignored_draft_tokens_count"))
+    if total_draft_tokens is not None:
+        metrics["total_draft_tokens"] = total_draft_tokens
+    if accepted_draft_tokens is not None:
+        metrics["accepted_draft_tokens"] = accepted_draft_tokens
+    if rejected_draft_tokens is not None:
+        metrics["rejected_draft_tokens"] = rejected_draft_tokens
+    if ignored_draft_tokens is not None:
+        metrics["ignored_draft_tokens"] = ignored_draft_tokens
+    if total_draft_tokens and accepted_draft_tokens is not None:
+        metrics["draft_acceptance_ratio"] = min(
+            1.0,
+            accepted_draft_tokens / total_draft_tokens,
+        )
 
     stop_reason = _first_text(
         stats.get("stop_reason"),
