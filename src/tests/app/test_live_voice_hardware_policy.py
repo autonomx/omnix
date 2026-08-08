@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from app.live_voice_hardware_policy import (
     _DEFERRED_TTS_ERROR,
     _deferred_speculative_entry,
@@ -10,7 +12,7 @@ from app.live_voice_hardware_policy import (
 
 class _SerialTtsProvider:
     provider_name = "faster-qwen3-tts"
-    tts_capabilities = {
+    tts_capabilities: ClassVar[dict[str, object]] = {
         "provider": "faster-qwen3-tts",
         "supports_streaming": True,
         "supports_concurrent_generation": False,
@@ -27,7 +29,7 @@ class _SerialTtsProvider:
 
 class _ConcurrentTtsProvider(_SerialTtsProvider):
     provider_name = "concurrent-fixture"
-    tts_capabilities = {
+    tts_capabilities: ClassVar[dict[str, object]] = {
         **_SerialTtsProvider.tts_capabilities,
         "provider": "concurrent-fixture",
         "supports_concurrent_generation": True,
