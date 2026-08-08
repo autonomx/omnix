@@ -9,6 +9,7 @@ import {
 
 describe('chat sidebar manager', () => {
   let dispose: () => void;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     window.localStorage.clear();
@@ -28,13 +29,26 @@ describe('chat sidebar manager', () => {
         </section>
       </aside>
       <section class="assistant-chat-header"><h2>Current chat</h2></section>
+      <label class="assistant-message-input">
+        <textarea name="content" placeholder="Message Omnix Assistant, or use the microphone…">old draft</textarea>
+      </label>
     `;
-    const fetchMock = vi.fn(async () => Response.json({
-      sessions: [
-        { id: 'chat:one', title: 'First chat', message_count: 12, created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:01:00Z' },
-        { id: 'chat:two', title: 'Second chat', message_count: 4, created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:02:00Z' },
-      ],
-    }));
+    fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(init?.method ?? 'GET').toUpperCase() === 'POST') {
+        return Response.json({
+          id: 'chat:new-session',
+          title: 'New chat',
+          messages: [],
+          message_count: 0,
+        });
+      }
+      return Response.json({
+        sessions: [
+          { id: 'chat:one', title: 'First chat', message_count: 12, created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:01:00Z' },
+          { id: 'chat:two', title: 'Second chat', message_count: 4, created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:02:00Z' },
+        ],
+      });
+    });
     vi.stubGlobal('fetch', fetchMock);
     dispose = initializeChatSidebarManager();
   });
@@ -71,6 +85,30 @@ describe('chat sidebar manager', () => {
         .map((item) => item.textContent?.replace(/^[^A-Za-z]+/, '').trim());
       expect(menuItems).toEqual(['Share', 'Rename', 'Pin chat', 'Archive', 'Delete']);
     });
+  });
+
+  it('starts the managed New chat in place and selects it without navigation', async () => {
+    await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.assistant-chatgpt-new')).not.toBeNull());
+
+    const selectedSessions: string[] = [];
+    const createdSessions: unknown[] = [];
+    const stopEvents = vi.fn();
+    window.addEventListener('omnix:live-chat-session-changed', (event) => {
+      selectedSessions.push((event as CustomEvent<{ sessionId: string }>).detail.sessionId);
+    }, { once: true });
+    window.addEventListener('omnix:chat-session-created', (event) => {
+      createdSessions.push((event as CustomEvent<{ session: unknown }>).detail.session);
+    }, { once: true });
+    window.addEventListener('omnix:assistant-live-voice-stop', stopEvents, { once: true });
+
+    document.querySelector<HTMLButtonElement>('.assistant-chatgpt-new')?.click();
+
+    await vi.waitFor(() => expect(selectedSessions).toEqual(['chat:new-session']));
+    const postCall = fetchMock.mock.calls.find(([, init]) => String(init?.method ?? 'GET').toUpperCase() === 'POST');
+    expect(postCall).toBeDefined();
+    expect(createdSessions).toHaveLength(1);
+    expect(stopEvents).toHaveBeenCalledTimes(1);
+    expect(document.querySelector<HTMLTextAreaElement>('textarea[name="content"]')?.value).toBe('');
   });
 
   it('moves a pinned chat out of Sessions and into Pinned', async () => {
