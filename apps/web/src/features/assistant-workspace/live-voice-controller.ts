@@ -167,11 +167,14 @@ export function semanticFinalizationRemainingMs(
   text: string,
   pace: ConversationPace,
   pauseElapsedMs: number,
+  transcriptStableMs: number = Number.POSITIVE_INFINITY,
 ): number {
-  return Math.max(
-    0,
-    semanticFinalizeDelay(text, pace) - Math.max(0, pauseElapsedMs),
-  );
+  const targetDelayMs = semanticFinalizeDelay(text, pace);
+  const pauseRemainingMs = targetDelayMs - Math.max(0, pauseElapsedMs);
+  const transcriptRemainingMs = Number.isFinite(transcriptStableMs)
+    ? targetDelayMs - Math.max(0, transcriptStableMs)
+    : 0;
+  return Math.max(0, pauseRemainingMs, transcriptRemainingMs);
 }
 
 export function initializeLiveVoiceController(root: ParentNode = document): void {
@@ -549,6 +552,7 @@ class OmnixLiveVoiceProcessor extends AudioWorkletProcessor {
     }
     return true;
   }
+  
 }
 registerProcessor('omnix-live-voice-processor', OmnixLiveVoiceProcessor);
 `], { type: 'text/javascript' }));
@@ -798,10 +802,12 @@ function armSemanticFinalizationTimer(
   const pauseElapsedMs = session.pauseStartedAt === null
     ? 0
     : Math.max(0, now - session.pauseStartedAt);
+  const transcriptStableMs = Math.max(0, now - session.partialTranscriptUpdatedAt);
   const remainingMs = semanticFinalizationRemainingMs(
     session.partialTranscript,
     pace,
     pauseElapsedMs,
+    transcriptStableMs,
   );
   if (session.silenceTimer) clearTimeout(session.silenceTimer);
   dispatchLiveVoicePerfEvent({
@@ -813,6 +819,7 @@ function armSemanticFinalizationTimer(
     reason: assessment.reason,
     delayMs: targetDelayMs,
     pauseElapsedMs: Math.round(pauseElapsedMs),
+    transcriptStableMs: Math.round(transcriptStableMs),
     remainingMs: Math.round(remainingMs),
     transcriptChars: session.partialTranscript.length,
   });
@@ -820,6 +827,36 @@ function armSemanticFinalizationTimer(
     () => requestFinalTranscript(session, 'semantic_timeout'),
     remainingMs,
   );
+}
+
+function shouldDeferSemanticTimeout(session: LiveVoiceSession): boolean {
+  if (session.pauseStartedAt === null) return false;
+  const now = performance.now();
+  const pace = readConversationPace();
+  const pauseElapsedMs = Math.max(0, now - session.pauseStartedAt);
+  const transcriptStableMs = Math.max(0, now - session.partialTranscriptUpdatedAt);
+  const remainingMs = semanticFinalizationRemainingMs(
+    session.partialTranscript,
+    pace,
+    pauseElapsedMs,
+    transcriptStableMs,
+  );
+  if (remainingMs <= 1) return false;
+  const assessment = assessSemanticTurn(session.partialTranscript, pace);
+  dispatchLiveVoicePerfEvent({
+    stage: 'semantic_turn_commit_deferred',
+    turnId: session.perfTurnId,
+    timestamp: new Date().toISOString(),
+    pace,
+    probabilityDone: assessment.probabilityDone,
+    reason: assessment.reason,
+    pauseElapsedMs: Math.round(pauseElapsedMs),
+    transcriptStableMs: Math.round(transcriptStableMs),
+    remainingMs: Math.round(remainingMs),
+    transcriptChars: session.partialTranscript.length,
+  });
+  armSemanticFinalizationTimer(session, 'semantic_turn_rescheduled');
+  return true;
 }
 
 function handleExternalStop(): void {
@@ -851,10 +888,11 @@ function requestFinalTranscript(
   trigger: 'semantic_timeout' | 'provider_endpoint' = 'semantic_timeout',
   endpoint?: ProviderEndpointCandidate,
 ): void {
+  if (activeSession !== session || session.finalRequested) return;
+  if (trigger === 'semantic_timeout' && shouldDeferSemanticTimeout(session)) return;
   if (session.silenceTimer) clearTimeout(session.silenceTimer);
   session.silenceTimer = null;
   session.pauseStartedAt = null;
-  if (activeSession !== session || session.finalRequested) return;
   if (session.floorState === 'overlap_candidate' && session.partialTranscript) assessOverlapCandidate(session);
   session.floorState = reduceUserFloor(session.floorState, { type: 'commit' });
   session.finalRequested = true;
