@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
+import {
+  dispatchAssistantTurnSummary,
+  resetAssistantDiagnosticSummaries,
+} from './live-conversation-assistant-summary';
 import { liveConversationStore } from './live-conversation-store';
 import {
   liveVoiceAssistantOwnsFloor,
@@ -13,6 +17,7 @@ afterEach(() => {
   window.localStorage.clear();
   document.body.innerHTML = '';
   liveConversationStore.reset();
+  resetAssistantDiagnosticSummaries();
 });
 
 describe('live voice controller sensitivity', () => {
@@ -39,6 +44,21 @@ describe('live voice semantic finalization deadline', () => {
   it('can lengthen the remaining wait again when the transcript becomes incomplete', () => {
     expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 150)).toBe(70);
     expect(semanticFinalizationRemainingMs('Where are we going to', 'balanced', 150)).toBe(850);
+  });
+
+  it('uses recent assistant-question context to finalize a one-word answer quickly', () => {
+    dispatchAssistantTurnSummary({
+      turnId: 'assistant-question',
+      turnKind: 'response',
+      wordCount: 5,
+      questionCount: 1,
+      topicFingerprint: null,
+      createsObligation: true,
+    });
+
+    expect(semanticFinalizationRemainingMs('Vancouver', 'balanced', 120)).toBe(100);
+    expect(semanticFinalizationRemainingMs('yes', 'balanced', 120)).toBe(100);
+    expect(semanticFinalizationRemainingMs('because', 'balanced', 120)).toBe(1_580);
   });
 });
 
