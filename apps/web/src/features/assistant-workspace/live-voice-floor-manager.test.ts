@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   assessSemanticTurn,
@@ -6,6 +6,14 @@ import {
   reduceUserFloor,
   semanticFinalizeDelay,
 } from './live-voice-floor-manager';
+import {
+  noteAssistantTurnCompletionContext,
+  resetAssistantTurnCompletionContext,
+} from './live-turn-context';
+
+afterEach(() => {
+  resetAssistantTurnCompletionContext();
+});
 
 describe('live voice floor manager', () => {
   it('waits longer for hesitation and unfinished clauses', () => {
@@ -49,6 +57,43 @@ describe('live voice floor manager', () => {
     expect(assessSemanticTurn('Hey', 'balanced').reason).toBe('insufficient_text');
     expect(semanticFinalizeDelay('', 'balanced')).toBe(profile.maximumWaitMs);
     expect(semanticFinalizeDelay('Hey', 'balanced')).toBe(profile.maximumWaitMs);
+  });
+
+  it('uses the clear-turn path for a one-word answer to a recent assistant question', () => {
+    noteAssistantTurnCompletionContext({
+      turnId: 'assistant-question',
+      questionCount: 1,
+      createsObligation: true,
+    });
+
+    expect(assessSemanticTurn('Vancouver', 'balanced')).toMatchObject({
+      probabilityDone: 0.96,
+      reason: 'contextual_short_answer',
+      recommendedWaitMs: 220,
+    });
+    expect(semanticFinalizeDelay('Vancouver', 'balanced')).toBe(220);
+    expect(semanticFinalizeDelay('yes', 'balanced')).toBe(220);
+  });
+
+  it('does not treat connector or hesitation words as complete contextual answers', () => {
+    const profile = conversationTimingProfile('balanced');
+    noteAssistantTurnCompletionContext({
+      turnId: 'assistant-question',
+      questionCount: 1,
+      createsObligation: true,
+    });
+
+    expect(assessSemanticTurn('because', 'balanced').reason).toBe('insufficient_text');
+    expect(semanticFinalizeDelay('because', 'balanced')).toBe(profile.maximumWaitMs);
+    expect(semanticFinalizeDelay('well', 'balanced')).toBe(profile.maximumWaitMs);
+  });
+
+  it('does not use stale or absent assistant context for arbitrary one-word speech', () => {
+    const profile = conversationTimingProfile('balanced');
+    resetAssistantTurnCompletionContext();
+
+    expect(assessSemanticTurn('Vancouver', 'balanced').reason).toBe('insufficient_text');
+    expect(semanticFinalizeDelay('Vancouver', 'balanced')).toBe(profile.maximumWaitMs);
   });
 
   it('provides bounded quick balanced and reflective profiles', () => {
