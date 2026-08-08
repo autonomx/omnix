@@ -52,8 +52,9 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
   const silence = Math.max(0, input.silenceMs);
   const complete = input.semanticProbabilityDone >= 0.9;
   if (
-    probability >= input.endpointThreshold
-    && silence >= (complete ? 160 : 260)
+    complete
+    && probability >= input.endpointThreshold
+    && silence >= 160
     && stable >= 80
   ) return 'commit';
   if (
