@@ -1,0 +1,12 @@
+.assistant-chat-sidebar [data-omnix-sidebar-native-hidden='true'],
+.assistant-chat-sidebar [hidden][data-omnix-sidebar-native-hidden='true'] {
+  display: none !important;
+}
+
+.assistant-chat-sidebar > [data-omnix-chat-sidebar-manager='true'] {
+  grid-row: 2 / -1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
