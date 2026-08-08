@@ -1,3 +1,8 @@
+import {
+  noteAssistantTurnCompletionContext,
+  resetAssistantTurnCompletionContext,
+} from './live-turn-context';
+
 export const LIVE_ASSISTANT_TURN_SUMMARY_EVENT = 'omnix:live-conversation-assistant-summary';
 
 export type LiveAssistantTurnSummary = {
@@ -106,12 +111,18 @@ export function pendingAssistantDiagnosticCount(): number {
 }
 
 export function dispatchAssistantTurnSummary(summary: LiveAssistantTurnSummary): void {
+  noteAssistantTurnCompletionContext({
+    turnId: summary.turnId,
+    questionCount: summary.questionCount,
+    createsObligation: summary.createsObligation,
+  });
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, { detail: summary }));
 }
 
 export function resetAssistantDiagnosticSummaries(): void {
   pendingDiagnostics.clear();
+  resetAssistantTurnCompletionContext();
 }
 
 function prunePendingDiagnostics(now: number): void {
