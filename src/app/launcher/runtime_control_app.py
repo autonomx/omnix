@@ -76,6 +76,18 @@ def build_runtime_service_specs():
                         **spec.env,
                         "OMNIX_IMAGE_ENABLED": "1" if image_available else "0",
                         "OMNIX_IMAGE_URL": IMAGE_SERVICE_URL if image_available else "",
+                        # The isolated live-voice branch exercises LM Studio's
+                        # stateful Responses path by default. It still fails
+                        # closed to normal chat-completions if unsupported or if
+                        # the exact Omnix prompt prefix changes.
+                        "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES": os.environ.get(
+                            "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES",
+                            "true" if kyutai_enabled else "false",
+                        ),
+                        "OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS": os.environ.get(
+                            "OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS",
+                            "2",
+                        ),
                     },
                 )
             )
