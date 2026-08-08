@@ -46,6 +46,13 @@ describe('live voice semantic finalization deadline', () => {
     expect(semanticFinalizationRemainingMs('Where are we going to', 'balanced', 150)).toBe(850);
   });
 
+  it('does not let an old pause prepay the completion window for newly arrived words', () => {
+    expect(semanticFinalizationRemainingMs('You should lie', 'balanced', 900, 21)).toBe(339);
+    expect(semanticFinalizationRemainingMs('You should lie', 'balanced', 900, 359)).toBe(1);
+    expect(semanticFinalizationRemainingMs('You should lie', 'balanced', 900, 360)).toBe(0);
+    expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 500, 40)).toBe(180);
+  });
+
   it('uses recent assistant-question context to finalize a one-word answer quickly', () => {
     dispatchAssistantTurnSummary({
       turnId: 'assistant-question',
