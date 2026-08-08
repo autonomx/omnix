@@ -54,10 +54,11 @@ const PROFILES: Record<ConversationPace, FloorTimingProfile> = {
 };
 
 const HESITATION_PATTERN = /(?:\b(?:um+|uh+|erm|hmm|let me think|one moment|give me a second)\b)[,.…\s-]*$/i;
-const UNFINISHED_PATTERN = /(?:\b(?:and|or|but|because|so|then|if|when|while|with|to|from|about|like|that|which|who|first|second|also)\b|[,;:\-–—])\s*$/i;
+const UNFINISHED_PATTERN = /(?:\b(?:and|or|but|because|so|then|if|when|while|with|to|from|about|like|that|which|who|first|second|also|what|why|where|how|is|are|was|were|do|does|did|can|could|would|should|will|have|has|had)\b|[,;:\-–—])\s*$/i;
 const SELF_CORRECTION_PATTERN = /(?:\b(?:actually|rather|I mean|no wait|correction)\b)[,.…\s-]*$/i;
 const ENUMERATION_PATTERN = /(?:\b(?:first|second|third|next)|\d+[.)])\s*$/i;
-const COMPLETE_QUESTION_PATTERN = /(?:[?？]|\b(?:what|why|when|where|who|how|can|could|would|should|is|are|do|does|did)\b.+)$/i;
+const COMPLETE_QUESTION_PATTERN = /[?？]\s*$/u;
+const QUESTION_LEAD_PATTERN = /^(?:what|why|when|where|who|how|can|could|would|should|is|are|was|were|do|does|did|will|have|has|had)\b/i;
 const COMPLETE_COMMAND_PATTERN = /^(?:please\s+)?(?:open|close|show|hide|start|stop|send|create|delete|save|load|continue|explain|tell|give|find|search|go|move|call|cancel)\b.+/i;
 
 export function conversationTimingProfile(pace: ConversationPace): FloorTimingProfile {
@@ -84,8 +85,9 @@ export function assessSemanticTurn(
 ): SemanticTurnAssessment {
   const profile = conversationTimingProfile(pace);
   const text = transcript.trim();
-  if (text.length < 2) {
-    return { probabilityDone: 0.1, reason: 'insufficient_text', recommendedWaitMs: profile.ambiguousWaitMs };
+  const wordCount = text ? text.split(/\s+/u).length : 0;
+  if (wordCount <= 1) {
+    return { probabilityDone: 0.1, reason: 'insufficient_text', recommendedWaitMs: profile.maximumWaitMs };
   }
   if (HESITATION_PATTERN.test(text)) {
     return { probabilityDone: 0.08, reason: 'trailing_hesitation', recommendedWaitMs: profile.maximumWaitMs };
@@ -101,6 +103,10 @@ export function assessSemanticTurn(
   }
   if (COMPLETE_QUESTION_PATTERN.test(text)) {
     return { probabilityDone: 0.92, reason: 'complete_question', recommendedWaitMs: profile.clearTurnWaitMs };
+  }
+  const trailingClause = text.split(/[.!?？]+/u).filter(Boolean).at(-1)?.trim() ?? '';
+  if (QUESTION_LEAD_PATTERN.test(trailingClause)) {
+    return { probabilityDone: 0.35, reason: 'unfinished_clause', recommendedWaitMs: profile.ambiguousWaitMs };
   }
   if (COMPLETE_COMMAND_PATTERN.test(text)) {
     return { probabilityDone: 0.94, reason: 'complete_command', recommendedWaitMs: profile.clearTurnWaitMs };
