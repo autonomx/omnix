@@ -21,6 +21,7 @@ from .live_chat_live_voice_profile import install_live_chat_live_voice_profile_h
 from .live_chat_lmstudio_diagnostics import (
     install_live_chat_lmstudio_diagnostics_hook,
 )
+from .live_chat_lmstudio_responses import install_live_chat_lmstudio_responses_hook
 from .live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
 from .live_chat_postgres_fast_path import install_live_chat_postgres_fast_path
 from .live_chat_prompt_cache import install_live_chat_prompt_cache_hook
@@ -174,6 +175,7 @@ install_live_chat_provider_routing_hook()
 install_live_chat_prompt_window_hook()
 install_live_chat_live_voice_profile_hook()
 install_lmstudio_loaded_model_resolution_hook()
+install_live_chat_lmstudio_responses_hook()
 install_live_voice_spoken_style_hook()
 install_live_chat_companion_context_hook()
 install_live_chat_prompt_cache_hook()
