@@ -39,6 +39,8 @@ def _stats_payload() -> dict[str, Any]:
 class _JsonResponse:
     def __init__(self, payload: Any) -> None:
         self.payload = payload
+        self.headers: dict[str, str] = {}
+        self.content = b"{}"
 
     def json(self) -> Any:
         return self.payload
