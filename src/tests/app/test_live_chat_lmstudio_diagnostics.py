@@ -190,6 +190,7 @@ def test_native_v1_chat_is_opt_in_stateless_and_exposes_native_stats(monkeypatch
             ChatMessage(role="system", content="Be concise."),
             ChatMessage(role="user", content="Hello"),
         ],
+        model="test-model",
         stream=False,
         _lmstudio_native_v1=True,
         chat_template_kwargs={"enable_thinking": False},
@@ -241,6 +242,7 @@ def test_native_v1_stream_continues_from_response_id_and_keeps_final_stats(monke
     chunks = list(
         provider.chat_completion(
             messages=[ChatMessage(role="user", content="Continue")],
+            model="test-model",
             stream=True,
             _lmstudio_native_v1=True,
             _lmstudio_store=True,
@@ -271,6 +273,7 @@ def test_native_v1_refuses_to_silently_flatten_assistant_history() -> None:
                 ChatMessage(role="assistant", content="Two"),
                 ChatMessage(role="user", content="Three"),
             ],
+            model="test-model",
             stream=False,
             _lmstudio_native_v1=True,
         )
