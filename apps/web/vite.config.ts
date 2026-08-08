@@ -12,6 +12,11 @@ const LIVE_VOICE_CRITICAL_PATHS = [
   'apps/web/src/features/assistant-workspace/live-speculation-controller.ts',
   'apps/web/src/features/assistant-workspace/live-voice-controller.ts',
   'apps/web/src/features/assistant-workspace/live-voice-turn-coordinator.ts',
+  'apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts',
+  'apps/web/src/features/assistant-workspace/live-voice-natural-timing.ts',
+  'apps/web/src/features/assistant-workspace/live-voice-performance-behavior.ts',
+  'apps/web/src/features/assistant-workspace/live-speech-delivery-plan.ts',
+  'apps/web/src/features/assistant-workspace/live-voice-cue-policy.ts',
 ] as const;
 
 function reactDevtoolsStandalonePlugin(): PluginOption {
