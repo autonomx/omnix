@@ -7,6 +7,7 @@ import { OmnixApp } from './app/OmnixApp';
 import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
 import './features/chatbot/chat-sidebar-manager.css';
+import './features/chatbot/chat-sidebar-manager-layout-fix.css';
 import { initializeChatSidebarManager } from './features/chatbot/chat-sidebar-manager';
 import './features/chatbot/researchProgressController';
 import './features/chatbot/researchProgressController.css';
