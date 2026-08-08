@@ -33,8 +33,11 @@ const trackedStreams = new Set<MediaStream>();
 const microphoneTaps = new Map<MediaStream, LiveVoiceMicrophoneTap>();
 const CANDIDATE_TIMEOUT_MS = 1_500;
 const DEFAULT_PLAYBACK_SAMPLE_RATE = 24_000;
+const PLAYBACK_REFERENCE_SECONDS = 4;
 
-let playbackReference = new BoundedWaveformReference(DEFAULT_PLAYBACK_SAMPLE_RATE * 2);
+let playbackReference = new BoundedWaveformReference(
+  DEFAULT_PLAYBACK_SAMPLE_RATE * PLAYBACK_REFERENCE_SECONDS,
+);
 let playbackSampleRate = DEFAULT_PLAYBACK_SAMPLE_RATE;
 let playbackRms = 0;
 let playbackReferenceAt = 0;
@@ -88,6 +91,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
       clearCandidate('playback-finished');
       playbackReference.clear();
       playbackRms = 0;
+      playbackReferenceAt = 0;
     }
     applyDuplexGate();
   };
@@ -112,7 +116,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
       : DEFAULT_PLAYBACK_SAMPLE_RATE;
     if (sampleRate !== playbackSampleRate) {
       playbackSampleRate = sampleRate;
-      playbackReference = new BoundedWaveformReference(sampleRate * 2);
+      playbackReference = new BoundedWaveformReference(sampleRate * PLAYBACK_REFERENCE_SECONDS);
     }
     playbackRms = calculatePcm16Rms(detail.samples);
     playbackReference.append(pcm16ToFloat32Reference(detail.samples));
@@ -123,7 +127,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     const assistantSpeaking = assistantAudioIsActive();
     if (!assistantSpeaking || resolvedRuntimeDuplexMode() !== 'echo_aware') return;
     const detail = (event as CustomEvent<{ rms?: number; assistantSpeaking?: boolean }>).detail;
-    const microphoneRms = typeof detail?.rms === 'number' ? detail.rms : 0;
+    const eventMicrophoneRms = typeof detail?.rms === 'number' ? detail.rms : 0;
     const tap = firstMicrophoneTap();
     const microphoneFrame = tap?.read() ?? new Float32Array(0);
     const resampledMicrophone = tap
@@ -134,15 +138,19 @@ export function initializeLiveVoiceDuplexGate(): () => void {
       resampledMicrophone,
       playbackSampleRate,
     );
+    const microphoneRms = waveform.alignedMicrophoneRms ?? eventMicrophoneRms;
+    const alignedPlaybackRms = waveform.alignedPlaybackRms ?? playbackRms;
     const sensitivity = runtime.presencePolicy?.values.interruption_sensitivity ?? 0.7;
     const calibration = runtime.duplex.calibration;
     const assessment = assessAcousticBargeIn({
       assistantSpeaking: detail?.assistantSpeaking ?? assistantSpeaking,
       microphoneRms,
-      playbackRms,
+      playbackRms: alignedPlaybackRms,
       playbackReferenceAgeMs: Math.max(0, performance.now() - playbackReferenceAt),
       speechThreshold: adaptiveSpeechThreshold(calibration, sensitivity),
       waveformSimilarity: waveform.similarity,
+      residualSpeechRatio: waveform.residualRatio,
+      estimatedEchoGain: waveform.estimatedEchoGain,
       calibratedEchoGain: calibration?.echoGain ?? null,
       interruptionSensitivity: sensitivity,
     });
@@ -152,16 +160,20 @@ export function initializeLiveVoiceDuplexGate(): () => void {
       reason: assessment.reason,
       microphone_rms: assessment.microphoneRms,
       playback_rms: assessment.playbackRms,
+      event_microphone_rms: eventMicrophoneRms,
       energy_ratio: assessment.energyRatio,
       waveform_similarity: assessment.waveformSimilarity,
       waveform_lag_ms: waveform.lagMs,
       waveform_samples: waveform.comparedSamples,
+      estimated_echo_gain: assessment.estimatedEchoGain,
+      residual_rms: waveform.residualRms,
+      residual_speech_ratio: assessment.residualSpeechRatio,
       calibration_confidence: calibration?.confidence ?? 0,
       presence_policy_version: runtime.presencePolicy?.version ?? null,
       interruption_sensitivity: sensitivity,
     });
     if (assessment.decision === 'likely_echo' || assessment.decision === 'no_playback') {
-      if (assessment.reason === 'waveform_matches_playback') recordReleaseQuality('playback_echo_submission', false);
+      if (assessment.decision === 'likely_echo') recordReleaseQuality('playback_echo_submission', false);
       return;
     }
     candidateStartedAt = performance.now();
