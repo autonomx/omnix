@@ -8,6 +8,9 @@ const INSTALLED_KEY = '__omnix_chat_session_tools__';
 const MODE_BUTTON_CLASS = 'omnix-chat-mode-button';
 const MODE_STORAGE_KEY = 'omnix.chat.mode';
 const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
+const LIVE_CHAT_SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
+const CHAT_SESSION_CREATED_EVENT = 'omnix:chat-session-created';
+const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 
 type PreservedChatSessionRequest = CreateChatSessionRequest & {
   interaction_mode: 'system' | 'character';
@@ -84,7 +87,24 @@ export function preservedNewChatRequest(
   };
 }
 
-export async function startBlankChat(): Promise<void> {
+function clearMessageComposer(): void {
+  const textarea = document.querySelector<HTMLTextAreaElement>(
+    '.assistant-message-input textarea[name="content"], textarea[placeholder^="Message Omnix"]',
+  );
+  if (!textarea) return;
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  if (valueSetter) valueSetter.call(textarea, '');
+  else textarea.value = '';
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  textarea.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function requestSessionListRefresh(): void {
+  document.dispatchEvent(new Event('visibilitychange'));
+  window.dispatchEvent(new Event('focus'));
+}
+
+export async function startBlankChat(): Promise<ChatSession> {
   let request: CreateChatSessionRequest = { title: 'New chat' };
   if (selectedSessionId) {
     const [session, interaction] = await Promise.all([
@@ -93,8 +113,20 @@ export async function startBlankChat(): Promise<void> {
     ]);
     request = preservedNewChatRequest(session, interaction);
   }
-  await omnixApiClient.createChatSession(request);
-  window.location.assign('/chatbot');
+
+  const session = await omnixApiClient.createChatSession(request);
+  const sessionId = String(session.id ?? '').trim();
+  if (!sessionId) throw new Error('New chat response did not include a session id.');
+
+  selectedSessionId = sessionId;
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_STOP_EVENT));
+  clearMessageComposer();
+  window.dispatchEvent(new CustomEvent(CHAT_SESSION_CREATED_EVENT, { detail: { session } }));
+  window.dispatchEvent(new CustomEvent(LIVE_CHAT_SESSION_CHANGED_EVENT, {
+    detail: { sessionId },
+  }));
+  requestSessionListRefresh();
+  return session;
 }
 
 function updateModeButton(button: HTMLButtonElement): void {
