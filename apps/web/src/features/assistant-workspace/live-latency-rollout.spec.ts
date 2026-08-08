@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveAuthoritySelection } from './live-stt-authority-controller';
 import {
   resolveLiveVoiceSttSelection,
@@ -10,9 +10,29 @@ import {
   transcriptsCanReuseSpeculation,
 } from './live-speculation-controller';
 import { AdaptiveTtsBufferPolicy } from './live-tts-adaptive-buffer-controller';
+import { assessAcousticBargeIn } from './live-voice-barge-in-detector';
 import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
+import {
+  clearPlaybackEchoSuppression,
+  markPlaybackEchoSuppressed,
+} from './live-voice-echo-suppression';
+import {
+  classifyOverlap,
+  shouldConfirmInterruption,
+} from './live-voice-overlap-classifier';
+import { compareRecentWaveforms } from './live-voice-waveform-reference';
 
 const locationLike = { protocol: 'http:', hostname: 'localhost' } as Pick<Location, 'protocol' | 'hostname'>;
+
+afterEach(() => clearPlaybackEchoSuppression());
+
+function deterministicNoise(length: number, seed: number): Float32Array {
+  let state = seed >>> 0;
+  return Float32Array.from({ length }, () => {
+    state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+    return (state / 0xffff_ffff * 2 - 1) * 0.35;
+  });
+}
 
 describe('live latency PR3-PR5 rollout policies', () => {
   it('selects authoritative Kyutai only after the pre-session gate passes', async () => {
@@ -140,5 +160,54 @@ describe('live latency PR3-PR5 rollout policies', () => {
     const lowered = policy.observeWorkletEvent('drained');
     expect(lowered.startBufferMs).toBeLessThan(beforeStable.startBufferMs);
     expect(lowered.rebufferMs).toBeLessThan(beforeStable.rebufferMs);
+  });
+
+  it('rejects delayed self playback while preserving simultaneous user speech', () => {
+    const playback = deterministicNoise(30_000, 17);
+    const source = playback.slice(10_800, 12_848);
+    const pureEcho = Float32Array.from(source, (sample) => sample * 0.5);
+    const user = deterministicNoise(source.length, 91_337);
+    const mixed = Float32Array.from(
+      source,
+      (sample, index) => sample * 0.5 + user[index] * 0.55,
+    );
+
+    const echoMatch = compareRecentWaveforms(playback, pureEcho, 24_000);
+    const mixedMatch = compareRecentWaveforms(playback, mixed, 24_000);
+    expect(echoMatch.lagMs ?? 0).toBeGreaterThan(650);
+    expect(echoMatch.residualRatio ?? 1).toBeLessThan(0.05);
+    expect(mixedMatch.residualRatio ?? 0).toBeGreaterThan(0.6);
+
+    const echo = assessAcousticBargeIn({
+      assistantSpeaking: true,
+      microphoneRms: echoMatch.alignedMicrophoneRms ?? 0,
+      playbackRms: echoMatch.alignedPlaybackRms ?? 0,
+      playbackReferenceAgeMs: 900,
+      speechThreshold: 0.01,
+      waveformSimilarity: echoMatch.similarity,
+      residualSpeechRatio: echoMatch.residualRatio,
+      estimatedEchoGain: echoMatch.estimatedEchoGain,
+    });
+    const bargeIn = assessAcousticBargeIn({
+      assistantSpeaking: true,
+      microphoneRms: mixedMatch.alignedMicrophoneRms ?? 0,
+      playbackRms: mixedMatch.alignedPlaybackRms ?? 0,
+      playbackReferenceAgeMs: 900,
+      speechThreshold: 0.01,
+      waveformSimilarity: mixedMatch.similarity,
+      residualSpeechRatio: mixedMatch.residualRatio,
+      estimatedEchoGain: mixedMatch.estimatedEchoGain,
+    });
+    expect(echo.decision).toBe('likely_echo');
+    expect(bargeIn.decision).toBe('independent_speech');
+  });
+
+  it('lets an acoustic echo verdict veto partial-STT interruption until real user speech clears it', () => {
+    const interruption = classifyOverlap('I need to change the destination now');
+    markPlaybackEchoSuppressed('echo_residual_matches_playback');
+    expect(shouldConfirmInterruption(interruption, 'easy')).toBe(false);
+
+    clearPlaybackEchoSuppression();
+    expect(shouldConfirmInterruption(interruption, 'easy')).toBe(true);
   });
 });
