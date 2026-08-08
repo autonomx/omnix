@@ -75,11 +75,23 @@ class _FailingLlmProvider:
 class _FakeTtsProvider:
     def __init__(self) -> None:
         self.calls = 0
+        self.last_kwargs = None
 
     def generate_audio_stream(self, **kwargs):
         self.calls += 1
+        self.last_kwargs = kwargs
+        assert kwargs["text"] == "Ready to answer."
         assert kwargs["speaker"] == "Jinx"
-        assert kwargs["chunk_size"] == 1
+        assert kwargs["language"] == "English"
+        assert kwargs["chunk_size"] == 4
+        assert kwargs["max_new_tokens"] == 42
+        assert kwargs["temperature"] == 0.6
+        assert kwargs["top_k"] == 20
+        assert kwargs["top_p"] == 0.85
+        assert kwargs["repetition_penalty"] == 1.05
+        assert kwargs["append_silence"] is False
+        assert kwargs["parity_mode"] is False
+        assert kwargs["non_streaming_mode"] is False
         yield [0.0, 0.1, -0.1], 24_000, {}
 
 
@@ -122,6 +134,7 @@ def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) ->
     assert second.json()["fully_warmed"] is True
     assert llm.calls == 1
     assert tts.calls == 1
+    assert tts.last_kwargs is not None
     assert store.prompt_calls == 1
     assert store.warm_user_message.metadata["side_effects_allowed"] is False
     assert store.warm_user_message.metadata["memory_writes_allowed"] is False
