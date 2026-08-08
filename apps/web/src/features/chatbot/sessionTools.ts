@@ -5,7 +5,6 @@ import { initializeChatResponseMetricsController } from './chat-response-metrics
 import { characterClient, type SessionInteraction } from './characterClient';
 
 const INSTALLED_KEY = '__omnix_chat_session_tools__';
-const BUTTON_CLASS = 'omnix-new-chat-button';
 const MODE_BUTTON_CLASS = 'omnix-chat-mode-button';
 const MODE_STORAGE_KEY = 'omnix.chat.mode';
 const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
@@ -85,7 +84,7 @@ export function preservedNewChatRequest(
   };
 }
 
-async function startBlankChat(): Promise<void> {
+export async function startBlankChat(): Promise<void> {
   let request: CreateChatSessionRequest = { title: 'New chat' };
   if (selectedSessionId) {
     const [session, interaction] = await Promise.all([
@@ -96,22 +95,6 @@ async function startBlankChat(): Promise<void> {
   }
   await omnixApiClient.createChatSession(request);
   window.location.assign('/chatbot');
-}
-
-function styleButton(button: HTMLButtonElement): void {
-  const compact = button.textContent === '+ New';
-  button.style.border = '1px solid rgba(255, 255, 255, 0.16)';
-  button.style.borderRadius = compact ? '999px' : '0.65rem';
-  button.style.background = 'linear-gradient(135deg, #6544d9, #7c5cff)';
-  button.style.color = '#fff';
-  button.style.cursor = 'pointer';
-  button.style.fontWeight = '750';
-  button.style.height = compact ? '2rem' : '2.55rem';
-  button.style.minHeight = compact ? '2rem' : '2.55rem';
-  button.style.minWidth = compact ? '4.2rem' : '';
-  button.style.padding = compact ? '0 0.75rem' : '0 1rem';
-  button.style.whiteSpace = 'nowrap';
-  button.style.width = 'auto';
 }
 
 function updateModeButton(button: HTMLButtonElement): void {
@@ -126,24 +109,6 @@ function updateModeButton(button: HTMLButtonElement): void {
   button.style.fontWeight = '750';
   button.style.minHeight = '2.55rem';
   button.style.padding = '0 1rem';
-}
-
-function addButton(target: Element | null, label: string, prepend = false): void {
-  if (!target || target.querySelector(`.${BUTTON_CLASS}`)) return;
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `${BUTTON_CLASS} assistant-header-pill`;
-  button.textContent = label;
-  button.title = 'Start a new chat';
-  styleButton(button);
-  button.addEventListener('click', () => {
-    button.setAttribute('disabled', 'true');
-    void startBlankChat().catch(() => {
-      button.removeAttribute('disabled');
-    });
-  });
-  if (prepend) target.prepend(button);
-  else target.appendChild(button);
 }
 
 function addModeButton(target: Element | null): void {
@@ -161,8 +126,6 @@ function addModeButton(target: Element | null): void {
 
 function mountButtons(): void {
   const headerActions = document.querySelector('.assistant-chat-integrated-actions, .assistant-chat-header-actions');
-  addButton(document.querySelector('.assistant-sidebar-sessions > header'), '+ New');
-  addButton(headerActions, 'New Chat', true);
   addModeButton(headerActions);
 }
 
