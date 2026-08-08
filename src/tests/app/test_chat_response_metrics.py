@@ -5,6 +5,7 @@ from typing import Any
 
 from app import shared
 from app.chat.provider_metrics import merge_provider_response_metrics
+from app.gateway import live_chat_live_voice_profile as live_voice_profile
 from app.gateway.live_chat_provider_metrics import (
     _LowLatencyTextChunker,
     _is_lmstudio,
@@ -19,12 +20,18 @@ def _stats_payload() -> dict[str, Any]:
             "prompt_tokens": 18,
             "completion_tokens": 37,
             "total_tokens": 55,
+            "prompt_tokens_details": {"cached_tokens": 12},
         },
         "stats": {
             "tokens_per_second": 127.26,
             "time_to_first_token": 0.11,
             "generation_time": 0.38,
             "stop_reason": "eosFound",
+            "draft_model": "draft-qwen",
+            "total_draft_tokens_count": 20,
+            "accepted_draft_tokens_count": 15,
+            "rejected_draft_tokens_count": 4,
+            "ignored_draft_tokens_count": 1,
         },
     }
 
@@ -45,9 +52,12 @@ class _StreamResponse:
         yield b'data: {"model":"qwen","choices":[{"delta":{"content":"Howdy"}}]}'
         yield (
             b'data: {"model":"qwen","choices":[{"delta":{},"finish_reason":"stop"}],'
-            b'"usage":{"prompt_tokens":18,"completion_tokens":37,"total_tokens":55},'
+            b'"usage":{"prompt_tokens":18,"completion_tokens":37,"total_tokens":55,'
+            b'"prompt_tokens_details":{"cached_tokens":12}},'
             b'"stats":{"tokens_per_second":127.26,"time_to_first_token":0.11,'
-            b'"generation_time":0.38,"stop_reason":"eosFound"}}'
+            b'"generation_time":0.38,"stop_reason":"eosFound","draft_model":"draft-qwen",'
+            b'"total_draft_tokens_count":20,"accepted_draft_tokens_count":15,'
+            b'"rejected_draft_tokens_count":4,"ignored_draft_tokens_count":1}}'
         )
         yield b'data: [DONE]'
 
@@ -112,6 +122,7 @@ def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> No
         "prompt_tokens": 18,
         "completion_tokens": 37,
         "total_tokens": 55,
+        "prompt_tokens_details": {"cached_tokens": 12},
     }
     assert chunks[-1].finish_reason == "stop"
     assert chunks[-1].raw_response["stats"]["tokens_per_second"] == 127.26
@@ -188,9 +199,18 @@ def test_provider_metrics_normalize_lmstudio_stats() -> None:
         "tokens_per_second": 127.26,
         "output_tokens": 37,
         "input_tokens": 18,
+        "cached_input_tokens": 12,
+        "uncached_input_tokens": 6,
+        "prompt_cache_hit_ratio": 12 / 18,
         "total_tokens": 55,
         "generation_time_seconds": 0.38,
         "time_to_first_token_seconds": 0.11,
+        "draft_model": "draft-qwen",
+        "total_draft_tokens": 20,
+        "accepted_draft_tokens": 15,
+        "rejected_draft_tokens": 4,
+        "ignored_draft_tokens": 1,
+        "draft_acceptance_ratio": 0.75,
         "stop_reason": "eosFound",
         "finish_reason": "stop",
     }
@@ -274,6 +294,8 @@ def test_lmstudio_prompt_stream_persists_metrics_on_completion(monkeypatch) -> N
     assert complete["content"] == "Hello there."
     assert complete["metadata"]["usage"]["completion_tokens"] == 37
     assert complete["metadata"]["provider_metrics"]["tokens_per_second"] == 127.26
+    assert complete["metadata"]["provider_metrics"]["cached_input_tokens"] == 12
+    assert complete["metadata"]["provider_metrics"]["draft_acceptance_ratio"] == 0.75
     assert complete["metadata"]["provider_metrics"]["stop_reason"] == "eosFound"
 
 
@@ -329,3 +351,87 @@ def test_lmstudio_prompt_stream_reconstructs_split_provider_deltas(monkeypatch) 
     assert text_events[0] == "Howdy "
     assert "".join(text_events) == "Howdy right back at ya."
     assert events[-1]["content"] == "Howdy right back at ya."
+
+
+def test_live_voice_policy_requests_native_metrics(monkeypatch) -> None:
+    live_voice_profile._install_lmstudio_thinking_policy()
+    provider = _provider()
+    calls: list[tuple[str, dict[str, Any]]] = []
+    payload = _stats_payload()
+
+    def fake_make_request(method: str, endpoint: str, **kwargs: Any):
+        calls.append((endpoint, kwargs))
+        if endpoint == "/api/v1/models":
+            return _loaded_model_response()
+        return _JsonResponse(
+            {
+                "model": "qwen",
+                "choices": [
+                    {
+                        "message": {"content": "Hello"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                **payload,
+            }
+        )
+
+    monkeypatch.setattr(provider, "_make_request", fake_make_request)
+    token = live_voice_profile._LIVE_VOICE_TURN.set(True)
+    try:
+        provider.chat_completion(
+            [ChatMessage(role="user", content="Hello")],
+            stream=False,
+        )
+    finally:
+        live_voice_profile._LIVE_VOICE_TURN.reset(token)
+
+    endpoint, request = calls[-1]
+    assert endpoint == "/api/v0/chat/completions"
+    assert request["json"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_raw_live_voice_provider_stream_logs_cache_and_ttft(monkeypatch) -> None:
+    payload = _stats_payload()
+    logs: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    monkeypatch.setattr(
+        live_voice_profile,
+        "stream_log",
+        lambda *args, **kwargs: logs.append((args, kwargs)),
+    )
+
+    source = iter(
+        [
+            ChatResponse(content="Hello ", model="qwen"),
+            ChatResponse(
+                content="there.",
+                model="qwen",
+                usage=payload["usage"],
+                finish_reason="stop",
+                raw_response=payload,
+            ),
+        ]
+    )
+
+    chunks = list(
+        live_voice_profile._stream_with_live_voice_context(
+            source,
+            is_live_voice=True,
+        )
+    )
+
+    assert "".join(chunk.content for chunk in chunks) == "Hello there."
+    metric_log = next(
+        kwargs
+        for args, kwargs in logs
+        if len(args) >= 3 and args[2] == "live_voice_raw_provider_stream_metrics"
+    )
+    assert metric_log["stream_completed"] is True
+    assert metric_log["input_tokens"] == 18
+    assert metric_log["cached_input_tokens"] == 12
+    assert metric_log["uncached_input_tokens"] == 6
+    assert metric_log["prompt_cache_hit_ratio"] == 12 / 18
+    assert metric_log["native_ttft_ms"] == 110.0
+    assert metric_log["draft_model"] == "draft-qwen"
+    assert metric_log["accepted_draft_tokens"] == 15
+    assert metric_log["draft_acceptance_ratio"] == 0.75
