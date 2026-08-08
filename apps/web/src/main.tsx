@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';
 import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
+import './features/chatbot/chat-sidebar-manager.css';
+import { initializeChatSidebarManager } from './features/chatbot/chat-sidebar-manager';
 import './features/chatbot/researchProgressController';
 import './features/chatbot/researchProgressController.css';
 import { bootstrapCentralAssistantSettings } from './features/chatbot/assistantSettingsBootstrap';
@@ -112,6 +114,7 @@ initializeDesktopCompanionDeliveryController();
 initializeLiveConversationRepairController();
 initializeLiveConversationEvaluationController();
 initializeLiveConversationDurableEvaluationController();
+initializeChatSidebarManager();
 initializeLiveChatWorkspace(queryClient);
 initializeVoiceSessionEvaluationWorkspace();
 
