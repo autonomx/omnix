@@ -33,10 +33,10 @@ type SidebarManagerWindow = Window & typeof globalThis & {
 
 let selectedSessionId: string | null = null;
 let openMenuSessionId: string | null = null;
-let refreshTimer: number | null = null;
+let refreshTimer: ReturnType<typeof window.setTimeout> | null = null;
 let refreshGeneration = 0;
 let sharedSessionFromUrlApplied = false;
-let statusTimer: number | null = null;
+let statusTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 export function initializeChatSidebarManager(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
