@@ -106,7 +106,7 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(shouldCommitProviderEndpoint({ ...ready, correctionPending: true })).toBe(false);
   });
 
-  it('requires more silence for semantically ambiguous statements', () => {
+  it('does not commit semantically ambiguous statements from provider confidence alone', () => {
     const ambiguous = {
       authorityEnabled: true,
       probability: 0.9,
@@ -124,7 +124,7 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(shouldCommitProviderEndpoint({
       ...ambiguous,
       pauseElapsedMs: 280,
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it('reuses speculation only when normalized words are unchanged', () => {
