@@ -3,6 +3,11 @@ export type WaveformSimilarity = {
   lagSamples: number | null;
   lagMs: number | null;
   comparedSamples: number;
+  alignedPlaybackRms: number | null;
+  alignedMicrophoneRms: number | null;
+  estimatedEchoGain: number | null;
+  residualRms: number | null;
+  residualRatio: number | null;
 };
 
 export class BoundedWaveformReference {
@@ -68,7 +73,7 @@ export function compareRecentWaveforms(
   playbackHistory: Float32Array,
   microphoneInput: Float32Array,
   sampleRate: number,
-  maxLagMs = 300,
+  maxLagMs = 900,
 ): WaveformSimilarity {
   if (!playbackHistory.length || microphoneInput.length < 16) return emptySimilarity();
   const boundedMicrophone = boundedDownsample(microphoneInput, 2_048);
@@ -86,6 +91,9 @@ export function compareRecentWaveforms(
   let bestSimilarity = -1;
   let bestLag = 0;
   let bestCount = 0;
+  let bestDot = 0;
+  let bestPlaybackEnergy = 0;
+  let bestMicrophoneEnergy = 0;
 
   for (let lag = 0; lag <= lagLimit; lag += lagStep) {
     const playbackEnd = playbackHistory.length - lag;
@@ -112,15 +120,41 @@ export function compareRecentWaveforms(
       bestSimilarity = similarity;
       bestLag = lag;
       bestCount = count;
+      bestDot = dot;
+      bestPlaybackEnergy = playbackEnergy;
+      bestMicrophoneEnergy = microphoneEnergy;
     }
   }
 
-  if (bestSimilarity < 0) return emptySimilarity();
+  if (bestSimilarity < 0 || bestCount <= 0) return emptySimilarity();
+  const alignedPlaybackRms = Math.sqrt(bestPlaybackEnergy / bestCount);
+  const alignedMicrophoneRms = Math.sqrt(bestMicrophoneEnergy / bestCount);
+  const estimatedEchoGain = bestPlaybackEnergy > 1e-9
+    ? bestDot / bestPlaybackEnergy
+    : null;
+  const residualEnergy = estimatedEchoGain === null
+    ? bestMicrophoneEnergy
+    : Math.max(
+      0,
+      bestMicrophoneEnergy
+        - 2 * estimatedEchoGain * bestDot
+        + estimatedEchoGain * estimatedEchoGain * bestPlaybackEnergy,
+    );
+  const residualRms = Math.sqrt(residualEnergy / bestCount);
+  const residualRatio = alignedMicrophoneRms > 1e-6
+    ? clamp01(residualRms / alignedMicrophoneRms)
+    : null;
+
   return {
     similarity: clamp01(bestSimilarity),
     lagSamples: bestLag,
     lagMs: bestLag * 1_000 / Math.max(1, sampleRate),
     comparedSamples: bestCount,
+    alignedPlaybackRms,
+    alignedMicrophoneRms,
+    estimatedEchoGain,
+    residualRms,
+    residualRatio,
   };
 }
 
@@ -135,7 +169,17 @@ function boundedDownsample(samples: Float32Array, maximum: number): Float32Array
 }
 
 function emptySimilarity(): WaveformSimilarity {
-  return { similarity: null, lagSamples: null, lagMs: null, comparedSamples: 0 };
+  return {
+    similarity: null,
+    lagSamples: null,
+    lagMs: null,
+    comparedSamples: 0,
+    alignedPlaybackRms: null,
+    alignedMicrophoneRms: null,
+    estimatedEchoGain: null,
+    residualRms: null,
+    residualRatio: null,
+  };
 }
 
 function clamp01(value: number): number {
