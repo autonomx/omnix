@@ -31,6 +31,10 @@ def main() -> int:
         print(json.dumps(status, sort_keys=True))
         return 0
 
+    from app.live_voice_hardware_policy import install_live_voice_hardware_policy
+
+    install_live_voice_hardware_policy()
+
     import uvicorn
 
     uvicorn.run(
