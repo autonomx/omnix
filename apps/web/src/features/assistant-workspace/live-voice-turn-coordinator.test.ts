@@ -1,11 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { assessSemanticTurn, semanticFinalizeDelay } from './live-voice-floor-manager';
+import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
 import {
   LIVE_VOICE_TURN_TIMELINE_EVENT,
   LiveVoiceTurnCoordinator,
   endpointFusionAction,
+  initializeLiveVoiceTranscriptReconciliation,
+  removeTransientFinalUserRows,
+  resetLiveVoiceTurnCoordinatorForTests,
   type LiveVoiceTurnTimelineDetail,
 } from './live-voice-turn-coordinator';
+
+afterEach(() => {
+  resetLiveVoiceTurnCoordinatorForTests();
+  document.body.innerHTML = '';
+});
 
 describe('live voice turn coordinator', () => {
   it('keeps the latest speech-end timestamp before finalization', () => {
@@ -74,6 +84,52 @@ describe('live voice turn coordinator', () => {
       transcriptWords: 1,
       correctionPending: false,
     })).toBe('speculate');
+  });
+
+  it('keeps the captured fragmented phrases open until the current clause is actually complete', () => {
+    expect(assessSemanticTurn('Hey', 'balanced')).toMatchObject({
+      reason: 'insufficient_text',
+      recommendedWaitMs: 1_700,
+    });
+    expect(assessSemanticTurn("What's up? What's happening? What was", 'balanced')).toMatchObject({
+      reason: 'unfinished_clause',
+      recommendedWaitMs: 1_000,
+    });
+    expect(assessSemanticTurn('it last? Was it last', 'balanced')).toMatchObject({
+      reason: 'unfinished_clause',
+      recommendedWaitMs: 1_000,
+    });
+    expect(assessSemanticTurn('thing? I know how it is.', 'balanced').reason).toBe('definitive_statement');
+    expect(semanticFinalizeDelay('Where are we going?', 'balanced')).toBe(220);
+  });
+
+  it('removes the controller-created final user row after durable conversation submission', () => {
+    document.body.innerHTML = `
+      <div class="assistant-voice-transcript">
+        <p class="user" data-live-voice-id="live-voice-123">I'm the one that found you.</p>
+        <p class="user">I'm the one that found you.</p>
+      </div>
+    `;
+    const dispose = initializeLiveVoiceTranscriptReconciliation();
+
+    window.dispatchEvent(new CustomEvent(LIVE_COORDINATION_TERMINAL_EVENT, {
+      detail: { outcome: 'conversation_submitted' },
+    }));
+
+    expect(document.querySelectorAll('.assistant-voice-transcript p.user')).toHaveLength(1);
+    expect(document.querySelector('.assistant-voice-transcript p.user[data-live-voice-id]')).toBeNull();
+    dispose();
+  });
+
+  it('keeps draft and non-conversation transcript rows intact', () => {
+    document.body.innerHTML = `
+      <div class="assistant-voice-transcript">
+        <p class="user" data-live-voice-id="live-voice-123">submitted final</p>
+        <p class="user" data-live-voice-id="live-voice-draft">still speaking</p>
+      </div>
+    `;
+    expect(removeTransientFinalUserRows(document)).toBe(1);
+    expect(document.querySelector('[data-live-voice-id="live-voice-draft"]')).not.toBeNull();
   });
 
   it('emits timeline events using the supplied monotonic timestamp', () => {
