@@ -25,6 +25,9 @@ from app.gateway.tts_stream_contract import TtsStreamRequest
 
 class _BlockingProvider:
     provider_name = "test-live-tts"
+    # Match Faster Qwen3 TTS: speculation must still run through the serialized
+    # priority lane even though the provider cannot generate concurrently.
+    supports_concurrent_generation = False
 
     def __init__(self) -> None:
         self.calls = 0
