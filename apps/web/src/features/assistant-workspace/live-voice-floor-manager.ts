@@ -1,3 +1,5 @@
+import { readAssistantTurnCompletionContext } from './live-turn-context';
+
 export type ConversationPace = 'quick' | 'balanced' | 'reflective';
 
 export type UserFloorState =
@@ -14,6 +16,7 @@ export type SemanticTurnReason =
   | 'definitive_statement'
   | 'complete_question'
   | 'complete_command'
+  | 'contextual_short_answer'
   | 'trailing_hesitation'
   | 'unfinished_clause'
   | 'self_correction'
@@ -60,6 +63,7 @@ const ENUMERATION_PATTERN = /(?:\b(?:first|second|third|next)|\d+[.)])\s*$/i;
 const COMPLETE_QUESTION_PATTERN = /[?？]\s*$/u;
 const QUESTION_LEAD_PATTERN = /^(?:what|why|when|where|who|how|can|could|would|should|is|are|was|were|do|does|did|will|have|has|had)\b/i;
 const COMPLETE_COMMAND_PATTERN = /^(?:please\s+)?(?:open|close|show|hide|start|stop|send|create|delete|save|load|continue|explain|tell|give|find|search|go|move|call|cancel)\b.+/i;
+const CONTEXTUAL_SHORT_ANSWER_BLOCK_PATTERN = /^(?:and|or|but|because|so|then|if|when|while|with|to|from|about|like|that|which|who|what|why|where|how|is|are|was|were|do|does|did|can|could|would|should|will|have|has|had|i|we|they|he|she|it|the|a|an|actually|well|um+|uh+|erm|hmm)[,.…\s-]*$/i;
 
 export function conversationTimingProfile(pace: ConversationPace): FloorTimingProfile {
   return PROFILES[pace];
@@ -86,7 +90,21 @@ export function assessSemanticTurn(
   const profile = conversationTimingProfile(pace);
   const text = transcript.trim();
   const wordCount = text ? text.split(/\s+/u).length : 0;
-  if (wordCount <= 1) {
+  if (wordCount === 0) {
+    return { probabilityDone: 0.1, reason: 'insufficient_text', recommendedWaitMs: profile.maximumWaitMs };
+  }
+  if (wordCount === 1) {
+    const context = readAssistantTurnCompletionContext(30_000);
+    const expectsAnswer = Boolean(
+      context && (context.questionCount > 0 || context.createsObligation),
+    );
+    if (expectsAnswer && !CONTEXTUAL_SHORT_ANSWER_BLOCK_PATTERN.test(text)) {
+      return {
+        probabilityDone: 0.96,
+        reason: 'contextual_short_answer',
+        recommendedWaitMs: profile.clearTurnWaitMs,
+      };
+    }
     return { probabilityDone: 0.1, reason: 'insufficient_text', recommendedWaitMs: profile.maximumWaitMs };
   }
   if (HESITATION_PATTERN.test(text)) {
