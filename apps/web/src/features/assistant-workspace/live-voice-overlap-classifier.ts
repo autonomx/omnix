@@ -6,6 +6,7 @@ import {
   type InterruptionPreference,
   readLiveConversationSettings,
 } from './live-voice-conversation-settings';
+import { isPlaybackEchoSuppressed } from './live-voice-echo-suppression';
 
 export type OverlapIntent = 'hard_stop' | 'interrupt' | 'backchannel' | 'noise' | 'uncertain';
 
@@ -53,6 +54,10 @@ export function shouldConfirmInterruption(
   assessment: OverlapAssessment,
   preference: InterruptionPreference = readLiveConversationSettings().interruptionPreference,
 ): boolean {
+  // Acoustic echo has stronger evidence than a partial STT overlap transcript.
+  // A subsequent independent-speech acoustic verdict clears this latch before
+  // the user's real transcript reaches the semantic classifier.
+  if (isPlaybackEchoSuppressed()) return false;
   if (assessment.intent === 'hard_stop') return true;
   if (assessment.intent !== 'interrupt') return false;
   const threshold = preference === 'easy' ? 0.58 : preference === 'finish_more' ? 0.86 : 0.7;
