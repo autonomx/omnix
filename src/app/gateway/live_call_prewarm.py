@@ -20,7 +20,7 @@ from app.providers import ChatMessage as ProviderMessage
 from app.providers.lmstudio_provider import LMStudioProvider
 from app.shared import get_tts_provider
 
-from .tts_stream_contract import audio_chunk_to_pcm16_bytes
+from .tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
 from .tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_live_call_prewarm_registered"
@@ -30,6 +30,7 @@ _PREWARM_LOCK = threading.RLock()
 _PREWARMED_AT: dict[str, float] = {}
 _PREWARM_INFLIGHT: dict[str, threading.Event] = {}
 _WARM_USER_CONTENT = "Reply with one short acknowledgement."
+_WARM_TTS_TEXT = "Ready to answer."
 
 
 class LiveCallPrewarmRequest(BaseModel):
@@ -345,20 +346,36 @@ def _warm_tts(speaker: str | None, language: str) -> _WarmResult:
             detail="tts_provider_unavailable",
         )
 
+    # Build the warm-up through the same chat-stream policy used by live voice.
+    # Faster Qwen's first-token path is sensitive to decoder/chunk shapes; the
+    # old six-character, one-step warm-up did not prepare the 4-step / ~42-token
+    # shape actually used by the first spoken live-chat clause.
+    warm_request = TtsStreamRequest(
+        text=_WARM_TTS_TEXT,
+        speaker=speaker,
+        language=language,
+        diagnostics_stream_id="chat-live-call-prewarm",
+        temperature=0.6,
+        top_k=20,
+        top_p=0.85,
+        repetition_penalty=1.05,
+        append_silence=False,
+        parity_mode=False,
+    )
     provider_stream: Iterator[Any] | None = None
     try:
         provider_stream = provider.generate_audio_stream(
-            text="Ready.",
-            speaker=speaker,
-            language=language,
-            chunk_size=1,
-            temperature=0.6,
-            top_k=20,
-            top_p=0.85,
-            repetition_penalty=1.05,
-            append_silence=False,
-            max_new_tokens=12,
-            parity_mode=False,
+            text=warm_request.text,
+            speaker=warm_request.speaker,
+            language=warm_request.language,
+            chunk_size=warm_request.chunk_size,
+            temperature=warm_request.temperature,
+            top_k=warm_request.top_k,
+            top_p=warm_request.top_p,
+            repetition_penalty=warm_request.repetition_penalty,
+            append_silence=warm_request.append_silence,
+            max_new_tokens=warm_request.max_new_tokens,
+            parity_mode=warm_request.parity_mode,
             non_streaming_mode=False,
         )
         first = next(provider_stream, None)
