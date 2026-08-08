@@ -132,6 +132,25 @@
   width: 1.8rem;
 }
 
+.assistant-chatgpt-pin {
+  font-size: 0;
+}
+
+.assistant-chatgpt-pin::before,
+.assistant-chatgpt-menu button:nth-child(3) .assistant-chatgpt-menu-icon::before {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 2h-4v2H7v2l2 5v3l-4 3v1h6v4h2v-4h6v-1l-4-3v-3l2-5V4h-3V2z'/%3E%3C/svg%3E") center / contain no-repeat;
+  background: currentColor;
+  content: '';
+  display: block;
+  height: 0.95rem;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 2h-4v2H7v2l2 5v3l-4 3v1h6v4h2v-4h6v-1l-4-3v-3l2-5V4h-3V2z'/%3E%3C/svg%3E") center / contain no-repeat;
+  width: 0.95rem;
+}
+
+.assistant-chatgpt-menu button:nth-child(3) .assistant-chatgpt-menu-icon {
+  font-size: 0;
+}
+
 .assistant-chatgpt-more {
   font-size: 0.72rem;
   letter-spacing: -0.12em;
