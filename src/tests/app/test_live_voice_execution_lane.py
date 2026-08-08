@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from typing import Any
 
 from app.gateway import live_voice_execution_lane as execution_lane
 from app.gateway.live_voice_execution_lane import (
@@ -15,13 +16,17 @@ from app.gateway.live_voice_execution_lane import (
 
 
 class _BlockingProvider:
+    provider_name = "test-live-tts"
+
     def __init__(self) -> None:
         self.speculative_started = threading.Event()
         self.release_speculative = threading.Event()
         self.calls: list[str] = []
+        self.kwargs_by_text: dict[str, dict[str, Any]] = {}
 
-    def generate_audio_stream(self, *, text: str, **_kwargs):
+    def generate_audio_stream(self, *, text: str, **kwargs):
         self.calls.append(text)
+        self.kwargs_by_text[text] = dict(kwargs)
         if text == "speculative":
             self.speculative_started.set()
             self.release_speculative.wait(timeout=2)
@@ -98,8 +103,67 @@ def test_dedicated_tts_reuses_started_provider_without_reloading_settings(monkey
         reset_live_voice_execution_lane_for_tests()
 
 
-def test_accepted_tts_preempts_active_speculative_stream() -> None:
-    scheduler = PriorityTtsScheduler()
+def test_speculative_tts_uses_smaller_hidden_chunk_without_changing_accepted_shape(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS", raising=False)
+    provider = _BlockingProvider()
+    scheduler = PriorityTtsScheduler(log=lambda *_args, **_kwargs: None)
+
+    provider.release_speculative.set()
+    list(
+        scheduler.stream(
+            provider,
+            text="speculative",
+            speaker=None,
+            language="en",
+            kwargs={"chunk_size": 4, "temperature": 0.6},
+            priority=TtsLanePriority.SPECULATIVE,
+        )
+    )
+    list(
+        scheduler.stream(
+            provider,
+            text="accepted",
+            speaker=None,
+            language="en",
+            kwargs={"chunk_size": 4, "temperature": 0.6},
+            priority=TtsLanePriority.ACCEPTED,
+        )
+    )
+
+    assert provider.kwargs_by_text["speculative"]["chunk_size"] == 2
+    assert provider.kwargs_by_text["accepted"]["chunk_size"] == 4
+    assert provider.kwargs_by_text["speculative"]["temperature"] == 0.6
+
+
+def test_promoted_speculative_ticket_keeps_authoritative_chunk_shape() -> None:
+    provider = _BlockingProvider()
+    provider.release_speculative.set()
+    promotion = threading.Event()
+    promotion.set()
+    scheduler = PriorityTtsScheduler(log=lambda *_args, **_kwargs: None)
+
+    list(
+        scheduler.stream(
+            provider,
+            text="speculative",
+            speaker=None,
+            language="en",
+            kwargs={"chunk_size": 4},
+            priority=TtsLanePriority.SPECULATIVE,
+            promotion_event=promotion,
+        )
+    )
+
+    assert provider.kwargs_by_text["speculative"]["chunk_size"] == 4
+
+
+def test_accepted_tts_preempts_active_speculative_stream_and_reports_wait() -> None:
+    logs: list[tuple[str, dict[str, Any]]] = []
+    scheduler = PriorityTtsScheduler(
+        log=lambda _stream_id, _source, event, **fields: logs.append((event, fields))
+    )
     provider = _BlockingProvider()
     speculative_output: list[tuple[bytes, int, object]] = []
     accepted_output: list[tuple[bytes, int, object]] = []
@@ -111,7 +175,7 @@ def test_accepted_tts_preempts_active_speculative_stream() -> None:
                 text="speculative",
                 speaker=None,
                 language="en",
-                kwargs={},
+                kwargs={"chunk_size": 4},
                 priority=TtsLanePriority.SPECULATIVE,
             )
         ),
@@ -126,7 +190,7 @@ def test_accepted_tts_preempts_active_speculative_stream() -> None:
                 text="accepted",
                 speaker=None,
                 language="en",
-                kwargs={},
+                kwargs={"chunk_size": 4},
                 priority=TtsLanePriority.ACCEPTED,
             )
         ),
@@ -147,3 +211,17 @@ def test_accepted_tts_preempts_active_speculative_stream() -> None:
     assert speculative_output == []
     assert accepted_output == [(b"\x01\x00", 24_000, {"text": "accepted"})]
     assert provider.calls == ["speculative", "accepted"]
+    assert provider.kwargs_by_text["speculative"]["chunk_size"] == 2
+    assert provider.kwargs_by_text["accepted"]["chunk_size"] == 4
+
+    events = [event for event, _fields in logs]
+    assert "speculative_tts_preempt_requested" in events
+    assert events.count("tts_lane_ticket_enqueued") == 2
+    assert events.count("tts_lane_ticket_acquired") == 2
+    assert events.count("tts_lane_ticket_released") == 2
+    accepted_acquired = next(
+        fields
+        for event, fields in logs
+        if event == "tts_lane_ticket_acquired" and fields["priority"] == int(TtsLanePriority.ACCEPTED)
+    )
+    assert accepted_acquired["wait_ms"] >= 0
