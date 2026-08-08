@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import time
 from contextvars import ContextVar
 from functools import wraps
 from typing import Any, Iterator
@@ -12,6 +13,7 @@ from app.chat.memory_prompt import resolve_prompt_memory
 from app.chat.prompt_assembly import build_prompt_assembly
 from app.chat.prompt_rendering import render_prompt_assembly
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
+from app.chat.provider_metrics import merge_provider_response_metrics
 from app.providers.lmstudio_provider import LMStudioProvider
 
 from .live_material_context import live_material_context_items
@@ -203,6 +205,11 @@ def _install_lmstudio_thinking_policy() -> None:
             template_kwargs = dict(configured) if isinstance(configured, dict) else {}
             template_kwargs["enable_thinking"] = False
             kwargs["chat_template_kwargs"] = template_kwargs
+            # Native LM Studio metrics expose prompt/input tokens, TTFT and
+            # speculative-decoding stats. The provider transparently falls back
+            # to the OpenAI-compatible endpoint if the native metrics endpoint is
+            # unavailable, so this stays safe for older local servers.
+            kwargs["include_metrics"] = True
         return original_chat_completion(
             self,
             messages,
@@ -216,19 +223,28 @@ def _install_lmstudio_thinking_policy() -> None:
 
 
 def _stream_with_live_voice_context(
-    stream: Iterator[dict[str, Any]],
+    stream: Iterator[Any],
     *,
     is_live_voice: bool,
-) -> Iterator[dict[str, Any]]:
+) -> Iterator[Any]:
     """Advance a stream without carrying ContextVar tokens across yields.
 
     Starlette may advance a synchronous response iterator in a different copied
     context for each chunk. A token created before ``yield`` therefore cannot be
     reset reliably after the caller asks for the next chunk. Keep each token
     entirely inside the single iterator advance that created it.
+
+    Raw LM Studio streams (notably side-effect-free speculative generations) are
+    also summarized here because they bypass the normal chat provider-metrics
+    persistence hook. Dict-shaped chat events simply produce no provider metrics,
+    so normal accepted chat does not get double-counted.
     """
 
     iterator = iter(stream)
+    stream_started = time.perf_counter()
+    first_provider_text_ms: float | None = None
+    provider_metrics: dict[str, Any] = {}
+    completed = False
     try:
         while True:
             token = _LIVE_VOICE_TURN.set(is_live_voice)
@@ -236,9 +252,23 @@ def _stream_with_live_voice_context(
                 try:
                     item = next(iterator)
                 except StopIteration:
+                    completed = True
                     return
             finally:
                 _LIVE_VOICE_TURN.reset(token)
+
+            if is_live_voice:
+                provider_metrics = merge_provider_response_metrics(
+                    provider_metrics,
+                    item,
+                    provider_id=None,
+                )
+                if first_provider_text_ms is None:
+                    text = getattr(item, "content", "") or ""
+                    if text:
+                        first_provider_text_ms = (
+                            time.perf_counter() - stream_started
+                        ) * 1000.0
             yield item
     finally:
         close = getattr(iterator, "close", None)
@@ -248,6 +278,38 @@ def _stream_with_live_voice_context(
                 close()
             finally:
                 _LIVE_VOICE_TURN.reset(token)
+
+        if is_live_voice and (provider_metrics or first_provider_text_ms is not None):
+            native_ttft = provider_metrics.get("time_to_first_token_seconds")
+            stream_log(
+                "gateway-live-chat-first-token",
+                "runtime",
+                "live_voice_raw_provider_stream_metrics",
+                stream_completed=completed,
+                first_provider_text_ms=(
+                    round(first_provider_text_ms, 3)
+                    if first_provider_text_ms is not None
+                    else None
+                ),
+                native_ttft_ms=(
+                    round(float(native_ttft) * 1000.0, 3)
+                    if isinstance(native_ttft, (int, float))
+                    else None
+                ),
+                input_tokens=provider_metrics.get("input_tokens"),
+                cached_input_tokens=provider_metrics.get("cached_input_tokens"),
+                uncached_input_tokens=provider_metrics.get("uncached_input_tokens"),
+                prompt_cache_hit_ratio=provider_metrics.get("prompt_cache_hit_ratio"),
+                output_tokens=provider_metrics.get("output_tokens"),
+                tokens_per_second=provider_metrics.get("tokens_per_second"),
+                draft_model=provider_metrics.get("draft_model"),
+                total_draft_tokens=provider_metrics.get("total_draft_tokens"),
+                accepted_draft_tokens=provider_metrics.get("accepted_draft_tokens"),
+                rejected_draft_tokens=provider_metrics.get("rejected_draft_tokens"),
+                ignored_draft_tokens=provider_metrics.get("ignored_draft_tokens"),
+                draft_acceptance_ratio=provider_metrics.get("draft_acceptance_ratio"),
+                total_ms=round((time.perf_counter() - stream_started) * 1000.0, 3),
+            )
 
 
 def install_live_chat_live_voice_profile_hook() -> None:
