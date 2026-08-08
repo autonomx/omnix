@@ -1,10 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
+import {
+  clearPlaybackEchoSuppression,
+  markPlaybackEchoSuppressed,
+} from './live-voice-echo-suppression';
 import {
   classifyOverlap,
   isLikelyEcho,
   shouldConfirmInterruption,
 } from './live-voice-overlap-classifier';
+
+afterEach(() => clearPlaybackEchoSuppression());
 
 describe('live voice overlap classifier', () => {
   it('confirms hard stops, corrections, questions, and sustained speech', () => {
@@ -26,6 +32,18 @@ describe('live voice overlap classifier', () => {
     const echo = 'entrance beneath the old watchtower near the river';
     expect(isLikelyEcho(echo, assistant)).toBe(true);
     expect(classifyOverlap(echo, assistant).intent).toBe('noise');
+  });
+
+  it('suppresses semantic interruption while the acoustic gate identifies playback echo', () => {
+    const sustained = classifyOverlap('I need to change the destination now');
+    const hardStop = classifyOverlap('stop');
+    markPlaybackEchoSuppressed('echo_residual_matches_playback');
+
+    expect(shouldConfirmInterruption(sustained, 'easy')).toBe(false);
+    expect(shouldConfirmInterruption(hardStop, 'finish_more')).toBe(false);
+
+    clearPlaybackEchoSuppression();
+    expect(shouldConfirmInterruption(hardStop, 'finish_more')).toBe(true);
   });
 
   it('allows users to tune ambiguous sustained overlap without weakening hard stops', () => {
