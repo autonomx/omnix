@@ -45,6 +45,43 @@ describe('live voice waveform reference', () => {
     expect(match.comparedSamples).toBeGreaterThan(100);
   });
 
+  it('covers the live playback buffer plus acoustic delay by default', () => {
+    const playback = deterministicNoise(30_000, 71);
+    const microphone = playback.slice(10_800, 12_848);
+    const match = compareRecentWaveforms(playback, microphone, 24_000);
+
+    expect(match.similarity ?? 0).toBeGreaterThan(0.99);
+    expect(match.lagMs ?? 0).toBeGreaterThan(650);
+    expect(match.lagMs ?? 1_000).toBeLessThan(800);
+  });
+
+  it('estimates echo gain and leaves almost no residual for pure playback echo', () => {
+    const playback = deterministicNoise(8_000, 117);
+    const source = playback.slice(6_000, 7_000);
+    const microphone = Float32Array.from(source, (sample) => sample * 0.42);
+
+    const match = compareRecentWaveforms(playback, microphone, 24_000);
+
+    expect(match.similarity ?? 0).toBeGreaterThan(0.99);
+    expect(match.estimatedEchoGain ?? 0).toBeCloseTo(0.42, 2);
+    expect(match.residualRatio ?? 1).toBeLessThan(0.03);
+  });
+
+  it('keeps simultaneous independent speech in the echo-subtracted residual', () => {
+    const playback = deterministicNoise(8_000, 211);
+    const source = playback.slice(6_000, 7_000);
+    const userSpeech = deterministicNoise(1_000, 991);
+    const microphone = Float32Array.from(
+      source,
+      (sample, index) => sample * 0.42 + userSpeech[index] * 0.45,
+    );
+
+    const match = compareRecentWaveforms(playback, microphone, 24_000);
+
+    expect(match.similarity ?? 0).toBeGreaterThan(0.65);
+    expect(match.residualRatio ?? 0).toBeGreaterThan(0.55);
+  });
+
   it('normalizes PCM and resamples microphone frames to playback rate', () => {
     expect(Array.from(pcm16ToFloat32Reference(new Int16Array([0, 16384, -32768]))))
       .toEqual([0, 0.5, -1]);
