@@ -58,6 +58,17 @@ def stateful_responses_enabled() -> bool:
     }
 
 
+def _is_live_voice_user_message(user_message: Any) -> bool:
+    metadata = getattr(user_message, "metadata", None)
+    if not isinstance(metadata, dict):
+        return False
+    user_turn_id = str(metadata.get("user_turn_id") or "").strip()
+    speech_segment_id = str(metadata.get("speech_segment_id") or "").strip()
+    return user_turn_id.startswith("voice-user-turn:") or speech_segment_id.startswith(
+        "voice-segment:"
+    )
+
+
 def _state_ttl_seconds() -> float:
     raw = (os.environ.get(_STATE_TTL_ENV) or "").strip()
     try:
@@ -560,7 +571,7 @@ def _stream_stateful_lmstudio_reply(
 
 
 def install_live_chat_lmstudio_responses_hook() -> None:
-    """Wrap accepted LM Studio streaming with opt-in fail-closed response state."""
+    """Wrap accepted live-voice LM Studio streams with fail-closed response state."""
     if getattr(metrics_runtime, _HOOK_SENTINEL, False):
         return
     original_stream = metrics_runtime._stream_lmstudio_reply
@@ -576,7 +587,11 @@ def install_live_chat_lmstudio_responses_hook() -> None:
         context_items: list[dict[str, Any]] | None,
         provider: Any | None = None,
     ) -> Iterator[dict[str, Any]]:
-        if not stateful_responses_enabled() or not isinstance(provider, LMStudioProvider):
+        if (
+            not stateful_responses_enabled()
+            or not _is_live_voice_user_message(user_message)
+            or not isinstance(provider, LMStudioProvider)
+        ):
             yield from original_stream(
                 self,
                 session,
