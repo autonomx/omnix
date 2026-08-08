@@ -159,7 +159,7 @@ jobs:
           npm --workspace @omnix/web run typecheck 2>&1 | tee live-stt-typecheck.txt
           typecheck_status=${PIPESTATUS[0]}
           set -e
-          if grep -E "(live-(call-prewarm-controller(\\.test)?|chat-submission-gateway(\\.test)?|conversation-durable-evaluation-controller(\\.test)?|runtime-provenance|voice-websocket(\\.spec)?|voice-controller(\\.test)?|voice-turn-coordinator(\\.test)?|accepted-final|stt-authority-controller|speculation-controller(\\.test)?|speculation-diagnostics-bridge(\\.test)?|speculation-direct-gateway-transport(\\.test)?|speculation-early-trigger(\\.test)?|speculation-runtime(\\.test)?|speculation-eligibility-diagnostics(\\.test)?|speculation-handshake-transport(\\.test)?|tts-adaptive-buffer-controller(\\.test)?|tts-capability-controller|voice-clause-stabilizer(\\.test)?|speech-delivery-plan(\\.test)?|voice-pcm-worklet|voice-release-observer(-speech-end)?(\\.test)?|latency-rollout\\.spec)\\.(ts|tsx)|assistant-context-(controller|critical-path\\.test)\\.(ts|tsx)|chat-response-metrics-controller(\\.test)?\\.ts|characterClient(\\.test)?\\.ts|vite\\.config\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
+          if grep -E "(live-(call-prewarm-controller(\\.test)?|chat-submission-gateway(\\.test)?|conversation-durable-evaluation-controller(\\.test)?|runtime-provenance|voice-websocket(\\.spec)?|voice-controller(\\.test)?|voice-pending-output-interrupt(\\.test)?|voice-turn-coordinator(\\.test)?|accepted-final|stt-authority-controller|speculation-controller(\\.test)?|speculation-diagnostics-bridge(\\.test)?|speculation-direct-gateway-transport(\\.test)?|speculation-early-trigger(\\.test)?|speculation-runtime(\\.test)?|speculation-eligibility-diagnostics(\\.test)?|speculation-handshake-transport(\\.test)?|tts-adaptive-buffer-controller(\\.test)?|tts-capability-controller|voice-clause-stabilizer(\\.test)?|speech-delivery-plan(\\.test)?|voice-pcm-worklet|voice-release-observer(-speech-end)?(\\.test)?|latency-rollout\\.spec)\\.(ts|tsx)|assistant-context-(controller|critical-path\\.test)\\.(ts|tsx)|chat-response-metrics-controller(\\.test)?\\.ts|characterClient(\\.test)?\\.ts|vite\\.config\\.ts|src/main\\.tsx)" live-stt-typecheck.txt; then
             echo "TypeScript errors were reported in the live latency rollout path."
             exit "${typecheck_status:-1}"
           fi
@@ -174,6 +174,7 @@ jobs:
             src/features/assistant-workspace/live-chat-submission-gateway.test.ts \
             src/features/assistant-workspace/live-voice-websocket.spec.ts \
             src/features/assistant-workspace/live-voice-controller.test.ts \
+            src/features/assistant-workspace/live-voice-pending-output-interrupt.test.ts \
             src/features/assistant-workspace/live-latency-rollout.spec.ts \
             src/features/assistant-workspace/live-speculation-controller.test.ts \
             src/features/assistant-workspace/live-speculation-diagnostics-bridge.test.ts \
