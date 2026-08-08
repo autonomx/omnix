@@ -56,6 +56,7 @@ import { initializeLiveVoiceCuePackLoader } from './features/assistant-workspace
 import { initializeLiveVoiceDuplexGate } from './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-form-sync';
 import { initializeLiveVoiceController } from './features/assistant-workspace/live-voice-controller';
+import { initializeLiveVoicePendingOutputInterrupt } from './features/assistant-workspace/live-voice-pending-output-interrupt';
 import { initializeLiveVoiceTurnCoordinator } from './features/assistant-workspace/live-voice-turn-coordinator';
 import { emitLiveRuntimeProvenance } from './features/assistant-workspace/live-runtime-provenance';
 import './features/assistant-workspace/live-voice-transcript-autoscroll';
@@ -109,6 +110,7 @@ initializeLiveVoiceCuePackLoader();
 initializeLiveTtsCapabilityController();
 initializeLiveTtsAdaptiveBufferController();
 initializeLiveVoiceUnifiedAudioController();
+initializeLiveVoicePendingOutputInterrupt();
 initializeLiveAvatarPresenceController();
 initializeLiveConversationInitiativeController();
 initializeDesktopCompanionDeliveryController();
