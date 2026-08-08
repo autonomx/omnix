@@ -30,8 +30,8 @@ describe('live voice controller sensitivity', () => {
 });
 
 describe('live voice semantic finalization deadline', () => {
-  it('shortens a stale insufficient-text timer from the original pause boundary', () => {
-    expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(880);
+  it('keeps an insufficient-text timer conservative from the original pause boundary', () => {
+    expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(1_580);
     expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 120)).toBe(100);
     expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 260)).toBe(0);
   });
