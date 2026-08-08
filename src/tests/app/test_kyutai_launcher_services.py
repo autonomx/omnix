@@ -61,6 +61,8 @@ def test_runtime_dashboard_inserts_kyutai_before_gateway_and_configures_web(
     monkeypatch.setenv("OMNIX_START_KYUTAI_MOSHI", "1")
     monkeypatch.setenv("OMNIX_START_KYUTAI_ADAPTER", "1")
     monkeypatch.delenv("VITE_ASSISTANT_STT_URL", raising=False)
+    monkeypatch.delenv("OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES", raising=False)
+    monkeypatch.delenv("OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS", raising=False)
 
     specs = build_runtime_service_specs()
     ids = [spec.service_id for spec in specs]
@@ -71,9 +73,22 @@ def test_runtime_dashboard_inserts_kyutai_before_gateway_and_configures_web(
     assert by_id["kyutai_moshi"].auto_start is True
     assert by_id["kyutai_stt"].auto_start is True
     assert by_id["kyutai_stt"].env["KYUTAI_STT_PATH"] == "/api/asr-streaming"
+    assert by_id["gateway"].env["OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"] == "true"
+    assert by_id["gateway"].env["OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS"] == "2"
     assert by_id["web"].env["VITE_ASSISTANT_STT_URL"].startswith(
         "http://127.0.0.1:5202?"
     )
     assert "authority=test" in by_id["web"].env["VITE_ASSISTANT_STT_URL"]
     assert by_id["web"].env["VITE_LIVE_SPECULATION_ENABLED"] == "true"
     assert by_id["web"].env["VITE_LIVE_TTS_ADAPTIVE_BUFFER"] == "true"
+
+
+def test_runtime_dashboard_allows_stateful_response_opt_out(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_KYUTAI_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES", "false")
+    monkeypatch.setenv("OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS", "4")
+
+    by_id = {spec.service_id: spec for spec in build_runtime_service_specs()}
+
+    assert by_id["gateway"].env["OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"] == "false"
+    assert by_id["gateway"].env["OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS"] == "4"
