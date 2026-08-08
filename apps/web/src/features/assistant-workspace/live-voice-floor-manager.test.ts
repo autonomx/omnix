@@ -20,7 +20,7 @@ describe('live voice floor manager', () => {
     expect(unfinished.recommendedWaitMs).toBeGreaterThan(command.recommendedWaitMs);
   });
 
-  it('uses a bounded 220 ms balanced fast path for clear questions and commands', () => {
+  it('uses a bounded 220 ms balanced fast path for clearly terminated questions and commands', () => {
     expect(semanticFinalizeDelay('Where are we going?', 'balanced')).toBe(220);
     expect(semanticFinalizeDelay('Open the inventory', 'balanced')).toBe(220);
   });
@@ -30,6 +30,27 @@ describe('live voice floor manager', () => {
     expect(semanticFinalizeDelay('We should take the road because', 'balanced')).toBe(1_000);
   });
 
+  it('treats a trailing question fragment as unfinished even when an earlier clause has a question mark', () => {
+    const firstFragment = assessSemanticTurn("What's up? What's happening? What was", 'balanced');
+    const secondFragment = assessSemanticTurn('it last? Was it last', 'balanced');
+    const laterStatement = assessSemanticTurn('thing? I know how it is.', 'balanced');
+
+    expect(firstFragment).toMatchObject({ reason: 'unfinished_clause', recommendedWaitMs: 1_000 });
+    expect(secondFragment).toMatchObject({ reason: 'unfinished_clause', recommendedWaitMs: 1_000 });
+    expect(laterStatement.reason).toBe('definitive_statement');
+    expect(semanticFinalizeDelay("What's up? What's happening? What was", 'balanced')).toBe(1_000);
+    expect(semanticFinalizeDelay('it last? Was it last', 'balanced')).toBe(1_000);
+  });
+
+  it('keeps the floor for empty and one-word partials until stronger completion evidence arrives', () => {
+    const profile = conversationTimingProfile('balanced');
+
+    expect(assessSemanticTurn('', 'balanced').reason).toBe('insufficient_text');
+    expect(assessSemanticTurn('Hey', 'balanced').reason).toBe('insufficient_text');
+    expect(semanticFinalizeDelay('', 'balanced')).toBe(profile.maximumWaitMs);
+    expect(semanticFinalizeDelay('Hey', 'balanced')).toBe(profile.maximumWaitMs);
+  });
+
   it('provides bounded quick balanced and reflective profiles', () => {
     expect(semanticFinalizeDelay('Open the inventory', 'quick')).toBeLessThan(
       semanticFinalizeDelay('Open the inventory', 'reflective'),
@@ -37,13 +58,6 @@ describe('live voice floor manager', () => {
     expect(semanticFinalizeDelay('I think we should um', 'reflective')).toBe(
       conversationTimingProfile('reflective').maximumWaitMs,
     );
-  });
-
-  it('uses the ambiguous pause instead of the maximum pause before partial STT is ready', () => {
-    const profile = conversationTimingProfile('balanced');
-
-    expect(semanticFinalizeDelay('', 'balanced')).toBe(profile.ambiguousWaitMs);
-    expect(semanticFinalizeDelay('', 'balanced')).toBeLessThan(profile.maximumWaitMs);
   });
 
   it('keeps user-floor state independent from assistant lifecycle', () => {
