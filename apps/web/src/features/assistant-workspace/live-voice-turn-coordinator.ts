@@ -1,3 +1,5 @@
+import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
+
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 export const LIVE_VOICE_TURN_TIMELINE_EVENT = 'omnix:live-voice-turn-timeline';
 
@@ -35,6 +37,10 @@ type PerfDetail = {
   turnId?: unknown;
 };
 
+type CoordinationTerminalDetail = {
+  outcome?: unknown;
+};
+
 type TurnRecord = {
   turnId: string;
   state: LiveVoiceTurnState;
@@ -63,6 +69,14 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
     && (input.transcriptWords >= 2 || probability >= 0.9)
   ) return 'speculate';
   return 'continue';
+}
+
+export function removeTransientFinalUserRows(root: ParentNode = document): number {
+  const rows = root.querySelectorAll<HTMLElement>(
+    '.assistant-voice-transcript p.user[data-live-voice-id]:not([data-live-voice-id="live-voice-draft"])',
+  );
+  rows.forEach((row) => row.remove());
+  return rows.length;
 }
 
 export class LiveVoiceTurnCoordinator {
@@ -157,6 +171,8 @@ export class LiveVoiceTurnCoordinator {
 export const liveVoiceTurnCoordinator = new LiveVoiceTurnCoordinator();
 
 let initialized = false;
+let transcriptReconciliationInitialized = false;
+let disposeTranscriptReconciliation: (() => void) | null = null;
 
 export function initializeLiveVoiceTurnCoordinator(): () => void {
   if (initialized || typeof window === 'undefined') return () => undefined;
@@ -178,4 +194,31 @@ export function initializeLiveVoiceTurnCoordinator(): () => void {
     liveVoiceTurnCoordinator.clear();
     initialized = false;
   };
+}
+
+export function initializeLiveVoiceTranscriptReconciliation(): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
+  if (transcriptReconciliationInitialized) return disposeTranscriptReconciliation ?? (() => undefined);
+  transcriptReconciliationInitialized = true;
+  const handleTerminal = (event: Event): void => {
+    const detail = (event as CustomEvent<CoordinationTerminalDetail>).detail ?? {};
+    if (detail.outcome !== 'conversation_submitted') return;
+    // The dedicated controller owns only the transient draft. Once the final is
+    // durably submitted, React's session message is the canonical user row.
+    removeTransientFinalUserRows(document);
+  };
+  window.addEventListener(LIVE_COORDINATION_TERMINAL_EVENT, handleTerminal);
+  disposeTranscriptReconciliation = () => {
+    window.removeEventListener(LIVE_COORDINATION_TERMINAL_EVENT, handleTerminal);
+    transcriptReconciliationInitialized = false;
+    disposeTranscriptReconciliation = null;
+  };
+  return disposeTranscriptReconciliation;
+}
+
+export function resetLiveVoiceTurnCoordinatorForTests(): void {
+  disposeTranscriptReconciliation?.();
+  transcriptReconciliationInitialized = false;
+  disposeTranscriptReconciliation = null;
+  liveVoiceTurnCoordinator.clear();
 }
