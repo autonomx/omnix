@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from app.gateway import live_chat_lmstudio_diagnostics as diagnostics
+from app.gateway import live_chat_lmstudio_responses as responses_runtime
 from app.providers.base import ChatMessage, ProviderConfig
 from app.providers.lmstudio_provider import LMStudioProvider
 
@@ -277,3 +278,139 @@ def test_native_v1_refuses_to_silently_flatten_assistant_history() -> None:
             stream=False,
             _lmstudio_native_v1=True,
         )
+
+
+def test_responses_transport_seeds_assistant_history_and_preserves_cached_usage(
+    monkeypatch,
+) -> None:
+    provider = _lmstudio_provider()
+    captured: dict[str, Any] = {}
+    response = _FakeLmStudioResponse(
+        lines=[
+            'event: response.created',
+            'data: {"type":"response.created","response":{"id":"resp_seed","model":"test-model"}}',
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"Okay"}',
+            'event: response.completed',
+            'data: {"type":"response.completed","response":{"id":"resp_seed","model":"test-model","usage":{"input_tokens":1200,"output_tokens":4,"total_tokens":1204,"input_tokens_details":{"cached_tokens":900}}}}',
+        ]
+    )
+
+    def fake_request(method: str, endpoint: str, **kwargs: Any):
+        captured.update({"method": method, "endpoint": endpoint, **kwargs})
+        return response
+
+    monkeypatch.setattr(provider, "_make_request", fake_request)
+    chunks = list(
+        responses_runtime._stream_responses(
+            provider,
+            messages=[
+                ChatMessage(role="system", content="Stay in character."),
+                ChatMessage(role="user", content="Hello"),
+                ChatMessage(role="assistant", content="Hi."),
+                ChatMessage(role="user", content="Continue"),
+            ],
+            model="test-model",
+            previous_response_id=None,
+        )
+    )
+
+    assert [chunk.content for chunk in chunks] == ["Okay", ""]
+    assert chunks[-1].usage == {
+        "input_tokens": 1200,
+        "output_tokens": 4,
+        "total_tokens": 1204,
+        "input_tokens_details": {"cached_tokens": 900},
+    }
+    assert chunks[-1].raw_response["id"] == "resp_seed"
+    assert captured["endpoint"] == "/v1/responses"
+    assert captured["json"]["store"] is True
+    assert captured["json"]["input"] == [
+        {"role": "system", "content": "Stay in character."},
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi."},
+        {"role": "user", "content": "Continue"},
+    ]
+    assert response.closed is True
+
+
+def test_responses_continuation_sends_only_new_user_input() -> None:
+    payload = responses_runtime._responses_payload(
+        messages=[ChatMessage(role="user", content="Next question")],
+        model="test-model",
+        previous_response_id="resp_previous",
+        stream=True,
+    )
+
+    assert payload["input"] == "Next question"
+    assert payload["previous_response_id"] == "resp_previous"
+    assert payload["model"] == "test-model"
+    assert payload["store"] is True
+
+
+def test_response_state_reuses_only_exact_prompt_prefix_and_model() -> None:
+    responses_runtime._clear_response_states_for_tests()
+    request_messages = [
+        ChatMessage(role="system", content="Persona v1"),
+        ChatMessage(role="user", content="First"),
+    ]
+    assert responses_runtime._remember_response_state(
+        session_id="chat-one",
+        model_id="test-model",
+        request_messages=request_messages,
+        assistant_text="Answer one",
+        response_id="resp_one",
+    ) is True
+
+    next_messages = [
+        *request_messages,
+        ChatMessage(role="assistant", content="Answer one"),
+        ChatMessage(role="user", content="Second"),
+    ]
+    response_id, reason = responses_runtime._resolve_previous_response_id(
+        session_id="chat-one",
+        model_id="test-model",
+        messages=next_messages,
+    )
+    assert (response_id, reason) == ("resp_one", "hit")
+
+    changed_prompt = [
+        ChatMessage(role="system", content="Persona v2"),
+        *next_messages[1:],
+    ]
+    response_id, reason = responses_runtime._resolve_previous_response_id(
+        session_id="chat-one",
+        model_id="test-model",
+        messages=changed_prompt,
+    )
+    assert response_id is None
+    assert reason == "prompt_prefix_changed"
+
+
+def test_response_state_invalidates_when_loaded_model_changes() -> None:
+    responses_runtime._clear_response_states_for_tests()
+    request_messages = [
+        ChatMessage(role="system", content="Persona"),
+        ChatMessage(role="user", content="First"),
+    ]
+    responses_runtime._remember_response_state(
+        session_id="chat-two",
+        model_id="model-a",
+        request_messages=request_messages,
+        assistant_text="Answer",
+        response_id="resp_model_a",
+    )
+    next_messages = [
+        *request_messages,
+        ChatMessage(role="assistant", content="Answer"),
+        ChatMessage(role="user", content="Second"),
+    ]
+
+    response_id, reason = responses_runtime._resolve_previous_response_id(
+        session_id="chat-two",
+        model_id="model-b",
+        messages=next_messages,
+    )
+
+    assert response_id is None
+    assert reason == "model_changed"
