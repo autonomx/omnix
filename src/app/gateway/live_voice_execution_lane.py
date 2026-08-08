@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -41,6 +42,8 @@ class _TtsTicket:
     promotion_event: threading.Event | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event)
     started: bool = False
+    enqueued_at: float = field(default_factory=time.perf_counter)
+    acquired_at: float | None = None
 
 
 class PriorityTtsScheduler:
@@ -49,13 +52,19 @@ class PriorityTtsScheduler:
     A newly accepted request cancels an active unaccepted speculative stream.
     A speculative first clause that becomes authoritative can be promoted in
     place and is then protected from later accepted-turn preemption.
+
+    Speculative provider work uses a smaller codec chunk than audible accepted
+    work. This does not change the authoritative request/cache contract; it only
+    gives the scheduler more frequent safe cancellation boundaries while hidden
+    speculative CUDA generation is running.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, log: Callable[..., None] = stream_log) -> None:
         self._condition = threading.Condition(threading.RLock())
         self._waiting: list[_TtsTicket] = []
         self._active: _TtsTicket | None = None
         self._sequence = 0
+        self._log = log
 
     def stream(
         self,
@@ -71,6 +80,37 @@ class PriorityTtsScheduler:
     ) -> Iterator[tuple[Any, int, Any]]:
         ticket = self._acquire(priority, promotion_event)
         stream: Any = None
+        effective_kwargs = dict(kwargs)
+        requested_chunk_size = effective_kwargs.get("chunk_size")
+        effective_priority = self._effective_priority(ticket)
+        if effective_priority == TtsLanePriority.SPECULATIVE:
+            speculative_chunk_steps = _env_int(
+                "OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS",
+                2,
+                minimum=1,
+                maximum=4,
+            )
+            if isinstance(requested_chunk_size, int) and requested_chunk_size > 0:
+                effective_kwargs["chunk_size"] = min(
+                    requested_chunk_size,
+                    speculative_chunk_steps,
+                )
+        self._log(
+            "gateway-live-voice-lane",
+            "scheduler",
+            "tts_lane_stream_started",
+            sequence=ticket.sequence,
+            priority=int(priority),
+            effective_priority=int(effective_priority),
+            wait_ms=round(
+                ((ticket.acquired_at or time.perf_counter()) - ticket.enqueued_at)
+                * 1000.0,
+                3,
+            ),
+            requested_chunk_size=requested_chunk_size,
+            effective_chunk_size=effective_kwargs.get("chunk_size"),
+            provider_name=getattr(provider, "provider_name", None),
+        )
         try:
             if self._stopped(ticket, should_stop):
                 return
@@ -78,7 +118,7 @@ class PriorityTtsScheduler:
                 text=text,
                 speaker=speaker,
                 language=language,
-                **kwargs,
+                **effective_kwargs,
             )
             for chunk in stream:
                 if self._stopped(ticket, should_stop):
@@ -132,7 +172,22 @@ class PriorityTtsScheduler:
                 sequence=self._sequence,
                 promotion_event=promotion_event,
             )
+            active_priority = (
+                int(self._effective_priority(self._active))
+                if self._active is not None
+                else None
+            )
             self._waiting.append(ticket)
+            self._log(
+                "gateway-live-voice-lane",
+                "scheduler",
+                "tts_lane_ticket_enqueued",
+                sequence=ticket.sequence,
+                priority=int(priority),
+                effective_priority=int(self._effective_priority(ticket)),
+                active_priority=active_priority,
+                waiting_count=len(self._waiting),
+            )
             if (
                 priority == TtsLanePriority.ACCEPTED
                 and self._active is not None
@@ -140,16 +195,35 @@ class PriorityTtsScheduler:
                 == TtsLanePriority.SPECULATIVE
             ):
                 self._active.cancel_event.set()
-                stream_log(
+                self._log(
                     "gateway-live-voice-lane",
                     "scheduler",
                     "speculative_tts_preempt_requested",
                     active_sequence=self._active.sequence,
                     accepted_sequence=ticket.sequence,
+                    active_ms=round(
+                        (
+                            time.perf_counter()
+                            - (self._active.acquired_at or self._active.enqueued_at)
+                        )
+                        * 1000.0,
+                        3,
+                    ),
                 )
             while True:
                 if ticket.cancel_event.is_set():
                     self._waiting = [item for item in self._waiting if item is not ticket]
+                    self._log(
+                        "gateway-live-voice-lane",
+                        "scheduler",
+                        "tts_lane_ticket_cancelled_before_start",
+                        sequence=ticket.sequence,
+                        priority=int(priority),
+                        wait_ms=round(
+                            (time.perf_counter() - ticket.enqueued_at) * 1000.0,
+                            3,
+                        ),
+                    )
                     raise RuntimeError("tts_lane_ticket_cancelled")
                 next_ticket = min(
                     self._waiting,
@@ -162,6 +236,20 @@ class PriorityTtsScheduler:
                     self._waiting.remove(ticket)
                     self._active = ticket
                     ticket.started = True
+                    ticket.acquired_at = time.perf_counter()
+                    self._log(
+                        "gateway-live-voice-lane",
+                        "scheduler",
+                        "tts_lane_ticket_acquired",
+                        sequence=ticket.sequence,
+                        priority=int(priority),
+                        effective_priority=int(self._effective_priority(ticket)),
+                        wait_ms=round(
+                            (ticket.acquired_at - ticket.enqueued_at) * 1000.0,
+                            3,
+                        ),
+                        waiting_count=len(self._waiting),
+                    )
                     return ticket
                 self._condition.wait(timeout=0.025)
 
@@ -170,6 +258,22 @@ class PriorityTtsScheduler:
             if self._active is ticket:
                 self._active = None
             self._waiting = [item for item in self._waiting if item is not ticket]
+            now = time.perf_counter()
+            self._log(
+                "gateway-live-voice-lane",
+                "scheduler",
+                "tts_lane_ticket_released",
+                sequence=ticket.sequence,
+                priority=int(ticket.priority),
+                effective_priority=int(self._effective_priority(ticket)),
+                active_ms=round(
+                    (now - (ticket.acquired_at or ticket.enqueued_at)) * 1000.0,
+                    3,
+                ),
+                total_ms=round((now - ticket.enqueued_at) * 1000.0, 3),
+                cancelled=ticket.cancel_event.is_set(),
+                waiting_count=len(self._waiting),
+            )
             self._condition.notify_all()
 
     @staticmethod
@@ -203,6 +307,21 @@ def _boolean_setting(name: str, fallback: bool = False) -> bool:
     if raw is None:
         return fallback
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(
+    name: str,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    raw = os.environ.get(name)
+    try:
+        value = int(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
 
 
 def live_voice_execution_lane_config() -> LiveVoiceExecutionLaneConfig:
