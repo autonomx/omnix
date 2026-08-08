@@ -76,8 +76,6 @@ export function compareRecentWaveforms(
   maxLagMs = 900,
 ): WaveformSimilarity {
   if (!playbackHistory.length || microphoneInput.length < 16) return emptySimilarity();
-  const boundedMicrophone = boundedDownsample(microphoneInput, 2_048);
-  const scale = microphoneInput.length / Math.max(1, boundedMicrophone.length);
   const minimumOverlap = Math.min(
     microphoneInput.length,
     Math.max(16, Math.min(256, Math.ceil(microphoneInput.length * 0.6))),
@@ -87,7 +85,6 @@ export function compareRecentWaveforms(
     Math.max(0, Math.round(sampleRate * maxLagMs / 1_000)),
   );
   if (lagLimit < 0) return emptySimilarity();
-  const lagStep = Math.max(1, Math.round(scale));
   let bestSimilarity = -1;
   let bestLag = 0;
   let bestCount = 0;
@@ -95,13 +92,15 @@ export function compareRecentWaveforms(
   let bestPlaybackEnergy = 0;
   let bestMicrophoneEnergy = 0;
 
-  for (let lag = 0; lag <= lagLimit; lag += lagStep) {
+  // Keep single-sample lag precision, but bound each candidate to at most ~256
+  // waveform points so a 900 ms echo search does not create a main-thread stall.
+  for (let lag = 0; lag <= lagLimit; lag += 1) {
     const playbackEnd = playbackHistory.length - lag;
     const compared = Math.min(microphoneInput.length, playbackEnd);
     if (compared < minimumOverlap) continue;
     const playbackStart = playbackEnd - compared;
     const microphoneStart = microphoneInput.length - compared;
-    const stride = Math.max(1, Math.ceil(compared / 2_048));
+    const stride = Math.max(1, Math.ceil(compared / 256));
     let dot = 0;
     let playbackEnergy = 0;
     let microphoneEnergy = 0;
@@ -156,16 +155,6 @@ export function compareRecentWaveforms(
     residualRms,
     residualRatio,
   };
-}
-
-function boundedDownsample(samples: Float32Array, maximum: number): Float32Array {
-  if (samples.length <= maximum) return samples;
-  const result = new Float32Array(maximum);
-  const stride = samples.length / maximum;
-  for (let index = 0; index < maximum; index += 1) {
-    result[index] = samples[Math.min(samples.length - 1, Math.floor(index * stride))];
-  }
-  return result;
 }
 
 function emptySimilarity(): WaveformSimilarity {
