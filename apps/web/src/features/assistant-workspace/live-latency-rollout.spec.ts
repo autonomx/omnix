@@ -9,6 +9,7 @@ import {
   transcriptIsSpeculationSafe,
   transcriptsCanReuseSpeculation,
 } from './live-speculation-controller';
+import { parseLiveVoiceCriticalDirtyFiles } from './live-runtime-provenance';
 import { AdaptiveTtsBufferPolicy } from './live-tts-adaptive-buffer-controller';
 import { assessAcousticBargeIn } from './live-voice-barge-in-detector';
 import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
@@ -125,6 +126,20 @@ describe('live latency PR3-PR5 rollout policies', () => {
       ...ambiguous,
       pauseElapsedMs: 280,
     })).toBe(false);
+  });
+
+  it('reports only normalized live-voice critical dirty paths from build provenance', () => {
+    expect(parseLiveVoiceCriticalDirtyFiles(JSON.stringify([
+      'src/app/gateway/live_voice_speculative_tts.py',
+      ' src/app/gateway/live_voice_execution_lane.py ',
+      'src/app/gateway/live_voice_speculative_tts.py',
+      42,
+    ]))).toEqual([
+      'src/app/gateway/live_voice_speculative_tts.py',
+      'src/app/gateway/live_voice_execution_lane.py',
+    ]);
+    expect(parseLiveVoiceCriticalDirtyFiles('not-json')).toEqual([]);
+    expect(parseLiveVoiceCriticalDirtyFiles(undefined)).toEqual([]);
   });
 
   it('reuses speculation only when normalized words are unchanged', () => {
