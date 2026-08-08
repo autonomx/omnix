@@ -63,6 +63,19 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
     && silence >= 160
     && stable >= 80
   ) return 'commit';
+  // Kyutai runs behind live audio by roughly its model delay, so ordinary
+  // statements often become semantically readable only after the user has
+  // already held the floor quiet for a substantial interval. Recover that
+  // latency only when both acoustic and transcript evidence are mature. This
+  // deliberately excludes short internal pauses such as "You should lie ...
+  // more", whose failing trace had 0 ms measured pause and 21 ms stability.
+  const stableDefinitiveStatement = !complete
+    && input.semanticProbabilityDone >= 0.75
+    && input.transcriptWords >= 2
+    && probability >= Math.max(0.8, input.endpointThreshold + 0.05)
+    && silence >= 650
+    && stable >= 140;
+  if (stableDefinitiveStatement) return 'commit';
   if (
     probability >= Math.max(0.35, input.endpointThreshold - 0.35)
     && stable >= 60
