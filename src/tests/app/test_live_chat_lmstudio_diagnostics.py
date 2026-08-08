@@ -6,6 +6,39 @@ from typing import Any
 import pytest
 
 from app.gateway import live_chat_lmstudio_diagnostics as diagnostics
+from app.providers.base import ChatMessage, ProviderConfig
+from app.providers.lmstudio_provider import LMStudioProvider
+
+
+class _FakeLmStudioResponse:
+    def __init__(
+        self,
+        *,
+        json_payload: dict[str, Any] | None = None,
+        lines: list[str] | None = None,
+    ) -> None:
+        self._json_payload = json_payload or {}
+        self._lines = lines or []
+        self.closed = False
+
+    def json(self) -> dict[str, Any]:
+        return self._json_payload
+
+    def iter_lines(self):
+        yield from self._lines
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _lmstudio_provider() -> LMStudioProvider:
+    return LMStudioProvider(
+        ProviderConfig(
+            provider_type="lmstudio",
+            base_url="http://localhost:1234",
+            model="test-model",
+        )
+    )
 
 
 def test_channel_error_is_normalized_without_raw_prompt_content() -> None:
@@ -129,3 +162,115 @@ def test_nonstream_failure_logs_normalized_channel_error(monkeypatch) -> None:
     assert failed["error_code"] == "lmstudio_channel_error"
     assert failed["error_summary"] == "LM Studio inference channel closed."
     assert "Channel Error" not in failed["error_summary"]
+
+
+def test_native_v1_chat_is_opt_in_stateless_and_exposes_native_stats(monkeypatch) -> None:
+    provider = _lmstudio_provider()
+    captured: dict[str, Any] = {}
+    response = _FakeLmStudioResponse(
+        json_payload={
+            "model_instance_id": "liquid/lfm2.5-1.2b",
+            "output": [{"type": "message", "content": "Hello back"}],
+            "stats": {
+                "input_tokens": 120,
+                "total_output_tokens": 5,
+                "tokens_per_second": 91.5,
+                "time_to_first_token_seconds": 0.081,
+            },
+        }
+    )
+
+    def fake_request(method: str, endpoint: str, **kwargs: Any):
+        captured.update({"method": method, "endpoint": endpoint, **kwargs})
+        return response
+
+    monkeypatch.setattr(provider, "_make_request", fake_request)
+    result = provider.chat_completion(
+        messages=[
+            ChatMessage(role="system", content="Be concise."),
+            ChatMessage(role="user", content="Hello"),
+        ],
+        stream=False,
+        _lmstudio_native_v1=True,
+        chat_template_kwargs={"enable_thinking": False},
+    )
+
+    assert result.content == "Hello back"
+    assert result.model == "liquid/lfm2.5-1.2b"
+    assert result.usage == {
+        "prompt_tokens": 120,
+        "completion_tokens": 5,
+        "total_tokens": 125,
+    }
+    assert result.raw_response["stats"]["time_to_first_token_seconds"] == 0.081
+    assert captured["endpoint"] == "/api/v1/chat"
+    assert captured["json"] == {
+        "input": "Hello",
+        "stream": False,
+        "store": False,
+        "temperature": 0.7,
+        "model": "test-model",
+        "system_prompt": "Be concise.",
+        "reasoning": "off",
+    }
+
+
+def test_native_v1_stream_continues_from_response_id_and_keeps_final_stats(monkeypatch) -> None:
+    provider = _lmstudio_provider()
+    captured: dict[str, Any] = {}
+    response = _FakeLmStudioResponse(
+        lines=[
+            'event: chat.start',
+            'data: {"type":"chat.start","model_instance_id":"test-model"}',
+            'event: prompt_processing.start',
+            'data: {"type":"prompt_processing.start"}',
+            'event: message.delta',
+            'data: {"type":"message.delta","content":"Fast "}',
+            'event: message.delta',
+            'data: {"type":"message.delta","content":"reply"}',
+            'event: chat.end',
+            'data: {"type":"chat.end","result":{"model_instance_id":"test-model","output":[{"type":"message","content":"Fast reply"}],"stats":{"input_tokens":24,"total_output_tokens":2,"tokens_per_second":100.0,"time_to_first_token_seconds":0.05},"response_id":"resp_next"}}',
+        ]
+    )
+
+    def fake_request(method: str, endpoint: str, **kwargs: Any):
+        captured.update({"method": method, "endpoint": endpoint, **kwargs})
+        return response
+
+    monkeypatch.setattr(provider, "_make_request", fake_request)
+    chunks = list(
+        provider.chat_completion(
+            messages=[ChatMessage(role="user", content="Continue")],
+            stream=True,
+            _lmstudio_native_v1=True,
+            _lmstudio_store=True,
+            _lmstudio_previous_response_id="resp_previous",
+        )
+    )
+
+    assert [chunk.content for chunk in chunks] == ["Fast ", "reply", ""]
+    assert chunks[-1].usage == {
+        "prompt_tokens": 24,
+        "completion_tokens": 2,
+        "total_tokens": 26,
+    }
+    assert chunks[-1].raw_response["response_id"] == "resp_next"
+    assert captured["json"]["store"] is True
+    assert captured["json"]["previous_response_id"] == "resp_previous"
+    assert captured["json"]["input"] == "Continue"
+    assert response.closed is True
+
+
+def test_native_v1_refuses_to_silently_flatten_assistant_history() -> None:
+    provider = _lmstudio_provider()
+
+    with pytest.raises(ValueError, match="cannot seed assistant/tool history"):
+        provider.chat_completion(
+            messages=[
+                ChatMessage(role="user", content="One"),
+                ChatMessage(role="assistant", content="Two"),
+                ChatMessage(role="user", content="Three"),
+            ],
+            stream=False,
+            _lmstudio_native_v1=True,
+        )
