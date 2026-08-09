@@ -4,6 +4,7 @@ import {
   normalizeSpeculationWords,
   shouldStartExtendedHypothesis,
   speculationCandidateCanStart,
+  speculativeTtsPrefetchEnabled,
   speculativeTtsPrefetchWindowOpen,
   transcriptExtendsSpeculation,
   transcriptsCanReuseSpeculation,
@@ -68,5 +69,12 @@ describe('live speculation hypothesis policy', () => {
     expect(speculativeTtsPrefetchWindowOpen(null, true)).toBe(true);
     expect(speculativeTtsPrefetchWindowOpen(null, false)).toBe(false);
     expect(speculativeTtsPrefetchWindowOpen('final transcript', true)).toBe(false);
+  });
+
+  it('keeps speculative TTS enabled by default but allows an explicit TTS-only opt out', () => {
+    expect(speculativeTtsPrefetchEnabled(undefined)).toBe(true);
+    expect(speculativeTtsPrefetchEnabled('true')).toBe(true);
+    expect(speculativeTtsPrefetchEnabled('FALSE')).toBe(false);
+    expect(speculativeTtsPrefetchEnabled(' false ')).toBe(false);
   });
 });
