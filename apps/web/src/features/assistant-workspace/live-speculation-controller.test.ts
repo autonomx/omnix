@@ -4,6 +4,7 @@ import {
   normalizeSpeculationWords,
   shouldStartExtendedHypothesis,
   speculationCandidateCanStart,
+  speculativeTtsPrefetchWindowOpen,
   transcriptExtendsSpeculation,
   transcriptsCanReuseSpeculation,
 } from './live-speculation-controller';
@@ -61,5 +62,11 @@ describe('live speculation hypothesis policy', () => {
 
   it('normalizes curly apostrophes for final compatibility', () => {
     expect(normalizeSpeculationWords('That’s wild')).toEqual(["that's", 'wild']);
+  });
+
+  it('closes the speculative TTS prefetch window once authoritative final text exists', () => {
+    expect(speculativeTtsPrefetchWindowOpen(null, true)).toBe(true);
+    expect(speculativeTtsPrefetchWindowOpen(null, false)).toBe(false);
+    expect(speculativeTtsPrefetchWindowOpen('final transcript', true)).toBe(false);
   });
 });
