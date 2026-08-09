@@ -1,6 +1,7 @@
 """Server-owned live-call runtime resolution for System Assistant and Character Mode."""
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -224,6 +225,9 @@ def resolve_live_call_runtime(
         profile_loaded=runtime.preload.profile_loaded,
         avatar_pack_loaded=runtime.preload.avatar_pack_loaded,
         preload_ms=runtime.preload.preload_ms,
+        kyutai_asr_delay_tokens_requested=(
+            os.environ.get("OMNIX_KYUTAI_ASR_DELAY_TOKENS", "").strip() or None
+        ),
     )
     return runtime
 
