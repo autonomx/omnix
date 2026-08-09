@@ -164,6 +164,13 @@ export function speculationRequestCanReuse(
   return true;
 }
 
+export function speculativeTtsPrefetchWindowOpen(
+  finalText: string | null,
+  isNewestHypothesis: boolean,
+): boolean {
+  return finalText === null && isNewestHypothesis;
+}
+
 export function initializeLiveSpeculationController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const liveWindow = window as SpeculationWindow;
@@ -245,19 +252,14 @@ export function initializeLiveSpeculationController(): () => void {
       return;
     }
     accepted.finalText = finalText;
+    clearFirstClauseTimer(accepted);
     segmentSpeculations(detail.segmentId, detail.sourceSequence)
       .filter((active) => active !== accepted)
       .forEach((active) => cancelSpeculation(active, 'final_hypothesis_not_selected'));
-    if (!accepted.prefetchedClause) {
-      const flushed = accepted.firstClause.flush();
-      if (flushed.length) accepted.prefetchedClause = flushed[0].text;
-    }
-    const speculativeTtsRestarted = Boolean(
-      accepted.prefetchedClause && !accepted.prefetchStarted,
-    );
-    if (accepted.prefetchedClause && !accepted.prefetchStarted) {
-      startSpeculativeTtsPrefetch(accepted, accepted.prefetchedClause);
-    }
+    // Once the authoritative final exists, normal accepted TTS owns the lane.
+    // Only prefetch work that genuinely started before finalization may be promoted.
+    // Starting a new speculative job here can block Faster Qwen, which is serialized.
+    const speculativeTtsRestarted = false;
     acceptSpeculativeTts(accepted);
     dispatchPerformance('llm_speculation_final_accepted', {
       sessionId: accepted.sessionId,
@@ -581,7 +583,7 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
     active.prefetchStarted
     || !active.generationId
     || !clause.trim()
-    || (newest !== active && !active.finalText)
+    || !speculativeTtsPrefetchWindowOpen(active.finalText, newest === active)
   ) return;
   active.prefetchStarted = true;
   active.prefetchAcceptPromise = null;
@@ -640,7 +642,6 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
         error: error instanceof Error ? error.message : String(error),
       });
     });
-  if (active.finalText) acceptSpeculativeTts(active);
 }
 
 function acceptSpeculativeTts(active: ActiveSpeculation): void {
