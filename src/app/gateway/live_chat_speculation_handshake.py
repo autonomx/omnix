@@ -267,10 +267,13 @@ def _run_generation(
             generation.store,
             generation.session,
             pending,
+            cancel_event=generation.cancel_event,
         ):
             if generation.cancel_event.is_set():
                 return
             _append_event(generation, event)
+        if generation.cancel_event.is_set():
+            return
         _finish_success(pending, generation)
     except _SpeculationBufferLimitExceeded:
         generation.cancel_event.set()
