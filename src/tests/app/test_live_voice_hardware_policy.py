@@ -42,16 +42,16 @@ def test_stateful_live_responses_defaults_on_but_preserves_explicit_opt_out() ->
     assert stateful_live_responses_enabled("false") is False
 
 
-def test_serial_tts_is_deferred_unless_explicitly_allowed() -> None:
+def test_serial_tts_uses_priority_scheduler_by_default_with_explicit_kill_switch() -> None:
     provider = _SerialTtsProvider()
 
-    assert should_defer_speculative_tts(provider) is True
-    assert should_defer_speculative_tts(provider, "false") is True
+    assert should_defer_speculative_tts(provider) is False
     assert should_defer_speculative_tts(provider, "true") is False
+    assert should_defer_speculative_tts(provider, "false") is True
 
 
-def test_concurrent_tts_keeps_hidden_prefetch_enabled() -> None:
-    assert should_defer_speculative_tts(_ConcurrentTtsProvider()) is False
+def test_concurrent_tts_keeps_hidden_prefetch_enabled_even_with_serial_kill_switch() -> None:
+    assert should_defer_speculative_tts(_ConcurrentTtsProvider(), "false") is False
 
 
 def test_deferred_entry_cannot_be_claimed_by_authoritative_tts() -> None:
