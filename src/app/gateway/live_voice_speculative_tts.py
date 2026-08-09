@@ -446,6 +446,8 @@ def _claim_entry(
     actual_speaker = _normalized_speaker(speaker)
     actual_language = _normalized_language(language)
     actual_kwargs = _stable_kwargs(kwargs)
+    cold_entry: _SpeculativeTtsEntry | None = None
+    cold_remainder = ""
     with _CACHE_LOCK:
         _prune_entries_locked()
         matches: list[tuple[int, float, _SpeculativeTtsEntry, str]] = []
@@ -467,8 +469,31 @@ def _claim_entry(
         if not matches:
             return None
         _, _, entry, remainder = max(matches, key=lambda item: (item[0], item[1]))
-        entry.claimed = True
-        return _CacheClaim(entry=entry, remainder_text=remainder)
+        with entry.condition:
+            if not entry.chunks:
+                _ENTRIES.pop(entry.generation_id, None)
+                entry.cancelled = True
+                entry.condition.notify_all()
+                cold_entry = entry
+                cold_remainder = remainder
+            else:
+                entry.claimed = True
+                return _CacheClaim(entry=entry, remainder_text=remainder)
+
+    if cold_entry is not None:
+        stream_log(
+            "gateway-live-speculative-tts",
+            "provider",
+            "speculative_tts_cache_cold_claim_abandoned",
+            generation_id=cold_entry.generation_id,
+            buffered_chunk_count=0,
+            completed=cold_entry.completed,
+            prefix_match=bool(cold_remainder),
+            remainder_text_length=len(cold_remainder),
+            execution_lane=cold_entry.lane,
+        )
+        live_voice_tts_scheduler().notify_priority_change()
+    return None
 
 
 def _prefix_remainder(cached_text: str, actual_text: str) -> str | None:
