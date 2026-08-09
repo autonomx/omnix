@@ -33,11 +33,14 @@ CHAT_STREAM_TOKEN_NUMERATOR = 9
 CHAT_STREAM_TOKEN_DENOMINATOR = 8
 CHAT_STREAM_TOKEN_OVERHEAD = 24
 CHAT_STREAM_MIN_REPETITION_PENALTY = 1.05
-# Qwen3-TTS emits roughly 80 ms of 24 kHz audio per codec step. The prior
-# live-chat value of eight therefore withheld about 640 ms of waveform before
-# the provider could yield its first chunk. Four retains useful decoder
-# batching while allowing the first ~320 ms of speech to become available.
+# Qwen3-TTS emits roughly 80 ms of 24 kHz audio per codec step. Keep ordinary
+# clauses capped at four steps for decoder throughput, but let the first spoken
+# phrase of each accepted response use two steps so its first raw chunk can be
+# available at roughly half the waveform depth. Conversation output IDs encode
+# their response-local phrase index as ``-pN``.
+CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS = 2
 CHAT_STREAM_MAX_CODEC_CHUNK_STEPS = 4
+_FIRST_CONVERSATION_PHRASE_PATTERN = re.compile(r"-g\d+-p0$")
 
 
 class TtsPronunciationEntry(BaseModel):
@@ -69,6 +72,14 @@ def estimate_chat_stream_max_new_tokens(text: str) -> int:
         + CHAT_STREAM_TOKEN_OVERHEAD
     )
     return max(CHAT_STREAM_MIN_NEW_TOKENS, min(CHAT_STREAM_MAX_NEW_TOKENS, estimated))
+
+
+def chat_stream_codec_chunk_cap(output_id: str | None) -> int:
+    """Use the two-step fast path only for the first canonical phrase of a response."""
+    normalized_output_id = (output_id or "").strip()
+    if _FIRST_CONVERSATION_PHRASE_PATTERN.search(normalized_output_id):
+        return CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS
+    return CHAT_STREAM_MAX_CODEC_CHUNK_STEPS
 
 
 class TtsStreamRequest(BaseModel):
@@ -103,7 +114,7 @@ class TtsStreamRequest(BaseModel):
         if not stream_id.startswith("chat-"):
             return self
         self.parity_mode = False
-        self.chunk_size = min(self.chunk_size, CHAT_STREAM_MAX_CODEC_CHUNK_STEPS)
+        self.chunk_size = min(self.chunk_size, chat_stream_codec_chunk_cap(self.output_id))
         token_budget = estimate_chat_stream_max_new_tokens(self.text)
         if self.max_new_tokens is None or self.max_new_tokens > token_budget:
             self.max_new_tokens = token_budget
