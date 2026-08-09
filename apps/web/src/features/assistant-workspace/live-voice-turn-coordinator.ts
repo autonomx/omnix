@@ -57,11 +57,21 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
   const stable = Math.max(0, input.transcriptStableMs);
   const silence = Math.max(0, input.silenceMs);
   const complete = input.semanticProbabilityDone >= 0.9;
+  // Once a semantically complete transcript arrives after a long acoustic
+  // pause, the ordinary 80 ms transcript-stability guard no longer buys useful
+  // safety. On delayed-streaming STT (Kyutai in particular), the last word can
+  // arrive roughly a model-delay behind the microphone even though endpoint
+  // confidence has already stayed high for hundreds of milliseconds. Commit
+  // that newly completed text immediately only when the acoustic evidence is
+  // also mature; short internal pauses still use the normal stability guard.
+  const matureComplete = complete
+    && probability >= Math.max(0.85, input.endpointThreshold + 0.1)
+    && silence >= 650;
   if (
     complete
     && probability >= input.endpointThreshold
     && silence >= 160
-    && stable >= 80
+    && (stable >= 80 || matureComplete)
   ) return 'commit';
   // Kyutai runs behind live audio by roughly its model delay, so ordinary
   // statements often become semantically readable only after the user has
