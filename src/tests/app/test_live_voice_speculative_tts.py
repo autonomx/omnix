@@ -13,6 +13,7 @@ from app.gateway.live_voice_execution_lane import (
 )
 from app.gateway.live_voice_speculative_tts import (
     _accept_entry,
+    _claim_entry,
     _LiveLaneProviderProxy,
     _start_prefetch,
     _stream_kwargs,
@@ -40,6 +41,26 @@ class _BlockingProvider:
         self.first_chunk_ready.set()
         self.allow_finish.wait(timeout=2)
         yield b"\x02\x00" * 4_800, 24_000, {"chunk": 1}
+
+
+class _ColdStartProvider:
+    provider_name = "test-live-tts"
+    supports_concurrent_generation = False
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.first_call_started = threading.Event()
+        self.allow_first_call_yield = threading.Event()
+        self.chunk_sizes: list[int | None] = []
+
+    def generate_audio_stream(self, **kwargs: Any):
+        self.calls += 1
+        call_number = self.calls
+        self.chunk_sizes.append(kwargs.get("chunk_size"))
+        if call_number == 1:
+            self.first_call_started.set()
+            self.allow_first_call_yield.wait(timeout=2)
+        yield b"\x03\x00" * 4_800, 24_000, {"chunk": 0, "call": call_number}
 
 
 def _request(text: str) -> TtsStreamRequest:
@@ -100,6 +121,60 @@ def test_accepted_prefetch_is_promoted_and_replayed_without_second_generation() 
         assert speculative_tts_cache_snapshot()[0]["claimed"] is True
     finally:
         provider.allow_finish.set()
+        _reset()
+
+
+def test_accepted_prefetch_without_pcm_restarts_authoritative_stream(monkeypatch) -> None:
+    monkeypatch.delenv("OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS", raising=False)
+    _reset()
+    provider = _ColdStartProvider()
+    request = _request("Cold speculation must not become audible.")
+
+    try:
+        entry = _start_prefetch("spec-cold", request, provider, "shared")
+        assert provider.first_call_started.wait(timeout=1)
+        _accept_entry("spec-cold")
+
+        accepted_kwargs = _stream_kwargs(request, provider)
+        accepted_kwargs["chunk_size"] = 2
+        claim = _claim_entry(
+            request.text,
+            request.speaker,
+            request.language or "en",
+            accepted_kwargs,
+        )
+
+        assert claim is None
+        with entry.condition:
+            assert entry.cancelled is True
+            assert entry.chunks == []
+        assert speculative_tts_cache_snapshot() == []
+
+        # Let the hidden one-step decoder reach its next cancellation boundary,
+        # then verify the authoritative request starts fresh at its two-step
+        # cadence rather than inheriting the cold speculative stream.
+        provider.allow_first_call_yield.set()
+        with entry.condition:
+            deadline = time.monotonic() + 1.0
+            while not entry.completed and time.monotonic() < deadline:
+                entry.condition.wait(timeout=0.025)
+            assert entry.completed
+
+        replay = _LiveLaneProviderProxy(provider, "shared").generate_audio_stream(
+            text=request.text,
+            speaker=request.speaker,
+            language=request.language or "en",
+            **accepted_kwargs,
+        )
+        first_pcm, first_rate, timing = next(replay)
+
+        assert first_pcm == b"\x03\x00" * 4_800
+        assert first_rate == 24_000
+        assert "speculative_tts_cache" not in timing
+        assert provider.calls == 2
+        assert provider.chunk_sizes == [1, 2]
+    finally:
+        provider.allow_first_call_yield.set()
         _reset()
 
 
