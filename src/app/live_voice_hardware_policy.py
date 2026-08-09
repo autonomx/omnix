@@ -1,9 +1,12 @@
 """Hardware-gated policies for the local low-latency live-voice path.
 
 The RTX 4090 validation path uses a Faster Qwen provider that explicitly reports
-that generations cannot overlap. Hidden speculative TTS must therefore not own
-the provider while an accepted turn is waiting. LLM speculation remains enabled;
-only provider work that would serialize accepted speech is deferred.
+that generations cannot overlap. The live execution lane now serializes that
+provider with accepted-first priority and bounded speculative chunk sizes, so
+serial speculative TTS is safe by default and can be preempted when accepted
+speech arrives. ``OMNIX_LIVE_TTS_ALLOW_SERIAL_SPECULATION=false`` remains an
+explicit fail-closed kill switch if a provider proves unable to stop cleanly at
+scheduler chunk boundaries.
 
 This module is installed by the gateway entry point before the FastAPI app is
 created. It also makes LM Studio Responses state reuse default-on for accepted
@@ -43,8 +46,8 @@ def stateful_live_responses_enabled(raw: str | None) -> bool:
 
 
 def should_defer_speculative_tts(provider: Any, allow_serial: str | None = None) -> bool:
-    """Return True when hidden TTS would compete with accepted speech on one lane."""
-    if _bool_setting(allow_serial, default=False):
+    """Defer serial speculation only when the explicit scheduler kill switch is off."""
+    if _bool_setting(allow_serial, default=True):
         return False
     capabilities = resolve_tts_provider_capabilities(provider)
     return not capabilities.supports_concurrent_generation
@@ -100,7 +103,7 @@ def _deferred_speculative_entry(
 
 
 def install_live_voice_hardware_policy() -> None:
-    """Install fail-closed serial-TTS and stateful LM Studio live-voice policies."""
+    """Install scheduler-safe serial-TTS and stateful LM Studio live-voice policies."""
     from app.gateway import live_chat_lmstudio_responses as responses_runtime
     from app.gateway import live_chat_provider_metrics as metrics_runtime
     from app.gateway import live_voice_speculative_tts as speculative_tts_runtime
