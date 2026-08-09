@@ -23,12 +23,13 @@ type ClausePolicy = {
   deadlineMs: number;
 };
 
-// Later clauses retain enough text for stable prosody. The first clause uses a
-// smaller bounded window because the user has already experienced STT + LLM
-// latency before any audio can begin.
+// Later clauses retain enough text for stable prosody while staying short enough
+// for reliable local TTS lexical coverage. The first clause uses a smaller
+// bounded window because the user has already experienced STT + LLM latency
+// before any audio can begin.
 const DEFAULT_MINIMUM = 12;
 const DEFAULT_LOOKAHEAD = 12;
-const DEFAULT_MAXIMUM = 96;
+const DEFAULT_MAXIMUM = 64;
 const DEFAULT_DEADLINE_MS = 140;
 const DEFAULT_FIRST_MINIMUM = 8;
 const DEFAULT_FIRST_LOOKAHEAD = 4;
@@ -146,17 +147,25 @@ export class StableClauseAccumulator {
     const policy = this.currentPolicy();
     const strong = findSafeBoundary(this.buffer, STRONG_BOUNDARY, policy.minimum);
     const weak = findStableWeakBoundary(this.buffer, policy.minimum, policy.lookahead);
-    if (strong !== null || weak !== null) {
-      if (weak !== null && (strong === null || weak < strong)) {
-        return { end: weak, reason: 'stable-boundary' };
-      }
-      if (strong !== null) return { end: strong, reason: 'strong-boundary' };
-    }
+    const naturalBoundary = weak !== null && (strong === null || weak < strong)
+      ? { end: weak, reason: 'stable-boundary' as const }
+      : strong !== null ? { end: strong, reason: 'strong-boundary' as const } : null;
+
+    // Do not let late punctuation defeat the TTS fidelity ceiling. If a known
+    // natural boundary lies beyond the ceiling, reserve at least one minimum
+    // clause for its tail and split the prefix at whitespace. Joining emitted
+    // clauses therefore reconstructs the source text without dropping words.
+    if (naturalBoundary && naturalBoundary.end <= policy.maximum) return naturalBoundary;
 
     if (this.buffer.length >= policy.maximum) {
-      const fallback = safeWhitespaceBoundary(this.buffer, policy.maximum, policy.minimum);
+      const splitLimit = naturalBoundary
+        ? Math.min(policy.maximum, Math.max(policy.minimum, naturalBoundary.end - policy.minimum))
+        : policy.maximum;
+      const fallback = safeWhitespaceBoundary(this.buffer, splitLimit, policy.minimum);
       if (fallback !== null) return { end: fallback, reason: 'maximum' };
     }
+
+    if (naturalBoundary) return naturalBoundary;
 
     if (
       this.openedAtMs !== null
