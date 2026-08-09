@@ -275,7 +275,7 @@ export function CharacterManagementPanel({
                     <textarea aria-label="Character greeting" rows={2} value={draft.default_greeting} onChange={(event) => setDraft({ ...draft, default_greeting: event.currentTarget.value })} />
                   </label>
                   <label className="wide">
-                    <span>Personality prompt <small>{draft.personality_prompt.length} / 12000</small></span>
+                    <span>Personality prompt <small>{draft.personality_prompt.length} characters</small></span>
                     <textarea aria-label="Character personality" rows={4} value={draft.personality_prompt} onChange={(event) => setDraft({ ...draft, personality_prompt: event.currentTarget.value })} />
                   </label>
                 </div>
