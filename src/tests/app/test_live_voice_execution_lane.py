@@ -103,7 +103,7 @@ def test_dedicated_tts_reuses_started_provider_without_reloading_settings(monkey
         reset_live_voice_execution_lane_for_tests()
 
 
-def test_speculative_tts_uses_smaller_hidden_chunk_without_changing_accepted_shape(
+def test_speculative_tts_uses_one_step_hidden_chunk_without_changing_accepted_shape(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv("OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS", raising=False)
@@ -132,9 +132,29 @@ def test_speculative_tts_uses_smaller_hidden_chunk_without_changing_accepted_sha
         )
     )
 
-    assert provider.kwargs_by_text["speculative"]["chunk_size"] == 2
+    assert provider.kwargs_by_text["speculative"]["chunk_size"] == 1
     assert provider.kwargs_by_text["accepted"]["chunk_size"] == 4
     assert provider.kwargs_by_text["speculative"]["temperature"] == 0.6
+
+
+def test_speculative_tts_chunk_override_remains_available(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS", "2")
+    provider = _BlockingProvider()
+    scheduler = PriorityTtsScheduler(log=lambda *_args, **_kwargs: None)
+
+    provider.release_speculative.set()
+    list(
+        scheduler.stream(
+            provider,
+            text="speculative",
+            speaker=None,
+            language="en",
+            kwargs={"chunk_size": 4},
+            priority=TtsLanePriority.SPECULATIVE,
+        )
+    )
+
+    assert provider.kwargs_by_text["speculative"]["chunk_size"] == 2
 
 
 def test_promoted_speculative_ticket_keeps_authoritative_chunk_shape() -> None:
@@ -211,7 +231,7 @@ def test_accepted_tts_preempts_active_speculative_stream_and_reports_wait() -> N
     assert speculative_output == []
     assert accepted_output == [(b"\x01\x00", 24_000, {"text": "accepted"})]
     assert provider.calls == ["speculative", "accepted"]
-    assert provider.kwargs_by_text["speculative"]["chunk_size"] == 2
+    assert provider.kwargs_by_text["speculative"]["chunk_size"] == 1
     assert provider.kwargs_by_text["accepted"]["chunk_size"] == 4
 
     events = [event for event, _fields in logs]
