@@ -171,6 +171,10 @@ export function speculativeTtsPrefetchWindowOpen(
   return finalText === null && isNewestHypothesis;
 }
 
+export function speculativeTtsPrefetchEnabled(value: string | undefined): boolean {
+  return value?.trim().toLowerCase() !== 'false';
+}
+
 export function initializeLiveSpeculationController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const liveWindow = window as SpeculationWindow;
@@ -544,7 +548,7 @@ function applySpeculationEvent(active: ActiveSpeculation, event: SpeculationEven
 }
 
 function collectSpeculativeFirstClause(active: ActiveSpeculation, text: string): void {
-  if (active.prefetchedClause) return;
+  if (!ttsSpeculationEnabled() || active.prefetchedClause) return;
   const ready = active.firstClause.append(text, performance.now());
   if (ready.length) {
     active.prefetchedClause = ready[0].text;
@@ -580,7 +584,8 @@ function clearFirstClauseTimer(active: ActiveSpeculation): void {
 function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string): void {
   const newest = newestSegmentSpeculation(active.segmentId, active.sourceSequence);
   if (
-    active.prefetchStarted
+    !ttsSpeculationEnabled()
+    || active.prefetchStarted
     || !active.generationId
     || !clause.trim()
     || !speculativeTtsPrefetchWindowOpen(active.finalText, newest === active)
@@ -795,6 +800,7 @@ function createAcceptedSpeculationResponse(
 }
 
 async function waitForSpeculativeTtsAcceptance(active: ActiveSpeculation): Promise<void> {
+  if (!ttsSpeculationEnabled()) return;
   const deadline = performance.now() + SPECULATIVE_TTS_ACCEPT_WAIT_MS;
   while (!active.prefetchAcceptPromise && !active.error && performance.now() < deadline) {
     await delay(Math.min(5, Math.max(1, deadline - performance.now())));
@@ -930,6 +936,11 @@ function selectedVoiceId(): string | null {
 function speculationEnabled(): boolean {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
   return env?.VITE_LIVE_SPECULATION_ENABLED?.trim().toLowerCase() !== 'false';
+}
+
+function ttsSpeculationEnabled(): boolean {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  return speculativeTtsPrefetchEnabled(env?.VITE_LIVE_TTS_SPECULATION_ENABLED);
 }
 
 function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
