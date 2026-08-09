@@ -41,4 +41,40 @@ else
   echo "[KYUTAI MOSHI] Reusing cached moshi-server ${MOSHI_VERSION} binary."
 fi
 
-exec "${BINARY_PATH}" "$@"
+args=("$@")
+delay_tokens="${OMNIX_KYUTAI_ASR_DELAY_TOKENS:-}"
+if [[ -n "${delay_tokens}" ]]; then
+  if [[ ! "${delay_tokens}" =~ ^[1-9][0-9]*$ ]] || (( delay_tokens > 32 )); then
+    echo "[KYUTAI MOSHI] ERROR: OMNIX_KYUTAI_ASR_DELAY_TOKENS must be an integer from 1 to 32." >&2
+    exit 2
+  fi
+
+  config_path=""
+  config_arg_index=-1
+  for ((index = 0; index < ${#args[@]}; index++)); do
+    if [[ "${args[$index]}" == "--config" && $((index + 1)) -lt ${#args[@]} ]]; then
+      config_path="${args[$((index + 1))]}"
+      config_arg_index=$((index + 1))
+      break
+    fi
+  done
+
+  if [[ -z "${config_path}" || ! -f "${config_path}" ]]; then
+    echo "[KYUTAI MOSHI] ERROR: ASR delay override requested but the moshi-server config could not be resolved." >&2
+    exit 2
+  fi
+  if ! grep -Eq '^[[:space:]]*asr_delay_in_tokens[[:space:]]*=' "${config_path}"; then
+    echo "[KYUTAI MOSHI] ERROR: ASR delay override requested but asr_delay_in_tokens is absent from ${config_path}." >&2
+    exit 2
+  fi
+
+  override_config="/tmp/omnix-stt-delay-${delay_tokens}.toml"
+  cp "${config_path}" "${override_config}"
+  sed -E -i \
+    "s/^([[:space:]]*asr_delay_in_tokens[[:space:]]*=[[:space:]]*)[0-9]+/\\1${delay_tokens}/" \
+    "${override_config}"
+  args[$config_arg_index]="${override_config}"
+  echo "[KYUTAI MOSHI] Experimental ASR delay override active: asr_delay_in_tokens=${delay_tokens}."
+fi
+
+exec "${BINARY_PATH}" "${args[@]}"
