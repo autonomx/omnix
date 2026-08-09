@@ -36,9 +36,12 @@ _CACHE_TTL_SECONDS = 45.0
 _ACCEPTED_UNCLAIMED_TTL_SECONDS = 5.0
 _MAX_CACHE_ENTRIES = 16
 _WAIT_SLICE_SECONDS = 0.025
+# Provider chunk_size controls streaming/cancellation cadence, not synthesis
+# identity. Accepted first-phrase playback may intentionally request a smaller
+# chunk than hidden speculation, and cached PCM is reblocked by the live TTS
+# transport before playback. Keep only synthesis-affecting controls in the key.
 _CACHE_KEY_KWARGS = frozenset(
     {
-        "chunk_size",
         "temperature",
         "top_k",
         "top_p",
