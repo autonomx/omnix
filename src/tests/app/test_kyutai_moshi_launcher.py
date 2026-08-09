@@ -187,7 +187,10 @@ def test_secure_entrypoint_and_compose_persist_heavy_setup() -> None:
     assert "set -x" not in entrypoint
     assert "CARGO_BUILD_JOBS" in entrypoint
     assert "Reusing cached moshi-server" in entrypoint
+    assert "OMNIX_KYUTAI_ASR_DELAY_TOKENS" in entrypoint
+    assert "asr_delay_in_tokens" in entrypoint
     assert "omnix-kyutai-stt-venv:/app/moshi-server/.venv" in compose
     assert "omnix-kyutai-stt-cargo-install:/app/omnix-cargo-install" in compose
     assert "mem_limit: ${OMNIX_KYUTAI_MEMORY_LIMIT:-16g}" in compose
     assert "cpu_shares: 512" in compose
+    assert "OMNIX_KYUTAI_ASR_DELAY_TOKENS: ${OMNIX_KYUTAI_ASR_DELAY_TOKENS:-}" in compose
