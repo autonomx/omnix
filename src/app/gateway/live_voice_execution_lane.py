@@ -86,7 +86,7 @@ class PriorityTtsScheduler:
         if effective_priority == TtsLanePriority.SPECULATIVE:
             speculative_chunk_steps = _env_int(
                 "OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS",
-                2,
+                1,
                 minimum=1,
                 maximum=4,
             )
