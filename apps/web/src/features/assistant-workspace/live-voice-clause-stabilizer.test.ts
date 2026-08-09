@@ -54,6 +54,25 @@ describe('stable live voice clauses', () => {
     ]);
   });
 
+  it('caps later narrative clauses before late punctuation without losing words', () => {
+    const accumulator = new StableClauseAccumulator();
+    expect(accumulator.append('Opening line.', 0)).toEqual([
+      { text: 'Opening line.', reason: 'strong-boundary' },
+    ]);
+    const source = 'I was a kid who loved stories and I would stay up late imagining every strange place those stories might take me.';
+
+    const clauses = [
+      ...accumulator.append(source, 10),
+      ...accumulator.flush(),
+    ];
+
+    expect(clauses.length).toBeGreaterThan(1);
+    expect(clauses[0]?.reason).toBe('maximum');
+    expect(clauses.every((clause) => clause.text.length <= 64)).toBe(true);
+    expect(clauses.map((clause) => clause.text).join(' ')).toBe(source);
+    expect(clauses.map((clause) => clause.text).join(' ')).toContain('I was a kid who loved stories');
+  });
+
   it('does not split decimals, abbreviations, URLs, or unclosed parentheses', () => {
     const accumulator = new StableClauseAccumulator({
       minimumClauseCharacters: 8,
