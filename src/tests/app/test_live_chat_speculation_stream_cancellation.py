@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import Any
 
@@ -73,28 +74,19 @@ def test_lmstudio_stream_cancel_closes_blocked_response_before_ttft(monkeypatch)
         _cancel_event=cancel_event,
     )
 
-    errors: list[Exception] = []
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(list, stream)
+        assert response.iter_started.wait(timeout=1.0)
 
-    def consume() -> None:
-        try:
-            list(stream)
-        except Exception as exc:  # pragma: no cover - assertion below reports it
-            errors.append(exc)
+        started = time.perf_counter()
+        cancel_event.set()
+        result = future.result(timeout=0.5)
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
 
-    worker = threading.Thread(target=consume, daemon=True)
-    worker.start()
-    assert response.iter_started.wait(timeout=1.0)
-
-    started = time.perf_counter()
-    cancel_event.set()
-    worker.join(timeout=0.5)
-    elapsed_ms = (time.perf_counter() - started) * 1000.0
-
-    assert not worker.is_alive()
+    assert result == []
     assert response.closed.is_set()
     assert response.close_calls >= 1
     assert elapsed_ms < 500.0
-    assert errors == []
     assert len(captured_payloads) == 1
     assert "_cancel_event" not in captured_payloads[0]
 
