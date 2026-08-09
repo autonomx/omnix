@@ -74,6 +74,33 @@ describe('live voice turn coordinator', () => {
     })).toBe('continue');
   });
 
+  it('commits newly complete delayed text immediately after a mature acoustic pause', () => {
+    const delayedComplete = {
+      endpointProbability: 0.91,
+      endpointThreshold: 0.75,
+      semanticProbabilityDone: 0.92,
+      transcriptWords: 5,
+      correctionPending: false,
+    };
+
+    expect(endpointFusionAction({
+      ...delayedComplete,
+      silenceMs: 900,
+      transcriptStableMs: 1,
+    })).toBe('commit');
+    expect(endpointFusionAction({
+      ...delayedComplete,
+      silenceMs: 300,
+      transcriptStableMs: 1,
+    })).toBe('continue');
+    expect(endpointFusionAction({
+      ...delayedComplete,
+      endpointProbability: 0.82,
+      silenceMs: 900,
+      transcriptStableMs: 1,
+    })).toBe('continue');
+  });
+
   it('recovers definitive-statement latency only after long silence and stable text', () => {
     const stableStatement = {
       endpointProbability: 0.85,
@@ -113,10 +140,10 @@ describe('live voice turn coordinator', () => {
     expect(endpointFusionAction({
       endpointProbability: 0.999,
       endpointThreshold: 0.75,
-      silenceMs: 300,
+      silenceMs: 1_000,
       transcriptStableMs: 6_000,
       semanticProbabilityDone: 0.18,
-      transcriptWords: 1,
+      transcriptWords: 4,
       correctionPending: false,
     })).toBe('speculate');
   });
