@@ -181,7 +181,7 @@ class LMStudioProvider(BaseProvider):
                     try:
                         response.close()
                     except Exception:
-                        pass
+                        return
                     return
 
         threading.Thread(
