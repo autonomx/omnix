@@ -464,6 +464,8 @@ def _generate_side_effect_free(
     store: ChatSessionStore,
     session: Any,
     speculation: _Speculation,
+    *,
+    cancel_event: threading.Event | None = None,
 ) -> Iterator[str]:
     provider = shared.get_provider(_provider_key(speculation.provider_id))
     if provider is None:
@@ -488,12 +490,16 @@ def _generate_side_effect_free(
         ProviderMessage(role=item.role, content=item.content)
         for item in rendered.messages
     ]
+    provider_kwargs: dict[str, Any] = {}
+    if cancel_event is not None and getattr(provider, "provider_name", None) == "lmstudio":
+        provider_kwargs["_cancel_event"] = cancel_event
     live_voice_token = live_voice_profile._LIVE_VOICE_TURN.set(True)
     try:
         raw_response = provider.chat_completion(
             messages=messages,
             model=_model_key(speculation.model_id),
             stream=True,
+            **provider_kwargs,
         )
     finally:
         live_voice_profile._LIVE_VOICE_TURN.reset(live_voice_token)
@@ -504,6 +510,8 @@ def _generate_side_effect_free(
     chunker = LowLatencyTextChunker()
     full_text = ""
     for chunk in response:
+        if cancel_event is not None and cancel_event.is_set():
+            return
         text = getattr(chunk, "content", "") or ""
         if not text:
             continue
@@ -514,6 +522,8 @@ def _generate_side_effect_free(
                 "generation_id": speculation.generation_id,
                 "text": ready,
             })
+    if cancel_event is not None and cancel_event.is_set():
+        return
     remaining = chunker.flush()
     if remaining:
         yield _sse({
