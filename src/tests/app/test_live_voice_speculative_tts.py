@@ -76,11 +76,16 @@ def test_accepted_prefetch_is_promoted_and_replayed_without_second_generation() 
         entry = _accept_entry("spec-live-lane")
         assert entry.promotion_event.is_set()
 
+        # Hidden speculation may use a different provider chunk cadence than the
+        # accepted first phrase. That transport choice must not invalidate PCM
+        # reuse or trigger a duplicate authoritative provider generation.
+        accepted_kwargs = _stream_kwargs(request, provider)
+        accepted_kwargs["chunk_size"] = 2
         replay = _LiveLaneProviderProxy(provider, "shared").generate_audio_stream(
             text=request.text,
             speaker=request.speaker,
             language=request.language or "en",
-            **_stream_kwargs(request, provider),
+            **accepted_kwargs,
         )
         first_pcm, first_rate, timing = next(replay)
         assert first_pcm == b"\x01\x00" * 4_800
