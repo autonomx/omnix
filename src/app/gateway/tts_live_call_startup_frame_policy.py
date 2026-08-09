@@ -3,10 +3,15 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from functools import wraps
+from itertools import chain
 from typing import Any
 
 from . import tts_live_call_websocket
-from .tts_stream_contract import STREAM_INITIAL_FALLBACK_THRESHOLD
+from .tts_stream_contract import (
+    DEFAULT_SAMPLE_RATE,
+    STREAM_INITIAL_FALLBACK_THRESHOLD,
+    STREAM_MAX_INITIAL_SILENCE_MS,
+)
 
 # The first accepted response phrase now uses a two-step Qwen decoder chunk,
 # which materializes 3,840 samples (160 ms at 24 kHz). The previous 4,800-sample
@@ -25,7 +30,31 @@ TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES = 3_840
 # avoidable wait when signal is already present.
 TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD = STREAM_INITIAL_FALLBACK_THRESHOLD
 
+# The two-step first-phrase fast path produces exactly one 3,840-sample / 160 ms
+# chunk at 24 kHz. Hardware traces showed that this chunk can contain waveform
+# energy below the quiet-speech threshold, causing the bounded scanner to wait
+# for three or four decoder chunks before it arms the non-zero fallback. Arm
+# that fallback after the first two-step chunk instead. Exact digital silence
+# is still rejected by the transport-neutral scanner, and ordinary four-step
+# phrases retain the established 400 ms window.
+TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS = 160.0
+
 _HOOK_SENTINEL = "_omnix_tts_live_call_startup_policy_installed"
+
+
+def live_call_max_initial_silence_ms_for_first_chunk(
+    pcm_bytes: bytes,
+    sample_rate: int,
+) -> float:
+    """Return the onset scan window for the first raw live-call TTS chunk."""
+    resolved_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
+    first_chunk_samples = len(pcm_bytes) // 2
+    if (
+        resolved_rate == DEFAULT_SAMPLE_RATE
+        and first_chunk_samples == TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES
+    ):
+        return TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS
+    return STREAM_MAX_INITIAL_SILENCE_MS
 
 
 def _install_live_call_onset_policy() -> None:
@@ -39,11 +68,26 @@ def _install_live_call_onset_policy() -> None:
         *args: Any,
         **kwargs: Any,
     ) -> Iterator[tuple[bytes, int, Any]]:
+        chunk_iter = iter(chunks)
+        try:
+            first_chunk = next(chunk_iter)
+        except StopIteration:
+            return iter(())
+
+        first_pcm, first_rate, _first_timing = first_chunk
         kwargs.setdefault(
             "silence_threshold",
             TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD,
         )
-        return original_streamer(chunks, *args, **kwargs)
+        kwargs.setdefault(
+            "max_initial_silence_ms",
+            live_call_max_initial_silence_ms_for_first_chunk(first_pcm, first_rate),
+        )
+        return original_streamer(
+            chain((first_chunk,), chunk_iter),
+            *args,
+            **kwargs,
+        )
 
     tts_live_call_websocket._stream_pcm16_blocks = live_call_streamer
     setattr(tts_live_call_websocket, _HOOK_SENTINEL, True)
