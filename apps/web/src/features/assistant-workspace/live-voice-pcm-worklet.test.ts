@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { liveVoicePcmWorkletSource } from './live-voice-pcm-worklet';
+import {
+  liveVoiceAvatarMouthFrameForRms,
+  liveVoicePcmWorkletSource,
+} from './live-voice-pcm-worklet';
 
 type WorkletMessage = Record<string, unknown> & { type?: string };
 type WorkletPort = {
@@ -68,6 +71,13 @@ function events(processor: ProcessorInstance, type?: string): WorkletMessage[] {
 }
 
 describe('live voice PCM worklet state machine', () => {
+  it('maps playback RMS to the same stable avatar mouth states as the character bridge', () => {
+    expect(liveVoiceAvatarMouthFrameForRms(0)).toBe('closed');
+    expect(liveVoiceAvatarMouthFrameForRms(0.02)).toBe('small');
+    expect(liveVoiceAvatarMouthFrameForRms(0.05)).toBe('medium');
+    expect(liveVoiceAvatarMouthFrameForRms(0.2)).toBe('wide');
+  });
+
   it('does not let cue or intentional silence independently satisfy onset readiness', () => {
     const processor = createProcessor();
     send(processor, {
@@ -104,6 +114,39 @@ describe('live voice PCM worklet state machine', () => {
       'cue',
       'silence',
       'speech',
+    ]);
+  });
+
+  it('drives avatar mouth frames from rendered speech and keeps cues silent', () => {
+    const processor = createProcessor({ avatarEnvelopeIntervalSamples: 128 });
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'cue-0',
+      segmentKind: 'cue',
+      samples: new Float32Array(128).fill(0.4),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'cue-0' });
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-0',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      samples: new Float32Array(128).fill(0.2),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-0' });
+
+    render(processor);
+    expect(events(processor, 'avatar_frame')).toHaveLength(0);
+
+    render(processor);
+    expect(events(processor, 'avatar_frame')).toEqual([
+      expect.objectContaining({ type: 'avatar_frame', frame: 'wide' }),
+    ]);
+
+    render(processor);
+    expect(events(processor, 'avatar_frame')).toEqual([
+      expect.objectContaining({ type: 'avatar_frame', frame: 'wide' }),
+      expect.objectContaining({ type: 'avatar_frame', frame: 'closed' }),
     ]);
   });
 
