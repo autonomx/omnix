@@ -189,7 +189,11 @@ def test_secure_entrypoint_and_compose_persist_heavy_setup() -> None:
     assert "Reusing cached moshi-server" in entrypoint
     assert "OMNIX_KYUTAI_ASR_DELAY_TOKENS" in entrypoint
     assert "asr_delay_in_tokens" in entrypoint
+    assert "Hugging Face authentication cache hit." in entrypoint
+    assert 'hf_token_path="${HF_HOME}/token"' in entrypoint
     assert "omnix-kyutai-stt-venv:/app/moshi-server/.venv" in compose
+    assert "omnix-kyutai-stt-uv-python:/root/.local/share/uv/python" in compose
+    assert "UV_PYTHON_INSTALL_DIR: /root/.local/share/uv/python" in compose
     assert "omnix-kyutai-stt-cargo-install:/app/omnix-cargo-install" in compose
     assert "mem_limit: ${OMNIX_KYUTAI_MEMORY_LIMIT:-16g}" in compose
     assert "cpu_shares: 512" in compose
