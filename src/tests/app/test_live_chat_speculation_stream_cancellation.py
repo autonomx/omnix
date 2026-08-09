@@ -73,12 +73,12 @@ def test_lmstudio_stream_cancel_closes_blocked_response_before_ttft(monkeypatch)
         _cancel_event=cancel_event,
     )
 
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
 
     def consume() -> None:
         try:
             list(stream)
-        except BaseException as exc:  # pragma: no cover - assertion below reports it
+        except Exception as exc:  # pragma: no cover - assertion below reports it
             errors.append(exc)
 
     worker = threading.Thread(target=consume, daemon=True)
