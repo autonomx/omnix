@@ -14,13 +14,25 @@ export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
 export UV_CONCURRENT_BUILDS="${UV_CONCURRENT_BUILDS:-1}"
 export UV_CONCURRENT_INSTALLS="${UV_CONCURRENT_INSTALLS:-2}"
 export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
+export HF_HOME="${HF_HOME:-/root/.cache/huggingface}"
 
 mkdir -p "${INSTALL_ROOT}"
 
 if [[ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]]; then
-  # Preserve upstream authentication behavior without shell tracing or token output.
-  uvx hf auth login --token "${HUGGING_FACE_HUB_TOKEN}" >/dev/null 2>&1
-  echo "[KYUTAI MOSHI] Hugging Face authentication completed."
+  # hf-hub's Rust client reads ${HF_HOME}/token. Avoid a network-backed CLI
+  # login on every restart when the persisted token already matches.
+  hf_token_path="${HF_HOME}/token"
+  cached_hf_token=""
+  if [[ -f "${hf_token_path}" ]]; then
+    cached_hf_token="$(tr -d '\r\n' < "${hf_token_path}" 2>/dev/null || true)"
+  fi
+  if [[ "${cached_hf_token}" == "${HUGGING_FACE_HUB_TOKEN}" ]]; then
+    echo "[KYUTAI MOSHI] Hugging Face authentication cache hit."
+  else
+    uvx hf auth login --token "${HUGGING_FACE_HUB_TOKEN}" >/dev/null 2>&1
+    echo "[KYUTAI MOSHI] Hugging Face authentication completed."
+  fi
+  unset cached_hf_token
 else
   echo "[KYUTAI MOSHI] WARNING: Hugging Face token is not configured."
 fi
