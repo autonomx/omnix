@@ -3,19 +3,18 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from functools import wraps
-from itertools import chain
 from typing import Any
 
 from . import tts_live_call_websocket
 from .tts_stream_contract import STREAM_INITIAL_FALLBACK_THRESHOLD
 
-# Keep ordinary four-step Qwen phrases on the established 4,800-sample frame.
-# The first accepted response phrase now uses a two-step decoder chunk, which
-# materializes 3,840 samples. A 4,800-sample websocket frame forces that fast
-# path to wait for another decoder chunk before any PCM can be handed off, so
-# align only that raw-chunk shape with the browser's 160 ms startup reserve.
-TTS_LIVE_CALL_FAST_START_FRAME_SAMPLES = 3_840
-TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES = 4_800
+# The first accepted response phrase now uses a two-step Qwen decoder chunk,
+# which materializes 3,840 samples (160 ms at 24 kHz). The previous 4,800-sample
+# websocket frame forced that fast path to wait for another decoder chunk before
+# any PCM could be handed off. Align the transport frame with the first raw
+# chunk and the browser's normal 160 ms startup reserve. Four-step later phrases
+# still arrive as 7,680-sample raw chunks and are simply split into two frames.
+TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES = 3_840
 
 # Generated TTS output is not microphone input. The transport-neutral scanner
 # intentionally starts at a stricter 1% amplitude threshold, then falls back to
@@ -44,28 +43,7 @@ def _install_live_call_onset_policy() -> None:
             "silence_threshold",
             TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD,
         )
-        chunk_iter = iter(chunks)
-        try:
-            first_chunk = next(chunk_iter)
-        except StopIteration:
-            return iter(())
-
-        first_pcm_bytes = first_chunk[0]
-        first_chunk_samples = len(first_pcm_bytes) // 2
-        requested_block_samples = int(
-            kwargs.get("block_samples", TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES)
-        )
-        if (
-            first_chunk_samples == TTS_LIVE_CALL_FAST_START_FRAME_SAMPLES
-            and requested_block_samples > TTS_LIVE_CALL_FAST_START_FRAME_SAMPLES
-        ):
-            kwargs["block_samples"] = TTS_LIVE_CALL_FAST_START_FRAME_SAMPLES
-
-        return original_streamer(
-            chain((first_chunk,), chunk_iter),
-            *args,
-            **kwargs,
-        )
+        return original_streamer(chunks, *args, **kwargs)
 
     tts_live_call_websocket._stream_pcm16_blocks = live_call_streamer
     setattr(tts_live_call_websocket, _HOOK_SENTINEL, True)
