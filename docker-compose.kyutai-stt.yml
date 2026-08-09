@@ -11,6 +11,7 @@ services:
       UV_CONCURRENT_BUILDS: ${OMNIX_KYUTAI_UV_BUILD_JOBS:-1}
       UV_CONCURRENT_INSTALLS: ${OMNIX_KYUTAI_UV_INSTALL_JOBS:-2}
       UV_LINK_MODE: copy
+      OMNIX_KYUTAI_ASR_DELAY_TOKENS: ${OMNIX_KYUTAI_ASR_DELAY_TOKENS:-}
     entrypoint:
       - /bin/bash
       - -lc
