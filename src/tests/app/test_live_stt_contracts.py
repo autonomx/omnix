@@ -16,6 +16,7 @@ from app.providers.nemotron_eou_live_websocket import (
     HYBRID_NEGOTIATION,
     primary_pcm_slice,
 )
+from app.providers.nemotron_eou_quality import QualityFirstNemotronEouModelManager
 from app.providers.nemotron_eou_streaming import (
     HybridStream,
     NemotronEouModelManager,
@@ -167,6 +168,46 @@ def test_model_manager_rearms_only_eou_stream(monkeypatch) -> None:
     assert stream.nemotron is original_nemotron
     assert stream.eou is replacement_eou
     assert stream.eou_rearm_count == 1
+
+
+def test_quality_first_final_prefers_full_buffer_decode(monkeypatch) -> None:
+    manager = QualityFirstNemotronEouModelManager()
+    manager._streams["segment-quality"] = SimpleNamespace(
+        nemotron=SimpleNamespace(finalize_text=lambda: "How are"),
+    )
+    monkeypatch.setattr(
+        manager,
+        "transcribe_pcm16",
+        lambda _: "How are you doing today?",
+    )
+
+    text, metrics = manager.finalize("segment-quality", b"\x00\x00")
+
+    assert text == "How are you doing today?"
+    assert metrics["authoritative_full_decode"] == 1.0
+    assert metrics["streaming_final"] == 0.0
+    assert metrics["authoritative_changed"] == 1.0
+    assert metrics["streaming_chars"] == 7.0
+    assert metrics["authoritative_chars"] == 24.0
+
+
+def test_quality_first_final_falls_back_to_streaming_if_full_decode_fails(monkeypatch) -> None:
+    manager = QualityFirstNemotronEouModelManager()
+    manager._streams["segment-fallback"] = SimpleNamespace(
+        nemotron=SimpleNamespace(finalize_text=lambda: "Short but usable"),
+    )
+
+    def fail_decode(_: bytes) -> str:
+        raise RuntimeError("decode_failed")
+
+    monkeypatch.setattr(manager, "transcribe_pcm16", fail_decode)
+
+    text, metrics = manager.finalize("segment-fallback", b"\x00\x00")
+
+    assert text == "Short but usable"
+    assert metrics["full_decode_failed"] == 1.0
+    assert metrics["streaming_final"] == 1.0
+    assert metrics["authoritative_full_decode"] == 0.0
 
 
 def test_hybrid_stream_drops_cross_segment_overlap_before_inference() -> None:
