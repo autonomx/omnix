@@ -123,7 +123,14 @@ class CacheAwareRnntStream:
             return StreamingUpdate(self.transcript, False, False, 0.0)
         started = time.perf_counter()
         audio = pcm16le_to_float32(pcm16le)
-        _, _, self.stream_id = self.buffer.append_audio(audio, stream_id=self.stream_id)
+        if self.stream_id < 0:
+            self.buffer.append_audio(audio, stream_id=-1)
+            # CacheAwareStreamingAudioBuffer uses -1 to mean "new stream" and
+            # leaves that sentinel unchanged on the initial append. Subsequent
+            # appends must explicitly target stream zero.
+            self.stream_id = 0
+        else:
+            self.buffer.append_audio(audio, stream_id=self.stream_id)
         before = self.transcript
         new_eou = False
         for chunk_audio, chunk_lengths in iter(self.buffer):
@@ -158,7 +165,7 @@ class CacheAwareRnntStream:
                 cache_last_channel=self.cache_last_channel,
                 cache_last_time=self.cache_last_time,
                 cache_last_channel_len=self.cache_last_channel_len,
-                keep_all_outputs=False,
+                keep_all_outputs=self.buffer.is_buffer_empty(),
                 previous_hypotheses=self.previous_hypotheses,
                 previous_pred_out=self.pred_out_stream,
                 drop_extra_pre_encoded=drop_extra,
