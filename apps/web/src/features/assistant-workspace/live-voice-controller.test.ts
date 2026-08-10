@@ -5,7 +5,10 @@ import {
   resetAssistantDiagnosticSummaries,
 } from './live-conversation-assistant-summary';
 import { liveConversationStore } from './live-conversation-store';
-import { resetLiveSttCapabilityState } from './live-stt-capability-state';
+import {
+  noteLiveSttNegotiation,
+  resetLiveSttCapabilityState,
+} from './live-stt-capability-state';
 import {
   liveVoiceAssistantOwnsFloor,
   liveVoiceSpeechThreshold,
@@ -101,6 +104,20 @@ describe('live voice semantic finalization deadline', () => {
     expect(semanticFinalizationRemainingMs('You should lie', 'balanced', 900, 359)).toBe(1);
     expect(semanticFinalizationRemainingMs('You should lie', 'balanced', 900, 360)).toBe(0);
     expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 500, 40)).toBe(180);
+  });
+
+  it('does not let late Nemotron partials restart the authoritative EOU watchdog', () => {
+    noteLiveSttNegotiation('nemotron_parakeet_eou', [
+      'segmented_audio',
+      'authoritative_final',
+      'result_replay',
+      'partial_transcripts',
+      'authoritative_eou',
+    ]);
+
+    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 514, 0)).toBe(86);
+    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 599, 0)).toBe(1);
+    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 600, 0)).toBe(0);
   });
 
   it('uses recent assistant-question context to finalize a one-word answer quickly', () => {
