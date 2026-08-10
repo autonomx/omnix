@@ -28,6 +28,31 @@ describe('live STT capability state', () => {
     expect(liveSttUsesFinalOnlyEndpointing()).toBe(true);
   });
 
+  it('clears stale capabilities as soon as a new STT authority is selected', () => {
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: {
+        stage: 'stt_negotiated',
+        provider: 'parakeet',
+        capabilities: ['segmented_audio', 'authoritative_final', 'result_replay'],
+      },
+    }));
+    expect(liveSttUsesFinalOnlyEndpointing()).toBe(true);
+
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: {
+        stage: 'stt_authority_selected',
+        selectedProvider: 'kyutai',
+      },
+    }));
+
+    expect(currentLiveSttCapabilities()).toEqual({
+      provider: null,
+      capabilities: [],
+      negotiated: false,
+    });
+    expect(liveSttUsesFinalOnlyEndpointing()).toBe(false);
+  });
+
   it('does not classify semantic or unknown capability sets as final-only', () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
       detail: {
