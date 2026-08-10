@@ -90,6 +90,7 @@ class HybridSegment:
     stream_task: asyncio.Task[None] | None = None
     last_partial: str = ""
     eou_emitted: bool = False
+    eou_candidate_count: int = 0
     finalize_request_id: str = ""
     end_sample: int = 0
     finalized: bool = False
@@ -199,8 +200,13 @@ async def _drain_stream_audio(
                 eou_ms=round(update.eou_ms, 3),
                 model_time_ms=model_time_ms,
             )
-        if update.eou and not segment.eou_emitted:
+        if update.eou:
+            # EOU state is re-armed inside the model manager after every token.
+            # Do not permanently latch the first candidate for this segment: if
+            # the browser rejects a rare mid-turn candidate because speech is
+            # still active, a later true endpoint must still be deliverable.
             segment.eou_emitted = True
+            segment.eou_candidate_count += 1
             endpoint = {
                 "provider": PROVIDER_NAME,
                 "segmentId": segment.segment_id,
@@ -214,6 +220,7 @@ async def _drain_stream_audio(
             _metric(
                 "stt_eou_emitted",
                 segment_sequence=segment.sequence,
+                candidate_count=segment.eou_candidate_count,
                 transcript_chars=len(segment.last_partial),
                 model_time_ms=model_time_ms,
                 nemotron_ms=round(update.nemotron_ms, 3),
@@ -435,6 +442,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                             **provider_metrics,
                             "finalize_ms": round(finalize_ms, 3),
                             "eou_triggered": 1.0 if segment.eou_emitted else 0.0,
+                            "eou_candidate_count": float(segment.eou_candidate_count),
                         }
                         result = {
                             "type": "result_available",
@@ -459,6 +467,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                             transcript_chars=len(text),
                             finalize_ms=round(finalize_ms, 3),
                             eou_triggered=segment.eou_emitted,
+                            eou_candidate_count=segment.eou_candidate_count,
                             streaming_final=provider_metrics.get("streaming_final", 0.0),
                             offline_fallback=provider_metrics.get("offline_fallback", 0.0),
                         )
