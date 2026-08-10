@@ -6,7 +6,7 @@ from app.launcher.kyutai_services import build_kyutai_service_specs
 from app.launcher.runtime_control_app import build_runtime_service_specs
 
 
-def test_kyutai_launcher_specs_auto_start_for_branch_testing(monkeypatch) -> None:
+def test_kyutai_launcher_specs_are_opt_in_and_parakeet_is_default(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_KYUTAI_ENABLED", raising=False)
     monkeypatch.delenv("OMNIX_START_KYUTAI_MOSHI", raising=False)
     monkeypatch.delenv("OMNIX_START_KYUTAI_ADAPTER", raising=False)
@@ -19,8 +19,8 @@ def test_kyutai_launcher_specs_auto_start_for_branch_testing(monkeypatch) -> Non
     by_id = {spec.service_id: spec for spec in specs}
 
     assert set(by_id) == {"kyutai_moshi", "kyutai_stt"}
-    assert by_id["kyutai_moshi"].enabled is True
-    assert by_id["kyutai_moshi"].auto_start is True
+    assert by_id["kyutai_moshi"].enabled is False
+    assert by_id["kyutai_moshi"].auto_start is False
     assert by_id["kyutai_moshi"].optional is True
     assert by_id["kyutai_moshi"].command == [
         "F:/Python/python.exe",
@@ -29,19 +29,15 @@ def test_kyutai_launcher_specs_auto_start_for_branch_testing(monkeypatch) -> Non
     assert "127.0.0.1:8090" in by_id["kyutai_moshi"].description
 
     adapter = by_id["kyutai_stt"]
-    assert adapter.enabled is True
-    assert adapter.auto_start is True
+    assert adapter.enabled is False
+    assert adapter.auto_start is False
     assert adapter.optional is True
     assert adapter.ports == (5202,)
     assert adapter.env["KYUTAI_STT_URL"] == "ws://127.0.0.1:8090"
     assert adapter.env["KYUTAI_STT_PATH"] == "/api/asr-streaming"
     assert adapter.env["OMNIX_STT_PORT"] == "5202"
     assert "127.0.0.1:8090/api/asr-streaming" in adapter.description
-    assert browser_url == (
-        "http://127.0.0.1:5202?language=en&authority=test"
-        "&endpoint_threshold=0.75"
-        "&fallback=http%3A%2F%2F127.0.0.1%3A5201"
-    )
+    assert browser_url == "http://127.0.0.1:5201"
 
 
 def test_kyutai_launcher_services_can_be_disabled(monkeypatch) -> None:
@@ -52,6 +48,19 @@ def test_kyutai_launcher_services_can_be_disabled(monkeypatch) -> None:
     assert all(spec.optional for spec in specs)
     assert all(not spec.enabled for spec in specs)
     assert all(not spec.auto_start for spec in specs)
+
+
+def test_runtime_dashboard_defaults_to_parakeet_stt(monkeypatch) -> None:
+    monkeypatch.delenv("OMNIX_KYUTAI_ENABLED", raising=False)
+    monkeypatch.delenv("VITE_ASSISTANT_STT_URL", raising=False)
+
+    by_id = {spec.service_id: spec for spec in build_runtime_service_specs()}
+
+    assert by_id["stt"].label == "Parakeet STT"
+    assert by_id["stt"].enabled is True
+    assert by_id["stt"].auto_start is True
+    assert by_id["stt"].env["OMNIX_STT_URL"] == "http://127.0.0.1:5201"
+    assert "VITE_ASSISTANT_STT_URL" not in by_id["web"].env
 
 
 def test_runtime_dashboard_inserts_kyutai_before_gateway_and_configures_web(

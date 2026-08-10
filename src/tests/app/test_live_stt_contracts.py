@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from array import array
+from types import SimpleNamespace
 
 from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_EOU,
@@ -15,7 +16,11 @@ from app.providers.nemotron_eou_live_websocket import (
     HYBRID_NEGOTIATION,
     primary_pcm_slice,
 )
-from app.providers.nemotron_eou_streaming import has_eou_token, strip_eou_control_tokens
+from app.providers.nemotron_eou_streaming import (
+    _normalize_streaming_hypotheses,
+    has_eou_token,
+    strip_eou_control_tokens,
+)
 
 
 def test_live_stt_negotiation_emits_stable_ready_payload() -> None:
@@ -54,6 +59,19 @@ def test_eou_control_tokens_never_enter_authoritative_transcript() -> None:
     assert has_eou_token(raw) is True
     assert strip_eou_control_tokens(raw) == "Where are we going?"
     assert strip_eou_control_tokens("Hello <EOB> there <EOU>") == "Hello there"
+
+
+def test_streaming_hypotheses_flatten_mapping_timestamps_for_continuation_merge() -> None:
+    hypothesis = SimpleNamespace(
+        timestamp={"timestep": [2, 5], "segment": [[2, 5]]},
+    )
+    untouched = SimpleNamespace(timestamp=[7])
+
+    normalized = _normalize_streaming_hypotheses((hypothesis, untouched))
+
+    assert normalized == [hypothesis, untouched]
+    assert hypothesis.timestamp == [2, 5]
+    assert untouched.timestamp == [7]
 
 
 def test_hybrid_stream_drops_cross_segment_overlap_before_inference() -> None:

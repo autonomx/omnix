@@ -18,7 +18,7 @@ def _flag(name: str, default: str = "0") -> bool:
 
 
 def build_kyutai_service_specs(root: Path) -> tuple[list[ServiceSpec], str]:
-    enabled = _flag("OMNIX_KYUTAI_ENABLED", "1")
+    enabled = _flag("OMNIX_KYUTAI_ENABLED", "0")
     moshi_auto_start = enabled and _flag("OMNIX_START_KYUTAI_MOSHI", "1")
     adapter_auto_start = enabled and _flag("OMNIX_START_KYUTAI_ADAPTER", "1")
 
@@ -38,16 +38,19 @@ def build_kyutai_service_specs(root: Path) -> tuple[list[ServiceSpec], str]:
     language = os.environ.get("OMNIX_LIVE_STT_LANGUAGE", "en")
     endpoint_threshold = os.environ.get("KYUTAI_ENDPOINT_CANDIDATE_THRESHOLD", "0.75")
     fallback_url = os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201")
-    browser_stt_url = os.environ.get(
-        "VITE_ASSISTANT_STT_URL",
-        (
-            f"http://127.0.0.1:{adapter_port}"
-            f"?language={quote(language)}"
-            f"&authority=test"
-            f"&endpoint_threshold={quote(endpoint_threshold)}"
-            f"&fallback={quote(fallback_url, safe='')}"
-        ),
-    )
+    browser_stt_url = os.environ.get("VITE_ASSISTANT_STT_URL")
+    if not browser_stt_url:
+        browser_stt_url = (
+            (
+                f"http://127.0.0.1:{adapter_port}"
+                f"?language={quote(language)}"
+                f"&authority=test"
+                f"&endpoint_threshold={quote(endpoint_threshold)}"
+                f"&fallback={quote(fallback_url, safe='')}"
+            )
+            if enabled
+            else fallback_url
+        )
 
     shared_env = {
         "PYTHONPATH": str(root / "src"),

@@ -64,7 +64,7 @@ OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES=true
 OMNIX_LIVE_LMSTUDIO_RESPONSE_STATE_TTL_SECONDS=900
 ```
 
-The managed launcher enables the first setting by default on this isolated Kyutai test branch. Set it to `false` for a control run. If `/v1/responses` is unavailable before any text is emitted, Omnix invalidates the state and falls back to the existing chat-completions stream.
+The managed launcher enables the first setting when Kyutai is explicitly enabled for isolated testing; it defaults to `false` with the standard Parakeet STT path. If `/v1/responses` is unavailable before any text is emitted, Omnix invalidates the state and falls back to the existing chat-completions stream.
 
 Relevant gateway events:
 

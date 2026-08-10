@@ -59,6 +59,33 @@ def _extract_text(value: Any) -> str:
     return text if isinstance(text, str) else str(value)
 
 
+def _normalize_streaming_hypotheses(hypotheses: Any) -> Any:
+    """Make RNNT hypotheses compatible with NeMo's continuation merger.
+
+    Some NeMo decoders expose ``Hypothesis.timestamp`` as a mapping containing
+    the token-level ``timestep`` list.  The cache-aware continuation path still
+    calls ``Hypothesis.merge_`` from an older contract that expects that field
+    itself to be list-like and calls ``.extend`` on it.  Live transcription only
+    needs the token timesteps, so flatten that representation before the next
+    streaming step.
+    """
+
+    if not isinstance(hypotheses, (list, tuple)):
+        return hypotheses
+
+    normalized = list(hypotheses)
+    for hypothesis in normalized:
+        timestamp = getattr(hypothesis, "timestamp", None)
+        if not isinstance(timestamp, dict):
+            continue
+        timestep = timestamp.get("timestep", ())
+        try:
+            hypothesis.timestamp = list(timestep)
+        except TypeError:
+            hypothesis.timestamp = []
+    return normalized
+
+
 def _select_device(torch_module: Any, env_name: str, fallback: str) -> str:
     requested = os.environ.get(env_name, fallback).strip().lower()
     if requested == "auto":
@@ -151,6 +178,7 @@ class CacheAwareRnntStream:
     def _step(self, chunk_audio: Any, chunk_lengths: Any) -> str:
         torch = self.torch
         drop_extra = 0 if self.step_num == 0 else self.model.encoder.streaming_cfg.drop_extra_pre_encoded
+        self.previous_hypotheses = _normalize_streaming_hypotheses(self.previous_hypotheses)
         with torch.inference_mode():
             (
                 self.pred_out_stream,
@@ -171,6 +199,7 @@ class CacheAwareRnntStream:
                 drop_extra_pre_encoded=drop_extra,
                 return_transcription=True,
             )
+        self.previous_hypotheses = _normalize_streaming_hypotheses(self.previous_hypotheses)
         self.step_num += 1
         return _extract_text(transcribed_texts)
 
