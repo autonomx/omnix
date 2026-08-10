@@ -79,7 +79,7 @@ describe('live voice turn coordinator', () => {
     })).toBe('continue');
   });
 
-  it('requires a short acoustic confirmation before authoritative EOU commits', () => {
+  it('uses semantic-aware acoustic confirmation for authoritative EOU', () => {
     noteLiveSttNegotiation('nemotron_parakeet_eou', [
       'segmented_audio',
       'authoritative_final',
@@ -88,28 +88,70 @@ describe('live voice turn coordinator', () => {
       'authoritative_eou',
     ]);
 
-    const meaningfulCandidate = {
+    const incompleteCandidate = {
       endpointProbability: 1,
       endpointThreshold: 0.75,
-      transcriptStableMs: 0,
+      transcriptStableMs: 500,
       semanticProbabilityDone: 0.18,
       transcriptWords: 3,
       correctionPending: false,
     };
 
     expect(endpointFusionAction({
-      ...meaningfulCandidate,
-      silenceMs: 239,
+      ...incompleteCandidate,
+      silenceMs: 599,
     })).toBe('continue');
     expect(endpointFusionAction({
-      ...meaningfulCandidate,
-      silenceMs: 240,
+      ...incompleteCandidate,
+      silenceMs: 600,
+    })).toBe('commit');
+
+    const completeCandidate = {
+      ...incompleteCandidate,
+      semanticProbabilityDone: 0.95,
+      transcriptWords: 4,
+    };
+    expect(endpointFusionAction({
+      ...completeCandidate,
+      silenceMs: 359,
+    })).toBe('continue');
+    expect(endpointFusionAction({
+      ...completeCandidate,
+      silenceMs: 360,
     })).toBe('commit');
     expect(endpointFusionAction({
-      ...meaningfulCandidate,
-      silenceMs: 500,
-      semanticProbabilityDone: 0.95,
+      ...completeCandidate,
+      silenceMs: 600,
       transcriptWords: 0,
+    })).toBe('continue');
+  });
+
+  it('keeps the captured 431 and 478 ms intra-sentence pauses open', () => {
+    noteLiveSttNegotiation('nemotron_parakeet_eou', [
+      'segmented_audio',
+      'authoritative_final',
+      'result_replay',
+      'partial_transcripts',
+      'authoritative_eou',
+    ]);
+
+    expect(endpointFusionAction({
+      endpointProbability: 1,
+      endpointThreshold: 0.5,
+      silenceMs: 431,
+      transcriptStableMs: 1480,
+      semanticProbabilityDone: 0.1,
+      transcriptWords: 1,
+      correctionPending: false,
+    })).toBe('continue');
+    expect(endpointFusionAction({
+      endpointProbability: 1,
+      endpointThreshold: 0.5,
+      silenceMs: 478,
+      transcriptStableMs: 154,
+      semanticProbabilityDone: 0.78,
+      transcriptWords: 3,
+      correctionPending: false,
     })).toBe('continue');
   });
 
