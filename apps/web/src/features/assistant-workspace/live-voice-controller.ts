@@ -17,6 +17,7 @@ import {
   type AuthoritySelection,
   resolveAuthoritySelection,
 } from './live-stt-authority-controller';
+import { liveSttUsesAuthoritativeEou } from './live-stt-capability-state';
 import {
   type ConversationPace,
   type UserFloorState,
@@ -171,6 +172,13 @@ export function semanticFinalizationRemainingMs(
 ): number {
   const targetDelayMs = semanticFinalizeDelay(text, pace);
   const pauseRemainingMs = targetDelayMs - Math.max(0, pauseElapsedMs);
+  // When authoritative EOU is negotiated, the semantic timeout is only a
+  // watchdog for a missed or delayed EOU. Nemotron partials can legitimately
+  // revise late in the acoustic pause; restarting the whole 600 ms watchdog on
+  // each revision stretched real traces to ~1 second. Keep the watchdog tied
+  // to the microphone pause while the provider endpoint gate still protects
+  // short intra-sentence pauses.
+  if (liveSttUsesAuthoritativeEou()) return Math.max(0, pauseRemainingMs);
   const transcriptRemainingMs = Number.isFinite(transcriptStableMs)
     ? targetDelayMs - Math.max(0, transcriptStableMs)
     : 0;
