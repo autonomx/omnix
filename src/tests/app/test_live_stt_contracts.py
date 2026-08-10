@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+from array import array
+
 from app.providers.live_stt_contracts import (
+    CAP_AUTHORITATIVE_EOU,
     CAP_AUTHORITATIVE_FINAL,
+    CAP_PARTIAL_TRANSCRIPTS,
     CAP_SEGMENTED_AUDIO,
     CircuitState,
     LiveSttCircuitBreaker,
     LiveSttNegotiation,
 )
+from app.providers.nemotron_eou_live_websocket import HYBRID_NEGOTIATION, primary_pcm_slice
+from app.providers.nemotron_eou_streaming import has_eou_token, strip_eou_control_tokens
 
 
 def test_live_stt_negotiation_emits_stable_ready_payload() -> None:
@@ -30,6 +36,29 @@ def test_live_stt_negotiation_emits_stable_ready_payload() -> None:
         "configVersion": "live-stt-v1",
         "maxSegmentAudioMs": 15_000,
     }
+
+
+def test_hybrid_stt_negotiation_separates_transcript_and_eou_authority() -> None:
+    assert HYBRID_NEGOTIATION.provider == "nemotron_parakeet_eou"
+    assert CAP_AUTHORITATIVE_FINAL in HYBRID_NEGOTIATION.capabilities
+    assert CAP_PARTIAL_TRANSCRIPTS in HYBRID_NEGOTIATION.capabilities
+    assert CAP_AUTHORITATIVE_EOU in HYBRID_NEGOTIATION.capabilities
+
+
+def test_eou_control_tokens_never_enter_authoritative_transcript() -> None:
+    raw = "Where are we going? <EOU>"
+
+    assert has_eou_token(raw) is True
+    assert strip_eou_control_tokens(raw) == "Where are we going?"
+    assert strip_eou_control_tokens("Hello <EOB> there <EOU>") == "Hello there"
+
+
+def test_hybrid_stream_drops_cross_segment_overlap_before_inference() -> None:
+    samples = array("h", [10, 20, 30, 40]).tobytes()
+
+    assert primary_pcm_slice(100, 102, samples) == array("h", [30, 40]).tobytes()
+    assert primary_pcm_slice(102, 102, samples) == samples
+    assert primary_pcm_slice(100, 104, samples) == b""
 
 
 def test_live_stt_circuit_breaker_opens_and_probes_after_cooldown() -> None:
