@@ -11,7 +11,10 @@ from app.providers.live_stt_contracts import (
     LiveSttCircuitBreaker,
     LiveSttNegotiation,
 )
-from app.providers.nemotron_eou_live_websocket import HYBRID_NEGOTIATION, primary_pcm_slice
+from app.providers.nemotron_eou_live_websocket import (
+    HYBRID_NEGOTIATION,
+    primary_pcm_slice,
+)
 from app.providers.nemotron_eou_streaming import has_eou_token, strip_eou_control_tokens
 
 
