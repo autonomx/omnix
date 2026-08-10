@@ -1,3 +1,4 @@
+import { liveSttUsesFinalOnlyEndpointing } from './live-stt-capability-state';
 import { readAssistantTurnCompletionContext } from './live-turn-context';
 
 export type ConversationPace = 'quick' | 'balanced' | 'reflective';
@@ -54,6 +55,16 @@ const PROFILES: Record<ConversationPace, FloorTimingProfile> = {
   quick: { minimumPauseMs: 160, clearTurnWaitMs: 180, ambiguousWaitMs: 650, maximumWaitMs: 1_050 },
   balanced: { minimumPauseMs: 180, clearTurnWaitMs: 220, ambiguousWaitMs: 1_000, maximumWaitMs: 1_700 },
   reflective: { minimumPauseMs: 450, clearTurnWaitMs: 650, ambiguousWaitMs: 1_800, maximumWaitMs: 2_800 },
+};
+
+// Final-only providers cannot supply the transcript needed by semantic EOT until
+// after finalization has already been requested. Use a short acoustic fallback
+// only when the negotiated capability set proves that no pre-final evidence is
+// available. Streaming/semantic providers keep the normal semantic policy.
+const FINAL_ONLY_ACOUSTIC_WAIT_MS: Record<ConversationPace, number> = {
+  quick: 260,
+  balanced: 350,
+  reflective: 650,
 };
 
 const HESITATION_PATTERN = /(?:\b(?:um+|uh+|erm|hmm|let me think|one moment|give me a second)\b)[,.…\s-]*$/i;
@@ -141,11 +152,18 @@ export function semanticFinalizeDelay(
   pace: ConversationPace = 'balanced',
 ): number {
   const profile = conversationTimingProfile(pace);
+  if (!transcript.trim() && liveSttUsesFinalOnlyEndpointing()) {
+    return finalOnlyAcousticFinalizeDelay(pace);
+  }
   const assessment = assessSemanticTurn(transcript, pace);
   return Math.min(
     profile.maximumWaitMs,
     Math.max(profile.minimumPauseMs, assessment.recommendedWaitMs),
   );
+}
+
+export function finalOnlyAcousticFinalizeDelay(pace: ConversationPace = 'balanced'): number {
+  return FINAL_ONLY_ACOUSTIC_WAIT_MS[pace];
 }
 
 function definitiveStatementWaitMs(
