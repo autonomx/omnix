@@ -3,7 +3,8 @@ import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 export const LIVE_VOICE_TURN_TIMELINE_EVENT = 'omnix:live-voice-turn-timeline';
-const AUTHORITATIVE_EOU_CONFIRMATION_MS = 240;
+const AUTHORITATIVE_EOU_COMPLETE_CONFIRMATION_MS = 360;
+const AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS = 600;
 
 export type LiveVoiceTurnState =
   | 'listening'
@@ -58,16 +59,19 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
     : 0;
   const stable = Math.max(0, input.transcriptStableMs);
   const silence = Math.max(0, input.silenceMs);
-  // Parakeet EOU is a strong endpoint vote, but real microphone traces can
-  // produce EOU during very short intra-sentence pauses. Confirm a small local
-  // acoustic gap before committing so 4-200 ms hesitations cannot fragment one
-  // spoken sentence into several authoritative turns. The 600 ms watchdog still
-  // handles a missed EOU, so this guard is bounded and does not restore the old
-  // long semantic wait.
-  if (liveSttUsesAuthoritativeEou() && probability >= input.endpointThreshold) {
-    return silence >= AUTHORITATIVE_EOU_CONFIRMATION_MS ? 'commit' : 'continue';
-  }
   const complete = input.semanticProbabilityDone >= 0.9;
+  // Parakeet EOU is a strong endpoint vote, but the captured Nemotron/EOU
+  // traces include real intra-sentence pauses around 430-480 ms. Those pauses
+  // must not split one utterance before the full-buffer Nemotron final can see
+  // the complete sentence. Keep a faster path only when the current transcript
+  // is already semantically complete; otherwise use the same 600 ms bound as
+  // the authoritative-EOU watchdog. Resumed speech resets the local pause.
+  if (liveSttUsesAuthoritativeEou() && probability >= input.endpointThreshold) {
+    const requiredSilenceMs = complete && input.transcriptWords >= 2
+      ? AUTHORITATIVE_EOU_COMPLETE_CONFIRMATION_MS
+      : AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS;
+    return silence >= requiredSilenceMs ? 'commit' : 'continue';
+  }
   // Once a semantically complete transcript arrives after a long acoustic
   // pause, the ordinary 80 ms transcript-stability guard no longer buys useful
   // safety. On delayed-streaming STT (Kyutai in particular), the last word can
