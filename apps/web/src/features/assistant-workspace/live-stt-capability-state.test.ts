@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   currentLiveSttCapabilities,
+  liveSttUsesAuthoritativeEou,
   liveSttUsesFinalOnlyEndpointing,
   resetLiveSttCapabilityState,
 } from './live-stt-capability-state';
@@ -26,6 +27,26 @@ describe('live STT capability state', () => {
       negotiated: true,
     });
     expect(liveSttUsesFinalOnlyEndpointing()).toBe(true);
+    expect(liveSttUsesAuthoritativeEou()).toBe(false);
+  });
+
+  it('recognizes the Nemotron plus Parakeet EOU split contract', () => {
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: {
+        stage: 'stt_negotiated',
+        provider: 'nemotron_parakeet_eou',
+        capabilities: [
+          'segmented_audio',
+          'authoritative_final',
+          'result_replay',
+          'partial_transcripts',
+          'authoritative_eou',
+        ],
+      },
+    }));
+
+    expect(liveSttUsesAuthoritativeEou()).toBe(true);
+    expect(liveSttUsesFinalOnlyEndpointing()).toBe(false);
   });
 
   it('clears stale capabilities as soon as a new STT authority is selected', () => {
@@ -51,6 +72,7 @@ describe('live STT capability state', () => {
       negotiated: false,
     });
     expect(liveSttUsesFinalOnlyEndpointing()).toBe(false);
+    expect(liveSttUsesAuthoritativeEou()).toBe(false);
   });
 
   it('does not classify semantic or unknown capability sets as final-only', () => {
@@ -93,5 +115,6 @@ describe('live STT capability state', () => {
       negotiated: false,
     });
     expect(liveSttUsesFinalOnlyEndpointing()).toBe(false);
+    expect(liveSttUsesAuthoritativeEou()).toBe(false);
   });
 });
