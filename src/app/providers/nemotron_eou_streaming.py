@@ -7,6 +7,7 @@ not require the heavyweight speech environment.
 """
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import threading
@@ -44,6 +45,28 @@ def strip_eou_control_tokens(text: str) -> str:
 
 def has_eou_token(text: str) -> bool:
     return EOU_TOKEN in text
+
+
+def has_meaningful_transcript(text: str) -> bool:
+    """Return whether Nemotron has produced user speech worth ending."""
+    return any(character.isalnum() for character in text)
+
+
+def _metric(event: str, **fields: Any) -> None:
+    print(
+        "[STT_METRIC] "
+        + json.dumps(
+            {
+                "event": event,
+                "source": "nemotron-parakeet-eou-streaming",
+                "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                **fields,
+            },
+            sort_keys=True,
+            default=str,
+        ),
+        flush=True,
+    )
 
 
 def _extract_text(value: Any) -> str:
@@ -212,6 +235,8 @@ class HybridStream:
     nemotron: CacheAwareRnntStream
     eou: CacheAwareRnntStream
     last_partial: str = ""
+    eou_rearm_count: int = 0
+    ignored_pre_speech_eou_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -290,6 +315,13 @@ class NemotronEouModelManager:
             "active_streams": len(self._streams),
         }
 
+    def _new_eou_stream(self) -> CacheAwareRnntStream:
+        return CacheAwareRnntStream(
+            self.eou_model,
+            right_context=self.eou_right_context,
+            detect_eou=True,
+        )
+
     def ensure_stream(self, segment_id: str) -> HybridStream:
         self.load()
         existing = self._streams.get(segment_id)
@@ -301,14 +333,20 @@ class NemotronEouModelManager:
                 right_context=self.nemotron_right_context,
                 detect_eou=False,
             ),
-            eou=CacheAwareRnntStream(
-                self.eou_model,
-                right_context=self.eou_right_context,
-                detect_eou=True,
-            ),
+            eou=self._new_eou_stream(),
         )
         self._streams[segment_id] = stream
         return stream
+
+    def rearm_eou(self, segment_id: str) -> bool:
+        """Reset only Parakeet EOU state while preserving Nemotron caches."""
+        stream = self._streams.get(segment_id)
+        if stream is None or self.eou_model is None:
+            return False
+        with self._eou_lock:
+            stream.eou = self._new_eou_stream()
+            stream.eou_rearm_count += 1
+        return True
 
     def feed(self, segment_id: str, pcm16le: bytes) -> HybridUpdate:
         stream = self.ensure_stream(segment_id)
@@ -319,10 +357,38 @@ class NemotronEouModelManager:
         with self._eou_lock:
             eou = stream.eou.feed_pcm16(pcm16le)
         stream.last_partial = nemotron.transcript
+
+        eou_event = eou.eou
+        if eou_event:
+            meaningful_speech = has_meaningful_transcript(nemotron.transcript)
+            # Parakeet's <EOU> is an utterance boundary for its own RNNT state.
+            # Always replace that endpoint stream after a token so a rejected
+            # early/mid-turn candidate cannot permanently consume the only EOU
+            # available for this browser segment. Nemotron is deliberately left
+            # untouched and remains the authoritative continuous transcript.
+            rearmed = self.rearm_eou(segment_id)
+            _metric(
+                "stt_eou_rearmed",
+                segment_id=segment_id,
+                transcript_chars=len(nemotron.transcript),
+                meaningful_speech=meaningful_speech,
+                rearmed=rearmed,
+                rearm_count=stream.eou_rearm_count,
+            )
+            if not meaningful_speech:
+                stream.ignored_pre_speech_eou_count += 1
+                eou_event = False
+                _metric(
+                    "stt_eou_ignored_pre_speech",
+                    segment_id=segment_id,
+                    ignored_count=stream.ignored_pre_speech_eou_count,
+                    rearm_count=stream.eou_rearm_count,
+                )
+
         return HybridUpdate(
             transcript=nemotron.transcript,
             transcript_changed=nemotron.transcript_changed,
-            eou=eou.eou,
+            eou=eou_event,
             nemotron_ms=nemotron.model_ms,
             eou_ms=eou.model_ms,
         )
