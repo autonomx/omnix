@@ -5,6 +5,7 @@ export type LiveSttCapabilitySnapshot = {
 };
 
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
+const CAP_AUTHORITATIVE_EOU = 'authoritative_eou';
 const FINAL_ONLY_CAPABILITIES = new Set([
   'segmented_audio',
   'authoritative_final',
@@ -43,6 +44,10 @@ export function currentLiveSttCapabilities(): LiveSttCapabilitySnapshot {
     capabilities: [...snapshot.capabilities],
     negotiated: snapshot.negotiated,
   };
+}
+
+export function liveSttUsesAuthoritativeEou(): boolean {
+  return snapshot.negotiated && snapshot.capabilities.includes(CAP_AUTHORITATIVE_EOU);
 }
 
 export function liveSttUsesFinalOnlyEndpointing(): boolean {
