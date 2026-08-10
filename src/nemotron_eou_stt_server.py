@@ -14,7 +14,8 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.providers.nemotron_eou_live_websocket import PROVIDER_NAME, install_nemotron_eou_websocket
-from app.providers.nemotron_eou_streaming import SAMPLE_RATE, model_manager
+from app.providers.nemotron_eou_quality import quality_model_manager as model_manager
+from app.providers.nemotron_eou_streaming import SAMPLE_RATE
 
 app = FastAPI(
     title="Omnix Nemotron + Parakeet EOU STT",
@@ -28,7 +29,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-install_nemotron_eou_websocket(app)
+install_nemotron_eou_websocket(app, manager=model_manager)
 
 
 @app.on_event("startup")
