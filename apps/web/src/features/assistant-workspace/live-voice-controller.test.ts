@@ -5,6 +5,7 @@ import {
   resetAssistantDiagnosticSummaries,
 } from './live-conversation-assistant-summary';
 import { liveConversationStore } from './live-conversation-store';
+import { resetLiveSttCapabilityState } from './live-stt-capability-state';
 import {
   liveVoiceAssistantOwnsFloor,
   liveVoiceSpeechThreshold,
@@ -18,6 +19,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   liveConversationStore.reset();
   resetAssistantDiagnosticSummaries();
+  resetLiveSttCapabilityState();
 });
 
 describe('live voice controller sensitivity', () => {
@@ -39,6 +41,54 @@ describe('live voice semantic finalization deadline', () => {
     expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(1_580);
     expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 120)).toBe(100);
     expect(semanticFinalizationRemainingMs('Where are we?', 'balanced', 260)).toBe(0);
+  });
+
+  it('uses the final-only acoustic deadline after Parakeet negotiation', () => {
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: {
+        stage: 'stt_negotiated',
+        provider: 'parakeet',
+        capabilities: ['segmented_audio', 'authoritative_final', 'result_replay'],
+      },
+    }));
+
+    expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(230);
+    expect(semanticFinalizationRemainingMs('', 'balanced', 349)).toBe(1);
+    expect(semanticFinalizationRemainingMs('', 'balanced', 350)).toBe(0);
+  });
+
+  it('clears the final-only deadline before a new provider negotiates', () => {
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: {
+        stage: 'stt_negotiated',
+        provider: 'parakeet',
+        capabilities: ['segmented_audio', 'authoritative_final', 'result_replay'],
+      },
+    }));
+    expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(230);
+
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: {
+        stage: 'stt_authority_selected',
+        selectedProvider: 'kyutai',
+      },
+    }));
+    expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(1_580);
+
+    window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+      detail: {
+        stage: 'stt_negotiated',
+        provider: 'kyutai',
+        capabilities: [
+          'segmented_audio',
+          'authoritative_final',
+          'continuous_words',
+          'semantic_endpointing',
+          'delayed_flush',
+        ],
+      },
+    }));
+    expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(1_580);
   });
 
   it('can lengthen the remaining wait again when the transcript becomes incomplete', () => {
