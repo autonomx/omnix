@@ -17,8 +17,12 @@ from app.providers.nemotron_eou_live_websocket import (
     primary_pcm_slice,
 )
 from app.providers.nemotron_eou_streaming import (
+    HybridStream,
+    NemotronEouModelManager,
+    StreamingUpdate,
     _normalize_streaming_hypotheses,
     has_eou_token,
+    has_meaningful_transcript,
     strip_eou_control_tokens,
 )
 
@@ -61,6 +65,13 @@ def test_eou_control_tokens_never_enter_authoritative_transcript() -> None:
     assert strip_eou_control_tokens("Hello <EOB> there <EOU>") == "Hello there"
 
 
+def test_meaningful_transcript_requires_actual_user_text() -> None:
+    assert has_meaningful_transcript("") is False
+    assert has_meaningful_transcript("   ... ") is False
+    assert has_meaningful_transcript("I") is True
+    assert has_meaningful_transcript("yes") is True
+
+
 def test_streaming_hypotheses_flatten_mapping_timestamps_for_continuation_merge() -> None:
     hypothesis = SimpleNamespace(
         timestamp={"timestep": [2, 5], "segment": [[2, 5]]},
@@ -72,6 +83,90 @@ def test_streaming_hypotheses_flatten_mapping_timestamps_for_continuation_merge(
     assert normalized == [hypothesis, untouched]
     assert hypothesis.timestamp == [2, 5]
     assert untouched.timestamp == [7]
+
+
+def test_model_manager_ignores_pre_speech_eou_and_rearms(monkeypatch) -> None:
+    manager = NemotronEouModelManager()
+    stream = SimpleNamespace(
+        nemotron=SimpleNamespace(
+            feed_pcm16=lambda _: StreamingUpdate("", False, False, 1.0),
+        ),
+        eou=SimpleNamespace(
+            feed_pcm16=lambda _: StreamingUpdate("", False, True, 2.0),
+        ),
+        last_partial="",
+        eou_rearm_count=0,
+        ignored_pre_speech_eou_count=0,
+    )
+    rearmed: list[str] = []
+
+    monkeypatch.setattr(manager, "ensure_stream", lambda _: stream)
+
+    def fake_rearm(segment_id: str) -> bool:
+        rearmed.append(segment_id)
+        stream.eou_rearm_count += 1
+        return True
+
+    monkeypatch.setattr(manager, "rearm_eou", fake_rearm)
+
+    update = manager.feed("segment-1", b"\x00\x00")
+
+    assert update.eou is False
+    assert update.transcript == ""
+    assert rearmed == ["segment-1"]
+    assert stream.ignored_pre_speech_eou_count == 1
+
+
+def test_model_manager_surfaces_eou_after_meaningful_nemotron_text(monkeypatch) -> None:
+    manager = NemotronEouModelManager()
+    stream = SimpleNamespace(
+        nemotron=SimpleNamespace(
+            feed_pcm16=lambda _: StreamingUpdate("Yes", True, False, 1.0),
+        ),
+        eou=SimpleNamespace(
+            feed_pcm16=lambda _: StreamingUpdate("", False, True, 2.0),
+        ),
+        last_partial="",
+        eou_rearm_count=0,
+        ignored_pre_speech_eou_count=0,
+    )
+    rearmed: list[str] = []
+
+    monkeypatch.setattr(manager, "ensure_stream", lambda _: stream)
+
+    def fake_rearm(segment_id: str) -> bool:
+        rearmed.append(segment_id)
+        stream.eou_rearm_count += 1
+        return True
+
+    monkeypatch.setattr(manager, "rearm_eou", fake_rearm)
+
+    update = manager.feed("segment-2", b"\x00\x00")
+
+    assert update.eou is True
+    assert update.transcript == "Yes"
+    assert rearmed == ["segment-2"]
+    assert stream.ignored_pre_speech_eou_count == 0
+
+
+def test_model_manager_rearms_only_eou_stream(monkeypatch) -> None:
+    manager = NemotronEouModelManager()
+    manager.eou_model = object()
+    original_nemotron = object()
+    original_eou = object()
+    replacement_eou = object()
+    stream = HybridStream(nemotron=original_nemotron, eou=original_eou)  # type: ignore[arg-type]
+    manager._streams["segment-3"] = stream
+
+    monkeypatch.setattr(
+        "app.providers.nemotron_eou_streaming.CacheAwareRnntStream",
+        lambda *args, **kwargs: replacement_eou,
+    )
+
+    assert manager.rearm_eou("segment-3") is True
+    assert stream.nemotron is original_nemotron
+    assert stream.eou is replacement_eou
+    assert stream.eou_rearm_count == 1
 
 
 def test_hybrid_stream_drops_cross_segment_overlap_before_inference() -> None:
