@@ -3,6 +3,7 @@ import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 export const LIVE_VOICE_TURN_TIMELINE_EVENT = 'omnix:live-voice-turn-timeline';
+const AUTHORITATIVE_EOU_CONFIRMATION_MS = 240;
 
 export type LiveVoiceTurnState =
   | 'listening'
@@ -57,12 +58,14 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
     : 0;
   const stable = Math.max(0, input.transcriptStableMs);
   const silence = Math.max(0, input.silenceMs);
-  // A provider that negotiated authoritative_eou is explicitly separating
-  // "what was said" from "has the turn ended". Its endpoint candidates are
-  // dedicated EOU decisions, while transcript text remains authoritative from
-  // the streaming ASR. Do not re-impose semantic completion latency here.
+  // Parakeet EOU is a strong endpoint vote, but real microphone traces can
+  // produce EOU during very short intra-sentence pauses. Confirm a small local
+  // acoustic gap before committing so 4-200 ms hesitations cannot fragment one
+  // spoken sentence into several authoritative turns. The 600 ms watchdog still
+  // handles a missed EOU, so this guard is bounded and does not restore the old
+  // long semantic wait.
   if (liveSttUsesAuthoritativeEou() && probability >= input.endpointThreshold) {
-    return 'commit';
+    return silence >= AUTHORITATIVE_EOU_CONFIRMATION_MS ? 'commit' : 'continue';
   }
   const complete = input.semanticProbabilityDone >= 0.9;
   // Once a semantically complete transcript arrives after a long acoustic
