@@ -19,6 +19,8 @@ CAP_CONTINUOUS_WORDS = "continuous_words"
 CAP_WORD_TIMESTAMPS = "word_timestamps"
 CAP_SEMANTIC_ENDPOINTING = "semantic_endpointing"
 CAP_DELAYED_FLUSH = "delayed_flush"
+CAP_PARTIAL_TRANSCRIPTS = "partial_transcripts"
+CAP_AUTHORITATIVE_EOU = "authoritative_eou"
 
 
 @dataclass(frozen=True)
