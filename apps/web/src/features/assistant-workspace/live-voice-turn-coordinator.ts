@@ -1,3 +1,4 @@
+import { liveSttUsesAuthoritativeEou } from './live-stt-capability-state';
 import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
@@ -56,6 +57,13 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
     : 0;
   const stable = Math.max(0, input.transcriptStableMs);
   const silence = Math.max(0, input.silenceMs);
+  // A provider that negotiated authoritative_eou is explicitly separating
+  // "what was said" from "has the turn ended". Its endpoint candidates are
+  // dedicated EOU decisions, while transcript text remains authoritative from
+  // the streaming ASR. Do not re-impose semantic completion latency here.
+  if (liveSttUsesAuthoritativeEou() && probability >= input.endpointThreshold) {
+    return 'commit';
+  }
   const complete = input.semanticProbabilityDone >= 0.9;
   // Once a semantically complete transcript arrives after a long acoustic
   // pause, the ordinary 80 ms transcript-stability guard no longer buys useful
