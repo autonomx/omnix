@@ -52,7 +52,12 @@ export function liveSttUsesFinalOnlyEndpointing(): boolean {
 
 function handleLiveVoicePerfEvent(event: Event): void {
   const detail = (event as CustomEvent<Record<string, unknown>>).detail;
-  if (!detail || detail.stage !== 'stt_negotiated') return;
+  if (!detail || typeof detail.stage !== 'string') return;
+  if (detail.stage === 'stt_authority_selected') {
+    resetLiveSttCapabilityState();
+    return;
+  }
+  if (detail.stage !== 'stt_negotiated') return;
   const provider = typeof detail.provider === 'string' ? detail.provider : undefined;
   const capabilities = Array.isArray(detail.capabilities)
     ? detail.capabilities.filter((capability): capability is string => typeof capability === 'string')
