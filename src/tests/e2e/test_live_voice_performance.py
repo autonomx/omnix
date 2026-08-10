@@ -1,9 +1,10 @@
 """Five-turn hardware benchmark driver for the real Omnix live-voice path.
 
-This test is intentionally local/self-hosted only.  It replaces getUserMedia's
+This test is intentionally local/self-hosted only. It replaces getUserMedia's
 microphone track with a programmable WebAudio MediaStream, then feeds the
 committed examples/voice/interaction-1.wav ... interaction-5.wav one at a time.
-Each next utterance waits for the preceding assistant response to finish.
+Each next utterance waits for the preceding assistant response stream and audio
+playback to finish before the next WAV is injected.
 
 Use scripts/run_live_voice_performance_benchmark.py instead of invoking this
 file directly; the runner performs service preflight and analyzes resources/logs.
@@ -25,6 +26,9 @@ from playwright.sync_api import Playwright, expect
 RUN_BENCHMARK = os.environ.get("OMNIX_RUN_LIVE_VOICE_PERFORMANCE", "0") == "1"
 ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_AUDIO_DIR = ROOT_DIR / "examples" / "voice"
+EXPECTED_PROVIDER = os.environ.get("OMNIX_LIVE_VOICE_EXPECTED_PROVIDER", "cerebras").strip().casefold()
+_RESPONSE_TIMEOUT_MS = 90_000
+_STABLE_LISTENING_MS = 1_200
 
 _PROGRAMMABLE_MIC_INIT = r"""
 (() => {
@@ -112,8 +116,11 @@ def _audio_paths() -> list[Path]:
     return paths
 
 
-def _is_live_chat_stream_request(url: str, method: str) -> bool:
-    return method == "POST" and urlparse(url).path.endswith("/messages/stream")
+def _is_live_chat_stream_response(response) -> bool:
+    return (
+        response.request.method == "POST"
+        and urlparse(response.url).path.endswith("/messages/stream")
+    )
 
 
 def _voice_mode(page) -> str:
@@ -122,27 +129,80 @@ def _voice_mode(page) -> str:
     ).strip()
 
 
-def _wait_for_response_cycle(page, *, timeout_ms: int = 90_000) -> None:
+def _settings_provider(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    nested = payload.get("settings")
+    if isinstance(nested, dict):
+        candidate = nested.get("provider")
+        if candidate:
+            return str(candidate).strip().casefold()
+    return str(payload.get("provider") or "").strip().casefold()
+
+
+def _assert_expected_provider(context, app_base_url: str) -> None:
+    response = context.request.get(f"{app_base_url}/api/settings", timeout=15_000)
+    if not response.ok:
+        pytest.fail(f"Could not read Omnix provider settings: HTTP {response.status}")
+    try:
+        payload = response.json()
+    except Exception as exc:
+        pytest.fail(f"Could not decode /api/settings response: {exc}")
+    provider = _settings_provider(payload)
+    if EXPECTED_PROVIDER and provider != EXPECTED_PROVIDER:
+        pytest.fail(
+            "Live Voice benchmark provider preflight failed: "
+            f"expected {EXPECTED_PROVIDER!r}, active provider is {provider or '<unknown>'!r}. "
+            "Select Cerebras in Omnix (and ensure its local API key is available) before running "
+            "the benchmark."
+        )
+
+
+def _wait_for_speaking(page, *, timeout_ms: int = _RESPONSE_TIMEOUT_MS) -> None:
     page.wait_for_function(
         """() => document.querySelector('.assistant-voice-orb')?.dataset.voiceMode === 'speaking'""",
         timeout=timeout_ms,
     )
-    page.wait_for_function(
-        """() => document.querySelector('.assistant-voice-orb')?.dataset.voiceMode !== 'speaking'""",
-        timeout=timeout_ms,
+
+
+def _wait_for_stable_listening(
+    page,
+    *,
+    timeout_ms: int = _RESPONSE_TIMEOUT_MS,
+    stable_ms: int = _STABLE_LISTENING_MS,
+) -> None:
+    """Require a continuous non-speaking window, not a transient inter-clause pause."""
+
+    deadline = time.monotonic() + timeout_ms / 1000
+    stable_since: float | None = None
+    while time.monotonic() < deadline:
+        mode = _voice_mode(page)
+        if mode and mode != "speaking":
+            if stable_since is None:
+                stable_since = time.monotonic()
+            elif (time.monotonic() - stable_since) * 1000 >= stable_ms:
+                return
+        else:
+            stable_since = None
+        page.wait_for_timeout(100)
+    pytest.fail(
+        f"Live Voice did not remain non-speaking for {stable_ms} ms within {timeout_ms} ms; "
+        f"last voice mode={_voice_mode(page)!r}"
     )
 
 
 def _settle_initial_greeting(page) -> None:
-    # Give the optional greeting enough time to start. If it does, wait for it to
-    # finish so interaction-1 is never treated as an interruption of the greeting.
+    # Give the optional greeting enough time to start. If it does, wait until the
+    # call is continuously idle so interaction-1 cannot land in an inter-clause pause.
     page.wait_for_timeout(2_000)
     if _voice_mode(page) == "speaking":
-        page.wait_for_function(
-            """() => document.querySelector('.assistant-voice-orb')?.dataset.voiceMode !== 'speaking'""",
-            timeout=60_000,
-        )
-    page.wait_for_timeout(500)
+        _wait_for_stable_listening(page, timeout_ms=60_000)
+    else:
+        _wait_for_stable_listening(page, timeout_ms=15_000)
+
+
+def _persist_manifest(path: Path, manifest: dict[str, object]) -> None:
+    path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 @pytest.mark.e2e
@@ -175,18 +235,22 @@ def test_five_turn_live_voice_hardware_performance(
     page = context.new_page()
     page.add_init_script(_PROGRAMMABLE_MIC_INIT)
 
+    interactions: list[dict[str, object]] = []
     manifest: dict[str, object] = {
         "schema_version": 1,
         "started_at_utc": _utc_now(),
         "app_base_url": app_base_url,
+        "expected_provider": EXPECTED_PROVIDER,
         "audio_files": [str(path.resolve()) for path in audio_paths],
-        "interactions": [],
+        "interactions": interactions,
     }
+    _persist_manifest(manifest_path, manifest)
 
     try:
         page.goto(f"{app_base_url}/chatbot", wait_until="domcontentloaded", timeout=30_000)
         live_card = page.locator(".assistant-live-card")
         expect(live_card).to_be_visible(timeout=30_000)
+        _assert_expected_provider(context, app_base_url)
 
         auto_speak = page.locator('.assistant-voice-toggle input[type="checkbox"]')
         if auto_speak.count() and not auto_speak.is_checked():
@@ -197,22 +261,25 @@ def test_five_turn_live_voice_hardware_performance(
         page.evaluate("() => window.__omnixBenchmarkMic.resume()")
         _settle_initial_greeting(page)
 
-        interactions: list[dict[str, object]] = []
         for index, audio_path in enumerate(audio_paths, start=1):
             encoded = base64.b64encode(audio_path.read_bytes()).decode("ascii")
             interaction_started = _utc_now()
             wall_started = time.perf_counter()
+            manifest["active_interaction_index"] = index
+            manifest["active_audio_file"] = str(audio_path.resolve())
+            _persist_manifest(manifest_path, manifest)
 
-            with page.expect_request(
-                lambda candidate: _is_live_chat_stream_request(candidate.url, candidate.method),
+            with page.expect_response(
+                _is_live_chat_stream_response,
                 timeout=45_000,
-            ) as stream_request_info:
+            ) as stream_response_info:
                 playback = page.evaluate(
                     "(encoded) => window.__omnixBenchmarkMic.playWavBase64(encoded)",
                     encoded,
                 )
 
-            stream_request = stream_request_info.value
+            stream_response = stream_response_info.value
+            stream_request = stream_response.request
             try:
                 payload = stream_request.post_data_json
             except Exception:
@@ -220,8 +287,13 @@ def test_five_turn_live_voice_hardware_performance(
             if not isinstance(payload, dict):
                 payload = {}
 
-            _wait_for_response_cycle(page)
-            page.wait_for_timeout(250)
+            # Response headers opening is not the end of a live turn. Observe real
+            # audio, then require the SSE body to finish before accepting an idle
+            # window. This prevents p1/p2 natural pauses from being mistaken for
+            # turn completion and stops the next WAV from becoming a barge-in.
+            _wait_for_speaking(page)
+            stream_response.finished()
+            _wait_for_stable_listening(page)
 
             transcript = str(payload.get("content") or "").strip()
             turn_id = str(payload.get("live_voice_turn_id") or "").strip() or None
@@ -234,15 +306,19 @@ def test_five_turn_live_voice_hardware_performance(
                     "wall_elapsed_ms": round((time.perf_counter() - wall_started) * 1000, 3),
                     "microphone_playback": playback,
                     "request_url": stream_request.url,
+                    "response_status": stream_response.status,
                     "transcript": transcript,
                     "live_voice_turn_id": turn_id,
                 }
             )
+            manifest["interactions"] = interactions
+            manifest.pop("active_interaction_index", None)
+            manifest.pop("active_audio_file", None)
+            _persist_manifest(manifest_path, manifest)
 
-        manifest["interactions"] = interactions
         manifest["completed_at_utc"] = _utc_now()
         manifest["completed"] = True
-        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+        _persist_manifest(manifest_path, manifest)
 
         assert len(interactions) == 5
         assert all(str(item.get("transcript") or "").strip() for item in interactions), (
@@ -252,10 +328,11 @@ def test_five_turn_live_voice_hardware_performance(
         live_card.get_by_role("button", name="End Call").click()
         expect(live_card.get_by_role("button", name="Start Call")).to_be_visible(timeout=10_000)
     except Exception:
+        manifest["interactions"] = interactions
         manifest["completed_at_utc"] = _utc_now()
         manifest["completed"] = False
         manifest["failure_voice_mode"] = _voice_mode(page)
-        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+        _persist_manifest(manifest_path, manifest)
         raise
     finally:
         context.close()
