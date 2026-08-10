@@ -47,6 +47,25 @@ async def health() -> dict[str, object]:
     }
 
 
+@app.get("/authorityz")
+async def authorityz(language: str = "en", mode: str = "auto") -> dict[str, object]:
+    normalized_language = language.strip().lower()
+    english = normalized_language in {"en", "en-us", "en_us", "english"}
+    ready = model_manager.loaded
+    reasons: list[str] = []
+    if not english:
+        reasons.append("parakeet_eou_english_only")
+    if not ready:
+        reasons.append("hybrid_models_not_ready")
+    return {
+        "ok": ready,
+        "eligible": ready and english,
+        "mode": mode,
+        "provider": PROVIDER_NAME,
+        "reasons": reasons,
+    }
+
+
 def _wav_pcm16_mono_16k(payload: bytes) -> tuple[bytes, float] | None:
     try:
         with wave.open(io.BytesIO(payload), "rb") as wav_file:
@@ -78,8 +97,8 @@ def _decode_audio(payload: bytes, filename: str) -> tuple[bytes, float]:
     input_path = Path(input_value)
     try:
         input_path.write_bytes(payload)
-        audio = AudioSegment.from_file(input_path).set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)
-        return bytes(audio.raw_data), audio.duration_seconds
+        decoded = AudioSegment.from_file(input_path).set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)
+        return bytes(decoded.raw_data), decoded.duration_seconds
     finally:
         input_path.unlink(missing_ok=True)
 
