@@ -116,11 +116,8 @@ def _audio_paths() -> list[Path]:
     return paths
 
 
-def _is_live_chat_stream_response(response) -> bool:
-    return (
-        response.request.method == "POST"
-        and urlparse(response.url).path.endswith("/messages/stream")
-    )
+def _is_live_chat_stream_request(url: str, method: str) -> bool:
+    return method == "POST" and urlparse(url).path.endswith("/messages/stream")
 
 
 def _voice_mode(page) -> str:
@@ -269,17 +266,16 @@ def test_five_turn_live_voice_hardware_performance(
             manifest["active_audio_file"] = str(audio_path.resolve())
             _persist_manifest(manifest_path, manifest)
 
-            with page.expect_response(
-                _is_live_chat_stream_response,
+            with page.expect_request(
+                lambda candidate: _is_live_chat_stream_request(candidate.url, candidate.method),
                 timeout=45_000,
-            ) as stream_response_info:
+            ) as stream_request_info:
                 playback = page.evaluate(
                     "(encoded) => window.__omnixBenchmarkMic.playWavBase64(encoded)",
                     encoded,
                 )
 
-            stream_response = stream_response_info.value
-            stream_request = stream_response.request
+            stream_request = stream_request_info.value
             try:
                 payload = stream_request.post_data_json
             except Exception:
@@ -292,6 +288,9 @@ def test_five_turn_live_voice_hardware_performance(
             # window. This prevents p1/p2 natural pauses from being mistaken for
             # turn completion and stops the next WAV from becoming a barge-in.
             _wait_for_speaking(page)
+            stream_response = stream_request.response()
+            if stream_response is None:
+                pytest.fail("Live chat stream request completed without a response")
             stream_response.finished()
             _wait_for_stable_listening(page)
 
