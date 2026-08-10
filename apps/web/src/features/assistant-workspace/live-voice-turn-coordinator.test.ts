@@ -79,7 +79,7 @@ describe('live voice turn coordinator', () => {
     })).toBe('continue');
   });
 
-  it('commits authoritative EOU immediately once Nemotron has meaningful speech', () => {
+  it('requires a short acoustic confirmation before authoritative EOU commits', () => {
     noteLiveSttNegotiation('nemotron_parakeet_eou', [
       'segmented_audio',
       'authoritative_final',
@@ -88,23 +88,28 @@ describe('live voice turn coordinator', () => {
       'authoritative_eou',
     ]);
 
-    expect(endpointFusionAction({
+    const meaningfulCandidate = {
       endpointProbability: 1,
       endpointThreshold: 0.75,
-      silenceMs: 1,
       transcriptStableMs: 0,
       semanticProbabilityDone: 0.18,
       transcriptWords: 3,
       correctionPending: false,
+    };
+
+    expect(endpointFusionAction({
+      ...meaningfulCandidate,
+      silenceMs: 239,
+    })).toBe('continue');
+    expect(endpointFusionAction({
+      ...meaningfulCandidate,
+      silenceMs: 240,
     })).toBe('commit');
     expect(endpointFusionAction({
-      endpointProbability: 1,
-      endpointThreshold: 0.75,
-      silenceMs: 1,
-      transcriptStableMs: 0,
+      ...meaningfulCandidate,
+      silenceMs: 500,
       semanticProbabilityDone: 0.95,
       transcriptWords: 0,
-      correctionPending: false,
     })).toBe('continue');
   });
 
