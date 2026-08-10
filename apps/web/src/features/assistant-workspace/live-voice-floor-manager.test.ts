@@ -7,12 +7,17 @@ import {
   semanticFinalizeDelay,
 } from './live-voice-floor-manager';
 import {
+  noteLiveSttNegotiation,
+  resetLiveSttCapabilityState,
+} from './live-stt-capability-state';
+import {
   noteAssistantTurnCompletionContext,
   resetAssistantTurnCompletionContext,
 } from './live-turn-context';
 
 afterEach(() => {
   resetAssistantTurnCompletionContext();
+  resetLiveSttCapabilityState();
 });
 
 describe('live voice floor manager', () => {
@@ -57,6 +62,48 @@ describe('live voice floor manager', () => {
     expect(assessSemanticTurn('Hey', 'balanced').reason).toBe('insufficient_text');
     expect(semanticFinalizeDelay('', 'balanced')).toBe(profile.maximumWaitMs);
     expect(semanticFinalizeDelay('Hey', 'balanced')).toBe(profile.maximumWaitMs);
+  });
+
+  it('uses a short acoustic fallback when negotiated STT is final-only', () => {
+    noteLiveSttNegotiation('parakeet', [
+      'segmented_audio',
+      'authoritative_final',
+      'result_replay',
+    ]);
+
+    expect(semanticFinalizeDelay('', 'quick')).toBe(260);
+    expect(semanticFinalizeDelay('', 'balanced')).toBe(350);
+    expect(semanticFinalizeDelay('', 'reflective')).toBe(650);
+    expect(semanticFinalizeDelay('Hey', 'balanced')).toBe(
+      conversationTimingProfile('balanced').maximumWaitMs,
+    );
+  });
+
+  it('keeps semantic timing for providers with pre-final endpoint evidence', () => {
+    noteLiveSttNegotiation('kyutai', [
+      'segmented_audio',
+      'authoritative_final',
+      'result_replay',
+      'continuous_words',
+      'semantic_endpointing',
+      'delayed_flush',
+    ]);
+
+    expect(semanticFinalizeDelay('', 'balanced')).toBe(
+      conversationTimingProfile('balanced').maximumWaitMs,
+    );
+  });
+
+  it('stays conservative when a provider advertises an unknown capability', () => {
+    noteLiveSttNegotiation('future-streaming-provider', [
+      'segmented_audio',
+      'authoritative_final',
+      'partial_transcripts',
+    ]);
+
+    expect(semanticFinalizeDelay('', 'balanced')).toBe(
+      conversationTimingProfile('balanced').maximumWaitMs,
+    );
   });
 
   it('uses the clear-turn path for a one-word answer to a recent assistant question', () => {
