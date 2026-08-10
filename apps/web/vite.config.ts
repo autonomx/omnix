@@ -95,6 +95,9 @@ export default defineConfig(({ command, mode }) => {
   process.env.VITE_GIT_DIRTY ??= resolveGitDirty();
   process.env.VITE_LIVE_VOICE_CRITICAL_DIRTY_FILES ??= resolveLiveVoiceCriticalDirtyFiles();
   process.env.VITE_BUILD_ID ??= `${command}-${mode}-${gitSha.slice(0, 12)}`;
+  // The local 5201 service is now Nemotron transcript + Parakeet EOU. Auto
+  // authority lets its dedicated EOU candidate end the turn immediately.
+  process.env.VITE_ASSISTANT_STT_URL ??= 'http://127.0.0.1:5201?authority=auto';
   return ({
   plugins: [
     ...(command === 'serve' && mode === 'devtools'
