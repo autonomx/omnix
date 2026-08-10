@@ -1,4 +1,7 @@
-import { liveSttUsesFinalOnlyEndpointing } from './live-stt-capability-state';
+import {
+  liveSttUsesAuthoritativeEou,
+  liveSttUsesFinalOnlyEndpointing,
+} from './live-stt-capability-state';
 import { readAssistantTurnCompletionContext } from './live-turn-context';
 
 export type ConversationPace = 'quick' | 'balanced' | 'reflective';
@@ -55,6 +58,15 @@ const PROFILES: Record<ConversationPace, FloorTimingProfile> = {
   quick: { minimumPauseMs: 160, clearTurnWaitMs: 180, ambiguousWaitMs: 650, maximumWaitMs: 1_050 },
   balanced: { minimumPauseMs: 180, clearTurnWaitMs: 220, ambiguousWaitMs: 1_000, maximumWaitMs: 1_700 },
   reflective: { minimumPauseMs: 450, clearTurnWaitMs: 650, ambiguousWaitMs: 1_800, maximumWaitMs: 2_800 },
+};
+
+// When a provider supplies a dedicated authoritative EOU signal, semantic text
+// is no longer the primary turn-ending mechanism. This is only the watchdog if
+// EOU is missed; explicit EOU commits immediately in the voice controller.
+const AUTHORITATIVE_EOU_FALLBACK_MS: Record<ConversationPace, number> = {
+  quick: 450,
+  balanced: 600,
+  reflective: 800,
 };
 
 // Final-only providers cannot supply the transcript needed by semantic EOT until
@@ -152,6 +164,9 @@ export function semanticFinalizeDelay(
   pace: ConversationPace = 'balanced',
 ): number {
   const profile = conversationTimingProfile(pace);
+  if (liveSttUsesAuthoritativeEou()) {
+    return authoritativeEouFallbackDelay(pace);
+  }
   if (!transcript.trim() && liveSttUsesFinalOnlyEndpointing()) {
     return finalOnlyAcousticFinalizeDelay(pace);
   }
@@ -160,6 +175,10 @@ export function semanticFinalizeDelay(
     profile.maximumWaitMs,
     Math.max(profile.minimumPauseMs, assessment.recommendedWaitMs),
   );
+}
+
+export function authoritativeEouFallbackDelay(pace: ConversationPace = 'balanced'): number {
+  return AUTHORITATIVE_EOU_FALLBACK_MS[pace];
 }
 
 export function finalOnlyAcousticFinalizeDelay(pace: ConversationPace = 'balanced'): number {
