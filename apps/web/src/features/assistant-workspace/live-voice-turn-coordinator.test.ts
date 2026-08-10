@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  noteLiveSttNegotiation,
+  resetLiveSttCapabilityState,
+} from './live-stt-capability-state';
 import { assessSemanticTurn, semanticFinalizeDelay } from './live-voice-floor-manager';
 import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
 import {
@@ -14,6 +18,7 @@ import {
 
 afterEach(() => {
   resetLiveVoiceTurnCoordinatorForTests();
+  resetLiveSttCapabilityState();
   document.body.innerHTML = '';
 });
 
@@ -72,6 +77,49 @@ describe('live voice turn coordinator', () => {
       transcriptWords: 3,
       correctionPending: true,
     })).toBe('continue');
+  });
+
+  it('commits authoritative EOU immediately once Nemotron has meaningful speech', () => {
+    noteLiveSttNegotiation('nemotron_parakeet_eou', [
+      'segmented_audio',
+      'authoritative_final',
+      'result_replay',
+      'partial_transcripts',
+      'authoritative_eou',
+    ]);
+
+    expect(endpointFusionAction({
+      endpointProbability: 1,
+      endpointThreshold: 0.75,
+      silenceMs: 1,
+      transcriptStableMs: 0,
+      semanticProbabilityDone: 0.18,
+      transcriptWords: 3,
+      correctionPending: false,
+    })).toBe('commit');
+    expect(endpointFusionAction({
+      endpointProbability: 1,
+      endpointThreshold: 0.75,
+      silenceMs: 1,
+      transcriptStableMs: 0,
+      semanticProbabilityDone: 0.95,
+      transcriptWords: 0,
+      correctionPending: false,
+    })).toBe('continue');
+  });
+
+  it('uses a 600 ms watchdog when authoritative EOU is negotiated', () => {
+    noteLiveSttNegotiation('nemotron_parakeet_eou', [
+      'segmented_audio',
+      'authoritative_final',
+      'result_replay',
+      'partial_transcripts',
+      'authoritative_eou',
+    ]);
+
+    expect(semanticFinalizeDelay('', 'balanced')).toBe(600);
+    expect(semanticFinalizeDelay('Where are we going?', 'balanced')).toBe(600);
+    expect(semanticFinalizeDelay('We should take the road because', 'balanced')).toBe(600);
   });
 
   it('commits newly complete delayed text immediately after a mature acoustic pause', () => {
