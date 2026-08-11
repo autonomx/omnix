@@ -139,6 +139,10 @@ def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) ->
     assert store.warm_user_message.metadata["side_effects_allowed"] is False
     assert store.warm_user_message.metadata["memory_writes_allowed"] is False
     assert store.calls == 2
+    assert prewarm.live_call_provider_affinity("session-prewarm") == (
+        "fake-provider",
+        "fake-model",
+    )
 
 
 def test_live_call_prewarm_does_not_cache_partial_success(monkeypatch) -> None:
@@ -170,6 +174,10 @@ def test_live_call_prewarm_does_not_cache_partial_success(monkeypatch) -> None:
     assert llm.calls == 2
     assert tts.calls == 2
     assert store.prompt_calls == 2
+    assert prewarm.live_call_provider_affinity("session-prewarm") == (
+        "fake-provider",
+        "fake-model",
+    )
 
 
 def test_live_call_prewarm_is_best_effort_when_providers_are_unavailable(
@@ -193,3 +201,7 @@ def test_live_call_prewarm_is_best_effort_when_providers_are_unavailable(
     assert response.json()["llm"]["status"] == "unavailable"
     assert response.json()["tts"]["status"] == "unavailable"
     assert store.prompt_calls == 0
+    assert prewarm.live_call_provider_affinity("session-prewarm") == (
+        "fake-provider",
+        "fake-model",
+    )
