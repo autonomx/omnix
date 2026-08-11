@@ -6,7 +6,9 @@ import pytest
 
 from app import shared
 from app.chat.models import SendChatMessageRequest
+from app.gateway import live_call_prewarm as prewarm
 from app.gateway.live_chat_provider_routing import (
+    _live_voice_affinity_for_current_provider,
     _remember_turn_route,
     _reset_provider_route_state_for_tests,
     _stream_route,
@@ -19,8 +21,10 @@ from app.gateway.live_chat_provider_routing import (
 @pytest.fixture(autouse=True)
 def reset_route_state():
     _reset_provider_route_state_for_tests()
+    prewarm.clear_live_call_prewarm_state()
     yield
     _reset_provider_route_state_for_tests()
+    prewarm.clear_live_call_prewarm_state()
 
 
 def test_default_provider_is_concretized_before_metrics_and_retry(monkeypatch) -> None:
@@ -78,6 +82,31 @@ def test_implicit_turn_overrides_stale_session_provider_and_model(monkeypatch) -
     assert route.provider_explicit is False
     assert route.model_explicit is False
     assert route.execution_lane == "session"
+
+
+def test_live_voice_ignores_stale_prewarm_affinity_after_settings_change(monkeypatch) -> None:
+    monkeypatch.setattr(shared, "load_settings", lambda: {"provider": "lmstudio"})
+    prewarm.remember_live_call_provider_affinity(
+        "session-live",
+        "cerebras",
+        "stale-cerebras-model",
+    )
+
+    assert _live_voice_affinity_for_current_provider("session-live") is None
+
+
+def test_live_voice_keeps_prewarm_affinity_when_settings_provider_matches(monkeypatch) -> None:
+    monkeypatch.setattr(shared, "load_settings", lambda: {"provider": "lmstudio"})
+    prewarm.remember_live_call_provider_affinity(
+        "session-live",
+        "lmstudio",
+        "session-live-model",
+    )
+
+    assert _live_voice_affinity_for_current_provider("session-live") == (
+        "lmstudio",
+        "session-live-model",
+    )
 
 
 def test_implicit_live_turn_uses_prewarmed_session_affinity(monkeypatch) -> None:
