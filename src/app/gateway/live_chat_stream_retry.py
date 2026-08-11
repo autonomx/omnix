@@ -13,6 +13,7 @@ from functools import wraps
 from typing import Any
 
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
+from app.providers.exceptions import RateLimitError
 
 from .tts_stream_diagnostics import stream_log
 
@@ -86,6 +87,19 @@ def _bounded_retry_delay_ms(attempt: int, *, base_ms: float, maximum_ms: float) 
     return min(maximum_ms, base_ms * (2 ** max(0, attempt - 1)))
 
 
+def _rate_limit_error(error: BaseException) -> RateLimitError | None:
+    """Find a provider rate-limit error even when a transport wrapper hides it."""
+
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, RateLimitError):
+            return current
+        current = current.__cause__ or current.__context__
+    return None
+
+
 def retry_provider_stream(
     stream_factory: Callable[[], Iterator[dict[str, Any]]],
     fallback_factory: Callable[[], dict[str, Any]] | None,
@@ -156,6 +170,19 @@ def retry_provider_stream(
                     **context,
                 )
                 raise
+            rate_limit_error = _rate_limit_error(exc)
+            if rate_limit_error is not None:
+                stream_log(
+                    "gateway-live-chat-stream",
+                    "runtime",
+                    "live_chat_stream_retry_suppressed",
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error_type=type(rate_limit_error).__name__,
+                    reason="provider_rate_limited",
+                    **context,
+                )
+                raise rate_limit_error
             if attempt < max_attempts:
                 delay_ms = _bounded_retry_delay_ms(
                     attempt,
