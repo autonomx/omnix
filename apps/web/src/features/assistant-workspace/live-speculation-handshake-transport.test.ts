@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   directGatewayEnabled,
+  liveChatDirectGatewayEnabled,
+  resolveDirectLiveChatUrl,
   resolveDirectSpeculationUrl,
 } from './live-speculation-direct-gateway-transport';
 import { bridgeLiveSpeculationHandshakeRequest } from './live-speculation-handshake-transport';
@@ -11,6 +13,13 @@ function startBody(segmentId = 'segment-test', sourceSequence = 4): string {
     content: 'Tell me a story',
     segment_id: segmentId,
     source_sequence: sourceSequence,
+  });
+}
+
+function liveChatBody(turnId = 'voice-turn:test'): string {
+  return JSON.stringify({
+    content: 'Hello there',
+    live_voice_turn_id: turnId,
   });
 }
 
@@ -46,6 +55,39 @@ describe('live speculation direct gateway transport', () => {
     )).toBeNull();
   });
 
+  it('routes accepted live voice chat directly without changing manual chat', () => {
+    const path = '/api/chat/sessions/session-test/messages/stream';
+    expect(liveChatDirectGatewayEnabled(viteLocation, {})).toBe(true);
+    expect(resolveDirectLiveChatUrl(
+      path,
+      { method: 'POST', body: liveChatBody() },
+      viteLocation,
+      {},
+    )).toBe('http://127.0.0.1:8000/api/chat/sessions/session-test/messages/stream');
+    expect(resolveDirectLiveChatUrl(
+      path,
+      { method: 'POST', body: JSON.stringify({ content: 'manual chat' }) },
+      viteLocation,
+      {},
+    )).toBeNull();
+  });
+
+  it('honors accepted-live direct origin and opt-out independently of speculation', () => {
+    const path = '/api/chat/sessions/session-test/messages/stream?mode=voice';
+    expect(resolveDirectLiveChatUrl(
+      path,
+      { method: 'POST', body: liveChatBody() },
+      viteLocation,
+      { VITE_LIVE_CHAT_GATEWAY_ORIGIN: 'http://localhost:8124' },
+    )).toBe('http://localhost:8124/api/chat/sessions/session-test/messages/stream?mode=voice');
+    expect(resolveDirectLiveChatUrl(
+      path,
+      { method: 'POST', body: liveChatBody() },
+      viteLocation,
+      { VITE_LIVE_CHAT_DIRECT_GATEWAY: 'false' },
+    )).toBeNull();
+  });
+
   it('fails closed outside local Vite and honors the explicit opt-out', () => {
     expect(directGatewayEnabled({
       hostname: 'omnix.example',
@@ -55,6 +97,11 @@ describe('live speculation direct gateway transport', () => {
     expect(directGatewayEnabled(viteLocation, {
       VITE_LIVE_SPECULATION_DIRECT_GATEWAY: 'false',
     })).toBe(false);
+    expect(liveChatDirectGatewayEnabled({
+      hostname: 'omnix.example',
+      port: '443',
+      origin: 'https://omnix.example',
+    }, {})).toBe(false);
   });
 });
 
