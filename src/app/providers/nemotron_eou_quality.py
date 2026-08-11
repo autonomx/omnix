@@ -8,12 +8,15 @@ becoming the authoritative sentence when Parakeet closes the turn.
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from app.providers.nemotron_eou_streaming import (
     NemotronEouModelManager,
     _configure_streaming_context,
     env_int,
 )
+
+_SUPPORTED_FINAL_RIGHT_CONTEXTS = {0, 1, 6, 13}
 
 
 class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
@@ -26,7 +29,16 @@ class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
         # supported right context by default. The shared model is reconfigured
         # only while holding the Nemotron lock, so this adds no duplicate model
         # or VRAM allocation and cannot race a streaming feed.
-        self.nemotron_final_right_context = env_int("OMNIX_NEMOTRON_FINAL_RIGHT_CONTEXT", 13)
+        requested = env_int("OMNIX_NEMOTRON_FINAL_RIGHT_CONTEXT", 13)
+        self.nemotron_final_right_context = (
+            requested if requested in _SUPPORTED_FINAL_RIGHT_CONTEXTS else 13
+        )
+
+    def health_details(self) -> dict[str, Any]:
+        return {
+            **super().health_details(),
+            "nemotron_final_right_context": self.nemotron_final_right_context,
+        }
 
     def _transcribe_quality_pcm16(self, pcm16le: bytes) -> str:
         # Unit tests commonly replace transcribe_pcm16 without loading NeMo.
