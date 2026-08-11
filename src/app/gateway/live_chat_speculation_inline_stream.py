@@ -26,6 +26,7 @@ from .tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_inline_stream_registered"
 _CLIENT_GENERATION_ID = re.compile(r"^spec-client-[A-Za-z0-9_-]{8,80}$")
+_SPECULATION_BLOCKED_PROVIDER_IDS = frozenset({"cerebras"})
 
 
 def register_live_chat_speculation_inline_stream_routes(
@@ -66,6 +67,23 @@ def register_live_chat_speculation_inline_stream_routes(
             request.provider_id or session.provider_id,
             request.model_id or session.model_id,
         )
+        if str(provider_id or "").strip().casefold() in _SPECULATION_BLOCKED_PROVIDER_IDS:
+            stream_log(
+                "gateway-live-chat-speculation",
+                "runtime",
+                "live_chat_speculation_provider_suppressed",
+                provider_id=provider_id,
+                model_id=model_id,
+                execution_lane=execution_lane,
+                reason="rate_limited_remote_provider",
+                session_id=session_id,
+                segment_id=request.segment_id,
+                source_sequence=request.source_sequence,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail="speculation_provider_suppressed",
+            )
         generation_id = _requested_generation_id(await _request_payload(raw_request))
         if generation_id is None:
             generation_id = f"spec-{uuid.uuid4().hex}"
