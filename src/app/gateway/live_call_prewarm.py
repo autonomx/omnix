@@ -448,6 +448,6 @@ __all__ = [
     "LiveCallPrewarmRequest",
     "clear_live_call_prewarm_state",
     "live_call_provider_affinity",
-    "remember_live_call_provider_affinity",
     "register_live_call_prewarm_routes",
+    "remember_live_call_provider_affinity",
 ]
