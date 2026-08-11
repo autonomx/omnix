@@ -103,7 +103,11 @@ def route_chat_request(
     model_id = (
         request.model_id
         if model_explicit
-        else _normalized(implicit_model_id)
+        else (
+            _normalized(implicit_model_id)
+            if not provider_explicit
+            else None
+        )
     )
     execution_lane = "session"
     if _is_live_voice_request(request):
