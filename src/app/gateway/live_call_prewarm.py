@@ -20,6 +20,7 @@ from app.providers import ChatMessage as ProviderMessage
 from app.providers.lmstudio_provider import LMStudioProvider
 from app.shared import get_tts_provider
 
+from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
 from .tts_stream_diagnostics import stream_log
 
@@ -107,6 +108,20 @@ def clear_live_call_prewarm_state() -> None:
         event.set()
 
 
+def _configured_live_route() -> tuple[str | None, str | None, str]:
+    """Resolve the live route from current Settings, not stale session metadata."""
+
+    settings = shared.load_settings()
+    provider_id = str(settings.get("provider") or "lmstudio").strip() or "lmstudio"
+    provider_name = _provider_key(provider_id)
+    model_id = None
+    if provider_name != "lmstudio":
+        provider_settings = settings.get(provider_name)
+        if isinstance(provider_settings, dict):
+            model_id = _model_key(provider_settings.get("model"))
+    return resolve_live_voice_chat_route(provider_id, model_id)
+
+
 def register_live_call_prewarm_routes(
     app: FastAPI,
     *,
@@ -138,13 +153,16 @@ def register_live_call_prewarm_routes(
                 "elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
             }
 
+        provider_id, model_id, execution_lane = _configured_live_route()
         remember_live_call_provider_affinity(
             session_id,
-            getattr(session, "provider_id", None),
-            getattr(session, "model_id", None),
+            provider_id,
+            model_id,
         )
         key = _prewarm_key(
             session=session,
+            provider_id=provider_id,
+            model_id=model_id,
             speaker=request.speaker,
             language=request.language,
         )
@@ -174,8 +192,11 @@ def register_live_call_prewarm_routes(
             "runtime",
             "live_call_prewarm_started",
             session_id=session_id,
-            provider_id=getattr(session, "provider_id", None),
-            model_id=getattr(session, "model_id", None),
+            provider_id=provider_id,
+            model_id=model_id,
+            execution_lane=execution_lane,
+            session_provider_id=getattr(session, "provider_id", None),
+            session_model_id=getattr(session, "model_id", None),
             interaction_mode=getattr(session, "interaction_mode", None),
             character_id=getattr(session, "character_id", None),
             character_profile_version=getattr(
@@ -188,7 +209,13 @@ def register_live_call_prewarm_routes(
         )
         try:
             llm_result, tts_result = await asyncio.gather(
-                asyncio.to_thread(_warm_llm, store, session),
+                asyncio.to_thread(
+                    _warm_llm,
+                    store,
+                    session,
+                    provider_id=provider_id,
+                    model_id=model_id,
+                ),
                 asyncio.to_thread(
                     _warm_tts,
                     request.speaker,
@@ -219,6 +246,9 @@ def register_live_call_prewarm_routes(
                 "runtime",
                 "live_call_prewarm_completed",
                 session_id=session_id,
+                provider_id=provider_id,
+                model_id=model_id,
+                execution_lane=execution_lane,
                 **payload,
             )
             return payload
@@ -279,14 +309,16 @@ def _prune_prewarm_locked() -> None:
 def _prewarm_key(
     *,
     session: Any,
+    provider_id: str | None,
+    model_id: str | None,
     speaker: str | None,
     language: str,
 ) -> str:
     return "|".join(
         (
             str(getattr(session, "id", "") or ""),
-            str(getattr(session, "provider_id", "") or ""),
-            str(getattr(session, "model_id", "") or ""),
+            str(provider_id or ""),
+            str(model_id or ""),
             str(getattr(session, "interaction_mode", "") or ""),
             str(getattr(session, "character_id", "") or ""),
             str(getattr(session, "character_profile_version", "") or ""),
@@ -300,9 +332,25 @@ def _prewarm_key(
     )
 
 
-def _warm_llm(store: Any, session: Any) -> _WarmResult:
+def _warm_llm(
+    store: Any,
+    session: Any,
+    *,
+    provider_id: str | None = None,
+    model_id: str | None = None,
+) -> _WarmResult:
     started = time.perf_counter()
-    provider = shared.get_provider(_provider_key(getattr(session, "provider_id", None)))
+    selected_provider_id = (
+        provider_id
+        if provider_id is not None
+        else getattr(session, "provider_id", None)
+    )
+    selected_model_id = (
+        model_id
+        if provider_id is not None
+        else getattr(session, "model_id", None)
+    )
+    provider = shared.get_provider(_provider_key(selected_provider_id))
     if provider is None or not hasattr(provider, "chat_completion"):
         return _WarmResult(
             status="unavailable",
@@ -314,13 +362,12 @@ def _warm_llm(store: Any, session: Any) -> _WarmResult:
     prompt_messages: list[ProviderMessage] = []
     try:
         prompt_messages = _live_voice_warm_messages(store, session)
-        # A session may retain a stale configured LM Studio model identifier.
-        # Passing no explicit model lets the loaded-model resolver use the model
-        # that is actually resident in LM Studio at call time.
+        # LM Studio should warm whichever model is actually resident. Cloud and
+        # other explicit providers use the current model from Settings/live lane.
         model = (
             None
             if isinstance(provider, LMStudioProvider)
-            else _model_key(getattr(session, "model_id", None))
+            else _model_key(selected_model_id)
         )
         response = provider.chat_completion(
             messages=prompt_messages,
