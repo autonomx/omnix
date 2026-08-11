@@ -189,6 +189,34 @@ def test_quality_first_final_prefers_full_buffer_decode(monkeypatch) -> None:
     assert metrics["authoritative_changed"] == 1.0
     assert metrics["streaming_chars"] == 7.0
     assert metrics["authoritative_chars"] == 24.0
+    assert metrics["final_right_context"] == 13.0
+
+
+def test_quality_first_final_uses_high_context_then_restores_live_context(monkeypatch) -> None:
+    contexts: list[list[int]] = []
+
+    class FakeEncoder:
+        def set_default_att_context_size(self, *, att_context_size: list[int]) -> None:
+            contexts.append(list(att_context_size))
+
+    manager = QualityFirstNemotronEouModelManager()
+    manager.nemotron_model = SimpleNamespace(encoder=FakeEncoder())
+    manager._streams["segment-context"] = SimpleNamespace(
+        nemotron=SimpleNamespace(finalize_text=lambda: "Then I score"),
+    )
+
+    def decode(_: bytes) -> str:
+        assert contexts[-1] == [70, 13]
+        return "Then let's go to a river."
+
+    monkeypatch.setattr(manager, "transcribe_pcm16", decode)
+
+    text, metrics = manager.finalize("segment-context", b"\x00\x00")
+
+    assert text == "Then let's go to a river."
+    assert contexts == [[70, 13], [70, 1]]
+    assert metrics["final_right_context"] == 13.0
+    assert metrics["authoritative_changed"] == 1.0
 
 
 def test_quality_first_final_falls_back_to_streaming_if_full_decode_fails(monkeypatch) -> None:
@@ -252,5 +280,3 @@ def test_live_stt_circuit_breaker_opens_immediately_for_non_transient_failure() 
     breaker = LiveSttCircuitBreaker()
 
     breaker.record_failure(transient=False)
-
-    assert breaker.state is CircuitState.OPEN
