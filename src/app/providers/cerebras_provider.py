@@ -116,7 +116,6 @@ class CerebrasProvider(BaseProvider):
             "top_k",
             "presence_penalty",
             "frequency_penalty",
-            "chat_template_kwargs",
         ]:
             if key in kwargs:
                 payload[key] = kwargs[key]
