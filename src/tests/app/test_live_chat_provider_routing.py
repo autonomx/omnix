@@ -80,6 +80,48 @@ def test_implicit_turn_overrides_stale_session_provider_and_model(monkeypatch) -
     assert route.execution_lane == "session"
 
 
+def test_implicit_live_turn_uses_prewarmed_session_affinity(monkeypatch) -> None:
+    monkeypatch.setattr(shared, "load_settings", lambda: {"provider": "cerebras"})
+    request = SendChatMessageRequest(
+        content="Hello",
+        user_turn_id="voice-user-turn:one",
+        speech_segment_id="voice-segment:one",
+    )
+
+    routed_request, route = route_chat_request(
+        request,
+        implicit_provider_id="lmstudio",
+        implicit_model_id="session-live-model",
+    )
+
+    assert routed_request.provider_id == "lmstudio"
+    assert routed_request.model_id == "session-live-model"
+    assert route.provider_explicit is False
+    assert route.model_explicit is False
+    assert route.execution_lane == "session"
+
+
+def test_explicit_live_provider_ignores_prewarmed_session_affinity(monkeypatch) -> None:
+    monkeypatch.setattr(shared, "load_settings", lambda: {"provider": "lmstudio"})
+    request = SendChatMessageRequest(
+        content="Hello",
+        provider_id="llm:cerebras",
+        user_turn_id="voice-user-turn:two",
+        speech_segment_id="voice-segment:two",
+    )
+
+    routed_request, route = route_chat_request(
+        request,
+        implicit_provider_id="lmstudio",
+        implicit_model_id="session-live-model",
+    )
+
+    assert routed_request.provider_id == "llm:cerebras"
+    assert routed_request.model_id == "session-live-model"
+    assert route.provider_explicit is True
+    assert route.model_explicit is False
+
+
 def test_explicit_provider_and_model_routing_is_preserved(monkeypatch) -> None:
     monkeypatch.setattr(shared, "load_settings", lambda: {"provider": "lmstudio"})
     request = SendChatMessageRequest(
