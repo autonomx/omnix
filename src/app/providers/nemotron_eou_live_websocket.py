@@ -470,6 +470,12 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                             eou_candidate_count=segment.eou_candidate_count,
                             streaming_final=provider_metrics.get("streaming_final", 0.0),
                             offline_fallback=provider_metrics.get("offline_fallback", 0.0),
+                            authoritative_full_decode=provider_metrics.get("authoritative_full_decode", 0.0),
+                            full_decode_ms=provider_metrics.get("full_decode_ms", 0.0),
+                            streaming_chars=provider_metrics.get("streaming_chars", 0.0),
+                            authoritative_chars=provider_metrics.get("authoritative_chars", 0.0),
+                            authoritative_changed=provider_metrics.get("authoritative_changed", 0.0),
+                            final_right_context=provider_metrics.get("final_right_context", 0.0),
                         )
                     except Exception as exc:
                         _metric(
