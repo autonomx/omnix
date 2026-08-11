@@ -29,6 +29,7 @@ _PREWARM_WAIT_SECONDS = 8.0
 _PREWARM_LOCK = threading.RLock()
 _PREWARMED_AT: dict[str, float] = {}
 _PREWARM_INFLIGHT: dict[str, threading.Event] = {}
+_PROVIDER_AFFINITY: dict[str, tuple[str | None, str | None, float]] = {}
 _WARM_USER_CONTENT = "Reply with one short acknowledgement."
 _WARM_TTS_TEXT = "Ready to answer."
 
@@ -59,6 +60,41 @@ class _WarmResult:
         return payload
 
 
+def remember_live_call_provider_affinity(
+    session_id: str,
+    provider_id: str | None,
+    model_id: str | None,
+) -> None:
+    """Remember the provider/model that was warmed for an active live call."""
+
+    normalized_session_id = str(session_id or "").strip()
+    if not normalized_session_id:
+        return
+    provider = str(provider_id or "").strip() or None
+    model = str(model_id or "").strip() or None
+    with _PREWARM_LOCK:
+        _PROVIDER_AFFINITY[normalized_session_id] = (provider, model, time.time())
+
+
+def live_call_provider_affinity(
+    session_id: str,
+) -> tuple[str | None, str | None] | None:
+    """Return a recent prewarmed provider/model affinity for one live session."""
+
+    normalized_session_id = str(session_id or "").strip()
+    if not normalized_session_id:
+        return None
+    with _PREWARM_LOCK:
+        entry = _PROVIDER_AFFINITY.get(normalized_session_id)
+        if entry is None:
+            return None
+        provider_id, model_id, recorded_at = entry
+        if time.time() - recorded_at > _PREWARM_TTL_SECONDS:
+            _PROVIDER_AFFINITY.pop(normalized_session_id, None)
+            return None
+        return provider_id, model_id
+
+
 def clear_live_call_prewarm_state() -> None:
     """Clear warm-up deduplication state for focused tests."""
 
@@ -66,6 +102,7 @@ def clear_live_call_prewarm_state() -> None:
         waiting = list(_PREWARM_INFLIGHT.values())
         _PREWARM_INFLIGHT.clear()
         _PREWARMED_AT.clear()
+        _PROVIDER_AFFINITY.clear()
     for event in waiting:
         event.set()
 
@@ -101,6 +138,11 @@ def register_live_call_prewarm_routes(
                 "elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
             }
 
+        remember_live_call_provider_affinity(
+            session_id,
+            getattr(session, "provider_id", None),
+            getattr(session, "model_id", None),
+        )
         key = _prewarm_key(
             session=session,
             speaker=request.speaker,
@@ -229,6 +271,9 @@ def _prune_prewarm_locked() -> None:
     for key, warmed_at in list(_PREWARMED_AT.items()):
         if warmed_at < cutoff:
             _PREWARMED_AT.pop(key, None)
+    for session_id, (_, _, recorded_at) in list(_PROVIDER_AFFINITY.items()):
+        if recorded_at < cutoff:
+            _PROVIDER_AFFINITY.pop(session_id, None)
 
 
 def _prewarm_key(
@@ -402,5 +447,7 @@ def _warm_tts(speaker: str | None, language: str) -> _WarmResult:
 __all__ = [
     "LiveCallPrewarmRequest",
     "clear_live_call_prewarm_state",
+    "live_call_provider_affinity",
+    "remember_live_call_provider_affinity",
     "register_live_call_prewarm_routes",
 ]
