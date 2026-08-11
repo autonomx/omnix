@@ -150,6 +150,30 @@ def test_inline_stream_allocates_and_attaches_before_generation(monkeypatch) -> 
     assert store.get_session_calls == 1
 
 
+def test_inline_stream_suppresses_cerebras_before_provider_generation(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    handshake.clear_live_speculation_handshake_state()
+    store = _FakeStore()
+    store.session.provider_id = "cerebras"
+    store.session.model_id = None
+    provider = _FakeProvider()
+    client = _client(store, provider, monkeypatch)
+
+    response = client.post(
+        "/api/live/speculation/sessions/session-inline/start-stream",
+        json={
+            "content": "Tell me a story",
+            "segment_id": "segment-cerebras",
+            "source_sequence": 9,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "speculation_provider_suppressed"
+    assert provider.calls == 0
+    assert handshake._HANDSHAKE_GENERATIONS == {}
+
+
 def test_inline_stream_uses_dedicated_live_model_lane(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     handshake.clear_live_speculation_handshake_state()
