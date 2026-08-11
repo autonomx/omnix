@@ -9,11 +9,40 @@ from __future__ import annotations
 
 import time
 
-from app.providers.nemotron_eou_streaming import NemotronEouModelManager
+from app.providers.nemotron_eou_streaming import (
+    NemotronEouModelManager,
+    _configure_streaming_context,
+    env_int,
+)
 
 
 class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
-    """Use full-buffer Nemotron decoding for authoritative finals."""
+    """Use a higher-context full-buffer Nemotron decode for authoritative finals."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Keep the live stream at the low-latency right context (normally 1 =
+        # 160 ms), but decode the completed utterance with Nemotron's largest
+        # supported right context by default. The shared model is reconfigured
+        # only while holding the Nemotron lock, so this adds no duplicate model
+        # or VRAM allocation and cannot race a streaming feed.
+        self.nemotron_final_right_context = env_int("OMNIX_NEMOTRON_FINAL_RIGHT_CONTEXT", 13)
+
+    def _transcribe_quality_pcm16(self, pcm16le: bytes) -> str:
+        # Unit tests commonly replace transcribe_pcm16 without loading NeMo.
+        # Production finalization always has a loaded model because the segment
+        # has already streamed through Nemotron.
+        if self.nemotron_model is None:
+            return self.transcribe_pcm16(pcm16le)
+
+        with self._nemotron_lock:
+            _configure_streaming_context(self.nemotron_model, self.nemotron_final_right_context)
+            try:
+                return self.transcribe_pcm16(pcm16le)
+            finally:
+                # Restore the live configuration before the next microphone
+                # chunk can enter the shared Nemotron model.
+                _configure_streaming_context(self.nemotron_model, self.nemotron_right_context)
 
     def finalize(
         self,
@@ -22,6 +51,7 @@ class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
     ) -> tuple[str, dict[str, float]]:
         stream = self._streams.get(segment_id)
         streaming_text = stream.nemotron.finalize_text() if stream is not None else ""
+        final_context = float(self.nemotron_final_right_context)
 
         if not pcm16le_fallback:
             return streaming_text, {
@@ -31,11 +61,12 @@ class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
                 "streaming_chars": float(len(streaming_text)),
                 "authoritative_chars": float(len(streaming_text)),
                 "authoritative_changed": 0.0,
+                "final_right_context": final_context,
             }
 
         started = time.perf_counter()
         try:
-            authoritative_text = self.transcribe_pcm16(pcm16le_fallback).strip()
+            authoritative_text = self._transcribe_quality_pcm16(pcm16le_fallback).strip()
         except Exception:
             if not streaming_text:
                 raise
@@ -47,6 +78,7 @@ class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
                 "streaming_chars": float(len(streaming_text)),
                 "authoritative_chars": float(len(streaming_text)),
                 "authoritative_changed": 0.0,
+                "final_right_context": final_context,
             }
 
         full_decode_ms = (time.perf_counter() - started) * 1000.0
@@ -59,6 +91,7 @@ class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
                 "streaming_chars": float(len(streaming_text)),
                 "authoritative_chars": float(len(authoritative_text)),
                 "authoritative_changed": 1.0 if authoritative_text != streaming_text else 0.0,
+                "final_right_context": final_context,
             }
 
         return streaming_text, {
@@ -70,6 +103,7 @@ class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
             "streaming_chars": float(len(streaming_text)),
             "authoritative_chars": float(len(streaming_text)),
             "authoritative_changed": 0.0,
+            "final_right_context": final_context,
         }
 
 
