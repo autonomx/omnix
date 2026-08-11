@@ -50,11 +50,19 @@ export async function directLiveGatewayFetch(
     return response;
   } catch (error: unknown) {
     if (init?.signal?.aborted) throw error;
-    dispatchPerformance(stageFor(input, 'fallback'), {
-      directGateway: true,
-      elapsedMs: now() - startedAt,
-      error: error instanceof Error ? error.name : typeof error,
-    });
+    const acceptedLiveChat = isChatStreamPath(input);
+    dispatchPerformance(
+      acceptedLiveChat ? 'live_chat_direct_gateway_failed' : stageFor(input, 'fallback'),
+      {
+        directGateway: true,
+        elapsedMs: now() - startedAt,
+        error: error instanceof Error ? error.name : typeof error,
+      },
+    );
+    // Speculation is private and side-effect free, so a failed direct attempt can
+    // safely retry through same-origin. Accepted chat persists the user turn;
+    // retrying after an ambiguous network/CORS failure could duplicate it.
+    if (acceptedLiveChat) throw error;
     return fetchImpl(input, init);
   }
 }
@@ -166,6 +174,16 @@ function isLiveVoiceChatBody(body: BodyInit | null | undefined): boolean {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
     const turnId = (parsed as Record<string, unknown>).live_voice_turn_id;
     return typeof turnId === 'string' && turnId.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function isChatStreamPath(input: RequestInfo | URL): boolean {
+  if (input instanceof Request) return false;
+  const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : '';
+  try {
+    return CHAT_STREAM_PATH.test(new URL(rawUrl, window.location.origin).pathname);
   } catch {
     return false;
   }
