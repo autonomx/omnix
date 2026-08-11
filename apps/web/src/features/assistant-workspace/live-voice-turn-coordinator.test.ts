@@ -100,7 +100,7 @@ describe('live voice turn coordinator', () => {
     expect(endpointFusionAction({
       ...incompleteCandidate,
       silenceMs: 599,
-    })).toBe('continue');
+    })).toBe('speculate');
     expect(endpointFusionAction({
       ...incompleteCandidate,
       silenceMs: 600,
@@ -114,7 +114,7 @@ describe('live voice turn coordinator', () => {
     expect(endpointFusionAction({
       ...completeCandidate,
       silenceMs: 359,
-    })).toBe('continue');
+    })).toBe('speculate');
     expect(endpointFusionAction({
       ...completeCandidate,
       silenceMs: 360,
@@ -124,6 +124,30 @@ describe('live voice turn coordinator', () => {
       silenceMs: 600,
       transcriptWords: 0,
     })).toBe('continue');
+  });
+
+  it('starts private speculation before the authoritative EOU commit threshold', () => {
+    noteLiveSttNegotiation('nemotron_parakeet_eou', [
+      'segmented_audio',
+      'authoritative_final',
+      'result_replay',
+      'partial_transcripts',
+      'authoritative_eou',
+    ]);
+
+    const candidate = {
+      endpointProbability: 1,
+      endpointThreshold: 0.5,
+      transcriptStableMs: 215,
+      semanticProbabilityDone: 0.78,
+      transcriptWords: 5,
+      correctionPending: false,
+    };
+
+    expect(endpointFusionAction({ ...candidate, silenceMs: 159 })).toBe('continue');
+    expect(endpointFusionAction({ ...candidate, silenceMs: 160 })).toBe('speculate');
+    expect(endpointFusionAction({ ...candidate, silenceMs: 599 })).toBe('speculate');
+    expect(endpointFusionAction({ ...candidate, silenceMs: 600 })).toBe('commit');
   });
 
   it('keeps the captured 431 and 478 ms intra-sentence pauses open', () => {
@@ -152,7 +176,7 @@ describe('live voice turn coordinator', () => {
       semanticProbabilityDone: 0.78,
       transcriptWords: 3,
       correctionPending: false,
-    })).toBe('continue');
+    })).toBe('speculate');
   });
 
   it('uses a 600 ms watchdog when authoritative EOU is negotiated', () => {
