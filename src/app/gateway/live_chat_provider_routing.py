@@ -89,13 +89,22 @@ def resolve_provider_route(provider_id: str | None) -> tuple[str | None, Any]:
 
 def route_chat_request(
     request: SendChatMessageRequest,
+    *,
+    implicit_provider_id: str | None = None,
+    implicit_model_id: str | None = None,
 ) -> tuple[SendChatMessageRequest, _TurnProviderRoute]:
     """Concretize routing and apply the opt-in dedicated live model lane."""
 
     provider_explicit = _normalized(request.provider_id) is not None
     model_explicit = _normalized(request.model_id) is not None
-    provider_id = resolve_effective_provider_id(request.provider_id)
-    model_id = request.model_id if model_explicit else None
+    provider_id = resolve_effective_provider_id(
+        request.provider_id if provider_explicit else implicit_provider_id
+    )
+    model_id = (
+        request.model_id
+        if model_explicit
+        else _normalized(implicit_model_id)
+    )
     execution_lane = "session"
     if _is_live_voice_request(request):
         provider_id, model_id, execution_lane = resolve_live_voice_chat_route(
@@ -312,7 +321,22 @@ def install_live_chat_provider_routing_hook() -> None:
             context_items: list[dict[str, Any]] | None = None,
             context_diagnostics: dict[str, Any] | None = None,
         ):
-            routed_request, route = route_chat_request(request)
+            implicit_provider_id = None
+            implicit_model_id = None
+            if _is_live_voice_request(request) and _normalized(request.provider_id) is None:
+                # Prewarm already loaded the live session and warmed its provider.
+                # Reuse that short-lived affinity so an implicit accepted turn
+                # cannot jump to a newly changed global default after warm-up.
+                from .live_call_prewarm import live_call_provider_affinity
+
+                affinity = live_call_provider_affinity(session_id)
+                if affinity is not None:
+                    implicit_provider_id, implicit_model_id = affinity
+            routed_request, route = route_chat_request(
+                request,
+                implicit_provider_id=implicit_provider_id,
+                implicit_model_id=implicit_model_id,
+            )
             appended = original_begin(
                 self,
                 session_id,
