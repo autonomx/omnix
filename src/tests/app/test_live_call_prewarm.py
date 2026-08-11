@@ -105,11 +105,19 @@ def _client(store: _FakeStore) -> TestClient:
     return TestClient(app)
 
 
+def _fake_provider_settings() -> dict[str, object]:
+    return {
+        "provider": "fake-provider",
+        "fake-provider": {"model": "fake-model"},
+    }
+
+
 def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) -> None:
     prewarm.clear_live_call_prewarm_state()
     store = _FakeStore()
     llm = _FakeLlmProvider()
     tts = _FakeTtsProvider()
+    monkeypatch.setattr(prewarm.shared, "load_settings", _fake_provider_settings)
     monkeypatch.setattr(prewarm.shared, "get_provider", lambda _provider_id: llm)
     monkeypatch.setattr(prewarm, "get_tts_provider", lambda: tts)
     client = _client(store)
@@ -140,6 +148,42 @@ def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) ->
     assert store.warm_user_message.metadata["side_effects_allowed"] is False
     assert store.warm_user_message.metadata["memory_writes_allowed"] is False
     assert store.calls == 2
+    assert prewarm.live_call_provider_affinity("session-prewarm") == (
+        "fake-provider",
+        "fake-model",
+    )
+
+
+def test_live_call_prewarm_uses_settings_provider_over_stale_session_provider(
+    monkeypatch,
+) -> None:
+    prewarm.clear_live_call_prewarm_state()
+    store = _FakeStore()
+    store.session.provider_id = "cerebras"
+    store.session.model_id = "stale-cerebras-model"
+    llm = _FakeLlmProvider()
+    tts = _FakeTtsProvider()
+    requested_provider_ids: list[str | None] = []
+
+    monkeypatch.setattr(prewarm.shared, "load_settings", _fake_provider_settings)
+
+    def fake_get_provider(provider_id: str | None):
+        requested_provider_ids.append(provider_id)
+        return llm
+
+    monkeypatch.setattr(prewarm.shared, "get_provider", fake_get_provider)
+    monkeypatch.setattr(prewarm, "get_tts_provider", lambda: tts)
+    client = _client(store)
+
+    response = client.post(
+        "/api/live-call/sessions/session-prewarm/prewarm",
+        json={"speaker": "Jinx", "language": "English"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["fully_warmed"] is True
+    assert requested_provider_ids == ["fake-provider"]
+    assert store.session.provider_id == "cerebras"
     assert prewarm.live_call_provider_affinity("session-prewarm") == (
         "fake-provider",
         "fake-model",
@@ -178,6 +222,7 @@ def test_live_call_prewarm_does_not_cache_partial_success(monkeypatch) -> None:
     store = _FakeStore()
     llm = _FailingLlmProvider()
     tts = _FakeTtsProvider()
+    monkeypatch.setattr(prewarm.shared, "load_settings", _fake_provider_settings)
     monkeypatch.setattr(prewarm.shared, "get_provider", lambda _provider_id: llm)
     monkeypatch.setattr(prewarm, "get_tts_provider", lambda: tts)
     client = _client(store)
@@ -213,6 +258,7 @@ def test_live_call_prewarm_is_best_effort_when_providers_are_unavailable(
 ) -> None:
     prewarm.clear_live_call_prewarm_state()
     store = _FakeStore()
+    monkeypatch.setattr(prewarm.shared, "load_settings", _fake_provider_settings)
     monkeypatch.setattr(prewarm.shared, "get_provider", lambda _provider_id: None)
     monkeypatch.setattr(prewarm, "get_tts_provider", lambda: None)
     client = _client(store)
