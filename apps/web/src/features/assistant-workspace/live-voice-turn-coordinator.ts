@@ -5,6 +5,7 @@ const PERF_EVENT = 'omnix:assistant-voice-perf';
 export const LIVE_VOICE_TURN_TIMELINE_EVENT = 'omnix:live-voice-turn-timeline';
 const AUTHORITATIVE_EOU_COMPLETE_CONFIRMATION_MS = 360;
 const AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS = 600;
+const AUTHORITATIVE_EOU_SPECULATION_MIN_SILENCE_MS = 160;
 
 export type LiveVoiceTurnState =
   | 'listening'
@@ -63,14 +64,19 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
   // Parakeet EOU is a strong endpoint vote, but the captured Nemotron/EOU
   // traces include real intra-sentence pauses around 430-480 ms. Those pauses
   // must not split one utterance before the full-buffer Nemotron final can see
-  // the complete sentence. Keep a faster path only when the current transcript
-  // is already semantically complete; otherwise use the same 600 ms bound as
-  // the authoritative-EOU watchdog. Resumed speech resets the local pause.
+  // the complete sentence. Keep the 360/600 ms commit confirmation bounds,
+  // while allowing a stable multi-word EOU candidate to start side-effect-free
+  // speculation earlier. Resumed speech cancels that private work, so this
+  // recovers LLM/TTS lead time without making an early EOU user-visible.
   if (liveSttUsesAuthoritativeEou() && probability >= input.endpointThreshold) {
     const requiredSilenceMs = complete && input.transcriptWords >= 2
       ? AUTHORITATIVE_EOU_COMPLETE_CONFIRMATION_MS
       : AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS;
-    return silence >= requiredSilenceMs ? 'commit' : 'continue';
+    if (silence >= requiredSilenceMs) return 'commit';
+    const speculationReady = silence >= AUTHORITATIVE_EOU_SPECULATION_MIN_SILENCE_MS
+      && input.transcriptWords >= 2
+      && (stable >= 60 || complete);
+    return speculationReady ? 'speculate' : 'continue';
   }
   // Once a semantically complete transcript arrives after a long acoustic
   // pause, the ordinary 80 ms transcript-stability guard no longer buys useful
