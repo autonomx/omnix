@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.chat import ChatSession
 from app.gateway import live_call_prewarm as prewarm
+from app.providers import CerebrasProvider, ProviderConfig
 
 
 class _FakeStore:
@@ -143,6 +144,33 @@ def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) ->
         "fake-provider",
         "fake-model",
     )
+
+
+def test_cerebras_live_call_prewarm_omits_unsupported_template_kwargs(monkeypatch) -> None:
+    prewarm.clear_live_call_prewarm_state()
+    store = _FakeStore()
+    provider = CerebrasProvider(
+        ProviderConfig(
+            provider_type="cerebras",
+            api_key="test-key",
+            model="fake-model",
+        )
+    )
+    captured_payload = {}
+
+    def fake_stream_completion(payload, *, timeout=None):
+        captured_payload.update(payload)
+        return iter([SimpleNamespace(content="ready")])
+
+    monkeypatch.setattr(provider, "_stream_completion", fake_stream_completion)
+    monkeypatch.setattr(prewarm.shared, "get_provider", lambda _provider_id: provider)
+
+    result = prewarm._warm_llm(store, store.session)
+
+    assert result.status == "warmed"
+    assert captured_payload["model"] == "fake-model"
+    assert captured_payload["stream"] is True
+    assert "chat_template_kwargs" not in captured_payload
 
 
 def test_live_call_prewarm_does_not_cache_partial_success(monkeypatch) -> None:
