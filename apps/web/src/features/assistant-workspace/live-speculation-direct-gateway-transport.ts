@@ -1,4 +1,5 @@
 const SPECULATION_PATH = /^\/api\/live\/speculation(?:\/|$)/;
+const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
 const INSTALLED_KEY = '__omnixLiveSpeculationDirectGatewayTransportInstalled';
 const DEFAULT_DIRECT_GATEWAY_ORIGIN = 'http://127.0.0.1:8000';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
@@ -20,7 +21,7 @@ export function initializeLiveSpeculationDirectGatewayTransport(): () => void {
   if (liveWindow[INSTALLED_KEY]) return () => undefined;
   liveWindow[INSTALLED_KEY] = true;
   previousFetch = window.fetch.bind(window);
-  window.fetch = directSpeculationFetch;
+  window.fetch = directLiveGatewayFetch;
 
   return () => {
     if (previousFetch) window.fetch = previousFetch;
@@ -29,12 +30,12 @@ export function initializeLiveSpeculationDirectGatewayTransport(): () => void {
   };
 }
 
-export async function directSpeculationFetch(
+export async function directLiveGatewayFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
   const fetchImpl = previousFetch ?? window.fetch.bind(window);
-  const directUrl = resolveDirectSpeculationUrl(input);
+  const directUrl = resolveDirectLiveGatewayUrl(input, init);
   if (!directUrl) return fetchImpl(input, init);
 
   const startedAt = now();
@@ -56,6 +57,19 @@ export async function directSpeculationFetch(
     });
     return fetchImpl(input, init);
   }
+}
+
+// Compatibility alias retained for tests/imports added during the speculation rollout.
+export const directSpeculationFetch = directLiveGatewayFetch;
+
+export function resolveDirectLiveGatewayUrl(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  locationLike: LocationLike = window.location,
+  env: EnvLike = importMetaEnv(),
+): string | null {
+  return resolveDirectSpeculationUrl(input, locationLike, env)
+    ?? resolveDirectLiveChatUrl(input, init, locationLike, env);
 }
 
 export function resolveDirectSpeculationUrl(
@@ -82,11 +96,59 @@ export function resolveDirectSpeculationUrl(
   return `${directOrigin}${url.pathname}${url.search}${url.hash}`;
 }
 
+export function resolveDirectLiveChatUrl(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  locationLike: LocationLike = window.location,
+  env: EnvLike = importMetaEnv(),
+): string | null {
+  // ChatbotWorkspace sends the live voice turn as a string URL + JSON body.
+  // Avoid cloning Request body streams in this synchronous hot-path resolver.
+  if (input instanceof Request) return null;
+  if (!liveChatDirectGatewayEnabled(locationLike, env)) return null;
+
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (method !== 'POST' || !isLiveVoiceChatBody(init?.body)) return null;
+
+  const rawUrl = typeof input === 'string' || input instanceof URL
+    ? input.toString()
+    : '';
+  const url = new URL(rawUrl, locationLike.origin);
+  if (url.origin !== locationLike.origin || !CHAT_STREAM_PATH.test(url.pathname)) {
+    return null;
+  }
+
+  const configuredOrigin = stringEnv(env, 'VITE_LIVE_CHAT_GATEWAY_ORIGIN')
+    ?? stringEnv(env, 'VITE_LIVE_SPECULATION_GATEWAY_ORIGIN');
+  const directOrigin = normalizeOrigin(configuredOrigin ?? DEFAULT_DIRECT_GATEWAY_ORIGIN);
+  if (!directOrigin || directOrigin === locationLike.origin) return null;
+  return `${directOrigin}${url.pathname}${url.search}${url.hash}`;
+}
+
 export function directGatewayEnabled(
   locationLike: LocationLike,
   env: EnvLike = importMetaEnv(),
 ): boolean {
-  const explicit = booleanEnv(env, 'VITE_LIVE_SPECULATION_DIRECT_GATEWAY');
+  return localDirectGatewayEnabled(
+    locationLike,
+    booleanEnv(env, 'VITE_LIVE_SPECULATION_DIRECT_GATEWAY'),
+  );
+}
+
+export function liveChatDirectGatewayEnabled(
+  locationLike: LocationLike,
+  env: EnvLike = importMetaEnv(),
+): boolean {
+  return localDirectGatewayEnabled(
+    locationLike,
+    booleanEnv(env, 'VITE_LIVE_CHAT_DIRECT_GATEWAY'),
+  );
+}
+
+function localDirectGatewayEnabled(
+  locationLike: LocationLike,
+  explicit: boolean | undefined,
+): boolean {
   if (explicit === false) return false;
   const hostname = locationLike.hostname.trim().toLowerCase();
   const localHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
@@ -97,8 +159,23 @@ export function directGatewayEnabled(
   return locationLike.port === '5173' || locationLike.port === '4173';
 }
 
+function isLiveVoiceChatBody(body: BodyInit | null | undefined): boolean {
+  if (typeof body !== 'string' || !body.trim()) return false;
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    const turnId = (parsed as Record<string, unknown>).live_voice_turn_id;
+    return typeof turnId === 'string' && turnId.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function stageFor(input: RequestInfo | URL, suffix: 'response' | 'fallback'): string {
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : '';
+  if (rawUrl.includes('/api/chat/sessions/') && rawUrl.includes('/messages/stream')) {
+    return `live_chat_direct_gateway_${suffix}`;
+  }
   const tts = rawUrl.includes('/tts-prefetch');
   return `${tts ? 'tts_speculative' : 'llm_speculation'}_direct_gateway_${suffix}`;
 }
