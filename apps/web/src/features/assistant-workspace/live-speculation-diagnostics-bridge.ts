@@ -1,7 +1,11 @@
 import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
-const SPECULATION_STAGE_PREFIXES = ['llm_speculation_', 'tts_speculative_'] as const;
+const HOT_PATH_STAGE_PREFIXES = [
+  'llm_speculation_',
+  'tts_speculative_',
+  'live_chat_direct_gateway_',
+] as const;
 const INSTALLED_KEY = '__omnixLiveSpeculationDiagnosticsInstalled';
 
 type SpeculationDiagnosticsWindow = Window & typeof globalThis & {
@@ -9,7 +13,7 @@ type SpeculationDiagnosticsWindow = Window & typeof globalThis & {
 };
 
 export function isSpeculationDiagnosticStage(stage: string): boolean {
-  return SPECULATION_STAGE_PREFIXES.some((prefix) => stage.startsWith(prefix));
+  return HOT_PATH_STAGE_PREFIXES.some((prefix) => stage.startsWith(prefix));
 }
 
 export function initializeLiveSpeculationDiagnosticsBridge(): () => void {
