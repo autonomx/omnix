@@ -131,6 +131,33 @@ def route_chat_request(
     return routed_request, route
 
 
+def _live_voice_affinity_for_current_provider(
+    session_id: str,
+) -> tuple[str | None, str | None] | None:
+    """Return prewarm affinity only while it matches the current Settings provider."""
+
+    from .live_call_prewarm import live_call_provider_affinity
+
+    affinity = live_call_provider_affinity(session_id)
+    if affinity is None:
+        return None
+    affinity_provider_id, affinity_model_id = affinity
+    configured_provider_id = resolve_effective_provider_id(None)
+    if _provider_key(affinity_provider_id) == _provider_key(configured_provider_id):
+        return affinity_provider_id, affinity_model_id
+
+    stream_log(
+        "gateway-live-chat-first-token",
+        "runtime",
+        "live_chat_provider_affinity_stale",
+        session_id=session_id,
+        affinity_provider_id=affinity_provider_id,
+        configured_provider_id=configured_provider_id,
+        reason="settings_provider_changed",
+    )
+    return None
+
+
 def _remember_turn_route(message_id: str, route: _TurnProviderRoute) -> None:
     with _ROUTE_LOCK:
         _TURN_ROUTES[message_id] = route
@@ -328,12 +355,11 @@ def install_live_chat_provider_routing_hook() -> None:
             implicit_provider_id = None
             implicit_model_id = None
             if _is_live_voice_request(request) and _normalized(request.provider_id) is None:
-                # Prewarm already loaded the live session and warmed its provider.
-                # Reuse that short-lived affinity so an implicit accepted turn
-                # cannot jump to a newly changed global default after warm-up.
-                from .live_call_prewarm import live_call_provider_affinity
-
-                affinity = live_call_provider_affinity(session_id)
+                # Reuse prewarm affinity only while it still matches Settings.
+                # Changing the configured provider must take effect immediately,
+                # even when this chat session was previously stamped with another
+                # provider or an older live-call affinity is still within its TTL.
+                affinity = _live_voice_affinity_for_current_provider(session_id)
                 if affinity is not None:
                     implicit_provider_id, implicit_model_id = affinity
             routed_request, route = route_chat_request(
