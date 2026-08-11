@@ -112,6 +112,36 @@ describe('live voice release observer', () => {
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
   });
 
+  it('records authoritative STT provider quality metrics', () => {
+    perf('stt_provider_final', 'voice-turn:quality', {
+      provider: 'nemotron_parakeet_eou',
+      segmentId: 'segment-quality',
+      sourceSequence: 3,
+      transcriptChars: 25,
+      providerMetrics: {
+        authoritative_full_decode: 1,
+        full_decode_ms: 241.5,
+        streaming_chars: 13,
+        authoritative_chars: 25,
+        authoritative_changed: 1,
+        final_right_context: 13,
+      },
+    });
+
+    expect(mocks.record).toHaveBeenCalledWith('stt_provider_final', {
+      provider: 'nemotron_parakeet_eou',
+      segment_id: 'segment-quality',
+      source_sequence: 3,
+      transcript_chars: 25,
+      authoritative_full_decode: 1,
+      full_decode_ms: 241.5,
+      streaming_chars: 13,
+      authoritative_chars: 25,
+      authoritative_changed: 1,
+      final_right_context: 13,
+    }, 'release_observer');
+  });
+
   it('rejects unrelated cross-trace playback diagnostics', () => {
     now = 100;
     perf('stt_final_received', 'voice-turn:2', { sttFinalizeMs: 100 });
