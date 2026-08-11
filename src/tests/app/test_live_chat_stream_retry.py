@@ -8,6 +8,8 @@ from app.gateway.live_chat_stream_retry import (
     EmptyProviderStreamError,
     retry_provider_stream,
 )
+from app.providers.base import ConnectionError as ProviderConnectionError
+from app.providers.exceptions import RateLimitError
 
 
 def test_retries_failure_before_first_text() -> None:
@@ -67,6 +69,43 @@ def test_does_not_retry_after_partial_text_delivery() -> None:
     with pytest.raises(RuntimeError, match="provider failed after delivery"):
         next(stream)
     assert calls == 1
+
+
+def test_rate_limit_cause_is_not_retried_or_sent_to_fallback() -> None:
+    calls = 0
+    fallback_calls = 0
+    sleeps: list[float] = []
+
+    def stream_factory() -> Iterator[dict[str, object]]:
+        nonlocal calls
+        calls += 1
+        try:
+            raise RateLimitError("provider rate limit exceeded")
+        except RateLimitError as exc:
+            raise ProviderConnectionError("Failed to start provider stream") from exc
+        yield  # pragma: no cover
+
+    def fallback_factory() -> dict[str, object]:
+        nonlocal fallback_calls
+        fallback_calls += 1
+        return {"content": "should never run", "metadata": {}}
+
+    with pytest.raises(RateLimitError, match="provider rate limit exceeded"):
+        list(
+            retry_provider_stream(
+                stream_factory,
+                fallback_factory,
+                attempts=4,
+                retry_base_delay_ms=250,
+                retry_max_delay_ms=1000,
+                fallback_delay_ms=1000,
+                sleep_fn=sleeps.append,
+            )
+        )
+
+    assert calls == 1
+    assert fallback_calls == 0
+    assert sleeps == []
 
 
 def test_uses_non_streaming_fallback_after_stream_attempts_exhausted() -> None:
