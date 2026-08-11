@@ -44,6 +44,10 @@ type PerfDetail = {
   input_chars?: unknown;
   transcriptChars?: unknown;
   transcript_chars?: unknown;
+  provider?: unknown;
+  segmentId?: unknown;
+  sourceSequence?: unknown;
+  providerMetrics?: unknown;
 };
 
 type DiagnosticDetail = {
@@ -123,6 +127,16 @@ function handleTurnTimeline(event: Event): void {
 function handlePerfEvent(event: Event): void {
   const detail = (event as CustomEvent<PerfDetail>).detail ?? {};
   const stage = typeof detail.stage === 'string' ? detail.stage : '';
+  if (stage === 'stt_provider_final') {
+    reporter?.record('stt_provider_final', {
+      provider: normalizedString(detail.provider),
+      segment_id: normalizedString(detail.segmentId),
+      source_sequence: finiteNonnegative(detail.sourceSequence),
+      transcript_chars: finiteNonnegative(detail.transcriptChars ?? detail.transcript_chars),
+      ...finiteNumericRecord(detail.providerMetrics),
+    }, 'release_observer');
+    return;
+  }
   const now = performance.now();
   const incomingTurnId = normalizedTurnId(detail.turnId);
   if (stage === 'stt_final_requested') {
@@ -347,6 +361,19 @@ function elapsed(start: number | null, end: number): number | null {
 
 function finiteNonnegative(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function finiteNumericRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+    ),
+  );
+}
+
+function normalizedString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function normalizedTurnId(value: unknown): string | null {
