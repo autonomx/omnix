@@ -117,7 +117,7 @@ def test_explicit_live_provider_ignores_prewarmed_session_affinity(monkeypatch) 
     )
 
     assert routed_request.provider_id == "llm:cerebras"
-    assert routed_request.model_id == "session-live-model"
+    assert routed_request.model_id is None
     assert route.provider_explicit is True
     assert route.model_explicit is False
 
