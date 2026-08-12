@@ -2,9 +2,9 @@
 """Run and analyze the five-turn local live-voice hardware benchmark.
 
 The benchmark assumes the real Omnix services are already running on the local
-machine (Kyutai adapter, gateway/Qwen TTS, and Vite).  It drives the browser with
-examples/voice/interaction-1.wav through interaction-5.wav and then analyzes the
-matching window from resources/logs.
+machine (Nemotron + Parakeet EOU STT, gateway/Qwen TTS, and Vite). It drives the
+browser with examples/voice/interaction-1.wav through interaction-5.wav and then
+analyzes the matching window from resources/logs.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ DEFAULT_AUDIO_DIR = ROOT_DIR / "examples" / "voice"
 DEFAULT_LOGS_DIR = ROOT_DIR / "resources" / "logs"
 LIVE_LOG_NAME = "live-call-streaming.log"
 TTS_LOG_NAME = "tts-streaming.log"
+EXPECTED_STT_PROVIDER = "nemotron_parakeet_eou"
 METRICS = (
     "stt_finalize_ms",
     "final_to_response_open_ms",
@@ -286,14 +287,16 @@ def _analyze(
     if unexpected:
         failures.append(f"unexpected live LLM provider routes observed: {unexpected}")
 
-    kyutai_records = [
+    stt_records = [
         record
         for record in live_records
-        if str(record.get("provider") or "").strip().casefold() == "kyutai"
+        if str(record.get("provider") or "").strip().casefold() == EXPECTED_STT_PROVIDER
         and str(record.get("event") or "").startswith("stt_")
     ]
-    if not kyutai_records:
-        failures.append("no Kyutai STT diagnostics were observed during the benchmark window")
+    if not stt_records:
+        failures.append(
+            f"no {EXPECTED_STT_PROVIDER} STT diagnostics were observed during the benchmark window"
+        )
 
     max_underruns = 0
     explicit_underruns = 0
@@ -351,7 +354,8 @@ def _analyze(
         "metrics": metric_summaries,
         "provider_names": provider_names,
         "expected_provider": expected_provider,
-        "kyutai_diagnostic_count": len(kyutai_records),
+        "stt_provider": EXPECTED_STT_PROVIDER,
+        "stt_diagnostic_count": len(stt_records),
         "audio": {
             "explicit_underrun_events": explicit_underruns,
             "max_underrun_counter": max_underruns,
@@ -375,6 +379,7 @@ def _markdown_report(report: dict[str, Any], *, run_id: str, git_sha: str) -> st
         f"- Run: `{run_id}`",
         f"- Git: `{git_sha}`",
         f"- Provider: `{', '.join(report.get('provider_names') or ['unknown'])}`",
+        f"- STT: `{report.get('stt_provider') or 'unknown'}`",
         f"- Interactions: **{report.get('interaction_count')}**",
         f"- Completed release turns: **{report.get('release_turn_count')}**",
         f"- LLM speculation reused: **{report.get('speculation', {}).get('llm_reuse_count', 0)}**",
@@ -417,7 +422,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the local five-turn Live Voice hardware benchmark")
     parser.add_argument("--headed", action="store_true", help="Show Chromium while the benchmark runs")
     parser.add_argument("--app-url", default="http://127.0.0.1:5173", help="Vite/Omnix web URL")
-    parser.add_argument("--stt-url", default="http://127.0.0.1:5202", help="Kyutai adapter base URL")
+    parser.add_argument(
+        "--stt-url",
+        default="http://127.0.0.1:5201",
+        help="Nemotron + Parakeet EOU STT base URL",
+    )
     parser.add_argument("--audio-dir", type=Path, default=DEFAULT_AUDIO_DIR)
     parser.add_argument("--logs-dir", type=Path, default=DEFAULT_LOGS_DIR)
     parser.add_argument("--expected-provider", default="cerebras")
@@ -442,7 +451,7 @@ def main() -> int:
             _preflight(f"{args.app_url.rstrip('/')}/chatbot", "Omnix web app")
             authority = _preflight(
                 f"{args.stt_url.rstrip('/')}/authorityz?language=en&mode=test",
-                "Kyutai authority gate",
+                "Live STT authority gate",
                 json_required=True,
             )
             _preflight(
@@ -450,7 +459,7 @@ def main() -> int:
                 "Live TTS capability route",
                 json_required=True,
             )
-            print(f"Kyutai authority preflight: {json.dumps(authority, sort_keys=True)}")
+            print(f"Live STT authority preflight: {json.dumps(authority, sort_keys=True)}")
         except RuntimeError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
@@ -488,6 +497,7 @@ def main() -> int:
     print("Omnix Live Voice Hardware Benchmark")
     print(f"Git      : {git_sha}")
     print(f"Provider : {args.expected_provider}")
+    print(f"STT      : {EXPECTED_STT_PROVIDER}")
     print(f"Audio    : {args.audio_dir}")
     print(f"Logs     : {args.logs_dir}")
     print(f"Run dir  : {run_dir}")
