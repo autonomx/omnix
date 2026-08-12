@@ -80,7 +80,7 @@ describe('live voice floor manager', () => {
   });
 
   it('keeps semantic timing for providers with pre-final endpoint evidence', () => {
-    noteLiveSttNegotiation('kyutai', [
+    noteLiveSttNegotiation('segmented-test-provider', [
       'segmented_audio',
       'authoritative_final',
       'result_replay',
