@@ -11,7 +11,10 @@ scheduler chunk boundaries.
 This module is installed by the gateway entry point before the FastAPI app is
 created. It also makes LM Studio Responses state reuse default-on for accepted
 live-voice turns when the environment variable is absent, while preserving an
-explicit false opt-out and logging the final eligibility decision.
+explicit false opt-out and logging the final eligibility decision. The loaded
+model discovery cache is widened for the live hardware profile so a stable LM
+Studio model does not require a management-API round trip on every accepted
+turn; users can still override the cache TTL explicitly.
 """
 from __future__ import annotations
 
@@ -22,6 +25,8 @@ from typing import Any
 from app.live_speech.performance_contract import resolve_tts_provider_capabilities
 
 _STATE_ENV = "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"
+_LMSTUDIO_DISCOVERY_CACHE_ENV = "OMNIX_LMSTUDIO_MODEL_DISCOVERY_CACHE_SECONDS"
+_LMSTUDIO_DISCOVERY_CACHE_DEFAULT = "15"
 _ALLOW_SERIAL_TTS_SPECULATION_ENV = "OMNIX_LIVE_TTS_ALLOW_SERIAL_SPECULATION"
 _INSTALL_SENTINEL = "_omnix_live_voice_hardware_policy_installed"
 _DEFERRED_TTS_ERROR = "speculative_tts_deferred_nonconcurrent_provider"
@@ -43,6 +48,21 @@ def _bool_setting(raw: str | None, *, default: bool) -> bool:
 def stateful_live_responses_enabled(raw: str | None) -> bool:
     """Default state reuse on for accepted live voice, preserving explicit opt-out."""
     return _bool_setting(raw, default=True)
+
+
+def apply_live_voice_process_defaults() -> None:
+    """Install process-level defaults before gateway modules capture env-backed gates.
+
+    ``setdefault`` is intentional: an explicit operator value remains authoritative.
+    The process-level value also makes the Responses default survive import-order or
+    worker-start differences where the later function monkey-patch is not observed.
+    """
+
+    os.environ.setdefault(_STATE_ENV, "true")
+    os.environ.setdefault(
+        _LMSTUDIO_DISCOVERY_CACHE_ENV,
+        _LMSTUDIO_DISCOVERY_CACHE_DEFAULT,
+    )
 
 
 def should_defer_speculative_tts(provider: Any, allow_serial: str | None = None) -> bool:
@@ -104,6 +124,11 @@ def _deferred_speculative_entry(
 
 def install_live_voice_hardware_policy() -> None:
     """Install scheduler-safe serial-TTS and stateful LM Studio live-voice policies."""
+    # Apply env-backed defaults before importing gateway modules. Some gates are
+    # evaluated by code reached during package import, and a process-level default
+    # is more robust than relying solely on the later runtime monkey-patch.
+    apply_live_voice_process_defaults()
+
     from app.gateway import live_chat_lmstudio_responses as responses_runtime
     from app.gateway import live_chat_provider_metrics as metrics_runtime
     from app.gateway import live_voice_speculative_tts as speculative_tts_runtime
@@ -183,6 +208,9 @@ def install_live_voice_hardware_policy() -> None:
                 provider_class_compatible=class_compatible,
                 provider_request_capable=callable(getattr(provider, "_make_request", None)),
                 model_id=model_id,
+                model_discovery_cache_seconds=os.environ.get(
+                    _LMSTUDIO_DISCOVERY_CACHE_ENV
+                ),
             )
         yield from responses_stream(
             self,
@@ -199,6 +227,7 @@ def install_live_voice_hardware_policy() -> None:
 
 
 __all__ = [
+    "apply_live_voice_process_defaults",
     "install_live_voice_hardware_policy",
     "should_defer_speculative_tts",
     "stateful_live_responses_enabled",
