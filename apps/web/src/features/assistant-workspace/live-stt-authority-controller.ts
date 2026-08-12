@@ -91,7 +91,7 @@ export async function resolveAuthoritySelection(
   const fallback = configured.searchParams.get('fallback')?.trim();
   if (!fallback) {
     throw new Error(
-      `Kyutai authority gate failed: ${reasons.join(', ') || 'not eligible'}`,
+      `STT authority gate failed: ${reasons.join(', ') || 'not eligible'}`,
     );
   }
   return {
@@ -110,9 +110,8 @@ export async function resolveAuthoritySelection(
 }
 
 /**
- * Kept as a compatibility no-op for older bootstrap imports. Authority is now
- * resolved before microphone capture and committed by the live voice controller,
- * rather than by prototype-patching the STT client.
+ * Compatibility no-op for older bootstrap imports. Authority is resolved
+ * before microphone capture and committed by the live voice controller.
  */
 export function initializeLiveSttAuthorityController(): () => void {
   return () => undefined;

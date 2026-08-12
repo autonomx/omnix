@@ -62,7 +62,7 @@ describe('live STT capability state', () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
       detail: {
         stage: 'stt_authority_selected',
-        selectedProvider: 'kyutai',
+        selectedProvider: 'configured_stt',
       },
     }));
 
@@ -79,7 +79,7 @@ describe('live STT capability state', () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
       detail: {
         stage: 'stt_negotiated',
-        provider: 'kyutai',
+        provider: 'streaming-test-provider',
         capabilities: [
           'segmented_audio',
           'authoritative_final',

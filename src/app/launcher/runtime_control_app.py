@@ -1,4 +1,4 @@
-"""Launcher composition for on-demand models and optional live services."""
+"""Launcher composition for on-demand models and live voice services."""
 from __future__ import annotations
 
 import os
@@ -13,11 +13,6 @@ from app.launcher.huggingface_token_control import (
     enhance_launcher_html as enhance_huggingface_token_html,
 )
 from app.launcher.huggingface_token_control import register_huggingface_token_controls
-from app.launcher.kyutai_readiness_control import (
-    enhance_launcher_html as enhance_kyutai_readiness_html,
-)
-from app.launcher.kyutai_readiness_control import register_kyutai_readiness_controls
-from app.launcher.kyutai_services import build_kyutai_service_specs
 from app.launcher.service_manager import (
     LauncherServiceManager,
     build_default_service_specs,
@@ -26,36 +21,28 @@ from app.launcher.service_manager import (
 
 app = control_app.app
 IMAGE_SERVICE_URL = "http://127.0.0.1:5301"
-
-_BASE_REFRESH_BLOCK = "  refresh();\n  window.setInterval(refresh, 2000);"
-_HUGGINGFACE_REFRESH_BLOCK = """  refreshHuggingFaceTokenStatus();
-  refresh();
-  window.setInterval(refresh, 2000);
-  window.setInterval(refreshHuggingFaceTokenStatus, 5000);"""
-_KYUTAI_REFRESH_BLOCK = """  refreshKyutaiReadiness(false);
-  refresh();
-  window.setInterval(refresh, 2000);
-  window.setInterval(() => refreshKyutaiReadiness(false), 5000);"""
-_COMBINED_REFRESH_BLOCK = """  refreshHuggingFaceTokenStatus();
-  refreshKyutaiReadiness(false);
-  refresh();
-  window.setInterval(refresh, 2000);
-  window.setInterval(refreshHuggingFaceTokenStatus, 5000);
-  window.setInterval(() => refreshKyutaiReadiness(false), 5000);"""
+LIVE_STT_URL = "http://127.0.0.1:5201?language=en&authority=auto&endpoint_threshold=0.5"
 
 
 def build_runtime_service_specs():
     root = Path(__file__).resolve().parents[3]
-    kyutai_specs, browser_stt_url = build_kyutai_service_specs(root)
-    kyutai_enabled = any(spec.enabled for spec in kyutai_specs)
     specs = []
-    kyutai_inserted = False
 
     for spec in build_default_service_specs(root):
+        if spec.service_id == "stt":
+            specs.append(
+                replace(
+                    spec,
+                    label="Nemotron + Parakeet EOU STT",
+                    command=[spec.command[0], str(root / "src" / "nemotron_eou_stt_server.py")],
+                    description=(
+                        "Nemotron transcript + Parakeet EOU websocket service "
+                        "on 127.0.0.1:5201."
+                    ),
+                )
+            )
+            continue
         if spec.service_id == "gateway":
-            if not kyutai_inserted:
-                specs.extend(kyutai_specs)
-                kyutai_inserted = True
             image_enabled = os.environ.get("OMNIX_IMAGE_ENABLED", "1").strip().lower() in {
                 "1",
                 "true",
@@ -76,10 +63,6 @@ def build_runtime_service_specs():
                         **spec.env,
                         "OMNIX_IMAGE_ENABLED": "1" if image_available else "0",
                         "OMNIX_IMAGE_URL": IMAGE_SERVICE_URL if image_available else "",
-                        # Stateful Responses is an accepted live-voice optimization,
-                        # independent of which STT provider launched the turn. Keep
-                        # an explicit operator override, otherwise match the gateway
-                        # hardware policy's default-on behavior.
                         "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES": os.environ.get(
                             "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES",
                             "true",
@@ -92,13 +75,16 @@ def build_runtime_service_specs():
                 )
             )
             continue
-        if spec.service_id == "web" and kyutai_enabled:
+        if spec.service_id == "web":
             specs.append(
                 replace(
                     spec,
                     env={
                         **spec.env,
-                        "VITE_ASSISTANT_STT_URL": browser_stt_url,
+                        "VITE_ASSISTANT_STT_URL": os.environ.get(
+                            "VITE_ASSISTANT_STT_URL",
+                            LIVE_STT_URL,
+                        ),
                         "VITE_LIVE_SPECULATION_ENABLED": os.environ.get(
                             "VITE_LIVE_SPECULATION_ENABLED",
                             "true",
@@ -110,7 +96,7 @@ def build_runtime_service_specs():
                     },
                     description=(
                         "React/Vite browser app on 127.0.0.1:5173. "
-                        "Live voice uses Kyutai test authority with Parakeet fallback."
+                        "Live voice uses Nemotron transcript + Parakeet EOU on port 5201."
                     ),
                 )
             )
@@ -140,34 +126,16 @@ def build_runtime_service_specs():
             continue
         specs.append(spec)
 
-    if not kyutai_inserted:
-        specs.extend(kyutai_specs)
     return specs
 
 
 def _enhance_runtime_launcher_html(source: str) -> str:
-    with_token = enhance_huggingface_token_html(source)
-    if _HUGGINGFACE_REFRESH_BLOCK not in with_token:
-        raise RuntimeError("launcher Hugging Face refresh block was not found")
-    prepared = with_token.replace(
-        _HUGGINGFACE_REFRESH_BLOCK,
-        _BASE_REFRESH_BLOCK,
-        1,
-    )
-    with_readiness = enhance_kyutai_readiness_html(prepared)
-    if _KYUTAI_REFRESH_BLOCK not in with_readiness:
-        raise RuntimeError("launcher Kyutai refresh block was not found")
-    return with_readiness.replace(
-        _KYUTAI_REFRESH_BLOCK,
-        _COMBINED_REFRESH_BLOCK,
-        1,
-    )
+    return enhance_huggingface_token_html(source)
 
 
 install_tts_live_call_startup_frame_policy()
 reset_default_manager_for_tests(LauncherServiceManager(build_runtime_service_specs()))
 control_app._HTML = _enhance_runtime_launcher_html(control_app._HTML)
 register_huggingface_token_controls(app)
-register_kyutai_readiness_controls(app)
 
 __all__ = ["app", "build_runtime_service_specs"]

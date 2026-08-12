@@ -73,7 +73,7 @@ describe('live voice semantic finalization deadline', () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
       detail: {
         stage: 'stt_authority_selected',
-        selectedProvider: 'kyutai',
+        selectedProvider: 'configured_stt',
       },
     }));
     expect(semanticFinalizationRemainingMs('', 'balanced', 120)).toBe(1_580);
@@ -81,7 +81,7 @@ describe('live voice semantic finalization deadline', () => {
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
       detail: {
         stage: 'stt_negotiated',
-        provider: 'kyutai',
+        provider: 'streaming-test-provider',
         capabilities: [
           'segmented_audio',
           'authoritative_final',

@@ -1,50 +1,46 @@
 # Local live-voice hardware benchmark
 
-This benchmark replaces the manual cycle of speaking five test turns, copying logs, and calculating latency by hand. It runs on the real local Omnix stack and is intentionally suitable for a future self-hosted GitHub Actions runner.
+This benchmark drives the real local Omnix live-call stack with five committed WAV interactions and measures the existing release diagnostics.
 
 ## What it exercises
 
-The browser test drives the same live-call path as a real user:
-
 ```text
-interaction-1.wav ... interaction-5.wav (in order)
+interaction-1.wav ... interaction-5.wav
   -> programmable Chromium microphone MediaStream
   -> Omnix browser capture/resampling
-  -> Kyutai adapter / authoritative endpointing
+  -> Nemotron transcript + Parakeet Realtime EOU
   -> LLM speculation + accepted chat request
-  -> configured LLM provider (expected: Cerebras)
+  -> configured LLM provider
   -> Faster Qwen3 TTS
   -> live PCM WebSocket
   -> AudioWorklet playback
   -> resources/logs diagnostics
 ```
 
-The five WAVs are injected one at a time. The next WAV does not start until the preceding assistant response has entered and then exited the `speaking` playback state. This prevents the test fixture from accidentally becoming a barge-in test.
+The next WAV starts only after the preceding assistant response has entered and exited the speaking state, so the fixture does not accidentally become a barge-in test.
 
 ## Prerequisites
 
-Run the normal local services first. The benchmark does not start or stop GPU services because doing so would change the hardware state being measured.
+Run the normal local services first. The benchmark does not start or stop GPU services because doing so would change the measured hardware state.
 
-Required local services/configuration:
+Required:
 
 - Vite web app at `http://127.0.0.1:5173`
-- Omnix gateway and Faster Qwen3 TTS reachable through the web app
-- Kyutai adapter at `http://127.0.0.1:5202`
-- Kyutai `authority=test`, normally with endpoint threshold `0.75`
-- LLM provider configured as `cerebras`
-- Cerebras credential available to the already-running gateway (local protected provider secret, or `CEREBRAS_API_KEY` in the gateway process environment)
-- Python Playwright + Chromium installed
+- Omnix gateway and Faster Qwen3 TTS
+- Nemotron + Parakeet EOU STT at `http://127.0.0.1:5201`
+- configured LLM provider available to the gateway
+- Python Playwright + Chromium
 
-For the current latency A/B configuration, start Vite with:
+Default live-STT browser configuration:
 
 ```powershell
-$env:VITE_ASSISTANT_STT_URL="http://127.0.0.1:5202?language=en&authority=test&endpoint_threshold=0.75&fallback=http%3A%2F%2F127.0.0.1%3A5201"
+$env:VITE_ASSISTANT_STT_URL="http://127.0.0.1:5201?language=en&authority=auto&endpoint_threshold=0.5"
 $env:VITE_LIVE_SPECULATION_ENABLED="true"
 $env:VITE_LIVE_TTS_SPECULATION_ENABLED="false"
 npm run web:dev
 ```
 
-If Playwright Chromium is not installed:
+If Chromium is not installed:
 
 ```powershell
 python -m playwright install chromium
@@ -52,23 +48,13 @@ python -m playwright install chromium
 
 ## Run locally
 
-From the repository root:
-
 ```powershell
 python scripts/run_live_voice_performance_benchmark.py --headed
 ```
 
-Headless Chromium is the default; omit `--headed` when a visible browser is unnecessary:
+Headless Chromium is the default; omit `--headed` when a visible browser is unnecessary.
 
-```powershell
-python scripts/run_live_voice_performance_benchmark.py
-```
-
-The runner performs three preflight checks before opening Chromium:
-
-1. `/chatbot` is reachable.
-2. Kyutai `/authorityz?language=en&mode=test` is reachable.
-3. `/api/tts/live-call/capabilities` is reachable.
+The benchmark should preflight the web app, the STT `/authorityz` readiness endpoint on port 5201, and `/api/tts/live-call/capabilities` before opening Chromium.
 
 ## Result files
 
@@ -83,23 +69,19 @@ resources/logs/benchmarks/YYYYMMDD-HHMMSS-<git-sha>/
   tts-streaming.run.log
 ```
 
-The two `.run.log` files contain only records from the benchmark time window, so previous manual calls in the normal rolling logs do not contaminate the result.
+## Correctness gates
 
-## Default gates
+A clean run should require:
 
-The first version is measurement-first. It fails on correctness/safety problems:
+- exactly five driven WAV interactions
+- exactly five completed release-metric turns
+- the expected live LLM provider
+- negotiated STT provider `nemotron_parakeet_eou`
+- no AudioWorklet underruns
+- speculative TTS behavior matching the requested benchmark mode
+- no browser-driver failure
 
-- not exactly five driven WAV interactions
-- not exactly five completed release-metric turns
-- live LLM routing is not Cerebras
-- no Kyutai STT diagnostics are observed
-- any AudioWorklet underrun is observed
-- speculative TTS starts while the benchmark expects it disabled
-- the browser driver itself fails
-
-It reports, but does not yet hard-code, a production latency threshold. This is intentional because the LLM provider has changed to Cerebras and the first clean hardware run should establish the new baseline.
-
-Optional hard limits can be supplied immediately:
+Optional hard latency limits apply to `speech_end_to_first_playback_ms`:
 
 ```powershell
 python scripts/run_live_voice_performance_benchmark.py `
@@ -107,51 +89,12 @@ python scripts/run_live_voice_performance_benchmark.py `
   --max-p95-ms 2000
 ```
 
-The limits apply to `speech_end_to_first_playback_ms`.
-
-To benchmark a configuration where speculative TTS is enabled:
-
-```powershell
-python scripts/run_live_voice_performance_benchmark.py --expect-tts-speculation enabled
-```
-
-Or use `--expect-tts-speculation any` when that feature is not part of the experiment.
-
 ## Metrics
 
-The report groups the existing `release_metric` events by voice turn and calculates median/p95/min/max for:
+The report groups existing `release_metric` events by voice turn and calculates median/p95/min/max for STT finalize, speech-end to authoritative final, final to first LLM token, first token to first audio, final to first playback, first PCM to first playback, and speech-end to first playback.
 
-- STT finalize
-- speech end -> authoritative final
-- final -> first LLM token
-- first token -> first audio
-- final -> first playback
-- first PCM -> first playback
-- speech end -> first playback
+It also reports LLM speculative reuse, provider first-text latency, first-phrase TTS lane wait, provider-to-first-raw-PCM latency, speculative TTS starts, and AudioWorklet underruns.
 
-It additionally reports:
+## Future self-hosted CI
 
-- LLM speculative reuse count
-- LLM provider first-text latency
-- first-phrase (`p0`) Qwen lane wait
-- p0 provider -> first raw PCM
-- p0 raw PCM -> audible block
-- p0 route -> first transport frame
-- speculative-TTS start count
-- AudioWorklet underruns
-
-## Why the microphone is programmable
-
-Chromium's `--use-file-for-fake-audio-capture` flag accepts only one fixed file for the browser process. Concatenating all five interactions into one WAV would make the silence between turns depend on assistant response length and would turn long responses into unintended barge-ins.
-
-Instead, the test installs a pre-page `getUserMedia` override backed by a WebAudio `MediaStreamDestination`. The application receives a normal microphone `MediaStream`, but Playwright can inject one WAV at a time and wait for the full assistant playback cycle before injecting the next file.
-
-## Future self-hosted GitHub Actions use
-
-The local runner is deliberately the unit of execution. A future self-hosted Windows/RTX 4090 workflow only needs to:
-
-1. start the same Omnix services with `CEREBRAS_API_KEY` from the GitHub `dev` environment,
-2. invoke `python scripts/run_live_voice_performance_benchmark.py`, and
-3. upload `resources/logs/benchmarks/<run-id>` as the workflow artifact.
-
-The performance measurement logic therefore remains identical between a manual local run and the eventual GitHub Actions hardware run.
+The local runner remains the unit of execution. A future self-hosted Windows/RTX 4090 workflow only needs to start the same Omnix services, invoke the runner, and upload the generated benchmark directory as a workflow artifact.

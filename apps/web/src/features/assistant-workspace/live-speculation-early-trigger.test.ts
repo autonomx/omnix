@@ -11,6 +11,17 @@ import {
   LIVE_STT_SPECULATION_PARTIAL_EVENT,
 } from './live-stt-authority-controller';
 
+const NEGOTIATED_EOU = {
+  stage: 'stt_negotiated',
+  provider: 'nemotron_parakeet_eou',
+  capabilities: [
+    'segmented_audio',
+    'authoritative_final',
+    'partial_transcripts',
+    'authoritative_eou',
+  ],
+};
+
 describe('early live speculation trigger', () => {
   it('starts longer stable candidates at a lower bounded endpoint score', () => {
     expect(earlySpeculationProbabilityFloor('What kind of nonsense is this')).toBe(0.35);
@@ -53,16 +64,12 @@ describe('early live speculation trigger', () => {
 
     try {
       window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
-        detail: {
-          stage: 'stt_authority_selected',
-          authorityEnabled: true,
-          selectedProvider: 'kyutai',
-        },
+        detail: NEGOTIATED_EOU,
       }));
       window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
         detail: {
           stage: 'stt_endpoint_score',
-          provider: 'kyutai',
+          provider: 'nemotron_parakeet_eou',
           segmentId: 'segment-new',
           sourceSequence: 9,
           probability: 0.95,
@@ -86,11 +93,7 @@ describe('early live speculation trigger', () => {
 
     try {
       window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
-        detail: {
-          stage: 'stt_authority_selected',
-          authorityEnabled: true,
-          selectedProvider: 'kyutai',
-        },
+        detail: NEGOTIATED_EOU,
       }));
       window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
         detail: {
@@ -103,7 +106,7 @@ describe('early live speculation trigger', () => {
       window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
         detail: {
           stage: 'stt_endpoint_score',
-          provider: 'kyutai',
+          provider: 'nemotron_parakeet_eou',
           segmentId: 'segment-early',
           sourceSequence: 7,
           probability: 0.35,
@@ -131,6 +134,45 @@ describe('early live speculation trigger', () => {
       cleanup();
       window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, candidateListener);
       window.removeEventListener('omnix:assistant-voice-perf', perfListener);
+      liveConversationStore.dispatch({ type: 'reset_all' });
+    }
+  });
+
+  it('ignores endpoint scores from a provider without authoritative EOU', () => {
+    const candidateListener = vi.fn();
+    window.addEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, candidateListener);
+    const cleanup = initializeLiveSpeculationEarlyTrigger();
+
+    try {
+      window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+        detail: {
+          stage: 'stt_negotiated',
+          provider: 'parakeet',
+          capabilities: ['segmented_audio', 'authoritative_final'],
+        },
+      }));
+      window.dispatchEvent(new CustomEvent(LIVE_STT_SPECULATION_PARTIAL_EVENT, {
+        detail: {
+          chatSessionId: 'chat:no-eou',
+          segmentId: 'segment-no-eou',
+          sourceSequence: 2,
+          text: 'This should not speculate early',
+        },
+      }));
+      window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
+        detail: {
+          stage: 'stt_endpoint_score',
+          provider: 'parakeet',
+          segmentId: 'segment-no-eou',
+          sourceSequence: 2,
+          probability: 0.99,
+        },
+      }));
+
+      expect(candidateListener).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, candidateListener);
       liveConversationStore.dispatch({ type: 'reset_all' });
     }
   });

@@ -21,10 +21,7 @@ type EarlyTriggerWindow = Window & typeof globalThis & {
 type PerfDetail = Record<string, unknown> & {
   stage?: unknown;
   provider?: unknown;
-  selectedProvider?: unknown;
-  selected_provider?: unknown;
-  authorityEnabled?: unknown;
-  authority_enabled?: unknown;
+  capabilities?: unknown;
   segmentId?: unknown;
   segment_id?: unknown;
   sourceSequence?: unknown;
@@ -88,7 +85,12 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
   liveWindow[INSTALLED_KEY] = true;
   const lastBySegment = new Map<string, LastDispatch>();
   const partialBySegment = new Map<string, CachedPartial>();
-  let authoritativeKyutai = false;
+  let authoritativeProvider = '';
+
+  const resetProviderState = (): void => {
+    lastBySegment.clear();
+    partialBySegment.clear();
+  };
 
   const handlePartial = (event: Event): void => {
     const detail = (event as CustomEvent<SpeculationPartialDetail>).detail;
@@ -111,13 +113,21 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
     const detail = (event as CustomEvent<PerfDetail>).detail;
     const stage = stringValue(detail?.stage);
     if (stage === 'stt_authority_selected') {
-      authoritativeKyutai = booleanValue(
-        detail?.authorityEnabled ?? detail?.authority_enabled,
-      ) && stringValue(
-        detail?.selectedProvider ?? detail?.selected_provider,
-      ).toLowerCase() === 'kyutai';
-      lastBySegment.clear();
-      partialBySegment.clear();
+      authoritativeProvider = '';
+      resetProviderState();
+      return;
+    }
+    if (stage === 'stt_negotiated') {
+      const provider = stringValue(detail?.provider).toLowerCase();
+      const capabilities = Array.isArray(detail?.capabilities)
+        ? detail.capabilities
+          .filter((capability): capability is string => typeof capability === 'string')
+          .map((capability) => capability.trim().toLowerCase())
+        : [];
+      authoritativeProvider = capabilities.includes('authoritative_eou')
+        ? provider
+        : '';
+      resetProviderState();
       return;
     }
     if (stage === 'stt_final_received') {
@@ -128,8 +138,8 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
       }
       return;
     }
-    if (stage !== 'stt_endpoint_score' || !authoritativeKyutai) return;
-    if (stringValue(detail?.provider).toLowerCase() !== 'kyutai') return;
+    if (stage !== 'stt_endpoint_score' || !authoritativeProvider) return;
+    if (stringValue(detail?.provider).toLowerCase() !== authoritativeProvider) return;
 
     const segmentId = stringValue(detail?.segmentId ?? detail?.segment_id);
     const sourceSequence = numberValue(
@@ -138,9 +148,8 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
     const probability = numberValue(detail?.probability);
     if (!segmentId || sourceSequence === null || probability === null) return;
 
-    // Never combine a score for one Kyutai segment with transcript state from
-    // another segment. The controller forwards authoritative STT partials with
-    // the same segment/sequence identity; wait for that exact text if needed.
+    // Never combine a score for one authoritative STT segment with transcript
+    // state from another segment. Wait for text with the exact segment/sequence.
     const key = `${segmentId}:${sourceSequence}`;
     const cachedPartial = partialBySegment.get(key);
     if (!cachedPartial) return;
@@ -197,9 +206,8 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
   return () => {
     window.removeEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
     window.removeEventListener(PERF_EVENT, handlePerformance);
-    lastBySegment.clear();
-    partialBySegment.clear();
-    authoritativeKyutai = false;
+    resetProviderState();
+    authoritativeProvider = '';
     liveWindow[INSTALLED_KEY] = false;
   };
 }
@@ -235,9 +243,4 @@ function stringValue(value: unknown): string {
 function numberValue(value: unknown): number | null {
   const number = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function booleanValue(value: unknown): boolean {
-  if (typeof value === 'boolean') return value;
-  return String(value).trim().toLowerCase() === 'true';
 }
