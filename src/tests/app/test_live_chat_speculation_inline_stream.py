@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.chat import ChatSession
 from app.gateway import live_chat_speculation as speculation
 from app.gateway import live_chat_speculation_handshake as handshake
+from app.gateway import live_chat_speculation_inline_stream as inline_stream
 from app.gateway.live_chat_speculation_inline_stream import (
     register_live_chat_speculation_inline_stream_routes,
 )
@@ -69,6 +70,16 @@ def _client(store: _FakeStore, provider: _FakeProvider, monkeypatch) -> TestClie
         speculation.shared,
         "get_provider",
         lambda _provider_id: provider,
+    )
+    monkeypatch.setattr(
+        inline_stream,
+        "resolve_effective_provider_id",
+        lambda _provider_id: "fake-provider",
+    )
+    monkeypatch.setattr(
+        inline_stream,
+        "live_call_provider_affinity",
+        lambda _session_id: None,
     )
     app = FastAPI()
     speculation.register_live_chat_speculation_routes(
@@ -158,6 +169,11 @@ def test_inline_stream_suppresses_cerebras_before_provider_generation(monkeypatc
     store.session.model_id = None
     provider = _FakeProvider()
     client = _client(store, provider, monkeypatch)
+    monkeypatch.setattr(
+        inline_stream,
+        "resolve_effective_provider_id",
+        lambda _provider_id: "cerebras",
+    )
 
     response = client.post(
         "/api/live/speculation/sessions/session-inline/start-stream",
@@ -172,6 +188,43 @@ def test_inline_stream_suppresses_cerebras_before_provider_generation(monkeypatc
     assert response.json()["detail"] == "speculation_provider_suppressed"
     assert provider.calls == 0
     assert handshake._HANDSHAKE_GENERATIONS == {}
+
+
+def test_inline_stream_ignores_stale_session_provider_after_settings_switch(monkeypatch) -> None:
+    speculation.clear_live_speculation_session_cache()
+    handshake.clear_live_speculation_handshake_state()
+    store = _FakeStore()
+    store.session.provider_id = "cerebras"
+    store.session.model_id = "old-cerebras-model"
+    provider = _FakeProvider()
+    client = _client(store, provider, monkeypatch)
+    monkeypatch.setattr(
+        inline_stream,
+        "resolve_effective_provider_id",
+        lambda _provider_id: "lmstudio",
+    )
+    monkeypatch.setattr(
+        inline_stream,
+        "live_call_provider_affinity",
+        lambda _session_id: ("lmstudio", None),
+    )
+
+    response = client.post(
+        "/api/live/speculation/sessions/session-inline/start-stream",
+        json={
+            "content": "Tell me a story",
+            "segment_id": "segment-settings-switch",
+            "source_sequence": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-omnix-speculation-provider-id"] == "lmstudio"
+    assert response.headers.get("x-omnix-speculation-model-id") is None
+    payloads = _event_payloads(response.text)
+    assert payloads[0]["provider_id"] == "lmstudio"
+    assert payloads[0]["model_id"] is None
+    assert provider.calls == 1
 
 
 def test_inline_stream_uses_dedicated_live_model_lane(monkeypatch) -> None:
