@@ -11,6 +11,8 @@ import {
   type StreamingSttSocketLike,
 } from './live-voice-websocket';
 
+const SEGMENTED_TEST_PROVIDER = 'segmented-test-provider';
+
 describe('live voice websocket helpers', () => {
   it('builds the local transcription websocket URL from the browser location', () => {
     expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost' })).toBe('ws://127.0.0.1:5201/ws/transcribe');
@@ -103,7 +105,7 @@ describe('live voice websocket helpers', () => {
 
     const input = new Float32Array([0, 0.25, 0.5, 0.75, 1, 0.75]);
     client.sendAudio(input, 48_000);
-    sockets[0].receive(kyutaiReady());
+    sockets[0].receive(segmentedReady());
     expect(sockets[0].sentJson().filter((message) => message.type === 'audio')).toHaveLength(0);
     sockets[0].receive({ type: 'session_ready', sessionId: client.segmentState.sessionId, results: [] });
     await vi.waitFor(() => expect(sockets[0].sentJson().filter((message) => message.type === 'audio')).toHaveLength(1));
@@ -112,7 +114,7 @@ describe('live voice websocket helpers', () => {
     expect(audio[0].sampleRate).toBe(24_000);
     expect(audio[0].data).toBe(encodePcm16Base64(resampleFloat32(input, 48_000, 24_000)));
     expect(client.segmentState.negotiation).toEqual({
-      provider: 'kyutai',
+      provider: SEGMENTED_TEST_PROVIDER,
       protocol: 'segmented-v1',
       sampleRate: 24_000,
       frameSamples: 1_920,
@@ -142,7 +144,7 @@ describe('live voice websocket helpers', () => {
     });
     await openClient(client, sockets);
     sockets[0].receive(parakeetReady());
-    sockets[0].receive(kyutaiReady());
+    sockets[0].receive(segmentedReady());
 
     expect(onError).toHaveBeenCalledWith('Live STT negotiation changed during the active capture epoch.');
     expect(sockets[0].close).toHaveBeenCalledOnce();
@@ -232,7 +234,7 @@ describe('live voice websocket helpers', () => {
         return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: 'test', taskContractVersion: 1 };
       },
     });
-    await openSegmentedClient(client, sockets, kyutaiReady());
+    await openSegmentedClient(client, sockets, segmentedReady());
     client.sendAudio(new Float32Array([0.1, 0.2]), 24_000);
     client.sendFinal();
     client.sendAudio(new Float32Array([0.3, 0.4]), 24_000);
@@ -240,11 +242,11 @@ describe('live voice websocket helpers', () => {
     const finalizes = sockets[0].sentJson().filter((message) => message.type === 'finalize');
 
     sockets[0].receive({ type: 'segment_error', segmentId: finalizes[0].segmentId, sequence: 0, errorCode: 'flush_cancelled' });
-    sockets[0].receive(resultFor(client, finalizes[1], 'r1', 'second succeeds', 'kyutai'));
+    sockets[0].receive(resultFor(client, finalizes[1], 'r1', 'second succeeds', SEGMENTED_TEST_PROVIDER));
     await vi.waitFor(() => expect(finals).toEqual(['second succeeds']));
   });
 
-  it('retains acknowledged Kyutai audio and replays it after reconnect', async () => {
+  it('retains acknowledged segmented-provider audio and replays it after reconnect', async () => {
     const sockets: TestStreamingSocket[] = [];
     class TestWebSocket extends TestStreamingSocket {
       static readonly OPEN = 1;
@@ -260,7 +262,7 @@ describe('live voice websocket helpers', () => {
       reconnectDelayMs: 1,
       overlapMs: 0,
     });
-    await openSegmentedClient(client, sockets, kyutaiReady());
+    await openSegmentedClient(client, sockets, segmentedReady());
     client.sendAudio(new Float32Array([0.1, 0.2]), 24_000);
     const original = sockets[0].sentJson().find((message) => message.type === 'audio')!;
     sockets[0].receive({
@@ -274,7 +276,7 @@ describe('live voice websocket helpers', () => {
     await vi.waitFor(() => expect(sockets).toHaveLength(2));
     sockets[1].readyState = TestWebSocket.OPEN;
     sockets[1].onopen?.();
-    sockets[1].receive(kyutaiReady());
+    sockets[1].receive(segmentedReady());
     expect(sockets[1].sentJson().filter((message) => message.type === 'audio')).toHaveLength(0);
     sockets[1].receive({ type: 'session_ready', sessionId: client.segmentState.sessionId, results: [] });
     await vi.waitFor(() => expect(sockets[1].sentJson().filter((message) => message.type === 'audio')).toHaveLength(1));
@@ -311,21 +313,21 @@ describe('live voice websocket helpers', () => {
           return { outcome: 'ignored', segmentId: final.segmentId, sourceSequence: final.sourceSequence, taskContractId: 'test', taskContractVersion: 1 };
         },
       });
-      await openSegmentedClient(client, sockets, kyutaiReady());
+      await openSegmentedClient(client, sockets, segmentedReady());
       client.sendAudio(new Float32Array([0.1, 0.2]), 24_000);
       client.sendFinal();
       const finalize = sockets[0].sentJson().find((message) => message.type === 'finalize')!;
-      sockets[0].receive({ type: 'word', provider: 'kyutai', segmentId: finalize.segmentId, sequence: 0, text: 'hello', startMs: 100, endMs: 300 });
+      sockets[0].receive({ type: 'word', provider: SEGMENTED_TEST_PROVIDER, segmentId: finalize.segmentId, sequence: 0, text: 'hello', startMs: 100, endMs: 300 });
       sockets[0].receive({
-        ...resultFor(client, finalize, 'r0', 'hello', 'kyutai'),
+        ...resultFor(client, finalize, 'r0', 'hello', SEGMENTED_TEST_PROVIDER),
         providerMetrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 },
       });
 
       expect(onWord).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello', startMs: 100, endMs: 300 }));
-      await vi.waitFor(() => expect(finals).toEqual([{ provider: 'kyutai', metrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 } }]));
+      await vi.waitFor(() => expect(finals).toEqual([{ provider: SEGMENTED_TEST_PROVIDER, metrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 } }]));
       expect(diagnostics).toEqual(expect.arrayContaining([
-        expect.objectContaining({ stage: 'stt_word', provider: 'kyutai', textChars: 5, startMs: 100, endMs: 300 }),
-        expect.objectContaining({ stage: 'stt_provider_final', provider: 'kyutai', transcriptChars: 5, providerMetrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 } }),
+        expect.objectContaining({ stage: 'stt_word', provider: SEGMENTED_TEST_PROVIDER, textChars: 5, startMs: 100, endMs: 300 }),
+        expect.objectContaining({ stage: 'stt_provider_final', provider: SEGMENTED_TEST_PROVIDER, transcriptChars: 5, providerMetrics: { flushWallMs: 90, flushRealtimeFactor: 0.18 } }),
       ]));
       expect(diagnostics.some((event) => Object.values(event).includes('hello'))).toBe(false);
     } finally {
@@ -351,13 +353,13 @@ describe('live voice websocket helpers', () => {
         url: 'ws://127.0.0.1:5202/ws/transcribe?language=fr',
         webSocketCtor: TestWebSocket,
       });
-      await openSegmentedClient(client, sockets, { ...kyutaiReady(), language: 'fr' });
-      sockets[0].receive({ type: 'endpoint_score', provider: 'kyutai', segmentId: 'segment-1', sequence: 1, probability: 0.72, modelTimeMs: 400, signal: 'semantic_pause' });
-      sockets[0].receive({ type: 'endpoint_candidate', provider: 'kyutai', segmentId: 'segment-1', sequence: 1, probability: 0.8, modelTimeMs: 480 });
-      sockets[0].receive({ type: 'flush_completed', provider: 'kyutai', attemptId: 'attempt-1', wall_ms: 75, model_ms: 500, realtime_factor: 0.15 });
+      await openSegmentedClient(client, sockets, { ...segmentedReady(), language: 'fr' });
+      sockets[0].receive({ type: 'endpoint_score', provider: SEGMENTED_TEST_PROVIDER, segmentId: 'segment-1', sequence: 1, probability: 0.72, modelTimeMs: 400, signal: 'semantic_pause' });
+      sockets[0].receive({ type: 'endpoint_candidate', provider: SEGMENTED_TEST_PROVIDER, segmentId: 'segment-1', sequence: 1, probability: 0.8, modelTimeMs: 480 });
+      sockets[0].receive({ type: 'flush_completed', provider: SEGMENTED_TEST_PROVIDER, attemptId: 'attempt-1', wall_ms: 75, model_ms: 500, realtime_factor: 0.15 });
 
       expect(diagnostics).toEqual(expect.arrayContaining([
-        expect.objectContaining({ stage: 'stt_negotiated', provider: 'kyutai', language: 'fr' }),
+        expect.objectContaining({ stage: 'stt_negotiated', provider: SEGMENTED_TEST_PROVIDER, language: 'fr' }),
         expect.objectContaining({ stage: 'stt_endpoint_score', probability: 0.72, modelTimeMs: 400 }),
         expect.objectContaining({ stage: 'stt_endpoint_candidate', probability: 0.8, modelTimeMs: 480 }),
         expect.objectContaining({ stage: 'stt_flush_completed', attemptId: 'attempt-1', wallMs: 75, modelMs: 500, realtimeFactor: 0.15 }),
@@ -381,11 +383,11 @@ function parakeetReady(): Record<string, unknown> {
   };
 }
 
-function kyutaiReady(): Record<string, unknown> {
+function segmentedReady(): Record<string, unknown> {
   return {
     type: 'ready',
     protocol: 'segmented-v1',
-    provider: 'kyutai',
+    provider: SEGMENTED_TEST_PROVIDER,
     sampleRate: 24_000,
     frameSamples: 1_920,
     encoding: 'pcm16le',
