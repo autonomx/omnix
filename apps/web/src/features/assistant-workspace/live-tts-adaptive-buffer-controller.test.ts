@@ -7,19 +7,19 @@ import {
 } from './live-tts-adaptive-buffer-controller';
 
 describe('adaptive live TTS buffering', () => {
-  it('starts with a 160 ms speech reserve at 24 kHz', () => {
+  it('starts just above one 160 ms Qwen startup frame at 24 kHz', () => {
     const policy = new AdaptiveTtsBufferPolicy();
     const snapshot = policy.snapshot();
 
     expect(snapshot).toMatchObject({
-      startBufferMs: 160,
+      startBufferMs: 170,
       rebufferMs: 520,
       stableTurns: 0,
       underrunTurns: 0,
     });
     expect(adaptiveBufferWorkletMessage(snapshot, 24_000)).toMatchObject({
-      startBufferSamples: 3_840,
-      minimumBufferedSpeechSamples: 3_840,
+      startBufferSamples: 4_080,
+      minimumBufferedSpeechSamples: 4_080,
       rebufferSamples: 12_480,
     });
   });
@@ -28,28 +28,40 @@ describe('adaptive live TTS buffering', () => {
     const policy = new AdaptiveTtsBufferPolicy();
 
     expect(policy.observeWorkletEvent('underrun')).toMatchObject({
-      startBufferMs: 230,
+      startBufferMs: 240,
       rebufferMs: 630,
     });
     expect(policy.observeWorkletEvent('drained')).toMatchObject({
-      startBufferMs: 230,
+      startBufferMs: 240,
       rebufferMs: 630,
       stableTurns: 0,
       underrunTurns: 1,
     });
   });
 
-  it('only reduces the reserve after three complete stable turns', () => {
+  it('never decays below the one-frame startup safety floor', () => {
     const policy = new AdaptiveTtsBufferPolicy();
 
     policy.observeWorkletEvent('drained');
     policy.observeWorkletEvent('drained');
-    expect(policy.snapshot().startBufferMs).toBe(160);
+    expect(policy.snapshot().startBufferMs).toBe(170);
 
     expect(policy.observeWorkletEvent('drained')).toMatchObject({
-      startBufferMs: 130,
+      startBufferMs: 170,
       rebufferMs: 490,
       stableTurns: 0,
+    });
+  });
+
+  it('clamps a persisted legacy sub-frame reserve to the new floor', () => {
+    const policy = new AdaptiveTtsBufferPolicy({
+      startBufferMs: 140,
+      rebufferMs: 490,
+    });
+
+    expect(policy.snapshot()).toMatchObject({
+      startBufferMs: 170,
+      rebufferMs: 490,
     });
   });
 
