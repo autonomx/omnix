@@ -2,14 +2,14 @@ import { waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  let releaseCue: (() => void) | null = null;
+  const cueControl: { release: (() => void) | null } = { release: null };
   const session = {
     sampleRate: 24_000,
     enqueuePhrase: vi.fn(async () => undefined),
     enqueueOutputPhrase: vi.fn(async () => undefined),
     enqueueSilence: vi.fn(async () => undefined),
     enqueueCue: vi.fn(() => new Promise<void>((resolve) => {
-      releaseCue = resolve;
+      cueControl.release = resolve;
     })),
     cancelSegment: vi.fn(),
     cancelOutputItem: vi.fn(async () => undefined),
@@ -27,14 +27,13 @@ const mocks = vi.hoisted(() => {
     close: vi.fn(async () => undefined),
   };
   return {
+    cueControl,
     session,
     reporter,
     createSession: vi.fn(async () => session),
     createReporter: vi.fn(() => reporter),
     createTraceId: vi.fn(() => 'live-call:s1:ordering-regression'),
     stopButtonStream: vi.fn(),
-    releaseCue: () => releaseCue?.(),
-    resetCue: () => { releaseCue = null; },
   };
 });
 
@@ -113,12 +112,11 @@ beforeEach(() => {
   renderLiveVoice();
   window.localStorage.clear();
   window.localStorage.setItem('omnix.chatbot.assistantSettings', JSON.stringify({ voiceId: 'Sofia' }));
-  mocks.resetCue();
+  mocks.cueControl.release = null;
   mocks.session.enqueueOutputPhrase.mockReset().mockResolvedValue(undefined);
   mocks.session.enqueueSilence.mockReset().mockResolvedValue(undefined);
   mocks.session.enqueueCue.mockReset().mockImplementation(() => new Promise<void>((resolve) => {
-    const release = () => resolve();
-    Object.defineProperty(mocks, 'releaseCue', { value: release, configurable: true });
+    mocks.cueControl.release = resolve;
   }));
   mocks.session.cancelOutputItem.mockReset().mockResolvedValue(undefined);
   mocks.session.waitForOutputItem.mockReset().mockResolvedValue(undefined);
@@ -136,6 +134,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  mocks.cueControl.release?.();
   cleanup?.();
   cleanup = null;
   await Promise.resolve();
@@ -163,7 +162,7 @@ describe('live voice phrase ordering regression', () => {
     expect(mocks.session.enqueueSilence).not.toHaveBeenCalled();
     expect(mocks.session.enqueueOutputPhrase).not.toHaveBeenCalled();
 
-    mocks.releaseCue();
+    mocks.cueControl.release?.();
 
     await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mocks.session.enqueueSilence).toHaveBeenCalledTimes(1));
