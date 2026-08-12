@@ -18,7 +18,7 @@ def _pcm16(sample: int, count: int) -> bytes:
     return struct.pack("<h", sample) * count
 
 
-def test_one_step_first_chunk_arms_nonzero_fallback_after_one_chunk() -> None:
+def test_two_step_first_chunk_arms_nonzero_fallback_after_one_chunk() -> None:
     quiet_signal = _pcm16(1, TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES)
     max_initial_silence_ms = live_call_max_initial_silence_ms_for_first_chunk(
         quiet_signal,
@@ -26,7 +26,7 @@ def test_one_step_first_chunk_arms_nonzero_fallback_after_one_chunk() -> None:
     )
 
     assert max_initial_silence_ms == TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS
-    assert max_initial_silence_ms == 80.0
+    assert max_initial_silence_ms == 160.0
 
     blocks = list(
         stream_pcm16_blocks(
@@ -38,11 +38,11 @@ def test_one_step_first_chunk_arms_nonzero_fallback_after_one_chunk() -> None:
     )
 
     assert blocks
-    first_samples = struct.unpack("<1920h", blocks[0][0])
+    first_samples = struct.unpack("<3840h", blocks[0][0])
     assert any(sample != 0 for sample in first_samples)
 
 
-def test_one_step_first_chunk_still_rejects_exact_digital_silence() -> None:
+def test_two_step_first_chunk_still_rejects_exact_digital_silence() -> None:
     silence = _pcm16(0, TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES)
 
     blocks = list(
@@ -61,7 +61,7 @@ def test_one_step_first_chunk_still_rejects_exact_digital_silence() -> None:
 
 
 def test_four_step_first_chunk_keeps_established_scan_window() -> None:
-    four_step_samples = TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES * 4
+    four_step_samples = TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES * 2
     quiet_signal = _pcm16(1, four_step_samples)
     max_initial_silence_ms = live_call_max_initial_silence_ms_for_first_chunk(
         quiet_signal,
