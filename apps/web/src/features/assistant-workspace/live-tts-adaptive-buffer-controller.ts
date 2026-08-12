@@ -4,6 +4,7 @@ const INSTALLED_KEY = '__omnixLiveTtsAdaptiveBufferInstalled';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v2';
 const MAX_TRACKED_ANCILLARY_SEGMENTS = 128;
+const MIN_START_BUFFER_MS = 170;
 
 export type AdaptiveBufferSnapshot = {
   startBufferMs: number;
@@ -33,11 +34,12 @@ export class AdaptiveTtsBufferPolicy {
 
   constructor(initial?: Partial<AdaptiveBufferSnapshot>) {
     this.snapshotValue = {
-      // Qwen now yields a four-codec-step first block (about 320 ms of audio).
-      // Starting after 160 ms keeps half that block in reserve while removing
-      // the previous 260 ms deliberate onset delay. Underruns still increase
-      // this value immediately and are persisted for later turns.
-      startBufferMs: clamp(initial?.startBufferMs ?? 160, 120, 650),
+      // The accepted-response fast path hands off one 3,840-sample / 160 ms
+      // Qwen startup frame. Starting at or below that frame lets playback drain
+      // the only available block before the next decoder chunk arrives. Keep
+      // the adaptive floor just above one frame so startup still stays low but
+      // waits for a second handoff before consuming speech.
+      startBufferMs: clamp(initial?.startBufferMs ?? MIN_START_BUFFER_MS, MIN_START_BUFFER_MS, 650),
       rebufferMs: clamp(initial?.rebufferMs ?? 520, 300, 1_200),
       maxRebufferMs: clamp(initial?.maxRebufferMs ?? 1_400, 800, 2_000),
       stableTurns: Math.max(0, initial?.stableTurns ?? 0),
@@ -54,7 +56,7 @@ export class AdaptiveTtsBufferPolicy {
       this.turnUnderruns += 1;
       this.snapshotValue.startBufferMs = clamp(
         this.snapshotValue.startBufferMs + 70,
-        120,
+        MIN_START_BUFFER_MS,
         650,
       );
       this.snapshotValue.rebufferMs = clamp(
@@ -70,13 +72,12 @@ export class AdaptiveTtsBufferPolicy {
       } else {
         this.snapshotValue.stableTurns += 1;
         if (this.snapshotValue.stableTurns >= 3) {
-          // The live-call transport hands off a 200 ms startup frame. Returning
-          // a post-underrun reserve from 230 ms to 200 ms after three stable
-          // turns avoids waiting for a second frame while retaining one full
-          // startup frame before playback.
+          // Decay the post-underrun reserve after three stable turns, but never
+          // below the 170 ms startup floor: the live transport's first frame is
+          // 160 ms, so a lower target can restart the single-frame underrun.
           this.snapshotValue.startBufferMs = clamp(
             this.snapshotValue.startBufferMs - 30,
-            120,
+            MIN_START_BUFFER_MS,
             650,
           );
           this.snapshotValue.rebufferMs = clamp(
