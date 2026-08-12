@@ -6,7 +6,7 @@ from app.gateway.tts_stream_contract import (
 )
 
 
-def test_first_conversation_phrase_uses_one_step_codec_startup() -> None:
+def test_first_conversation_phrase_uses_two_step_codec_startup() -> None:
     output_id = "conversation-chat-s1-g7-p0"
     request = TtsStreamRequest.model_validate(
         {
@@ -17,9 +17,9 @@ def test_first_conversation_phrase_uses_one_step_codec_startup() -> None:
         }
     )
 
-    assert CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS == 1
-    assert chat_stream_codec_chunk_cap(output_id) == 1
-    assert request.chunk_size == 1
+    assert CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS == 2
+    assert chat_stream_codec_chunk_cap(output_id) == 2
+    assert request.chunk_size == 2
 
 
 def test_later_conversation_phrases_keep_four_step_codec_cap() -> None:
