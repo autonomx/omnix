@@ -53,6 +53,7 @@ def test_kyutai_launcher_services_can_be_disabled(monkeypatch) -> None:
 def test_runtime_dashboard_defaults_to_parakeet_stt(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_KYUTAI_ENABLED", raising=False)
     monkeypatch.delenv("VITE_ASSISTANT_STT_URL", raising=False)
+    monkeypatch.delenv("OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES", raising=False)
 
     by_id = {spec.service_id: spec for spec in build_runtime_service_specs()}
 
@@ -60,6 +61,7 @@ def test_runtime_dashboard_defaults_to_parakeet_stt(monkeypatch) -> None:
     assert by_id["stt"].enabled is True
     assert by_id["stt"].auto_start is True
     assert by_id["stt"].env["OMNIX_STT_URL"] == "http://127.0.0.1:5201"
+    assert by_id["gateway"].env["OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"] == "true"
     assert "VITE_ASSISTANT_STT_URL" not in by_id["web"].env
 
 
