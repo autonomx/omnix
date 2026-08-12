@@ -304,10 +304,12 @@ async function startLiveVoice(card: HTMLElement): Promise<void> {
       window.fetch.bind(window),
     );
     const selectedProvider = sttAuthority.authorityEnabled
-      ? 'kyutai'
-      : sttAuthority.fallbackUsed || !runtimeConfig.sttServiceUrl?.trim()
-        ? 'parakeet'
-        : 'configured_observational';
+      ? 'configured_authoritative'
+      : sttAuthority.fallbackUsed
+        ? 'fallback'
+        : runtimeConfig.sttServiceUrl?.trim()
+          ? 'configured_observational'
+          : 'default_stt';
     reporter.record('stt_authority_selected', {
       selected_provider: selectedProvider,
       authority_enabled: sttAuthority.authorityEnabled,
