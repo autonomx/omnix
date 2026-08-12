@@ -18,15 +18,50 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.chat import ChatSessionStore, default_chat_store
+from app.chat.store import _provider_key
 
 from . import live_chat_speculation as speculation_runtime
 from . import live_chat_speculation_handshake as handshake_runtime
+from .live_call_prewarm import live_call_provider_affinity
+from .live_chat_provider_routing import resolve_effective_provider_id
 from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_inline_stream_registered"
 _CLIENT_GENERATION_ID = re.compile(r"^spec-client-[A-Za-z0-9_-]{8,80}$")
 _SPECULATION_BLOCKED_PROVIDER_IDS = frozenset({"cerebras"})
+
+
+def _effective_speculation_route(
+    session_id: str,
+    request: speculation_runtime.LiveSpeculationRequest,
+) -> tuple[str | None, str | None, str]:
+    """Resolve speculation against current Settings/prewarm, not stale session state."""
+
+    requested_provider_id = str(request.provider_id or "").strip() or None
+    requested_model_id = str(request.model_id or "").strip() or None
+    if requested_provider_id is not None:
+        # Explicit provider selection wins and must not inherit a model from the
+        # provider previously persisted on the chat session.
+        return resolve_live_voice_chat_route(
+            requested_provider_id,
+            requested_model_id,
+        )
+
+    configured_provider_id = resolve_effective_provider_id(None)
+    affinity = live_call_provider_affinity(session_id)
+    if affinity is not None:
+        affinity_provider_id, affinity_model_id = affinity
+        if _provider_key(affinity_provider_id) == _provider_key(configured_provider_id):
+            return resolve_live_voice_chat_route(
+                affinity_provider_id or configured_provider_id,
+                requested_model_id or affinity_model_id,
+            )
+
+    return resolve_live_voice_chat_route(
+        configured_provider_id,
+        requested_model_id,
+    )
 
 
 def register_live_chat_speculation_inline_stream_routes(
@@ -63,9 +98,9 @@ def register_live_chat_speculation_inline_stream_routes(
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
 
-        provider_id, model_id, execution_lane = resolve_live_voice_chat_route(
-            request.provider_id or session.provider_id,
-            request.model_id or session.model_id,
+        provider_id, model_id, execution_lane = _effective_speculation_route(
+            session_id,
+            request,
         )
         if str(provider_id or "").strip().casefold() in _SPECULATION_BLOCKED_PROVIDER_IDS:
             stream_log(
