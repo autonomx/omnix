@@ -19,10 +19,11 @@ on:
       - "src/app/trading/**"
       - "src/app/gateway/trading_routes.py"
       - "src/app/gateway/__init__.py"
-      - "src/app/persistence/migrations/002*_trading_*.sql"
+      - "src/app/persistence/migrations/*_trading_*.sql"
       - "src/tests/trading/**"
       - "docs/architecture/ADR-0004-omnix-trading-terminal.md"
       - "docs/architecture/OMNIX_TRADING_**"
+      - "docs/plans/omnix_trading_terminal_roadmap.md"
       - "docs/plans/omnix_trading_terminal_roadmap_review.md"
       - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/trading-terminal.yml"
@@ -40,9 +41,18 @@ jobs:
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out immutable workflow head
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact checked-out head
+        shell: bash
+        run: |
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          echo "Expected head: ${expected}"
+          echo "Checked out:   ${actual}"
+          test "${actual}" = "${expected}"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
