@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Protocol
 
@@ -21,9 +20,11 @@ from .paper import (
     PaperOrder,
     PaperOrderRequest,
     PaperPosition,
+    paper_buy_reservation,
     paper_commission,
     paper_fill_decision,
     paper_fill_key,
+    paper_order_request_matches,
     paper_realized_pnl,
     paper_unrealized_pnl,
 )
@@ -62,15 +63,17 @@ def _order(row) -> PaperOrder:
         average_fill_price=Decimal(row[11]) if row[11] is not None else None,
         idempotency_key=str(row[12]),
         rejection_reason=str(row[13]) if row[13] is not None else None,
-        created_at=row[14],
-        updated_at=row[15],
+        reserved_cash=Decimal(row[14]),
+        created_at=row[15],
+        updated_at=row[16],
     )
 
 
 _ORDER_COLUMNS = """
     account_id, order_id, instrument_id, binding_id, side, order_type,
     quantity, limit_price, stop_price, status, filled_quantity,
-    average_fill_price, idempotency_key, rejection_reason, created_at, updated_at
+    average_fill_price, idempotency_key, rejection_reason, reserved_cash,
+    created_at, updated_at
 """
 
 
@@ -158,7 +161,7 @@ class TradingPaperRepository:
         request: PaperOrderRequest,
     ) -> PaperOrder:
         with self.uow_factory() as uow:
-            account = uow.connection.execute(
+            account_row = uow.connection.execute(
                 """
                 SELECT account_id, name, base_currency, commission_bps,
                        enabled, revision, created_at, updated_at
@@ -168,31 +171,98 @@ class TradingPaperRepository:
                 """,
                 (self.context.workspace_id, account_id),
             ).fetchone()
-            if account is None:
+            if account_row is None:
                 raise ValueError(f"paper_account_not_found: {account_id}")
-            if not bool(account[4]):
+            account = _account(account_row)
+            if not account.enabled:
                 raise ValueError(f"paper_account_disabled: {account_id}")
-            if request.side == "sell":
-                position = uow.connection.execute(
+
+            existing_row = uow.connection.execute(
+                f"""
+                SELECT {_ORDER_COLUMNS}
+                  FROM omnix_trading_paper_orders
+                 WHERE workspace_id = %s AND account_id = %s AND idempotency_key = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, account_id, request.idempotency_key),
+            ).fetchone()
+            if existing_row is not None:
+                existing = _order(existing_row)
+                if not paper_order_request_matches(existing, request):
+                    raise ValueError("paper_idempotency_payload_mismatch")
+                return existing
+
+            reserved_cash = Decimal("0")
+            if request.side == "buy":
+                balance_row = uow.connection.execute(
                     """
-                    SELECT quantity FROM omnix_trading_paper_positions
+                    SELECT available, reserved
+                      FROM omnix_trading_paper_balances
+                     WHERE workspace_id = %s AND account_id = %s AND currency = %s
+                     FOR UPDATE
+                    """,
+                    (self.context.workspace_id, account_id, account.base_currency),
+                ).fetchone()
+                available = Decimal(balance_row[0]) if balance_row else Decimal("0")
+                reserved_cash = paper_buy_reservation(
+                    request,
+                    available_cash=available,
+                    commission_bps=account.commission_bps,
+                )
+                if reserved_cash <= 0 or available < reserved_cash:
+                    raise ValueError("insufficient_paper_cash")
+                uow.connection.execute(
+                    """
+                    UPDATE omnix_trading_paper_balances
+                       SET available = available - %s,
+                           reserved = reserved + %s,
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND account_id = %s AND currency = %s
+                    """,
+                    (
+                        reserved_cash,
+                        reserved_cash,
+                        self.context.workspace_id,
+                        account_id,
+                        account.base_currency,
+                    ),
+                )
+            else:
+                position_row = uow.connection.execute(
+                    """
+                    SELECT quantity, reserved_quantity
+                      FROM omnix_trading_paper_positions
                      WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
                      FOR UPDATE
                     """,
                     (self.context.workspace_id, account_id, request.instrument_id),
                 ).fetchone()
-                quantity = Decimal(position[0]) if position else Decimal("0")
-                if quantity < request.quantity:
+                quantity = Decimal(position_row[0]) if position_row else Decimal("0")
+                already_reserved = Decimal(position_row[1]) if position_row else Decimal("0")
+                if quantity - already_reserved < request.quantity:
                     raise ValueError("insufficient_paper_position")
+                uow.connection.execute(
+                    """
+                    UPDATE omnix_trading_paper_positions
+                       SET reserved_quantity = reserved_quantity + %s,
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+                    """,
+                    (
+                        request.quantity,
+                        self.context.workspace_id,
+                        account_id,
+                        request.instrument_id,
+                    ),
+                )
+
             row = uow.connection.execute(
                 f"""
                 INSERT INTO omnix_trading_paper_orders (
                     workspace_id, account_id, order_id, instrument_id, binding_id,
                     side, order_type, quantity, limit_price, stop_price,
-                    status, idempotency_key
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s)
-                ON CONFLICT (workspace_id, account_id, idempotency_key) DO UPDATE
-                    SET order_id = omnix_trading_paper_orders.order_id
+                    status, idempotency_key, reserved_cash
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)
                 RETURNING {_ORDER_COLUMNS}
                 """,
                 (
@@ -207,6 +277,7 @@ class TradingPaperRepository:
                     request.limit_price,
                     request.stop_price,
                     request.idempotency_key,
+                    reserved_cash,
                 ),
             ).fetchone()
             uow.commit()
@@ -214,20 +285,86 @@ class TradingPaperRepository:
 
     def cancel_order(self, account_id: str, order_id: str) -> PaperOrder:
         with self.uow_factory() as uow:
+            account_row = uow.connection.execute(
+                """
+                SELECT account_id, name, base_currency, commission_bps,
+                       enabled, revision, created_at, updated_at
+                  FROM omnix_trading_paper_accounts
+                 WHERE workspace_id = %s AND account_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, account_id),
+            ).fetchone()
+            if account_row is None:
+                raise ValueError(f"paper_account_not_found: {account_id}")
+            account = _account(account_row)
+            order_row = uow.connection.execute(
+                f"""
+                SELECT {_ORDER_COLUMNS}
+                  FROM omnix_trading_paper_orders
+                 WHERE workspace_id = %s AND account_id = %s AND order_id = %s
+                   AND status = 'open'
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, account_id, order_id),
+            ).fetchone()
+            if order_row is None:
+                raise ValueError("paper_order_not_open")
+            order = _order(order_row)
+            self._release_order_reservation(uow, account, order)
             row = uow.connection.execute(
                 f"""
                 UPDATE omnix_trading_paper_orders
-                   SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+                   SET status = 'cancelled', reserved_cash = 0,
+                       updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND account_id = %s AND order_id = %s
-                   AND status = 'open'
                 RETURNING {_ORDER_COLUMNS}
                 """,
                 (self.context.workspace_id, account_id, order_id),
             ).fetchone()
-            if row is None:
-                raise ValueError("paper_order_not_open")
             uow.commit()
             return _order(row)
+
+    def _release_order_reservation(
+        self,
+        uow: PostgresUnitOfWork,
+        account: PaperAccount,
+        order: PaperOrder,
+    ) -> None:
+        if order.side == "buy" and order.reserved_cash > 0:
+            uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_balances
+                   SET available = available + %s,
+                       reserved = reserved - %s,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND currency = %s
+                """,
+                (
+                    order.reserved_cash,
+                    order.reserved_cash,
+                    self.context.workspace_id,
+                    account.account_id,
+                    account.base_currency,
+                ),
+            )
+        elif order.side == "sell":
+            uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_positions
+                   SET reserved_quantity = reserved_quantity - %s,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+                   AND reserved_quantity >= %s
+                """,
+                (
+                    order.quantity,
+                    self.context.workspace_id,
+                    account.account_id,
+                    order.instrument_id,
+                    order.quantity,
+                ),
+            )
 
     def process_observation(
         self,
@@ -258,10 +395,11 @@ class TradingPaperRepository:
                 """,
                 (self.context.workspace_id, account_id, account.base_currency),
             ).fetchone()
-            cash = Decimal(balance_row[0]) if balance_row else Decimal("0")
+            cash_available = Decimal(balance_row[0]) if balance_row else Decimal("0")
+            cash_reserved = Decimal(balance_row[1]) if balance_row else Decimal("0")
             position_row = uow.connection.execute(
                 """
-                SELECT quantity, average_cost, realized_pnl
+                SELECT quantity, reserved_quantity, average_cost, realized_pnl
                   FROM omnix_trading_paper_positions
                  WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
                  FOR UPDATE
@@ -269,8 +407,9 @@ class TradingPaperRepository:
                 (self.context.workspace_id, account_id, observation.instrument_id),
             ).fetchone()
             position_quantity = Decimal(position_row[0]) if position_row else Decimal("0")
-            average_cost = Decimal(position_row[1]) if position_row else Decimal("0")
-            realized_pnl = Decimal(position_row[2]) if position_row else Decimal("0")
+            reserved_quantity = Decimal(position_row[1]) if position_row else Decimal("0")
+            average_cost = Decimal(position_row[2]) if position_row else Decimal("0")
+            realized_pnl = Decimal(position_row[3]) if position_row else Decimal("0")
             order_rows = uow.connection.execute(
                 f"""
                 SELECT {_ORDER_COLUMNS}
@@ -282,6 +421,7 @@ class TradingPaperRepository:
                 """,
                 (self.context.workspace_id, account_id, observation.instrument_id),
             ).fetchall()
+
             for row in order_rows:
                 order = _order(row)
                 decision = paper_fill_decision(order, observation)
@@ -289,22 +429,32 @@ class TradingPaperRepository:
                     continue
                 notional = order.quantity * decision.fill_price
                 commission = paper_commission(notional, account.commission_bps)
+                total_cost = notional + commission
                 rejection = None
-                if order.side == "buy" and cash < notional + commission:
+                if order.side == "buy" and order.reserved_cash < total_cost:
                     rejection = "insufficient_paper_cash"
-                if order.side == "sell" and position_quantity < order.quantity:
+                if order.side == "sell" and (
+                    position_quantity < order.quantity or reserved_quantity < order.quantity
+                ):
                     rejection = "insufficient_paper_position"
                 if rejection:
+                    if order.side == "buy":
+                        cash_available += order.reserved_cash
+                        cash_reserved -= order.reserved_cash
+                    else:
+                        release_quantity = min(reserved_quantity, order.quantity)
+                        reserved_quantity -= release_quantity
                     uow.connection.execute(
                         """
                         UPDATE omnix_trading_paper_orders
                            SET status = 'rejected', rejection_reason = %s,
-                               updated_at = CURRENT_TIMESTAMP
+                               reserved_cash = 0, updated_at = CURRENT_TIMESTAMP
                          WHERE workspace_id = %s AND account_id = %s AND order_id = %s
                         """,
                         (rejection, self.context.workspace_id, account_id, order.order_id),
                     )
                     continue
+
                 key = paper_fill_key(account_id, order.order_id, observation)
                 fill_id = key[:32]
                 inserted = uow.connection.execute(
@@ -334,14 +484,17 @@ class TradingPaperRepository:
                 ).fetchone()
                 if inserted is None:
                     continue
+
                 if order.side == "buy":
                     prior_cost = position_quantity * average_cost
-                    cash -= notional + commission
+                    cash_reserved -= order.reserved_cash
+                    cash_available += order.reserved_cash - total_cost
                     position_quantity += order.quantity
                     average_cost = (prior_cost + notional) / position_quantity
                     realized_delta = Decimal("0")
                 else:
-                    cash += notional - commission
+                    reserved_quantity -= order.quantity
+                    cash_available += notional - commission
                     realized_delta = paper_realized_pnl(
                         order.quantity,
                         average_cost,
@@ -351,13 +504,20 @@ class TradingPaperRepository:
                     position_quantity -= order.quantity
                     if position_quantity == 0:
                         average_cost = Decimal("0")
+
                 uow.connection.execute(
                     """
                     UPDATE omnix_trading_paper_balances
-                       SET available = %s, updated_at = CURRENT_TIMESTAMP
+                       SET available = %s, reserved = %s, updated_at = CURRENT_TIMESTAMP
                      WHERE workspace_id = %s AND account_id = %s AND currency = %s
                     """,
-                    (cash, self.context.workspace_id, account_id, account.base_currency),
+                    (
+                        cash_available,
+                        cash_reserved,
+                        self.context.workspace_id,
+                        account_id,
+                        account.base_currency,
+                    ),
                 )
                 unrealized = paper_unrealized_pnl(
                     position_quantity,
@@ -368,10 +528,12 @@ class TradingPaperRepository:
                     """
                     INSERT INTO omnix_trading_paper_positions (
                         workspace_id, account_id, instrument_id, quantity,
-                        average_cost, realized_pnl, last_price, unrealized_pnl
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        reserved_quantity, average_cost, realized_pnl,
+                        last_price, unrealized_pnl
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
                        SET quantity = EXCLUDED.quantity,
+                           reserved_quantity = EXCLUDED.reserved_quantity,
                            average_cost = EXCLUDED.average_cost,
                            realized_pnl = EXCLUDED.realized_pnl,
                            last_price = EXCLUDED.last_price,
@@ -383,6 +545,7 @@ class TradingPaperRepository:
                         account_id,
                         order.instrument_id,
                         position_quantity,
+                        reserved_quantity,
                         average_cost,
                         realized_pnl,
                         observation.price,
@@ -393,11 +556,13 @@ class TradingPaperRepository:
                     """
                     UPDATE omnix_trading_paper_orders
                        SET status = 'filled', filled_quantity = quantity,
-                           average_fill_price = %s, updated_at = CURRENT_TIMESTAMP
+                           average_fill_price = %s, reserved_cash = 0,
+                           updated_at = CURRENT_TIMESTAMP
                      WHERE workspace_id = %s AND account_id = %s AND order_id = %s
                     """,
                     (decision.fill_price, self.context.workspace_id, account_id, order.order_id),
                 )
+
                 ledger_rows = [
                     ("trade_cash", notional if order.side == "sell" else -notional),
                     ("commission", -commission),
@@ -425,11 +590,15 @@ class TradingPaperRepository:
                             order.order_id,
                             fill_id,
                             ledger_key,
-                            json.dumps({
-                                "provider": observation.provider,
-                                "binding_id": observation.binding_id,
-                                "source_time": observation.source_time.isoformat(),
-                            }),
+                            json.dumps(
+                                {
+                                    "provider": observation.provider,
+                                    "binding_id": observation.binding_id,
+                                    "source_time": observation.source_time.isoformat(),
+                                    "high": str(observation.high) if observation.high is not None else None,
+                                    "low": str(observation.low) if observation.low is not None else None,
+                                }
+                            ),
                         ),
                     )
                 fills.append(
@@ -446,7 +615,8 @@ class TradingPaperRepository:
                         idempotency_key=key,
                     )
                 )
-            if position_row and not order_rows:
+
+            if position_row is not None and not fills:
                 unrealized = paper_unrealized_pnl(
                     position_quantity,
                     average_cost,
@@ -456,15 +626,31 @@ class TradingPaperRepository:
                     """
                     UPDATE omnix_trading_paper_positions
                        SET last_price = %s, unrealized_pnl = %s,
-                           updated_at = CURRENT_TIMESTAMP
+                           reserved_quantity = %s, updated_at = CURRENT_TIMESTAMP
                      WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
                     """,
                     (
                         observation.price,
                         unrealized,
+                        reserved_quantity,
                         self.context.workspace_id,
                         account_id,
                         observation.instrument_id,
+                    ),
+                )
+            if balance_row is not None and not fills:
+                uow.connection.execute(
+                    """
+                    UPDATE omnix_trading_paper_balances
+                       SET available = %s, reserved = %s, updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND account_id = %s AND currency = %s
+                    """,
+                    (
+                        cash_available,
+                        cash_reserved,
+                        self.context.workspace_id,
+                        account_id,
+                        account.base_currency,
                     ),
                 )
             uow.commit()
@@ -491,7 +677,11 @@ class TradingPaperRepository:
                     raise ValueError(f"paper_account_not_found: {account_id}")
                 account = _account(row)
             balances = [
-                PaperBalance(currency=str(row[0]), available=Decimal(row[1]), reserved=Decimal(row[2]))
+                PaperBalance(
+                    currency=str(row[0]),
+                    available=Decimal(row[1]),
+                    reserved=Decimal(row[2]),
+                )
                 for row in uow.connection.execute(
                     "SELECT currency, available, reserved FROM omnix_trading_paper_balances WHERE workspace_id = %s AND account_id = %s ORDER BY currency",
                     (self.context.workspace_id, account_id),
@@ -499,25 +689,37 @@ class TradingPaperRepository:
             ]
             positions = [
                 PaperPosition(
-                    instrument_id=str(row[0]), quantity=Decimal(row[1]),
-                    average_cost=Decimal(row[2]), realized_pnl=Decimal(row[3]),
-                    last_price=Decimal(row[4]) if row[4] is not None else None,
-                    unrealized_pnl=Decimal(row[5]),
+                    instrument_id=str(row[0]),
+                    quantity=Decimal(row[1]),
+                    reserved_quantity=Decimal(row[2]),
+                    average_cost=Decimal(row[3]),
+                    realized_pnl=Decimal(row[4]),
+                    last_price=Decimal(row[5]) if row[5] is not None else None,
+                    unrealized_pnl=Decimal(row[6]),
                 )
                 for row in uow.connection.execute(
-                    "SELECT instrument_id, quantity, average_cost, realized_pnl, last_price, unrealized_pnl FROM omnix_trading_paper_positions WHERE workspace_id = %s AND account_id = %s ORDER BY instrument_id",
+                    "SELECT instrument_id, quantity, reserved_quantity, average_cost, realized_pnl, last_price, unrealized_pnl FROM omnix_trading_paper_positions WHERE workspace_id = %s AND account_id = %s ORDER BY instrument_id",
                     (self.context.workspace_id, account_id),
                 ).fetchall()
             ]
-            orders = [_order(row) for row in uow.connection.execute(
-                f"SELECT {_ORDER_COLUMNS} FROM omnix_trading_paper_orders WHERE workspace_id = %s AND account_id = %s AND status = 'open' ORDER BY created_at",
-                (self.context.workspace_id, account_id),
-            ).fetchall()]
+            orders = [
+                _order(row)
+                for row in uow.connection.execute(
+                    f"SELECT {_ORDER_COLUMNS} FROM omnix_trading_paper_orders WHERE workspace_id = %s AND account_id = %s AND status = 'open' ORDER BY created_at",
+                    (self.context.workspace_id, account_id),
+                ).fetchall()
+            ]
             fills = [
                 PaperFill(
-                    fill_id=str(row[0]), order_id=str(row[1]), instrument_id=str(row[2]),
-                    side=str(row[3]), quantity=Decimal(row[4]), price=Decimal(row[5]),
-                    commission=Decimal(row[6]), source_time=row[7], evaluated_at=row[8],
+                    fill_id=str(row[0]),
+                    order_id=str(row[1]),
+                    instrument_id=str(row[2]),
+                    side=str(row[3]),
+                    quantity=Decimal(row[4]),
+                    price=Decimal(row[5]),
+                    commission=Decimal(row[6]),
+                    source_time=row[7],
+                    evaluated_at=row[8],
                     idempotency_key=str(row[9]),
                 )
                 for row in uow.connection.execute(
@@ -527,9 +729,13 @@ class TradingPaperRepository:
             ]
             ledger = [
                 PaperLedgerEntry(
-                    ledger_id=str(row[0]), entry_type=str(row[1]), currency=str(row[2]),
-                    amount=Decimal(row[3]), order_id=str(row[4]) if row[4] else None,
-                    fill_id=str(row[5]) if row[5] else None, idempotency_key=str(row[6]),
+                    ledger_id=str(row[0]),
+                    entry_type=str(row[1]),
+                    currency=str(row[2]),
+                    amount=Decimal(row[3]),
+                    order_id=str(row[4]) if row[4] else None,
+                    fill_id=str(row[5]) if row[5] else None,
+                    idempotency_key=str(row[6]),
                     payload=dict(row[7] or {}),
                 )
                 for row in uow.connection.execute(
