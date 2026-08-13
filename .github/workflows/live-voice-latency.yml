@@ -34,7 +34,7 @@ jobs:
       - name: Install focused dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff pytest fastapi httpx uvicorn pillow playwright requests "websockets>=12"
+          python -m pip install ruff pytest fastapi httpx uvicorn pillow playwright requests numpy "websockets>=12"
           npm install
 
       - name: Import live voice entry points
