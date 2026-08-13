@@ -98,6 +98,16 @@ def _timing_payload(
     return payload
 
 
+def _codec_suppress_mask(vocab_size: int, eos_id: int, device: torch.device) -> torch.Tensor:
+    """Build the reserved-codec mask with two CUDA writes instead of ~1,024 scalar writes."""
+    suppress_mask = torch.zeros(vocab_size, dtype=torch.bool, device=device)
+    suppress_start = max(0, vocab_size - 1024)
+    suppress_mask[suppress_start:] = True
+    if suppress_start <= eos_id < vocab_size:
+        suppress_mask[eos_id] = False
+    return suppress_mask
+
+
 @torch.inference_mode()
 def fast_generate_streaming(
     talker,
@@ -136,11 +146,7 @@ def fast_generate_streaming(
         policy=policy,
     )
 
-    suppress_mask = torch.zeros(vocab_size, dtype=torch.bool, device=device)
-    suppress_start = max(0, vocab_size - 1024)
-    for i in range(suppress_start, vocab_size):
-        if i != eos_id:
-            suppress_mask[i] = True
+    suppress_mask = _codec_suppress_mask(vocab_size, eos_id, device)
 
     predictor = talker.code_predictor
     talker_codec_embed = talker.get_input_embeddings()
@@ -353,11 +359,7 @@ def parity_generate_streaming(
         policy=policy,
     )
 
-    suppress_mask = torch.zeros(vocab_size, dtype=torch.bool, device=device)
-    suppress_start = max(0, vocab_size - 1024)
-    for i in range(suppress_start, vocab_size):
-        if i != eos_id:
-            suppress_mask[i] = True
+    suppress_mask = _codec_suppress_mask(vocab_size, eos_id, device)
 
     t_start = time.time()
     out = talker.forward(
