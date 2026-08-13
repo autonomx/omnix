@@ -13,13 +13,13 @@ from .tts_stream_contract import (
     STREAM_MAX_INITIAL_SILENCE_MS,
 )
 
-# The first accepted response phrase now uses a two-step Qwen decoder chunk,
-# which materializes 3,840 samples (160 ms at 24 kHz). The previous 4,800-sample
-# websocket frame forced that fast path to wait for another decoder chunk before
-# any PCM could be handed off. Align the transport frame with the first raw
-# chunk and the browser's normal 160 ms startup reserve. Four-step later phrases
-# still arrive as 7,680-sample raw chunks and are simply split into two frames.
-TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES = 3_840
+# The first accepted response phrase uses a one-step Qwen decoder chunk, which
+# materializes 1,920 samples (80 ms at 24 kHz). A larger websocket frame would
+# force that fast path to wait for another decoder chunk before any PCM could be
+# handed off. Align the transport frame with the first raw chunk. Four-step
+# later phrases still arrive as 7,680-sample raw chunks and are split into four
+# steady frames.
+TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES = 1_920
 
 # Generated TTS output is not microphone input. The transport-neutral scanner
 # intentionally starts at a stricter 1% amplitude threshold, then falls back to
@@ -30,14 +30,12 @@ TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES = 3_840
 # avoidable wait when signal is already present.
 TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD = STREAM_INITIAL_FALLBACK_THRESHOLD
 
-# The two-step first-phrase fast path produces exactly one 3,840-sample / 160 ms
-# chunk at 24 kHz. Hardware traces showed that this chunk can contain waveform
-# energy below the quiet-speech threshold, causing the bounded scanner to wait
-# for three or four decoder chunks before it arms the non-zero fallback. Arm
-# that fallback after the first two-step chunk instead. Exact digital silence
-# is still rejected by the transport-neutral scanner, and ordinary four-step
-# phrases retain the established 400 ms window.
-TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS = 160.0
+# The one-step first-phrase fast path produces exactly one 1,920-sample / 80 ms
+# chunk at 24 kHz. Arm the non-zero fallback after that first chunk so quiet
+# speech can be handed off immediately. Exact digital silence is still rejected
+# by the transport-neutral scanner, and ordinary later phrases retain the
+# established 400 ms window.
+TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS = 80.0
 
 _HOOK_SENTINEL = "_omnix_tts_live_call_startup_policy_installed"
 
