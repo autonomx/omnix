@@ -11,6 +11,8 @@ def sync_delivery_metadata(record: AssistantTurnRecord) -> bool:
     store = default_chat_store()
     metadata = _metadata(record)
     targeted_update = getattr(store, "update_delivery_metadata", None)
+    if not callable(targeted_update):
+        targeted_update = getattr(getattr(store, "_repository", None), "update_delivery_metadata", None)
     if callable(targeted_update):
         return bool(
             targeted_update(
