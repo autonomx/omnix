@@ -1,12 +1,12 @@
-"""Keep persistence-backed polling routes off the gateway asyncio thread.
+"""Keep persistence and synchronous generation work off the gateway asyncio thread.
 
-The live-call latency watchdog showed that several read-only browser polling
-handlers synchronously enter PostgreSQL and migration discovery while a TTS
+The live-call latency watchdog showed that several browser handlers synchronously
+enter PostgreSQL, migration discovery, or local provider HTTP calls while a TTS
 phrase is active. FastAPI only moves ordinary ``def`` handlers to its worker
-pool; these legacy handlers are declared ``async def`` even though their work
-is synchronous. This module replaces the already-built route dependant call
-with a small async bridge that executes the original handler on a worker
-thread and therefore keeps WebSocket frame delivery responsive.
+pool; these legacy handlers are declared ``async def`` even though their work is
+synchronous. This module replaces the already-built route dependant call with a
+small async bridge that executes the original handler on a worker thread and
+therefore keeps WebSocket frame delivery responsive.
 """
 from __future__ import annotations
 
@@ -28,19 +28,20 @@ _ROUTE_SENTINEL = "_omnix_blocking_route_offload_registered"
 _CALL_SENTINEL = "_omnix_blocking_route_offloaded"
 _DEFAULT_LOG_THRESHOLD_MS = 25.0
 
-# These exact GET routes appeared on the event-loop thread during measured
-# first-frame queue stalls. They are read-only and persistence-backed.
-BLOCKING_ROUTE_PATHS = frozenset(
-    {
-        "/api/assistant/research/status",
-        "/api/chat/sessions",
-        "/api/chat/sessions/{session_id}",
-        "/api/chat/sessions/{session_id}/interaction",
-        "/api/chat/sessions/{session_id}/live-call/runtime",
-        "/api/chat/sessions/{session_id}/live-conversation/profile",
-        "/api/settings",
-    }
-)
+# Exact method/path pairs observed doing synchronous persistence or provider work
+# on the asyncio thread. Keep this allow-list narrow so genuinely asynchronous
+# handlers are not moved into one thread per request without evidence.
+BLOCKING_ROUTE_METHODS: dict[str, frozenset[str]] = {
+    "/api/assistant/research/status": frozenset({"GET"}),
+    "/api/chat/sessions": frozenset({"GET"}),
+    "/api/chat/sessions/{session_id}": frozenset({"GET"}),
+    "/api/chat/sessions/{session_id}/interaction": frozenset({"GET"}),
+    "/api/chat/sessions/{session_id}/live-call/runtime": frozenset({"GET"}),
+    "/api/chat/sessions/{session_id}/live-conversation/profile": frozenset({"GET"}),
+    "/api/chat/sessions/{session_id}/messages": frozenset({"POST"}),
+    "/api/settings": frozenset({"GET"}),
+}
+BLOCKING_ROUTE_PATHS = frozenset(BLOCKING_ROUTE_METHODS)
 
 
 def _log_threshold_ms() -> float:
@@ -95,13 +96,14 @@ def _offloaded_call(
 
 
 def offload_blocking_gateway_routes(gateway: FastAPI) -> list[str]:
-    """Move measured persistence-backed GET handlers to the worker pool."""
+    """Move measured synchronous handlers to the worker pool."""
     patched: list[str] = []
     for route in gateway.routes:
         if not isinstance(route, APIRoute):
             continue
         methods = tuple(sorted(route.methods or ()))
-        if "GET" not in methods or route.path not in BLOCKING_ROUTE_PATHS:
+        allowed_methods = BLOCKING_ROUTE_METHODS.get(route.path)
+        if allowed_methods is None or not allowed_methods.intersection(methods):
             continue
         endpoint = route.dependant.call
         if endpoint is None or not inspect.iscoroutinefunction(endpoint):

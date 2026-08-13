@@ -85,6 +85,9 @@ class LiveChatMetricPolicy(BaseModel):
 
 DEFAULT_LIVE_CHAT_METRIC_POLICIES: dict[str, LiveChatMetricPolicy] = {
     "stt_finalize_ms": LiveChatMetricPolicy(kind="latency", limit=1_500.0, minimum_samples=5),
+    "stt_request_to_first_playback_ms": LiveChatMetricPolicy(
+        kind="latency", limit=1_000.0, minimum_samples=5
+    ),
     "final_to_first_token_ms": LiveChatMetricPolicy(kind="latency", limit=5_000.0, minimum_samples=5),
     "first_token_to_first_audio_ms": LiveChatMetricPolicy(kind="latency", limit=3_500.0, minimum_samples=5),
     "interruption_to_silence_ms": LiveChatMetricPolicy(kind="latency", limit=500.0, minimum_samples=5),

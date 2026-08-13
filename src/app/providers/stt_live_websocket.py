@@ -13,6 +13,12 @@ from typing import Any
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.routing import APIWebSocketRoute
 
+from app.providers.live_stt_contracts import (
+    CAP_AUTHORITATIVE_FINAL,
+    CAP_RESULT_REPLAY,
+    CAP_SEGMENTED_AUDIO,
+    LiveSttNegotiation,
+)
 from app.providers.stt_live_runtime_support import (
     env_float,
     env_int,
@@ -32,6 +38,20 @@ from app.providers.stt_streaming_audio import (
 )
 
 SEGMENTED_PROTOCOL = "segmented-v1"
+PARAKEET_FRAME_SAMPLES = 320
+PARAKEET_NEGOTIATION = LiveSttNegotiation(
+    provider="parakeet",
+    protocol=SEGMENTED_PROTOCOL,
+    sample_rate=DEFAULT_SAMPLE_RATE,
+    frame_samples=PARAKEET_FRAME_SAMPLES,
+    capabilities=frozenset(
+        {
+            CAP_SEGMENTED_AUDIO,
+            CAP_AUTHORITATIVE_FINAL,
+            CAP_RESULT_REPLAY,
+        }
+    ),
+)
 SESSION_TTL_SECONDS = 600.0
 MAX_SESSION_STATES = 64
 MAX_OPEN_SEGMENTS = 16
@@ -248,13 +268,10 @@ def install_live_stt_websocket(legacy: Any) -> None:
         await _safe_send(
             websocket,
             send_lock,
-            {
-                "type": "ready",
-                "protocol": SEGMENTED_PROTOCOL,
-                "connectionId": connection_id,
-                "sampleRate": DEFAULT_SAMPLE_RATE,
-                "maxSegmentAudioMs": MAX_SEGMENT_AUDIO_MS,
-            },
+            PARAKEET_NEGOTIATION.ready_payload(
+                connection_id=connection_id,
+                maxSegmentAudioMs=MAX_SEGMENT_AUDIO_MS,
+            ),
         )
 
         async def deliver_result(
@@ -446,6 +463,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                         {
                             "type": "session_ready",
                             "sessionId": active_session_id,
+                            "provider": "parakeet",
                             "results": [state.results[key] for key in sorted(state.results)],
                         },
                     )
@@ -456,6 +474,21 @@ def install_live_stt_websocket(legacy: Any) -> None:
                     if not encoded_audio:
                         continue
                     segmented = _field(data, "segmentId", "segment_id") is not None
+                    sample_rate = int(_field(data, "sampleRate", "sample_rate", DEFAULT_SAMPLE_RATE))
+                    if sample_rate != DEFAULT_SAMPLE_RATE:
+                        await _safe_send(
+                            websocket,
+                            send_lock,
+                            {
+                                "type": "segment_error" if segmented else "error",
+                                "segmentId": _field(data, "segmentId", "segment_id"),
+                                "sequence": int(data.get("sequence", 0)),
+                                "retryable": False,
+                                "errorCode": "sample_rate_mismatch",
+                                "error": f"Parakeet requires {DEFAULT_SAMPLE_RATE} Hz PCM",
+                            },
+                        )
+                        continue
                     if segmented:
                         segment_id = str(_field(data, "segmentId", "segment_id"))[:120]
                         sequence = int(data.get("sequence", 0))
@@ -491,6 +524,7 @@ def install_live_stt_websocket(legacy: Any) -> None:
                             sequence=sequence,
                             capture_start_sample=capture_start,
                             primary_start_sample=primary_start,
+                            sample_rate=sample_rate,
                             capture_epoch=str(_field(data, "captureEpoch", "capture_epoch", ""))[:160],
                         )
                     segment = state.segments[segment_id]

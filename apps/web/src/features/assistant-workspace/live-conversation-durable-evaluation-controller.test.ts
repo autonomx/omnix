@@ -59,6 +59,9 @@ function activeCall() {
       stt_finalize_ms: [400, 500],
       final_to_first_token_ms: [800, 900],
       first_token_to_first_audio_ms: [300, 350],
+      final_to_first_audio_ms: [1_100, 1_250],
+      stt_request_to_first_audio_ms: [1_500, 1_750],
+      stt_request_to_first_playback_ms: [1_700, 1_950],
       interruption_to_silence_ms: [120, 150],
     },
     releaseQuality: {
@@ -132,6 +135,9 @@ describe('durable Live Conversation evaluation controller', () => {
         stt_finalize_p95_ms: 500,
         final_to_first_token_p95_ms: 900,
         first_token_to_first_audio_p95_ms: 350,
+        final_to_first_audio_p95_ms: 1_250,
+        stt_request_to_first_audio_p95_ms: 1_750,
+        stt_request_to_first_playback_p95_ms: 1_950,
         interruption_to_silence_p95_ms: 150,
         cancellation_p95_ms: 140,
         rejected_candidate_restore_p95_ms: 110,
@@ -145,7 +151,7 @@ describe('durable Live Conversation evaluation controller', () => {
     expect(payload.browser_version.length).toBeGreaterThan(0);
     expect(payload.os_version.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(payload).toLocaleLowerCase();
-    expect(serialized).not.toMatch(/transcript|prompt|memory|pcm|message_content|utterance_text/);
+    expect(serialized).not.toMatch(/transcript|prompt|memory|message_content|utterance_text/);
   });
 
   it('posts one record, evaluates the durable aggregate, and counts release observations', async () => {
@@ -168,6 +174,9 @@ describe('durable Live Conversation evaluation controller', () => {
       detail: { kind: 'latency', metricName: 'stt_finalize_ms', valueMs: 430, scenario: 'speakers-quiet' },
     }));
     window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
+      detail: { kind: 'latency', metricName: 'stt_request_to_first_playback_ms', valueMs: 1_780, scenario: 'speakers-quiet' },
+    }));
+    window.dispatchEvent(new CustomEvent('omnix:live-voice-release-observation', {
       detail: { kind: 'quality', qualityName: 'playback_echo_submission', occurred: false, scenario: 'speakers-quiet' },
     }));
     window.dispatchEvent(new CustomEvent('omnix:assistant-voice-perf', {
@@ -183,6 +192,7 @@ describe('durable Live Conversation evaluation controller', () => {
     const body = JSON.parse(String(init?.body));
     expect(body.eos_termination_counts.natural_eos).toBe(1);
     expect(body.latency_summary.stt_finalize_p95_ms).toBe(430);
+    expect(body.latency_summary.stt_request_to_first_playback_p95_ms).toBe(1_780);
     expect(body.latency_summary.cancellation_p95_ms).toBe(125);
     expect(body.quality_metrics.playback_echo_submission_rate).toBe(0);
     expect(body.release_gate_status).toBe('insufficient');

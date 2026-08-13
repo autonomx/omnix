@@ -7,10 +7,21 @@ type LiveChatWindow = Window & typeof globalThis & {
   __omnixLiveChatWorkspaceInstalled?: boolean;
 };
 
+type LiveCallDiagnosticDetail = {
+  event?: unknown;
+  details?: Record<string, unknown>;
+};
+
 const NAV_ATTRIBUTE = 'data-omnix-live-chat-nav';
 const HOST_ATTRIBUTE = 'data-omnix-live-chat-host';
 const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
+const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)(?:$|\/)/;
+const SESSION_RECONCILIATION_EVENTS = new Set([
+  'turn_finished',
+  'turn_stopped',
+  'turn_failed_final',
+]);
 
 let active = false;
 let selectedSessionId: string | null = null;
@@ -55,18 +66,42 @@ export function initializeLiveChatWorkspace(queryClient: QueryClient): () => voi
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
   const handleSessionChanged = () => renderLiveChat();
+  const handleLiveCallDiagnostic = (event: Event) => {
+    const detail = (event as CustomEvent<LiveCallDiagnosticDetail>).detail;
+    const eventName = typeof detail?.event === 'string' ? detail.event : '';
+    if (!SESSION_RECONCILIATION_EVENTS.has(eventName)) return;
+    if (detail?.details?.turn_kind !== 'response') return;
+    const sessionId = selectedSessionId;
+    const client = workspaceQueryClient;
+    if (!sessionId || !client) return;
+
+    // Live voice deliberately avoids projecting a potentially large session
+    // while first audio is on the critical path. Reconcile from persisted chat
+    // state once the response turn is terminal so interrupted or otherwise
+    // deferred turns cannot leave the visible chat one turn behind.
+    void client.invalidateQueries({
+      queryKey: ['feature', 'chatbot', 'session', sessionId],
+      exact: true,
+    });
+    void client.invalidateQueries({
+      queryKey: ['feature', 'chatbot', 'sessions'],
+      exact: true,
+    });
+  };
   const handleNavigationClick = (event: Event) => {
     const button = (event.target as Element | null)?.closest<HTMLButtonElement>('.assistant-sidebar-nav button');
     if (!button || button.hasAttribute(NAV_ATTRIBUTE)) return;
     closeLiveChat();
   };
   window.addEventListener(SESSION_CHANGED_EVENT, handleSessionChanged);
+  window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleLiveCallDiagnostic);
   document.addEventListener('click', handleNavigationClick, true);
   installLiveChatNavigation();
 
   return () => {
     observer.disconnect();
     window.removeEventListener(SESSION_CHANGED_EVENT, handleSessionChanged);
+    window.removeEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleLiveCallDiagnostic);
     document.removeEventListener('click', handleNavigationClick, true);
     closeLiveChat();
     document.querySelector(`[${NAV_ATTRIBUTE}]`)?.remove();

@@ -11,11 +11,13 @@ class DummyStore:
     def __init__(self, session: ChatSession) -> None:
         self.sessions = [session]
         self.provider_calls = 0
+        self.save_calls = 0
 
     def _load_sessions(self):
         return self.sessions
 
     def _save_sessions(self, sessions):
+        self.save_calls += 1
         self.sessions = sessions
 
     def stream_provider_reply_chunks(
@@ -82,7 +84,12 @@ def test_auto_live_agent_returns_proposal_without_provider_execution(monkeypatch
                 "success": True,
                 "response": "Proposal: turn off the kitchen light after approval.",
                 "domain": "house",
-                "tool_calls": [{"name": "set_light", "args": {"room": "kitchen", "state": "off"}}],
+                "tool_calls": [
+                    {
+                        "name": "set_light",
+                        "args": {"room": "kitchen", "state": "off"},
+                    }
+                ],
                 "tool_results": [],
                 "requires_confirmation": True,
                 "error": None,
@@ -135,7 +142,9 @@ def test_hermes_failure_falls_back_to_original_provider_stream(monkeypatch) -> N
     assert completion["content"] == "Direct provider answer."
     assert completion["metadata"]["live_agent"] is False
     assert completion["metadata"]["live_agent_route"]["route"] == "direct_chat"
-    assert completion["metadata"]["live_agent_route"]["reason"] == "hermes_unavailable_fallback"
+    assert completion["metadata"]["live_agent_route"]["reason"] == (
+        "hermes_unavailable_fallback"
+    )
     assert completion["metadata"]["live_agent_fallback_error"] == "offline"
 
 
@@ -157,7 +166,39 @@ def test_casual_live_voice_stays_on_original_provider_path(monkeypatch) -> None:
     completion = next(event for event in events if event["type"] == "complete")
     assert store.provider_calls == 1
     assert completion["metadata"]["live_agent_route"]["route"] == "direct_chat"
-    assert completion["metadata"]["live_agent_route"]["reason"] == "casual_conversation"
+    assert completion["metadata"]["live_agent_route"]["reason"] == (
+        "casual_conversation"
+    )
+
+
+def test_direct_route_persistence_does_not_block_first_provider_chunk(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OMNIX_LIVE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
+    monkeypatch.setenv("HERMES_ENABLED", "1")
+    session, message = _session("How are you?")
+    store = DummyStore(session)
+    install_live_agent_store_hooks(DummyStore)
+
+    stream = store.stream_provider_reply_chunks(
+        session,
+        message,
+        provider_id="lmstudio",
+        model_id="test-model",
+    )
+
+    first = next(stream)
+    assert first == {"type": "text_chunk", "text": "Direct provider answer."}
+    assert store.provider_calls == 1
+    assert store.save_calls == 0
+
+    completion = next(stream)
+    assert completion["type"] == "complete"
+    assert store.save_calls == 1
+    assert store.sessions[0].messages[0].metadata["live_agent_route"]["route"] == (
+        "direct_chat"
+    )
 
 
 def test_typed_chat_never_auto_routes_even_for_action_wording(monkeypatch) -> None:

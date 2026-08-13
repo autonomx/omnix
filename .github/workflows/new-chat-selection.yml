@@ -5,6 +5,11 @@ on:
     paths:
       - "apps/web/src/features/chatbot/newChatCoordinator.ts"
       - "apps/web/src/features/chatbot/newChatCoordinator.test.ts"
+      - "apps/web/src/features/chatbot/chat-sidebar-manager.ts"
+      - "apps/web/src/features/chatbot/chat-sidebar-manager.test.ts"
+      - "apps/web/src/features/chatbot/chat-sidebar-manager.css"
+      - "apps/web/src/features/chatbot/sessionTools.ts"
+      - "apps/web/src/features/chatbot/sessionTools.test.ts"
       - "apps/web/src/features/chatbot/live-chat-fullscreen-controller.ts"
       - "apps/web/src/features/chatbot/live-chat-fullscreen-controller.test.ts"
       - ".github/workflows/new-chat-selection.yml"
@@ -26,8 +31,23 @@ jobs:
           node-version: "22"
       - name: Install web dependencies
         run: npm install
+      - name: Typecheck chat sidebar changes
+        run: |
+          set +e
+          npm --workspace @omnix/web run typecheck 2>&1 | tee chat-sidebar-typecheck.txt
+          typecheck_status=${PIPESTATUS[0]}
+          set -e
+          if grep -E "src/features/chatbot/(chat-sidebar-manager|sessionTools)(\.test)?\.ts" chat-sidebar-typecheck.txt; then
+            echo "TypeScript errors were reported in the chat sidebar path."
+            exit "${typecheck_status:-1}"
+          fi
+          if [ "$typecheck_status" -ne 0 ]; then
+            echo "::warning::Repository-wide typecheck has baseline failures outside the chat sidebar files."
+          fi
       - name: Verify new chat creation and selection
         run: >-
           npm --workspace @omnix/web run test --
           src/features/chatbot/newChatCoordinator.test.ts
+          src/features/chatbot/chat-sidebar-manager.test.ts
+          src/features/chatbot/sessionTools.test.ts
           src/features/chatbot/live-chat-fullscreen-controller.test.ts

@@ -47,6 +47,55 @@ describe('acoustic barge-in detector', () => {
     expect(result.waveformSimilarity).toBe(0.93);
   });
 
+  it('uses echo-subtracted residual energy to reject the assistant own voice', () => {
+    const result = assessAcousticBargeIn({
+      assistantSpeaking: true,
+      microphoneRms: 0.07,
+      playbackRms: 0.08,
+      playbackReferenceAgeMs: 640,
+      speechThreshold: 0.018,
+      waveformSimilarity: 0.72,
+      residualSpeechRatio: 0.18,
+      estimatedEchoGain: 0.64,
+      interruptionSensitivity: 0.75,
+    });
+
+    expect(result.decision).toBe('likely_echo');
+    expect(result.reason).toBe('echo_residual_matches_playback');
+    expect(result.residualSpeechRatio).toBe(0.18);
+  });
+
+  it('preserves real user barge-in when speech remains after echo subtraction', () => {
+    const result = assessAcousticBargeIn({
+      assistantSpeaking: true,
+      microphoneRms: 0.075,
+      playbackRms: 0.08,
+      playbackReferenceAgeMs: 640,
+      speechThreshold: 0.018,
+      waveformSimilarity: 0.7,
+      residualSpeechRatio: 0.76,
+      estimatedEchoGain: 0.5,
+      interruptionSensitivity: 0.75,
+    });
+
+    expect(result.decision).toBe('independent_speech');
+    expect(result.reason).toBe('residual_speech_exceeds_echo');
+  });
+
+  it('keeps a buffered playback reference valid while speaker audio is still draining', () => {
+    const result = assessAcousticBargeIn({
+      assistantSpeaking: true,
+      microphoneRms: 0.035,
+      playbackRms: 0.07,
+      playbackReferenceAgeMs: 1_600,
+      speechThreshold: 0.018,
+      waveformSimilarity: 0.96,
+      interruptionSensitivity: 0.75,
+    });
+
+    expect(result.decision).toBe('likely_echo');
+  });
+
   it('uses waveform separation to identify independent speech before STT', () => {
     const result = assessAcousticBargeIn({
       assistantSpeaking: true,

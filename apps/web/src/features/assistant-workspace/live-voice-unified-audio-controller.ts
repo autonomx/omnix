@@ -452,8 +452,8 @@ async function consumeLiveVoiceText(stream: ReadableStream<Uint8Array>, turn: Ac
       if (rejected?.status === 'rejected') throw rejected.reason;
       await withTimeout(
         Promise.all(turn.outputOwnerships.map((ownership) => session.waitForOutputItem(
-ownership.outputId,
-ownership.generationEpoch,
+          ownership.outputId,
+          ownership.generationEpoch,
         ))).then(() => undefined),
         AUDIO_COMPLETION_TIMEOUT_MS,
         'Live audio completion timed out.',
@@ -559,7 +559,9 @@ function queuePhrase(text: string, turn: ActiveLiveTurn, reason: string): void {
     output_order: ownership.outputOrder,
   }, 'controller');
 
-  const audioTask = turn.sessionPromise.then(async (session) => {
+  const previousAudioTask = turn.audioTasks[turn.audioTasks.length - 1] ?? Promise.resolve();
+  const audioTask = previousAudioTask.catch(() => undefined).then(async () => {
+    const session = await turn.sessionPromise;
     if (phraseIndex === 0) {
       const onsetPolicy = performancePlan?.onset_policy;
       const onset = turn.flags.naturalTiming

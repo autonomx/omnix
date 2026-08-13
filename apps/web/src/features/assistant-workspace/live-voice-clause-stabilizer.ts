@@ -10,12 +10,31 @@ export type ClauseStabilizerOptions = {
   stableLookaheadCharacters?: number;
   maximumClauseCharacters?: number;
   deadlineMs?: number;
+  firstClauseMinimumCharacters?: number;
+  firstClauseStableLookaheadCharacters?: number;
+  firstClauseMaximumCharacters?: number;
+  firstClauseDeadlineMs?: number;
 };
 
-const DEFAULT_MINIMUM = 24;
-const DEFAULT_LOOKAHEAD = 24;
-const DEFAULT_MAXIMUM = 180;
-const DEFAULT_DEADLINE_MS = 420;
+type ClausePolicy = {
+  minimum: number;
+  lookahead: number;
+  maximum: number;
+  deadlineMs: number;
+};
+
+// Later clauses retain enough text for stable prosody while staying short enough
+// for reliable local TTS lexical coverage. The first clause uses a smaller
+// bounded window because the user has already experienced STT + LLM latency
+// before any audio can begin.
+const DEFAULT_MINIMUM = 12;
+const DEFAULT_LOOKAHEAD = 12;
+const DEFAULT_MAXIMUM = 64;
+const DEFAULT_DEADLINE_MS = 140;
+const DEFAULT_FIRST_MINIMUM = 8;
+const DEFAULT_FIRST_LOOKAHEAD = 4;
+const DEFAULT_FIRST_MAXIMUM = 56;
+const DEFAULT_FIRST_DEADLINE_MS = 55;
 const STRONG_BOUNDARY = /[.!?][\]})"'’”]*(?=\s|$)/g;
 const WEAK_BOUNDARY = /[,;:][\]})"'’”]*(?=\s|$)/g;
 const ABBREVIATION = /(?:\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e)|\b[A-Z])\.$/i;
@@ -35,16 +54,45 @@ const NON_SPEECH_EMOJI_ONLY = /^(?=[\s\S]*\p{Extended_Pictographic})[\s\p{Extend
 export class StableClauseAccumulator {
   private buffer = '';
   private openedAtMs: number | null = null;
-  private readonly minimum: number;
-  private readonly lookahead: number;
-  private readonly maximum: number;
-  private readonly deadlineMs: number;
+  private committedClauseCount = 0;
+  private readonly normalPolicy: ClausePolicy;
+  private readonly firstPolicy: ClausePolicy;
 
   constructor(options: ClauseStabilizerOptions = {}) {
-    this.minimum = positiveInteger(options.minimumClauseCharacters, DEFAULT_MINIMUM);
-    this.lookahead = positiveInteger(options.stableLookaheadCharacters, DEFAULT_LOOKAHEAD);
-    this.maximum = Math.max(this.minimum, positiveInteger(options.maximumClauseCharacters, DEFAULT_MAXIMUM));
-    this.deadlineMs = positiveInteger(options.deadlineMs, DEFAULT_DEADLINE_MS);
+    const normalMinimum = positiveInteger(options.minimumClauseCharacters, DEFAULT_MINIMUM);
+    const normalMaximum = Math.max(
+      normalMinimum,
+      positiveInteger(options.maximumClauseCharacters, DEFAULT_MAXIMUM),
+    );
+    this.normalPolicy = {
+      minimum: normalMinimum,
+      lookahead: positiveInteger(options.stableLookaheadCharacters, DEFAULT_LOOKAHEAD),
+      maximum: normalMaximum,
+      deadlineMs: positiveInteger(options.deadlineMs, DEFAULT_DEADLINE_MS),
+    };
+
+    const firstMinimum = positiveInteger(
+      options.firstClauseMinimumCharacters,
+      options.minimumClauseCharacters ?? DEFAULT_FIRST_MINIMUM,
+    );
+    this.firstPolicy = {
+      minimum: firstMinimum,
+      lookahead: positiveInteger(
+        options.firstClauseStableLookaheadCharacters,
+        options.stableLookaheadCharacters ?? DEFAULT_FIRST_LOOKAHEAD,
+      ),
+      maximum: Math.max(
+        firstMinimum,
+        positiveInteger(
+          options.firstClauseMaximumCharacters,
+          options.maximumClauseCharacters ?? DEFAULT_FIRST_MAXIMUM,
+        ),
+      ),
+      deadlineMs: positiveInteger(
+        options.firstClauseDeadlineMs,
+        options.deadlineMs ?? DEFAULT_FIRST_DEADLINE_MS,
+      ),
+    };
   }
 
   append(fragment: string, nowMs = performance.now()): StableClause[] {
@@ -63,7 +111,10 @@ export class StableClauseAccumulator {
       const text = this.buffer.slice(0, boundary.end).trim();
       this.buffer = this.buffer.slice(boundary.end).trimStart();
       const spokenText = sanitizeLiveVoiceSpokenText(text);
-      if (spokenText) committed.push({ text: spokenText, reason: boundary.reason });
+      if (spokenText) {
+        committed.push({ text: spokenText, reason: boundary.reason });
+        this.committedClauseCount += 1;
+      }
       this.openedAtMs = this.buffer ? nowMs : null;
     }
     return committed;
@@ -73,7 +124,9 @@ export class StableClauseAccumulator {
     const text = sanitizeLiveVoiceSpokenText(this.buffer.trim());
     this.buffer = '';
     this.openedAtMs = null;
-    return text ? [{ text, reason: 'stream-end' }] : [];
+    if (!text) return [];
+    this.committedClauseCount += 1;
+    return [{ text, reason: 'stream-end' }];
   }
 
   pendingText(): string {
@@ -82,33 +135,47 @@ export class StableClauseAccumulator {
 
   deadlineRemainingMs(nowMs = performance.now()): number | null {
     if (this.openedAtMs === null || !this.buffer) return null;
-    return Math.max(0, this.deadlineMs - (nowMs - this.openedAtMs));
+    const policy = this.currentPolicy();
+    return Math.max(0, policy.deadlineMs - (nowMs - this.openedAtMs));
+  }
+
+  private currentPolicy(): ClausePolicy {
+    return this.committedClauseCount === 0 ? this.firstPolicy : this.normalPolicy;
   }
 
   private nextBoundary(nowMs: number): { end: number; reason: ClauseCommitReason } | null {
-    const strong = findSafeBoundary(this.buffer, STRONG_BOUNDARY, this.minimum);
-    const weak = findStableWeakBoundary(this.buffer, this.minimum, this.lookahead);
-    if (strong !== null || weak !== null) {
-      if (weak !== null && (strong === null || weak < strong)) {
-        return { end: weak, reason: 'stable-boundary' };
-      }
-      if (strong !== null) return { end: strong, reason: 'strong-boundary' };
-    }
+    const policy = this.currentPolicy();
+    const strong = findSafeBoundary(this.buffer, STRONG_BOUNDARY, policy.minimum);
+    const weak = findStableWeakBoundary(this.buffer, policy.minimum, policy.lookahead);
+    const naturalBoundary = weak !== null && (strong === null || weak < strong)
+      ? { end: weak, reason: 'stable-boundary' as const }
+      : strong !== null ? { end: strong, reason: 'strong-boundary' as const } : null;
 
-    if (this.buffer.length >= this.maximum) {
-      const fallback = safeWhitespaceBoundary(this.buffer, this.maximum, this.minimum);
+    // Do not let late punctuation defeat the TTS fidelity ceiling. If a known
+    // natural boundary lies beyond the ceiling, reserve at least one minimum
+    // clause for its tail and split the prefix at whitespace. Joining emitted
+    // clauses therefore reconstructs the source text without dropping words.
+    if (naturalBoundary && naturalBoundary.end <= policy.maximum) return naturalBoundary;
+
+    if (this.buffer.length >= policy.maximum) {
+      const splitLimit = naturalBoundary
+        ? Math.min(policy.maximum, Math.max(policy.minimum, naturalBoundary.end - policy.minimum))
+        : policy.maximum;
+      const fallback = safeWhitespaceBoundary(this.buffer, splitLimit, policy.minimum);
       if (fallback !== null) return { end: fallback, reason: 'maximum' };
     }
 
+    if (naturalBoundary) return naturalBoundary;
+
     if (
       this.openedAtMs !== null
-      && nowMs - this.openedAtMs >= this.deadlineMs
-      && this.buffer.length >= this.minimum
+      && nowMs - this.openedAtMs >= policy.deadlineMs
+      && this.buffer.length >= policy.minimum
     ) {
       const deadlineBoundary = safeWhitespaceBoundary(
         this.buffer,
-        Math.min(this.maximum, this.buffer.length),
-        this.minimum,
+        Math.min(policy.maximum, this.buffer.length),
+        policy.minimum,
       );
       if (deadlineBoundary !== null) return { end: deadlineBoundary, reason: 'deadline' };
     }

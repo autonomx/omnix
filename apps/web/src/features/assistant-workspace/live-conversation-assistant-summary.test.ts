@@ -9,6 +9,7 @@ import {
   summarizeAssistantTurn,
   type LiveAssistantTurnSummary,
 } from './live-conversation-assistant-summary';
+import { readAssistantTurnCompletionContext } from './live-turn-context';
 
 afterEach(() => {
   resetAssistantDiagnosticSummaries();
@@ -53,6 +54,11 @@ describe('assistant turn summaries', () => {
       turnId: 'assistant-one', questionCount: 1, createsObligation: true,
     });
     expect(JSON.stringify(received[0])).not.toContain('launch schedule');
+    expect(readAssistantTurnCompletionContext()).toMatchObject({
+      turnId: 'assistant-one',
+      questionCount: 1,
+      createsObligation: true,
+    });
     expect(pendingAssistantDiagnosticCount()).toBe(0);
     window.removeEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, listener);
   });

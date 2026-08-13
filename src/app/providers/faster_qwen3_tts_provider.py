@@ -9,6 +9,7 @@ import base64
 import logging
 import os
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
@@ -780,6 +781,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         Yields:
             Tuples of (audio_chunk_numpy, sample_rate, timing_dict)
         """
+        provider_entry_at = time.perf_counter()
         try:
             # Get reference audio path
             ref_audio_path = None
@@ -826,11 +828,20 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
                 'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
             }
+            provider_setup_ms = (time.perf_counter() - provider_entry_at) * 1000.0
             
             # Stream generation – validate each chunk before yielding
             chunk_idx = 0
             try:
                 for audio_chunk, sr, timing in model.generate_voice_clone_streaming(**gen_kwargs):
+                    timing = dict(timing)
+                    if chunk_idx == 0:
+                        timing.update({
+                            'provider_setup_ms': provider_setup_ms,
+                            'provider_entry_to_first_audio_ms': (
+                                time.perf_counter() - provider_entry_at
+                            ) * 1000.0,
+                        })
                     if not _is_valid_audio(audio_chunk):
                         logger.warning("[TTS] Skipping corrupt streaming chunk %d", chunk_idx)
                         chunk_idx += 1

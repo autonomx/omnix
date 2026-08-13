@@ -17,6 +17,8 @@ from typing import Any
 
 from app.shared import LOGS_DIR
 
+from .resilient_rotating_file_handler import ResilientRotatingFileHandler
+
 LIVE_VOICE_STREAM_LOG_PATH = Path(LOGS_DIR) / "live-call-streaming.log"
 LIVE_VOICE_STREAM_LOG_MAX_BYTES = 25_000_000
 LIVE_VOICE_STREAM_LOG_BACKUP_COUNT = 4
@@ -39,7 +41,7 @@ def _json_default(value: Any) -> Any:
 
 def _create_logger() -> tuple[logging.Logger, logging.handlers.QueueListener]:
     LIVE_VOICE_STREAM_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.handlers.RotatingFileHandler(
+    file_handler = ResilientRotatingFileHandler(
         LIVE_VOICE_STREAM_LOG_PATH,
         maxBytes=LIVE_VOICE_STREAM_LOG_MAX_BYTES,
         backupCount=LIVE_VOICE_STREAM_LOG_BACKUP_COUNT,

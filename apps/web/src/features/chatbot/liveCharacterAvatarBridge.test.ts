@@ -78,6 +78,17 @@ const visemeRuntime: CharacterLiveCallRuntime = {
   },
 };
 
+const live2dRuntime: CharacterLiveCallRuntime = {
+  ...runtime,
+  avatar_pack: {
+    ...runtime.avatar_pack!,
+    renderer: 'live2d',
+    rig_asset_id: 'character-live2d:test-maya',
+    base_asset_id: null,
+    mouth_frames: {},
+  },
+};
+
 afterEach(() => {
   vi.useRealTimers();
   publishCharacterAvatarRuntime(null);
@@ -206,5 +217,54 @@ describe('live character avatar audio envelope', () => {
     const image = avatar?.querySelector<HTMLImageElement>('img');
     expect(avatar?.dataset.mouthFrame).toBe('closed');
     expect(image?.getAttribute('src')).toBe('/api/assets/image%3Amaya-closed/file');
+  });
+
+  it('uses worklet playback frames for Live2D and ignores arrival-time PCM', () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <section class="assistant-live-card">
+        <div class="assistant-voice-orb" data-voice-mode="idle"></div>
+        <div class="assistant-voice-controls"></div>
+        <div class="assistant-voice-transcript"></div>
+      </section>
+      <div class="assistant-inline-status"></div>
+    `;
+    publishCharacterAvatarRuntime(live2dRuntime);
+
+    const observed: string[] = [];
+    const onFrame = (event: Event): void => {
+      const frame = (event as CustomEvent<{ frame?: string }>).detail?.frame;
+      if (frame) observed.push(frame);
+    };
+    window.addEventListener('omnix:character-avatar-frame', onFrame);
+    try {
+      const samples = new Int16Array(2_400);
+      samples.fill(16_000);
+      window.dispatchEvent(new CustomEvent('omnix:character-avatar-pcm', {
+        detail: { samples, sampleRate: 24_000 },
+      }));
+      vi.advanceTimersByTime(150);
+      expect(observed).toEqual([]);
+
+      window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+        detail: {
+          source: 'audio_worklet',
+          event: 'worklet_avatar_frame',
+          details: { frame: 'wide', rms: 0.2 },
+        },
+      }));
+      expect(observed).toEqual(['wide']);
+
+      window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+        detail: {
+          source: 'audio_worklet',
+          event: 'worklet_underrun',
+          details: {},
+        },
+      }));
+      expect(observed).toEqual(['wide', 'closed']);
+    } finally {
+      window.removeEventListener('omnix:character-avatar-frame', onFrame);
+    }
   });
 });

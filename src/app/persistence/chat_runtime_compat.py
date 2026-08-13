@@ -165,6 +165,19 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
     def _save_sessions(self, sessions):
         self._repository.save_sessions(sessions)
 
+    def update_delivery_metadata(
+        self,
+        *,
+        session_id: str,
+        assistant_turn_id: str,
+        metadata: dict[str, object],
+    ) -> bool:
+        return self._repository.update_delivery_metadata(
+            session_id=session_id,
+            assistant_turn_id=assistant_turn_id,
+            metadata=metadata,
+        )
+
 
 class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSessionStore):
     pass
