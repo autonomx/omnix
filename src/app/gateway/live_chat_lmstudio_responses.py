@@ -1,9 +1,12 @@
-"""Opt-in LM Studio Responses state reuse for accepted live-chat turns.
+"""Bounded LM Studio Responses state reuse for accepted live-chat turns.
 
-The normal Omnix rendered prompt remains authoritative. Provider-side state is
-reused only when the exact role/content prefix expected from the previous turn
-still matches the newly rendered prompt. Any persona, memory, task, history, or
-prompt-window change therefore fails closed to a full Responses seed.
+The stable provider context remains authoritative: system/persona/memory/summary
+content must match exactly. The live voice recent-message window is allowed to
+advance only by dropping messages from its front while preserving an exact
+suffix of the previous authoritative conversation tail. Provider-side state is
+periodically reseeded so dropped rolling-window history cannot accumulate
+without bound. Turns carrying ephemeral external/retrieved context are never
+remembered for a later continuation.
 """
 from __future__ import annotations
 
@@ -32,16 +35,21 @@ _HOOK_SENTINEL = "_omnix_live_chat_lmstudio_responses_installed"
 _RESPONSES_ENDPOINT = "/v1/responses"
 _STATE_ENV = "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"
 _STATE_TTL_ENV = "OMNIX_LIVE_LMSTUDIO_RESPONSE_STATE_TTL_SECONDS"
+_MAX_CONTINUATIONS_ENV = "OMNIX_LIVE_LMSTUDIO_RESPONSE_MAX_CONTINUATIONS"
 _DEFAULT_STATE_TTL_SECONDS = 900.0
+_DEFAULT_MAX_CONTINUATIONS = 4
 _MAX_STATES = 64
 _ALLOWED_ROLES = frozenset({"system", "developer", "user", "assistant"})
+_TURN_ROLES = frozenset({"user", "assistant"})
 
 
 @dataclass(frozen=True)
 class _ResponseState:
     response_id: str
     model_id: str
-    expected_prefix_fingerprint: str
+    context_fingerprint: str
+    conversation_tail_fingerprints: tuple[str, ...]
+    continuation_count: int
     updated_at: float
 
 
@@ -78,6 +86,15 @@ def _state_ttl_seconds() -> float:
     return max(30.0, min(3600.0, parsed))
 
 
+def _max_continuations() -> int:
+    raw = (os.environ.get(_MAX_CONTINUATIONS_ENV) or "").strip()
+    try:
+        parsed = int(raw) if raw else _DEFAULT_MAX_CONTINUATIONS
+    except ValueError:
+        parsed = _DEFAULT_MAX_CONTINUATIONS
+    return max(1, min(16, parsed))
+
+
 def prompt_fingerprint(messages: list[ProviderMessage]) -> str:
     """Hash exact provider-visible role/content without logging prompt material."""
     canonical = [
@@ -93,6 +110,47 @@ def prompt_fingerprint(messages: list[ProviderMessage]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _message_fingerprint(message: ProviderMessage) -> str:
+    return prompt_fingerprint([message])
+
+
+def _split_live_prompt(
+    messages: list[ProviderMessage],
+) -> tuple[list[ProviderMessage], list[ProviderMessage], bool]:
+    """Return stable leading context, recent turns, and structural support.
+
+    Live voice rendering places all stable system/persona/memory/summary messages
+    before a contiguous user/assistant tail and the current user input. If a
+    system/developer message appears after conversation turns begin, fail closed
+    because that shape cannot be continued safely with one new user input.
+    """
+    if not messages or str(messages[-1].role or "").strip().casefold() != "user":
+        return [], [], False
+    prefix = messages[:-1]
+    first_turn = len(prefix)
+    for index, message in enumerate(prefix):
+        if str(message.role or "").strip().casefold() in _TURN_ROLES:
+            first_turn = index
+            break
+    context = prefix[:first_turn]
+    recent = prefix[first_turn:]
+    supported = all(
+        str(message.role or "").strip().casefold() in _TURN_ROLES
+        for message in recent
+    )
+    return context, recent, supported
+
+
+def _tail_fingerprints(messages: list[ProviderMessage]) -> tuple[str, ...]:
+    return tuple(_message_fingerprint(message) for message in messages)
+
+
+def _is_exact_suffix(candidate: tuple[str, ...], expected: tuple[str, ...]) -> bool:
+    if not candidate or len(candidate) > len(expected):
+        return False
+    return expected[-len(candidate) :] == candidate
 
 
 def _prune_states_locked() -> None:
@@ -117,32 +175,42 @@ def _resolve_previous_response_id(
     session_id: str,
     model_id: str | None,
     messages: list[ProviderMessage],
-) -> tuple[str | None, str]:
+) -> tuple[str | None, str, int, int]:
     normalized_session = str(session_id or "").strip()
     normalized_model = str(model_id or "").strip()
     if not normalized_session:
-        return None, "session_id_missing"
+        return None, "session_id_missing", 0, 0
     if not normalized_model:
         _invalidate_state(normalized_session)
-        return None, "model_unresolved"
-    if not messages or str(messages[-1].role or "").strip().casefold() != "user":
-        _invalidate_state(normalized_session)
-        return None, "current_input_not_user"
+        return None, "model_unresolved", 0, 0
 
-    prefix_fingerprint = prompt_fingerprint(messages[:-1])
+    context, recent, supported = _split_live_prompt(messages)
+    if not supported:
+        _invalidate_state(normalized_session)
+        return None, "prompt_shape_unsupported", 0, 0
+    context_fingerprint = prompt_fingerprint(context)
+    current_tail = _tail_fingerprints(recent)
+
     with _STATE_LOCK:
         _prune_states_locked()
         state = _RESPONSE_STATES.get(normalized_session)
         if state is None:
-            return None, "state_missing"
+            return None, "state_missing", 0, 0
         if state.model_id != normalized_model:
             _RESPONSE_STATES.pop(normalized_session, None)
-            return None, "model_changed"
-        if state.expected_prefix_fingerprint != prefix_fingerprint:
+            return None, "model_changed", 0, 0
+        if state.context_fingerprint != context_fingerprint:
             _RESPONSE_STATES.pop(normalized_session, None)
-            return None, "prompt_prefix_changed"
+            return None, "stable_context_changed", 0, 0
+        if state.continuation_count >= _max_continuations():
+            _RESPONSE_STATES.pop(normalized_session, None)
+            return None, "continuation_limit", state.continuation_count, 0
+        if not _is_exact_suffix(current_tail, state.conversation_tail_fingerprints):
+            _RESPONSE_STATES.pop(normalized_session, None)
+            return None, "conversation_tail_changed", state.continuation_count, 0
+        rolled_off = len(state.conversation_tail_fingerprints) - len(current_tail)
         _RESPONSE_STATES.move_to_end(normalized_session)
-        return state.response_id, "hit"
+        return state.response_id, "hit", state.continuation_count, rolled_off
 
 
 def _remember_response_state(
@@ -152,11 +220,17 @@ def _remember_response_state(
     request_messages: list[ProviderMessage],
     assistant_text: str,
     response_id: str | None,
+    prior_continuation_count: int = 0,
+    state_hit: bool = False,
+    carry_allowed: bool = True,
 ) -> bool:
     normalized_session = str(session_id or "").strip()
     normalized_model = str(model_id or "").strip()
     normalized_response = str(response_id or "").strip()
     normalized_assistant = str(assistant_text or "").strip()
+    if not carry_allowed:
+        _invalidate_state(normalized_session)
+        return False
     if (
         not normalized_session
         or not normalized_model
@@ -165,14 +239,22 @@ def _remember_response_state(
     ):
         _invalidate_state(normalized_session)
         return False
-    expected_messages = [
-        *request_messages,
+
+    context, recent, supported = _split_live_prompt(request_messages)
+    if not supported:
+        _invalidate_state(normalized_session)
+        return False
+    conversation_tail = [
+        *recent,
+        request_messages[-1],
         ProviderMessage(role="assistant", content=normalized_assistant),
     ]
     state = _ResponseState(
         response_id=normalized_response,
         model_id=normalized_model,
-        expected_prefix_fingerprint=prompt_fingerprint(expected_messages),
+        context_fingerprint=prompt_fingerprint(context),
+        conversation_tail_fingerprints=_tail_fingerprints(conversation_tail),
+        continuation_count=(prior_continuation_count + 1 if state_hit else 0),
         updated_at=time.time(),
     )
     with _STATE_LOCK:
@@ -414,12 +496,17 @@ def _stream_stateful_lmstudio_reply(
     requested_model = _model_key(model_id)
     resolved_model, _ = _resolve_current_model(provider, requested_model)
     session_id = str(getattr(session, "id", "") or "").strip()
-    previous_response_id, state_reason = _resolve_previous_response_id(
-        session_id=session_id,
-        model_id=resolved_model,
-        messages=messages,
+    previous_response_id, state_reason, prior_continuation_count, rolled_off = (
+        _resolve_previous_response_id(
+            session_id=session_id,
+            model_id=resolved_model,
+            messages=messages,
+        )
     )
     state_hit = previous_response_id is not None
+    carry_allowed = not bool(getattr(assembly, "external_context", None)) and not bool(
+        getattr(assembly, "retrieved_history", None)
+    )
     stream_log(
         "gateway-live-chat-first-token",
         "runtime",
@@ -430,6 +517,10 @@ def _stream_stateful_lmstudio_reply(
         model_id=resolved_model,
         prompt_message_count=len(messages),
         prompt_build_ms=round(prompt_build_ms, 3),
+        continuation_count=prior_continuation_count,
+        max_continuations=_max_continuations(),
+        rolling_messages_dropped=rolled_off,
+        carry_allowed=carry_allowed,
     )
 
     transport_messages = [messages[-1]] if state_hit else messages
@@ -515,7 +606,11 @@ def _stream_stateful_lmstudio_reply(
         request_messages=messages,
         assistant_text=normalized_text,
         response_id=response_id,
+        prior_continuation_count=prior_continuation_count,
+        state_hit=state_hit,
+        carry_allowed=carry_allowed,
     )
+    next_continuation_count = prior_continuation_count + 1 if state_hit else 0
     cached_input_tokens = provider_metrics.get("cached_input_tokens")
     stream_log(
         "gateway-live-chat-first-token",
@@ -526,6 +621,9 @@ def _stream_stateful_lmstudio_reply(
         state_updated=state_updated,
         response_id_available=bool(response_id),
         model_id=resolved_model,
+        continuation_count=(next_continuation_count if state_updated else None),
+        max_continuations=_max_continuations(),
+        carry_allowed=carry_allowed,
         input_tokens=provider_metrics.get("input_tokens"),
         cached_input_tokens=cached_input_tokens,
         prompt_cache_hit_ratio=provider_metrics.get("prompt_cache_hit_ratio"),
