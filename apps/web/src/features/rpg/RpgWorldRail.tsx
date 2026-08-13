@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { omnixApiClient } from '../../api/client';
 import { RpgMapDialog } from './RpgMapDialog';
+import { rpgMapAssetUrl } from './rpgMapAssets';
 import type {
   RpgCheckpointSummaryPreview,
   RpgEncounterPreview,
@@ -11,6 +12,7 @@ import type {
   RpgSessionSummaryPreview,
   RpgWorldStateRowPreview,
 } from './rpgUiState';
+import { useRpgWorldMapArtwork } from './useRpgWorldMapArtwork';
 import './RpgVisualAssets.css';
 
 const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
@@ -79,9 +81,15 @@ export function RpgWorldRail({
   const mapStateRecord = recordValue(stateRecord.map_state);
   const queriedMapId = typeof mapStateRecord.current_map_id === 'string' ? mapStateRecord.current_map_id.trim() : '';
   const activeMapId = currentMapId?.trim() || queriedMapId;
+  const mapArtwork = useRpgWorldMapArtwork({
+    mapId: activeMapId,
+    sessionId: isPreview ? '' : selectedSessionSummary.id,
+  });
+  const liveMapArtworkUrl = rpgMapAssetUrl(mapArtwork.assetId);
   const visibleJobCards = jobCards.slice(0, 3);
   const visibleAssets = rpgAssets.slice(0, 3);
   const canOpenLiveMap = !isPreview && Boolean(selectedSessionSummary.id.trim() && activeMapId);
+  const hasMapImage = isPreview || Boolean(liveMapArtworkUrl);
   const [isMapOpen, setIsMapOpen] = useState(false);
 
   return (
@@ -91,9 +99,11 @@ export function RpgWorldRail({
           <div className="rpg-section-heading">
             <p className="eyebrow">World & location</p>
           </div>
-          <div className={isPreview ? 'rpg-map-preview rpg-map-preview-has-image' : 'rpg-map-preview'} aria-label={`${selectedSessionSummary.location} travel map`}>
+          <div className={hasMapImage ? 'rpg-map-preview rpg-map-preview-has-image' : 'rpg-map-preview'} aria-label={`${selectedSessionSummary.location} travel map`}>
             {isPreview ? (
               <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
+            ) : liveMapArtworkUrl ? (
+              <img className="rpg-map-image" src={liveMapArtworkUrl} alt="" aria-hidden="true" loading="lazy" />
             ) : (
               <span className="rpg-live-visual-label">{activeMapId ? 'Live map ready' : 'Live map unavailable'}</span>
             )}
