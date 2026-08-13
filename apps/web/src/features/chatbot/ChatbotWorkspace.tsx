@@ -125,6 +125,7 @@ const STREAMING_TTS_START_DELAY_SECONDS = 0.09;
 const STREAMING_TTS_RECOVERY_DELAY_SECONDS = 0.05;
 const STREAMED_TTS_MIN_PHRASE_CHARS = 90;
 const LIVE_VOICE_AUTO_SEND_DELAY_MS = 600;
+const LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS = 0;
 
 function liveVoiceSubmissionKey(content: string): string {
   return content.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}']+/gu, ' ').trim();
@@ -263,6 +264,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceActiveRef = useRef(false);
   const pendingLiveSessionProjectionRef = useRef<ApiChatSession | null>(null);
   const pendingLiveComposerResetRef = useRef(false);
+  const pendingLiveProjectionCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSubmittedVoiceTextRef = useRef('');
   const voiceTurnPerformanceRef = useRef<VoiceTurnPerformance | null>(null);
   const voiceTurnDiagnosticsRef = useRef<LiveCallDiagnosticsReporter | null>(null);
@@ -510,6 +512,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       dispatchLiveVoiceStop();
       stopVoiceInput();
       stopAssistantResponseAudio();
+      if (pendingLiveProjectionCommitTimerRef.current !== null) {
+        window.clearTimeout(pendingLiveProjectionCommitTimerRef.current);
+        pendingLiveProjectionCommitTimerRef.current = null;
+      }
       void voiceTurnDiagnosticsRef.current?.close('workspace_unmounted');
       voiceTurnDiagnosticsRef.current = null;
     };
@@ -636,6 +642,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   function commitPendingLiveSessionProjection(): void {
+    if (pendingLiveProjectionCommitTimerRef.current !== null) {
+      window.clearTimeout(pendingLiveProjectionCommitTimerRef.current);
+      pendingLiveProjectionCommitTimerRef.current = null;
+    }
     const session = pendingLiveSessionProjectionRef.current;
     if (session) {
       pendingLiveSessionProjectionRef.current = null;
@@ -652,6 +662,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         shouldValidate: false,
       });
     }
+  }
+
+  function schedulePendingLiveSessionProjection(): void {
+    if (!liveVoiceActiveRef.current || pendingLiveSessionProjectionRef.current === null) return;
+    if (pendingLiveProjectionCommitTimerRef.current !== null) return;
+    pendingLiveProjectionCommitTimerRef.current = window.setTimeout(() => {
+      pendingLiveProjectionCommitTimerRef.current = null;
+      if (liveVoiceActiveRef.current) commitPendingLiveSessionProjection();
+    }, LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS);
   }
 
   async function startLiveCall(): Promise<void> {
@@ -1062,6 +1081,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       }
       if (liveVoiceActiveRef.current) {
         pendingLiveComposerResetRef.current = true;
+        // The audio controller normally commits this projection at
+        // turn_finished. Keep the chat screen correct even when that
+        // controller is unavailable or audio completion is interrupted.
+        schedulePendingLiveSessionProjection();
       } else {
         setLiveTranscript('');
         setLiveInterimTranscript('');

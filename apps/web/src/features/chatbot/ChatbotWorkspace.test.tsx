@@ -557,12 +557,6 @@ describe('ChatbotWorkspace', () => {
       );
       expect(streamCall?.[1]?.body).toContain('"content":"open the pod bay doors"');
     });
-    expect(screen.queryByText('Opening them now.')).not.toBeInTheDocument();
-    act(() => {
-      window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
-        detail: { event: 'turn_finished' },
-      }));
-    });
     expect((await screen.findAllByText('Opening them now.')).length).toBeGreaterThan(0);
     await waitFor(() => {
       const diagnosticBodies = fetchMock.mock.calls
@@ -670,12 +664,6 @@ describe('ChatbotWorkspace', () => {
     expect(fetchMock.mock.calls.some(
       ([input, init]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && init?.method === 'POST',
     )).toBe(false);
-    expect(screen.queryByText('I can see it now.')).not.toBeInTheDocument();
-    act(() => {
-      window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
-        detail: { event: 'turn_finished' },
-      }));
-    });
     expect((await screen.findAllByText('I can see it now.')).length).toBeGreaterThan(0);
   });
 
