@@ -142,6 +142,36 @@ class PostgresChatRepositoryAdapter:
                     )
             work.commit()
 
+    def update_delivery_metadata(
+        self,
+        *,
+        session_id: str,
+        assistant_turn_id: str,
+        metadata: dict[str, object],
+    ) -> bool:
+        """Patch delivery metadata without serializing the entire chat workspace."""
+        if not metadata:
+            return False
+        with unit_of_work(self.database) as work:
+            cursor = work.connection.execute(
+                """
+                UPDATE omnix_chat_messages
+                   SET metadata = metadata || %s::jsonb
+                 WHERE workspace_id = %s
+                   AND session_id = %s
+                   AND metadata ->> 'assistant_turn_id' = %s
+                """,
+                (
+                    _json(metadata),
+                    self.context.workspace_id,
+                    session_id,
+                    assistant_turn_id,
+                ),
+            )
+            changed = cursor.rowcount > 0
+            work.commit()
+        return changed
+
     def _session_payload(self, session: ChatSession) -> dict[str, Any]:
         return {
             "id": session.id,
