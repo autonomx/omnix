@@ -50,7 +50,6 @@ jobs:
             src/app/providers/nemotron_eou_live_websocket.py \
             src/app/providers/nemotron_eou_quality.py \
             src/app/providers/stt_live_websocket.py \
-            src/app/providers/vendor/faster_qwen3_tts/streaming.py \
             src/app/gateway/live_chat_lmstudio_responses.py \
             src/app/gateway/live_chat_speculation.py \
             src/app/gateway/live_voice_execution_lane.py \
@@ -74,6 +73,9 @@ jobs:
           # The NeMo streaming import is deliberately lazy inside the stream
           # constructor. Keep all other Ruff checks active for that module.
           ruff check --ignore I001 src/app/providers/nemotron_eou_streaming.py
+          # The vendored Qwen file retains its upstream shebang and legacy typing
+          # style. Gate all substantive rules while preserving those baselines.
+          ruff check --ignore EXE001,UP035,UP006 src/app/providers/vendor/faster_qwen3_tts/streaming.py
           # The API-only benchmark imports this conftest at collection time, so
           # keep its browser-parity orchestration under the focused static gate.
           ruff check src/tests/e2e/conftest.py
