@@ -3,7 +3,6 @@ import { resolveAuthoritySelection } from './live-stt-authority-controller';
 import {
   resolveLiveVoiceSttSelection,
   shouldCommitProviderEndpoint,
-  shouldDispatchProviderEndpointSpeculation,
 } from './live-voice-controller';
 import {
   LIVE_SPECULATION_HANDSHAKE_GRACE_MS,
@@ -127,30 +126,6 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(shouldCommitProviderEndpoint({
       ...ambiguous,
       pauseElapsedMs: 280,
-    })).toBe(false);
-  });
-
-  it('starts guarded private endpoint work while authoritative preview is still decoding', () => {
-    expect(shouldDispatchProviderEndpointSpeculation({
-      authorityEnabled: true,
-      candidateText: 'Hello',
-      probability: 0.95,
-      fusionAction: 'continue',
-    })).toBe(true);
-    expect(shouldDispatchProviderEndpointSpeculation({
-      authorityEnabled: true,
-      candidateText: 'because',
-      probability: 0.99,
-      fusionAction: 'continue',
-    })).toBe(false);
-  });
-
-  it('keeps provider endpoint speculation private to the authoritative lane', () => {
-    expect(shouldDispatchProviderEndpointSpeculation({
-      authorityEnabled: false,
-      candidateText: 'This is a safe multi-word candidate',
-      probability: 1,
-      fusionAction: 'speculate',
     })).toBe(false);
   });
 

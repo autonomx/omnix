@@ -9,7 +9,6 @@ import {
 import { liveConversationStore } from './live-conversation-store';
 import { currentLiveRuntimeProvenance } from './live-runtime-provenance';
 import { liveSessionCoordinator } from './live-session-coordinator';
-import { earlySpeculationCandidateEligible } from './live-speculation-early-trigger';
 import {
   LIVE_STT_SPECULATION_CANDIDATE_EVENT,
   LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
@@ -107,13 +106,6 @@ type EndpointCommitState = {
   semanticProbabilityDone?: number;
   transcriptWords?: number;
   correctionPending?: boolean;
-};
-
-type ProviderEndpointSpeculationState = {
-  authorityEnabled: boolean;
-  candidateText: string;
-  probability: number;
-  fusionAction: ReturnType<typeof endpointFusionAction>;
 };
 
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
@@ -752,14 +744,6 @@ function dispatchLiveSttSpeculationEvent(type: string, detail: Record<string, un
   window.dispatchEvent(new CustomEvent(type, { detail }));
 }
 
-export function shouldDispatchProviderEndpointSpeculation(
-  state: ProviderEndpointSpeculationState,
-): boolean {
-  if (!state.authorityEnabled || !state.candidateText.trim()) return false;
-  return state.fusionAction !== 'continue'
-    || earlySpeculationCandidateEligible(state.probability, state.candidateText);
-}
-
 function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpointCandidate): void {
   const session = activeSession;
   if (!session || session.card !== card) return;
@@ -816,17 +800,11 @@ function handleProviderEndpointCandidate(card: HTMLElement, event: ProviderEndpo
     endpointMinSilenceMs: PROVIDER_ENDPOINT_MIN_SILENCE_MS,
   });
   if (
-    shouldDispatchProviderEndpointSpeculation({
-      authorityEnabled: session.sttAuthority.authorityEnabled,
-      candidateText,
-      probability: event.probability,
-      fusionAction,
-    })
+    session.sttAuthority.authorityEnabled
+    && !session.client.authoritativePreviewSupported
+    && candidateText
+    && fusionAction !== 'continue'
   ) {
-    // High-context preview remains the preferred final hypothesis, but it must
-    // not gate private work. Provider EOU candidates are side-effect-free and
-    // exact final matching still controls reuse, so starting them here recovers
-    // the preview decode window without weakening transcript commitment.
     session.speculationSegmentId = event.segmentId;
     session.speculationSourceSequence = event.sequence;
     const detail = {
