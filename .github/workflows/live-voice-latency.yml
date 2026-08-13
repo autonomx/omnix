@@ -42,29 +42,31 @@ jobs:
           python -c "from app.live_voice_hardware_policy import install_live_voice_hardware_policy; from app.launcher.runtime_control_app import app, build_runtime_service_specs; from app.providers.live_stt_contracts import LiveSttNegotiation; from app.providers.nemotron_eou_live_websocket import PROVIDER_NAME; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.tts_stream_contract import TtsStreamRequest"
 
       - name: Lint focused live voice modules
-        run: >-
-          ruff check
-          src/app/live_voice_hardware_policy.py
-          src/app/launcher/runtime_control_app.py
-          src/app/providers/live_stt_contracts.py
-          src/app/providers/nemotron_eou_live_websocket.py
-          src/app/providers/nemotron_eou_quality.py
-          src/app/providers/nemotron_eou_streaming.py
-          src/app/providers/stt_live_websocket.py
-          src/app/gateway/live_chat_lmstudio_responses.py
-          src/app/gateway/live_chat_speculation.py
-          src/app/gateway/live_voice_execution_lane.py
-          src/app/gateway/live_voice_speculative_tts.py
-          src/app/gateway/lmstudio_loaded_model_resolution.py
-          src/app/gateway/tts_live_call_websocket.py
-          src/app/gateway/tts_stream_contract.py
-          src/nemotron_eou_stt_server.py
-          src/tests/app/test_runtime_launcher_services.py
-          src/tests/app/test_live_stt_contracts.py
-          src/tests/app/test_live_voice_hardware_policy.py
-          src/tests/app/test_live_chat_speculation.py
-          src/tests/app/test_live_voice_speculative_tts.py
-          src/tests/app/test_lmstudio_loaded_model_resolution.py
+        run: |
+          ruff check \
+            src/app/live_voice_hardware_policy.py \
+            src/app/launcher/runtime_control_app.py \
+            src/app/providers/live_stt_contracts.py \
+            src/app/providers/nemotron_eou_live_websocket.py \
+            src/app/providers/nemotron_eou_quality.py \
+            src/app/providers/stt_live_websocket.py \
+            src/app/gateway/live_chat_lmstudio_responses.py \
+            src/app/gateway/live_chat_speculation.py \
+            src/app/gateway/live_voice_execution_lane.py \
+            src/app/gateway/live_voice_speculative_tts.py \
+            src/app/gateway/lmstudio_loaded_model_resolution.py \
+            src/app/gateway/tts_live_call_websocket.py \
+            src/app/gateway/tts_stream_contract.py \
+            src/nemotron_eou_stt_server.py \
+            src/tests/app/test_runtime_launcher_services.py \
+            src/tests/app/test_live_stt_contracts.py \
+            src/tests/app/test_live_voice_hardware_policy.py \
+            src/tests/app/test_live_chat_speculation.py \
+            src/tests/app/test_live_voice_speculative_tts.py \
+            src/tests/app/test_lmstudio_loaded_model_resolution.py
+          # The NeMo streaming import is deliberately lazy inside the stream
+          # constructor. Keep all other Ruff checks active for that module.
+          ruff check --ignore I001 src/app/providers/nemotron_eou_streaming.py
 
       - name: Run focused Python tests
         run: >-
