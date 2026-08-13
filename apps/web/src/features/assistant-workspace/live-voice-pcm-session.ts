@@ -414,9 +414,6 @@ export async function createLiveVoicePcmSession(
     totalReceivedSamples += sourceSamples;
     const evenBytes = buffer.byteLength - (buffer.byteLength % 2);
     const sourcePcm = new Int16Array(buffer.slice(0, evenBytes));
-    window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_PCM_EVENT, {
-      detail: { samples: sourcePcm, sampleRate: phrase.stats.sampleRate },
-    }));
     const converted = pcm16ToFloat32(sourcePcm, phrase.stats.sampleRate, audioContext.sampleRate);
     phrase.stats.playbackSamples += converted.length;
     totalPlaybackSamples += converted.length;
@@ -432,7 +429,14 @@ export async function createLiveVoicePcmSession(
       workletMessage.generationEpoch = phrase.ownership.generationEpoch;
       workletMessage.outputOrder = phrase.ownership.outputOrder;
     }
+    // Keep the physical playback path ahead of synchronous visualization and
+    // echo-reference consumers. A large promoted startup frame can make those
+    // listeners do enough main-thread work to delay this postMessage by an
+    // entire audio runway, even though PCM has already reached the browser.
     node.port.postMessage(workletMessage, [converted.buffer]);
+    window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_PCM_EVENT, {
+      detail: { samples: sourcePcm, sampleRate: phrase.stats.sampleRate },
+    }));
   };
 
   const controlMatchesPhrase = (message: ControlEvent, phrase: ActivePhrase): boolean => {

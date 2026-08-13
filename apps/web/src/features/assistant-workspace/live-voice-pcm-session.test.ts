@@ -362,6 +362,21 @@ describe('live voice PCM session', () => {
     );
   });
 
+  it('hands received PCM to the worklet before synchronous avatar consumers', async () => {
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    let workletWasQueuedAtAvatarDispatch = false;
+    const handleAvatarPcm = () => {
+      workletWasQueuedAtAvatarDispatch = FakeAudioWorkletNode.instances[0].port.messages
+        .some((message) => (message as { type?: string }).type === 'push_segment_samples');
+    };
+    window.addEventListener('omnix:character-avatar-pcm', handleAvatarPcm, { once: true });
+
+    await session.enqueuePhrase('Prioritize audible playback.', 0);
+    await session.finish();
+
+    expect(workletWasQueuedAtAvatarDispatch).toBe(true);
+  });
+
   it('closes the turn websocket and sends a cancellation reason to the worklet', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const phrase = session.enqueuePhrase('Interrupt this phrase.', 0);
