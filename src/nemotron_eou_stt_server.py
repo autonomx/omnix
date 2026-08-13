@@ -13,7 +13,10 @@ import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.providers.nemotron_eou_live_websocket import PROVIDER_NAME, install_nemotron_eou_websocket
+from app.providers.nemotron_eou_live_websocket import (
+    PROVIDER_NAME,
+    install_nemotron_eou_websocket,
+)
 from app.providers.nemotron_eou_quality import quality_model_manager as model_manager
 from app.providers.nemotron_eou_streaming import SAMPLE_RATE
 
@@ -106,8 +109,8 @@ def _decode_audio(payload: bytes, filename: str) -> tuple[bytes, float]:
 
 @app.post("/transcribe")
 async def transcribe(
-    file: UploadFile | None = File(default=None),
-    audio: UploadFile | None = File(default=None),
+    file: UploadFile | None = File(default=None),  # noqa: B008 - FastAPI dependency default
+    audio: UploadFile | None = File(default=None),  # noqa: B008 - FastAPI dependency default
     language: str | None = None,
 ) -> dict[str, object]:
     del language  # English-only runtime; kept for legacy client compatibility.
