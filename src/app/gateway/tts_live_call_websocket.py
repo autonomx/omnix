@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import threading
 import time
 from contextlib import suppress
@@ -13,9 +14,11 @@ from typing import Any, Callable
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from app import shared
 from app.live_speech.performance_contract import apply_performance_plan_to_provider
-from app.shared import get_tts_provider, remove_emojis
+from app.shared import remove_emojis
 
+from .live_voice_speculative_tts import resolve_live_call_tts_provider
 from .tts_stream_diagnostics import (
     begin_stream,
     diagnostics_log_path,
@@ -34,7 +37,13 @@ _ROUTE_SENTINEL = "_omnix_tts_live_call_ws_registered"
 _HOOK_SENTINEL = "_omnix_tts_live_call_ws_hook_installed"
 TTS_LIVE_CALL_WEBSOCKET_PATH = "/api/tts/live-call/websocket"
 TTS_PCM_FRAME_SAMPLES = 2_400
-FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS = 0.050
+FRAME_HANDOFF_TIMEOUT_SECONDS = 0.250
+SPECULATIVE_STARTUP_BURST_FRAMES = 2
+
+# Explicit dependency seam retained for focused tests and alternate gateway
+# composition. Runtime lane selection still happens below; this is not a
+# process-wide provider monkey-patch.
+get_tts_provider = shared.get_tts_provider
 
 
 @dataclass(frozen=True)
@@ -92,6 +101,52 @@ def _output_identity(payload: dict[str, Any]) -> tuple[str, int, str]:
         generation_epoch = 0
     segment_id = str(payload.get("segment_id") or f"{output_id}:segment")[:160]
     return output_id, generation_epoch, segment_id
+
+
+_FIRST_RAW_TIMING_FIELDS = {
+    "provider_setup_ms": "provider_setup_ms",
+    "provider_entry_to_first_audio_ms": "provider_entry_to_first_audio_ms",
+    "prepare_total_ms": "provider_prepare_ms",
+    "input_tokenization_ms": "provider_input_tokenization_ms",
+    "voice_prompt_prepare_ms": "provider_voice_prompt_ms",
+    "talker_input_construction_ms": "provider_talker_input_ms",
+    "graph_warmup_ms": "provider_graph_warmup_ms",
+    "prefill_ms": "provider_talker_prefill_ms",
+    "decode_ms": "provider_first_codec_ms",
+    "model_to_first_codec_ms": "provider_model_to_first_codec_ms",
+    "speech_tokenizer_decode_call_ms": "provider_speech_decode_call_ms",
+    "tensor_to_numpy_ms": "provider_tensor_to_numpy_ms",
+    "speech_tokenizer_decode_ms": "provider_speech_decode_ms",
+    "codec_to_audio_ms": "provider_codec_to_audio_ms",
+    "model_to_first_audio_ms": "provider_model_to_first_audio_ms",
+}
+
+
+def _first_raw_timing_details(timing: Any) -> dict[str, Any]:
+    if not isinstance(timing, dict):
+        return {}
+    sanitized: dict[str, Any] = {}
+    for key, value in timing.items():
+        if isinstance(value, bool):
+            sanitized[str(key)] = value
+        elif isinstance(value, (int, float)) and math.isfinite(float(value)):
+            sanitized[str(key)] = round(float(value), 3)
+        elif isinstance(value, str):
+            sanitized[str(key)] = value[:120]
+    details: dict[str, Any] = {"provider_timing": sanitized}
+    for source, target in _FIRST_RAW_TIMING_FIELDS.items():
+        value = sanitized.get(source)
+        if isinstance(value, (int, float)):
+            details[target] = value
+    if isinstance(sanitized.get("voice_prompt_cache_hit"), bool):
+        details["provider_voice_prompt_cache_hit"] = sanitized["voice_prompt_cache_hit"]
+    if isinstance(sanitized.get("prompt_tokens"), (int, float)):
+        details["provider_prompt_tokens"] = int(sanitized["prompt_tokens"])
+    return details
+
+
+def _is_speculative_cache_frame(timing: Any) -> bool:
+    return isinstance(timing, dict) and timing.get("speculative_tts_cache") is True
 
 
 def _ownership_fields(
@@ -315,7 +370,7 @@ async def _stream_phrase(
             )
             return
 
-        provider = get_tts_provider()
+        provider = resolve_live_call_tts_provider(get_tts_provider())
         if provider is None or not hasattr(provider, "generate_audio_stream"):
             message = "tts_provider_unavailable" if provider is None else "tts_provider_streaming_unavailable"
             stream_log(stream_id, "server", "request_rejected", reason=message)
@@ -342,6 +397,7 @@ async def _stream_phrase(
             provider_class=f"{type(provider).__module__}.{type(provider).__qualname__}",
             provider_name=getattr(provider, "provider_name", None),
             provider_object_id=id(provider),
+            live_execution_lane=getattr(provider, "execution_lane", "shared"),
             provider_capabilities=capability_payload,
             performance_controls_applied=applied_controls,
             performance_controls_ignored=ignored_controls,
@@ -366,6 +422,10 @@ async def _stream_phrase(
             raw_chunk_count = 0
             queued_frame_count = 0
             produced_samples = 0
+            frame_handoff_count = 0
+            frame_handoff_timeout_count = 0
+            max_frame_handoff_wait_ms = 0.0
+            speculative_startup_burst_frames = 0
             stream_log(
                 stream_id,
                 "provider",
@@ -403,13 +463,36 @@ async def _stream_phrase(
                         if stopped():
                             return
                         raw_chunk_ready_at = time.perf_counter()
+                        raw_chunk_interarrival_ms = (
+                            raw_chunk_ready_at - last_raw_chunk_at
+                        ) * 1000
                         pcm_bytes = _audio_chunk_to_pcm16_bytes(audio_chunk)
                         resolved_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
                         sample_count = len(pcm_bytes) // 2
                         raw_chunk_count += 1
                         produced_samples += sample_count
                         last_raw_chunk_at = raw_chunk_ready_at
+                        stream_log(
+                            stream_id,
+                            "provider",
+                            "raw_chunk_ready",
+                            raw_chunk_index=raw_chunk_count - 1,
+                            interarrival_ms=round(raw_chunk_interarrival_ms, 3),
+                            raw_chunk_samples=sample_count,
+                            raw_chunk_audio_ms=round(
+                                sample_count * 1000 / max(1, resolved_rate),
+                                3,
+                            ),
+                            producer_elapsed_ms=round(
+                                (raw_chunk_ready_at - producer_started_at) * 1000,
+                                3,
+                            ),
+                            provider_timing=timing if isinstance(timing, dict) else {},
+                            output_id=output_id,
+                            generation_epoch=generation_epoch,
+                        )
                         if raw_chunk_count == 1:
+                            first_raw_timing = _first_raw_timing_details(timing)
                             stream_log(
                                 stream_id,
                                 "provider",
@@ -426,20 +509,34 @@ async def _stream_phrase(
                                 sample_rate=resolved_rate,
                                 output_id=output_id,
                                 generation_epoch=generation_epoch,
+                                **first_raw_timing,
                             )
                         yield pcm_bytes, resolved_rate, timing
 
-                for pcm_bytes, sample_rate, timing in _stream_pcm16_blocks(
-                    raw_chunks(),
-                    block_samples=TTS_PCM_FRAME_SAMPLES,
-                ):
+                def handoff_frame(
+                    pcm_bytes: bytes,
+                    sample_rate: int,
+                    timing: Any,
+                    *,
+                    bundled_frame_count: int = 1,
+                ) -> bool:
+                    nonlocal queued_frame_count
+                    nonlocal frame_handoff_count
+                    nonlocal frame_handoff_timeout_count
+                    nonlocal max_frame_handoff_wait_ms
                     if stopped():
-                        return
+                        return False
                     is_first_frame = queued_frame_count == 0
-                    first_frame_ack = threading.Event() if is_first_frame else None
+                    # Synchronize every websocket handoff with the asyncio
+                    # sender. Qwen's CUDA decode loop can retain the GIL long
+                    # enough for faster-than-real-time chunks to accumulate in
+                    # the callback queue. Waiting releases the GIL before the
+                    # next decoder step begins.
+                    frame_sent_ack = threading.Event()
                     queued_at = time.perf_counter()
                     metadata = {
                         "frame_index": queued_frame_count,
+                        "bundled_frame_count": bundled_frame_count,
                         "provider_timing": timing,
                         "output_id": output_id,
                         "generation_epoch": generation_epoch,
@@ -453,23 +550,81 @@ async def _stream_phrase(
                             sample_rate,
                             metadata,
                             queued_at=queued_at,
-                            sent_ack=first_frame_ack,
+                            sent_ack=frame_sent_ack,
                         )
                     )
-                    if first_frame_ack is not None:
-                        wait_started_at = time.perf_counter()
-                        first_frame_ack.wait(timeout=FIRST_FRAME_HANDOFF_TIMEOUT_SECONDS)
+                    wait_started_at = time.perf_counter()
+                    frame_sent_ack.wait(timeout=FRAME_HANDOFF_TIMEOUT_SECONDS)
+                    handoff_wait_ms = (time.perf_counter() - wait_started_at) * 1000
+                    frame_handoff_count += 1
+                    max_frame_handoff_wait_ms = max(
+                        max_frame_handoff_wait_ms,
+                        handoff_wait_ms,
+                    )
+                    if not frame_sent_ack.is_set():
+                        frame_handoff_timeout_count += 1
+                    if is_first_frame:
                         stream_log(
                             stream_id,
                             "provider",
                             "first_frame_handoff_completed",
-                            acknowledged=first_frame_ack.is_set(),
-                            wait_ms=round((time.perf_counter() - wait_started_at) * 1000, 3),
+                            acknowledged=frame_sent_ack.is_set(),
+                            wait_ms=round(handoff_wait_ms, 3),
+                            bundled_frame_count=bundled_frame_count,
                             output_id=output_id,
                             generation_epoch=generation_epoch,
                         )
-                        if stopped():
+                    elif not frame_sent_ack.is_set():
+                        stream_log(
+                            stream_id,
+                            "provider",
+                            "frame_handoff_timeout",
+                            frame_index=queued_frame_count - 1,
+                            wait_ms=round(handoff_wait_ms, 3),
+                            output_id=output_id,
+                            generation_epoch=generation_epoch,
+                        )
+                    return not stopped()
+
+                transport_frames = _stream_pcm16_blocks(
+                    raw_chunks(),
+                    block_samples=TTS_PCM_FRAME_SAMPLES,
+                )
+                deferred_frame: tuple[bytes, int, Any] | None = None
+                first_frame = next(transport_frames, None)
+                if first_frame is not None:
+                    startup_frames = [first_frame]
+                    if _is_speculative_cache_frame(first_frame[2]):
+                        # A promoted cache already owns a two-frame runway.
+                        # Deliver it in one browser message so a busy main
+                        # thread cannot start playback after frame one and then
+                        # delay frame two long enough to underrun.
+                        while len(startup_frames) < SPECULATIVE_STARTUP_BURST_FRAMES:
+                            next_frame = next(transport_frames, None)
+                            if next_frame is None:
+                                break
+                            if next_frame[1] != first_frame[1]:
+                                deferred_frame = next_frame
+                                break
+                            startup_frames.append(next_frame)
+                        speculative_startup_burst_frames = len(startup_frames)
+                        startup_pcm = b"".join(frame[0] for frame in startup_frames)
+                        if not handoff_frame(
+                            startup_pcm,
+                            first_frame[1],
+                            first_frame[2],
+                            bundled_frame_count=len(startup_frames),
+                        ):
                             return
+                    else:
+                        if not handoff_frame(*first_frame):
+                            return
+
+                if deferred_frame is not None and not handoff_frame(*deferred_frame):
+                    return
+                for pcm_bytes, sample_rate, timing in transport_frames:
+                    if not handoff_frame(pcm_bytes, sample_rate, timing):
+                        return
                 if stopped():
                     return
                 emit(FrameMessage("done", None, DEFAULT_SAMPLE_RATE, {}))
@@ -491,6 +646,10 @@ async def _stream_phrase(
                     raw_chunk_count=raw_chunk_count,
                     queued_frame_count=queued_frame_count,
                     produced_samples=produced_samples,
+                    frame_handoff_count=frame_handoff_count,
+                    frame_handoff_timeout_count=frame_handoff_timeout_count,
+                    max_frame_handoff_wait_ms=round(max_frame_handoff_wait_ms, 3),
+                    speculative_startup_burst_frames=speculative_startup_burst_frames,
                     last_raw_chunk_age_ms=round((time.perf_counter() - last_raw_chunk_at) * 1000, 3),
                     stop_requested=stopped(),
                     output_id=output_id,
@@ -576,6 +735,7 @@ async def _stream_phrase(
                             ),
                             route_to_first_frame_ms=round((now - route_started_at) * 1000, 3),
                             frame_samples=len(pcm_bytes) // 2,
+                            bundled_frame_count=int(metadata.get("bundled_frame_count") or 1),
                             sample_rate=sample_rate,
                             output_id=output_id,
                             generation_epoch=generation_epoch,

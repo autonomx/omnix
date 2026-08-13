@@ -16,6 +16,14 @@ const maya = {
   created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 };
 
+const jinx = {
+  id: 'jinx', display_name: 'Jinx', description: 'Chaotic inventor',
+  personality_prompt: 'Be chaotic, theatrical, and unmistakably Jinx.', default_greeting: 'Make it interesting.',
+  default_voice_asset_id: 'voice-cloning:Jinx', speech_style: {}, identity_policy: {},
+  shared_memory_policy: {}, active_version: 5, enabled: true, status: 'active',
+  created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-05T00:00:00Z',
+};
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('CharacterModePanel', () => {
@@ -48,6 +56,49 @@ describe('CharacterModePanel', () => {
       read_memory: false, write_memory: false, transcript_policy: 'persistent',
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Character Mode enabled. Maya loaded with linked voice. Memory off.');
+  });
+
+  it('does not reset a manual character choice to the currently active character', async () => {
+    const posted: Array<Record<string, unknown>> = [];
+    let interaction = {
+      id: 'chat:one', title: 'Chat', interaction_mode: 'character', character_id: 'maya',
+      voice_asset_id: 'voice-cloning:maya', read_memory: false, write_memory: false,
+      shared_memory_access: 'none', transcript_policy: 'persistent', character_profile_version: 2, messages: [],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input.toString(), 'http://localhost');
+      if (url.pathname === '/api/characters') return Response.json({ characters: [maya, jinx] });
+      if (url.pathname.endsWith('/interaction') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        posted.push(body);
+        interaction = {
+          ...interaction,
+          interaction_mode: String(body.interaction_mode),
+          character_id: String(body.character_id),
+          voice_asset_id: String(body.voice_asset_id),
+        };
+        return Response.json(interaction);
+      }
+      if (url.pathname.endsWith('/interaction')) return Response.json(interaction);
+      return new Response('not found', { status: 404 });
+    }));
+
+    renderPanel();
+    const selector = await screen.findByRole('combobox', { name: 'Character' });
+    await waitFor(() => expect(selector).toHaveValue('maya'));
+
+    fireEvent.change(selector, { target: { value: 'jinx' } });
+    expect(selector).toHaveValue('jinx');
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(selector).toHaveValue('jinx');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Character Settings' }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toMatchObject({
+      interaction_mode: 'character',
+      character_id: 'jinx',
+      voice_asset_id: 'voice-cloning:Jinx',
+    });
   });
 
   it('creates a persisted session when the selected chat is missing and confirms the loaded character', async () => {

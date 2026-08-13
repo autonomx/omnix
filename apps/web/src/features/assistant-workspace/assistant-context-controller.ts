@@ -32,6 +32,7 @@ const DESKTOP_ACTION_ATTRIBUTE = 'data-omnix-desktop-action';
 const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
+const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const assistantContextWindow = window as AssistantContextWindow;
 
 let profileDefaultMode: ResearchMode = 'disabled';
@@ -40,6 +41,8 @@ let activeSessionId: string | null = null;
 let nativeFetch: typeof window.fetch | null = null;
 let desktopShare: DesktopShareSession | null = null;
 let desktopStatus = 'Off';
+const knownResearchModes = new Map<string, ResearchMode>();
+const researchModePersistenceQueues = new Map<string, Promise<void>>();
 
 export function initializeAssistantContextController(root: ParentNode = document): void {
   if (assistantContextWindow.__omnixAssistantContextInitialized) return;
@@ -126,17 +129,28 @@ function installFetchInterceptor(): void {
 
     const messageMatch = parsed.pathname.match(MESSAGE_PATH);
     activeSessionId = messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null;
-    if (activeSessionId) await persistConversationResearchMode(activeSessionId, researchMode);
 
     const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null;
-    if (!shouldEnhance) return originalFetch(input, init);
+    if (!shouldEnhance) {
+      const responsePromise = originalFetch(input, init);
+      deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
+      dispatchPerformance('assistant_context_chat_request_dispatched', {
+        sessionId: activeSessionId,
+        researchMode,
+        enhanced: false,
+        persistenceDeferred: true,
+      });
+      return responsePromise;
+    }
 
     const bodyText = await requestBodyText(input, init);
     let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(bodyText) as Record<string, unknown>;
     } catch {
-      return originalFetch(input, init);
+      const responsePromise = originalFetch(input, init);
+      deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
+      return responsePromise;
     }
 
     let desktopPayload: Awaited<ReturnType<DesktopTemporalCapture['buildPayload']>> | undefined;
@@ -154,9 +168,19 @@ function installFetchInterceptor(): void {
     }
 
     const enhancedUrl = enhancedAssistantMessageUrl(inputUrl);
-    if (!enhancedUrl) return originalFetch(input, init);
+    if (!enhancedUrl) {
+      const responsePromise = originalFetch(input, init);
+      deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
+      return responsePromise;
+    }
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     headers.set('Content-Type', 'application/json');
+    dispatchPerformance('assistant_context_chat_request_dispatched', {
+      sessionId: activeSessionId,
+      researchMode,
+      enhanced: true,
+      persistenceDeferred: true,
+    });
     const enhancedResponse = await originalFetch(enhancedUrl, {
       ...init,
       method: 'POST',
@@ -171,7 +195,12 @@ function installFetchInterceptor(): void {
         desktop_capture_mode: desktopPayload?.captureMode ?? 'single',
       }),
     });
-    if (enhancedResponse.status === 404) return originalFetch(input, init);
+    if (enhancedResponse.status === 404) {
+      const fallbackPromise = originalFetch(input, init);
+      deferResearchModePersistence(fallbackPromise, activeSessionId, researchMode);
+      return fallbackPromise;
+    }
+    deferResearchModePersistence(Promise.resolve(enhancedResponse), activeSessionId, researchMode);
     return enhancedResponse;
   };
   window.fetch = wrappedFetch;
@@ -184,6 +213,7 @@ async function applySessionResearchMode(sessionId: string, response: Response): 
     researchMode = session.research_mode_override == null
       ? profileDefaultMode
       : normalizeResearchMode(session.research_mode_override);
+    knownResearchModes.set(sessionId, researchMode);
     renderControls();
   } catch {
     // Session reads remain usable when research metadata is absent.
@@ -207,17 +237,56 @@ async function loadProfileResearchDefault(): Promise<void> {
   }
 }
 
-async function persistConversationResearchMode(sessionId: string, mode: ResearchMode): Promise<void> {
+function deferResearchModePersistence(
+  responsePromise: Promise<Response>,
+  sessionId: string | null,
+  mode: ResearchMode,
+): void {
+  if (!sessionId || knownResearchModes.get(sessionId) === mode) return;
+  void responsePromise.then(
+    () => scheduleConversationResearchModePersistence(sessionId, mode),
+    () => scheduleConversationResearchModePersistence(sessionId, mode),
+  );
+}
+
+function scheduleConversationResearchModePersistence(sessionId: string, mode: ResearchMode): void {
+  if (knownResearchModes.get(sessionId) === mode) return;
+  const previous = researchModePersistenceQueues.get(sessionId) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(async () => {
+      if (knownResearchModes.get(sessionId) === mode) return;
+      const persisted = await persistConversationResearchMode(sessionId, mode);
+      if (persisted) {
+        knownResearchModes.set(sessionId, mode);
+        dispatchPerformance('assistant_context_research_mode_persisted', {
+          sessionId,
+          researchMode: mode,
+        });
+      }
+    });
+  researchModePersistenceQueues.set(sessionId, next);
+  const cleanup = (): void => {
+    if (researchModePersistenceQueues.get(sessionId) === next) {
+      researchModePersistenceQueues.delete(sessionId);
+    }
+  };
+  void next.then(cleanup, cleanup);
+}
+
+async function persistConversationResearchMode(sessionId: string, mode: ResearchMode): Promise<boolean> {
   const fetchImpl = nativeFetch;
-  if (!fetchImpl) return;
+  if (!fetchImpl) return false;
   try {
-    await fetchImpl(`/api/chat/sessions/${encodeURIComponent(sessionId)}/research-mode`, {
+    const response = await fetchImpl(`/api/chat/sessions/${encodeURIComponent(sessionId)}/research-mode`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ research_mode_override: mode }),
     });
+    return response.ok;
   } catch {
     // The selected turn still carries its explicit mode if session persistence is unavailable.
+    return false;
   }
 }
 
@@ -251,7 +320,7 @@ function injectControls(root: ParentNode): void {
     webSelect.value = researchMode;
     webSelect.addEventListener('change', () => {
       researchMode = normalizeResearchMode(webSelect.value);
-      if (activeSessionId) void persistConversationResearchMode(activeSessionId, researchMode);
+      if (activeSessionId) scheduleConversationResearchModePersistence(activeSessionId, researchMode);
       renderControls();
     });
     webLabel.append(webCaption, webSelect);
@@ -394,6 +463,12 @@ function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {
       resolve();
     }, { once: true });
   });
+}
+
+function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, {
+    detail: { stage, timestamp: new Date().toISOString(), ...detail },
+  }));
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

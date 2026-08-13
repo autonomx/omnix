@@ -1,0 +1,125 @@
+name: Live voice latency
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-voice-latency:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff pytest fastapi httpx uvicorn pillow playwright requests numpy "websockets>=12"
+          npm install
+
+      - name: Import live voice entry points
+        run: |
+          python -c "from app.live_voice_hardware_policy import install_live_voice_hardware_policy; from app.launcher.runtime_control_app import app, build_runtime_service_specs; from app.providers.live_stt_contracts import LiveSttNegotiation; from app.providers.nemotron_eou_live_websocket import PROVIDER_NAME; from app.gateway.live_chat_speculation import LiveSpeculationRequest; from app.gateway.tts_stream_contract import TtsStreamRequest"
+
+      - name: Lint focused live voice modules
+        run: |
+          ruff check \
+            src/app/live_voice_hardware_policy.py \
+            src/app/launcher/runtime_control_app.py \
+            src/app/providers/live_stt_contracts.py \
+            src/app/providers/nemotron_eou_live_websocket.py \
+            src/app/providers/nemotron_eou_quality.py \
+            src/app/providers/stt_live_websocket.py \
+            src/app/gateway/live_chat_lmstudio_responses.py \
+            src/app/gateway/live_chat_speculation.py \
+            src/app/gateway/live_voice_execution_lane.py \
+            src/app/gateway/live_voice_speculative_tts.py \
+            src/app/gateway/live_voice_spoken_style.py \
+            src/app/gateway/lmstudio_loaded_model_resolution.py \
+            src/app/gateway/tts_live_call_startup_frame_policy.py \
+            src/app/gateway/tts_live_call_websocket.py \
+            src/app/gateway/tts_stream_contract.py \
+            src/nemotron_eou_stt_server.py \
+            src/tests/app/test_runtime_launcher_services.py \
+            src/tests/app/test_live_stt_contracts.py \
+            src/tests/app/test_live_voice_hardware_policy.py \
+            src/tests/app/test_live_chat_lmstudio_responses.py \
+            src/tests/app/test_live_chat_speculation.py \
+            src/tests/app/test_live_voice_speculative_tts.py \
+            src/tests/app/test_live_voice_spoken_style.py \
+            src/tests/app/test_lmstudio_loaded_model_resolution.py \
+            src/tests/app/test_tts_live_call_startup_frame_policy.py \
+            src/tests/app/test_tts_stream_contract_performance.py
+          # The NeMo streaming import is deliberately lazy inside the stream
+          # constructor. Keep all other Ruff checks active for that module.
+          ruff check --ignore I001 src/app/providers/nemotron_eou_streaming.py
+          # The vendored Qwen file retains its upstream shebang and legacy typing
+          # style. Gate all substantive rules while preserving those baselines.
+          ruff check --ignore EXE001,UP035,UP006 src/app/providers/vendor/faster_qwen3_tts/streaming.py
+          # The API-only benchmark imports this conftest at collection time, so
+          # keep its browser-parity orchestration under the focused static gate.
+          ruff check src/tests/e2e/conftest.py
+          # E2E transport guards intentionally translate malformed wire payloads
+          # to RuntimeError and use best-effort cleanup. Keep every other rule,
+          # including parser/import/name checks, active on the API harness.
+          ruff check --ignore TRY004,S110,BLE001 src/tests/e2e/test_live_voice_api.py
+
+      - name: Run focused Python tests
+        run: >-
+          python -m pytest
+          src/tests/app/test_runtime_launcher_services.py
+          src/tests/app/test_live_stt_contracts.py
+          src/tests/app/test_live_voice_hardware_policy.py
+          src/tests/app/test_live_chat_lmstudio_responses.py
+          src/tests/app/test_live_chat_speculation.py
+          src/tests/app/test_live_voice_speculative_tts.py
+          src/tests/app/test_live_voice_spoken_style.py
+          src/tests/app/test_lmstudio_loaded_model_resolution.py
+          src/tests/app/test_tts_live_call_startup_frame_policy.py
+          src/tests/app/test_tts_stream_contract_performance.py
+          -q --tb=short
+
+      - name: Typecheck live voice browser path
+        run: |
+          set +e
+          npm --workspace @omnix/web run typecheck 2>&1 | tee live-voice-typecheck.txt
+          typecheck_status=${PIPESTATUS[0]}
+          set -e
+          if grep -E "(live-(stt-authority-controller|stt-capability-state|speculation-early-trigger|voice-controller|voice-websocket|speculation-controller|tts-adaptive-buffer-controller).*\.(ts|tsx))" live-voice-typecheck.txt; then
+            echo "TypeScript errors were reported in the live voice path."
+            exit "${typecheck_status:-1}"
+          fi
+          if [ "$typecheck_status" -ne 0 ]; then
+            echo "::warning::Repository-wide typecheck has baseline failures outside the live voice files."
+          fi
+
+      - name: Test live voice browser controllers
+        run: >-
+          npm --workspace @omnix/web run test -- --run
+          src/features/assistant-workspace/live-stt-capability-state.test.ts
+          src/features/assistant-workspace/live-speculation-early-trigger.test.ts
+          src/features/assistant-workspace/live-voice-controller.test.ts
+          src/features/assistant-workspace/live-voice-websocket.spec.ts
+          src/features/assistant-workspace/live-speculation-controller.test.ts
+          src/features/assistant-workspace/live-voice-turn-coordinator.test.ts
+          src/features/assistant-workspace/live-tts-adaptive-buffer-controller.test.ts

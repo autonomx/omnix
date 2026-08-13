@@ -19,6 +19,7 @@ from typing import Any
 from app.shared import LOGS_DIR
 
 from .content_free_diagnostics import sanitize_content_free_details
+from .resilient_rotating_file_handler import ResilientRotatingFileHandler
 
 TTS_STREAM_LOG_PATH = Path(LOGS_DIR) / "tts-streaming.log"
 TTS_STREAM_LOG_MAX_BYTES = 25_000_000
@@ -44,7 +45,7 @@ def _json_default(value: Any) -> Any:
 
 def _create_logger() -> tuple[logging.Logger, logging.handlers.QueueListener]:
     TTS_STREAM_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.handlers.RotatingFileHandler(
+    file_handler = ResilientRotatingFileHandler(
         TTS_STREAM_LOG_PATH,
         maxBytes=TTS_STREAM_LOG_MAX_BYTES,
         backupCount=TTS_STREAM_LOG_BACKUP_COUNT,

@@ -12,7 +12,7 @@ describe('new chat coordinator', () => {
     resetNewChatCoordinatorForTests();
     document.body.innerHTML = `
       <section class="assistant-sidebar-sessions">
-        <header><h2>Sessions</h2><button type="button">+ New</button></header>
+        <header><h2>Sessions</h2></header>
       </section>
       <label class="assistant-message-input">
         <textarea name="content" placeholder="Message Omnix Assistant, or use the microphone…">old draft</textarea>
@@ -29,7 +29,7 @@ describe('new chat coordinator', () => {
     document.body.innerHTML = '';
   });
 
-  it('creates and selects a real empty session instead of falling back to the first existing chat', async () => {
+  it('restores the missing New Chat control and selects the created empty session', async () => {
     const fetchMock = vi.fn(async () => Response.json({
       id: 'chat:new-session',
       title: 'New chat',
@@ -49,7 +49,13 @@ describe('new chat coordinator', () => {
     }, { once: true });
     window.addEventListener('omnix:assistant-live-voice-stop', stopEvents, { once: true });
 
-    const button = document.querySelector<HTMLButtonElement>('.assistant-sidebar-sessions button');
+    const button = document.querySelector<HTMLButtonElement>(
+      '.assistant-sidebar-sessions button[data-action="new-chat"]',
+    );
+    expect(button).not.toBeNull();
+    expect(button).toHaveAccessibleName('New chat');
+    expect(button).toHaveAttribute('data-omnix-new-chat-coordinator', 'true');
+
     const originalClick = vi.fn();
     button?.addEventListener('click', originalClick);
     button?.click();
@@ -70,6 +76,17 @@ describe('new chat coordinator', () => {
     expect(document.querySelector<HTMLTextAreaElement>('textarea[name="content"]')?.value).toBe('');
     expect(button?.disabled).toBe(false);
     expect(button?.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('restores the New Chat control after the React-owned header is rerendered', async () => {
+    const header = document.querySelector<HTMLElement>('.assistant-sidebar-sessions > header');
+    expect(header?.querySelectorAll('button')).toHaveLength(1);
+
+    if (header) header.innerHTML = '<h2>Sessions</h2>';
+
+    await vi.waitFor(() => {
+      expect(header?.querySelectorAll('button[data-action="new-chat"]')).toHaveLength(1);
+    });
   });
 
   it('does not intercept unrelated buttons outside the sessions panel', () => {

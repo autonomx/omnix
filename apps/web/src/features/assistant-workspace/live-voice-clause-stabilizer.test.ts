@@ -16,6 +16,43 @@ describe('stable live voice clauses', () => {
     expect(accumulator.pendingText()).toBe('');
   });
 
+  it('uses a bounded 55 ms deadline for the first spoken clause by default', () => {
+    const accumulator = new StableClauseAccumulator();
+
+    expect(accumulator.append('Start speaking now with enough text', 0)).toEqual([]);
+    expect(accumulator.takeReady(54)).toEqual([]);
+    expect(accumulator.takeReady(56)).toEqual([
+      { text: 'Start speaking now with enough', reason: 'deadline' },
+    ]);
+    expect(accumulator.pendingText()).toBe('text');
+  });
+
+  it('does not commit a punctuated first prefix below its configured audio floor', () => {
+    const accumulator = new StableClauseAccumulator({
+      firstClauseMinimumCharacters: 8,
+      firstClauseDeadlineMs: 20,
+    });
+
+    expect(accumulator.append('Right.', 0)).toEqual([]);
+    expect(accumulator.append(' Let me check.', 5)).toEqual([
+      { text: 'Right. Let me check.', reason: 'strong-boundary' },
+    ]);
+  });
+
+  it('returns to the 140 ms policy after the first clause', () => {
+    const accumulator = new StableClauseAccumulator();
+
+    expect(accumulator.append('First clause.', 0)).toEqual([
+      { text: 'First clause.', reason: 'strong-boundary' },
+    ]);
+    expect(accumulator.append('The second clause has enough words to split', 10)).toEqual([]);
+    expect(accumulator.takeReady(149)).toEqual([]);
+    expect(accumulator.takeReady(151)).toEqual([
+      { text: 'The second clause has enough words to', reason: 'deadline' },
+    ]);
+    expect(accumulator.pendingText()).toBe('split');
+  });
+
   it('uses lookahead before committing weaker punctuation', () => {
     const accumulator = new StableClauseAccumulator({
       minimumClauseCharacters: 12,
@@ -27,6 +64,25 @@ describe('stable live voice clauses', () => {
       { text: 'There are two options,', reason: 'stable-boundary' },
       { text: 'and the safer one keeps state isolated.', reason: 'strong-boundary' },
     ]);
+  });
+
+  it('caps later narrative clauses before late punctuation without losing words', () => {
+    const accumulator = new StableClauseAccumulator();
+    expect(accumulator.append('Opening line.', 0)).toEqual([
+      { text: 'Opening line.', reason: 'strong-boundary' },
+    ]);
+    const source = 'I was a kid who loved stories and I would stay up late imagining every strange place those stories might take me.';
+
+    const clauses = [
+      ...accumulator.append(source, 10),
+      ...accumulator.flush(),
+    ];
+
+    expect(clauses.length).toBeGreaterThan(1);
+    expect(clauses[0]?.reason).toBe('maximum');
+    expect(clauses.every((clause) => clause.text.length <= 64)).toBe(true);
+    expect(clauses.map((clause) => clause.text).join(' ')).toBe(source);
+    expect(clauses.map((clause) => clause.text).join(' ')).toContain('I was a kid who loved stories');
   });
 
   it('does not split decimals, abbreviations, URLs, or unclosed parentheses', () => {

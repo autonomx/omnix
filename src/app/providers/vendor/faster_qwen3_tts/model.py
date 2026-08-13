@@ -5,6 +5,7 @@ Wrapper class that provides a Qwen3-TTS API while using
 CUDA graphs for 6-10x speedup.
 """
 import logging
+import time
 from pathlib import Path
 from typing import Generator, Optional, Tuple, Union
 
@@ -614,6 +615,7 @@ class FasterQwen3TTS:
         non_streaming_mode: bool = False,
         append_silence: bool = True,
         skip_warmup: bool = False,
+        timing: Optional[dict] = None,
     ):
         """Prepare inputs for generation (shared by streaming and non-streaming).
 
@@ -623,10 +625,15 @@ class FasterQwen3TTS:
                 continuing the reference audio's last phoneme and allows natural language switching.
                 When False, the full reference audio codec tokens are included in context (ICL mode).
         """
+        prepare_started_at = time.perf_counter()
+        tokenization_started_at = prepare_started_at
         input_texts = [self.model._build_assistant_text(text)]
         input_ids = self.model._tokenize_texts(input_texts)
+        tokenization_completed_at = time.perf_counter()
 
         cache_key = (str(ref_audio), ref_text, xvec_only, append_silence)
+        voice_prompt_started_at = tokenization_completed_at
+        voice_prompt_cache_hit = cache_key in self._voice_prompt_cache
         if cache_key in self._voice_prompt_cache:
             vcp, ref_ids = self._voice_prompt_cache[cache_key]
         elif xvec_only:
@@ -662,9 +669,11 @@ class FasterQwen3TTS:
                 ref_ids.append(None)
 
             self._voice_prompt_cache[cache_key] = (vcp, ref_ids)
+        voice_prompt_completed_at = time.perf_counter()
 
         m = self.model.model
 
+        talker_inputs_started_at = voice_prompt_completed_at
         tie, tam, tth, tpe = self._build_talker_inputs_local(
             m=m,
             input_ids=input_ids,
@@ -674,9 +683,12 @@ class FasterQwen3TTS:
             speakers=None,
             non_streaming_mode=non_streaming_mode,
         )
+        talker_inputs_completed_at = time.perf_counter()
 
+        warmup_started_at = talker_inputs_completed_at
         if not skip_warmup and not self._warmed_up:
             self._warmup(tie.shape[1])
+        warmup_completed_at = time.perf_counter()
 
         talker = m.talker
         config = m.config.talker_config
@@ -686,6 +698,25 @@ class FasterQwen3TTS:
         ref_codes = None
         if not xvec_only and vcp.get("ref_code") and vcp["ref_code"][0] is not None:
             ref_codes = vcp["ref_code"][0]
+
+        if timing is not None:
+            timing.update({
+                "prepare_total_ms": (warmup_completed_at - prepare_started_at) * 1000.0,
+                "input_tokenization_ms": (
+                    tokenization_completed_at - tokenization_started_at
+                ) * 1000.0,
+                "voice_prompt_prepare_ms": (
+                    voice_prompt_completed_at - voice_prompt_started_at
+                ) * 1000.0,
+                "voice_prompt_cache_hit": voice_prompt_cache_hit,
+                "talker_input_construction_ms": (
+                    talker_inputs_completed_at - talker_inputs_started_at
+                ) * 1000.0,
+                "graph_warmup_ms": (
+                    warmup_completed_at - warmup_started_at
+                ) * 1000.0,
+                "prompt_tokens": int(tie.shape[1]),
+            })
 
         return m, talker, config, tie, tam, tth, tpe, ref_codes
 
@@ -1116,6 +1147,8 @@ class FasterQwen3TTS:
         """
         from .streaming import fast_generate_streaming, parity_generate_streaming
 
+        model_started_at = time.perf_counter()
+        preparation_timing = {}
         m, talker, config, tie, tam, tth, tpe, ref_codes = self._prepare_generation(
             text,
             ref_audio,
@@ -1125,6 +1158,7 @@ class FasterQwen3TTS:
             non_streaming_mode=non_streaming_mode,
             append_silence=append_silence,
             skip_warmup=parity_mode,
+            timing=preparation_timing,
         )
 
         speech_tokenizer = m.speech_tokenizer
@@ -1161,6 +1195,14 @@ class FasterQwen3TTS:
             stream_kwargs["talker_graph"] = self.talker_graph
 
         for codec_chunk, timing in stream_fn(**stream_kwargs):
+            codec_ready_at = time.perf_counter()
+            is_first_codec_chunk = not all_codes
+            timing = dict(timing)
+            if is_first_codec_chunk:
+                timing.update(preparation_timing)
+                timing["model_to_first_codec_ms"] = (
+                    codec_ready_at - model_started_at
+                ) * 1000.0
             all_codes.append(codec_chunk)
             n_new = codec_chunk.shape[0]
             all_flat = torch.cat(all_codes, dim=0)
@@ -1174,14 +1216,18 @@ class FasterQwen3TTS:
                     codes_input = torch.cat([ref_codes.to(all_flat.device), all_flat], dim=0)
                 else:
                     codes_input = all_flat
+                speech_decode_started_at = time.perf_counter()
                 audio_list, sr = speech_tokenizer.decode(
                     {"audio_codes": codes_input.unsqueeze(0)}
                 )
+                speech_decode_returned_at = time.perf_counter()
                 audio = audio_list[0]
+                tensor_conversion_started_at = time.perf_counter()
                 if hasattr(audio, 'cpu'):
                     audio = audio.flatten().cpu().numpy()
                 else:
                     audio = audio.flatten() if hasattr(audio, 'flatten') else audio
+                tensor_conversion_completed_at = time.perf_counter()
 
                 # Separate out reference audio portion; track position in generated audio only
                 if ref_codes is not None:
@@ -1203,20 +1249,44 @@ class FasterQwen3TTS:
                 window = all_flat[ctx_start:]
                 n_ctx = window.shape[0] - n_new
 
+                speech_decode_started_at = time.perf_counter()
                 audio_list, sr = speech_tokenizer.decode(
                     {"audio_codes": window.unsqueeze(0)}
                 )
+                speech_decode_returned_at = time.perf_counter()
                 audio = audio_list[0]
+                tensor_conversion_started_at = time.perf_counter()
                 if hasattr(audio, 'cpu'):
                     audio = audio.flatten().cpu().numpy()
                 else:
                     audio = audio.flatten() if hasattr(audio, 'flatten') else audio
+                tensor_conversion_completed_at = time.perf_counter()
 
                 if n_ctx > 0:
                     ctx_samples = int(round(n_ctx * samples_per_frame))
                     new_audio = audio[ctx_samples:]
                 else:
                     new_audio = audio
+
+            if is_first_codec_chunk:
+                timing.update({
+                    "speech_tokenizer_decode_call_ms": (
+                        speech_decode_returned_at - speech_decode_started_at
+                    ) * 1000.0,
+                    "tensor_to_numpy_ms": (
+                        tensor_conversion_completed_at - tensor_conversion_started_at
+                    ) * 1000.0,
+                    "speech_tokenizer_decode_ms": (
+                        tensor_conversion_completed_at - speech_decode_started_at
+                    ) * 1000.0,
+                    "codec_to_audio_ms": (
+                        tensor_conversion_completed_at - codec_ready_at
+                    ) * 1000.0,
+                    "model_to_first_audio_ms": (
+                        tensor_conversion_completed_at - model_started_at
+                    ) * 1000.0,
+                    "first_audio_samples": int(len(new_audio)),
+                })
 
             yield new_audio, sr, timing
 

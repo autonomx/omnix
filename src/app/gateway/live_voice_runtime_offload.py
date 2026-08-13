@@ -12,12 +12,15 @@ from typing import Any
 
 from fastapi import FastAPI
 
+from app import shared
+
 from .tts_stream_diagnostics import active_streams_snapshot, stream_log
 
 _HOOK_SENTINEL = "_omnix_live_voice_runtime_offload_hook_installed"
 _STATE_SENTINEL = "_omnix_live_voice_runtime_offload_registered"
 _DEFAULT_PROVIDER_REFRESH_SECONDS = 5.0
 _DEFAULT_DELIVERY_QUEUE_SIZE = 128
+_PROVIDER_RESOLVER: CachedTtsProviderResolver | None = None
 
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
@@ -266,18 +269,27 @@ class CachedTtsProviderResolver:
             )
 
 
+def get_cached_live_tts_provider(provider_name: str | None = None) -> Any:
+    """Return the warmed shared provider without coupling to the websocket module."""
+    resolver = _PROVIDER_RESOLVER
+    if resolver is None:
+        return shared.get_tts_provider(provider_name)
+    return resolver.get(provider_name)
+
+
 def install_live_voice_runtime_offload_hook() -> None:
-    """Patch the two measured synchronous live-voice paths before app creation."""
+    """Install bounded persistence and provider warming before app creation."""
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
 
-    from . import live_voice_stream_diagnostics, tts_live_call_websocket
+    from . import live_voice_stream_diagnostics
 
     persistence_worker = DeliveryPersistenceWorker(live_voice_stream_diagnostics._persist_delivery)
     live_voice_stream_diagnostics._persist_delivery = persistence_worker.enqueue
 
-    provider_resolver = CachedTtsProviderResolver(tts_live_call_websocket.get_tts_provider)
-    tts_live_call_websocket.get_tts_provider = provider_resolver.get
+    global _PROVIDER_RESOLVER
+    provider_resolver = CachedTtsProviderResolver(shared.get_tts_provider)
+    _PROVIDER_RESOLVER = provider_resolver
 
     original_init = FastAPI.__init__
 

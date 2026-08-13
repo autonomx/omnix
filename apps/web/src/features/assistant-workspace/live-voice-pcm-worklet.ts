@@ -1,5 +1,14 @@
 export const LIVE_VOICE_PCM_WORKLET_NAME = 'omnix-live-voice-pcm-stream';
 
+export type LiveVoiceAvatarMouthFrame = 'closed' | 'small' | 'medium' | 'wide';
+
+export function liveVoiceAvatarMouthFrameForRms(rms: number): LiveVoiceAvatarMouthFrame {
+  if (!Number.isFinite(rms) || rms < 0.015) return 'closed';
+  if (rms < 0.035) return 'small';
+  if (rms < 0.075) return 'medium';
+  return 'wide';
+}
+
 export function liveVoicePcmWorkletSource(): string {
   return `
 class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
@@ -18,6 +27,13 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       Number(settings.transitionFadeSamples) || Math.round(sampleRate * 0.008),
     );
     this.progressIntervalSamples = Math.max(128, Math.round(sampleRate * 0.5));
+    this.avatarEnvelopeIntervalSamples = Math.max(
+      128,
+      Math.round(Number(settings.avatarEnvelopeIntervalSamples) || sampleRate * 0.02),
+    );
+    this.avatarEnvelopeSamples = 0;
+    this.avatarEnvelopeSquareSum = 0;
+    this.avatarMouthFrame = 'closed';
     this.startPolicy = {
       notBeforeRenderSample: Math.max(0, Number(settings.notBeforeRenderSample) || 0),
       minimumBufferedSpeechSamples: Math.max(
@@ -54,6 +70,12 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   counters() {
     return {
       sample_rate: sampleRate,
+      // AudioWorklet messages can be delivered to the main thread well after
+      // their render quantum under UI contention. Preserve the audio clock so
+      // release metrics can recover the actual output time.
+      audio_context_time_seconds: typeof currentTime === 'number'
+        ? currentTime
+        : this.renderClockSamples / sampleRate,
       render_clock_samples: this.renderClockSamples,
       segment_timeline_samples: this.segmentTimelineSamples,
       semantic_speech_samples: this.semanticSpeechSamples,
@@ -84,6 +106,28 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
       ...this.counters(),
       ...details,
     });
+  }
+
+  avatarFrameForRms(rms) {
+    if (!Number.isFinite(rms) || rms < 0.015) return 'closed';
+    if (rms < 0.035) return 'small';
+    if (rms < 0.075) return 'medium';
+    return 'wide';
+  }
+
+  reportAvatarPlayback(renderedSamples, speechSquareSum) {
+    this.avatarEnvelopeSamples += Math.max(0, Number(renderedSamples) || 0);
+    this.avatarEnvelopeSquareSum += Math.max(0, Number(speechSquareSum) || 0);
+    if (this.avatarEnvelopeSamples < this.avatarEnvelopeIntervalSamples) return;
+    const rms = Math.sqrt(
+      this.avatarEnvelopeSquareSum / Math.max(1, this.avatarEnvelopeSamples),
+    );
+    const frame = this.avatarFrameForRms(rms);
+    this.avatarEnvelopeSamples = 0;
+    this.avatarEnvelopeSquareSum = 0;
+    if (frame === this.avatarMouthFrame) return;
+    this.avatarMouthFrame = frame;
+    this.emit('avatar_frame', { frame, rms });
   }
 
   handleMessage(message) {
@@ -471,6 +515,20 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     return written;
   }
 
+  enterIdle() {
+    if (!this.started && !this.waitingForBuffer) return;
+    this.started = false;
+    this.waitingForBuffer = false;
+    this.waitingForFollowingSpeech = false;
+    this.currentRebufferSamples = this.rebufferSamples;
+    this.lastOutputSample = 0;
+    this.emit('idle', {
+      buffered_samples: this.queuedSamples,
+      buffered_speech_samples: this.bufferedSpeechSamples,
+      underrun_count: this.underrunCount,
+    });
+  }
+
   beginRebuffering() {
     if (this.waitingForBuffer) return;
     this.waitingForBuffer = true;
@@ -523,11 +581,16 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
     if (!channel) return !this.stopped;
     channel.fill(0);
     this.renderClockSamples += channel.length;
-    if (this.stopped) return false;
+    if (this.stopped) {
+      this.reportAvatarPlayback(channel.length, 0);
+      return false;
+    }
 
     this.maybeStartOrResume();
     let written = this.writeCancellationFade(channel);
+    let avatarSpeechSquareSum = 0;
     if ((!this.started || this.waitingForBuffer) && written === 0) {
+      this.reportAvatarPlayback(channel.length, 0);
       this.maybeReportProgress();
       if (this.inputEnded && this.queuedSamples === 0) return this.signalDrained();
       return true;
@@ -561,7 +624,15 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
         : head.samples.length - this.headOffset;
       const take = Math.min(available, channel.length - written);
       if (head.segmentKind !== 'silence') {
-        channel.set(head.samples.subarray(this.headOffset, this.headOffset + take), written);
+        const sampleStart = this.headOffset;
+        const sampleEnd = this.headOffset + take;
+        const rendered = head.samples.subarray(sampleStart, sampleEnd);
+        channel.set(rendered, written);
+        if (head.segmentKind === 'speech') {
+          for (let index = 0; index < rendered.length; index += 1) {
+            avatarSpeechSquareSum += rendered[index] * rendered[index];
+          }
+        }
         this.headOffset += take;
       } else {
         head.remainingSamples -= take;
@@ -586,11 +657,16 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
 
     this.applyFadeIn(channel, written);
     if (written > 0) this.lastOutputSample = channel[written - 1];
+    this.reportAvatarPlayback(channel.length, avatarSpeechSquareSum);
     if (this.queue.length === 0 && !this.cancellationFade) {
       this.applyFadeOut(channel, written);
       this.maybeCompleteActiveSegment();
       if (this.inputEnded) return this.signalDrained();
-      this.beginRebuffering();
+      if (this.activeSegment === null && this.queuedSamples === 0) {
+        this.enterIdle();
+      } else {
+        this.beginRebuffering();
+      }
     }
     this.maybeReportProgress();
     return true;

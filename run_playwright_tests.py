@@ -23,6 +23,9 @@ Usage:
     # Run the Live Voice test with a specific MP3 or WAV
     python run_playwright_tests.py --suite live_voice --headed --no-report --live-voice-audio hows-it-going.mp3
 
+    # Run the five-turn Live Voice API test without a browser
+    python run_playwright_tests.py --suite live_voice_api --no-report
+
     # Run only JS static analysis (no browser/server needed)
     python run_playwright_tests.py --suite js_analysis
 
@@ -55,6 +58,7 @@ SUITE_MAP = {
     "healthcheck": str(TESTS_DIR / "api" / "healthcheck" / "test_health_responses.py"),
     "frontend": str(TESTS_DIR / "e2e" / "test_frontend.py"),
     "live_voice": str(TESTS_DIR / "e2e" / "test_live_voice_audio.py"),
+    "live_voice_api": str(TESTS_DIR / "e2e" / "test_live_voice_api.py"),
     "js_analysis": str(TESTS_DIR / "e2e" / "test_js_variables.py"),
     "console": str(TESTS_DIR / "e2e" / "test_js_console.py"),
 }
@@ -89,6 +93,16 @@ def main():
         type=str,
         help="Override the Parakeet STT URL (default: http://127.0.0.1:5201)",
     )
+    parser.add_argument(
+        "--api-url",
+        type=str,
+        help="Override the Live Voice API gateway URL (default: http://127.0.0.1:8000)",
+    )
+    parser.add_argument(
+        "--api-stt-url",
+        type=str,
+        help="Override the Live Voice API STT URL (default: http://127.0.0.1:5201)",
+    )
 
     args = parser.parse_args()
 
@@ -108,6 +122,9 @@ def main():
 
     if args.verbose:
         cmd.append("-vv")
+    if args.suite == "live_voice_api":
+        # The protocol trace is intentionally printed live for this long-running suite.
+        cmd.append("-s")
     if args.keyword:
         cmd.extend(["-k", args.keyword])
 
@@ -119,12 +136,20 @@ def main():
         run_env["OMNIX_RUN_LIVE_VOICE_AUDIO"] = "1"
         run_env.setdefault("OMNIX_BASE_URL", "http://127.0.0.1:5173")
         run_env.setdefault("OMNIX_STT_URL", "http://127.0.0.1:5201")
+    if args.suite == "live_voice_api":
+        run_env["OMNIX_RUN_LIVE_VOICE_API"] = "1"
+        run_env.setdefault("OMNIX_LIVE_VOICE_API_URL", "http://127.0.0.1:8000")
+        run_env.setdefault("OMNIX_LIVE_VOICE_API_STT_URL", "http://127.0.0.1:5201")
     if args.live_voice_audio:
         run_env["OMNIX_LIVE_VOICE_AUDIO"] = str(Path(args.live_voice_audio).expanduser().resolve())
     if args.app_url:
         run_env["OMNIX_BASE_URL"] = args.app_url
     if args.stt_url:
         run_env["OMNIX_STT_URL"] = args.stt_url
+    if args.api_url:
+        run_env["OMNIX_LIVE_VOICE_API_URL"] = args.api_url
+    if args.api_stt_url:
+        run_env["OMNIX_LIVE_VOICE_API_STT_URL"] = args.api_stt_url
 
     print("=" * 70)
     print("  🧪  Omnix Playwright Test Runner")
@@ -135,6 +160,9 @@ def main():
         print(f"  App    : {run_env['OMNIX_BASE_URL']}")
         print(f"  STT    : {run_env['OMNIX_STT_URL']}")
         print(f"  Audio  : {run_env.get('OMNIX_LIVE_VOICE_AUDIO', 'Windows System.Speech')}")
+    if args.suite == "live_voice_api":
+        print(f"  API    : {run_env['OMNIX_LIVE_VOICE_API_URL']}")
+        print(f"  STT    : {run_env['OMNIX_LIVE_VOICE_API_STT_URL']}")
     print(f"  Command: {' '.join(cmd)}")
     print("=" * 70)
     print()

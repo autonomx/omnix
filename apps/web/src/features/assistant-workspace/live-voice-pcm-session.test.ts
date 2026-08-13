@@ -4,7 +4,10 @@ import {
   clearVoiceCueAssets,
   registerVoiceCueSamples,
 } from './live-voice-cue-bank';
-import { createLiveVoicePcmSession } from './live-voice-pcm-session';
+import {
+  createLiveVoicePcmSession,
+  resolveWorkletPlaybackPerformanceTimeMs,
+} from './live-voice-pcm-session';
 
 class FakePort {
   onmessage: ((event: MessageEvent) => void) | null = null;
@@ -181,6 +184,19 @@ afterEach(() => {
 });
 
 describe('live voice PCM session', () => {
+  it('maps a delayed worklet event back to its audio output time', () => {
+    expect(resolveWorkletPlaybackPerformanceTimeMs(
+      { audio_context_time_seconds: 10 },
+      {
+        getOutputTimestamp: () => ({
+          contextTime: 10.25,
+          performanceTime: 5_000,
+        }),
+      },
+      5_300,
+    )).toBe(4_750);
+  });
+
   it('keeps one AudioContext, worklet, and websocket while preserving segment identity', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const first = session.enqueuePhrase('First phrase.', 0);
@@ -344,6 +360,21 @@ describe('live voice PCM session', () => {
       expect.objectContaining({ playback_samples: 4, sample_rate: 48_000 }),
       'pcm_session',
     );
+  });
+
+  it('hands received PCM to the worklet before synchronous avatar consumers', async () => {
+    const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
+    let workletWasQueuedAtAvatarDispatch = false;
+    const handleAvatarPcm = () => {
+      workletWasQueuedAtAvatarDispatch = FakeAudioWorkletNode.instances[0].port.messages
+        .some((message) => (message as { type?: string }).type === 'push_segment_samples');
+    };
+    window.addEventListener('omnix:character-avatar-pcm', handleAvatarPcm, { once: true });
+
+    await session.enqueuePhrase('Prioritize audible playback.', 0);
+    await session.finish();
+
+    expect(workletWasQueuedAtAvatarDispatch).toBe(true);
   });
 
   it('closes the turn websocket and sends a cancellation reason to the worklet', async () => {

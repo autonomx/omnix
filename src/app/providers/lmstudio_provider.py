@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any, Dict, Iterator, List, Optional, Union
 from urllib.parse import urlsplit, urlunsplit
 
@@ -26,8 +27,35 @@ from .structured.transport import (
 )
 
 _NATIVE_CHAT_COMPLETIONS_ENDPOINT = "/api/v0/chat/completions"
+_NATIVE_V1_CHAT_ENDPOINT = "/api/v1/chat"
 _OPENAI_CHAT_COMPLETIONS_ENDPOINT = "/v1/chat/completions"
 _DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_STREAM_CANCEL_POLL_SECONDS = 0.025
+
+
+def _native_v1_usage(stats: Any) -> Dict[str, int] | None:
+    if not isinstance(stats, dict):
+        return None
+    input_tokens = stats.get("input_tokens")
+    output_tokens = stats.get("total_output_tokens")
+    usage: Dict[str, int] = {}
+    if isinstance(input_tokens, int) and input_tokens >= 0:
+        usage["prompt_tokens"] = input_tokens
+    if isinstance(output_tokens, int) and output_tokens >= 0:
+        usage["completion_tokens"] = output_tokens
+    if "prompt_tokens" in usage and "completion_tokens" in usage:
+        usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
+    return usage or None
+
+
+def _native_v1_output_text(output: Any, item_type: str) -> str:
+    if not isinstance(output, list):
+        return ""
+    return "".join(
+        str(item.get("content") or "")
+        for item in output
+        if isinstance(item, dict) and item.get("type") == item_type
+    )
 
 
 class LMStudioProvider(BaseProvider):
@@ -135,6 +163,110 @@ class LMStudioProvider(BaseProvider):
                 **request_kwargs,
             )
 
+    @staticmethod
+    def _start_stream_cancel_watcher(
+        response: requests.Response,
+        cancel_event: threading.Event | None,
+    ) -> threading.Event | None:
+        """Close a streaming response promptly when private work is cancelled."""
+        if cancel_event is None:
+            return None
+        watcher_done = threading.Event()
+
+        def watch() -> None:
+            while not watcher_done.is_set():
+                if cancel_event.wait(timeout=_STREAM_CANCEL_POLL_SECONDS):
+                    if watcher_done.is_set():
+                        return
+                    try:
+                        response.close()
+                    except Exception:
+                        return
+                    return
+
+        threading.Thread(
+            target=watch,
+            name="omnix-lmstudio-stream-cancel",
+            daemon=True,
+        ).start()
+        return watcher_done
+
+    def _native_v1_payload(
+        self,
+        messages: List[ChatMessage],
+        *,
+        model: str | None,
+        stream: bool,
+        store: bool,
+        previous_response_id: str | None,
+        kwargs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        system_parts: list[str] = []
+        user_parts: list[str] = []
+        for message in messages:
+            role = str(message.role or "").strip().lower()
+            if role == "system":
+                if message.content:
+                    system_parts.append(str(message.content))
+                continue
+            if role != "user":
+                raise ValueError(
+                    "LM Studio native v1 chat cannot seed assistant/tool history; "
+                    "use the default chat-completions transport or continue from a response id"
+                )
+            user_parts.append(str(message.content or ""))
+
+        if not user_parts:
+            raise ValueError("LM Studio native v1 chat requires at least one user input")
+        if previous_response_id:
+            previous_response_id = str(previous_response_id).strip()
+            if not previous_response_id.startswith("resp_"):
+                raise ValueError("LM Studio previous_response_id must start with 'resp_'")
+            if len(user_parts) != 1:
+                raise ValueError(
+                    "LM Studio native v1 continuation requires exactly one new user input"
+                )
+
+        input_value: Any
+        if len(user_parts) == 1:
+            input_value = user_parts[0]
+        else:
+            input_value = [
+                {"type": "message", "content": content}
+                for content in user_parts
+            ]
+
+        payload: Dict[str, Any] = {
+            "input": input_value,
+            "stream": stream,
+            # Omnix keeps native provider state opt-in. Speculation and ordinary
+            # chat remain side-effect-free unless a caller explicitly requests
+            # LM Studio response state.
+            "store": bool(store),
+            "temperature": kwargs.get("temperature", 0.7),
+        }
+        if model:
+            payload["model"] = model
+        if system_parts:
+            payload["system_prompt"] = "\n\n".join(system_parts)
+        if previous_response_id:
+            payload["previous_response_id"] = previous_response_id
+        if "top_p" in kwargs:
+            payload["top_p"] = kwargs["top_p"]
+        if "top_k" in kwargs:
+            payload["top_k"] = kwargs["top_k"]
+        if "max_tokens" in kwargs:
+            payload["max_output_tokens"] = kwargs["max_tokens"]
+        if "context_length" in kwargs:
+            payload["context_length"] = kwargs["context_length"]
+        if "reasoning" in kwargs:
+            payload["reasoning"] = kwargs["reasoning"]
+        else:
+            template_kwargs = kwargs.get("chat_template_kwargs")
+            if isinstance(template_kwargs, dict) and template_kwargs.get("enable_thinking") is False:
+                payload["reasoning"] = "off"
+        return payload
+
     def chat_completion(
         self,
         messages: List[ChatMessage],
@@ -142,49 +274,235 @@ class LMStudioProvider(BaseProvider):
         stream: bool = False,
         **kwargs,
     ) -> Union[ChatResponse, Iterator[ChatResponse]]:
+        use_configured_model = bool(kwargs.pop("_use_configured_model", True))
+        native_v1 = bool(kwargs.pop("_lmstudio_native_v1", False))
+        native_store = bool(kwargs.pop("_lmstudio_store", False))
+        previous_response_id = kwargs.pop("_lmstudio_previous_response_id", None)
+        cancel_event = kwargs.pop("_cancel_event", None)
         trace_row = provider_call_enter(
             provider="lmstudio",
             method="chat_completion",
             model=model,
             messages=messages,
-            extra={"stream": bool(stream), "kwargs_keys": sorted(kwargs)},
+            extra={
+                "stream": bool(stream),
+                "kwargs_keys": sorted(kwargs),
+                "use_configured_model": use_configured_model,
+                "native_v1": native_v1,
+                "native_store": native_store,
+                "has_previous_response_id": bool(previous_response_id),
+                "cancellable_stream": bool(stream and cancel_event is not None),
+            },
         )
         try:
             if not messages:
                 raise ValueError("Messages list cannot be empty")
             transport = pop_structured_transport_options(kwargs)
-            resolved_model = model or self.config.model
-            include_metrics = bool(kwargs.get("include_metrics", False))
-            payload: Dict[str, Any] = {
-                "messages": [message.to_dict() for message in messages],
-                "temperature": kwargs.get("temperature", 0.7),
-                "stream": stream,
-                **transport.payload_options,
-            }
-            if resolved_model:
-                payload["model"] = resolved_model
-            for key in ["max_tokens", "top_p", "chat_template_kwargs"]:
-                if key in kwargs:
-                    payload[key] = kwargs[key]
-            timeout = transport.request_timeout_seconds
-            result = (
-                self._stream_completion(
-                    payload,
-                    include_metrics=include_metrics,
-                    timeout=timeout,
-                )
-                if stream
-                else self._non_stream_completion(
-                    payload,
-                    include_metrics=include_metrics,
-                    timeout=timeout,
-                )
+            resolved_model = model or (
+                self.config.model if use_configured_model else None
             )
+            timeout = transport.request_timeout_seconds
+            if native_v1:
+                if transport.payload_options:
+                    raise ValueError(
+                        "Structured transport options are not supported by LM Studio native v1 chat"
+                    )
+                payload = self._native_v1_payload(
+                    messages,
+                    model=resolved_model,
+                    stream=stream,
+                    store=native_store,
+                    previous_response_id=(
+                        str(previous_response_id) if previous_response_id else None
+                    ),
+                    kwargs=kwargs,
+                )
+                result = (
+                    self._native_v1_stream_completion(
+                        payload,
+                        timeout=timeout,
+                        cancel_event=cancel_event,
+                    )
+                    if stream
+                    else self._native_v1_non_stream_completion(payload, timeout=timeout)
+                )
+            else:
+                include_metrics = bool(kwargs.get("include_metrics", False))
+                payload = {
+                    "messages": [message.to_dict() for message in messages],
+                    "temperature": kwargs.get("temperature", 0.7),
+                    "stream": stream,
+                    **transport.payload_options,
+                }
+                if resolved_model:
+                    payload["model"] = resolved_model
+                for key in ["max_tokens", "top_p", "chat_template_kwargs"]:
+                    if key in kwargs:
+                        payload[key] = kwargs[key]
+                result = (
+                    self._stream_completion(
+                        payload,
+                        include_metrics=include_metrics,
+                        timeout=timeout,
+                        cancel_event=cancel_event,
+                    )
+                    if stream
+                    else self._non_stream_completion(
+                        payload,
+                        include_metrics=include_metrics,
+                        timeout=timeout,
+                    )
+                )
             provider_call_exit(trace_row, ok=True)
             return result
         except Exception as exc:
             provider_call_exit(trace_row, ok=False, error=f"{type(exc).__name__}: {exc}")
             raise
+
+    def _native_v1_non_stream_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> ChatResponse:
+        request_kwargs: Dict[str, Any] = {"json": payload, "stream": False}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+        response = self._make_request(
+            "post",
+            _NATIVE_V1_CHAT_ENDPOINT,
+            **request_kwargs,
+        )
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ConnectionError(f"Invalid LM Studio native v1 JSON response: {exc}") from exc
+        if not isinstance(data, dict):
+            raise ConnectionError("Invalid LM Studio native v1 response payload")
+        return self._native_v1_response(data)
+
+    def _native_v1_response(self, data: Dict[str, Any]) -> ChatResponse:
+        content = _native_v1_output_text(data.get("output"), "message")
+        reasoning = _native_v1_output_text(data.get("output"), "reasoning")
+        return ChatResponse(
+            content=content,
+            model=str(data.get("model_instance_id") or data.get("model") or ""),
+            usage=_native_v1_usage(data.get("stats")),
+            thinking=reasoning or None,
+            reasoning=reasoning or None,
+            raw_response=data,
+        )
+
+    def _native_v1_stream_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        timeout: float | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> Iterator[ChatResponse]:
+        request_kwargs: Dict[str, Any] = {"json": payload, "stream": True}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+        try:
+            response = self._make_request(
+                "post",
+                _NATIVE_V1_CHAT_ENDPOINT,
+                **request_kwargs,
+            )
+        except Exception as exc:
+            raise ConnectionError(f"Failed to start LM Studio native v1 stream: {exc}") from exc
+
+        watcher_done = self._start_stream_cancel_watcher(response, cancel_event)
+        model_name = str(payload.get("model") or "")
+        event_name = ""
+        stream_error: str | None = None
+        try:
+            for line in response.iter_lines():
+                if cancel_event is not None and cancel_event.is_set():
+                    return
+                if not line:
+                    continue
+                line_text = line.decode("utf-8") if isinstance(line, bytes) else str(line)
+                if line_text.startswith("event:"):
+                    event_name = line_text[6:].strip()
+                    continue
+                if not line_text.startswith("data:"):
+                    continue
+                data_text = line_text[5:].strip()
+                try:
+                    event = json.loads(data_text)
+                except (ValueError, TypeError):
+                    event_name = ""
+                    continue
+                if not isinstance(event, dict):
+                    event_name = ""
+                    continue
+                event_type = str(event.get("type") or event_name or "")
+                event_name = ""
+                if event_type == "chat.start":
+                    model_name = str(event.get("model_instance_id") or model_name)
+                    continue
+                if event_type == "message.delta":
+                    content = event.get("content")
+                    if isinstance(content, str) and content:
+                        yield ChatResponse(
+                            content=content,
+                            model=model_name,
+                            raw_response=event,
+                        )
+                    continue
+                if event_type == "reasoning.delta":
+                    reasoning = event.get("content")
+                    if isinstance(reasoning, str) and reasoning:
+                        yield ChatResponse(
+                            content="",
+                            model=model_name,
+                            thinking=reasoning,
+                            reasoning=reasoning,
+                            raw_response=event,
+                        )
+                    continue
+                if event_type == "error":
+                    error = event.get("error")
+                    stream_error = (
+                        str(error.get("message") or error.get("type") or "native v1 stream error")
+                        if isinstance(error, dict)
+                        else str(error or "native v1 stream error")
+                    )
+                    continue
+                if event_type == "chat.end":
+                    result = event.get("result")
+                    if not isinstance(result, dict):
+                        raise ConnectionError("LM Studio native v1 chat.end did not include a result")
+                    final = self._native_v1_response(result)
+                    if final.model:
+                        model_name = final.model
+                    yield ChatResponse(
+                        content="",
+                        model=model_name,
+                        usage=final.usage,
+                        thinking=final.thinking,
+                        reasoning=final.reasoning,
+                        raw_response=result,
+                    )
+                    if stream_error:
+                        raise ConnectionError(f"LM Studio native v1 stream error: {stream_error}")
+                    return
+            if cancel_event is not None and cancel_event.is_set():
+                return
+            if stream_error:
+                raise ConnectionError(f"LM Studio native v1 stream error: {stream_error}")
+            raise ConnectionError("LM Studio native v1 stream ended without chat.end")
+        except ConnectionError:
+            raise
+        except Exception as exc:
+            if cancel_event is not None and cancel_event.is_set():
+                return
+            raise ConnectionError(f"LM Studio native v1 stream error: {exc}") from exc
+        finally:
+            if watcher_done is not None:
+                watcher_done.set()
+            response.close()
 
     def _non_stream_completion(
         self,
@@ -247,6 +565,7 @@ class LMStudioProvider(BaseProvider):
         *,
         include_metrics: bool = False,
         timeout: float | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Iterator[ChatResponse]:
         try:
             response = self._make_chat_completion_request(
@@ -257,6 +576,7 @@ class LMStudioProvider(BaseProvider):
             )
         except Exception as exc:
             raise ConnectionError(f"Failed to start stream: {exc}") from exc
+        watcher_done = self._start_stream_cancel_watcher(response, cancel_event)
         thinking_buffer = ""
         usage: Dict[str, Any] | None = None
         finish_reason: str | None = None
@@ -264,6 +584,8 @@ class LMStudioProvider(BaseProvider):
         last_response: Dict[str, Any] | None = None
         try:
             for line in response.iter_lines():
+                if cancel_event is not None and cancel_event.is_set():
+                    return
                 if not line:
                     continue
                 line_text = line.decode("utf-8") if isinstance(line, bytes) else line
@@ -317,6 +639,8 @@ class LMStudioProvider(BaseProvider):
                     )
                 except (ValueError, SyntaxError, KeyError, IndexError, TypeError):
                     continue
+            if cancel_event is not None and cancel_event.is_set():
+                return
             yield ChatResponse(
                 content="",
                 model=resolved_model,
@@ -327,7 +651,13 @@ class LMStudioProvider(BaseProvider):
                 raw_response=last_response,
             )
         except Exception as exc:
+            if cancel_event is not None and cancel_event.is_set():
+                return
             raise ConnectionError(f"Stream error: {exc}") from exc
+        finally:
+            if watcher_done is not None:
+                watcher_done.set()
+            response.close()
 
     def get_models(self) -> List[ModelInfo]:
         try:
@@ -339,6 +669,7 @@ class LMStudioProvider(BaseProvider):
                     name=model_data.get("id", ""),
                     provider=self.provider_name,
                     context_length=model_data.get("context_length"),
+                    capabilities=[],
                     description=model_data.get("description", ""),
                     metadata={
                         "owned_by": model_data.get("owned_by", ""),
@@ -401,7 +732,7 @@ class LMStudioProvider(BaseProvider):
                     "type": "string",
                     "label": "Default Model",
                     "required": False,
-                    "description": "Model loaded by LM Studio",
+                    "description": "Fallback model used when LM Studio has no loaded LLM",
                 },
             ],
         }

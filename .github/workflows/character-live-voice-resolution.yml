@@ -21,6 +21,10 @@ on:
       - "apps/web/src/features/assistant-workspace/live-voice-smooth-audio-controller.ts"
       - "apps/web/src/features/chatbot/characterClient.ts"
       - "apps/web/src/features/chatbot/characterClient.test.ts"
+      - "apps/web/src/features/chatbot/CharacterModePanel.tsx"
+      - "apps/web/src/features/chatbot/CharacterModePanel.test.tsx"
+      - "apps/web/src/features/chatbot/CharacterManagementPanel.tsx"
+      - "apps/web/src/features/chatbot/CharacterManagementPanel.selection.test.tsx"
       - "apps/web/src/features/chatbot/VoiceGovernancePanel.tsx"
       - "apps/web/src/features/chatbot/VoiceGovernancePanel.test.tsx"
       - "apps/web/src/features/voice/voiceLibraryAssetFallback.ts"
@@ -52,7 +56,7 @@ jobs:
       - name: Install focused Python dependencies
         run: >-
           python -m pip install
-          ruff pytest pydantic fastapi httpx requests python-multipart
+          ruff pytest pydantic fastapi httpx requests python-multipart pillow
       - name: Install web dependencies
         run: npm install
       - name: Lint voice resolution path
@@ -74,12 +78,14 @@ jobs:
           src/tests/unit/assets/test_canonical_voice_clone_resolution.py
           src/tests/unit/characters/test_live_call.py
           src/tests/unit/test_voice_resolution_debug_logging.py
-      - name: Verify browser playback and reassignment
+      - name: Verify browser playback and character reassignment
         run: >-
           npm --workspace @omnix/web run test --
           src/features/assistant-workspace/runtime-config.test.ts
           src/features/assistant-workspace/assistant-pcm-stream-player.test.ts
           src/features/assistant-workspace/chat-message-audio-controller-v2.test.ts
           src/features/chatbot/characterClient.test.ts
+          src/features/chatbot/CharacterModePanel.test.tsx
+          src/features/chatbot/CharacterManagementPanel.selection.test.tsx
           src/features/chatbot/VoiceGovernancePanel.test.tsx
           src/features/voice/voiceLibraryAssetFallback.test.ts

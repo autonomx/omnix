@@ -12,6 +12,7 @@ from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.store import _provider_key
 from app.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
 
+from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_provider_routing_installed"
@@ -27,11 +28,21 @@ class _TurnProviderRoute:
     model_id: str | None
     provider_explicit: bool
     model_explicit: bool
+    execution_lane: str = "session"
 
 
 def _normalized(value: str | None) -> str | None:
     text = str(value or "").strip()
     return text or None
+
+
+def _is_live_voice_request(request: SendChatMessageRequest) -> bool:
+    user_turn_id = _normalized(request.user_turn_id)
+    speech_segment_id = _normalized(request.speech_segment_id)
+    return bool(
+        speech_segment_id
+        or (user_turn_id and user_turn_id.startswith("voice-user-turn:"))
+    )
 
 
 def _invalidate_default_provider_cache() -> None:
@@ -78,19 +89,73 @@ def resolve_provider_route(provider_id: str | None) -> tuple[str | None, Any]:
 
 def route_chat_request(
     request: SendChatMessageRequest,
+    *,
+    implicit_provider_id: str | None = None,
+    implicit_model_id: str | None = None,
 ) -> tuple[SendChatMessageRequest, _TurnProviderRoute]:
-    """Concretize implicit provider routing while retaining explicit model intent."""
+    """Concretize routing and apply the opt-in dedicated live model lane."""
 
     provider_explicit = _normalized(request.provider_id) is not None
     model_explicit = _normalized(request.model_id) is not None
+    provider_id = resolve_effective_provider_id(
+        request.provider_id if provider_explicit else implicit_provider_id
+    )
+    model_id = (
+        request.model_id
+        if model_explicit
+        else (
+            _normalized(implicit_model_id)
+            if not provider_explicit
+            else None
+        )
+    )
+    execution_lane = "session"
+    if _is_live_voice_request(request):
+        provider_id, model_id, execution_lane = resolve_live_voice_chat_route(
+            provider_id,
+            model_id,
+        )
     route = _TurnProviderRoute(
-        provider_id=resolve_effective_provider_id(request.provider_id),
-        model_id=request.model_id if model_explicit else None,
+        provider_id=provider_id,
+        model_id=model_id,
         provider_explicit=provider_explicit,
         model_explicit=model_explicit,
+        execution_lane=execution_lane,
     )
-    routed_request = request.model_copy(update={"provider_id": route.provider_id})
+    routed_request = request.model_copy(
+        update={
+            "provider_id": route.provider_id,
+            "model_id": route.model_id,
+        }
+    )
     return routed_request, route
+
+
+def _live_voice_affinity_for_current_provider(
+    session_id: str,
+) -> tuple[str | None, str | None] | None:
+    """Return prewarm affinity only while it matches the current Settings provider."""
+
+    from .live_call_prewarm import live_call_provider_affinity
+
+    affinity = live_call_provider_affinity(session_id)
+    if affinity is None:
+        return None
+    affinity_provider_id, affinity_model_id = affinity
+    configured_provider_id = resolve_effective_provider_id(None)
+    if _provider_key(affinity_provider_id) == _provider_key(configured_provider_id):
+        return affinity_provider_id, affinity_model_id
+
+    stream_log(
+        "gateway-live-chat-first-token",
+        "runtime",
+        "live_chat_provider_affinity_stale",
+        session_id=session_id,
+        affinity_provider_id=affinity_provider_id,
+        configured_provider_id=configured_provider_id,
+        reason="settings_provider_changed",
+    )
+    return None
 
 
 def _remember_turn_route(message_id: str, route: _TurnProviderRoute) -> None:
@@ -148,8 +213,13 @@ def _log_route(
         ),
         provider_explicit=turn_route.provider_explicit if turn_route is not None else None,
         model_explicit=turn_route.model_explicit if turn_route is not None else None,
+        execution_lane=(turn_route.execution_lane if turn_route is not None else "session"),
+        effective_model_id=(turn_route.model_id if turn_route is not None else None),
         session_provider_overridden=(
-            bool(turn_route is not None and _provider_key(provider_id) != _provider_key(effective_provider_id))
+            bool(
+                turn_route is not None
+                and _provider_key(provider_id) != _provider_key(effective_provider_id)
+            )
         ),
         lmstudio_metrics_path_expected=effective_provider_name == "lmstudio",
         stream=stream,
@@ -282,7 +352,21 @@ def install_live_chat_provider_routing_hook() -> None:
             context_items: list[dict[str, Any]] | None = None,
             context_diagnostics: dict[str, Any] | None = None,
         ):
-            routed_request, route = route_chat_request(request)
+            implicit_provider_id = None
+            implicit_model_id = None
+            if _is_live_voice_request(request) and _normalized(request.provider_id) is None:
+                # Reuse prewarm affinity only while it still matches Settings.
+                # Changing the configured provider must take effect immediately,
+                # even when this chat session was previously stamped with another
+                # provider or an older live-call affinity is still within its TTL.
+                affinity = _live_voice_affinity_for_current_provider(session_id)
+                if affinity is not None:
+                    implicit_provider_id, implicit_model_id = affinity
+            routed_request, route = route_chat_request(
+                request,
+                implicit_provider_id=implicit_provider_id,
+                implicit_model_id=implicit_model_id,
+            )
             appended = original_begin(
                 self,
                 session_id,
@@ -295,8 +379,7 @@ def install_live_chat_provider_routing_hook() -> None:
             session, user_message = appended
             _remember_turn_route(user_message.id, route)
             session.provider_id = route.provider_id
-            if not route.model_explicit:
-                session.model_id = None
+            session.model_id = route.model_id
             return session, user_message
 
         return patched_begin

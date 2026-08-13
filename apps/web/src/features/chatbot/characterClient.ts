@@ -166,7 +166,10 @@ export interface CharacterDataActionResponse {
   profile_archived: boolean;
 }
 
+const LIVE_CALL_RUNTIME_CACHE_TTL_MS = 5 * 60_000;
 const trackedPlaybackRuntimes = new Map<string, Set<CharacterLiveCallRuntime>>();
+const liveCallRuntimeCache = new Map<string, { runtime: CharacterLiveCallRuntime; cachedAt: number }>();
+const liveCallRuntimeRequests = new Map<string, Promise<CharacterLiveCallRuntime>>();
 let latestTrustedPlaybackRuntime: CharacterLiveCallRuntime | null = null;
 
 export function readLatestTrustedCharacterRuntime(): CharacterLiveCallRuntime | null {
@@ -233,14 +236,54 @@ function synchronizeTrackedPlaybackRuntime(runtime: CharacterLiveCallRuntime): C
   for (const existing of tracked) Object.assign(existing, playbackRuntime);
   tracked.add(playbackRuntime);
   trackedPlaybackRuntimes.set(playbackRuntime.session_id, tracked);
+  liveCallRuntimeCache.set(playbackRuntime.session_id, {
+    runtime: playbackRuntime,
+    cachedAt: Date.now(),
+  });
   latestTrustedPlaybackRuntime = playbackRuntime;
   publishCharacterAvatarRuntime(playbackRuntime);
   return playbackRuntime;
 }
 
-async function loadLiveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
-  const runtime = await request<CharacterLiveCallRuntime>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`);
-  return synchronizeTrackedPlaybackRuntime(runtime);
+function cachedLiveCallRuntime(sessionId: string): CharacterLiveCallRuntime | null {
+  const cached = liveCallRuntimeCache.get(sessionId);
+  if (!cached) return null;
+  if (Date.now() - cached.cachedAt > LIVE_CALL_RUNTIME_CACHE_TTL_MS) {
+    liveCallRuntimeCache.delete(sessionId);
+    return null;
+  }
+  latestTrustedPlaybackRuntime = cached.runtime;
+  publishCharacterAvatarRuntime(cached.runtime);
+  return cached.runtime;
+}
+
+async function loadLiveCallRuntime(
+  sessionId: string,
+  { force = false }: { force?: boolean } = {},
+): Promise<CharacterLiveCallRuntime> {
+  if (!force) {
+    const cached = cachedLiveCallRuntime(sessionId);
+    if (cached) return cached;
+    const pending = liveCallRuntimeRequests.get(sessionId);
+    if (pending) return pending;
+  }
+
+  const pending = request<CharacterLiveCallRuntime>(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`,
+  ).then(synchronizeTrackedPlaybackRuntime);
+  if (!force) liveCallRuntimeRequests.set(sessionId, pending);
+  try {
+    return await pending;
+  } finally {
+    if (!force && liveCallRuntimeRequests.get(sessionId) === pending) {
+      liveCallRuntimeRequests.delete(sessionId);
+    }
+  }
+}
+
+function invalidateLiveCallRuntime(sessionId: string): void {
+  liveCallRuntimeCache.delete(sessionId);
+  liveCallRuntimeRequests.delete(sessionId);
 }
 
 export const characterClient = {
@@ -296,9 +339,9 @@ export const characterClient = {
     return loadLiveCallRuntime(sessionId);
   },
   refreshLiveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
-    return loadLiveCallRuntime(sessionId);
+    return loadLiveCallRuntime(sessionId, { force: true });
   },
-  setSession(
+  async setSession(
     sessionId: string,
     input: {
       interaction_mode: 'system' | 'character';
@@ -311,7 +354,7 @@ export const characterClient = {
       continue_topic?: boolean;
     },
   ): Promise<SessionInteraction> {
-    return request(
+    const interaction = await request<SessionInteraction>(
       `/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`,
       jsonInit('POST', {
         transcript_policy: 'persistent',
@@ -321,5 +364,7 @@ export const characterClient = {
         ...input,
       }),
     );
+    invalidateLiveCallRuntime(sessionId);
+    return interaction;
   },
 };

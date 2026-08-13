@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { omnixApiClient } from '../../api/client';
 import { CharacterAvatarPanel } from './CharacterAvatarPanel';
 import { characterAvatarAssetUrl, characterAvatarClient } from './characterAvatarClient';
@@ -25,6 +25,7 @@ export function CharacterManagementPanel({
   const [actions, setActions] = useState({ delete_memories: false, delete_transcripts: false, unlink_voice: false, archive_profile: false });
   const [status, setStatus] = useState<string | null>(null);
   const [profileSaveStatus, setProfileSaveStatus] = useState<{ kind: 'saving' | 'saved' | 'error'; message: string } | null>(null);
+  const lastSessionIdentitySyncRef = useRef('');
 
   const charactersQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'characters', 'management'],
@@ -42,23 +43,29 @@ export function CharacterManagementPanel({
     queryFn: () => characterClient.session(sessionId ?? ''),
     enabled: Boolean(sessionId),
   });
+  const activeSessionCharacterId = interactionQuery.data?.interaction_mode === 'character'
+    ? interactionQuery.data.character_id
+    : null;
 
   useEffect(() => {
     if (!selectedId && characters[0]) setSelectedId(characters[0].id);
   }, [characters, selectedId]);
 
-  // When this dashboard is opened from Chatbot, the active session is the
-  // source of truth for Live Voice. Do not let a character-management choice
-  // left in localStorage make the avatar editor operate on a different
-  // character than the live canvas currently represents.
+  // Synchronize the editor with a newly selected chat once, then preserve the
+  // user's manual profile choice while they decide which character to activate.
+  // Background query refreshes must not snap the selector back to the currently
+  // active Live Voice character.
   useEffect(() => {
-    const activeCharacterId = interactionQuery.data?.interaction_mode === 'character'
-      ? interactionQuery.data.character_id
-      : null;
-    if (activeCharacterId && characters.some((character) => character.id === activeCharacterId)) {
-      setSelectedId((current) => current === activeCharacterId ? current : activeCharacterId);
+    if (!sessionId || !activeSessionCharacterId) {
+      lastSessionIdentitySyncRef.current = '';
+      return;
     }
-  }, [characters, interactionQuery.data?.character_id, interactionQuery.data?.interaction_mode]);
+    if (!characters.some((character) => character.id === activeSessionCharacterId)) return;
+    const syncKey = `${sessionId}:${activeSessionCharacterId}`;
+    if (lastSessionIdentitySyncRef.current === syncKey) return;
+    lastSessionIdentitySyncRef.current = syncKey;
+    setSelectedId(activeSessionCharacterId);
+  }, [activeSessionCharacterId, characters, sessionId]);
 
   useEffect(() => {
     if (selectedId) window.localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, selectedId);
@@ -146,6 +153,11 @@ export function CharacterManagementPanel({
       return { interaction, resolvedSessionId };
     },
     onSuccess: async ({ interaction, resolvedSessionId }) => {
+      queryClient.setQueryData(['feature', 'chatbot', 'interaction', resolvedSessionId], interaction);
+      if (interaction.interaction_mode === 'character' && interaction.character_id) {
+        setSelectedId(interaction.character_id);
+        lastSessionIdentitySyncRef.current = `${resolvedSessionId}:${interaction.character_id}`;
+      }
       onSessionResolved?.(resolvedSessionId);
       setStatus(`${selected?.display_name ?? 'Character'} is now active in this chat and Live Voice${interaction.voice_asset_id ? ' with its linked voice' : ''}.`);
       await Promise.all([
@@ -263,7 +275,7 @@ export function CharacterManagementPanel({
                     <textarea aria-label="Character greeting" rows={2} value={draft.default_greeting} onChange={(event) => setDraft({ ...draft, default_greeting: event.currentTarget.value })} />
                   </label>
                   <label className="wide">
-                    <span>Personality prompt <small>{draft.personality_prompt.length} / 12000</small></span>
+                    <span>Personality prompt <small>{draft.personality_prompt.length} characters</small></span>
                     <textarea aria-label="Character personality" rows={4} value={draft.personality_prompt} onChange={(event) => setDraft({ ...draft, personality_prompt: event.currentTarget.value })} />
                   </label>
                 </div>

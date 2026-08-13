@@ -7,6 +7,7 @@ console-error capture, and automatic screenshot-on-failure.
 
 from __future__ import annotations
 
+import argparse
 import inspect
 import os
 import sys
@@ -77,6 +78,16 @@ def pytest_addoption(parser):
         default=BASE_URL,
         help="Base URL for the running Omnix application",
     )
+    try:
+        parser.addoption(
+            "--headed",
+            action="store_true",
+            default=False,
+            help="Run Playwright browser tests with a visible browser",
+        )
+    except argparse.ArgumentError:
+        # pytest-playwright registers this option when its plugin is installed.
+        pass
 
 
 def pytest_collection_modifyitems(config, items):
