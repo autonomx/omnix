@@ -29,14 +29,7 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
   OmnixModuleDefinition
 >;
 const defaultModule = moduleById.chatbot;
-const modeModuleIds: OmnixModuleId[] = [
-  'chatbot',
-  'rpg',
-  'storyteller',
-  'podcast',
-  'voice',
-  'image-generation',
-];
+const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'podcast', 'voice', 'image-generation'];
 
 function moduleFromPath(pathname: string): OmnixModuleDefinition {
   return (
@@ -96,12 +89,7 @@ function OmnixShell() {
           <OmnixBrand />
           <nav className="omnix-nav">
             {omnixModules.map((module) => (
-              <Link
-                key={module.id}
-                to={module.route as never}
-                title={module.label}
-                activeProps={{ className: 'active' }}
-              >
+              <Link key={module.id} to={module.route as never} title={module.label} activeProps={{ className: 'active' }}>
                 <OmnixNavItem active={module.id === activeModule.id} moduleId={module.id}>
                   {module.label}
                 </OmnixNavItem>
@@ -139,10 +127,7 @@ function OmnixShell() {
   );
 }
 
-const rootRoute = createRootRoute({
-  component: OmnixShell,
-});
-
+const rootRoute = createRootRoute({ component: OmnixShell });
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -166,6 +151,7 @@ const voiceRoute = moduleRoute('voice', 'voice');
 const voiceCloningRoute = moduleRoute('voice-cloning', 'voice-cloning');
 const sttRoute = moduleRoute('stt', 'stt');
 const imageGenerationRoute = moduleRoute('image-generation', 'image-generation');
+const tradingRoute = moduleRoute('trading', 'trading');
 const providersRoute = moduleRoute('providers', 'providers');
 const modelsRoute = moduleRoute('models', 'models');
 const jobsRoute = moduleRoute('jobs', 'jobs');
@@ -186,6 +172,7 @@ const routeTree = rootRoute.addChildren([
   voiceCloningRoute,
   sttRoute,
   imageGenerationRoute,
+  tradingRoute,
   providersRoute,
   modelsRoute,
   jobsRoute,

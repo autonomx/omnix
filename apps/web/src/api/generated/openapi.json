@@ -1,6 +1,25 @@
 {
   "components": {
     "schemas": {
+      "AdjustmentMode": {
+        "enum": [
+          "raw",
+          "split_adjusted",
+          "dividend_adjusted"
+        ],
+        "title": "AdjustmentMode",
+        "type": "string"
+      },
+      "AssetClass": {
+        "enum": [
+          "crypto",
+          "equity",
+          "forex",
+          "commodity"
+        ],
+        "title": "AssetClass",
+        "type": "string"
+      },
       "AssetLegacyImportDryRun": {
         "properties": {
           "assets": {
@@ -1086,6 +1105,526 @@
         "title": "AssistantToolsConfigPayload",
         "type": "object"
       },
+      "BacktestArtifactReference": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_size": {
+            "minimum": 1.0,
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "checksum_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Checksum Sha256",
+            "type": "string"
+          },
+          "storage_key": {
+            "title": "Storage Key",
+            "type": "string"
+          },
+          "storage_provider": {
+            "title": "Storage Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storage_provider",
+          "storage_key",
+          "checksum_sha256",
+          "byte_size"
+        ],
+        "title": "BacktestArtifactReference",
+        "type": "object"
+      },
+      "BacktestEquityPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "bar_time": {
+            "format": "date-time",
+            "title": "Bar Time",
+            "type": "string"
+          },
+          "cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Cash",
+            "type": "string"
+          },
+          "drawdown_percent": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Drawdown Percent",
+            "type": "string"
+          },
+          "equity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Equity",
+            "type": "string"
+          },
+          "point_index": {
+            "title": "Point Index",
+            "type": "integer"
+          },
+          "position": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Position",
+            "type": "string"
+          }
+        },
+        "required": [
+          "point_index",
+          "bar_time",
+          "cash",
+          "position",
+          "equity",
+          "drawdown_percent"
+        ],
+        "title": "BacktestEquityPoint",
+        "type": "object"
+      },
+      "BacktestExecutionPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_short": {
+            "default": false,
+            "title": "Allow Short",
+            "type": "boolean"
+          },
+          "commission_bps": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Commission Bps"
+          },
+          "fill_timing": {
+            "const": "next_bar_open",
+            "default": "next_bar_open",
+            "title": "Fill Timing",
+            "type": "string"
+          },
+          "position_size_fraction": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1",
+            "title": "Position Size Fraction"
+          },
+          "slippage_bps": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Slippage Bps"
+          },
+          "use_finalized_bars_only": {
+            "default": true,
+            "title": "Use Finalized Bars Only",
+            "type": "boolean"
+          }
+        },
+        "title": "BacktestExecutionPolicy",
+        "type": "object"
+      },
+      "BacktestListResponse": {
+        "properties": {
+          "runs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "BacktestListResponse",
+        "type": "object"
+      },
+      "BacktestLogEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "bar_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bar Time"
+          },
+          "level": {
+            "default": "info",
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "log_index": {
+            "title": "Log Index",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "log_index",
+          "message"
+        ],
+        "title": "BacktestLogEntry",
+        "type": "object"
+      },
+      "BacktestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "execution_policy": {
+            "$ref": "#/components/schemas/BacktestExecutionPolicy"
+          },
+          "formula_version": {
+            "default": "omnix-indicators-v2",
+            "title": "Formula Version",
+            "type": "string"
+          },
+          "initial_cash": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "10000",
+            "title": "Initial Cash"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/MovingAverageCrossStrategy"
+          }
+        },
+        "title": "BacktestRequest",
+        "type": "object"
+      },
+      "BacktestRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/BacktestRequest"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "BacktestRunRequest",
+        "type": "object"
+      },
+      "BacktestRunResult": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BacktestArtifactReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dataset_fingerprint": {
+            "title": "Dataset Fingerprint",
+            "type": "string"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "equity_curve": {
+            "items": {
+              "$ref": "#/components/schemas/BacktestEquityPoint"
+            },
+            "title": "Equity Curve",
+            "type": "array"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "execution_policy": {
+            "additionalProperties": true,
+            "title": "Execution Policy",
+            "type": "object"
+          },
+          "exposure_percent": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Exposure Percent",
+            "type": "string"
+          },
+          "final_equity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Final Equity",
+            "type": "string"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "formula_version": {
+            "title": "Formula Version",
+            "type": "string"
+          },
+          "initial_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Initial Cash",
+            "type": "string"
+          },
+          "logs": {
+            "items": {
+              "$ref": "#/components/schemas/BacktestLogEntry"
+            },
+            "title": "Logs",
+            "type": "array"
+          },
+          "max_drawdown_percent": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max Drawdown Percent",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_parameters": {
+            "additionalProperties": true,
+            "title": "Strategy Parameters",
+            "type": "object"
+          },
+          "total_return_percent": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Return Percent",
+            "type": "string"
+          },
+          "trade_count": {
+            "title": "Trade Count",
+            "type": "integer"
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/BacktestTrade"
+            },
+            "title": "Trades",
+            "type": "array"
+          },
+          "win_rate_percent": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Win Rate Percent",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "dataset_id",
+          "dataset_fingerprint",
+          "strategy_id",
+          "strategy_parameters",
+          "execution_policy",
+          "formula_version",
+          "status",
+          "initial_cash",
+          "final_equity",
+          "total_return_percent",
+          "max_drawdown_percent",
+          "win_rate_percent",
+          "exposure_percent",
+          "trade_count",
+          "started_at",
+          "finished_at",
+          "trades",
+          "equity_curve",
+          "logs"
+        ],
+        "title": "BacktestRunResult",
+        "type": "object"
+      },
+      "BacktestTrade": {
+        "additionalProperties": false,
+        "properties": {
+          "cash_after": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Cash After",
+            "type": "string"
+          },
+          "commission": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Commission",
+            "type": "string"
+          },
+          "fill_bar_index": {
+            "minimum": 1.0,
+            "title": "Fill Bar Index",
+            "type": "integer"
+          },
+          "fill_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fill Price",
+            "type": "string"
+          },
+          "fill_time": {
+            "format": "date-time",
+            "title": "Fill Time",
+            "type": "string"
+          },
+          "position_after": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Position After",
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "signal_bar_index": {
+            "minimum": 0.0,
+            "title": "Signal Bar Index",
+            "type": "integer"
+          },
+          "signal_time": {
+            "format": "date-time",
+            "title": "Signal Time",
+            "type": "string"
+          },
+          "trade_index": {
+            "minimum": 0.0,
+            "title": "Trade Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trade_index",
+          "side",
+          "signal_bar_index",
+          "fill_bar_index",
+          "signal_time",
+          "fill_time",
+          "quantity",
+          "fill_price",
+          "commission",
+          "cash_after",
+          "position_after"
+        ],
+        "title": "BacktestTrade",
+        "type": "object"
+      },
+      "BarsResponse": {
+        "properties": {
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/MarketBar"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/ProviderBinding"
+          },
+          "instrument": {
+            "$ref": "#/components/schemas/CanonicalInstrument"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/DatasetProvenance"
+          }
+        },
+        "required": [
+          "instrument",
+          "binding",
+          "provenance",
+          "interval",
+          "bars"
+        ],
+        "title": "BarsResponse",
+        "type": "object"
+      },
       "CancelJobRequest": {
         "properties": {
           "reason": {
@@ -1145,6 +1684,109 @@
           }
         },
         "title": "CancelState",
+        "type": "object"
+      },
+      "CanonicalInstrument": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_class": {
+            "$ref": "#/components/schemas/AssetClass"
+          },
+          "base_currency": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Currency"
+          },
+          "display_symbol": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Display Symbol",
+            "type": "string"
+          },
+          "exchange_timezone": {
+            "default": "UTC",
+            "maxLength": 64,
+            "title": "Exchange Timezone",
+            "type": "string"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "instrument_type": {
+            "$ref": "#/components/schemas/InstrumentType"
+          },
+          "minimum_tick": {
+            "default": "0.01",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Tick",
+            "type": "string"
+          },
+          "price_scale": {
+            "default": 100,
+            "exclusiveMinimum": 0.0,
+            "title": "Price Scale",
+            "type": "integer"
+          },
+          "quote_currency": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Currency"
+          },
+          "session_calendar": {
+            "default": "24x7",
+            "maxLength": 64,
+            "title": "Session Calendar",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "enum": [
+              "active",
+              "inactive",
+              "delisted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "venue": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Venue",
+            "type": "string"
+          },
+          "venue_symbol": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Venue Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "asset_class",
+          "instrument_type",
+          "venue",
+          "venue_symbol",
+          "display_symbol"
+        ],
+        "title": "CanonicalInstrument",
         "type": "object"
       },
       "ChatMessage": {
@@ -2059,6 +2701,102 @@
         "title": "CreateJobRequest",
         "type": "object"
       },
+      "DatasetListResponse": {
+        "properties": {
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/FrozenDatasetSnapshot"
+            },
+            "title": "Datasets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "datasets"
+        ],
+        "title": "DatasetListResponse",
+        "type": "object"
+      },
+      "DatasetProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "cached": {
+            "default": false,
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "dataset_fingerprint": {
+            "title": "Dataset Fingerprint",
+            "type": "string"
+          },
+          "delay_seconds": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Delay Seconds",
+            "type": "integer"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          },
+          "freshness_mode": {
+            "enum": [
+              "live",
+              "polled",
+              "delayed",
+              "cached",
+              "fallback"
+            ],
+            "title": "Freshness Mode",
+            "type": "string"
+          },
+          "history_complete": {
+            "default": false,
+            "title": "History Complete",
+            "type": "boolean"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "requested_binding": {
+            "title": "Requested Binding",
+            "type": "string"
+          },
+          "resolved_binding": {
+            "title": "Resolved Binding",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "requested_binding",
+          "resolved_binding",
+          "dataset_fingerprint",
+          "freshness_mode",
+          "as_of",
+          "received_at"
+        ],
+        "title": "DatasetProvenance",
+        "type": "object"
+      },
       "DeleteChatSessionResponse": {
         "properties": {
           "ok": {
@@ -2148,6 +2886,284 @@
           "message"
         ],
         "title": "FailJobRequest",
+        "type": "object"
+      },
+      "FeedType": {
+        "enum": [
+          "rest",
+          "websocket",
+          "websocket_and_rest",
+          "historical_polling",
+          "historical_daily"
+        ],
+        "title": "FeedType",
+        "type": "string"
+      },
+      "FreezeDatasetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "dataset_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "gap_policy": {
+            "default": "fail",
+            "enum": [
+              "fail",
+              "skip"
+            ],
+            "title": "Gap Policy",
+            "type": "string"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "default": "1d",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "limit": {
+            "default": 500,
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "instrument_id"
+        ],
+        "title": "FreezeDatasetRequest",
+        "type": "object"
+      },
+      "FrozenBar": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_mode": {
+            "title": "Adjustment Mode",
+            "type": "string"
+          },
+          "close": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Close",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "high": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "High",
+            "type": "string"
+          },
+          "ingestion_revision": {
+            "default": 1,
+            "title": "Ingestion Revision",
+            "type": "integer"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "is_final": {
+            "title": "Is Final",
+            "type": "boolean"
+          },
+          "low": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Low",
+            "type": "string"
+          },
+          "open": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Event Id"
+          },
+          "provider_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Sequence"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "session": {
+            "title": "Session",
+            "type": "string"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "volume": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Volume",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "interval",
+          "start_time",
+          "end_time",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "is_final",
+          "adjustment_mode",
+          "session",
+          "provider",
+          "received_at"
+        ],
+        "title": "FrozenBar",
+        "type": "object"
+      },
+      "FrozenDatasetSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_mode": {
+            "title": "Adjustment Mode",
+            "type": "string"
+          },
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/FrozenBar"
+            },
+            "maxItems": 5000,
+            "minItems": 1,
+            "title": "Bars",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_fingerprint": {
+            "title": "Dataset Fingerprint",
+            "type": "string"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "exchange_timezone": {
+            "title": "Exchange Timezone",
+            "type": "string"
+          },
+          "gap_policy": {
+            "enum": [
+              "fail",
+              "skip"
+            ],
+            "title": "Gap Policy",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "requested_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Binding Id"
+          },
+          "resolved_binding_id": {
+            "title": "Resolved Binding Id",
+            "type": "string"
+          },
+          "session_calendar": {
+            "title": "Session Calendar",
+            "type": "string"
+          },
+          "source_as_of": {
+            "format": "date-time",
+            "title": "Source As Of",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "instrument_id",
+          "resolved_binding_id",
+          "provider",
+          "interval",
+          "adjustment_mode",
+          "session_calendar",
+          "exchange_timezone",
+          "gap_policy",
+          "dataset_fingerprint",
+          "source_as_of",
+          "bars"
+        ],
+        "title": "FrozenDatasetSnapshot",
         "type": "object"
       },
       "GatewayHealth": {
@@ -2326,6 +3342,32 @@
         ],
         "title": "HermesAssistantToolReviewPayload",
         "type": "object"
+      },
+      "InstrumentSearchResponse": {
+        "properties": {
+          "instruments": {
+            "items": {
+              "$ref": "#/components/schemas/CanonicalInstrument"
+            },
+            "title": "Instruments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instruments"
+        ],
+        "title": "InstrumentSearchResponse",
+        "type": "object"
+      },
+      "InstrumentType": {
+        "enum": [
+          "spot",
+          "perpetual",
+          "equity",
+          "index"
+        ],
+        "title": "InstrumentType",
+        "type": "string"
       },
       "JobError": {
         "properties": {
@@ -2834,6 +3876,264 @@
         "title": "LegacySuccessResponse",
         "type": "object"
       },
+      "MarketBar": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_mode": {
+            "$ref": "#/components/schemas/AdjustmentMode",
+            "default": "raw"
+          },
+          "close": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Close",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "high": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "High",
+            "type": "string"
+          },
+          "ingestion_revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Ingestion Revision",
+            "type": "integer"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "is_final": {
+            "default": true,
+            "title": "Is Final",
+            "type": "boolean"
+          },
+          "low": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Low",
+            "type": "string"
+          },
+          "open": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Event Id"
+          },
+          "provider_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Sequence"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "session": {
+            "default": "regular",
+            "title": "Session",
+            "type": "string"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "volume": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Volume",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "interval",
+          "start_time",
+          "end_time",
+          "open",
+          "high",
+          "low",
+          "close",
+          "provider"
+        ],
+        "title": "MarketBar",
+        "type": "object"
+      },
+      "MarketResearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bar_limit": {
+            "default": 120,
+            "maximum": 200.0,
+            "minimum": 30.0,
+            "title": "Bar Limit",
+            "type": "integer"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "default": "1d",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "question": {
+            "default": "Summarize the current technical structure, notable levels, and principal risks.",
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "selected_levels": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            "maxItems": 20,
+            "title": "Selected Levels",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instrument_id"
+        ],
+        "title": "MarketResearchRequest",
+        "type": "object"
+      },
+      "MarketResearchResult": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "disclaimer": {
+            "const": "Research only. Not financial advice. No order was created or executed.",
+            "default": "Research only. Not financial advice. No order was created or executed.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "observations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Observations",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Risks",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ResearchSource"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "observations",
+          "risks",
+          "confidence",
+          "provider",
+          "model",
+          "source"
+        ],
+        "title": "MarketResearchResult",
+        "type": "object"
+      },
       "ModelResidencyDiagnostics": {
         "properties": {
           "policy": {
@@ -3036,6 +4336,796 @@
         "title": "ModelSummary",
         "type": "object"
       },
+      "MovingAverageCrossStrategy": {
+        "additionalProperties": false,
+        "properties": {
+          "fast_period": {
+            "default": 10,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Fast Period",
+            "type": "integer"
+          },
+          "slow_period": {
+            "default": 30,
+            "maximum": 500.0,
+            "minimum": 2.0,
+            "title": "Slow Period",
+            "type": "integer"
+          },
+          "strategy_id": {
+            "const": "sma_cross",
+            "default": "sma_cross",
+            "title": "Strategy Id",
+            "type": "string"
+          }
+        },
+        "title": "MovingAverageCrossStrategy",
+        "type": "object"
+      },
+      "PaperAccount": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "commission_bps": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Commission Bps",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "account_id",
+          "name",
+          "base_currency",
+          "commission_bps"
+        ],
+        "title": "PaperAccount",
+        "type": "object"
+      },
+      "PaperAccountCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Account Id",
+            "type": "string"
+          },
+          "base_currency": {
+            "default": "USD",
+            "maxLength": 12,
+            "minLength": 3,
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "commission_bps": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Commission Bps"
+          },
+          "initial_cash": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "100000",
+            "title": "Initial Cash"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "name"
+        ],
+        "title": "PaperAccountCreate",
+        "type": "object"
+      },
+      "PaperAccountListResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/PaperAccount"
+            },
+            "title": "Accounts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "title": "PaperAccountListResponse",
+        "type": "object"
+      },
+      "PaperAccountSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/PaperAccount"
+          },
+          "balances": {
+            "items": {
+              "$ref": "#/components/schemas/PaperBalance"
+            },
+            "title": "Balances",
+            "type": "array"
+          },
+          "open_orders": {
+            "items": {
+              "$ref": "#/components/schemas/PaperOrder"
+            },
+            "title": "Open Orders",
+            "type": "array"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/PaperPosition"
+            },
+            "title": "Positions",
+            "type": "array"
+          },
+          "recent_fills": {
+            "items": {
+              "$ref": "#/components/schemas/PaperFill"
+            },
+            "title": "Recent Fills",
+            "type": "array"
+          },
+          "recent_ledger": {
+            "items": {
+              "$ref": "#/components/schemas/PaperLedgerEntry"
+            },
+            "title": "Recent Ledger",
+            "type": "array"
+          }
+        },
+        "required": [
+          "account",
+          "balances",
+          "positions",
+          "open_orders",
+          "recent_fills",
+          "recent_ledger"
+        ],
+        "title": "PaperAccountSnapshot",
+        "type": "object"
+      },
+      "PaperBalance": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Available",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "reserved": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reserved",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "available"
+        ],
+        "title": "PaperBalance",
+        "type": "object"
+      },
+      "PaperFill": {
+        "additionalProperties": false,
+        "properties": {
+          "commission": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Commission",
+            "type": "string"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "fill_id": {
+            "title": "Fill Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price",
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "source_time": {
+            "format": "date-time",
+            "title": "Source Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fill_id",
+          "order_id",
+          "instrument_id",
+          "side",
+          "quantity",
+          "price",
+          "commission",
+          "source_time",
+          "evaluated_at",
+          "idempotency_key"
+        ],
+        "title": "PaperFill",
+        "type": "object"
+      },
+      "PaperFillListResponse": {
+        "properties": {
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/PaperFill"
+            },
+            "title": "Fills",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fills"
+        ],
+        "title": "PaperFillListResponse",
+        "type": "object"
+      },
+      "PaperLedgerEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "entry_type": {
+            "enum": [
+              "deposit",
+              "withdrawal",
+              "trade_cash",
+              "commission",
+              "realized_pnl"
+            ],
+            "title": "Entry Type",
+            "type": "string"
+          },
+          "fill_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill Id"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "ledger_id": {
+            "title": "Ledger Id",
+            "type": "string"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ledger_id",
+          "entry_type",
+          "currency",
+          "amount",
+          "idempotency_key"
+        ],
+        "title": "PaperLedgerEntry",
+        "type": "object"
+      },
+      "PaperMarketObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Price"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "source_time": {
+            "format": "date-time",
+            "title": "Source Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "price",
+          "source_time"
+        ],
+        "title": "PaperMarketObservation",
+        "type": "object"
+      },
+      "PaperOrder": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "average_fill_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Fill Price"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "filled_quantity": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Filled Quantity",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "limit_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_type": {
+            "enum": [
+              "market",
+              "limit",
+              "stop"
+            ],
+            "title": "Order Type",
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "status": {
+            "default": "open",
+            "enum": [
+              "open",
+              "filled",
+              "cancelled",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "account_id",
+          "order_id",
+          "instrument_id",
+          "side",
+          "order_type",
+          "quantity",
+          "idempotency_key"
+        ],
+        "title": "PaperOrder",
+        "type": "object"
+      },
+      "PaperOrderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "idempotency_key": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "limit_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
+          "order_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Order Id",
+            "type": "string"
+          },
+          "order_type": {
+            "enum": [
+              "market",
+              "limit",
+              "stop"
+            ],
+            "title": "Order Type",
+            "type": "string"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "side": {
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          }
+        },
+        "required": [
+          "order_id",
+          "instrument_id",
+          "side",
+          "order_type",
+          "quantity",
+          "idempotency_key"
+        ],
+        "title": "PaperOrderRequest",
+        "type": "object"
+      },
+      "PaperPosition": {
+        "additionalProperties": false,
+        "properties": {
+          "average_cost": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Cost",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "last_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Price"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "realized_pnl": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Realized Pnl",
+            "type": "string"
+          },
+          "unrealized_pnl": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unrealized Pnl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "quantity",
+          "average_cost",
+          "realized_pnl"
+        ],
+        "title": "PaperPosition",
+        "type": "object"
+      },
+      "PaperResetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "initial_cash": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "100000",
+            "title": "Initial Cash"
+          }
+        },
+        "title": "PaperResetRequest",
+        "type": "object"
+      },
       "PersistenceInventory": {
         "properties": {
           "diagnostics": {
@@ -3136,6 +5226,85 @@
         "title": "PromptTemplate",
         "type": "object"
       },
+      "ProviderBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_capabilities": {
+            "default": [
+              "raw"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AdjustmentMode"
+            },
+            "title": "Adjustment Capabilities",
+            "type": "array"
+          },
+          "binding_id": {
+            "maxLength": 240,
+            "minLength": 3,
+            "title": "Binding Id",
+            "type": "string"
+          },
+          "delay_seconds": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Delay Seconds",
+            "type": "integer"
+          },
+          "feed_type": {
+            "$ref": "#/components/schemas/FeedType"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "is_official_api": {
+            "default": true,
+            "title": "Is Official Api",
+            "type": "boolean"
+          },
+          "provider": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_symbol": {
+            "maxLength": 96,
+            "minLength": 1,
+            "title": "Provider Symbol",
+            "type": "string"
+          },
+          "realtime_scope": {
+            "default": "none",
+            "title": "Realtime Scope",
+            "type": "string"
+          },
+          "supported_intervals": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Intervals",
+            "type": "array"
+          },
+          "usage_scope": {
+            "$ref": "#/components/schemas/UsageScope",
+            "default": "personal_local"
+          }
+        },
+        "required": [
+          "binding_id",
+          "instrument_id",
+          "provider",
+          "provider_symbol",
+          "feed_type"
+        ],
+        "title": "ProviderBinding",
+        "type": "object"
+      },
       "ProviderCapability": {
         "enum": [
           "chat",
@@ -3150,6 +5319,55 @@
         ],
         "title": "ProviderCapability",
         "type": "string"
+      },
+      "ProviderDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderBinding"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/ProviderPolicy"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/ProviderRuntimeStatus"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "degraded",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "display_name",
+          "enabled",
+          "status",
+          "policy",
+          "bindings"
+        ],
+        "title": "ProviderDescriptor",
+        "type": "object"
       },
       "ProviderFacadePayload": {
         "properties": {
@@ -3298,6 +5516,172 @@
         "title": "ProviderModelRefreshRequest",
         "type": "object"
       },
+      "ProviderPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "authentication_required": {
+            "default": false,
+            "title": "Authentication Required",
+            "type": "boolean"
+          },
+          "delay_seconds": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Delay Seconds",
+            "type": "integer"
+          },
+          "history_depth": {
+            "default": "provider_defined",
+            "title": "History Depth",
+            "type": "string"
+          },
+          "is_official_api": {
+            "default": true,
+            "title": "Is Official Api",
+            "type": "boolean"
+          },
+          "rate_limit_policy": {
+            "default": "bounded",
+            "title": "Rate Limit Policy",
+            "type": "string"
+          },
+          "realtime_scope": {
+            "default": "none",
+            "title": "Realtime Scope",
+            "type": "string"
+          },
+          "redistribution_allowed": {
+            "default": false,
+            "title": "Redistribution Allowed",
+            "type": "boolean"
+          },
+          "supported_asset_classes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AssetClass"
+            },
+            "title": "Supported Asset Classes",
+            "type": "array"
+          },
+          "supported_intervals": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Intervals",
+            "type": "array"
+          },
+          "terms_reference": {
+            "default": "",
+            "title": "Terms Reference",
+            "type": "string"
+          },
+          "usage_scope": {
+            "$ref": "#/components/schemas/UsageScope"
+          }
+        },
+        "required": [
+          "usage_scope"
+        ],
+        "title": "ProviderPolicy",
+        "type": "object"
+      },
+      "ProviderRuntimeStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "consecutive_failures": {
+            "default": 0,
+            "title": "Consecutive Failures",
+            "type": "integer"
+          },
+          "failure_count": {
+            "default": 0,
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "in_flight": {
+            "default": 0,
+            "title": "In Flight",
+            "type": "integer"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_failure_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure At"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "max_concurrency": {
+            "default": 0,
+            "title": "Max Concurrency",
+            "type": "integer"
+          },
+          "rate_limit_count": {
+            "default": 0,
+            "title": "Rate Limit Count",
+            "type": "integer"
+          },
+          "request_count": {
+            "default": 0,
+            "title": "Request Count",
+            "type": "integer"
+          },
+          "success_count": {
+            "default": 0,
+            "title": "Success Count",
+            "type": "integer"
+          }
+        },
+        "title": "ProviderRuntimeStatus",
+        "type": "object"
+      },
+      "ProviderStatusResponse": {
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderDescriptor"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "ProviderStatusResponse",
+        "type": "object"
+      },
       "ProviderSummary": {
         "properties": {
           "capabilities": {
@@ -3355,6 +5739,45 @@
           "source"
         ],
         "title": "ProviderSummary",
+        "type": "object"
+      },
+      "QuoteResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "binding_id": {
+            "title": "Binding Id",
+            "type": "string"
+          },
+          "freshness_mode": {
+            "title": "Freshness Mode",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "received_at": {
+            "title": "Received At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "binding_id",
+          "provider",
+          "price",
+          "received_at",
+          "freshness_mode"
+        ],
+        "title": "QuoteResponse",
         "type": "object"
       },
       "RenderedPrompt": {
@@ -3789,6 +6212,74 @@
           "diagnostics_enabled"
         ],
         "title": "ResearchRuntimeStatus",
+        "type": "object"
+      },
+      "ResearchSource": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "bar_count": {
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Bar Count",
+            "type": "integer"
+          },
+          "dataset_fingerprint": {
+            "title": "Dataset Fingerprint",
+            "type": "string"
+          },
+          "formula_version": {
+            "default": "omnix-indicators-v2",
+            "title": "Formula Version",
+            "type": "string"
+          },
+          "freshness_mode": {
+            "title": "Freshness Mode",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "requested_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Binding Id"
+          },
+          "resolved_binding_id": {
+            "title": "Resolved Binding Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "interval",
+          "provider",
+          "resolved_binding_id",
+          "dataset_fingerprint",
+          "as_of",
+          "freshness_mode",
+          "bar_count"
+        ],
+        "title": "ResearchSource",
         "type": "object"
       },
       "ResourceClass": {
@@ -4261,6 +6752,54 @@
         "title": "RuntimeStatusPayload",
         "type": "object"
       },
+      "ScannerDefinitionListResponse": {
+        "properties": {
+          "scanners": {
+            "items": {
+              "$ref": "#/components/schemas/TradingScannerDefinition-Output"
+            },
+            "title": "Scanners",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scanners"
+        ],
+        "title": "ScannerDefinitionListResponse",
+        "type": "object"
+      },
+      "ScannerResultListResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/TradingScannerResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "ScannerResultListResponse",
+        "type": "object"
+      },
+      "ScannerRunListResponse": {
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/TradingScannerRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "ScannerRunListResponse",
+        "type": "object"
+      },
       "SendChatMessageRequest": {
         "properties": {
           "agent_mode": {
@@ -4484,6 +7023,1395 @@
         ],
         "title": "StateHashResponse",
         "type": "object"
+      },
+      "TradingAlert": {
+        "additionalProperties": false,
+        "properties": {
+          "alert_id": {
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "condition_type": {
+            "enum": [
+              "price_above",
+              "price_below",
+              "percent_change_above",
+              "percent_change_below",
+              "indicator_above",
+              "indicator_below",
+              "indicator_cross_above",
+              "indicator_cross_below",
+              "volume_above",
+              "volume_below"
+            ],
+            "title": "Condition Type",
+            "type": "string"
+          },
+          "cooldown_seconds": {
+            "default": 0,
+            "maximum": 31536000.0,
+            "minimum": 0.0,
+            "title": "Cooldown Seconds",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "evaluation_policy": {
+            "$ref": "#/components/schemas/TradingAlertEvaluationPolicy"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "last_observed_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Observed Price"
+          },
+          "last_observed_value": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Observed Value"
+          },
+          "last_triggered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Triggered At"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/TradingAlertParameters"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "threshold": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Threshold",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "condition_type",
+          "threshold",
+          "alert_id"
+        ],
+        "title": "TradingAlert",
+        "type": "object"
+      },
+      "TradingAlertCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "alert_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "condition_type": {
+            "enum": [
+              "price_above",
+              "price_below",
+              "percent_change_above",
+              "percent_change_below",
+              "indicator_above",
+              "indicator_below",
+              "indicator_cross_above",
+              "indicator_cross_below",
+              "volume_above",
+              "volume_below"
+            ],
+            "title": "Condition Type",
+            "type": "string"
+          },
+          "cooldown_seconds": {
+            "default": 0,
+            "maximum": 31536000.0,
+            "minimum": 0.0,
+            "title": "Cooldown Seconds",
+            "type": "integer"
+          },
+          "evaluation_policy": {
+            "$ref": "#/components/schemas/TradingAlertEvaluationPolicy"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/TradingAlertParameters"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Threshold"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "condition_type",
+          "threshold",
+          "alert_id"
+        ],
+        "title": "TradingAlertCreate",
+        "type": "object"
+      },
+      "TradingAlertEvaluation": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "indicator_values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Indicator Values",
+            "type": "object"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "default": "1m",
+            "title": "Interval",
+            "type": "string"
+          },
+          "is_final": {
+            "default": true,
+            "title": "Is Final",
+            "type": "boolean"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "observed_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Observed Price"
+          },
+          "observed_volume": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Volume"
+          },
+          "percent_changes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Percent Changes",
+            "type": "object"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "resolved_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Binding Id"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "observed_price"
+        ],
+        "title": "TradingAlertEvaluation",
+        "type": "object"
+      },
+      "TradingAlertEvaluationPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_partial_bars": {
+            "default": false,
+            "title": "Allow Partial Bars",
+            "type": "boolean"
+          },
+          "formula_version": {
+            "default": "omnix-indicators-v2",
+            "title": "Formula Version",
+            "type": "string"
+          },
+          "interval": {
+            "default": "1m",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          }
+        },
+        "title": "TradingAlertEvaluationPolicy",
+        "type": "object"
+      },
+      "TradingAlertListResponse": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/TradingAlert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "alerts"
+        ],
+        "title": "TradingAlertListResponse",
+        "type": "object"
+      },
+      "TradingAlertParameters": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_bars_ago": {
+            "default": 0,
+            "maximum": 499.0,
+            "minimum": 0.0,
+            "title": "Anchor Bars Ago",
+            "type": "integer"
+          },
+          "component": {
+            "default": "value",
+            "enum": [
+              "value",
+              "line",
+              "signal",
+              "histogram",
+              "upper",
+              "middle",
+              "lower"
+            ],
+            "title": "Component",
+            "type": "string"
+          },
+          "fast_period": {
+            "default": 12,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Fast Period",
+            "type": "integer"
+          },
+          "indicator_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sma",
+                  "ema",
+                  "rsi",
+                  "macd",
+                  "bollinger",
+                  "atr",
+                  "vwap"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicator Id"
+          },
+          "lookback_bars": {
+            "default": 1,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Lookback Bars",
+            "type": "integer"
+          },
+          "period": {
+            "default": 14,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Period",
+            "type": "integer"
+          },
+          "signal_period": {
+            "default": 9,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Signal Period",
+            "type": "integer"
+          },
+          "slow_period": {
+            "default": 26,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Slow Period",
+            "type": "integer"
+          }
+        },
+        "title": "TradingAlertParameters",
+        "type": "object"
+      },
+      "TradingAlertTrigger": {
+        "additionalProperties": false,
+        "properties": {
+          "alert_id": {
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "condition_type": {
+            "enum": [
+              "price_above",
+              "price_below",
+              "percent_change_above",
+              "percent_change_below",
+              "indicator_above",
+              "indicator_below",
+              "indicator_cross_above",
+              "indicator_cross_below",
+              "volume_above",
+              "volume_below"
+            ],
+            "title": "Condition Type",
+            "type": "string"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "observed_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Observed Price",
+            "type": "string"
+          },
+          "observed_value": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Observed Value",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "threshold": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Threshold",
+            "type": "string"
+          },
+          "trigger_id": {
+            "title": "Trigger Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trigger_id",
+          "alert_id",
+          "instrument_id",
+          "observed_value",
+          "observed_price",
+          "threshold",
+          "condition_type",
+          "observed_at",
+          "evaluated_at",
+          "idempotency_key"
+        ],
+        "title": "TradingAlertTrigger",
+        "type": "object"
+      },
+      "TradingAlertTriggerListResponse": {
+        "properties": {
+          "triggers": {
+            "items": {
+              "$ref": "#/components/schemas/TradingAlertTrigger"
+            },
+            "title": "Triggers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "triggers"
+        ],
+        "title": "TradingAlertTriggerListResponse",
+        "type": "object"
+      },
+      "TradingAlertUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "condition_type": {
+            "enum": [
+              "price_above",
+              "price_below",
+              "percent_change_above",
+              "percent_change_below",
+              "indicator_above",
+              "indicator_below",
+              "indicator_cross_above",
+              "indicator_cross_below",
+              "volume_above",
+              "volume_below"
+            ],
+            "title": "Condition Type",
+            "type": "string"
+          },
+          "cooldown_seconds": {
+            "default": 0,
+            "maximum": 31536000.0,
+            "minimum": 0.0,
+            "title": "Cooldown Seconds",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "evaluation_policy": {
+            "$ref": "#/components/schemas/TradingAlertEvaluationPolicy"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/TradingAlertParameters"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Threshold"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "condition_type",
+          "threshold"
+        ],
+        "title": "TradingAlertUpdate",
+        "type": "object"
+      },
+      "TradingDiagnosticsResponse": {
+        "properties": {
+          "diagnostics": {
+            "additionalProperties": true,
+            "title": "Diagnostics",
+            "type": "object"
+          },
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "diagnostics"
+        ],
+        "title": "TradingDiagnosticsResponse",
+        "type": "object"
+      },
+      "TradingDocumentListResponse": {
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/TradingDocumentResponse"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "TradingDocumentListResponse",
+        "type": "object"
+      },
+      "TradingDocumentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "record_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Record Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_id"
+        ],
+        "title": "TradingDocumentRequest",
+        "type": "object"
+      },
+      "TradingDocumentResponse": {
+        "properties": {
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "record_type": {
+            "title": "Record Type",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "record_id",
+          "record_type",
+          "revision",
+          "payload"
+        ],
+        "title": "TradingDocumentResponse",
+        "type": "object"
+      },
+      "TradingScannerDefinition-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_ids": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Binding Ids",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "formula_version": {
+            "default": "omnix-indicators-v2",
+            "title": "Formula Version",
+            "type": "string"
+          },
+          "history_limit": {
+            "default": 100,
+            "maximum": 500.0,
+            "minimum": 2.0,
+            "title": "History Limit",
+            "type": "integer"
+          },
+          "instrument_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Instrument Ids",
+            "type": "array"
+          },
+          "interval": {
+            "default": "1d",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "max_concurrency": {
+            "default": 4,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Max Concurrency",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "request_timeout_seconds": {
+            "default": 10,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Request Timeout Seconds",
+            "type": "number"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/TradingScannerRule-Input"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Rules",
+            "type": "array"
+          },
+          "run_timeout_seconds": {
+            "default": 120,
+            "maximum": 300.0,
+            "minimum": 1.0,
+            "title": "Run Timeout Seconds",
+            "type": "number"
+          },
+          "scanner_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scanner Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "scanner_id",
+          "name",
+          "instrument_ids",
+          "rules"
+        ],
+        "title": "TradingScannerDefinition",
+        "type": "object"
+      },
+      "TradingScannerDefinition-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_ids": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Binding Ids",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "formula_version": {
+            "default": "omnix-indicators-v2",
+            "title": "Formula Version",
+            "type": "string"
+          },
+          "history_limit": {
+            "default": 100,
+            "maximum": 500.0,
+            "minimum": 2.0,
+            "title": "History Limit",
+            "type": "integer"
+          },
+          "instrument_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Instrument Ids",
+            "type": "array"
+          },
+          "interval": {
+            "default": "1d",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          },
+          "max_concurrency": {
+            "default": 4,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Max Concurrency",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "request_timeout_seconds": {
+            "default": 10,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Request Timeout Seconds",
+            "type": "number"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/TradingScannerRule-Output"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Rules",
+            "type": "array"
+          },
+          "run_timeout_seconds": {
+            "default": 120,
+            "maximum": 300.0,
+            "minimum": 1.0,
+            "title": "Run Timeout Seconds",
+            "type": "number"
+          },
+          "scanner_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scanner Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "scanner_id",
+          "name",
+          "instrument_ids",
+          "rules"
+        ],
+        "title": "TradingScannerDefinition",
+        "type": "object"
+      },
+      "TradingScannerResult": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_fingerprint": {
+            "title": "Dataset Fingerprint",
+            "type": "string"
+          },
+          "formula_version": {
+            "title": "Formula Version",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "matched_rules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Rules",
+            "type": "array"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "rank": {
+            "minimum": 1.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "requested_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Binding Id"
+          },
+          "resolved_binding_id": {
+            "title": "Resolved Binding Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Score",
+            "type": "string"
+          },
+          "source_as_of": {
+            "format": "date-time",
+            "title": "Source As Of",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "instrument_id",
+          "resolved_binding_id",
+          "provider",
+          "dataset_fingerprint",
+          "source_as_of",
+          "formula_version",
+          "metrics",
+          "matched_rules",
+          "rank",
+          "score"
+        ],
+        "title": "TradingScannerResult",
+        "type": "object"
+      },
+      "TradingScannerRule-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "lookback_bars": {
+            "default": 1,
+            "maximum": 499.0,
+            "minimum": 1.0,
+            "title": "Lookback Bars",
+            "type": "integer"
+          },
+          "metric": {
+            "enum": [
+              "close",
+              "percent_change",
+              "volume",
+              "sma",
+              "ema",
+              "rsi",
+              "atr"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "operator": {
+            "enum": [
+              "gt",
+              "gte",
+              "lt",
+              "lte"
+            ],
+            "title": "Operator",
+            "type": "string"
+          },
+          "period": {
+            "default": 14,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Period",
+            "type": "integer"
+          },
+          "rule_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Threshold"
+          }
+        },
+        "required": [
+          "rule_id",
+          "metric",
+          "operator",
+          "threshold"
+        ],
+        "title": "TradingScannerRule",
+        "type": "object"
+      },
+      "TradingScannerRule-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "lookback_bars": {
+            "default": 1,
+            "maximum": 499.0,
+            "minimum": 1.0,
+            "title": "Lookback Bars",
+            "type": "integer"
+          },
+          "metric": {
+            "enum": [
+              "close",
+              "percent_change",
+              "volume",
+              "sma",
+              "ema",
+              "rsi",
+              "atr"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "operator": {
+            "enum": [
+              "gt",
+              "gte",
+              "lt",
+              "lte"
+            ],
+            "title": "Operator",
+            "type": "string"
+          },
+          "period": {
+            "default": 14,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Period",
+            "type": "integer"
+          },
+          "rule_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "threshold": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Threshold",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "metric",
+          "operator",
+          "threshold"
+        ],
+        "title": "TradingScannerRule",
+        "type": "object"
+      },
+      "TradingScannerRun": {
+        "additionalProperties": false,
+        "properties": {
+          "cancellation_requested": {
+            "default": false,
+            "title": "Cancellation Requested",
+            "type": "boolean"
+          },
+          "completed_count": {
+            "default": 0,
+            "title": "Completed Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "definition_snapshot": {
+            "additionalProperties": true,
+            "title": "Definition Snapshot",
+            "type": "object"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "matched_count": {
+            "default": 0,
+            "title": "Matched Count",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scanner_id": {
+            "title": "Scanner Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelled",
+              "timed_out"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "universe_count": {
+            "default": 0,
+            "title": "Universe Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "run_id",
+          "scanner_id",
+          "status",
+          "definition_snapshot"
+        ],
+        "title": "TradingScannerRun",
+        "type": "object"
+      },
+      "UsageScope": {
+        "enum": [
+          "personal_local",
+          "internal",
+          "external_display",
+          "licensed"
+        ],
+        "title": "UsageScope",
+        "type": "string"
       },
       "ValidationError": {
         "properties": {
@@ -7542,6 +11470,2514 @@
         "summary": "Save Settings",
         "tags": [
           "settings"
+        ]
+      }
+    },
+    "/api/trading/alerts": {
+      "get": {
+        "operationId": "list_alerts_api_trading_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAlertListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alerts",
+        "tags": [
+          "trading-alerts"
+        ]
+      },
+      "post": {
+        "operationId": "create_alert_api_trading_alerts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingAlertCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAlert"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Alert",
+        "tags": [
+          "trading-alerts"
+        ]
+      }
+    },
+    "/api/trading/alerts/evaluate": {
+      "post": {
+        "operationId": "evaluate_alerts_api_trading_alerts_evaluate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingAlertEvaluation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAlertTriggerListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Alerts",
+        "tags": [
+          "trading-alerts"
+        ]
+      }
+    },
+    "/api/trading/alerts/triggers": {
+      "get": {
+        "operationId": "list_triggers_api_trading_alerts_triggers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAlertTriggerListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Triggers",
+        "tags": [
+          "trading-alerts"
+        ]
+      }
+    },
+    "/api/trading/alerts/{alert_id}": {
+      "delete": {
+        "operationId": "archive_alert_api_trading_alerts__alert_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_id",
+            "required": true,
+            "schema": {
+              "title": "Alert Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAlert"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Alert",
+        "tags": [
+          "trading-alerts"
+        ]
+      },
+      "put": {
+        "operationId": "update_alert_api_trading_alerts__alert_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_id",
+            "required": true,
+            "schema": {
+              "title": "Alert Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingAlertUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingAlert"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Alert",
+        "tags": [
+          "trading-alerts"
+        ]
+      }
+    },
+    "/api/trading/bars": {
+      "get": {
+        "operationId": "bars_api_trading_bars_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval",
+            "required": false,
+            "schema": {
+              "default": "1m",
+              "maxLength": 16,
+              "title": "Interval",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "binding_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bars",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/diagnostics": {
+      "get": {
+        "operationId": "diagnostics_api_trading_diagnostics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDiagnosticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Diagnostics",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/drawings": {
+      "get": {
+        "operationId": "list_trading_drawings_api_trading_drawings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Trading Drawings",
+        "tags": [
+          "trading"
+        ]
+      },
+      "post": {
+        "operationId": "create_trading_drawing_api_trading_drawings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Trading Drawing",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/drawings/{record_id}": {
+      "delete": {
+        "operationId": "archive_trading_drawing_api_trading_drawings__record_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Trading Drawing",
+        "tags": [
+          "trading"
+        ]
+      },
+      "get": {
+        "operationId": "get_trading_drawing_api_trading_drawings__record_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trading Drawing",
+        "tags": [
+          "trading"
+        ]
+      },
+      "put": {
+        "operationId": "update_trading_drawing_api_trading_drawings__record_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Trading Drawing",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/indicator-presets": {
+      "get": {
+        "operationId": "list_trading_indicator_presets_api_trading_indicator_presets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Trading Indicator Presets",
+        "tags": [
+          "trading"
+        ]
+      },
+      "post": {
+        "operationId": "create_trading_indicator_preset_api_trading_indicator_presets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Trading Indicator Preset",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/indicator-presets/{record_id}": {
+      "delete": {
+        "operationId": "archive_trading_indicator_preset_api_trading_indicator_presets__record_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Trading Indicator Preset",
+        "tags": [
+          "trading"
+        ]
+      },
+      "get": {
+        "operationId": "get_trading_indicator_preset_api_trading_indicator_presets__record_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trading Indicator Preset",
+        "tags": [
+          "trading"
+        ]
+      },
+      "put": {
+        "operationId": "update_trading_indicator_preset_api_trading_indicator_presets__record_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Trading Indicator Preset",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/instruments/search": {
+      "get": {
+        "operationId": "instruments_api_trading_instruments_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 96,
+              "title": "Query",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstrumentSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Instruments",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/paper/accounts": {
+      "get": {
+        "operationId": "list_accounts_api_trading_paper_accounts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperAccountListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Accounts",
+        "tags": [
+          "trading-paper"
+        ]
+      },
+      "post": {
+        "operationId": "create_account_api_trading_paper_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperAccountCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperAccountSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Account",
+        "tags": [
+          "trading-paper"
+        ]
+      }
+    },
+    "/api/trading/paper/accounts/{account_id}": {
+      "delete": {
+        "operationId": "archive_account_api_trading_paper_accounts__account_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperAccountSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Account",
+        "tags": [
+          "trading-paper"
+        ]
+      },
+      "get": {
+        "operationId": "account_snapshot_api_trading_paper_accounts__account_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperAccountSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Account Snapshot",
+        "tags": [
+          "trading-paper"
+        ]
+      }
+    },
+    "/api/trading/paper/accounts/{account_id}/observations": {
+      "post": {
+        "operationId": "process_observation_api_trading_paper_accounts__account_id__observations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperMarketObservation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperFillListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Process Observation",
+        "tags": [
+          "trading-paper"
+        ]
+      }
+    },
+    "/api/trading/paper/accounts/{account_id}/orders": {
+      "post": {
+        "operationId": "place_order_api_trading_paper_accounts__account_id__orders_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperOrder"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Place Order",
+        "tags": [
+          "trading-paper"
+        ]
+      }
+    },
+    "/api/trading/paper/accounts/{account_id}/orders/{order_id}": {
+      "delete": {
+        "operationId": "cancel_order_api_trading_paper_accounts__account_id__orders__order_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperOrder"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Order",
+        "tags": [
+          "trading-paper"
+        ]
+      }
+    },
+    "/api/trading/paper/accounts/{account_id}/reset": {
+      "post": {
+        "operationId": "reset_account_api_trading_paper_accounts__account_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperAccountSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Account",
+        "tags": [
+          "trading-paper"
+        ]
+      }
+    },
+    "/api/trading/providers": {
+      "get": {
+        "operationId": "providers_api_trading_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Providers",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/providers/status": {
+      "get": {
+        "operationId": "provider_status_api_trading_providers_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Provider Status",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/quotes": {
+      "get": {
+        "operationId": "quote_api_trading_quotes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "binding_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Quote",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/replay/backtests": {
+      "get": {
+        "operationId": "list_backtests_api_trading_replay_backtests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Backtests",
+        "tags": [
+          "trading-replay"
+        ]
+      },
+      "post": {
+        "operationId": "create_backtest_api_trading_replay_backtests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacktestRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestRunResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Backtest",
+        "tags": [
+          "trading-replay"
+        ]
+      }
+    },
+    "/api/trading/replay/backtests/{run_id}": {
+      "get": {
+        "operationId": "get_backtest_api_trading_replay_backtests__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestRunResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Backtest",
+        "tags": [
+          "trading-replay"
+        ]
+      }
+    },
+    "/api/trading/replay/datasets": {
+      "get": {
+        "operationId": "list_datasets_api_trading_replay_datasets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Datasets",
+        "tags": [
+          "trading-replay"
+        ]
+      },
+      "post": {
+        "operationId": "freeze_dataset_api_trading_replay_datasets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FreezeDatasetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrozenDatasetSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Freeze Dataset",
+        "tags": [
+          "trading-replay"
+        ]
+      }
+    },
+    "/api/trading/replay/datasets/{dataset_id}": {
+      "get": {
+        "operationId": "get_dataset_api_trading_replay_datasets__dataset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrozenDatasetSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dataset",
+        "tags": [
+          "trading-replay"
+        ]
+      }
+    },
+    "/api/trading/research": {
+      "post": {
+        "operationId": "create_research_api_trading_research_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketResearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketResearchResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Research",
+        "tags": [
+          "trading-research"
+        ]
+      }
+    },
+    "/api/trading/scanners": {
+      "get": {
+        "operationId": "list_scanners_api_trading_scanners_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScannerDefinitionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scanners",
+        "tags": [
+          "trading-scanners"
+        ]
+      },
+      "post": {
+        "operationId": "create_scanner_api_trading_scanners_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingScannerDefinition-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingScannerDefinition-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scanner",
+        "tags": [
+          "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/scanners/runs": {
+      "get": {
+        "operationId": "list_runs_api_trading_scanners_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scanner_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scanner Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScannerRunListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/scanners/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_run_api_trading_scanners_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Run",
+        "tags": [
+          "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/scanners/runs/{run_id}/results": {
+      "get": {
+        "operationId": "list_results_api_trading_scanners_runs__run_id__results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScannerResultListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Results",
+        "tags": [
+          "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/scanners/{scanner_id}": {
+      "put": {
+        "operationId": "update_scanner_api_trading_scanners__scanner_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scanner_id",
+            "required": true,
+            "schema": {
+              "title": "Scanner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingScannerDefinition-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingScannerDefinition-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Scanner",
+        "tags": [
+          "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/scanners/{scanner_id}/runs": {
+      "post": {
+        "operationId": "start_run_api_trading_scanners__scanner_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scanner_id",
+            "required": true,
+            "schema": {
+              "title": "Scanner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingScannerRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Run",
+        "tags": [
+          "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/watchlists": {
+      "get": {
+        "operationId": "list_trading_watchlists_api_trading_watchlists_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Trading Watchlists",
+        "tags": [
+          "trading"
+        ]
+      },
+      "post": {
+        "operationId": "create_trading_watchlist_api_trading_watchlists_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Trading Watchlist",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/watchlists/{record_id}": {
+      "delete": {
+        "operationId": "archive_trading_watchlist_api_trading_watchlists__record_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Trading Watchlist",
+        "tags": [
+          "trading"
+        ]
+      },
+      "get": {
+        "operationId": "get_trading_watchlist_api_trading_watchlists__record_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trading Watchlist",
+        "tags": [
+          "trading"
+        ]
+      },
+      "put": {
+        "operationId": "update_trading_watchlist_api_trading_watchlists__record_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Trading Watchlist",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/workspaces": {
+      "get": {
+        "operationId": "list_trading_workspaces_api_trading_workspaces_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Trading Workspaces",
+        "tags": [
+          "trading"
+        ]
+      },
+      "post": {
+        "operationId": "create_trading_workspace_api_trading_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Trading Workspace",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
+    "/api/trading/workspaces/{record_id}": {
+      "delete": {
+        "operationId": "archive_trading_workspace_api_trading_workspaces__record_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Trading Workspace",
+        "tags": [
+          "trading"
+        ]
+      },
+      "get": {
+        "operationId": "get_trading_workspace_api_trading_workspaces__record_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trading Workspace",
+        "tags": [
+          "trading"
+        ]
+      },
+      "put": {
+        "operationId": "update_trading_workspace_api_trading_workspaces__record_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Trading Workspace",
+        "tags": [
+          "trading"
         ]
       }
     },
