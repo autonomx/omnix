@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Literal
@@ -9,6 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .indicators.engine import CORE_INDICATOR_FORMULA_VERSION, simple_moving_average
 from .replay import FrozenDatasetSnapshot
+
+
+BACKTEST_MARK_TO_MARKET_POLICY = "final_finalized_bar_close"
 
 
 class MovingAverageCrossStrategy(BaseModel):
@@ -125,12 +130,19 @@ class BacktestRunResult(BaseModel):
     formula_version: str
     status: Literal["completed", "failed"]
     initial_cash: Decimal
+    ending_cash: Decimal
+    ending_position: Decimal
+    ending_mark_price: Decimal | None
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
     final_equity: Decimal
     total_return_percent: Decimal
     max_drawdown_percent: Decimal
     win_rate_percent: Decimal = Field(ge=0, le=100)
     exposure_percent: Decimal = Field(ge=0, le=100)
     trade_count: int
+    mark_to_market_policy: Literal["final_finalized_bar_close"] = BACKTEST_MARK_TO_MARKET_POLICY
+    economic_result_fingerprint: str = Field(min_length=64, max_length=64)
     started_at: datetime
     finished_at: datetime
     trades: tuple[BacktestTrade, ...]
@@ -138,6 +150,16 @@ class BacktestRunResult(BaseModel):
     logs: tuple[BacktestLogEntry, ...]
     artifact: BacktestArtifactReference | None = None
     error_message: str | None = None
+
+
+class BacktestEconomicBreakdown(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ending_cash: Decimal
+    ending_position: Decimal
+    ending_mark_price: Decimal | None
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
 
 
 def _aligned_sma(closes: list[Decimal], period: int) -> dict[int, Decimal]:
@@ -179,6 +201,111 @@ def _exposure_percent(equity_curve: list[BacktestEquityPoint]) -> Decimal:
     return Decimal(exposed) / Decimal(len(equity_curve)) * Decimal("100")
 
 
+def backtest_economic_breakdown(
+    *,
+    initial_cash: Decimal,
+    ending_cash: Decimal,
+    ending_position: Decimal,
+    ending_mark_price: Decimal | None,
+    trades: list[BacktestTrade] | tuple[BacktestTrade, ...],
+) -> BacktestEconomicBreakdown:
+    open_cost_basis = Decimal("0")
+    realized_pnl = Decimal("0")
+    for trade in trades:
+        notional = trade.quantity * trade.fill_price
+        if trade.side == "buy":
+            open_cost_basis = notional + trade.commission
+        else:
+            realized_pnl += notional - trade.commission - open_cost_basis
+            open_cost_basis = Decimal("0")
+    unrealized_pnl = Decimal("0")
+    if ending_position > 0 and ending_mark_price is not None:
+        unrealized_pnl = ending_position * ending_mark_price - open_cost_basis
+    if not trades and ending_position == 0:
+        realized_pnl = ending_cash - initial_cash
+    return BacktestEconomicBreakdown(
+        ending_cash=ending_cash,
+        ending_position=ending_position,
+        ending_mark_price=ending_mark_price,
+        realized_pnl=realized_pnl,
+        unrealized_pnl=unrealized_pnl,
+    )
+
+
+def backtest_economic_result_fingerprint(
+    *,
+    dataset_fingerprint: str,
+    strategy_id: str,
+    strategy_parameters: dict[str, object],
+    execution_policy: dict[str, object],
+    formula_version: str,
+    status: str,
+    initial_cash: Decimal,
+    economics: BacktestEconomicBreakdown,
+    final_equity: Decimal,
+    total_return_percent: Decimal,
+    max_drawdown_percent: Decimal,
+    win_rate_percent: Decimal,
+    exposure_percent: Decimal,
+    trades: list[BacktestTrade] | tuple[BacktestTrade, ...],
+    equity_curve: list[BacktestEquityPoint] | tuple[BacktestEquityPoint, ...],
+    error_message: str | None = None,
+) -> str:
+    """Hash deterministic economic evidence, excluding runtime/storage identity."""
+    payload = {
+        "schema": "omnix-backtest-economics-v1",
+        "dataset_fingerprint": dataset_fingerprint,
+        "strategy_id": strategy_id,
+        "strategy_parameters": strategy_parameters,
+        "execution_policy": execution_policy,
+        "formula_version": formula_version,
+        "status": status,
+        "initial_cash": str(initial_cash),
+        "ending_cash": str(economics.ending_cash),
+        "ending_position": str(economics.ending_position),
+        "ending_mark_price": (
+            str(economics.ending_mark_price)
+            if economics.ending_mark_price is not None
+            else None
+        ),
+        "realized_pnl": str(economics.realized_pnl),
+        "unrealized_pnl": str(economics.unrealized_pnl),
+        "final_equity": str(final_equity),
+        "total_return_percent": str(total_return_percent),
+        "max_drawdown_percent": str(max_drawdown_percent),
+        "win_rate_percent": str(win_rate_percent),
+        "exposure_percent": str(exposure_percent),
+        "mark_to_market_policy": BACKTEST_MARK_TO_MARKET_POLICY,
+        "trades": [
+            {
+                "trade_index": trade.trade_index,
+                "side": trade.side,
+                "signal_bar_index": trade.signal_bar_index,
+                "fill_bar_index": trade.fill_bar_index,
+                "quantity": str(trade.quantity),
+                "fill_price": str(trade.fill_price),
+                "commission": str(trade.commission),
+                "cash_after": str(trade.cash_after),
+                "position_after": str(trade.position_after),
+            }
+            for trade in trades
+        ],
+        "equity_curve": [
+            {
+                "point_index": point.point_index,
+                "cash": str(point.cash),
+                "position": str(point.position),
+                "equity": str(point.equity),
+                "drawdown_percent": str(point.drawdown_percent),
+            }
+            for point in equity_curve
+        ],
+        "error_message": error_message,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def run_backtest(
     snapshot: FrozenDatasetSnapshot,
     request: BacktestRequest,
@@ -192,6 +319,33 @@ def run_backtest(
     minimum = request.strategy.slow_period + 1
     if len(bars) < minimum:
         finished_at = datetime.now(timezone.utc)
+        ending_mark_price = bars[-1].close if bars else None
+        economics = backtest_economic_breakdown(
+            initial_cash=request.initial_cash,
+            ending_cash=request.initial_cash,
+            ending_position=Decimal("0"),
+            ending_mark_price=ending_mark_price,
+            trades=[],
+        )
+        error_message = f"dataset requires at least {minimum} bars"
+        fingerprint = backtest_economic_result_fingerprint(
+            dataset_fingerprint=snapshot.dataset_fingerprint,
+            strategy_id=request.strategy.strategy_id,
+            strategy_parameters=request.strategy.model_dump(mode="json"),
+            execution_policy=request.execution_policy.model_dump(mode="json"),
+            formula_version=request.formula_version,
+            status="failed",
+            initial_cash=request.initial_cash,
+            economics=economics,
+            final_equity=request.initial_cash,
+            total_return_percent=Decimal("0"),
+            max_drawdown_percent=Decimal("0"),
+            win_rate_percent=Decimal("0"),
+            exposure_percent=Decimal("0"),
+            trades=[],
+            equity_curve=[],
+            error_message=error_message,
+        )
         return BacktestRunResult(
             run_id=identifier,
             dataset_id=snapshot.dataset_id,
@@ -202,12 +356,18 @@ def run_backtest(
             formula_version=request.formula_version,
             status="failed",
             initial_cash=request.initial_cash,
+            ending_cash=economics.ending_cash,
+            ending_position=economics.ending_position,
+            ending_mark_price=economics.ending_mark_price,
+            realized_pnl=economics.realized_pnl,
+            unrealized_pnl=economics.unrealized_pnl,
             final_equity=request.initial_cash,
             total_return_percent=Decimal("0"),
             max_drawdown_percent=Decimal("0"),
             win_rate_percent=Decimal("0"),
             exposure_percent=Decimal("0"),
             trade_count=0,
+            economic_result_fingerprint=fingerprint,
             started_at=started_at,
             finished_at=finished_at,
             trades=(),
@@ -219,7 +379,7 @@ def run_backtest(
                     message="insufficient dataset history",
                 ),
             ),
-            error_message=f"dataset requires at least {minimum} bars",
+            error_message=error_message,
         )
 
     closes = [bar.close for bar in bars]
@@ -343,6 +503,31 @@ def run_backtest(
     ) * Decimal("100")
     win_rate = _round_trip_win_rate(trades)
     exposure = _exposure_percent(equity_curve)
+    ending_mark_price = bars[-1].close
+    economics = backtest_economic_breakdown(
+        initial_cash=request.initial_cash,
+        ending_cash=cash,
+        ending_position=position,
+        ending_mark_price=ending_mark_price,
+        trades=trades,
+    )
+    fingerprint = backtest_economic_result_fingerprint(
+        dataset_fingerprint=snapshot.dataset_fingerprint,
+        strategy_id=request.strategy.strategy_id,
+        strategy_parameters=request.strategy.model_dump(mode="json"),
+        execution_policy=request.execution_policy.model_dump(mode="json"),
+        formula_version=request.formula_version,
+        status="completed",
+        initial_cash=request.initial_cash,
+        economics=economics,
+        final_equity=final_equity,
+        total_return_percent=total_return,
+        max_drawdown_percent=max_drawdown,
+        win_rate_percent=win_rate,
+        exposure_percent=exposure,
+        trades=trades,
+        equity_curve=equity_curve,
+    )
     finished_at = datetime.now(timezone.utc)
     logs.append(
         BacktestLogEntry(
@@ -352,7 +537,14 @@ def run_backtest(
             payload={
                 "dataset_fingerprint": snapshot.dataset_fingerprint,
                 "trade_count": len(trades),
+                "ending_cash": str(economics.ending_cash),
+                "ending_position": str(economics.ending_position),
+                "ending_mark_price": str(economics.ending_mark_price),
+                "mark_to_market_policy": BACKTEST_MARK_TO_MARKET_POLICY,
+                "realized_pnl": str(economics.realized_pnl),
+                "unrealized_pnl": str(economics.unrealized_pnl),
                 "final_equity": str(final_equity),
+                "economic_result_fingerprint": fingerprint,
                 "win_rate_percent": str(win_rate),
                 "exposure_percent": str(exposure),
             },
@@ -368,12 +560,18 @@ def run_backtest(
         formula_version=request.formula_version,
         status="completed",
         initial_cash=request.initial_cash,
+        ending_cash=economics.ending_cash,
+        ending_position=economics.ending_position,
+        ending_mark_price=economics.ending_mark_price,
+        realized_pnl=economics.realized_pnl,
+        unrealized_pnl=economics.unrealized_pnl,
         final_equity=final_equity,
         total_return_percent=total_return,
         max_drawdown_percent=max_drawdown,
         win_rate_percent=win_rate,
         exposure_percent=exposure,
         trade_count=len(trades),
+        economic_result_fingerprint=fingerprint,
         started_at=started_at,
         finished_at=finished_at,
         trades=tuple(trades),
