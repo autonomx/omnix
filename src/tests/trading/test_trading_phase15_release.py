@@ -59,12 +59,18 @@ def minimal_backtest() -> BacktestRunResult:
         formula_version="omnix-indicators-v2",
         status="completed",
         initial_cash=Decimal("10000"),
+        ending_cash=Decimal("10100"),
+        ending_position=Decimal("0"),
+        ending_mark_price=Decimal("100"),
+        realized_pnl=Decimal("100"),
+        unrealized_pnl=Decimal("0"),
         final_equity=Decimal("10100"),
         total_return_percent=Decimal("1"),
         max_drawdown_percent=Decimal("0.5"),
         win_rate_percent=Decimal("50"),
         exposure_percent=Decimal("25"),
         trade_count=0,
+        economic_result_fingerprint="e" * 64,
         started_at=NOW,
         finished_at=NOW,
         trades=(),
@@ -139,7 +145,7 @@ def test_backtest_artifact_is_checksummed_and_corruption_is_detected(
     assert decoded["run_id"] == saved.run_id
     assert decoded["win_rate_percent"] == "50"
     assert decoded["exposure_percent"] == "25"
-    assert any("artifact_checksum_sha256" in statement for statement, _ in connection.statements)
+    assert decoded["economic_result_fingerprint"] == "e" * 64
 
     artifact_path = store.root.joinpath(*saved.artifact.storage_key.split("/"))
     artifact_path.write_bytes(b"corrupt")
@@ -230,6 +236,7 @@ def test_legal_operator_and_roadmap_review_records_are_present() -> None:
     ).read_text()
     assert "Pending environment run" in certification
     assert "PR #1488 remains draft" in certification
+    assert "immutable pull-request-head checkout" in certification
 
     operations = Path(
         "docs/architecture/OMNIX_TRADING_OPERATIONS.md"
@@ -259,6 +266,13 @@ def test_release_migrations_preserve_integrity_evidence() -> None:
     for column in (
         "win_rate_percent",
         "exposure_percent",
+        "ending_cash",
+        "ending_position",
+        "ending_mark_price",
+        "realized_pnl",
+        "unrealized_pnl",
+        "mark_to_market_policy",
+        "economic_result_fingerprint",
         "artifact_storage_provider",
         "artifact_storage_key",
         "artifact_checksum_sha256",
@@ -266,3 +280,4 @@ def test_release_migrations_preserve_integrity_evidence() -> None:
     ):
         assert column in artifacts
     assert "length(artifact_checksum_sha256) = 64" in artifacts
+    assert "length(economic_result_fingerprint) = 64" in artifacts
