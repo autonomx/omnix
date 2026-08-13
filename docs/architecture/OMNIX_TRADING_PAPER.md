@@ -28,11 +28,32 @@ The initial simulation supports:
 
 Limit and stop prices are required only for their corresponding order type. Market orders reject limit or stop fields.
 
+## Buying-power and position reservations
+
+Open orders reserve resources transactionally so multiple pending orders cannot spend the same buying power or sell the same position twice.
+
+- Limit and stop BUY orders reserve trigger-price notional plus the configured commission.
+- A MARKET BUY has no authoritative placement price, so it conservatively reserves all currently free cash until the next normalized observation fills or rejects the order.
+- SELL orders reserve their requested quantity from the canonical-instrument position.
+- Cancellation, rejection, and successful fill release or consume the corresponding reservation atomically.
+- Account snapshots expose free and reserved cash, while position snapshots expose reserved quantity.
+
+An idempotency-key retry is accepted only when the semantic order payload matches the original order. Reusing a key with a different order ID, instrument, binding, side, type, quantity, limit price, or stop price fails with `paper_idempotency_payload_mismatch` instead of silently returning an unrelated prior order.
+
 ## Fill and accounting behavior
 
-The gateway paper monitor groups open orders by instrument and requested feed, obtains one normalized quote per group, and evaluates all affected accounts while the browser is closed.
+The gateway paper monitor groups open orders by instrument and requested feed, obtains one normalized observation per group, and evaluates all affected accounts while the browser is closed.
 
-For a fill, the repository locks account, balance, position, and open-order rows. The fill, cash balance, position, order status, and ledger entries commit in one transaction. Fill and ledger idempotency keys prevent duplicate accounting during retries or concurrent gateway workers.
+Market orders fill at the observation price. Limit and stop simulation uses the observation range when high/low values are available:
+
+- BUY limit: triggered when `low <= limit_price`;
+- SELL limit: triggered when `high >= limit_price`;
+- BUY stop: triggered when `high >= stop_price`;
+- SELL stop: triggered when `low <= stop_price`.
+
+Triggered limit/stop orders fill deterministically at their configured limit/stop price. If high/low are unavailable, the current observation price is used as both ends of the evaluation range, preserving the previous quote-only behavior.
+
+For a fill, the repository locks account, balance, position, and open-order rows. The fill, reservation release/consumption, cash balance, position, order status, and ledger entries commit in one transaction. Fill and ledger idempotency keys prevent duplicate accounting during retries or concurrent gateway workers.
 
 Existing positions are marked to the latest normalized observation even when an open order does not fill. Realized and unrealized P&L use persisted fills, average cost, and persisted marks.
 
