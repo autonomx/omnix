@@ -70,6 +70,7 @@ from .rpg_world_generation_review_routes import (
 from .rpg_world_image_routes import install_rpg_world_image_route_hook
 from .rpg_world_profile_routes import install_rpg_world_profile_route_hook
 from .rpg_world_routes import install_rpg_world_route_hook
+from .trading_routes import install_trading_route_hook
 from .tts_live_call_pcm_diagnostics import (
     install_tts_live_call_pcm_diagnostics_hook,
 )
@@ -145,6 +146,7 @@ def _install_required_rpg_turn_hooks() -> None:
 _install_local_browser_cors_hook()
 install_assistant_context_route_hook()
 install_research_mode_route_hook()
+install_trading_route_hook()
 install_rpg_debug_route_hook()
 install_rpg_geometry_patch_route_hook()
 install_rpg_grid_performance_route_hook()
