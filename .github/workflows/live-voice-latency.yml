@@ -73,6 +73,9 @@ jobs:
           # The NeMo streaming import is deliberately lazy inside the stream
           # constructor. Keep all other Ruff checks active for that module.
           ruff check --ignore I001 src/app/providers/nemotron_eou_streaming.py
+          # The API-only benchmark imports this conftest at collection time, so
+          # keep its browser-parity orchestration under the focused static gate.
+          ruff check src/tests/e2e/conftest.py
           # E2E transport guards intentionally translate malformed wire payloads
           # to RuntimeError and use best-effort cleanup. Keep every other rule,
           # including parser/import/name checks, active on the API harness.
