@@ -7,19 +7,19 @@ import {
 } from './live-tts-adaptive-buffer-controller';
 
 describe('adaptive live TTS buffering', () => {
-  it('starts just above one 160 ms Qwen startup frame at 24 kHz', () => {
+  it('starts from one 80 ms Qwen startup frame at 24 kHz', () => {
     const policy = new AdaptiveTtsBufferPolicy();
     const snapshot = policy.snapshot();
 
     expect(snapshot).toMatchObject({
-      startBufferMs: 170,
+      startBufferMs: 80,
       rebufferMs: 520,
       stableTurns: 0,
       underrunTurns: 0,
     });
     expect(adaptiveBufferWorkletMessage(snapshot, 24_000)).toMatchObject({
-      startBufferSamples: 4_080,
-      minimumBufferedSpeechSamples: 4_080,
+      startBufferSamples: 1_920,
+      minimumBufferedSpeechSamples: 1_920,
       rebufferSamples: 12_480,
     });
   });
@@ -28,39 +28,39 @@ describe('adaptive live TTS buffering', () => {
     const policy = new AdaptiveTtsBufferPolicy();
 
     expect(policy.observeWorkletEvent('underrun')).toMatchObject({
-      startBufferMs: 240,
+      startBufferMs: 150,
       rebufferMs: 630,
     });
     expect(policy.observeWorkletEvent('drained')).toMatchObject({
-      startBufferMs: 240,
+      startBufferMs: 150,
       rebufferMs: 630,
       stableTurns: 0,
       underrunTurns: 1,
     });
   });
 
-  it('never decays below the one-frame startup safety floor', () => {
+  it('never decays below the one-frame startup floor', () => {
     const policy = new AdaptiveTtsBufferPolicy();
 
     policy.observeWorkletEvent('drained');
     policy.observeWorkletEvent('drained');
-    expect(policy.snapshot().startBufferMs).toBe(170);
+    expect(policy.snapshot().startBufferMs).toBe(80);
 
     expect(policy.observeWorkletEvent('drained')).toMatchObject({
-      startBufferMs: 170,
+      startBufferMs: 80,
       rebufferMs: 490,
       stableTurns: 0,
     });
   });
 
-  it('clamps a persisted legacy sub-frame reserve to the new floor', () => {
+  it('clamps a sub-frame reserve to the 80 ms floor', () => {
     const policy = new AdaptiveTtsBufferPolicy({
-      startBufferMs: 140,
+      startBufferMs: 60,
       rebufferMs: 490,
     });
 
     expect(policy.snapshot()).toMatchObject({
-      startBufferMs: 170,
+      startBufferMs: 80,
       rebufferMs: 490,
     });
   });
@@ -136,7 +136,7 @@ describe('adaptive live TTS buffering', () => {
     expect(guard.handleOutbound({
       type: 'set_start_policy',
       notBeforeRenderSample: 0,
-      minimumBufferedSpeechSamples: 3_840,
+      minimumBufferedSpeechSamples: 1_920,
     })).toEqual({ forward: true, cancelSegmentIds: [] });
     expect(guard.handleOutbound({
       type: 'push_segment_silence',
