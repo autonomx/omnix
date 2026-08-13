@@ -68,6 +68,36 @@ describe('live chat workspace controller', () => {
     expect(document.querySelectorAll('[data-omnix-live-chat-host]')).toHaveLength(1);
   });
 
+  it('reconciles persisted chat history after terminal live response diagnostics', async () => {
+    installWorkspaceShell();
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ok: true })));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
+    disposeWorkspace = initializeLiveChatWorkspace(queryClient);
+
+    await window.fetch('/api/chat/sessions/chat%3Aone/interaction');
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: { event: 'turn_finished', details: { turn_kind: 'response' } },
+    }));
+
+    await waitFor(() => {
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['feature', 'chatbot', 'session', 'chat:one'],
+        exact: true,
+      });
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['feature', 'chatbot', 'sessions'],
+        exact: true,
+      });
+    });
+
+    invalidateQueries.mockClear();
+    window.dispatchEvent(new CustomEvent('omnix:live-call-diagnostic', {
+      detail: { event: 'turn_finished', details: { turn_kind: 'greeting' } },
+    }));
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+
   it('mounts a selected-session Live Chat panel with the application QueryClient', async () => {
     installWorkspaceShell();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
