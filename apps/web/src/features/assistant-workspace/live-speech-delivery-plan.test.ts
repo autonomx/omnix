@@ -22,6 +22,28 @@ describe('live speech delivery plan', () => {
     expect(plan.nonverbal_eligibility.sigh).toBe(true);
   });
 
+  it('keeps adaptive onset below the first-audio latency budget', () => {
+    const plan = createSpeechDeliveryPlan('Let us start with the practical answer.', profile, false);
+
+    expect(plan.onset_policy).toEqual({
+      desired_perceived_onset_ms: 120,
+      maximum_additional_delay_ms: 80,
+    });
+  });
+
+  it('removes deliberate onset delay for immediate profiles', () => {
+    const immediateProfile: LiveConversationProfile = {
+      ...profile,
+      response_onset_style: 'immediate',
+    };
+    const plan = createSpeechDeliveryPlan('Yes, exactly.', immediateProfile, false);
+
+    expect(plan.onset_policy).toEqual({
+      desired_perceived_onset_ms: 0,
+      maximum_additional_delay_ms: 0,
+    });
+  });
+
   it('attaches the plan without using sampling controls as emotion proxies', () => {
     const engagedProfile: LiveConversationProfile = { ...profile, conversation_stance: 'discuss' };
     const plan = createSpeechDeliveryPlan('That is GREAT news!', engagedProfile, false);

@@ -2,19 +2,28 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
-from typing import Any, Callable, Iterable
+from typing import Any
 
-from app.assist_core.live_agent_planner import LiveAgentUnavailable, plan_live_agent_proposal
+from pydantic import ValidationError
+
+from app.assist_core.live_agent_planner import (
+    LiveAgentUnavailable,
+    plan_live_agent_proposal,
+)
 from app.assist_core.live_agent_router import (
     LiveAgentRouteDecision,
     live_agent_runtime_config,
     resolve_live_agent_route,
 )
 from app.assist_core.mode_chat import ModeChatRequest, plan_mode_chat
-from app.assistant_tools.live_agent_proposals import live_agent_planner_context, live_agent_tool_proposals
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.kasa_plan import first_pending_kasa_write
+from app.assistant_tools.live_agent_proposals import (
+    live_agent_planner_context,
+    live_agent_tool_proposals,
+)
 from app.assistant_tools.models import AssistantToolRequest
 
 from .assistant_turns import default_assistant_turn_coordinator
@@ -24,11 +33,11 @@ from .store import _pop_ready_sentences
 _HOOK = "_omnix_live_agent_stream_installed"
 _CONFIRM = re.compile(
     r"^(?:yes|yes[, ]+do it|confirm|confirmed|approve|go ahead|proceed|do it)[.!\s]*$",
-    re.I,
+    re.IGNORECASE,
 )
 _REJECT = re.compile(
     r"^(?:no|nope|cancel|reject|do not|don't do it|never mind|nevermind)[.!\s]*$",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -79,7 +88,6 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 return
 
             decision = _decision(user_message)
-            _persist_route(self, session.id, user_message.id, decision)
             if decision.route != "agent_plan":
                 yield from _provider_with_route(
                     _original(
@@ -91,17 +99,34 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                         context_items=context_items,
                     ),
                     decision,
+                    persist_route=lambda: _persist_route(
+                        self,
+                        session.id,
+                        user_message.id,
+                        decision,
+                    ),
                 )
                 return
+
+            _persist_route(self, session.id, user_message.id, decision)
             if decision.automatic:
                 try:
                     response = plan_live_agent_proposal(
-                        content=_contextual_content(user_message.content, context_items or []),
+                        content=_contextual_content(
+                            user_message.content,
+                            context_items or [],
+                        ),
                         session_id=session.id,
-                        context={"route_reason": decision.reason, **live_agent_planner_context()},
-                        timeout_seconds=live_agent_runtime_config().planner_timeout_seconds,
+                        context={
+                            "route_reason": decision.reason,
+                            **live_agent_planner_context(),
+                        },
+                        timeout_seconds=(
+                            live_agent_runtime_config().planner_timeout_seconds
+                        ),
                     )
                 except LiveAgentUnavailable as exc:
+                    fallback_error = str(exc)
                     fallback = decision.model_copy(
                         update={
                             "route": "direct_chat",
@@ -109,7 +134,6 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                             "review_required": False,
                         }
                     )
-                    _persist_route(self, session.id, user_message.id, fallback, error=str(exc))
                     yield from _provider_with_route(
                         _original(
                             self,
@@ -120,16 +144,29 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                             context_items=context_items,
                         ),
                         fallback,
-                        error=str(exc),
+                        error=fallback_error,
+                        persist_route=lambda fallback_error=fallback_error: _persist_route(
+                            self,
+                            session.id,
+                            user_message.id,
+                            fallback,
+                            error=fallback_error,
+                        ),
                     )
                     return
             else:
                 response = plan_mode_chat(
                     ModeChatRequest(
-                        content=_contextual_content(user_message.content, context_items or []),
+                        content=_contextual_content(
+                            user_message.content,
+                            context_items or [],
+                        ),
                         session_id=session.id,
                         dry_run=True,
-                        metadata={"source": "explicit_live_agent", "proposal_only": True},
+                        metadata={
+                            "source": "explicit_live_agent",
+                            "proposal_only": True,
+                        },
                     )
                 )
             yield from _agent_events(
@@ -151,7 +188,9 @@ def _decision(user_message: ChatMessage) -> LiveAgentRouteDecision:
         requested_mode=requested_mode,
         agent_mode=bool(user_message.metadata.get("agent_mode")),
         user_turn_id=str(user_message.metadata.get("user_turn_id") or "") or None,
-        speech_segment_id=str(user_message.metadata.get("speech_segment_id") or "") or None,
+        speech_segment_id=(
+            str(user_message.metadata.get("speech_segment_id") or "") or None
+        ),
     )
 
 
@@ -163,7 +202,9 @@ def _agent_events(
     session_id: str,
 ):
     coordinator = default_assistant_turn_coordinator()
-    assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
+    assistant_turn_id = str(
+        user_message.metadata.get("assistant_turn_id") or ""
+    ).strip()
     if assistant_turn_id:
         coordinator.mark_streaming(assistant_turn_id)
     payload = response.result
@@ -185,7 +226,9 @@ def _agent_events(
     )
     review_required = pending is not None or bool(payload.get("requires_confirmation"))
     proposal_only = review_required or not read_executed
-    content = str(payload.get("response") or "Live Agent returned no proposal.").strip()
+    content = str(
+        payload.get("response") or "Live Agent returned no proposal."
+    ).strip()
     if pending is not None:
         content = f"{content} {_confirmation_prompt(pending)}".strip()
     try:
@@ -220,7 +263,9 @@ def _agent_events(
                 "proposal_only": proposal_only,
                 "review_required": review_required,
                 "executes": read_executed,
-                "pending_tool_request": pending.model_dump(mode="json") if pending else None,
+                "pending_tool_request": (
+                    pending.model_dump(mode="json") if pending else None
+                ),
                 "kasa_execution_status": "pending" if pending else None,
                 "live_agent_route": decision.model_dump(mode="json"),
             },
@@ -237,17 +282,29 @@ def _provider_with_route(
     decision: LiveAgentRouteDecision,
     *,
     error: str | None = None,
+    persist_route: Callable[[], None] | None = None,
 ):
     for event in events:
         if event.get("type") == "complete":
-            metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+            if persist_route is not None:
+                persist_route()
+                persist_route = None
+            metadata = (
+                event.get("metadata")
+                if isinstance(event.get("metadata"), dict)
+                else {}
+            )
             event = {
                 **event,
                 "metadata": {
                     **metadata,
                     "live_agent": False,
                     "live_agent_route": decision.model_dump(mode="json"),
-                    **({"live_agent_fallback_error": error[:500]} if error else {}),
+                    **(
+                        {"live_agent_fallback_error": error[:500]}
+                        if error
+                        else {}
+                    ),
                 },
             }
         yield event
@@ -293,9 +350,12 @@ def _pending_kasa_proposal(
             continue
         try:
             request = AssistantToolRequest.model_validate(raw)
-        except Exception:
+        except ValidationError:
             continue
-        if request.tool_id == "kasa" and request.action_id in {"kasa.turn_on", "kasa.turn_off"}:
+        if request.tool_id == "kasa" and request.action_id in {
+            "kasa.turn_on",
+            "kasa.turn_off",
+        }:
             return message, request
     return None
 
@@ -317,7 +377,9 @@ def _mark_kasa_proposal(
                 continue
             message.metadata["kasa_execution_status"] = status
             message.metadata["kasa_execution_result"] = result
-            message.metadata["kasa_execution_updated_at"] = datetime.now(timezone.utc).isoformat()
+            message.metadata["kasa_execution_updated_at"] = datetime.now(
+                timezone.utc
+            ).isoformat()
             break
         sessions[index] = session
         store._save_sessions(sessions)
@@ -326,7 +388,9 @@ def _mark_kasa_proposal(
 
 def _kasa_execution_events(user_message: ChatMessage, payload):
     coordinator = default_assistant_turn_coordinator()
-    assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
+    assistant_turn_id = str(
+        user_message.metadata.get("assistant_turn_id") or ""
+    ).strip()
     if assistant_turn_id:
         coordinator.mark_streaming(assistant_turn_id)
     result = payload.execution_result
@@ -361,8 +425,13 @@ def _kasa_execution_events(user_message: ChatMessage, payload):
         raise
 
 
-def _kasa_rejection_events(user_message: ChatMessage, request: AssistantToolRequest):
-    assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
+def _kasa_rejection_events(
+    user_message: ChatMessage,
+    request: AssistantToolRequest,
+):
+    assistant_turn_id = str(
+        user_message.metadata.get("assistant_turn_id") or ""
+    ).strip()
     content = "Cancelled. I did not change the Kasa plug."
     yield {"type": "text_chunk", "text": content}
     yield {
@@ -395,10 +464,16 @@ def _confirmation_choice(content: str) -> str | None:
 def _confirmation_prompt(request: AssistantToolRequest) -> str:
     action = "turn on" if request.action_id == "kasa.turn_on" else "turn off"
     target = str(request.input.get("target") or "the selected Kasa plug")
-    return f"This will {action} {target}. Say 'confirm' to run it or 'cancel' to reject it."
+    return (
+        f"This will {action} {target}. "
+        "Say 'confirm' to run it or 'cancel' to reject it."
+    )
 
 
-def _contextual_content(content: str, context_items: list[dict[str, Any]]) -> str:
+def _contextual_content(
+    content: str,
+    context_items: list[dict[str, Any]],
+) -> str:
     if not context_items:
         return content
     sources = [

@@ -119,11 +119,13 @@ const ASSISTANT_VIEW_STORAGE_KEY = 'omnix.chatbot.activeView';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
+const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
 const STREAMING_TTS_START_DELAY_SECONDS = 0.09;
 const STREAMING_TTS_RECOVERY_DELAY_SECONDS = 0.05;
 const STREAMED_TTS_MIN_PHRASE_CHARS = 90;
 const LIVE_VOICE_AUTO_SEND_DELAY_MS = 600;
+const LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS = 0;
 
 function liveVoiceSubmissionKey(content: string): string {
   return content.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}']+/gu, ' ').trim();
@@ -260,6 +262,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveVoiceSubmissionInFlightRef = useRef(false);
   const liveVoiceActiveRef = useRef(false);
+  const pendingLiveSessionProjectionRef = useRef<ApiChatSession | null>(null);
+  const pendingLiveComposerResetRef = useRef(false);
+  const pendingLiveProjectionCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSubmittedVoiceTextRef = useRef('');
   const voiceTurnPerformanceRef = useRef<VoiceTurnPerformance | null>(null);
   const voiceTurnDiagnosticsRef = useRef<LiveCallDiagnosticsReporter | null>(null);
@@ -507,6 +512,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       dispatchLiveVoiceStop();
       stopVoiceInput();
       stopAssistantResponseAudio();
+      if (pendingLiveProjectionCommitTimerRef.current !== null) {
+        window.clearTimeout(pendingLiveProjectionCommitTimerRef.current);
+        pendingLiveProjectionCommitTimerRef.current = null;
+      }
       void voiceTurnDiagnosticsRef.current?.close('workspace_unmounted');
       voiceTurnDiagnosticsRef.current = null;
     };
@@ -517,6 +526,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
     return () => window.removeEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
   }, []);
+
+  useEffect(() => {
+    const handleDiagnostic = (event: Event) => {
+      const detail = (event as CustomEvent<{ event?: unknown }>).detail;
+      if (detail?.event === 'turn_finished') commitPendingLiveSessionProjection();
+    };
+    window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
+    return () => window.removeEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
+  }, [autoSpeakResponses, queryClient]);
 
   useEffect(() => {
     const handlePerfEvent = (event: Event) => {
@@ -623,6 +641,38 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     return liveCallRuntimeRef.current?.display_name || 'Omnix Assistant';
   }
 
+  function commitPendingLiveSessionProjection(): void {
+    if (pendingLiveProjectionCommitTimerRef.current !== null) {
+      window.clearTimeout(pendingLiveProjectionCommitTimerRef.current);
+      pendingLiveProjectionCommitTimerRef.current = null;
+    }
+    const session = pendingLiveSessionProjectionRef.current;
+    if (session) {
+      pendingLiveSessionProjectionRef.current = null;
+      if (autoSpeakResponses) markAssistantMessagesSpoken(session);
+      queryClient.setQueryData(['feature', 'chatbot', 'session', session.id], session);
+    }
+    if (pendingLiveComposerResetRef.current) {
+      pendingLiveComposerResetRef.current = false;
+      setLiveTranscript('');
+      setLiveInterimTranscript('');
+      setValue('content', '', {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }
+
+  function schedulePendingLiveSessionProjection(): void {
+    if (!liveVoiceActiveRef.current || pendingLiveSessionProjectionRef.current === null) return;
+    if (pendingLiveProjectionCommitTimerRef.current !== null) return;
+    pendingLiveProjectionCommitTimerRef.current = window.setTimeout(() => {
+      pendingLiveProjectionCommitTimerRef.current = null;
+      if (liveVoiceActiveRef.current) commitPendingLiveSessionProjection();
+    }, LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS);
+  }
+
   async function startLiveCall(): Promise<void> {
     if (callStartedAt !== null) return;
     setActiveUtilityPanel('voice');
@@ -714,11 +764,16 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     dispatchLiveVoiceStop();
     stopVoiceInput();
     stopAssistantResponseAudio();
+    commitPendingLiveSessionProjection();
     setCallStartedAt(null);
     setCallElapsedMs(0);
     liveCallRuntimeRef.current = null;
     setLiveCallRuntime(null);
     setAudioStatus('Live voice call ended.');
+    // Each streamed response already installs its authoritative session in the
+    // query cache. Reconcile list/interaction projections once the latency-
+    // sensitive call is over instead of competing with browser PCM delivery.
+    void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
   }
 
   async function startVoiceInput(): Promise<void> {
@@ -1002,28 +1057,50 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             }
             responseText = mergeTranscript(responseText, event.text);
             speechBuffer = mergeTranscript(speechBuffer, event.text);
-            setAudioStatus('Assistant response streaming.');
+            // Updating workspace state for each live token re-renders the full
+            // conversation projection (often hundreds of messages) while PCM
+            // frames are arriving. The call controller already owns the live
+            // status surface, so keep this text-mode update off the hot path.
+            if (!liveVoiceActiveRef.current) setAudioStatus('Assistant response streaming.');
             if (autoSpeakResponses && shouldFlushStreamedSpeechBuffer(speechBuffer)) {
               queueStreamedAssistantAudio(speechBuffer);
               speechBuffer = '';
             }
           }
           if (event.type === 'session' && event.session) {
-            if (autoSpeakResponses) markAssistantMessagesSpoken(event.session);
-            queryClient.setQueryData(['feature', 'chatbot', 'session', event.session.id], event.session);
+            if (liveVoiceActiveRef.current) {
+              // A full live session can contain hundreds of messages. Project it
+              // after playback so React work cannot block arriving PCM frames.
+              pendingLiveSessionProjectionRef.current = event.session;
+            } else {
+              if (autoSpeakResponses) markAssistantMessagesSpoken(event.session);
+              queryClient.setQueryData(['feature', 'chatbot', 'session', event.session.id], event.session);
+            }
           }
         }
       }
-      setLiveTranscript('');
-      setLiveInterimTranscript('');
-      setValue('content', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+      if (liveVoiceActiveRef.current) {
+        pendingLiveComposerResetRef.current = true;
+        // The audio controller normally commits this projection at
+        // turn_finished. Keep the chat screen correct even when that
+        // controller is unavailable or audio completion is interrupted.
+        schedulePendingLiveSessionProjection();
+      } else {
+        setLiveTranscript('');
+        setLiveInterimTranscript('');
+        setValue('content', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+      }
       if (autoSpeakResponses && speechBuffer.trim()) queueStreamedAssistantAudio(speechBuffer);
       markVoiceTurnPerformance('llmCompletedAt');
       recordVoiceTurnDiagnostic('llm_stream_completed', {
         response_chars: responseText.length,
       });
-      await queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
-      setAudioStatus(responseText ? 'Response ready.' : 'Voice text sent.');
+      if (!liveVoiceActiveRef.current) {
+        await queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot'] });
+      }
+      if (!liveVoiceActiveRef.current) {
+        setAudioStatus(responseText ? 'Response ready.' : 'Voice text sent.');
+      }
     } catch (error) {
       recordVoiceTurnDiagnostic('chat_stream_failed', {
         error_name: error instanceof Error ? error.name : 'unknown',

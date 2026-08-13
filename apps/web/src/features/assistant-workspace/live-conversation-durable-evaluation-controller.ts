@@ -25,7 +25,7 @@ type ActiveCall = {
   callId: string;
   startedAt: string;
   eosTerminationCounts: Record<string, number>;
-  releaseLatencies: Record<LiveVoiceLatencyMetric, number[]>;
+  releaseLatencies: Partial<Record<LiveVoiceLatencyMetric, number[]>>;
   releaseQuality: Record<LiveVoiceQualityMetric, boolean[]>;
   duckToCancelMs: number[];
   rejectedCandidateRestoreMs: number[];
@@ -47,7 +47,9 @@ export function initializeLiveConversationDurableEvaluationController(): () => v
     const observation = (event as CustomEvent<LiveVoiceReleaseObservation>).detail;
     if (!observation) return;
     if (observation.kind === 'latency') {
-      activeCall.releaseLatencies[observation.metricName].push(observation.valueMs);
+      const values = activeCall.releaseLatencies[observation.metricName] ?? [];
+      values.push(observation.valueMs);
+      activeCall.releaseLatencies[observation.metricName] = values;
     } else {
       activeCall.releaseQuality[observation.qualityName].push(observation.occurred);
     }
@@ -123,10 +125,18 @@ export function buildDurableEvaluationPayload(
       rejected_candidate_restore_p95_ms: p95(call.rejectedCandidateRestoreMs),
       turn_duration_median_ms: report.turnDurationMs.median,
       turn_duration_p95_ms: report.turnDurationMs.p95,
-      stt_finalize_p95_ms: p95(call.releaseLatencies.stt_finalize_ms),
-      final_to_first_token_p95_ms: p95(call.releaseLatencies.final_to_first_token_ms),
-      first_token_to_first_audio_p95_ms: p95(call.releaseLatencies.first_token_to_first_audio_ms),
-      interruption_to_silence_p95_ms: p95(call.releaseLatencies.interruption_to_silence_ms),
+      stt_finalize_p95_ms: latencyP95(call, 'stt_finalize_ms'),
+      final_to_response_open_p95_ms: latencyP95(call, 'final_to_response_open_ms'),
+      response_open_to_first_token_p95_ms: latencyP95(call, 'response_open_to_first_token_ms'),
+      final_to_first_token_p95_ms: latencyP95(call, 'final_to_first_token_ms'),
+      first_token_to_first_audio_p95_ms: latencyP95(call, 'first_token_to_first_audio_ms'),
+      final_to_first_audio_p95_ms: latencyP95(call, 'final_to_first_audio_ms'),
+      stt_request_to_first_audio_p95_ms: latencyP95(call, 'stt_request_to_first_audio_ms'),
+      first_pcm_to_first_playback_p95_ms: latencyP95(call, 'first_pcm_to_first_playback_ms'),
+      first_token_to_first_playback_p95_ms: latencyP95(call, 'first_token_to_first_playback_ms'),
+      final_to_first_playback_p95_ms: latencyP95(call, 'final_to_first_playback_ms'),
+      stt_request_to_first_playback_p95_ms: latencyP95(call, 'stt_request_to_first_playback_ms'),
+      interruption_to_silence_p95_ms: latencyP95(call, 'interruption_to_silence_ms'),
     },
     quality_metrics: {
       event_count: report.eventCount,
@@ -186,8 +196,16 @@ function createActiveCall(): ActiveCall {
     },
     releaseLatencies: {
       stt_finalize_ms: [],
+      final_to_response_open_ms: [],
+      response_open_to_first_token_ms: [],
       final_to_first_token_ms: [],
       first_token_to_first_audio_ms: [],
+      final_to_first_audio_ms: [],
+      stt_request_to_first_audio_ms: [],
+      first_pcm_to_first_playback_ms: [],
+      first_token_to_first_playback_ms: [],
+      final_to_first_playback_ms: [],
+      stt_request_to_first_playback_ms: [],
       interruption_to_silence_ms: [],
     },
     releaseQuality: {
@@ -205,14 +223,19 @@ function terminationReason(detail: Record<string, unknown>): string {
   const direct = detail.termination_reason;
   if (typeof direct === 'string') return direct;
   const timing = detail.provider_timing;
-  if (timing && typeof timing === 'object' && typeof (timing as Record<string, unknown>).termination_reason === 'string') {
+  if (
+    timing
+    && typeof timing === 'object'
+    && typeof (timing as Record<string, unknown>).termination_reason === 'string'
+  ) {
     return String((timing as Record<string, unknown>).termination_reason);
   }
   return '';
 }
 
 function createCallId(): string {
-  const suffix = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const suffix = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   return `live-call:${suffix}`;
 }
 
@@ -241,7 +264,9 @@ function currentBrowserVersion(): string {
 }
 
 function currentOsVersion(): string {
-  const userAgentData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  const userAgentData = (
+    navigator as Navigator & { userAgentData?: { platform?: string } }
+  ).userAgentData;
   const platform = userAgentData?.platform || navigator.platform || 'unknown';
   const userAgent = navigator.userAgent || '';
   const windows = userAgent.match(/Windows NT [0-9.]+/i)?.[0];
@@ -258,22 +283,39 @@ function currentScenarioLabels(): string[] {
     .slice(0, 64);
 }
 
+function latencyP95(call: ActiveCall, metric: LiveVoiceLatencyMetric): number | null {
+  return p95(call.releaseLatencies[metric] ?? []);
+}
+
 function p95(values: number[]): number | null {
   if (!values.length) return null;
-  const ordered = [...values].filter(Number.isFinite).sort((left, right) => left - right);
+  const ordered = [...values]
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right);
   if (!ordered.length) return null;
-  return Number(ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)].toFixed(3));
+  return Number(
+    ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)].toFixed(3),
+  );
 }
 
 function booleanRate(values: boolean[]): number | null {
-  return values.length ? Number((values.filter(Boolean).length / values.length).toFixed(3)) : null;
+  return values.length
+    ? Number((values.filter(Boolean).length / values.length).toFixed(3))
+    : null;
 }
 
 function pushFinite(target: number[], value: unknown): void {
-  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) target.push(value);
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    target.push(value);
+  }
 }
 
-function environmentHash(calibration: { deviceKey: string; confidence: number; delayMs: number; noiseFloorRms: number }): string {
+function environmentHash(calibration: {
+  deviceKey: string;
+  confidence: number;
+  delayMs: number;
+  noiseFloorRms: number;
+}): string {
   const source = `${calibration.deviceKey}|${calibration.confidence.toFixed(3)}|${calibration.delayMs.toFixed(1)}|${calibration.noiseFloorRms.toFixed(5)}`;
   let hash = 2166136261;
   for (const character of source) {

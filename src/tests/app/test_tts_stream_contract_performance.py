@@ -234,3 +234,41 @@ def test_pcm_helpers_fall_back_when_numpy_is_unavailable(monkeypatch) -> None:
         threshold=0.01,
         preroll_ms=0.0,
     ) == 2
+
+
+def test_first_canonical_phrase_uses_two_codec_steps() -> None:
+    assert (
+        tts_stream_contract.chat_stream_codec_chunk_cap(
+            "conversation-chat-session-g7-p0"
+        )
+        == 2
+    )
+    assert (
+        tts_stream_contract.chat_stream_codec_chunk_cap(
+            "conversation-chat-session-g7-p1"
+        )
+        == 4
+    )
+    assert tts_stream_contract.chat_stream_codec_chunk_cap(None) == 4
+
+
+def test_chat_stream_request_caps_only_the_first_phrase_to_two_codec_steps() -> None:
+    first = TtsStreamRequest.model_validate(
+        {
+            "text": "Hello there.",
+            "diagnostics_stream_id": "chat-live-test",
+            "output_id": "conversation-chat-session-g8-p0",
+            "chunk_size": 12,
+        }
+    )
+    later = TtsStreamRequest.model_validate(
+        {
+            "text": "And the next sentence.",
+            "diagnostics_stream_id": "chat-live-test",
+            "output_id": "conversation-chat-session-g8-p1",
+            "chunk_size": 12,
+        }
+    )
+
+    assert first.chunk_size == 2
+    assert later.chunk_size == 4

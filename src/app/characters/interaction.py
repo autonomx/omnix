@@ -21,10 +21,6 @@ LEGACY_MAYA_SYSTEM_PROMPT = (
     "maintain a natural, human-like presence."
 )
 _ALLOWED_SHARED_CATEGORIES = {"preference", "fact", "project", "relationship", "instruction"}
-_HARD_IDENTITY_DISCLOSURE = (
-    "You are an AI character, not a human. Never claim human identity or real-world "
-    "personal experiences. If your identity is relevant, clearly disclose that you are an AI character."
-)
 
 
 class CharacterInteractionError(ValueError):
@@ -156,31 +152,21 @@ def resolve_interaction_context(
     if not character.enabled:
         raise CharacterResolutionError("character profile is disabled")
 
-    identity_policy = _validated_identity_policy(character)
-    shared_categories: list[str] = []
+    # Keep governance validation server-side, but do not turn policy metadata or
+    # generic assistant wording into competing model instructions. Character
+    # Mode has one authoritative persona prompt: the saved personality prompt.
+    _validated_identity_policy(character)
     if selection.shared_memory_access != "none":
         if not character_shared_memory_enabled():
             raise CharacterInteractionError("shared character memory access is disabled")
-        shared_categories = _validate_shared_memory_policy(character)
+        _validate_shared_memory_policy(character)
     if (selection.read_memory or selection.write_memory) and not character_memory_enabled():
         raise CharacterInteractionError("character memory is disabled")
 
     # A character's governed default voice is authoritative for Character Mode.
     # The session selection remains a fallback for legacy profiles without one.
     voice_asset_id = selection.voice_asset_id or character.default_voice_asset_id
-    assistant_identity = [
-        _HARD_IDENTITY_DISCLOSURE,
-        f"You are {character.display_name}, an AI character in Omnix.",
-        character.personality_prompt.strip(),
-        "Character identity policy (server controlled): "
-        + json.dumps(identity_policy, sort_keys=True, separators=(",", ":")),
-    ]
-    if shared_categories:
-        assistant_identity.append(
-            "Shared System Assistant memory is read-only and limited to these categories: "
-            + ", ".join(shared_categories)
-            + ". Never treat shared memory as permission to write System Assistant memory."
-        )
+    assistant_identity = [character.personality_prompt.strip()]
     payload = {
         "interaction_mode": "character",
         "owner_type": "character",

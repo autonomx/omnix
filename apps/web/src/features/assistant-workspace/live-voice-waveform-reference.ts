@@ -3,6 +3,11 @@ export type WaveformSimilarity = {
   lagSamples: number | null;
   lagMs: number | null;
   comparedSamples: number;
+  alignedPlaybackRms: number | null;
+  alignedMicrophoneRms: number | null;
+  estimatedEchoGain: number | null;
+  residualRms: number | null;
+  residualRatio: number | null;
 };
 
 export class BoundedWaveformReference {
@@ -68,11 +73,9 @@ export function compareRecentWaveforms(
   playbackHistory: Float32Array,
   microphoneInput: Float32Array,
   sampleRate: number,
-  maxLagMs = 300,
+  maxLagMs = 900,
 ): WaveformSimilarity {
   if (!playbackHistory.length || microphoneInput.length < 16) return emptySimilarity();
-  const boundedMicrophone = boundedDownsample(microphoneInput, 2_048);
-  const scale = microphoneInput.length / Math.max(1, boundedMicrophone.length);
   const minimumOverlap = Math.min(
     microphoneInput.length,
     Math.max(16, Math.min(256, Math.ceil(microphoneInput.length * 0.6))),
@@ -82,18 +85,22 @@ export function compareRecentWaveforms(
     Math.max(0, Math.round(sampleRate * maxLagMs / 1_000)),
   );
   if (lagLimit < 0) return emptySimilarity();
-  const lagStep = Math.max(1, Math.round(scale));
   let bestSimilarity = -1;
   let bestLag = 0;
   let bestCount = 0;
+  let bestDot = 0;
+  let bestPlaybackEnergy = 0;
+  let bestMicrophoneEnergy = 0;
 
-  for (let lag = 0; lag <= lagLimit; lag += lagStep) {
+  // Keep single-sample lag precision, but bound each candidate to at most ~256
+  // waveform points so a 900 ms echo search does not create a main-thread stall.
+  for (let lag = 0; lag <= lagLimit; lag += 1) {
     const playbackEnd = playbackHistory.length - lag;
     const compared = Math.min(microphoneInput.length, playbackEnd);
     if (compared < minimumOverlap) continue;
     const playbackStart = playbackEnd - compared;
     const microphoneStart = microphoneInput.length - compared;
-    const stride = Math.max(1, Math.ceil(compared / 2_048));
+    const stride = Math.max(1, Math.ceil(compared / 256));
     let dot = 0;
     let playbackEnergy = 0;
     let microphoneEnergy = 0;
@@ -112,30 +119,56 @@ export function compareRecentWaveforms(
       bestSimilarity = similarity;
       bestLag = lag;
       bestCount = count;
+      bestDot = dot;
+      bestPlaybackEnergy = playbackEnergy;
+      bestMicrophoneEnergy = microphoneEnergy;
     }
   }
 
-  if (bestSimilarity < 0) return emptySimilarity();
+  if (bestSimilarity < 0 || bestCount <= 0) return emptySimilarity();
+  const alignedPlaybackRms = Math.sqrt(bestPlaybackEnergy / bestCount);
+  const alignedMicrophoneRms = Math.sqrt(bestMicrophoneEnergy / bestCount);
+  const estimatedEchoGain = bestPlaybackEnergy > 1e-9
+    ? bestDot / bestPlaybackEnergy
+    : null;
+  const residualEnergy = estimatedEchoGain === null
+    ? bestMicrophoneEnergy
+    : Math.max(
+      0,
+      bestMicrophoneEnergy
+        - 2 * estimatedEchoGain * bestDot
+        + estimatedEchoGain * estimatedEchoGain * bestPlaybackEnergy,
+    );
+  const residualRms = Math.sqrt(residualEnergy / bestCount);
+  const residualRatio = alignedMicrophoneRms > 1e-6
+    ? clamp01(residualRms / alignedMicrophoneRms)
+    : null;
+
   return {
     similarity: clamp01(bestSimilarity),
     lagSamples: bestLag,
     lagMs: bestLag * 1_000 / Math.max(1, sampleRate),
     comparedSamples: bestCount,
+    alignedPlaybackRms,
+    alignedMicrophoneRms,
+    estimatedEchoGain,
+    residualRms,
+    residualRatio,
   };
 }
 
-function boundedDownsample(samples: Float32Array, maximum: number): Float32Array {
-  if (samples.length <= maximum) return samples;
-  const result = new Float32Array(maximum);
-  const stride = samples.length / maximum;
-  for (let index = 0; index < maximum; index += 1) {
-    result[index] = samples[Math.min(samples.length - 1, Math.floor(index * stride))];
-  }
-  return result;
-}
-
 function emptySimilarity(): WaveformSimilarity {
-  return { similarity: null, lagSamples: null, lagMs: null, comparedSamples: 0 };
+  return {
+    similarity: null,
+    lagSamples: null,
+    lagMs: null,
+    comparedSamples: 0,
+    alignedPlaybackRms: null,
+    alignedMicrophoneRms: null,
+    estimatedEchoGain: null,
+    residualRms: null,
+    residualRatio: null,
+  };
 }
 
 function clamp01(value: number): number {

@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib
 import math
 import re
+import sys
 from typing import Any, Iterator
 
 from pydantic import BaseModel, Field, model_validator
@@ -19,13 +20,28 @@ except ImportError:  # pragma: no cover - exercised in minimal dependency enviro
 DEFAULT_SAMPLE_RATE = 24_000
 STREAM_OUTPUT_BLOCK_SAMPLES = 2_048
 STREAM_INITIAL_SILENCE_THRESHOLD = 0.01
+STREAM_INITIAL_FALLBACK_THRESHOLD = 0.0025
 STREAM_INITIAL_PREROLL_MS = 40.0
-CHAT_STREAM_MIN_NEW_TOKENS = 96
+STREAM_MAX_INITIAL_SILENCE_MS = 400.0
+# Qwen3-TTS emits roughly 80 ms of audio per codec step. A 96-step minimum
+# allowed a 14-character tail that missed EOS to produce about 7 seconds of
+# speech. Keep only enough floor for very short acknowledgements; ordinary
+# clauses continue to receive per-character headroom from the estimator below.
+CHAT_STREAM_MIN_NEW_TOKENS = 32
 CHAT_STREAM_MAX_NEW_TOKENS = 1_024
 CHAT_STREAM_TOKEN_NUMERATOR = 9
 CHAT_STREAM_TOKEN_DENOMINATOR = 8
 CHAT_STREAM_TOKEN_OVERHEAD = 24
 CHAT_STREAM_MIN_REPETITION_PENALTY = 1.05
+# Qwen3-TTS emits roughly 80 ms of 24 kHz audio per codec step. Keep ordinary
+# clauses capped at four steps for decoder throughput, but let the first spoken
+# phrase of each accepted response use two steps so decoder overhead is
+# amortized across 160 ms of speech. A one-step / 80 ms chunk has essentially
+# no cadence reserve and starves playback under ordinary scheduling jitter.
+# Conversation output IDs encode their response-local phrase index as ``-pN``.
+CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS = 2
+CHAT_STREAM_MAX_CODEC_CHUNK_STEPS = 4
+_FIRST_CONVERSATION_PHRASE_PATTERN = re.compile(r"-g\d+-p0$")
 
 
 class TtsPronunciationEntry(BaseModel):
@@ -57,6 +73,14 @@ def estimate_chat_stream_max_new_tokens(text: str) -> int:
         + CHAT_STREAM_TOKEN_OVERHEAD
     )
     return max(CHAT_STREAM_MIN_NEW_TOKENS, min(CHAT_STREAM_MAX_NEW_TOKENS, estimated))
+
+
+def chat_stream_codec_chunk_cap(output_id: str | None) -> int:
+    """Use the two-step startup path only for the first canonical response phrase."""
+    normalized_output_id = (output_id or "").strip()
+    if _FIRST_CONVERSATION_PHRASE_PATTERN.search(normalized_output_id):
+        return CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS
+    return CHAT_STREAM_MAX_CODEC_CHUNK_STEPS
 
 
 class TtsStreamRequest(BaseModel):
@@ -91,6 +115,7 @@ class TtsStreamRequest(BaseModel):
         if not stream_id.startswith("chat-"):
             return self
         self.parity_mode = False
+        self.chunk_size = min(self.chunk_size, chat_stream_codec_chunk_cap(self.output_id))
         token_budget = estimate_chat_stream_max_new_tokens(self.text)
         if self.max_new_tokens is None or self.max_new_tokens > token_budget:
             self.max_new_tokens = token_budget
@@ -107,13 +132,26 @@ def stream_pcm16_blocks(
     block_samples: int = STREAM_OUTPUT_BLOCK_SAMPLES,
     silence_threshold: float = STREAM_INITIAL_SILENCE_THRESHOLD,
     preroll_ms: float = STREAM_INITIAL_PREROLL_MS,
+    max_initial_silence_ms: float = STREAM_MAX_INITIAL_SILENCE_MS,
+    fallback_threshold: float = STREAM_INITIAL_FALLBACK_THRESHOLD,
 ) -> Iterator[tuple[bytes, int, Any]]:
-    """Repack provider chunks into steady PCM16 blocks without altering joins."""
+    """Repack provider chunks into steady PCM16 blocks with bounded startup scanning.
+
+    Initial speech detection first uses the normal amplitude threshold. After
+    ``max_initial_silence_ms`` of generated audio, each new chunk is rescanned
+    at a quiet-speech threshold and then for any nonzero signal. Until genuine
+    signal appears, only a small preroll tail is retained; all-zero PCM is not
+    mislabeled as audible output.
+    """
     block_bytes = max(1, int(block_samples)) * 2
     leftover = b""
     leftover_rate = DEFAULT_SAMPLE_RATE
     leftover_timing: Any = {}
+    initial_pcm = b""
+    initial_rate = DEFAULT_SAMPLE_RATE
+    initial_timing: Any = {}
     found_speech = False
+    fallback_armed = False
 
     for pcm_bytes, sample_rate, timing in chunks:
         sample_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
@@ -126,15 +164,59 @@ def stream_pcm16_blocks(
             leftover = b""
 
         if not found_speech:
+            if initial_pcm and sample_rate != initial_rate:
+                initial_pcm = b""
+                fallback_armed = False
+            initial_pcm += pcm_bytes
+            initial_rate = sample_rate
+            initial_timing = timing
             start_byte = initial_speech_start_byte(
-                pcm_bytes,
+                initial_pcm,
                 sample_rate,
                 silence_threshold,
                 preroll_ms,
             )
             if start_byte is None:
-                continue
-            pcm_bytes = pcm_bytes[start_byte:]
+                max_initial_samples = max(
+                    0,
+                    int(sample_rate * max(0.0, max_initial_silence_ms) / 1000.0),
+                )
+                if not fallback_armed and len(initial_pcm) // 2 < max_initial_samples:
+                    continue
+                fallback_armed = True
+                quiet_threshold = min(
+                    max(0.0, silence_threshold),
+                    max(0.0, fallback_threshold),
+                )
+                start_byte = initial_speech_start_byte(
+                    initial_pcm,
+                    sample_rate,
+                    quiet_threshold,
+                    preroll_ms,
+                )
+                if start_byte is None:
+                    start_byte = initial_speech_start_byte(
+                        initial_pcm,
+                        sample_rate,
+                        0.0,
+                        preroll_ms,
+                    )
+                if start_byte is None:
+                    preroll_samples = max(
+                        0,
+                        int(sample_rate * max(0.0, preroll_ms) / 1000.0),
+                    )
+                    retained_bytes = preroll_samples * 2
+                    initial_pcm = (
+                        initial_pcm[-retained_bytes:]
+                        if retained_bytes > 0
+                        else b""
+                    )
+                    continue
+            pcm_bytes = initial_pcm[start_byte:]
+            sample_rate = initial_rate
+            timing = initial_timing
+            initial_pcm = b""
             found_speech = True
 
         audio = leftover + pcm_bytes
@@ -151,13 +233,23 @@ def stream_pcm16_blocks(
 
 
 def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
-    """Convert float-like mono audio to little-endian PCM16 using a vectorized fast path."""
+    """Convert float-like mono audio to little-endian PCM16 using vectorized fast paths."""
     if audio_chunk is None:
         return b""
     if isinstance(audio_chunk, bytes):
         return audio_chunk
     if isinstance(audio_chunk, (bytearray, memoryview)):
         return bytes(audio_chunk)
+
+    # Qwen commonly yields torch tensors, including CUDA tensors. NumPy cannot
+    # directly coerce a CUDA tensor, and the old fallback called ``tolist()``,
+    # forcing a device sync plus thousands of Python scalar conversions. Keep
+    # clipping and int16 quantization on the tensor device, then transfer only
+    # the compact int16 buffer to CPU. Use the already-loaded torch module so
+    # lightweight gateway imports do not eagerly initialize torch.
+    torch_module = sys.modules.get("torch")
+    if torch_module is not None and torch_module.is_tensor(audio_chunk):
+        return _torch_audio_chunk_to_pcm16_bytes(audio_chunk, torch_module)
 
     if np is None:
         return _audio_chunk_to_pcm16_bytes_fallback(audio_chunk)
@@ -175,6 +267,29 @@ def audio_chunk_to_pcm16_bytes(audio_chunk: Any) -> bytes:
     np.nan_to_num(values, copy=False, nan=0.0, posinf=1.0, neginf=-1.0)
     np.clip(values, -1.0, 1.0, out=values)
     return (values * 32767.0).astype("<i2", copy=False).tobytes()
+
+
+def _torch_audio_chunk_to_pcm16_bytes(audio_chunk: Any, torch_module: Any) -> bytes:
+    values = audio_chunk.detach()
+    if int(values.numel()) == 0:
+        return b""
+    if int(values.ndim) > 1:
+        values = values[..., 0]
+    values = values.reshape(-1).to(dtype=torch_module.float32)
+    values = torch_module.nan_to_num(
+        values,
+        nan=0.0,
+        posinf=1.0,
+        neginf=-1.0,
+    )
+    pcm = values.clamp(-1.0, 1.0).mul(32767.0).to(dtype=torch_module.int16)
+    if getattr(pcm.device, "type", "cpu") != "cpu":
+        pcm = pcm.to(device="cpu", non_blocking=False)
+    pcm = pcm.contiguous()
+    array = pcm.numpy()
+    if np is not None:
+        array = array.astype("<i2", copy=False)
+    return array.tobytes()
 
 
 def _audio_chunk_to_pcm16_bytes_fallback(audio_chunk: Any) -> bytes:

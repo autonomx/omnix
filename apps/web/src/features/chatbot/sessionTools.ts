@@ -5,10 +5,12 @@ import { initializeChatResponseMetricsController } from './chat-response-metrics
 import { characterClient, type SessionInteraction } from './characterClient';
 
 const INSTALLED_KEY = '__omnix_chat_session_tools__';
-const BUTTON_CLASS = 'omnix-new-chat-button';
 const MODE_BUTTON_CLASS = 'omnix-chat-mode-button';
 const MODE_STORAGE_KEY = 'omnix.chat.mode';
 const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
+const LIVE_CHAT_SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
+const CHAT_SESSION_CREATED_EVENT = 'omnix:chat-session-created';
+const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 
 type PreservedChatSessionRequest = CreateChatSessionRequest & {
   interaction_mode: 'system' | 'character';
@@ -85,7 +87,24 @@ export function preservedNewChatRequest(
   };
 }
 
-async function startBlankChat(): Promise<void> {
+function clearMessageComposer(): void {
+  const textarea = document.querySelector<HTMLTextAreaElement>(
+    '.assistant-message-input textarea[name="content"], textarea[placeholder^="Message Omnix"]',
+  );
+  if (!textarea) return;
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+  if (valueSetter) valueSetter.call(textarea, '');
+  else textarea.value = '';
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  textarea.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function requestSessionListRefresh(): void {
+  document.dispatchEvent(new Event('visibilitychange'));
+  window.dispatchEvent(new Event('focus'));
+}
+
+export async function startBlankChat(): Promise<ChatSession> {
   let request: CreateChatSessionRequest = { title: 'New chat' };
   if (selectedSessionId) {
     const [session, interaction] = await Promise.all([
@@ -94,24 +113,20 @@ async function startBlankChat(): Promise<void> {
     ]);
     request = preservedNewChatRequest(session, interaction);
   }
-  await omnixApiClient.createChatSession(request);
-  window.location.assign('/chatbot');
-}
 
-function styleButton(button: HTMLButtonElement): void {
-  const compact = button.textContent === '+ New';
-  button.style.border = '1px solid rgba(255, 255, 255, 0.16)';
-  button.style.borderRadius = compact ? '999px' : '0.65rem';
-  button.style.background = 'linear-gradient(135deg, #6544d9, #7c5cff)';
-  button.style.color = '#fff';
-  button.style.cursor = 'pointer';
-  button.style.fontWeight = '750';
-  button.style.height = compact ? '2rem' : '2.55rem';
-  button.style.minHeight = compact ? '2rem' : '2.55rem';
-  button.style.minWidth = compact ? '4.2rem' : '';
-  button.style.padding = compact ? '0 0.75rem' : '0 1rem';
-  button.style.whiteSpace = 'nowrap';
-  button.style.width = 'auto';
+  const session = await omnixApiClient.createChatSession(request);
+  const sessionId = String(session.id ?? '').trim();
+  if (!sessionId) throw new Error('New chat response did not include a session id.');
+
+  selectedSessionId = sessionId;
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_STOP_EVENT));
+  clearMessageComposer();
+  window.dispatchEvent(new CustomEvent(CHAT_SESSION_CREATED_EVENT, { detail: { session } }));
+  window.dispatchEvent(new CustomEvent(LIVE_CHAT_SESSION_CHANGED_EVENT, {
+    detail: { sessionId },
+  }));
+  requestSessionListRefresh();
+  return session;
 }
 
 function updateModeButton(button: HTMLButtonElement): void {
@@ -126,24 +141,6 @@ function updateModeButton(button: HTMLButtonElement): void {
   button.style.fontWeight = '750';
   button.style.minHeight = '2.55rem';
   button.style.padding = '0 1rem';
-}
-
-function addButton(target: Element | null, label: string, prepend = false): void {
-  if (!target || target.querySelector(`.${BUTTON_CLASS}`)) return;
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = `${BUTTON_CLASS} assistant-header-pill`;
-  button.textContent = label;
-  button.title = 'Start a new chat';
-  styleButton(button);
-  button.addEventListener('click', () => {
-    button.setAttribute('disabled', 'true');
-    void startBlankChat().catch(() => {
-      button.removeAttribute('disabled');
-    });
-  });
-  if (prepend) target.prepend(button);
-  else target.appendChild(button);
 }
 
 function addModeButton(target: Element | null): void {
@@ -161,8 +158,6 @@ function addModeButton(target: Element | null): void {
 
 function mountButtons(): void {
   const headerActions = document.querySelector('.assistant-chat-integrated-actions, .assistant-chat-header-actions');
-  addButton(document.querySelector('.assistant-sidebar-sessions > header'), '+ New');
-  addButton(headerActions, 'New Chat', true);
   addModeButton(headerActions);
 }
 

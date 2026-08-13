@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from typing import Any
 
 from app.assistant_memory import companion_context as companion_context_module
@@ -78,6 +79,24 @@ def _effective_profile(session_id: str) -> LiveConversationProfile:
         return LiveConversationProfile()
 
 
+def _create_memory_service(factory: Callable[[], Any]) -> Any:
+    """Create the memory service only when live prompt resolution needs it."""
+    return factory()
+
+
+def _lazy_memory_service_factory(factory: Callable[[], Any]) -> Callable[[], Any]:
+    """Return a turn-local memoized factory without constructing eagerly."""
+    service: Any | None = None
+
+    def resolve() -> Any:
+        nonlocal service
+        if service is None:
+            service = _create_memory_service(factory)
+        return service
+
+    return resolve
+
+
 def _build_companion_prompt(
     self: Any,
     session: Any,
@@ -87,10 +106,10 @@ def _build_companion_prompt(
     from app import shared
 
     budget = live_profile._live_voice_prompt_budget()
-    memory_service = self.memory_service_factory()
+    memory_service_factory = _lazy_memory_service_factory(self.memory_service_factory)
     approved_memory, memory_diagnostics = resolve_prompt_memory(
         session,
-        memory_service_factory=lambda: memory_service,
+        memory_service_factory=memory_service_factory,
     )
     settings = load_memory_runtime_settings()
     rollout = companion_rollout_policy(settings)
@@ -106,11 +125,13 @@ def _build_companion_prompt(
     temporal_result = None
     if memory_diagnostics.get("memory_enabled") and rollout.memory_read_enabled:
         temporal_result = retrieve_temporal_context(
-            memory_service,
+            memory_service_factory(),
             scope_context,
             query,
             timezone_name=os.environ.get("OMNIX_USER_TIMEZONE"),
-            deadline_ms=float(os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS") or 50),
+            deadline_ms=float(
+                os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS") or 50
+            ),
             limit=int(os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_LIMIT") or 12),
         )
     temporal_memory = _temporal_prompt_memory(temporal_result) if temporal_result else []
@@ -279,18 +300,26 @@ def _build_companion_prompt(
         cache_hit=packet.cache_hit,
         truncated=packet.truncated,
         rollout_stage=rollout.stage,
-        temporal_selected_count=(temporal_result.selected_count if temporal_result else 0),
+        temporal_selected_count=(
+            temporal_result.selected_count if temporal_result else 0
+        ),
         temporal_preload_ms=(
             round(temporal_result.preload_ms, 3) if temporal_result else 0.0
         ),
         temporal_preload_timed_out=(
             temporal_result.preload_timed_out if temporal_result else False
         ),
-        initiative_action=(initiative_decision.action if initiative_decision else "suppress"),
-        initiative_reason=(
-            initiative_decision.reason if initiative_decision else "initiative_unavailable"
+        initiative_action=(
+            initiative_decision.action if initiative_decision else "suppress"
         ),
-        initiative_tool=(initiative_decision.requested_tool if initiative_decision else None),
+        initiative_reason=(
+            initiative_decision.reason
+            if initiative_decision
+            else "initiative_unavailable"
+        ),
+        initiative_tool=(
+            initiative_decision.requested_tool if initiative_decision else None
+        ),
         paralinguistic_signal_count=(
             len(paralinguistic_state.signals) if paralinguistic_state else 0
         ),

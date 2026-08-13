@@ -148,6 +148,38 @@ export type LiveVoicePcmSession = {
   isClosed: () => boolean;
 };
 
+type OutputTimestampSource = {
+  getOutputTimestamp?: () => {
+    contextTime: number;
+    performanceTime: number;
+  };
+};
+
+export function resolveWorkletPlaybackPerformanceTimeMs(
+  event: Record<string, unknown>,
+  audioContext: OutputTimestampSource,
+  receivedAtMs = performance.now(),
+): number | null {
+  const eventContextTime = event.audio_context_time_seconds;
+  if (typeof eventContextTime !== 'number' || !Number.isFinite(eventContextTime)) return null;
+  if (typeof audioContext.getOutputTimestamp !== 'function') return null;
+  try {
+    const timestamp = audioContext.getOutputTimestamp();
+    if (!Number.isFinite(timestamp.contextTime) || !Number.isFinite(timestamp.performanceTime)) return null;
+    const projected = timestamp.performanceTime
+      + ((eventContextTime - timestamp.contextTime) * 1_000);
+    // Reject a broken or cross-origin clock mapping. A worklet notification can
+    // be delayed, but a live-call playback event cannot reasonably predate its
+    // receipt by more than ten seconds or be materially in the future.
+    if (!Number.isFinite(projected)
+      || projected < receivedAtMs - 10_000
+      || projected > receivedAtMs + 250) return null;
+    return Math.min(receivedAtMs, projected);
+  } catch {
+    return null;
+  }
+}
+
 export async function createLiveVoicePcmSession(
   traceId: string,
   voiceId: string | null,
@@ -255,8 +287,14 @@ export async function createLiveVoicePcmSession(
     const eventType = event.data?.type ?? 'unknown';
     if (eventType === 'underrun') underruns += 1;
     if (eventType === 'resumed') resumes += 1;
+    const playbackPerformanceTimeMs = eventType === 'segment_started'
+      ? resolveWorkletPlaybackPerformanceTimeMs(event.data, audioContext)
+      : null;
     const details = {
       ...event.data,
+      ...(playbackPerformanceTimeMs === null
+        ? {}
+        : { playback_performance_time_ms: playbackPerformanceTimeMs }),
       sample_rate: event.data?.sample_rate ?? audioContext.sampleRate,
       audio_context_state: audioContext.state,
       total_frames: totalFrames,
@@ -376,9 +414,6 @@ export async function createLiveVoicePcmSession(
     totalReceivedSamples += sourceSamples;
     const evenBytes = buffer.byteLength - (buffer.byteLength % 2);
     const sourcePcm = new Int16Array(buffer.slice(0, evenBytes));
-    window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_PCM_EVENT, {
-      detail: { samples: sourcePcm, sampleRate: phrase.stats.sampleRate },
-    }));
     const converted = pcm16ToFloat32(sourcePcm, phrase.stats.sampleRate, audioContext.sampleRate);
     phrase.stats.playbackSamples += converted.length;
     totalPlaybackSamples += converted.length;
@@ -394,7 +429,14 @@ export async function createLiveVoicePcmSession(
       workletMessage.generationEpoch = phrase.ownership.generationEpoch;
       workletMessage.outputOrder = phrase.ownership.outputOrder;
     }
+    // Keep the physical playback path ahead of synchronous visualization and
+    // echo-reference consumers. A large promoted startup frame can make those
+    // listeners do enough main-thread work to delay this postMessage by an
+    // entire audio runway, even though PCM has already reached the browser.
     node.port.postMessage(workletMessage, [converted.buffer]);
+    window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_PCM_EVENT, {
+      detail: { samples: sourcePcm, sampleRate: phrase.stats.sampleRate },
+    }));
   };
 
   const controlMatchesPhrase = (message: ControlEvent, phrase: ActivePhrase): boolean => {

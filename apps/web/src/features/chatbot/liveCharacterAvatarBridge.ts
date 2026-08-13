@@ -7,6 +7,7 @@ export type AvatarPresentationState = 'idle' | 'listening' | 'thinking' | 'speak
 const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 export const CHARACTER_AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
+const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
 const LIVE_VISUAL_STAGE_CLASS = 'assistant-live-visual-stage';
@@ -34,6 +35,12 @@ type CapturableAudioElement = HTMLAudioElement & {
 
 type PatchedCreateBufferSource = AudioContext['createBufferSource'] & {
   __omnixAvatarAudioMonitor?: boolean;
+};
+
+type LiveCallDiagnosticDetail = {
+  source?: string;
+  event?: string;
+  details?: Record<string, unknown>;
 };
 
 let currentRuntime: CharacterLiveCallRuntime | null = null;
@@ -178,7 +185,29 @@ function installLiveCharacterAvatarBridge(): void {
     updateAvatarImage();
   });
   window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, () => renderAvatarHost());
+  window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, (event) => {
+    if (currentRuntime?.avatar_pack?.renderer !== 'live2d') return;
+    const detail = (event as CustomEvent<LiveCallDiagnosticDetail>).detail;
+    if (detail?.source !== 'audio_worklet') return;
+    if (detail.event === 'worklet_avatar_frame') {
+      const frame = detail.details?.frame;
+      if (isAvatarMouthFrame(frame)) dispatchAvatarFrame(frame);
+      return;
+    }
+    if (
+      detail.event === 'worklet_idle'
+      || detail.event === 'worklet_drained'
+      || detail.event === 'worklet_stopped'
+      || detail.event === 'worklet_underrun'
+    ) {
+      dispatchAvatarFrame('closed');
+    }
+  });
   window.addEventListener(AVATAR_PCM_EVENT, (event) => {
+    // Live2D live-call lip sync is driven from the AudioWorklet's actual
+    // playback envelope. Arrival-time PCM can be hundreds of milliseconds
+    // ahead of what is audible when playback is buffered or rebuffering.
+    if (currentRuntime?.avatar_pack?.renderer === 'live2d') return;
     const detail = (event as CustomEvent<{
       samples?: Int16Array;
       sampleRate?: number;
@@ -413,6 +442,10 @@ function schedulePcmSamples(samples: Int16Array, sampleRate: number, startDelayM
 
 function scheduleClosedFrame(): void {
   window.setTimeout(() => dispatchAvatarFrame('closed'), Math.max(0, nextAudioFrameAt - performance.now()));
+}
+
+function isAvatarMouthFrame(value: unknown): value is AvatarMouthFrame {
+  return value === 'closed' || value === 'small' || value === 'medium' || value === 'wide';
 }
 
 function dispatchAvatarFrame(frame: AvatarMouthFrame): void {

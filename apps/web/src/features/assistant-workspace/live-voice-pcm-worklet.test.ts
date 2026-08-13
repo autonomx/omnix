@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { liveVoicePcmWorkletSource } from './live-voice-pcm-worklet';
+import {
+  liveVoiceAvatarMouthFrameForRms,
+  liveVoicePcmWorkletSource,
+} from './live-voice-pcm-worklet';
 
 type WorkletMessage = Record<string, unknown> & { type?: string };
 type WorkletPort = {
@@ -68,6 +71,13 @@ function events(processor: ProcessorInstance, type?: string): WorkletMessage[] {
 }
 
 describe('live voice PCM worklet state machine', () => {
+  it('maps playback RMS to the same stable avatar mouth states as the character bridge', () => {
+    expect(liveVoiceAvatarMouthFrameForRms(0)).toBe('closed');
+    expect(liveVoiceAvatarMouthFrameForRms(0.02)).toBe('small');
+    expect(liveVoiceAvatarMouthFrameForRms(0.05)).toBe('medium');
+    expect(liveVoiceAvatarMouthFrameForRms(0.2)).toBe('wide');
+  });
+
   it('does not let cue or intentional silence independently satisfy onset readiness', () => {
     const processor = createProcessor();
     send(processor, {
@@ -104,6 +114,39 @@ describe('live voice PCM worklet state machine', () => {
       'cue',
       'silence',
       'speech',
+    ]);
+  });
+
+  it('drives avatar mouth frames from rendered speech and keeps cues silent', () => {
+    const processor = createProcessor({ avatarEnvelopeIntervalSamples: 128 });
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'cue-0',
+      segmentKind: 'cue',
+      samples: new Float32Array(128).fill(0.4),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'cue-0' });
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-0',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      samples: new Float32Array(128).fill(0.2),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-0' });
+
+    render(processor);
+    expect(events(processor, 'avatar_frame')).toHaveLength(0);
+
+    render(processor);
+    expect(events(processor, 'avatar_frame')).toEqual([
+      expect.objectContaining({ type: 'avatar_frame', frame: 'wide' }),
+    ]);
+
+    render(processor);
+    expect(events(processor, 'avatar_frame')).toEqual([
+      expect.objectContaining({ type: 'avatar_frame', frame: 'wide' }),
+      expect.objectContaining({ type: 'avatar_frame', frame: 'closed' }),
     ]);
   });
 
@@ -291,4 +334,67 @@ describe('live voice PCM worklet state machine', () => {
       output_id: 'output-a', generation_epoch: 1,
     }));
   });
+
+  it('treats a completed persistent-session turn as idle instead of an underrun', () => {
+    const processor = createProcessor();
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-0',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      samples: new Float32Array([0.2, 0.2, 0.2, 0.2]),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-0' });
+    render(processor);
+
+    expect(events(processor, 'started')).toHaveLength(1);
+    expect(events(processor, 'idle')).toHaveLength(1);
+    expect(events(processor, 'underrun')).toHaveLength(0);
+
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-1',
+      segmentKind: 'speech',
+      phraseIndex: 1,
+      samples: new Float32Array([0.3, 0.3]),
+    });
+    render(processor);
+    expect(events(processor, 'started')).toHaveLength(1);
+
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-1',
+      segmentKind: 'speech',
+      phraseIndex: 1,
+      samples: new Float32Array([0.3, 0.3]),
+    });
+    send(processor, { type: 'segment_end', segmentId: 'speech-1' });
+    render(processor);
+
+    expect(events(processor, 'started')).toHaveLength(2);
+    expect(events(processor, 'idle')).toHaveLength(2);
+    expect(events(processor, 'underrun')).toHaveLength(0);
+  });
+
+  it('still counts starvation before an active segment ends as an underrun', () => {
+    const processor = createProcessor();
+    send(processor, {
+      type: 'push_segment_samples',
+      segmentId: 'speech-starved',
+      segmentKind: 'speech',
+      phraseIndex: 0,
+      samples: new Float32Array([0.2, 0.2, 0.2, 0.2]),
+    });
+    render(processor);
+
+    expect(events(processor, 'idle')).toHaveLength(0);
+    expect(events(processor, 'underrun')).toEqual([
+      expect.objectContaining({
+        buffered_samples: 0,
+        buffered_speech_samples: 0,
+        underrun_count: 1,
+      }),
+    ]);
+  });
+
 });

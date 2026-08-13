@@ -1,3 +1,5 @@
+import { createLiveCallDiagnosticsReporter } from '../assistant-workspace/live-call-diagnostics-client';
+
 type JsonRecord = Record<string, unknown>;
 
 type ChatResponseMetrics = {
@@ -19,6 +21,7 @@ type ChatMetricsWindow = Window & typeof globalThis & {
 
 const CHAT_SESSION_PATH = /^\/api\/chat\/sessions\/[^/]+$/;
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
+const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const METRICS_ROW_CLASS = 'assistant-response-metrics';
 
 let originalFetch: typeof window.fetch | null = null;
@@ -191,21 +194,39 @@ function scheduleMetricsRender(): void {
   });
 }
 
-function captureSseSession(text: string): void {
-  for (const block of text.split(/\n\n+/)) {
-    const data = block
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trim())
-      .join('\n');
-    if (!data || data === '[DONE]') continue;
+function requestVoiceTurnId(input: RequestInfo | URL, init?: RequestInit): string | undefined {
+  const body = init?.body;
+  if (typeof body === 'string') {
     try {
-      const event = record(JSON.parse(data));
-      if (event.type === 'session') captureChatSessionResponseMetrics(event.session);
+      return nonEmptyText(record(JSON.parse(body)).live_voice_turn_id);
     } catch {
-      // Ignore unrelated or partial SSE blocks; the authoritative session fetch remains available.
+      return undefined;
     }
   }
+  if (input instanceof Request) {
+    return nonEmptyText(input.headers.get('x-omnix-live-voice-turn-id'));
+  }
+  return undefined;
+}
+
+function dispatchSseTransportObservation(response: Response, turnId?: string): void {
+  const detail = {
+    stage: 'chat_sse_transport_response_observed',
+    timestamp: new Date().toISOString(),
+    turnId,
+    transportVersion: response.headers.get('x-omnix-sse-transport'),
+    contentType: response.headers.get('content-type'),
+    responseCloned: false,
+  };
+  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, { detail }));
+  if (!turnId) return;
+  const reporter = createLiveCallDiagnosticsReporter(`live-call:${turnId}`);
+  reporter.record('chat_sse_transport_response_observed', {
+    transport_version: detail.transportVersion,
+    content_type: detail.contentType,
+    response_cloned: false,
+  }, 'chat_response_metrics');
+  void reporter.flush();
 }
 
 async function interceptChatMetricsFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -222,10 +243,11 @@ async function interceptChatMetricsFetch(input: RequestInfo | URL, init?: Reques
       .then(captureChatSessionResponseMetrics)
       .catch(() => undefined);
   } else if (method === 'POST' && CHAT_STREAM_PATH.test(url.pathname)) {
-    void response.clone().text()
-      .then(captureSseSession)
-      .catch(() => undefined);
+    dispatchSseTransportObservation(response, requestVoiceTurnId(input, init));
   }
+  // Never clone or consume a live SSE response here. The session query is
+  // invalidated after the stream completes and supplies the same persisted
+  // metrics without teeing the latency-critical response body.
   return response;
 }
 
@@ -251,6 +273,10 @@ export function initializeChatResponseMetricsController(): () => void {
 }
 
 export function resetChatResponseMetricsForTests(): void {
+  const metricsWindow = window as ChatMetricsWindow;
+  if (window.fetch === interceptChatMetricsFetch && originalFetch) window.fetch = originalFetch;
+  originalFetch = null;
+  metricsWindow.__omnixChatResponseMetricsInstalled = false;
   assistantMessages = [];
   renderQueued = false;
   observer?.disconnect();

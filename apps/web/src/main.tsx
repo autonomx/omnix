@@ -6,6 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';
 import { omnixTheme } from './design/theme';
 import './features/chatbot/sessionTools';
+import './features/chatbot/chat-sidebar-manager.css';
+import './features/chatbot/chat-sidebar-manager-layout-fix.css';
+import { initializeChatSidebarManager } from './features/chatbot/chat-sidebar-manager';
 import './features/chatbot/researchProgressController';
 import './features/chatbot/researchProgressController.css';
 import { bootstrapCentralAssistantSettings } from './features/chatbot/assistantSettingsBootstrap';
@@ -29,6 +32,7 @@ import { initializeChatMessageAudioControllerV2 } from './features/assistant-wor
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import { initializeDesktopCompanionDeliveryController } from './features/assistant-workspace/desktop-companion-delivery';
 import { initializeLiveAvatarPresenceController } from './features/assistant-workspace/live-avatar-presence';
+import { initializeLiveCallPrewarmController } from './features/assistant-workspace/live-call-prewarm-controller';
 import { initializeLiveConversationDurableEvaluationController } from './features/assistant-workspace/live-conversation-durable-evaluation-controller';
 import { initializeLiveConversationEvaluationController } from './features/assistant-workspace/live-conversation-evaluation-controller';
 import { initializeLiveConversationInitiativeController } from './features/assistant-workspace/live-conversation-initiative-controller';
@@ -37,12 +41,26 @@ import { initializeLiveConversationStoreBridge } from './features/assistant-work
 import { initializeLiveOutputCoordinator } from './features/assistant-workspace/live-output-coordinator';
 import { initializeLivePresencePolicyController } from './features/assistant-workspace/live-presence-policy-controller';
 import { initializeLiveSessionCoordinator } from './features/assistant-workspace/live-session-coordinator';
+import { initializeLiveSpeculationDiagnosticsBridge } from './features/assistant-workspace/live-speculation-diagnostics-bridge';
+import { initializeLiveSpeculationDirectGatewayTransport } from './features/assistant-workspace/live-speculation-direct-gateway-transport';
+import { initializeLiveSpeculationEarlyTrigger } from './features/assistant-workspace/live-speculation-early-trigger';
+import { initializeLiveSpeculationEligibilityDiagnostics } from './features/assistant-workspace/live-speculation-eligibility-diagnostics';
+import { initializeLiveSpeculationHandshakeTransport } from './features/assistant-workspace/live-speculation-handshake-transport';
+import { initializeLiveSpeculationRuntime } from './features/assistant-workspace/live-speculation-runtime';
+import { initializeLiveSttAuthorityController } from './features/assistant-workspace/live-stt-authority-controller';
+import { initializeLiveTtsAdaptiveBufferController } from './features/assistant-workspace/live-tts-adaptive-buffer-controller';
+import { initializeLiveTtsCapabilityController } from './features/assistant-workspace/live-tts-capability-controller';
 import { initializeLiveVoiceAudioDuckBridge } from './features/assistant-workspace/live-voice-audio-duck-bridge';
 import { initializeLiveVoiceCueAssetBridge } from './features/assistant-workspace/live-voice-cue-asset-bridge';
 import { initializeLiveVoiceCuePackLoader } from './features/assistant-workspace/live-voice-cue-pack-loader';
 import { initializeLiveVoiceDuplexGate } from './features/assistant-workspace/live-voice-duplex-gate';
 import './features/assistant-workspace/live-voice-form-sync';
 import { initializeLiveVoiceController } from './features/assistant-workspace/live-voice-controller';
+import { initializeLiveVoicePendingOutputInterrupt } from './features/assistant-workspace/live-voice-pending-output-interrupt';
+import {
+  initializeLiveVoiceTranscriptReconciliation,
+  initializeLiveVoiceTurnCoordinator,
+} from './features/assistant-workspace/live-voice-turn-coordinator';
 import { emitLiveRuntimeProvenance } from './features/assistant-workspace/live-runtime-provenance';
 import './features/assistant-workspace/live-voice-transcript-autoscroll';
 import { initializeLiveVoiceUnifiedAudioController } from './features/assistant-workspace/live-voice-unified-audio-controller';
@@ -72,6 +90,19 @@ installVoiceLibraryAssetFallback();
 installVoiceLibraryFetchDiagnostics();
 initializeLiveConversationStoreBridge();
 initializeLiveSessionCoordinator();
+initializeLiveVoiceTranscriptReconciliation();
+initializeLiveSttAuthorityController();
+initializeLiveVoiceTurnCoordinator();
+initializeLiveSpeculationDiagnosticsBridge();
+initializeLiveSpeculationEligibilityDiagnostics();
+// Install the local direct-gateway transport before the speculation wrappers so
+// their captured fetch implementations can bypass the Vite :5173 proxy for the
+// private hot path. Non-local and failed direct requests fall back to same-origin.
+initializeLiveSpeculationDirectGatewayTransport();
+initializeLiveSpeculationHandshakeTransport();
+initializeLiveSpeculationEarlyTrigger();
+initializeLiveSpeculationRuntime();
+initializeLiveCallPrewarmController();
 emitLiveRuntimeProvenance();
 initializeLiveVoiceController();
 initializeLiveOutputCoordinator();
@@ -80,13 +111,17 @@ initializeLiveVoiceDuplexGate();
 initializeLiveVoiceAudioDuckBridge();
 initializeLiveVoiceCueAssetBridge();
 initializeLiveVoiceCuePackLoader();
+initializeLiveTtsCapabilityController();
+initializeLiveTtsAdaptiveBufferController();
 initializeLiveVoiceUnifiedAudioController();
+initializeLiveVoicePendingOutputInterrupt();
 initializeLiveAvatarPresenceController();
 initializeLiveConversationInitiativeController();
 initializeDesktopCompanionDeliveryController();
 initializeLiveConversationRepairController();
 initializeLiveConversationEvaluationController();
 initializeLiveConversationDurableEvaluationController();
+initializeChatSidebarManager();
 initializeLiveChatWorkspace(queryClient);
 initializeVoiceSessionEvaluationWorkspace();
 
