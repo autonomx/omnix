@@ -73,7 +73,7 @@ class MarketResearchResult(BaseModel):
     ] = "Research only. Not financial advice. No order was created or executed."
 
     @model_validator(mode="after")
-    def reject_action_language_contract(self):
+    def enforce_read_only_output_field_contract(self):
         forbidden_keys = {"order", "trade", "execute", "alert", "position", "quantity"}
         serialized_keys = set(self.model_dump().keys())
         if serialized_keys & forbidden_keys:
