@@ -11,8 +11,8 @@ This document separates implementation closure, exact-head automated gates, and 
 - The roadmap now uses adaptive/flexible multi-chart language while retaining four charts × 5,000 bars as a qualification load case.
 - Shared gateway OpenAPI and TypeScript contracts were regenerated from the repository gateway on GitHub Actions and committed as exact generated artifacts in `ffbf2c060ceedf6f426b97480242b4a420d3714b`.
 - Restart-safe scanner execution, persisted incremental progress, post-restart cancellation reconciliation, and shared global/provider concurrency budgets remain **incomplete**. Connector write-safety blocked the scanner persistence/runtime changes; this item must remain open.
-- A branch-scoped one-shot codegen workflow was used because the connector had no binary/file upload write path for the ~650 KB generated artifacts. Its only push trigger is a change to that helper file on `agent/implement-omnix-trading-terminal`, so the generated-contract commit does not retrigger it. Connector write-safety is currently also blocking deletion/neutralization of that helper; it must be removed before merge.
-- Exact-head run `31753426577` on `1d5e6dc7bdc67108774368e870e8ac863a01d1e0` passed immutable checkout, backend, frontend, TypeScript, Playwright, and contract generation. Its only failure was the expected generated-contract drift check, which the `ffbf2c06...` codegen commit resolved. A later exact-head run is still required after this status commit and any remaining cleanup.
+- The branch-scoped one-shot codegen helper used to publish the generated artifacts was removed in `a88d4fd81759b80fbeac9c07b7f787ac9d51408b`; no temporary write-capable codegen helper remains in the candidate tree.
+- Exact-head run `31753426577` on `1d5e6dc7bdc67108774368e870e8ac863a01d1e0` passed immutable checkout, backend, frontend, TypeScript, Playwright, and contract generation. Its only failure was the expected generated-contract drift check, which the `ffbf2c06...` codegen commit resolved. A final exact-head run is required on the candidate head produced by this status update.
 
 ## Automated implementation gates
 
