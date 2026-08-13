@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from datetime import datetime
 from decimal import Decimal
 from typing import Protocol
 
@@ -11,10 +10,14 @@ from app.persistence.tenant import TenantContext, local_tenant_context
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 
 from .backtest import (
+    BACKTEST_MARK_TO_MARKET_POLICY,
+    BacktestArtifactReference,
     BacktestEquityPoint,
     BacktestLogEntry,
     BacktestRunResult,
     BacktestTrade,
+    backtest_economic_breakdown,
+    backtest_economic_result_fingerprint,
 )
 from .replay import FrozenDatasetSnapshot
 
@@ -47,6 +50,17 @@ _DATASET_COLUMNS = """
     provider, interval, adjustment_mode, session_calendar, exchange_timezone,
     gap_policy, dataset_fingerprint, source_as_of, bars, created_at
 """
+
+
+def _artifact_from_values(values) -> BacktestArtifactReference | None:
+    if not values or values[0] is None:
+        return None
+    return BacktestArtifactReference(
+        storage_provider=str(values[0]),
+        storage_key=str(values[1]),
+        checksum_sha256=str(values[2]),
+        byte_size=int(values[3]),
+    )
 
 
 class TradingReplayRepository:
@@ -115,17 +129,25 @@ class TradingReplayRepository:
             return [_dataset(row) for row in rows]
 
     def save_backtest(self, result: BacktestRunResult) -> BacktestRunResult:
+        artifact = result.artifact
         with self.uow_factory() as uow:
             uow.connection.execute(
                 """
                 INSERT INTO omnix_trading_backtest_runs (
                     workspace_id, run_id, dataset_id, strategy_id, strategy_parameters,
                     execution_policy, formula_version, status, initial_cash,
-                    final_equity, total_return_percent, max_drawdown_percent,
-                    trade_count, error_message, started_at, finished_at
+                    ending_cash, ending_position, ending_mark_price,
+                    realized_pnl, unrealized_pnl, final_equity,
+                    total_return_percent, max_drawdown_percent,
+                    win_rate_percent, exposure_percent, trade_count,
+                    mark_to_market_policy, economic_result_fingerprint,
+                    artifact_storage_provider, artifact_storage_key,
+                    artifact_checksum_sha256, artifact_byte_size,
+                    error_message, started_at, finished_at
                 ) VALUES (
                     %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 """,
                 (
@@ -138,10 +160,23 @@ class TradingReplayRepository:
                     result.formula_version,
                     result.status,
                     result.initial_cash,
+                    result.ending_cash,
+                    result.ending_position,
+                    result.ending_mark_price,
+                    result.realized_pnl,
+                    result.unrealized_pnl,
                     result.final_equity,
                     result.total_return_percent,
                     result.max_drawdown_percent,
+                    result.win_rate_percent,
+                    result.exposure_percent,
                     result.trade_count,
+                    result.mark_to_market_policy,
+                    result.economic_result_fingerprint,
+                    artifact.storage_provider if artifact else None,
+                    artifact.storage_key if artifact else None,
+                    artifact.checksum_sha256 if artifact else None,
+                    artifact.byte_size if artifact else None,
                     result.error_message,
                     result.started_at,
                     result.finished_at,
@@ -218,8 +253,12 @@ class TradingReplayRepository:
             rows = uow.connection.execute(
                 """
                 SELECT run_id, dataset_id, strategy_id, status, initial_cash,
-                       final_equity, total_return_percent, max_drawdown_percent,
-                       trade_count, formula_version, started_at, finished_at,
+                       ending_cash, ending_position, ending_mark_price,
+                       realized_pnl, unrealized_pnl, final_equity,
+                       total_return_percent, max_drawdown_percent,
+                       win_rate_percent, exposure_percent, trade_count,
+                       formula_version, mark_to_market_policy,
+                       economic_result_fingerprint, started_at, finished_at,
                        error_message
                   FROM omnix_trading_backtest_runs
                  WHERE workspace_id = %s
@@ -235,14 +274,23 @@ class TradingReplayRepository:
                     "strategy_id": str(row[2]),
                     "status": str(row[3]),
                     "initial_cash": str(row[4]),
-                    "final_equity": str(row[5]),
-                    "total_return_percent": str(row[6]),
-                    "max_drawdown_percent": str(row[7]),
-                    "trade_count": int(row[8]),
-                    "formula_version": str(row[9]),
-                    "started_at": row[10].isoformat(),
-                    "finished_at": row[11].isoformat(),
-                    "error_message": str(row[12]) if row[12] is not None else None,
+                    "ending_cash": str(row[5]) if row[5] is not None else None,
+                    "ending_position": str(row[6]) if row[6] is not None else None,
+                    "ending_mark_price": str(row[7]) if row[7] is not None else None,
+                    "realized_pnl": str(row[8]) if row[8] is not None else None,
+                    "unrealized_pnl": str(row[9]) if row[9] is not None else None,
+                    "final_equity": str(row[10]),
+                    "total_return_percent": str(row[11]),
+                    "max_drawdown_percent": str(row[12]),
+                    "win_rate_percent": str(row[13]),
+                    "exposure_percent": str(row[14]),
+                    "trade_count": int(row[15]),
+                    "formula_version": str(row[16]),
+                    "mark_to_market_policy": str(row[17]) if row[17] else None,
+                    "economic_result_fingerprint": str(row[18]) if row[18] else None,
+                    "started_at": row[19].isoformat(),
+                    "finished_at": row[20].isoformat(),
+                    "error_message": str(row[21]) if row[21] is not None else None,
                 }
                 for row in rows
             ]
@@ -252,9 +300,15 @@ class TradingReplayRepository:
             run = uow.connection.execute(
                 """
                 SELECT dataset_id, strategy_id, strategy_parameters, execution_policy,
-                       formula_version, status, initial_cash, final_equity,
-                       total_return_percent, max_drawdown_percent, trade_count,
-                       error_message, started_at, finished_at
+                       formula_version, status, initial_cash,
+                       ending_cash, ending_position, ending_mark_price,
+                       realized_pnl, unrealized_pnl,
+                       final_equity, total_return_percent, max_drawdown_percent,
+                       win_rate_percent, exposure_percent, trade_count,
+                       mark_to_market_policy, economic_result_fingerprint,
+                       error_message, started_at, finished_at,
+                       artifact_storage_provider, artifact_storage_key,
+                       artifact_checksum_sha256, artifact_byte_size
                   FROM omnix_trading_backtest_runs
                  WHERE workspace_id = %s AND run_id = %s
                 """,
@@ -291,61 +345,116 @@ class TradingReplayRepository:
                 """,
                 (self.context.workspace_id, run_id),
             ).fetchall()
-            return BacktestRunResult(
-                run_id=run_id,
-                dataset_id=str(run[0]),
-                dataset_fingerprint=dataset.dataset_fingerprint,
-                strategy_id=str(run[1]),
-                strategy_parameters=dict(run[2] or {}),
-                execution_policy=dict(run[3] or {}),
-                formula_version=str(run[4]),
-                status=str(run[5]),
-                initial_cash=Decimal(run[6]),
-                final_equity=Decimal(run[7]),
-                total_return_percent=Decimal(run[8]),
-                max_drawdown_percent=Decimal(run[9]),
-                trade_count=int(run[10]),
-                error_message=str(run[11]) if run[11] is not None else None,
-                started_at=run[12],
-                finished_at=run[13],
-                trades=tuple(
-                    BacktestTrade(
-                        trade_index=int(row[0]),
-                        side=str(row[1]),
-                        signal_bar_index=int(row[2]),
-                        fill_bar_index=int(row[3]),
-                        signal_time=row[4],
-                        fill_time=row[5],
-                        quantity=Decimal(row[6]),
-                        fill_price=Decimal(row[7]),
-                        commission=Decimal(row[8]),
-                        cash_after=Decimal(row[9]),
-                        position_after=Decimal(row[10]),
-                    )
-                    for row in trade_rows
-                ),
-                equity_curve=tuple(
-                    BacktestEquityPoint(
-                        point_index=int(row[0]),
-                        bar_time=row[1],
-                        cash=Decimal(row[2]),
-                        position=Decimal(row[3]),
-                        equity=Decimal(row[4]),
-                        drawdown_percent=Decimal(row[5]),
-                    )
-                    for row in equity_rows
-                ),
-                logs=tuple(
-                    BacktestLogEntry(
-                        log_index=int(row[0]),
-                        bar_time=row[1],
-                        level=str(row[2]),
-                        message=str(row[3]),
-                        payload=dict(row[4] or {}),
-                    )
-                    for row in log_rows
-                ),
+
+        trades = tuple(
+            BacktestTrade(
+                trade_index=int(row[0]),
+                side=str(row[1]),
+                signal_bar_index=int(row[2]),
+                fill_bar_index=int(row[3]),
+                signal_time=row[4],
+                fill_time=row[5],
+                quantity=Decimal(row[6]),
+                fill_price=Decimal(row[7]),
+                commission=Decimal(row[8]),
+                cash_after=Decimal(row[9]),
+                position_after=Decimal(row[10]),
             )
+            for row in trade_rows
+        )
+        equity_curve = tuple(
+            BacktestEquityPoint(
+                point_index=int(row[0]),
+                bar_time=row[1],
+                cash=Decimal(row[2]),
+                position=Decimal(row[3]),
+                equity=Decimal(row[4]),
+                drawdown_percent=Decimal(row[5]),
+            )
+            for row in equity_rows
+        )
+        ending_cash = Decimal(run[7]) if run[7] is not None else (
+            equity_curve[-1].cash if equity_curve else Decimal(run[6])
+        )
+        ending_position = Decimal(run[8]) if run[8] is not None else (
+            equity_curve[-1].position if equity_curve else Decimal("0")
+        )
+        ending_mark_price = Decimal(run[9]) if run[9] is not None else (
+            dataset.bars[-1].close if dataset.bars else None
+        )
+        economics = backtest_economic_breakdown(
+            initial_cash=Decimal(run[6]),
+            ending_cash=ending_cash,
+            ending_position=ending_position,
+            ending_mark_price=ending_mark_price,
+            trades=trades,
+        )
+        realized_pnl = Decimal(run[10]) if run[10] is not None else economics.realized_pnl
+        unrealized_pnl = Decimal(run[11]) if run[11] is not None else economics.unrealized_pnl
+        policy = str(run[18]) if run[18] else BACKTEST_MARK_TO_MARKET_POLICY
+        fingerprint = str(run[19]) if run[19] else backtest_economic_result_fingerprint(
+            dataset_fingerprint=dataset.dataset_fingerprint,
+            strategy_id=str(run[1]),
+            strategy_parameters=dict(run[2] or {}),
+            execution_policy=dict(run[3] or {}),
+            formula_version=str(run[4]),
+            status=str(run[5]),
+            initial_cash=Decimal(run[6]),
+            economics=economics.model_copy(
+                update={
+                    "realized_pnl": realized_pnl,
+                    "unrealized_pnl": unrealized_pnl,
+                }
+            ),
+            final_equity=Decimal(run[12]),
+            total_return_percent=Decimal(run[13]),
+            max_drawdown_percent=Decimal(run[14]),
+            win_rate_percent=Decimal(run[15]),
+            exposure_percent=Decimal(run[16]),
+            trades=trades,
+            equity_curve=equity_curve,
+            error_message=str(run[20]) if run[20] is not None else None,
+        )
+        return BacktestRunResult(
+            run_id=run_id,
+            dataset_id=str(run[0]),
+            dataset_fingerprint=dataset.dataset_fingerprint,
+            strategy_id=str(run[1]),
+            strategy_parameters=dict(run[2] or {}),
+            execution_policy=dict(run[3] or {}),
+            formula_version=str(run[4]),
+            status=str(run[5]),
+            initial_cash=Decimal(run[6]),
+            ending_cash=ending_cash,
+            ending_position=ending_position,
+            ending_mark_price=ending_mark_price,
+            realized_pnl=realized_pnl,
+            unrealized_pnl=unrealized_pnl,
+            final_equity=Decimal(run[12]),
+            total_return_percent=Decimal(run[13]),
+            max_drawdown_percent=Decimal(run[14]),
+            win_rate_percent=Decimal(run[15]),
+            exposure_percent=Decimal(run[16]),
+            trade_count=int(run[17]),
+            mark_to_market_policy=policy,
+            economic_result_fingerprint=fingerprint,
+            error_message=str(run[20]) if run[20] is not None else None,
+            started_at=run[21],
+            finished_at=run[22],
+            trades=trades,
+            equity_curve=equity_curve,
+            logs=tuple(
+                BacktestLogEntry(
+                    log_index=int(row[0]),
+                    bar_time=row[1],
+                    level=str(row[2]),
+                    message=str(row[3]),
+                    payload=dict(row[4] or {}),
+                )
+                for row in log_rows
+            ),
+            artifact=_artifact_from_values(run[23:27]),
+        )
 
 
 ReplayRepositoryFactory = Callable[[], TradingReplayRepository]
