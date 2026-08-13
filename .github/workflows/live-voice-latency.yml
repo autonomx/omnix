@@ -50,6 +50,7 @@ jobs:
             src/app/providers/nemotron_eou_live_websocket.py \
             src/app/providers/nemotron_eou_quality.py \
             src/app/providers/stt_live_websocket.py \
+            src/app/providers/vendor/faster_qwen3_tts/streaming.py \
             src/app/gateway/live_chat_lmstudio_responses.py \
             src/app/gateway/live_chat_speculation.py \
             src/app/gateway/live_voice_execution_lane.py \
