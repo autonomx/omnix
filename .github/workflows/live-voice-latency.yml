@@ -61,6 +61,7 @@ jobs:
             src/tests/app/test_runtime_launcher_services.py \
             src/tests/app/test_live_stt_contracts.py \
             src/tests/app/test_live_voice_hardware_policy.py \
+            src/tests/app/test_live_chat_lmstudio_responses.py \
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_live_voice_speculative_tts.py \
             src/tests/app/test_lmstudio_loaded_model_resolution.py
@@ -74,6 +75,7 @@ jobs:
           src/tests/app/test_runtime_launcher_services.py
           src/tests/app/test_live_stt_contracts.py
           src/tests/app/test_live_voice_hardware_policy.py
+          src/tests/app/test_live_chat_lmstudio_responses.py
           src/tests/app/test_live_chat_speculation.py
           src/tests/app/test_live_voice_speculative_tts.py
           src/tests/app/test_lmstudio_loaded_model_resolution.py
