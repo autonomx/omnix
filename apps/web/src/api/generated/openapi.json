@@ -1382,6 +1382,34 @@
             "title": "Dataset Id",
             "type": "string"
           },
+          "economic_result_fingerprint": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Economic Result Fingerprint",
+            "type": "string"
+          },
+          "ending_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Ending Cash",
+            "type": "string"
+          },
+          "ending_mark_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ending Mark Price"
+          },
+          "ending_position": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Ending Position",
+            "type": "string"
+          },
           "equity_curve": {
             "items": {
               "$ref": "#/components/schemas/BacktestEquityPoint"
@@ -1436,9 +1464,20 @@
             "title": "Logs",
             "type": "array"
           },
+          "mark_to_market_policy": {
+            "const": "final_finalized_bar_close",
+            "default": "final_finalized_bar_close",
+            "title": "Mark To Market Policy",
+            "type": "string"
+          },
           "max_drawdown_percent": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Max Drawdown Percent",
+            "type": "string"
+          },
+          "realized_pnl": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Realized Pnl",
             "type": "string"
           },
           "run_id": {
@@ -1483,6 +1522,11 @@
             "title": "Trades",
             "type": "array"
           },
+          "unrealized_pnl": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unrealized Pnl",
+            "type": "string"
+          },
           "win_rate_percent": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Win Rate Percent",
@@ -1499,12 +1543,18 @@
           "formula_version",
           "status",
           "initial_cash",
+          "ending_cash",
+          "ending_position",
+          "ending_mark_price",
+          "realized_pnl",
+          "unrealized_pnl",
           "final_equity",
           "total_return_percent",
           "max_drawdown_percent",
           "win_rate_percent",
           "exposure_percent",
           "trade_count",
+          "economic_result_fingerprint",
           "started_at",
           "finished_at",
           "trades",
@@ -4753,9 +4803,41 @@
             "title": "Evaluated At",
             "type": "string"
           },
+          "high": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
           "instrument_id": {
             "title": "Instrument Id",
             "type": "string"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
           },
           "price": {
             "anyOf": [
@@ -4891,6 +4973,12 @@
               }
             ],
             "title": "Rejection Reason"
+          },
+          "reserved_cash": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reserved Cash",
+            "type": "string"
           },
           "side": {
             "enum": [
@@ -5087,6 +5175,12 @@
           "realized_pnl": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Realized Pnl",
+            "type": "string"
+          },
+          "reserved_quantity": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reserved Quantity",
             "type": "string"
           },
           "unrealized_pnl": {

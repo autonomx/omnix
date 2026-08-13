@@ -2450,6 +2450,14 @@ export interface components {
             dataset_fingerprint: string;
             /** Dataset Id */
             dataset_id: string;
+            /** Economic Result Fingerprint */
+            economic_result_fingerprint: string;
+            /** Ending Cash */
+            ending_cash: string;
+            /** Ending Mark Price */
+            ending_mark_price: string | null;
+            /** Ending Position */
+            ending_position: string;
             /** Equity Curve */
             equity_curve: components["schemas"]["BacktestEquityPoint"][];
             /** Error Message */
@@ -2473,8 +2481,16 @@ export interface components {
             initial_cash: string;
             /** Logs */
             logs: components["schemas"]["BacktestLogEntry"][];
+            /**
+             * Mark To Market Policy
+             * @default final_finalized_bar_close
+             * @constant
+             */
+            mark_to_market_policy: "final_finalized_bar_close";
             /** Max Drawdown Percent */
             max_drawdown_percent: string;
+            /** Realized Pnl */
+            realized_pnl: string;
             /** Run Id */
             run_id: string;
             /**
@@ -2499,6 +2515,8 @@ export interface components {
             trade_count: number;
             /** Trades */
             trades: components["schemas"]["BacktestTrade"][];
+            /** Unrealized Pnl */
+            unrealized_pnl: string;
             /** Win Rate Percent */
             win_rate_percent: string;
         };
@@ -3856,8 +3874,12 @@ export interface components {
              * Format: date-time
              */
             evaluated_at?: string;
+            /** High */
+            high?: number | string | null;
             /** Instrument Id */
             instrument_id: string;
+            /** Low */
+            low?: number | string | null;
             /** Price */
             price: number | string;
             /** Provider */
@@ -3900,6 +3922,11 @@ export interface components {
             quantity: string;
             /** Rejection Reason */
             rejection_reason?: string | null;
+            /**
+             * Reserved Cash
+             * @default 0
+             */
+            reserved_cash: string;
             /**
              * Side
              * @enum {string}
@@ -3955,6 +3982,11 @@ export interface components {
             quantity: string;
             /** Realized Pnl */
             realized_pnl: string;
+            /**
+             * Reserved Quantity
+             * @default 0
+             */
+            reserved_quantity: string;
             /**
              * Unrealized Pnl
              * @default 0
