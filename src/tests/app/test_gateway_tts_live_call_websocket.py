@@ -5,6 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
+from app.gateway.tts_stream_contract import estimate_chat_stream_max_new_tokens
 from app.live_speech.performance_contract import SpeechPerformancePlan
 
 
@@ -116,7 +117,7 @@ def _assert_start_control(
         "sample_rate": 24_000,
         "sample_format": "pcm_s16le",
         "channels": 1,
-        "frame_samples": 2_400,
+        "frame_samples": 3_840,
         "diagnostics_log": "/tmp/tts-streaming.log",
         "provider_capabilities": {
             "provider": provider,
@@ -202,8 +203,8 @@ def test_live_call_websocket_reuses_one_connection_for_multiple_phrases(monkeypa
         applied=[],
         ignored=[],
     )
-    assert len(first_frame) == 4_800
-    assert len(second_frame) == 4_800
+    assert len(first_frame) == 7_680
+    assert len(second_frame) == 7_680
     assert first_done == {
         "type": "done",
         "stream_id": "chat-live-test-p0",
@@ -225,7 +226,10 @@ def test_live_call_websocket_reuses_one_connection_for_multiple_phrases(monkeypa
     ]
     assert all(call["parity_mode"] is False for call in provider.calls)
     assert all(call["repetition_penalty"] == 1.05 for call in provider.calls)
-    assert all(call["max_new_tokens"] == 96 for call in provider.calls)
+    assert [call["max_new_tokens"] for call in provider.calls] == [
+        estimate_chat_stream_max_new_tokens("First persistent phrase."),
+        estimate_chat_stream_max_new_tokens("Second persistent phrase."),
+    ]
 
     request_events = [
         (stream_id, details.get("phrase_index"))

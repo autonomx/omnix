@@ -70,6 +70,12 @@ class OmnixLiveVoicePcmStreamProcessor extends AudioWorkletProcessor {
   counters() {
     return {
       sample_rate: sampleRate,
+      // AudioWorklet messages can be delivered to the main thread well after
+      // their render quantum under UI contention. Preserve the audio clock so
+      // release metrics can recover the actual output time.
+      audio_context_time_seconds: typeof currentTime === 'number'
+        ? currentTime
+        : this.renderClockSamples / sampleRate,
       render_clock_samples: this.renderClockSamples,
       segment_timeline_samples: this.segmentTimelineSamples,
       semantic_speech_samples: this.semanticSpeechSamples,

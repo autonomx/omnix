@@ -170,6 +170,7 @@ describe('live voice websocket helpers', () => {
     client.sendAudio(new Float32Array([0.1, 0.2]), 16_000);
     client.sendFinal();
     client.sendAudio(new Float32Array([0.3, 0.4]), 16_000);
+    client.sendFinal();
 
     const sent = sockets[0].sentJson();
     const audio = sent.filter((message) => message.type === 'audio');
@@ -178,6 +179,81 @@ describe('live voice websocket helpers', () => {
     expect(audio[0].segmentId).not.toBe(audio[1].segmentId);
     expect(finalize?.segmentId).toBe(audio[0].segmentId);
     expect(audio[1].sequence).toBe(1);
+  });
+
+  it('coalesces capture callbacks to the negotiated websocket frame size', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5201/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      overlapMs: 0,
+    });
+    await openSegmentedClient(client, sockets, parakeetReady());
+
+    for (let index = 0; index < 4; index += 1) {
+      client.sendAudio(new Float32Array(80).fill((index + 1) / 10), 16_000);
+    }
+
+    const audio = sockets[0].sentJson().filter((message) => message.type === 'audio');
+    expect(audio).toHaveLength(1);
+    expect(audio[0].sampleStart).toBe(0);
+    expect(audio[0].sampleEnd).toBe(320);
+    client.disconnect();
+  });
+
+  it('flushes captured audio before requesting an authoritative preview', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    const onPreviewTranscript = vi.fn();
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5201/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      overlapMs: 0,
+      onPreviewTranscript,
+    });
+    await openSegmentedClient(client, sockets, {
+      ...parakeetReady(),
+      capabilities: ['result_replay', 'segmented_audio', 'authoritative_preview'],
+    });
+
+    client.sendAudio(new Float32Array([0.1, 0.2]), 16_000);
+    const previewRequestId = client.requestAuthoritativePreview();
+    const sent = sockets[0].sentJson();
+    const audioIndex = sent.findIndex((message) => message.type === 'audio');
+    const previewIndex = sent.findIndex((message) => message.type === 'preview');
+
+    expect(previewRequestId).toBeTruthy();
+    expect(audioIndex).toBeGreaterThanOrEqual(0);
+    expect(previewIndex).toBeGreaterThan(audioIndex);
+    sockets[0].receive({
+      type: 'preview_result',
+      provider: 'parakeet',
+      segmentId: sent[previewIndex].segmentId,
+      sequence: sent[previewIndex].sequence,
+      previewRequestId,
+      snapshotEndSample: 2,
+      text: 'Hello there.',
+    });
+    expect(onPreviewTranscript).toHaveBeenCalledWith(expect.objectContaining({
+      text: 'Hello there.',
+      previewRequestId,
+    }));
+    client.disconnect();
   });
 
   it('commits out-of-order results in sequence order and suppresses overlap', async () => {
@@ -264,6 +340,7 @@ describe('live voice websocket helpers', () => {
     });
     await openSegmentedClient(client, sockets, segmentedReady());
     client.sendAudio(new Float32Array([0.1, 0.2]), 24_000);
+    client.sendFinal();
     const original = sockets[0].sentJson().find((message) => message.type === 'audio')!;
     sockets[0].receive({
       type: 'audio_buffered',

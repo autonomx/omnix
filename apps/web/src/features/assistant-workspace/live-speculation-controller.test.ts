@@ -6,6 +6,7 @@ import {
   speculationCandidateCanStart,
   speculativeTtsPrefetchEnabled,
   speculativeTtsPrefetchWindowOpen,
+  transcriptCorrectionNeedsStability,
   transcriptExtendsSpeculation,
   transcriptsCanReuseSpeculation,
 } from './live-speculation-controller';
@@ -30,6 +31,17 @@ describe('live speculation hypothesis policy', () => {
     expect(transcriptExtendsSpeculation(
       'What kind of',
       'What type of nonsense',
+    )).toBe(false);
+  });
+
+  it('stabilizes a non-monotonic ASR correction before replacing an exact hypothesis', () => {
+    expect(transcriptCorrectionNeedsStability(
+      "I'm going to do something interesting today.",
+      "I'm going to something today.",
+    )).toBe(true);
+    expect(transcriptCorrectionNeedsStability(
+      'Tell me about',
+      'Tell me about the weather',
     )).toBe(false);
   });
 
@@ -65,10 +77,10 @@ describe('live speculation hypothesis policy', () => {
     expect(normalizeSpeculationWords('That’s wild')).toEqual(["that's", 'wild']);
   });
 
-  it('closes the speculative TTS prefetch window once authoritative final text exists', () => {
+  it('keeps the retained exact-final TTS prefetch window open through chat handoff', () => {
     expect(speculativeTtsPrefetchWindowOpen(null, true)).toBe(true);
     expect(speculativeTtsPrefetchWindowOpen(null, false)).toBe(false);
-    expect(speculativeTtsPrefetchWindowOpen('final transcript', true)).toBe(false);
+    expect(speculativeTtsPrefetchWindowOpen('final transcript', true)).toBe(true);
   });
 
   it('keeps speculative TTS enabled by default but allows an explicit TTS-only opt out', () => {

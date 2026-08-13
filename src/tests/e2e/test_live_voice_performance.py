@@ -91,6 +91,30 @@ _PROGRAMMABLE_MIC_INIT = r"""
       return { state: context.state, sample_rate: context.sampleRate };
     },
   };
+
+  const benchmarkEvents = { finals: [], perfFinals: [], turnFinished: [] };
+  window.__omnixBenchmarkEvents = benchmarkEvents;
+  window.addEventListener('omnix:live-stt-speculation-final', (event) => {
+    const detail = event?.detail ?? {};
+    benchmarkEvents.finals.push({
+      text: String(detail.text ?? ''),
+      segment_id: String(detail.segmentId ?? ''),
+      source_sequence: Number(detail.sourceSequence),
+    });
+  });
+  window.addEventListener('omnix:assistant-voice-perf', (event) => {
+    const detail = event?.detail ?? {};
+    if (detail.stage !== 'stt_final_received') return;
+    benchmarkEvents.perfFinals.push({
+      turn_id: String(detail.turnId ?? ''),
+      transcript_chars: Number(detail.transcriptChars ?? detail.transcript_chars),
+    });
+  });
+  window.addEventListener('omnix:live-call-diagnostic', (event) => {
+    const detail = event?.detail ?? {};
+    if (detail.event !== 'turn_finished') return;
+    benchmarkEvents.turnFinished.push({ trace_id: String(detail.traceId ?? '') });
+  });
 })();
 """
 
@@ -114,10 +138,6 @@ def _audio_paths() -> list[Path]:
     if missing:
         pytest.fail(f"Missing benchmark audio files: {missing}")
     return paths
-
-
-def _is_live_chat_stream_request(url: str, method: str) -> bool:
-    return method == "POST" and urlparse(url).path.endswith("/messages/stream")
 
 
 def _voice_mode(page) -> str:
@@ -150,8 +170,8 @@ def _assert_expected_provider(context, app_base_url: str) -> None:
         pytest.fail(
             "Live Voice benchmark provider preflight failed: "
             f"expected {EXPECTED_PROVIDER!r}, active provider is {provider or '<unknown>'!r}. "
-            "Select Cerebras in Omnix (and ensure its local API key is available) before running "
-            "the benchmark."
+            "Select the expected provider in Omnix (and ensure its local API key is available) "
+            "before running the benchmark."
         )
 
 
@@ -262,40 +282,52 @@ def test_five_turn_live_voice_hardware_performance(
             encoded = base64.b64encode(audio_path.read_bytes()).decode("ascii")
             interaction_started = _utc_now()
             wall_started = time.perf_counter()
+            event_counts = page.evaluate(
+                """() => ({
+                  finals: window.__omnixBenchmarkEvents.finals.length,
+                  perfFinals: window.__omnixBenchmarkEvents.perfFinals.length,
+                  turnFinished: window.__omnixBenchmarkEvents.turnFinished.length,
+                })"""
+            )
             manifest["active_interaction_index"] = index
             manifest["active_audio_file"] = str(audio_path.resolve())
             _persist_manifest(manifest_path, manifest)
 
-            with page.expect_request(
-                lambda candidate: _is_live_chat_stream_request(candidate.url, candidate.method),
-                timeout=45_000,
-            ) as stream_request_info:
-                playback = page.evaluate(
-                    "(encoded) => window.__omnixBenchmarkMic.playWavBase64(encoded)",
-                    encoded,
-                )
+            playback = page.evaluate(
+                "(encoded) => window.__omnixBenchmarkMic.playWavBase64(encoded)",
+                encoded,
+            )
 
-            stream_request = stream_request_info.value
-            try:
-                payload = stream_request.post_data_json
-            except Exception:
-                payload = {}
-            if not isinstance(payload, dict):
-                payload = {}
-
-            # Response headers opening is not the end of a live turn. Observe real
-            # audio, then require the SSE body to finish before accepting an idle
-            # window. This prevents p1/p2 natural pauses from being mistaken for
-            # turn completion and stops the next WAV from becoming a barge-in.
+            # Observe real audio and the controller's terminal turn diagnostic
+            # before accepting an idle window. This works for both canonical chat
+            # requests and speculative streams promoted without a second request.
             _wait_for_speaking(page)
-            stream_response = stream_request.response()
-            if stream_response is None:
-                pytest.fail("Live chat stream request completed without a response")
-            stream_response.finished()
+            page.wait_for_function(
+                "counts => window.__omnixBenchmarkEvents.turnFinished.length > counts.turnFinished",
+                arg=event_counts,
+                timeout=_RESPONSE_TIMEOUT_MS,
+            )
             _wait_for_stable_listening(page)
 
-            transcript = str(payload.get("content") or "").strip()
-            turn_id = str(payload.get("live_voice_turn_id") or "").strip() or None
+            page.wait_for_function(
+                """counts => (
+                  window.__omnixBenchmarkEvents.finals.length > counts.finals
+                  && window.__omnixBenchmarkEvents.perfFinals.length > counts.perfFinals
+                )""",
+                arg=event_counts,
+                timeout=15_000,
+            )
+            final_event = page.evaluate(
+                "counts => window.__omnixBenchmarkEvents.finals[counts.finals]",
+                event_counts,
+            )
+            perf_final = page.evaluate(
+                "counts => window.__omnixBenchmarkEvents.perfFinals[counts.perfFinals]",
+                event_counts,
+            )
+
+            transcript = str(final_event.get("text") or "").strip()
+            turn_id = str(perf_final.get("turn_id") or "").strip() or None
             interactions.append(
                 {
                     "index": index,
@@ -304,8 +336,6 @@ def test_five_turn_live_voice_hardware_performance(
                     "interaction_completed_at_utc": _utc_now(),
                     "wall_elapsed_ms": round((time.perf_counter() - wall_started) * 1000, 3),
                     "microphone_playback": playback,
-                    "request_url": stream_request.url,
-                    "response_status": stream_response.status,
                     "transcript": transcript,
                     "live_voice_turn_id": turn_id,
                 }

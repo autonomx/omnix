@@ -6,6 +6,7 @@ import {
 } from './live-voice-controller';
 import {
   LIVE_SPECULATION_HANDSHAKE_GRACE_MS,
+  speculationHandshakeWaitBudgetMs,
   transcriptIsSpeculationSafe,
   transcriptsCanReuseSpeculation,
 } from './live-speculation-controller';
@@ -148,9 +149,47 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(transcriptIsSpeculationSafe('Wait, no I mean tell me a story')).toBe(false);
   });
 
-  it('keeps handshake grace above the measured local round trip and below the onset budget', () => {
-    expect(LIVE_SPECULATION_HANDSHAKE_GRACE_MS).toBeGreaterThanOrEqual(250);
-    expect(LIVE_SPECULATION_HANDSHAKE_GRACE_MS).toBeLessThanOrEqual(400);
+  it('only spends a small handshake grace when the speculative response is already open', () => {
+    expect(LIVE_SPECULATION_HANDSHAKE_GRACE_MS).toBeGreaterThanOrEqual(20);
+    expect(LIVE_SPECULATION_HANDSHAKE_GRACE_MS).toBeLessThanOrEqual(75);
+    expect(speculationHandshakeWaitBudgetMs({
+      generationReady: false,
+      bufferedChunks: 0,
+      responseReady: true,
+      completed: false,
+      error: false,
+    })).toBe(LIVE_SPECULATION_HANDSHAKE_GRACE_MS);
+  });
+
+  it('does not delay fallback or already-usable speculation', () => {
+    const pending = {
+      generationReady: false,
+      bufferedChunks: 0,
+      responseReady: false,
+      completed: false,
+      error: false,
+    };
+    expect(speculationHandshakeWaitBudgetMs(pending)).toBe(0);
+    expect(speculationHandshakeWaitBudgetMs({
+      ...pending,
+      generationReady: true,
+      responseReady: true,
+    })).toBe(0);
+    expect(speculationHandshakeWaitBudgetMs({
+      ...pending,
+      bufferedChunks: 1,
+      responseReady: true,
+    })).toBe(0);
+    expect(speculationHandshakeWaitBudgetMs({
+      ...pending,
+      completed: true,
+      responseReady: true,
+    })).toBe(0);
+    expect(speculationHandshakeWaitBudgetMs({
+      ...pending,
+      error: true,
+      responseReady: true,
+    })).toBe(0);
   });
 
   it('commits streamed LLM text to TTS after the low-latency deadline', () => {

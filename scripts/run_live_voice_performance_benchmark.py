@@ -13,7 +13,6 @@ import argparse
 import json
 import math
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -31,6 +30,14 @@ DEFAULT_LOGS_DIR = ROOT_DIR / "resources" / "logs"
 LIVE_LOG_NAME = "live-call-streaming.log"
 TTS_LOG_NAME = "tts-streaming.log"
 EXPECTED_STT_PROVIDER = "nemotron_parakeet_eou"
+LLM_PROVIDER_EVIDENCE_EVENTS = frozenset(
+    {
+        "live_chat_provider_route_resolved",
+        "live_chat_speculation_handshake_ready",
+        "live_chat_speculation_session_resolved",
+        "live_chat_speculation_inline_stream_allocated",
+    }
+)
 METRICS = (
     "stt_finalize_ms",
     "final_to_response_open_ms",
@@ -112,6 +119,15 @@ def _load_json_lines(path: Path) -> list[dict[str, Any]]:
                 continue
             if isinstance(record, dict):
                 records.append(record)
+    return records
+
+
+def _load_rotated_json_lines(path: Path, *, backup_count: int = 4) -> list[dict[str, Any]]:
+    """Load a chronological JSONL stream across active and rotated segments."""
+    records: list[dict[str, Any]] = []
+    for index in range(max(0, backup_count), 0, -1):
+        records.extend(_load_json_lines(Path(f"{path}.{index}")))
+    records.extend(_load_json_lines(path))
     return records
 
 
@@ -269,13 +285,23 @@ def _analyze(
     route_records = [
         record
         for record in (*live_records, *tts_records)
-        if record.get("event") == "live_chat_provider_route_resolved"
+        if record.get("event") in LLM_PROVIDER_EVIDENCE_EVENTS
     ]
     provider_names = sorted(
         {
-            str(record.get("effective_provider_name") or "").strip().casefold()
+            str(
+                record.get("effective_provider_name")
+                or record.get("provider_id")
+                or ""
+            )
+            .strip()
+            .casefold()
             for record in route_records
-            if str(record.get("effective_provider_name") or "").strip()
+            if str(
+                record.get("effective_provider_name")
+                or record.get("provider_id")
+                or ""
+            ).strip()
         }
     )
     expected = expected_provider.strip().casefold()
@@ -475,6 +501,7 @@ def main() -> int:
     env["OMNIX_RUN_LIVE_VOICE_PERFORMANCE"] = "1"
     env["OMNIX_BASE_URL"] = args.app_url
     env["OMNIX_STT_URL"] = args.stt_url
+    env["OMNIX_LIVE_VOICE_EXPECTED_PROVIDER"] = args.expected_provider
     env["OMNIX_LIVE_VOICE_BENCHMARK_AUDIO_DIR"] = str(args.audio_dir.resolve())
     env["OMNIX_LIVE_VOICE_BENCHMARK_MANIFEST"] = str(manifest_path.resolve())
 
@@ -524,12 +551,12 @@ def main() -> int:
     started_at = _parse_utc(manifest.get("started_at_utc")) or run_started
     completed_at = _parse_utc(manifest.get("completed_at_utc")) or _utc_now()
     live_records = _window_records(
-        _load_json_lines(args.logs_dir / LIVE_LOG_NAME),
+        _load_rotated_json_lines(args.logs_dir / LIVE_LOG_NAME),
         started_at,
         completed_at,
     )
     tts_records = _window_records(
-        _load_json_lines(args.logs_dir / TTS_LOG_NAME),
+        _load_rotated_json_lines(args.logs_dir / TTS_LOG_NAME),
         started_at,
         completed_at,
     )

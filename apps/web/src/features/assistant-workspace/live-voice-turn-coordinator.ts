@@ -4,8 +4,8 @@ import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 export const LIVE_VOICE_TURN_TIMELINE_EVENT = 'omnix:live-voice-turn-timeline';
 const AUTHORITATIVE_EOU_COMPLETE_CONFIRMATION_MS = 360;
-const AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS = 600;
-const AUTHORITATIVE_EOU_SPECULATION_MIN_SILENCE_MS = 160;
+const AUTHORITATIVE_EOU_GENERAL_CONFIRMATION_MS = 500;
+const AUTHORITATIVE_EOU_SPECULATION_MIN_SILENCE_MS = 100;
 
 export type LiveVoiceTurnState =
   | 'listening'
@@ -64,9 +64,12 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
   // Parakeet EOU is a strong endpoint vote, but the captured Nemotron/EOU
   // traces include real intra-sentence pauses around 430-480 ms. Those pauses
   // must not split one utterance before the full-buffer Nemotron final can see
-  // the complete sentence. Keep the 360/600 ms commit confirmation bounds,
+  // the complete sentence. Keep the 360/500 ms commit confirmation bounds,
   // while allowing a stable multi-word EOU candidate to start side-effect-free
-  // speculation earlier. Resumed speech cancels that private work, so this
+  // speculation earlier. Provider candidates are not delivered continuously;
+  // a 160 ms floor often missed the 100-150 ms candidate and waited until the
+  // next update near 300 ms. The 500 ms general bound remains beyond the longest
+  // captured intra-sentence pause (478 ms). Resumed speech cancels private work, so this
   // recovers LLM/TTS lead time without making an early EOU user-visible.
   if (liveSttUsesAuthoritativeEou() && probability >= input.endpointThreshold) {
     const requiredSilenceMs = complete && input.transcriptWords >= 2

@@ -27,6 +27,18 @@ describe('stable live voice clauses', () => {
     expect(accumulator.pendingText()).toBe('text');
   });
 
+  it('does not commit a punctuated first prefix below its configured audio floor', () => {
+    const accumulator = new StableClauseAccumulator({
+      firstClauseMinimumCharacters: 8,
+      firstClauseDeadlineMs: 20,
+    });
+
+    expect(accumulator.append('Right.', 0)).toEqual([]);
+    expect(accumulator.append(' Let me check.', 5)).toEqual([
+      { text: 'Right. Let me check.', reason: 'strong-boundary' },
+    ]);
+  });
+
   it('returns to the 140 ms policy after the first clause', () => {
     const accumulator = new StableClauseAccumulator();
 

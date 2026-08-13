@@ -21,6 +21,7 @@ CAP_SEMANTIC_ENDPOINTING = "semantic_endpointing"
 CAP_DELAYED_FLUSH = "delayed_flush"
 CAP_PARTIAL_TRANSCRIPTS = "partial_transcripts"
 CAP_AUTHORITATIVE_EOU = "authoritative_eou"
+CAP_AUTHORITATIVE_PREVIEW = "authoritative_preview"
 
 
 @dataclass(frozen=True)

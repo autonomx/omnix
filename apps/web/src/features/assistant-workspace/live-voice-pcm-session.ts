@@ -148,6 +148,38 @@ export type LiveVoicePcmSession = {
   isClosed: () => boolean;
 };
 
+type OutputTimestampSource = {
+  getOutputTimestamp?: () => {
+    contextTime: number;
+    performanceTime: number;
+  };
+};
+
+export function resolveWorkletPlaybackPerformanceTimeMs(
+  event: Record<string, unknown>,
+  audioContext: OutputTimestampSource,
+  receivedAtMs = performance.now(),
+): number | null {
+  const eventContextTime = event.audio_context_time_seconds;
+  if (typeof eventContextTime !== 'number' || !Number.isFinite(eventContextTime)) return null;
+  if (typeof audioContext.getOutputTimestamp !== 'function') return null;
+  try {
+    const timestamp = audioContext.getOutputTimestamp();
+    if (!Number.isFinite(timestamp.contextTime) || !Number.isFinite(timestamp.performanceTime)) return null;
+    const projected = timestamp.performanceTime
+      + ((eventContextTime - timestamp.contextTime) * 1_000);
+    // Reject a broken or cross-origin clock mapping. A worklet notification can
+    // be delayed, but a live-call playback event cannot reasonably predate its
+    // receipt by more than ten seconds or be materially in the future.
+    if (!Number.isFinite(projected)
+      || projected < receivedAtMs - 10_000
+      || projected > receivedAtMs + 250) return null;
+    return Math.min(receivedAtMs, projected);
+  } catch {
+    return null;
+  }
+}
+
 export async function createLiveVoicePcmSession(
   traceId: string,
   voiceId: string | null,
@@ -255,8 +287,14 @@ export async function createLiveVoicePcmSession(
     const eventType = event.data?.type ?? 'unknown';
     if (eventType === 'underrun') underruns += 1;
     if (eventType === 'resumed') resumes += 1;
+    const playbackPerformanceTimeMs = eventType === 'segment_started'
+      ? resolveWorkletPlaybackPerformanceTimeMs(event.data, audioContext)
+      : null;
     const details = {
       ...event.data,
+      ...(playbackPerformanceTimeMs === null
+        ? {}
+        : { playback_performance_time_ms: playbackPerformanceTimeMs }),
       sample_rate: event.data?.sample_rate ?? audioContext.sampleRate,
       audio_context_state: audioContext.state,
       total_frames: totalFrames,

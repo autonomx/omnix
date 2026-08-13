@@ -43,6 +43,17 @@ export type StreamingSttEndpointCandidate = {
   modelTimeMs?: number;
 };
 
+export type StreamingSttPreviewResult = {
+  type: 'preview_result';
+  provider?: string;
+  segmentId: string;
+  sequence: number;
+  previewRequestId: string;
+  snapshotEndSample: number;
+  text: string;
+  providerMetrics?: Record<string, number>;
+};
+
 export type StreamingSttProviderEvent = {
   type: 'flush_started' | 'flush_completed' | 'flush_cancelled';
   provider?: string;
@@ -60,6 +71,7 @@ export type StreamingSttMessage =
   | StreamingSttWord
   | StreamingSttEndpointScore
   | StreamingSttEndpointCandidate
+  | StreamingSttPreviewResult
   | StreamingSttProviderEvent
   | LegacySttResult
   | { type: 'audio_buffered'; segmentId: string; sequence: number; acceptedThroughSample: number }
@@ -143,6 +155,7 @@ export type StreamingSttWebSocketClientOptions = {
   onNegotiated?: (negotiation: StreamingSttNegotiation) => void;
   onEndpointScore?: (event: StreamingSttEndpointScore) => void;
   onEndpointCandidate?: (event: StreamingSttEndpointCandidate) => void;
+  onPreviewTranscript?: (event: StreamingSttPreviewResult) => void;
   onProviderEvent?: (event: StreamingSttProviderEvent) => void;
 };
 
@@ -206,6 +219,7 @@ const DEFAULT_OVERLAP_MS = 300;
 const DEFAULT_MAX_FINAL_RESULT_AGE_MS = 8_000;
 const SEGMENTED_PROTOCOL = 'segmented-v1';
 const CAP_CLIENT_AUDIO_REPLAY = 'client_audio_replay';
+const CAP_AUTHORITATIVE_PREVIEW = 'authoritative_preview';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 
 export function getDefaultStreamingSttWebSocketUrl(
@@ -415,6 +429,8 @@ export class StreamingSttWebSocketClient {
   private readonly sessionId = createRuntimeId('stt-session');
   private readonly captureEpoch = createRuntimeId('capture');
   private readonly resampler = new StreamingFloat32Resampler();
+  private preparedAudioCarry = new Float32Array();
+  private preparedAudioFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private captureClosed = false;
   private absoluteSample = 0;
   private nextSequence = 0;
@@ -528,6 +544,7 @@ export class StreamingSttWebSocketClient {
       this.pendingFinal = true;
       return null;
     }
+    this.flushPreparedAudio();
     if (this.protocol === 'segmented-v1') return this.finalizeActiveSegment();
     if (this.legacyFinalize || this.absoluteSample <= this.legacyStartSample) return this.legacyFinalize?.finalizeRequestId ?? null;
     const finalizeRequestId = createRuntimeId('finalize');
@@ -555,6 +572,32 @@ export class StreamingSttWebSocketClient {
     return finalizeRequestId;
   }
 
+  requestAuthoritativePreview(): string | null {
+    if (
+      !this.socket
+      || this.socket.readyState !== this.options.webSocketCtor.OPEN
+      || !this.serverReady
+      || this.awaitingSessionReady
+      || this.protocol !== 'segmented-v1'
+      || !this.negotiation?.capabilities.includes(CAP_AUTHORITATIVE_PREVIEW)
+    ) return null;
+    this.flushPreparedAudio();
+    const segment = this.activeSegment;
+    if (!segment || segment.finalized || this.absoluteSample <= segment.primaryStartSample) return null;
+    const previewRequestId = createRuntimeId('preview');
+    this.socket.send(JSON.stringify({
+      type: 'preview',
+      protocol: SEGMENTED_PROTOCOL,
+      sessionId: this.sessionId,
+      captureEpoch: this.captureEpoch,
+      segmentId: segment.segmentId,
+      sequence: segment.sequence,
+      previewRequestId,
+      snapshotEndSample: this.absoluteSample,
+    }));
+    return previewRequestId;
+  }
+
   cancelFlush(attemptId: string): void {
     if (!attemptId || !this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN || !this.serverReady) return;
     this.socket.send(JSON.stringify({
@@ -579,6 +622,8 @@ export class StreamingSttWebSocketClient {
     this.serverReady = false;
     this.awaitingSessionReady = false;
     this.resampler.reset();
+    this.clearPreparedAudioFlushTimer();
+    this.preparedAudioCarry = new Float32Array();
     if (this.socket) {
       this.socket.close();
       this.socket = null;
@@ -594,14 +639,56 @@ export class StreamingSttWebSocketClient {
     return this.negotiation?.capabilities.includes(CAP_CLIENT_AUDIO_REPLAY) ?? false;
   }
 
+  get authoritativePreviewSupported(): boolean {
+    return this.negotiation?.capabilities.includes(CAP_AUTHORITATIVE_PREVIEW) ?? false;
+  }
+
   private sendPreparedAudio(frame: PendingAudioFrame): void {
     const resampled = this.resampler.transform(frame.audio, frame.sourceSampleRate, this.targetSampleRate);
     if (!resampled.length) return;
-    if (this.protocol === 'segmented-v1') this.sendSegmentAudio(resampled);
-    else {
-      this.sendLegacyAudio(resampled);
-      this.absoluteSample += resampled.length;
+    const batched = concatFloat32([this.preparedAudioCarry, resampled]);
+    const frameSamples = Math.max(1, this.negotiation?.frameSamples ?? DEFAULT_STT_FRAME_SAMPLES);
+    let offset = 0;
+    while (batched.length - offset >= frameSamples) {
+      this.sendPreparedAudioChunk(batched.slice(offset, offset + frameSamples));
+      offset += frameSamples;
     }
+    this.preparedAudioCarry = batched.slice(offset);
+    if (this.preparedAudioCarry.length) this.schedulePreparedAudioFlush();
+    else this.clearPreparedAudioFlushTimer();
+  }
+
+  private sendPreparedAudioChunk(audio: Float32Array): void {
+    if (this.protocol === 'segmented-v1') this.sendSegmentAudio(audio);
+    else {
+      this.sendLegacyAudio(audio);
+      this.absoluteSample += audio.length;
+    }
+  }
+
+  private schedulePreparedAudioFlush(): void {
+    if (this.preparedAudioFlushTimer) return;
+    const sampleRate = Math.max(1, this.targetSampleRate);
+    const frameSamples = Math.max(1, this.negotiation?.frameSamples ?? DEFAULT_STT_FRAME_SAMPLES);
+    const delayMs = Math.max(1, Math.round(frameSamples * 1_000 / sampleRate));
+    this.preparedAudioFlushTimer = setTimeout(() => {
+      this.preparedAudioFlushTimer = null;
+      this.flushPreparedAudio();
+    }, delayMs);
+  }
+
+  private flushPreparedAudio(): void {
+    this.clearPreparedAudioFlushTimer();
+    if (!this.preparedAudioCarry.length) return;
+    const audio = this.preparedAudioCarry;
+    this.preparedAudioCarry = new Float32Array();
+    this.sendPreparedAudioChunk(audio);
+  }
+
+  private clearPreparedAudioFlushTimer(): void {
+    if (!this.preparedAudioFlushTimer) return;
+    clearTimeout(this.preparedAudioFlushTimer);
+    this.preparedAudioFlushTimer = null;
   }
 
   private sendLegacyAudio(audio: Float32Array): void {
@@ -836,6 +923,18 @@ export class StreamingSttWebSocketClient {
           modelTimeMs: message.modelTimeMs,
         });
         this.options.onEndpointCandidate?.(message);
+        return;
+      case 'preview_result':
+        dispatchSttDiagnostic('stt_authoritative_preview', {
+          provider: message.provider,
+          segmentId: message.segmentId,
+          sourceSequence: message.sequence,
+          previewRequestId: message.previewRequestId,
+          snapshotEndSample: message.snapshotEndSample,
+          transcriptChars: message.text.trim().length,
+          providerMetrics: message.providerMetrics,
+        });
+        this.options.onPreviewTranscript?.(message);
         return;
       case 'flush_started':
       case 'flush_completed':

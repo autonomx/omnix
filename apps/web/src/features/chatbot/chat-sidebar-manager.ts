@@ -71,10 +71,15 @@ export function initializeChatSidebarManager(): () => void {
     scheduleRefresh(0);
   };
 
-  const observer = new MutationObserver((records) => {
+  const observer = new MutationObserver(() => {
+    // React updates transcripts, timers, and avatar state throughout a live
+    // call. None of those mutations change the session index, and refetching
+    // PostgreSQL-backed sessions for each render can starve the audio lane.
+    // Observe the document only to install the manager when the sidebar itself
+    // is mounted or replaced; explicit session events own data refreshes.
+    const sidebar = document.querySelector<HTMLElement>('.assistant-chat-sidebar');
     const host = managerHost();
-    if (host && records.every((record) => host.contains(record.target as Node))) return;
-    scheduleRefresh();
+    if (sidebar && (!host || !sidebar.contains(host))) scheduleRefresh();
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 

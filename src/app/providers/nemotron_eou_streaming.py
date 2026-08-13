@@ -315,6 +315,28 @@ class NemotronEouModelManager:
             "active_streams": len(self._streams),
         }
 
+    def warm_streaming_runtime(self, duration_ms: int = 2_000) -> float:
+        """Exercise both cache-aware streaming models before readiness is exposed."""
+
+        self.load()
+        segment_id = "__omnix_streaming_warmup__"
+        chunk = b"\x00\x00" * self.feed_chunk_samples
+        chunk_count = max(2, (max(1, duration_ms) + self.feed_chunk_ms - 1) // self.feed_chunk_ms)
+        started = time.perf_counter()
+        try:
+            for _ in range(chunk_count):
+                self.feed(segment_id, chunk)
+        finally:
+            self.release(segment_id)
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        _metric(
+            "stt_streaming_runtime_warmed",
+            duration_ms=chunk_count * self.feed_chunk_ms,
+            chunk_count=chunk_count,
+            elapsed_ms=round(elapsed_ms, 3),
+        )
+        return elapsed_ms
+
     def _new_eou_stream(self) -> CacheAwareRnntStream:
         return CacheAwareRnntStream(
             self.eou_model,

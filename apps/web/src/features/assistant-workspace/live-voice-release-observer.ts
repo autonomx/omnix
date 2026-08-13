@@ -251,12 +251,19 @@ function handleDiagnosticEvent(event: Event): void {
     && isSpeechPlayback(detail)
     && playbackMatchesFirstPcm(detail)
   ) {
-    state.firstPlaybackAt = now;
-    recordLatency('speech_end_to_first_playback_ms', elapsed(state.speechEndedAt, now));
-    recordLatency('first_pcm_to_first_playback_ms', elapsed(state.firstPcmAt, now));
-    recordLatency('first_token_to_first_playback_ms', elapsed(state.firstTokenAt, now));
-    recordLatency('final_to_first_playback_ms', elapsed(state.sttFinalAt, now));
-    recordLatency('stt_request_to_first_playback_ms', elapsed(state.sttRequestedAt, now));
+    const renderedAt = finiteNonnegative(
+      detail.details?.playback_performance_time_ms,
+    );
+    const playbackAt = Math.max(
+      state.firstPcmAt,
+      Math.min(now, renderedAt ?? now),
+    );
+    state.firstPlaybackAt = playbackAt;
+    recordLatency('speech_end_to_first_playback_ms', elapsed(state.speechEndedAt, playbackAt));
+    recordLatency('first_pcm_to_first_playback_ms', elapsed(state.firstPcmAt, playbackAt));
+    recordLatency('first_token_to_first_playback_ms', elapsed(state.firstTokenAt, playbackAt));
+    recordLatency('final_to_first_playback_ms', elapsed(state.sttFinalAt, playbackAt));
+    recordLatency('stt_request_to_first_playback_ms', elapsed(state.sttRequestedAt, playbackAt));
     return;
   }
   if (diagnosticEvent === 'turn_stopped' && state.interruptionAt !== null) {

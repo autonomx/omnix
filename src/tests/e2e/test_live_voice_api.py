@@ -22,6 +22,7 @@ import base64
 import json
 import os
 import re
+import subprocess
 import time
 import uuid
 import wave
@@ -47,7 +48,10 @@ STT_OVERLAP_SAMPLES = STT_SAMPLE_RATE * 300 // 1_000
 TTS_SAMPLE_RATE = 24_000
 TTS_START_BUFFER_MS = 80.0
 TTS_START_BUFFER_SAMPLES = round(TTS_SAMPLE_RATE * TTS_START_BUFFER_MS / 1_000)
-TTS_EXPECTED_FRAME_SAMPLES = 1_920
+# The live-call startup policy transfers the first two-step decoder chunk as
+# one 160 ms frame. Playback may still start at the modeled 80 ms floor because
+# that first atomic frame already exceeds the required reserve.
+TTS_EXPECTED_FRAME_SAMPLES = 3_840
 TTS_MAX_PHRASE_CHARS = 220
 TTS_SOFT_CLAUSE_CHARS = 96
 
@@ -84,6 +88,35 @@ def _delta_ms(started_at: float | None, ended_at: float | None) -> float | None:
     if started_at is None or ended_at is None:
         return None
     return (ended_at - started_at) * 1_000
+
+
+def _git_provenance() -> dict[str, Any]:
+    def git(*arguments: str) -> str:
+        try:
+            completed = subprocess.run(
+                ["git", *arguments],
+                cwd=ROOT_DIR,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        # Keep the leading status column from ``git status --porcelain``. A
+        # full ``strip`` corrupts the first path when its index column is blank.
+        return completed.stdout.rstrip() if completed.returncode == 0 else ""
+
+    status_lines = [line for line in git("status", "--porcelain").splitlines() if line]
+    return {
+        "git_sha": git("rev-parse", "HEAD") or None,
+        "git_branch": git("branch", "--show-current") or None,
+        "working_tree_dirty": bool(status_lines),
+        "working_tree_dirty_file_count": len(status_lines),
+        "working_tree_dirty_files": [line[3:] if len(line) > 3 else line for line in status_lines],
+    }
 
 
 def _audio_paths() -> list[Path]:
@@ -257,6 +290,7 @@ class TurnResult:
     audio_file: str
     input_rate: int
     input_samples: int
+    run_state: str = "cold"
     stt_text_chars: int = 0
     llm_text_chars: int = 0
     tts_phrase_count: int = 0
@@ -268,10 +302,17 @@ class TurnResult:
     tts_request_to_first_pcm_ms: float | None = None
     first_pcm_to_playback_ms: float | None = None
     final_to_first_playback_ms: float | None = None
+    stt_to_first_tts_ms: float | None = None
+    stt_to_first_playback_ms: float | None = None
+    speech_end_to_final_ms: float | None = None
+    speech_end_to_first_tts_ms: float | None = None
+    speech_end_to_first_playback_ms: float | None = None
     llm_completion_after_first_tts_ms: float | None = None
     streaming_tts_overlap: bool = False
     playback_mode: str = "adaptive_api_model"
     completed: bool = False
+    stt_started_at: float | None = field(default=None, repr=False)
+    speech_ended_at: float | None = field(default=None, repr=False)
     final_received_at: float | None = field(default=None, repr=False)
     first_llm_chunk_at: float | None = field(default=None, repr=False)
     llm_completed_at: float | None = field(default=None, repr=False)
@@ -285,6 +326,14 @@ class TurnResult:
         self.tts_request_to_first_pcm_ms = _delta_ms(self.first_tts_request_at, self.first_pcm_at)
         self.first_pcm_to_playback_ms = _delta_ms(self.first_pcm_at, self.first_playback_at)
         self.final_to_first_playback_ms = _delta_ms(self.final_received_at, self.first_playback_at)
+        self.stt_to_first_tts_ms = _delta_ms(self.stt_started_at, self.first_pcm_at)
+        self.stt_to_first_playback_ms = _delta_ms(self.stt_started_at, self.first_playback_at)
+        self.speech_end_to_final_ms = _delta_ms(self.speech_ended_at, self.final_received_at)
+        self.speech_end_to_first_tts_ms = _delta_ms(self.speech_ended_at, self.first_pcm_at)
+        self.speech_end_to_first_playback_ms = _delta_ms(
+            self.speech_ended_at,
+            self.first_playback_at,
+        )
         self.llm_completion_after_first_tts_ms = _delta_ms(self.first_tts_request_at, self.llm_completed_at)
         self.streaming_tts_overlap = bool(
             self.first_tts_request_at is not None
@@ -297,6 +346,11 @@ class TurnResult:
             "tts_request_to_first_pcm_ms": self.tts_request_to_first_pcm_ms,
             "first_pcm_to_playback_ms": self.first_pcm_to_playback_ms,
             "final_to_first_playback_ms": self.final_to_first_playback_ms,
+            "stt_to_first_tts_ms": self.stt_to_first_tts_ms,
+            "stt_to_first_playback_ms": self.stt_to_first_playback_ms,
+            "speech_end_to_final_ms": self.speech_end_to_final_ms,
+            "speech_end_to_first_tts_ms": self.speech_end_to_first_tts_ms,
+            "speech_end_to_first_playback_ms": self.speech_end_to_first_playback_ms,
             "llm_completion_after_first_tts_ms": self.llm_completion_after_first_tts_ms,
             "streaming_tts_overlap": self.streaming_tts_overlap,
             "playback_mode": self.playback_mode,
@@ -305,6 +359,8 @@ class TurnResult:
     def manifest_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         for key in (
+            "stt_started_at",
+            "speech_ended_at",
             "final_received_at",
             "first_llm_chunk_at",
             "llm_completed_at",
@@ -401,6 +457,7 @@ class ApiSttClient:
             await self._send_audio_frame(segment_id, sequence, capture_start, primary_start, sample_start, frame)
             await asyncio.sleep(len(frame) / 2 / self.sample_rate)
 
+        turn.speech_ended_at = time.perf_counter()
         self.absolute_sample += len(pcm16) // 2
         self.recent_overlap = pcm16[-STT_OVERLAP_SAMPLES * 2 :]
         finalize_request_id = f"finalize-api-{turn.index}-{uuid.uuid4().hex}"
@@ -411,6 +468,7 @@ class ApiSttClient:
             "finalize_request_id": finalize_request_id,
             "audio_samples": len(pcm16) // 2,
             "sample_rate": self.sample_rate,
+            "speech_end_source": "fixture_audio_end",
         }, "live_voice_controller")
         await self.websocket.send(json.dumps({
             "type": "finalize",
@@ -781,6 +839,7 @@ async def _run_api_test() -> dict[str, Any]:
     stt_url = _base_url(os.environ.get("OMNIX_LIVE_VOICE_API_STT_URL", "http://127.0.0.1:5201"))
     voice = os.environ.get("OMNIX_LIVE_VOICE_API_VOICE", "").strip() or None
     audio_paths = _audio_paths()
+    provenance = _git_provenance()
     _console_log("live voice API test started", api_url=api_url, stt_url=stt_url, turns=len(audio_paths), streaming_chat_to_tts=True, modeled_start_buffer_ms=TTS_START_BUFFER_MS)
     timeout = aiohttp.ClientTimeout(total=None, sock_connect=20, sock_read=CHAT_TIMEOUT_SECONDS)
     manifest_path = Path(os.environ.get(
@@ -788,8 +847,9 @@ async def _run_api_test() -> dict[str, Any]:
         DEFAULT_MANIFEST_DIR / f"live-voice-api-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.json",
     ))
     manifest: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "started_at_utc": _utc_now(),
+        "provenance": provenance,
         "api_base_url": api_url,
         "stt_base_url": stt_url,
         "audio_files": [str(path.resolve()) for path in audio_paths],
@@ -801,6 +861,11 @@ async def _run_api_test() -> dict[str, Any]:
             "start_buffer_ms": TTS_START_BUFFER_MS,
             "start_buffer_samples": TTS_START_BUFFER_SAMPLES,
             "expected_first_frame_samples": TTS_EXPECTED_FRAME_SAMPLES,
+            "speech_end_source": "fixture_audio_end",
+        },
+        "turn_classification": {
+            "cold_turn_index": 1,
+            "steady_state_start_turn": 2,
         },
         "log_paths": {
             "live_call": str(ROOT_DIR / "resources" / "logs" / "live-call-streaming.log"),
@@ -840,7 +905,13 @@ async def _run_api_test() -> dict[str, Any]:
         try:
             await stt_client.negotiate()
             for index, audio_path in enumerate(audio_paths, start=1):
-                turn = TurnResult(index=index, audio_file=audio_path.name, input_rate=0, input_samples=0)
+                turn = TurnResult(
+                    index=index,
+                    audio_file=audio_path.name,
+                    input_rate=0,
+                    input_samples=0,
+                    run_state="cold" if index == 1 else "warm",
+                )
                 turn_started = time.perf_counter()
                 turn_suffix = f"api-{index}-{uuid.uuid4().hex[:10]}"
                 reporter = DiagnosticReporter(http, api_url, f"live-call:voice-turn:{turn_suffix}")
@@ -857,6 +928,8 @@ async def _run_api_test() -> dict[str, Any]:
                         "stt_sample_rate": stt_client.sample_rate,
                         "stt_samples": len(pcm16) // 2,
                     }, "live_voice_controller")
+                    stt_started_at = time.perf_counter()
+                    turn.stt_started_at = stt_started_at
                     transcript = await stt_client.send_turn(pcm16, turn)
                     response_text = await _stream_chat_to_tts(http, api_url, session_id, transcript, turn_suffix, turn, reporter, tts_client)
                     turn.llm_text_chars = len(response_text)
@@ -871,6 +944,11 @@ async def _run_api_test() -> dict[str, Any]:
                         "tts_request_to_first_pcm_ms",
                         "first_pcm_to_playback_ms",
                         "final_to_first_playback_ms",
+                        "stt_to_first_tts_ms",
+                        "stt_to_first_playback_ms",
+                        "speech_end_to_final_ms",
+                        "speech_end_to_first_tts_ms",
+                        "speech_end_to_first_playback_ms",
                     ):
                         metric_value = metrics.get(metric_name)
                         if metric_value is None or metric_value < 0:
@@ -880,7 +958,8 @@ async def _run_api_test() -> dict[str, Any]:
                         "turn_index": index,
                         "stt_finalize_ms": turn.stt_finalize_ms,
                         **metrics,
-                        "total_turn_ms": (time.perf_counter() - turn_started) * 1_000,
+                        "total_turn_ms": metrics["speech_end_to_first_playback_ms"],
+                        "pipeline_completion_ms": (time.perf_counter() - turn_started) * 1_000,
                     }, "api_test")
                     manifest["turns"].append(turn.manifest_dict())
                     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")

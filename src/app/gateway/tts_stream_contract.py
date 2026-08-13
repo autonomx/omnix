@@ -35,10 +35,11 @@ CHAT_STREAM_TOKEN_OVERHEAD = 24
 CHAT_STREAM_MIN_REPETITION_PENALTY = 1.05
 # Qwen3-TTS emits roughly 80 ms of 24 kHz audio per codec step. Keep ordinary
 # clauses capped at four steps for decoder throughput, but let the first spoken
-# phrase of each accepted response use one step so the first raw chunk can be
-# handed to playback at the minimum supported codec depth. Conversation output
-# IDs encode their response-local phrase index as ``-pN``.
-CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS = 1
+# phrase of each accepted response use two steps so decoder overhead is
+# amortized across 160 ms of speech. A one-step / 80 ms chunk has essentially
+# no cadence reserve and starves playback under ordinary scheduling jitter.
+# Conversation output IDs encode their response-local phrase index as ``-pN``.
+CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS = 2
 CHAT_STREAM_MAX_CODEC_CHUNK_STEPS = 4
 _FIRST_CONVERSATION_PHRASE_PATTERN = re.compile(r"-g\d+-p0$")
 
@@ -75,7 +76,7 @@ def estimate_chat_stream_max_new_tokens(text: str) -> int:
 
 
 def chat_stream_codec_chunk_cap(output_id: str | None) -> int:
-    """Use the one-step fast path only for the first canonical phrase of a response."""
+    """Use the two-step startup path only for the first canonical response phrase."""
     normalized_output_id = (output_id or "").strip()
     if _FIRST_CONVERSATION_PHRASE_PATTERN.search(normalized_output_id):
         return CHAT_STREAM_FIRST_PHRASE_CODEC_CHUNK_STEPS

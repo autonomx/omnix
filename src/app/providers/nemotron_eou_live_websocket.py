@@ -4,6 +4,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import math
+import os
+import struct
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -14,6 +17,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_EOU,
     CAP_AUTHORITATIVE_FINAL,
+    CAP_AUTHORITATIVE_PREVIEW,
     CAP_PARTIAL_TRANSCRIPTS,
     CAP_RESULT_REPLAY,
     CAP_SEGMENTED_AUDIO,
@@ -45,6 +49,7 @@ HYBRID_NEGOTIATION = LiveSttNegotiation(
             CAP_RESULT_REPLAY,
             CAP_PARTIAL_TRANSCRIPTS,
             CAP_AUTHORITATIVE_EOU,
+            CAP_AUTHORITATIVE_PREVIEW,
         }
     ),
 )
@@ -81,6 +86,24 @@ def primary_pcm_slice(sample_start: int, primary_start_sample: int, payload: byt
     return payload[skip_samples * 2 :]
 
 
+def pcm16le_rms(payload: bytes) -> float:
+    if not payload:
+        return 0.0
+    sample_count = len(payload) // 2
+    if sample_count <= 0:
+        return 0.0
+    squared = sum(sample * sample for (sample,) in struct.iter_unpack("<h", payload))
+    return math.sqrt(squared / sample_count) / 32768.0
+
+
+def preview_tail_rms_threshold() -> float:
+    try:
+        value = float(os.environ.get("OMNIX_STT_PREVIEW_TAIL_RMS_THRESHOLD", "0.012"))
+    except (TypeError, ValueError):
+        return 0.012
+    return min(0.05, max(0.001, value))
+
+
 @dataclass
 class HybridSegment:
     segment_id: str
@@ -98,6 +121,11 @@ class HybridSegment:
     finalize_request_id: str = ""
     end_sample: int = 0
     finalized: bool = False
+    preview_request_id: str = ""
+    preview_text: str = ""
+    preview_decode_ms: float = 0.0
+    preview_end_sample: int = 0
+    preview_tail_max_rms: float = 0.0
 
     def append(self, sample_start: int, payload: bytes) -> int:
         if len(payload) % 2:
@@ -122,8 +150,35 @@ class HybridSegment:
                 raise ValueError("segment_audio_limit")
             self.primary_audio.extend(primary)
             self.stream_pending.extend(primary)
+            if self.preview_text and sample_start >= self.preview_end_sample:
+                self.preview_tail_max_rms = max(
+                    self.preview_tail_max_rms,
+                    pcm16le_rms(primary),
+                )
         self.accepted_through_sample = sample_start + len(payload) // 2
         return self.accepted_through_sample
+
+    def remember_preview(
+        self,
+        *,
+        request_id: str,
+        text: str,
+        decode_ms: float,
+        end_sample: int,
+    ) -> None:
+        self.preview_request_id = request_id
+        self.preview_text = text.strip()
+        self.preview_decode_ms = decode_ms
+        self.preview_end_sample = end_sample
+        self.preview_tail_max_rms = 0.0
+
+    def can_reuse_preview(self) -> bool:
+        return bool(
+            self.preview_text
+            and self.preview_end_sample > self.primary_start_sample
+            and self.preview_end_sample <= self.accepted_through_sample
+            and self.preview_tail_max_rms < preview_tail_rms_threshold()
+        )
 
 
 @dataclass
@@ -276,17 +331,23 @@ def _schedule_stream_drain(
     segment.stream_task = asyncio.create_task(run())
 
 
-async def _flush_stream(
+async def _settle_stream_for_final(
     segment: HybridSegment,
-    manager: NemotronEouModelManager,
-    websocket: WebSocket,
-    send_lock: asyncio.Lock,
-) -> None:
+) -> int:
+    """Drop obsolete draft work and wait for at most one in-flight feed.
+
+    The authoritative final is decoded from ``primary_audio`` immediately
+    afterward. Processing the rest of ``stream_pending`` first only repeats
+    inference over audio already present in that complete buffer and delays the
+    correctness-owning decode by several hundred milliseconds under load.
+    """
+
+    discarded_samples = len(segment.stream_pending) // 2
+    segment.stream_pending.clear()
     existing = segment.stream_task
     if existing is not None:
         await existing
-    if segment.stream_pending:
-        await _drain_stream_audio(segment, manager, websocket, send_lock, flush=True)
+    return discarded_samples
 
 
 def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = model_manager) -> None:
@@ -296,6 +357,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
         send_lock = asyncio.Lock()
         connection_id = uuid.uuid4().hex
         active_session_id = f"connection-{connection_id}"
+        owned_segments: dict[str, HybridSessionState] = {}
         await _safe_send(
             websocket,
             send_lock,
@@ -358,6 +420,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                             capture_epoch=str(_field(data, "captureEpoch", "capture_epoch", ""))[:160],
                         )
                         state.segments[segment_id] = segment
+                        owned_segments[segment_id] = state
                     try:
                         payload = base64.b64decode(str(data.get("data", "")), validate=True)
                         accepted = segment.append(sample_start, payload)
@@ -388,6 +451,67 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         },
                     )
                     _schedule_stream_drain(segment, manager, websocket, send_lock)
+                    continue
+                if message_type == "preview":
+                    segment_id = str(_field(data, "segmentId", "segment_id", ""))[:120]
+                    sequence = int(data.get("sequence", 0))
+                    request_id = str(
+                        _field(data, "previewRequestId", "preview_request_id", "")
+                    )[:160]
+                    segment = state.segments.get(segment_id)
+                    if segment is None or segment.finalized or not request_id:
+                        continue
+                    snapshot_end_sample = segment.accepted_through_sample
+                    snapshot = bytes(segment.primary_audio)
+                    preview_started = time.perf_counter()
+                    preview_method = getattr(manager, "preview", None)
+                    if not callable(preview_method):
+                        continue
+                    try:
+                        text, preview_metrics = await asyncio.to_thread(
+                            preview_method,
+                            snapshot,
+                        )
+                    except Exception as exc:  # noqa: BLE001 - preview failure is non-fatal
+                        _metric(
+                            "stt_authoritative_preview_failed",
+                            segment_sequence=sequence,
+                            error_type=type(exc).__name__,
+                            error=str(exc),
+                        )
+                        continue
+                    preview_ms = (time.perf_counter() - preview_started) * 1000.0
+                    preview_decode_ms = float(
+                        preview_metrics.get("preview_decode_ms", preview_ms)
+                    )
+                    segment.remember_preview(
+                        request_id=request_id,
+                        text=text,
+                        decode_ms=preview_decode_ms,
+                        end_sample=snapshot_end_sample,
+                    )
+                    await _safe_send(
+                        websocket,
+                        send_lock,
+                        {
+                            "type": "preview_result",
+                            "provider": PROVIDER_NAME,
+                            "segmentId": segment_id,
+                            "sequence": sequence,
+                            "previewRequestId": request_id,
+                            "snapshotEndSample": snapshot_end_sample,
+                            "text": text,
+                            "providerMetrics": preview_metrics,
+                        },
+                    )
+                    _metric(
+                        "stt_authoritative_preview_completed",
+                        segment_sequence=sequence,
+                        transcript_chars=len(text),
+                        snapshot_end_sample=snapshot_end_sample,
+                        preview_ms=round(preview_ms, 3),
+                        preview_decode_ms=round(preview_decode_ms, 3),
+                    )
                     continue
                 if message_type in {"final", "finalize"}:
                     segment_id = str(_field(data, "segmentId", "segment_id", ""))[:120]
@@ -429,22 +553,66 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         _field(data, "endSample", "end_sample", segment.accepted_through_sample)
                     )
                     final_started = time.perf_counter()
+                    stream_pending_samples_at_request = len(segment.stream_pending) // 2
+                    stream_task_active_at_request = (
+                        segment.stream_task is not None and not segment.stream_task.done()
+                    )
                     await _safe_send(
                         websocket,
                         send_lock,
                         {"type": "finalize_queued", "segmentId": segment_id, "sequence": sequence, "queuedSegments": 0},
                     )
                     try:
-                        await _flush_stream(segment, manager, websocket, send_lock)
-                        text, provider_metrics = await asyncio.to_thread(
-                            manager.finalize,
-                            segment_id,
-                            bytes(segment.primary_audio),
+                        stream_flush_started = time.perf_counter()
+                        stream_discarded_samples_at_final = await _settle_stream_for_final(
+                            segment,
                         )
+                        stream_flush_ms = (time.perf_counter() - stream_flush_started) * 1000.0
+                        provider_finalize_started = time.perf_counter()
+                        finalize_from_preview = getattr(manager, "finalize_from_preview", None)
+                        preview_reused = segment.can_reuse_preview() and callable(
+                            finalize_from_preview
+                        )
+                        if preview_reused:
+                            text, provider_metrics = finalize_from_preview(
+                                segment_id,
+                                segment.preview_text,
+                                segment.preview_decode_ms,
+                            )
+                        else:
+                            text, provider_metrics = await asyncio.to_thread(
+                                manager.finalize,
+                                segment_id,
+                                bytes(segment.primary_audio),
+                            )
+                        provider_finalize_ms = (
+                            time.perf_counter() - provider_finalize_started
+                        ) * 1000.0
                         finalize_ms = (time.perf_counter() - final_started) * 1000.0
                         provider_metrics = {
                             **provider_metrics,
                             "finalize_ms": round(finalize_ms, 3),
+                            "stream_flush_ms": round(stream_flush_ms, 3),
+                            "provider_finalize_ms": round(provider_finalize_ms, 3),
+                            "stream_pending_samples_at_request": float(
+                                stream_pending_samples_at_request
+                            ),
+                            "stream_pending_ms_at_request": round(
+                                stream_pending_samples_at_request * 1000.0 / SAMPLE_RATE,
+                                3,
+                            ),
+                            "stream_task_active_at_request": (
+                                1.0 if stream_task_active_at_request else 0.0
+                            ),
+                            "stream_discarded_samples_at_final": float(
+                                stream_discarded_samples_at_final
+                            ),
+                            "stream_discarded_ms_at_final": round(
+                                stream_discarded_samples_at_final * 1000.0 / SAMPLE_RATE,
+                                3,
+                            ),
+                            "authoritative_preview_reused": 1.0 if preview_reused else 0.0,
+                            "preview_tail_max_rms": round(segment.preview_tail_max_rms, 6),
                             "eou_triggered": 1.0 if segment.eou_emitted else 0.0,
                             "eou_candidate_count": float(segment.eou_candidate_count),
                         }
@@ -470,6 +638,11 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                             segment_sequence=segment.sequence,
                             transcript_chars=len(text),
                             finalize_ms=round(finalize_ms, 3),
+                            stream_flush_ms=round(stream_flush_ms, 3),
+                            provider_finalize_ms=round(provider_finalize_ms, 3),
+                            stream_pending_samples_at_request=stream_pending_samples_at_request,
+                            stream_discarded_samples_at_final=stream_discarded_samples_at_final,
+                            stream_task_active_at_request=stream_task_active_at_request,
                             eou_triggered=segment.eou_emitted,
                             eou_candidate_count=segment.eou_candidate_count,
                             streaming_final=provider_metrics.get("streaming_final", 0.0),
@@ -503,9 +676,24 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                     finally:
                         manager.release(segment_id)
                         state.segments.pop(segment_id, None)
+                        owned_segments.pop(segment_id, None)
                     continue
         except WebSocketDisconnect:
             return
         except Exception as exc:  # noqa: BLE001 - top-level websocket fault containment
             _metric("stt_hybrid_websocket_failed", error_type=type(exc).__name__, error=str(exc))
             await _safe_send(websocket, send_lock, {"type": "error", "error": str(exc)})
+        finally:
+            released = 0
+            for segment_id, state in tuple(owned_segments.items()):
+                segment = state.segments.pop(segment_id, None)
+                if segment is not None and segment.stream_task is not None:
+                    segment.stream_task.cancel()
+                manager.release(segment_id)
+                released += 1
+            if released:
+                _metric(
+                    "stt_hybrid_websocket_segments_released",
+                    connection_id=connection_id,
+                    released_segments=released,
+                )

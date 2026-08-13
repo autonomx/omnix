@@ -25,22 +25,20 @@ class BlockingAfterInitialQwenChunkProvider:
         self.finished = threading.Event()
 
     def generate_audio_stream(self, **_kwargs: Any):
-        # Four Qwen codec steps currently materialize 7,680 samples. The
-        # 1,920-sample live frame should hand off four times from this raw chunk
-        # before generation resumes.
+        # Four Qwen codec steps materialize two 3,840-sample transport frames.
         yield [0.006] * 7_680, 24_000, {"chunk_index": 0}
         self.allow_finish.wait(timeout=1.0)
         self.finished.set()
 
 
-class BlockingAfterOneStepQwenChunkProvider:
+class BlockingAfterTwoStepQwenChunkProvider:
     def __init__(self) -> None:
         self.allow_finish = threading.Event()
         self.finished = threading.Event()
 
     def generate_audio_stream(self, **_kwargs: Any):
-        # One Qwen codec step materializes exactly one 1,920-sample live frame.
-        yield [0.006] * 1_920, 24_000, {"chunk_index": 0}
+        # Two Qwen codec steps fill one 3,840-sample transport frame.
+        yield [0.006] * 3_840, 24_000, {"chunk_index": 0}
         self.allow_finish.wait(timeout=1.0)
         self.finished.set()
 
@@ -67,16 +65,16 @@ def _patch_live_tts_test_runtime(monkeypatch, provider: Any) -> None:
 def test_gateway_import_installs_startup_frame_policy() -> None:
     from app.gateway import tts_live_call_websocket
 
-    assert tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES == 1_920
-    assert TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES == 1_920
-    assert TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS == 80.0
+    assert tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES == 3_840
+    assert TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES == 3_840
+    assert TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS == 160.0
     assert TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD == STREAM_INITIAL_FALLBACK_THRESHOLD
 
 
-def test_one_step_chunk_gets_first_chunk_onset_window() -> None:
-    pcm = b"\x01\x00" * 1_920
+def test_two_step_chunk_gets_first_chunk_onset_window() -> None:
+    pcm = b"\x01\x00" * 3_840
 
-    assert live_call_max_initial_silence_ms_for_first_chunk(pcm, 24_000) == 80.0
+    assert live_call_max_initial_silence_ms_for_first_chunk(pcm, 24_000) == 160.0
     assert live_call_max_initial_silence_ms_for_first_chunk(pcm, 22_050) == (
         STREAM_MAX_INITIAL_SILENCE_MS
     )
@@ -89,7 +87,7 @@ def test_gateway_composition_binds_warmed_live_tts_provider() -> None:
     assert tts_live_call_websocket.get_tts_provider is get_cached_live_tts_provider
 
 
-def test_four_step_qwen_chunk_hands_off_four_80ms_frames_before_provider_resumes(monkeypatch) -> None:
+def test_four_step_qwen_chunk_hands_off_two_160ms_frames_before_provider_resumes(monkeypatch) -> None:
     from app.gateway import tts_live_call_websocket
 
     provider = BlockingAfterInitialQwenChunkProvider()
@@ -127,11 +125,9 @@ def test_four_step_qwen_chunk_hands_off_four_80ms_frames_before_provider_resumes
 
         start = websocket.receive_json()
         assert start["type"] == "start"
-        assert start["frame_samples"] == 1_920
-        assert len(websocket.receive_bytes()) == 3_840
-        assert len(websocket.receive_bytes()) == 3_840
-        assert len(websocket.receive_bytes()) == 3_840
-        assert len(websocket.receive_bytes()) == 3_840
+        assert start["frame_samples"] == 3_840
+        assert len(websocket.receive_bytes()) == 7_680
+        assert len(websocket.receive_bytes()) == 7_680
         assert not provider.finished.is_set()
 
         provider.allow_finish.set()
@@ -139,8 +135,8 @@ def test_four_step_qwen_chunk_hands_off_four_80ms_frames_before_provider_resumes
         websocket.send_json({"type": "close", "reason": "finished"})
 
 
-def test_one_step_qwen_chunk_hands_off_first_80ms_frame_without_waiting_for_second_chunk(monkeypatch) -> None:
-    provider = BlockingAfterOneStepQwenChunkProvider()
+def test_two_step_qwen_chunk_hands_off_first_160ms_frame_before_provider_resumes(monkeypatch) -> None:
+    provider = BlockingAfterTwoStepQwenChunkProvider()
     _patch_live_tts_test_runtime(monkeypatch, provider)
 
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
@@ -155,10 +151,10 @@ def test_one_step_qwen_chunk_hands_off_first_80ms_frame_without_waiting_for_seco
                 "output_id": "conversation-chat-test-g7-p0",
                 "generation_epoch": 7,
                 "phrase_index": 0,
-                "text": "One-step startup latency probe.",
+                "text": "Two-step startup latency probe.",
                 "speaker": "Sofia",
                 "language": "English",
-                "chunk_size": 1,
+                "chunk_size": 2,
                 "temperature": 0.6,
                 "top_k": 20,
                 "top_p": 0.85,
@@ -172,8 +168,8 @@ def test_one_step_qwen_chunk_hands_off_first_80ms_frame_without_waiting_for_seco
 
         start = websocket.receive_json()
         assert start["type"] == "start"
-        assert start["frame_samples"] == 1_920
-        assert len(websocket.receive_bytes()) == 3_840
+        assert start["frame_samples"] == 3_840
+        assert len(websocket.receive_bytes()) == 7_680
         assert not provider.finished.is_set()
 
         provider.allow_finish.set()

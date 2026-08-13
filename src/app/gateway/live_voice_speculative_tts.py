@@ -36,6 +36,16 @@ _CACHE_TTL_SECONDS = 45.0
 _ACCEPTED_UNCLAIMED_TTL_SECONDS = 5.0
 _MAX_CACHE_ENTRIES = 16
 _WAIT_SLICE_SECONDS = 0.025
+# An accepted claim can race the provider's first decoder step. Abandoning the
+# cache at that instant starts a second CUDA generation while the promoted one
+# is about to produce PCM, making the cold turn slower and wasting GPU work.
+# Wait only through the measured first-step envelope plus two steady decoder
+# steps, then fail safely to a fresh authoritative stream if the promoted
+# producer is genuinely stuck. Two 160 ms chunks give the AudioWorklet a 320 ms
+# reserve in one atomic browser handoff; the websocket sender continues to
+# deliver later frames between decoder steps.
+_COLD_CLAIM_WAIT_SECONDS = 0.55
+_COLD_CLAIM_TARGET_CHUNKS = 2
 # Provider chunk_size controls streaming/cancellation cadence, not synthesis
 # identity. Accepted first-phrase playback may intentionally request a smaller
 # chunk than hidden speculation, and cached PCM is reblocked by the live TTS
@@ -380,6 +390,11 @@ def _start_prefetch(
                         )
                     )
                     entry.condition.notify_all()
+                # Once accepted playback is consuming this cache, the gateway
+                # event loop must get a scheduling window between CUDA decoder
+                # steps. Without an explicit yield, produced-real-time cadence
+                # can still arrive at the browser as a >300 ms burst.
+                time.sleep(0.001)
         except Exception as exc:  # noqa: BLE001 - private speculative work
             with entry.condition:
                 if not entry.cancelled:
@@ -446,8 +461,6 @@ def _claim_entry(
     actual_speaker = _normalized_speaker(speaker)
     actual_language = _normalized_language(language)
     actual_kwargs = _stable_kwargs(kwargs)
-    cold_entry: _SpeculativeTtsEntry | None = None
-    cold_remainder = ""
     with _CACHE_LOCK:
         _prune_entries_locked()
         matches: list[tuple[int, float, _SpeculativeTtsEntry, str]] = []
@@ -470,29 +483,65 @@ def _claim_entry(
             return None
         _, _, entry, remainder = max(matches, key=lambda item: (item[0], item[1]))
         with entry.condition:
-            if not entry.chunks:
-                _ENTRIES.pop(entry.generation_id, None)
-                entry.cancelled = True
-                entry.condition.notify_all()
-                cold_entry = entry
-                cold_remainder = remainder
-            else:
-                entry.claimed = True
+            entry.claimed = True
+            initial_buffered_chunk_count = len(entry.chunks)
+            if (
+                entry.completed
+                or initial_buffered_chunk_count >= _COLD_CLAIM_TARGET_CHUNKS
+            ):
                 return _CacheClaim(entry=entry, remainder_text=remainder)
 
-    if cold_entry is not None:
-        stream_log(
-            "gateway-live-speculative-tts",
-            "provider",
-            "speculative_tts_cache_cold_claim_abandoned",
-            generation_id=cold_entry.generation_id,
-            buffered_chunk_count=0,
-            completed=cold_entry.completed,
-            prefix_match=bool(cold_remainder),
-            remainder_text_length=len(cold_remainder),
-            execution_lane=cold_entry.lane,
-        )
-        live_voice_tts_scheduler().notify_priority_change()
+    wait_started = time.perf_counter()
+    with entry.condition:
+        deadline = time.monotonic() + _COLD_CLAIM_WAIT_SECONDS
+        while (
+            len(entry.chunks) < _COLD_CLAIM_TARGET_CHUNKS
+            and not entry.completed
+            and not entry.cancelled
+            and entry.error is None
+        ):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            entry.condition.wait(min(_WAIT_SLICE_SECONDS, remaining))
+        if entry.chunks:
+            wait_ms = round((time.perf_counter() - wait_started) * 1000.0, 3)
+            stream_log(
+                "gateway-live-speculative-tts",
+                "provider",
+                "speculative_tts_cache_cold_claim_promoted",
+                generation_id=entry.generation_id,
+                buffered_chunk_count=len(entry.chunks),
+                initial_buffered_chunk_count=initial_buffered_chunk_count,
+                completed=entry.completed,
+                wait_ms=wait_ms,
+                prefix_match=bool(remainder),
+                remainder_text_length=len(remainder),
+                execution_lane=entry.lane,
+            )
+            return _CacheClaim(entry=entry, remainder_text=remainder)
+        entry.cancelled = True
+        entry.condition.notify_all()
+        completed = entry.completed
+        error = entry.error
+
+    with _CACHE_LOCK:
+        if _ENTRIES.get(entry.generation_id) is entry:
+            _ENTRIES.pop(entry.generation_id, None)
+    stream_log(
+        "gateway-live-speculative-tts",
+        "provider",
+        "speculative_tts_cache_cold_claim_abandoned",
+        generation_id=entry.generation_id,
+        buffered_chunk_count=0,
+        completed=completed,
+        error=error,
+        wait_ms=round((time.perf_counter() - wait_started) * 1000.0, 3),
+        prefix_match=bool(remainder),
+        remainder_text_length=len(remainder),
+        execution_lane=entry.lane,
+    )
+    live_voice_tts_scheduler().notify_priority_change()
     return None
 
 

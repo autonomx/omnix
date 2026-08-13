@@ -10,9 +10,11 @@ import {
   resetLiveSttCapabilityState,
 } from './live-stt-capability-state';
 import {
+  LiveSttSegmentTelemetryGate,
   liveVoiceAssistantOwnsFloor,
   liveVoiceSpeechThreshold,
   semanticFinalizationRemainingMs,
+  waitForLiveConversationSessionId,
 } from './live-voice-controller';
 
 const SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
@@ -115,9 +117,9 @@ describe('live voice semantic finalization deadline', () => {
       'authoritative_eou',
     ]);
 
-    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 514, 0)).toBe(86);
-    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 599, 0)).toBe(1);
-    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 600, 0)).toBe(0);
+    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 494, 0)).toBe(6);
+    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 499, 0)).toBe(1);
+    expect(semanticFinalizationRemainingMs('That should still be one turn', 'balanced', 500, 0)).toBe(0);
   });
 
   it('uses recent assistant-question context to finalize a one-word answer quickly', () => {
@@ -133,6 +135,34 @@ describe('live voice semantic finalization deadline', () => {
     expect(semanticFinalizationRemainingMs('Vancouver', 'balanced', 120)).toBe(100);
     expect(semanticFinalizationRemainingMs('yes', 'balanced', 120)).toBe(100);
     expect(semanticFinalizationRemainingMs('because', 'balanced', 120)).toBe(1_580);
+  });
+});
+
+describe('live STT segment telemetry', () => {
+  it('reports structural changes immediately and throttles unchanged audio progress', () => {
+    const gate = new LiveSttSegmentTelemetryGate();
+    const state = {
+      protocol: 'segmented-v1' as const,
+      activeSequence: 2,
+      pendingSegments: 1,
+      queuedSegments: 0,
+      absoluteSample: 16_000,
+    };
+
+    expect(gate.shouldReport(state, 1_000)).toBe(true);
+    expect(gate.shouldReport({ ...state, absoluteSample: 16_320 }, 1_020)).toBe(false);
+    expect(gate.shouldReport({ ...state, absoluteSample: 20_000 }, 1_250)).toBe(true);
+    expect(gate.shouldReport({ ...state, pendingSegments: 2 }, 1_260)).toBe(true);
+  });
+});
+
+describe('live voice session selection', () => {
+  it('waits for the React-selected session during call startup', async () => {
+    const selected = waitForLiveConversationSessionId(100);
+
+    liveConversationStore.dispatch({ type: 'session', sessionId: 'chat:just-created' });
+
+    await expect(selected).resolves.toBe('chat:just-created');
   });
 });
 

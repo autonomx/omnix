@@ -7,19 +7,19 @@ import {
 } from './live-tts-adaptive-buffer-controller';
 
 describe('adaptive live TTS buffering', () => {
-  it('starts from one 80 ms Qwen startup frame at 24 kHz', () => {
+  it('starts with a 120 ms reserve across the first two Qwen frames at 24 kHz', () => {
     const policy = new AdaptiveTtsBufferPolicy();
     const snapshot = policy.snapshot();
 
     expect(snapshot).toMatchObject({
-      startBufferMs: 80,
+      startBufferMs: 120,
       rebufferMs: 520,
       stableTurns: 0,
       underrunTurns: 0,
     });
     expect(adaptiveBufferWorkletMessage(snapshot, 24_000)).toMatchObject({
-      startBufferSamples: 1_920,
-      minimumBufferedSpeechSamples: 1_920,
+      startBufferSamples: 2_880,
+      minimumBufferedSpeechSamples: 2_880,
       rebufferSamples: 12_480,
     });
   });
@@ -28,39 +28,39 @@ describe('adaptive live TTS buffering', () => {
     const policy = new AdaptiveTtsBufferPolicy();
 
     expect(policy.observeWorkletEvent('underrun')).toMatchObject({
-      startBufferMs: 150,
+      startBufferMs: 190,
       rebufferMs: 630,
     });
     expect(policy.observeWorkletEvent('drained')).toMatchObject({
-      startBufferMs: 150,
+      startBufferMs: 190,
       rebufferMs: 630,
       stableTurns: 0,
       underrunTurns: 1,
     });
   });
 
-  it('never decays below the one-frame startup floor', () => {
+  it('never decays below the safe startup floor', () => {
     const policy = new AdaptiveTtsBufferPolicy();
 
     policy.observeWorkletEvent('drained');
     policy.observeWorkletEvent('drained');
-    expect(policy.snapshot().startBufferMs).toBe(80);
+    expect(policy.snapshot().startBufferMs).toBe(120);
 
     expect(policy.observeWorkletEvent('drained')).toMatchObject({
-      startBufferMs: 80,
+      startBufferMs: 120,
       rebufferMs: 490,
       stableTurns: 0,
     });
   });
 
-  it('clamps a sub-frame reserve to the 80 ms floor', () => {
+  it('clamps a sub-frame reserve to the 120 ms floor', () => {
     const policy = new AdaptiveTtsBufferPolicy({
       startBufferMs: 60,
       rebufferMs: 490,
     });
 
     expect(policy.snapshot()).toMatchObject({
-      startBufferMs: 80,
+      startBufferMs: 120,
       rebufferMs: 490,
     });
   });

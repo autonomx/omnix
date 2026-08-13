@@ -4,7 +4,10 @@ import {
   clearVoiceCueAssets,
   registerVoiceCueSamples,
 } from './live-voice-cue-bank';
-import { createLiveVoicePcmSession } from './live-voice-pcm-session';
+import {
+  createLiveVoicePcmSession,
+  resolveWorkletPlaybackPerformanceTimeMs,
+} from './live-voice-pcm-session';
 
 class FakePort {
   onmessage: ((event: MessageEvent) => void) | null = null;
@@ -181,6 +184,19 @@ afterEach(() => {
 });
 
 describe('live voice PCM session', () => {
+  it('maps a delayed worklet event back to its audio output time', () => {
+    expect(resolveWorkletPlaybackPerformanceTimeMs(
+      { audio_context_time_seconds: 10 },
+      {
+        getOutputTimestamp: () => ({
+          contextTime: 10.25,
+          performanceTime: 5_000,
+        }),
+      },
+      5_300,
+    )).toBe(4_750);
+  });
+
   it('keeps one AudioContext, worklet, and websocket while preserving segment identity', async () => {
     const session = await createLiveVoicePcmSession('live-call:s1:test', 'Jinx', reporter);
     const first = session.enqueuePhrase('First phrase.', 0);

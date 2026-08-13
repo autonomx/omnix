@@ -118,5 +118,40 @@ class QualityFirstNemotronEouModelManager(NemotronEouModelManager):
             "final_right_context": final_context,
         }
 
+    def preview(self, pcm16le: bytes) -> tuple[str, dict[str, float]]:
+        """Decode a side-effect-free high-context snapshot during a pause."""
+
+        started = time.perf_counter()
+        text = self._transcribe_quality_pcm16(pcm16le).strip() if pcm16le else ""
+        decode_ms = (time.perf_counter() - started) * 1000.0
+        return text, {
+            "authoritative_preview": 1.0,
+            "preview_decode_ms": round(decode_ms, 3),
+            "final_right_context": float(self.nemotron_final_right_context),
+        }
+
+    def finalize_from_preview(
+        self,
+        segment_id: str,
+        preview_text: str,
+        preview_decode_ms: float,
+    ) -> tuple[str, dict[str, float]]:
+        """Promote a preview proven to have only silence after its snapshot."""
+
+        stream = self._streams.get(segment_id)
+        streaming_text = stream.nemotron.finalize_text() if stream is not None else ""
+        return preview_text.strip(), {
+            "authoritative_full_decode": 1.0,
+            "authoritative_preview_reused": 1.0,
+            "preview_decode_ms": round(preview_decode_ms, 3),
+            "full_decode_ms": round(preview_decode_ms, 3),
+            "streaming_final": 0.0,
+            "offline_fallback": 0.0,
+            "streaming_chars": float(len(streaming_text)),
+            "authoritative_chars": float(len(preview_text.strip())),
+            "authoritative_changed": 1.0 if preview_text.strip() != streaming_text else 0.0,
+            "final_right_context": float(self.nemotron_final_right_context),
+        }
+
 
 quality_model_manager = QualityFirstNemotronEouModelManager()

@@ -65,7 +65,7 @@ const PROFILES: Record<ConversationPace, FloorTimingProfile> = {
 // EOU is missed; explicit EOU commits immediately in the voice controller.
 const AUTHORITATIVE_EOU_FALLBACK_MS: Record<ConversationPace, number> = {
   quick: 450,
-  balanced: 600,
+  balanced: 500,
   reflective: 800,
 };
 

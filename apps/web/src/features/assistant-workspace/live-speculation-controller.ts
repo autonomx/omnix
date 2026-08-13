@@ -18,7 +18,25 @@ const SINGLE_WORD_SPECULATION_MIN_PROBABILITY = 0.88;
 const MAX_ACTIVE_HYPOTHESES = 2;
 const MIN_EXTENSION_WORDS = 2;
 const SPECULATIVE_TTS_ACCEPT_WAIT_MS = 80;
-export const LIVE_SPECULATION_HANDSHAKE_GRACE_MS = 350;
+const TRANSCRIPT_CORRECTION_STABILITY_MS = 24;
+export const LIVE_SPECULATION_HANDSHAKE_GRACE_MS = 50;
+
+export type SpeculationHandshakeWaitState = {
+  generationReady: boolean;
+  bufferedChunks: number;
+  responseReady: boolean;
+  completed: boolean;
+  error: boolean;
+};
+
+export function speculationHandshakeWaitBudgetMs(
+  state: SpeculationHandshakeWaitState,
+): number {
+  if (state.generationReady || state.bufferedChunks > 0 || state.completed || state.error) {
+    return 0;
+  }
+  return state.responseReady ? LIVE_SPECULATION_HANDSHAKE_GRACE_MS : 0;
+}
 
 type SpeculationWindow = Window & typeof globalThis & {
   __omnixLiveSpeculationInstalled?: boolean;
@@ -86,6 +104,7 @@ type ActiveSpeculation = {
   finalText: string | null;
   completed: boolean;
   error: string | null;
+  handshakeResponseReady: boolean;
   reused: boolean;
   acceptBody: ChatStreamRequestBody | null;
   firstClause: StableClauseAccumulator;
@@ -99,6 +118,7 @@ type ActiveSpeculation = {
 let originalFetch: typeof window.fetch | null = null;
 let activeSpeculations: ActiveSpeculation[] = [];
 const partials = new Map<string, string>();
+const correctionTimers = new Map<string, ReturnType<typeof window.setTimeout>>();
 
 export function normalizeSpeculationWords(text: string): string[] {
   return [...text.matchAll(WORD_PATTERN)]
@@ -136,6 +156,11 @@ export function transcriptExtendsSpeculation(candidate: string, next: string): b
   return left.length <= right.length && left.every((word, index) => word === right[index]);
 }
 
+export function transcriptCorrectionNeedsStability(candidate: string, next: string): boolean {
+  return normalizeComparable(candidate) !== normalizeComparable(next)
+    && !transcriptExtendsSpeculation(candidate, next);
+}
+
 export function shouldStartExtendedHypothesis(
   previousCandidate: string,
   nextCandidate: string,
@@ -165,10 +190,13 @@ export function speculationRequestCanReuse(
 }
 
 export function speculativeTtsPrefetchWindowOpen(
-  finalText: string | null,
+  _finalText: string | null,
   isNewestHypothesis: boolean,
 ): boolean {
-  return finalText === null && isNewestHypothesis;
+  // An exact authoritative final makes the retained hypothesis safer, not less
+  // useful. Keep its private TTS window open through the chat handoff so the
+  // first arriving LLM chunk can still prefetch before normal clause delivery.
+  return isNewestHypothesis;
 }
 
 export function speculativeTtsPrefetchEnabled(value: string | undefined): boolean {
@@ -192,11 +220,31 @@ export function initializeLiveSpeculationController(): () => void {
     partials.set(key, text);
 
     const matching = segmentSpeculations(detail.segmentId, detail.sourceSequence);
-    matching.forEach((active) => {
-      if (!transcriptExtendsSpeculation(active.candidateText, text)) {
-        cancelSpeculation(active, 'transcript_corrected');
-      }
-    });
+    const corrected = matching.some((active) => (
+      transcriptCorrectionNeedsStability(active.candidateText, text)
+    ));
+    clearCorrectionTimer(key);
+    if (corrected) {
+      // Streaming ASR can briefly revise away from the eventual authoritative
+      // final while its right-context tail flushes. Keep the completed prior
+      // hypothesis (and its private TTS cache) eligible for one bounded window.
+      // A persistent correction still receives its own replacement hypothesis.
+      const latest = newestSegmentSpeculation(detail.segmentId, detail.sourceSequence);
+      const timer = window.setTimeout(() => {
+        correctionTimers.delete(key);
+        if (partials.get(key)?.trim() !== text) return;
+        startHypothesis(
+          detail.chatSessionId as string,
+          detail.segmentId as string,
+          detail.sourceSequence as number,
+          text,
+          latest?.endpointProbability,
+          'stable_partial_correction',
+        );
+      }, TRANSCRIPT_CORRECTION_STABILITY_MS);
+      correctionTimers.set(key, timer);
+      return;
+    }
 
     const latest = newestSegmentSpeculation(detail.segmentId, detail.sourceSequence);
     if (latest && shouldStartExtendedHypothesis(
@@ -223,6 +271,7 @@ export function initializeLiveSpeculationController(): () => void {
       || typeof detail.sourceSequence !== 'number') return;
     const candidateText = partials.get(key)?.trim() || detail.text?.trim() || '';
     if (!speculationCandidateCanStart(candidateText, detail.probability ?? 0)) return;
+    if (correctionTimers.has(key)) return;
     const latest = newestSegmentSpeculation(detail.segmentId, detail.sourceSequence);
     if (latest && normalizeComparable(latest.candidateText) === normalizeComparable(candidateText)) {
       latest.endpointProbability = detail.probability;
@@ -247,6 +296,8 @@ export function initializeLiveSpeculationController(): () => void {
     const detail = (event as CustomEvent<SttPartialDetail>).detail;
     const finalText = detail?.text?.trim() ?? '';
     if (!detail?.segmentId || typeof detail.sourceSequence !== 'number') return;
+    const key = partialKey(detail);
+    if (key) clearCorrectionTimer(key);
     const matching = segmentSpeculations(detail.segmentId, detail.sourceSequence)
       .filter((active) => transcriptsCanReuseSpeculation(active.candidateText, finalText))
       .sort((left, right) => right.createdAtMs - left.createdAtMs);
@@ -282,7 +333,10 @@ export function initializeLiveSpeculationController(): () => void {
   const handleDeliverySettled = (event: Event): void => {
     const detail = (event as CustomEvent<SttPartialDetail>).detail;
     const key = partialKey(detail);
-    if (key) partials.delete(key);
+    if (key) {
+      partials.delete(key);
+      clearCorrectionTimer(key);
+    }
     if (!detail?.segmentId || typeof detail.sourceSequence !== 'number') return;
     segmentSpeculations(detail.segmentId, detail.sourceSequence)
       .filter((active) => !active.reused)
@@ -301,6 +355,8 @@ export function initializeLiveSpeculationController(): () => void {
     if (originalFetch) window.fetch = originalFetch;
     originalFetch = null;
     [...activeSpeculations].forEach((active) => cancelSpeculation(active, 'controller_uninstalled'));
+    correctionTimers.forEach((timer) => window.clearTimeout(timer));
+    correctionTimers.clear();
     partials.clear();
     window.removeEventListener(LIVE_STT_SPECULATION_PARTIAL_EVENT, handlePartial);
     window.removeEventListener(LIVE_STT_SPECULATION_CANDIDATE_EVENT, handleCandidate);
@@ -311,6 +367,12 @@ export function initializeLiveSpeculationController(): () => void {
     );
     liveWindow[INSTALLED_KEY] = false;
   };
+}
+
+function clearCorrectionTimer(key: string): void {
+  const timer = correctionTimers.get(key);
+  if (timer !== undefined) window.clearTimeout(timer);
+  correctionTimers.delete(key);
 }
 
 async function interceptChatStream(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -343,21 +405,45 @@ async function interceptChatStream(input: RequestInfo | URL, init?: RequestInit)
     return fetchImpl(input, init);
   }
 
+  const handshakeWaitBudgetMs = speculationHandshakeWaitBudgetMs({
+    generationReady: Boolean(active.generationId),
+    bufferedChunks: active.chunks.length,
+    responseReady: active.handshakeResponseReady,
+    completed: active.completed,
+    error: Boolean(active.error),
+  });
   const handshakeWaitStartedAt = performance.now();
-  await Promise.race([
-    active.startedPromise,
-    delay(LIVE_SPECULATION_HANDSHAKE_GRACE_MS),
-  ]);
+  if (handshakeWaitBudgetMs > 0) {
+    await Promise.race([
+      active.startedPromise,
+      delay(handshakeWaitBudgetMs),
+    ]);
+  }
   const handshakeWaitMs = performance.now() - handshakeWaitStartedAt;
   dispatchPerformance('llm_speculation_handshake_wait_completed', {
     sessionId,
     segmentId: active.segmentId,
     generationId: active.generationId,
     handshakeReady: Boolean(active.generationId),
+    handshakeResponseReady: active.handshakeResponseReady,
     handshakeWaitMs,
+    handshakeWaitBudgetMs,
     handshakeGraceMs: LIVE_SPECULATION_HANDSHAKE_GRACE_MS,
   });
-  if (!active.generationId || active.error) return fetchImpl(input, init);
+  if (!active.generationId || active.error) {
+    const fallbackReason = active.error
+      ? 'speculation_error_at_final_request'
+      : 'handshake_not_ready_at_final_request';
+    cancelSpeculation(active, fallbackReason);
+    dispatchPerformance('llm_speculation_fallback', {
+      sessionId,
+      segmentId: active.segmentId,
+      handshakeWaitMs,
+      handshakeWaitBudgetMs,
+      reason: fallbackReason,
+    });
+    return fetchImpl(input, init);
+  }
   active.reused = true;
   active.acceptBody = body;
   activeSpeculations
@@ -462,11 +548,15 @@ function createSpeculation(
     finalText: null,
     completed: false,
     error: null,
+    handshakeResponseReady: false,
     reused: false,
     acceptBody: null,
     firstClause: new StableClauseAccumulator({
-      firstClauseMinimumCharacters: 4,
-      firstClauseStableLookaheadCharacters: 2,
+      // A tiny punctuated prefix can finish playing before synthesis of the
+      // authoritative remainder begins. Eight characters still opens TTS
+      // within the first streamed phrase while covering one decoder chunk.
+      firstClauseMinimumCharacters: 8,
+      firstClauseStableLookaheadCharacters: 4,
       firstClauseMaximumCharacters: 40,
       firstClauseDeadlineMs: 20,
     }),
@@ -501,6 +591,7 @@ async function consumeSpeculation(active: ActiveSpeculation, probability?: numbe
     },
   );
   if (!response.ok || !response.body) throw new Error(`Speculation stream failed with status ${response.status}.`);
+  active.handshakeResponseReady = true;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = '';
@@ -647,6 +738,7 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
         error: error instanceof Error ? error.message : String(error),
       });
     });
+  if (active.finalText) acceptSpeculativeTts(active);
 }
 
 function acceptSpeculativeTts(active: ActiveSpeculation): void {

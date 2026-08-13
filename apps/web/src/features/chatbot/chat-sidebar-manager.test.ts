@@ -131,6 +131,19 @@ describe('chat sidebar manager', () => {
     expect(readChatSidebarState()['chat:one']?.pinned).toBe(true);
   });
 
+  it('does not refetch sessions for unrelated live-render mutations', async () => {
+    await vi.waitFor(() => expect(document.querySelectorAll('.assistant-chatgpt-row')).toHaveLength(2));
+    const fetchCount = fetchMock.mock.calls.length;
+
+    const transcript = document.createElement('p');
+    transcript.textContent = 'Streaming transcript update';
+    document.querySelector('.assistant-chat-header')?.appendChild(transcript);
+    transcript.textContent = 'Streaming transcript update with more text';
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+
+    expect(fetchMock).toHaveBeenCalledTimes(fetchCount);
+  });
+
   it('persists local sidebar state and filters archived and podcast sessions', () => {
     writeChatSidebarState({
       'chat:archived': { archived: true },

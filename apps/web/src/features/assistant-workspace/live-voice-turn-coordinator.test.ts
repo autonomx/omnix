@@ -99,11 +99,11 @@ describe('live voice turn coordinator', () => {
 
     expect(endpointFusionAction({
       ...incompleteCandidate,
-      silenceMs: 599,
+      silenceMs: 499,
     })).toBe('speculate');
     expect(endpointFusionAction({
       ...incompleteCandidate,
-      silenceMs: 600,
+      silenceMs: 500,
     })).toBe('commit');
 
     const completeCandidate = {
@@ -144,10 +144,10 @@ describe('live voice turn coordinator', () => {
       correctionPending: false,
     };
 
-    expect(endpointFusionAction({ ...candidate, silenceMs: 159 })).toBe('continue');
-    expect(endpointFusionAction({ ...candidate, silenceMs: 160 })).toBe('speculate');
-    expect(endpointFusionAction({ ...candidate, silenceMs: 599 })).toBe('speculate');
-    expect(endpointFusionAction({ ...candidate, silenceMs: 600 })).toBe('commit');
+    expect(endpointFusionAction({ ...candidate, silenceMs: 99 })).toBe('continue');
+    expect(endpointFusionAction({ ...candidate, silenceMs: 100 })).toBe('speculate');
+    expect(endpointFusionAction({ ...candidate, silenceMs: 499 })).toBe('speculate');
+    expect(endpointFusionAction({ ...candidate, silenceMs: 500 })).toBe('commit');
   });
 
   it('keeps the captured 431 and 478 ms intra-sentence pauses open', () => {
@@ -179,7 +179,7 @@ describe('live voice turn coordinator', () => {
     })).toBe('speculate');
   });
 
-  it('uses a 600 ms watchdog when authoritative EOU is negotiated', () => {
+  it('uses a 500 ms watchdog when authoritative EOU is negotiated', () => {
     noteLiveSttNegotiation('nemotron_parakeet_eou', [
       'segmented_audio',
       'authoritative_final',
@@ -188,9 +188,9 @@ describe('live voice turn coordinator', () => {
       'authoritative_eou',
     ]);
 
-    expect(semanticFinalizeDelay('', 'balanced')).toBe(600);
-    expect(semanticFinalizeDelay('Where are we going?', 'balanced')).toBe(600);
-    expect(semanticFinalizeDelay('We should take the road because', 'balanced')).toBe(600);
+    expect(semanticFinalizeDelay('', 'balanced')).toBe(500);
+    expect(semanticFinalizeDelay('Where are we going?', 'balanced')).toBe(500);
+    expect(semanticFinalizeDelay('We should take the road because', 'balanced')).toBe(500);
   });
 
   it('commits newly complete delayed text immediately after a mature acoustic pause', () => {

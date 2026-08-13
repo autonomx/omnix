@@ -63,6 +63,26 @@ class _ColdStartProvider:
         yield b"\x03\x00" * 4_800, 24_000, {"chunk": 0, "call": call_number}
 
 
+class _ThreeChunkProvider:
+    provider_name = "test-live-tts"
+    supports_concurrent_generation = False
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.first_chunk_ready = threading.Event()
+        self.allow_second_chunk = threading.Event()
+        self.allow_third_chunk = threading.Event()
+
+    def generate_audio_stream(self, **_kwargs: Any):
+        self.calls += 1
+        yield b"\x01\x00" * 3_840, 24_000, {"chunk": 0}
+        self.first_chunk_ready.set()
+        self.allow_second_chunk.wait(timeout=2)
+        yield b"\x02\x00" * 3_840, 24_000, {"chunk": 1}
+        self.allow_third_chunk.wait(timeout=2)
+        yield b"\x03\x00" * 3_840, 24_000, {"chunk": 2}
+
+
 def _request(text: str) -> TtsStreamRequest:
     return TtsStreamRequest.model_validate(
         {
@@ -126,6 +146,7 @@ def test_accepted_prefetch_is_promoted_and_replayed_without_second_generation() 
 
 def test_accepted_prefetch_without_pcm_restarts_authoritative_stream(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS", raising=False)
+    monkeypatch.setattr(speculative_tts, "_COLD_CLAIM_WAIT_SECONDS", 0.01)
     _reset()
     provider = _ColdStartProvider()
     request = _request("Cold speculation must not become audible.")
@@ -175,6 +196,100 @@ def test_accepted_prefetch_without_pcm_restarts_authoritative_stream(monkeypatch
         assert provider.chunk_sizes == [1, 2]
     finally:
         provider.allow_first_call_yield.set()
+        _reset()
+
+
+def test_accepted_cold_prefetch_waits_for_imminent_pcm_instead_of_restarting() -> None:
+    _reset()
+    provider = _ColdStartProvider()
+    request = _request("Imminent speculative audio should be promoted.")
+
+    try:
+        entry = _start_prefetch("spec-cold-promoted", request, provider, "shared")
+        assert provider.first_call_started.wait(timeout=1)
+        _accept_entry("spec-cold-promoted")
+        threading.Timer(0.02, provider.allow_first_call_yield.set).start()
+
+        accepted_kwargs = _stream_kwargs(request, provider)
+        accepted_kwargs["chunk_size"] = 2
+        claim = _claim_entry(
+            request.text,
+            request.speaker,
+            request.language or "en",
+            accepted_kwargs,
+        )
+
+        assert claim is not None
+        assert claim.entry is entry
+        assert claim.remainder_text == ""
+        with entry.condition:
+            assert entry.cancelled is False
+            assert entry.chunks
+        assert provider.calls == 1
+        assert provider.chunk_sizes == [1]
+    finally:
+        provider.allow_first_call_yield.set()
+        _reset()
+
+
+def test_accepted_prefetch_with_one_chunk_waits_for_a_second_chunk() -> None:
+    _reset()
+    provider = _BlockingProvider()
+    request = _request("One chunk is not enough playback runway.")
+
+    try:
+        entry = _start_prefetch("spec-one-chunk", request, provider, "shared")
+        assert provider.first_chunk_ready.wait(timeout=1)
+        _accept_entry("spec-one-chunk")
+        threading.Timer(0.02, provider.allow_finish.set).start()
+
+        accepted_kwargs = _stream_kwargs(request, provider)
+        accepted_kwargs["chunk_size"] = 2
+        claim = _claim_entry(
+            request.text,
+            request.speaker,
+            request.language or "en",
+            accepted_kwargs,
+        )
+
+        assert claim is not None
+        assert claim.entry is entry
+        with entry.condition:
+            assert len(entry.chunks) == 2
+        assert provider.calls == 1
+    finally:
+        provider.allow_finish.set()
+        _reset()
+
+
+def test_accepted_prefetch_with_one_chunk_waits_for_two_chunk_startup_runway() -> None:
+    _reset()
+    provider = _ThreeChunkProvider()
+    request = _request("Two chunks protect playback from UI stalls.")
+
+    try:
+        entry = _start_prefetch("spec-three-chunks", request, provider, "shared")
+        assert provider.first_chunk_ready.wait(timeout=1)
+        _accept_entry("spec-three-chunks")
+        threading.Timer(0.02, provider.allow_second_chunk.set).start()
+
+        accepted_kwargs = _stream_kwargs(request, provider)
+        accepted_kwargs["chunk_size"] = 2
+        claim = _claim_entry(
+            request.text,
+            request.speaker,
+            request.language or "en",
+            accepted_kwargs,
+        )
+
+        assert claim is not None
+        assert claim.entry is entry
+        with entry.condition:
+            assert len(entry.chunks) == 2
+        assert provider.calls == 1
+    finally:
+        provider.allow_second_chunk.set()
+        provider.allow_third_chunk.set()
         _reset()
 
 

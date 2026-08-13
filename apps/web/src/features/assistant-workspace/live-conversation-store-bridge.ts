@@ -12,6 +12,7 @@ import { liveConversationStore } from './live-conversation-store';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
 
 const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
+const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
@@ -146,6 +147,7 @@ export function initializeLiveConversationStoreBridge(): () => void {
 
   const listeners: Array<[string, EventListener]> = [
     [SESSION_CHANGED_EVENT, handleSession],
+    [SESSION_SELECTED_EVENT, handleSession],
     [CALL_START_EVENT, handleCallStart],
     [CALL_CONNECTED_EVENT, handleCallConnected],
     [STOP_EVENT, handleStop],

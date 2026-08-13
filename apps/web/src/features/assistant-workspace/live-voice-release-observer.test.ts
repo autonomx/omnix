@@ -112,6 +112,52 @@ describe('live voice release observer', () => {
     window.removeEventListener(LIVE_VOICE_RELEASE_OBSERVATION_EVENT, listener);
   });
 
+  it('uses audio output time instead of delayed worklet message delivery', () => {
+    now = 100;
+    perf('stt_final_requested');
+    now = 300;
+    perf('stt_final_received', 'voice-turn:1', { sttFinalizeMs: 200 });
+    diagnostic('turn_intercepted');
+    now = 800;
+    diagnostic('llm_text_chunk_received');
+    now = 1_000;
+    diagnostic(
+      'phrase_first_frame_received',
+      'live-call:chat:s1:audio-session:a1',
+      'pcm_session',
+      { output_id: 'output-one', segment_id: 'speech-one', segment_kind: 'speech' },
+    );
+    now = 1_400;
+    diagnostic(
+      'worklet_segment_started',
+      'live-call:chat:s1:audio-session:a1',
+      'audio_worklet',
+      {
+        output_id: 'output-one',
+        segment_id: 'speech-one',
+        segment_kind: 'speech',
+        playback_performance_time_ms: 1_040,
+      },
+    );
+
+    expect(mocks.record).toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({
+        metric_name: 'first_pcm_to_first_playback_ms',
+        value_ms: 40,
+      }),
+      'release_observer',
+    );
+    expect(mocks.record).toHaveBeenCalledWith(
+      'release_metric',
+      expect.objectContaining({
+        metric_name: 'final_to_first_playback_ms',
+        value_ms: 740,
+      }),
+      'release_observer',
+    );
+  });
+
   it('records authoritative STT provider quality metrics', () => {
     perf('stt_provider_final', 'voice-turn:quality', {
       provider: 'nemotron_parakeet_eou',

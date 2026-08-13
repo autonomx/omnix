@@ -18,6 +18,14 @@ afterEach(() => {
 });
 
 describe('live conversation store bridge', () => {
+  it('projects React chat selection before the session fetch bridge completes', () => {
+    window.dispatchEvent(new CustomEvent('omnix:chat-session-selected', {
+      detail: { sessionId: 'chat:new-call' },
+    }));
+
+    expect(liveConversationStore.getState().sessionId).toBe('chat:new-call');
+  });
+
   it('projects call, speech, transcript, playback, and interruption events', () => {
     window.dispatchEvent(new CustomEvent('omnix:live-chat-session-changed', {
       detail: { sessionId: 'chat:one', characterId: 'maya', characterName: 'Maya', profileVersion: 3 },
