@@ -19,7 +19,11 @@ from app.providers.live_stt_contracts import (
     CAP_SEGMENTED_AUDIO,
     LiveSttNegotiation,
 )
-from app.providers.nemotron_eou_streaming import SAMPLE_RATE, NemotronEouModelManager, model_manager
+from app.providers.nemotron_eou_streaming import (
+    SAMPLE_RATE,
+    NemotronEouModelManager,
+    model_manager,
+)
 
 SEGMENTED_PROTOCOL = "segmented-v1"
 PROVIDER_NAME = "nemotron_parakeet_eou"
@@ -157,7 +161,7 @@ async def _safe_send(websocket: WebSocket, lock: asyncio.Lock, payload: dict[str
         async with lock:
             await websocket.send_json(payload)
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - best-effort send during websocket teardown
         return False
 
 
@@ -171,7 +175,7 @@ async def _drain_stream_audio(
 ) -> None:
     chunk_bytes = manager.feed_chunk_samples * 2
     while len(segment.stream_pending) >= chunk_bytes or (flush and segment.stream_pending):
-        take = chunk_bytes if len(segment.stream_pending) >= chunk_bytes else len(segment.stream_pending)
+        take = min(chunk_bytes, len(segment.stream_pending))
         payload = bytes(segment.stream_pending[:take])
         del segment.stream_pending[:take]
         update = await asyncio.to_thread(manager.feed, segment.segment_id, payload)
@@ -245,7 +249,7 @@ def _schedule_stream_drain(
             await _drain_stream_audio(segment, manager, websocket, send_lock)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - provider failures become segment errors
             _metric(
                 "stt_streaming_feed_failed",
                 segment_sequence=segment.sequence,
@@ -357,7 +361,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                     try:
                         payload = base64.b64decode(str(data.get("data", "")), validate=True)
                         accepted = segment.append(sample_start, payload)
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - malformed frames become protocol errors
                         manager.release(segment_id)
                         state.segments.pop(segment_id, None)
                         await _safe_send(
@@ -477,7 +481,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                             authoritative_changed=provider_metrics.get("authoritative_changed", 0.0),
                             final_right_context=provider_metrics.get("final_right_context", 0.0),
                         )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - provider failures become segment errors
                         _metric(
                             "stt_hybrid_final_failed",
                             segment_sequence=segment.sequence,
@@ -502,6 +506,6 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                     continue
         except WebSocketDisconnect:
             return
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - top-level websocket fault containment
             _metric("stt_hybrid_websocket_failed", error_type=type(exc).__name__, error=str(exc))
             await _safe_send(websocket, send_lock, {"type": "error", "error": str(exc)})
