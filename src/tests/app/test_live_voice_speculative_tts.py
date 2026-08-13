@@ -83,6 +83,23 @@ class _ThreeChunkProvider:
         yield b"\x03\x00" * 3_840, 24_000, {"chunk": 2}
 
 
+class _ShortChunkProvider:
+    provider_name = "test-live-tts"
+    supports_concurrent_generation = False
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.first_chunk_ready = threading.Event()
+        self.allow_second_chunk = threading.Event()
+
+    def generate_audio_stream(self, **_kwargs: Any):
+        self.calls += 1
+        yield b"\x01\x00" * 1_920, 24_000, {"chunk": 0}
+        self.first_chunk_ready.set()
+        self.allow_second_chunk.wait(timeout=2)
+        yield b"\x02\x00" * 1_920, 24_000, {"chunk": 1}
+
+
 def _request(text: str) -> TtsStreamRequest:
     return TtsStreamRequest.model_validate(
         {
@@ -232,16 +249,16 @@ def test_accepted_cold_prefetch_waits_for_imminent_pcm_instead_of_restarting() -
         _reset()
 
 
-def test_accepted_prefetch_with_one_chunk_waits_for_a_second_chunk() -> None:
+def test_accepted_prefetch_with_short_first_chunk_waits_for_160ms_runway() -> None:
     _reset()
-    provider = _BlockingProvider()
-    request = _request("One chunk is not enough playback runway.")
+    provider = _ShortChunkProvider()
+    request = _request("An 80 ms chunk is not enough playback runway.")
 
     try:
-        entry = _start_prefetch("spec-one-chunk", request, provider, "shared")
+        entry = _start_prefetch("spec-short-chunk", request, provider, "shared")
         assert provider.first_chunk_ready.wait(timeout=1)
-        _accept_entry("spec-one-chunk")
-        threading.Timer(0.02, provider.allow_finish.set).start()
+        _accept_entry("spec-short-chunk")
+        threading.Timer(0.02, provider.allow_second_chunk.set).start()
 
         accepted_kwargs = _stream_kwargs(request, provider)
         accepted_kwargs["chunk_size"] = 2
@@ -258,20 +275,19 @@ def test_accepted_prefetch_with_one_chunk_waits_for_a_second_chunk() -> None:
             assert len(entry.chunks) == 2
         assert provider.calls == 1
     finally:
-        provider.allow_finish.set()
+        provider.allow_second_chunk.set()
         _reset()
 
 
-def test_accepted_prefetch_with_one_chunk_waits_for_two_chunk_startup_runway() -> None:
+def test_accepted_prefetch_promotes_one_complete_160ms_startup_frame() -> None:
     _reset()
     provider = _ThreeChunkProvider()
-    request = _request("Two chunks protect playback from UI stalls.")
+    request = _request("One complete startup frame is ready to play.")
 
     try:
         entry = _start_prefetch("spec-three-chunks", request, provider, "shared")
         assert provider.first_chunk_ready.wait(timeout=1)
         _accept_entry("spec-three-chunks")
-        threading.Timer(0.02, provider.allow_second_chunk.set).start()
 
         accepted_kwargs = _stream_kwargs(request, provider)
         accepted_kwargs["chunk_size"] = 2
@@ -285,7 +301,8 @@ def test_accepted_prefetch_with_one_chunk_waits_for_two_chunk_startup_runway() -
         assert claim is not None
         assert claim.entry is entry
         with entry.condition:
-            assert len(entry.chunks) == 2
+            assert len(entry.chunks) == 1
+        assert provider.allow_second_chunk.is_set() is False
         assert provider.calls == 1
     finally:
         provider.allow_second_chunk.set()

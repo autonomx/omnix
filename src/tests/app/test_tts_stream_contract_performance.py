@@ -236,12 +236,12 @@ def test_pcm_helpers_fall_back_when_numpy_is_unavailable(monkeypatch) -> None:
     ) == 2
 
 
-def test_first_canonical_phrase_uses_one_codec_step() -> None:
+def test_first_canonical_phrase_uses_two_codec_steps() -> None:
     assert (
         tts_stream_contract.chat_stream_codec_chunk_cap(
             "conversation-chat-session-g7-p0"
         )
-        == 1
+        == 2
     )
     assert (
         tts_stream_contract.chat_stream_codec_chunk_cap(
@@ -252,7 +252,7 @@ def test_first_canonical_phrase_uses_one_codec_step() -> None:
     assert tts_stream_contract.chat_stream_codec_chunk_cap(None) == 4
 
 
-def test_chat_stream_request_caps_only_the_first_phrase_to_one_codec_step() -> None:
+def test_chat_stream_request_caps_only_the_first_phrase_to_two_codec_steps() -> None:
     first = TtsStreamRequest.model_validate(
         {
             "text": "Hello there.",
@@ -270,5 +270,5 @@ def test_chat_stream_request_caps_only_the_first_phrase_to_one_codec_step() -> N
         }
     )
 
-    assert first.chunk_size == 1
+    assert first.chunk_size == 2
     assert later.chunk_size == 4

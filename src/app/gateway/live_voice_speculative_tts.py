@@ -39,13 +39,15 @@ _WAIT_SLICE_SECONDS = 0.025
 # An accepted claim can race the provider's first decoder step. Abandoning the
 # cache at that instant starts a second CUDA generation while the promoted one
 # is about to produce PCM, making the cold turn slower and wasting GPU work.
-# Wait only through the measured first-step envelope plus two steady decoder
-# steps, then fail safely to a fresh authoritative stream if the promoted
-# producer is genuinely stuck. Two 160 ms chunks give the AudioWorklet a 320 ms
-# reserve in one atomic browser handoff; the websocket sender continues to
-# deliver later frames between decoder steps.
+# Wait only through the measured first-step envelope plus steady decoder work,
+# then fail safely to a fresh authoritative stream if the promoted producer is
+# genuinely stuck. Promotion is based on playable duration rather than provider
+# chunk count: one accepted two-step Qwen chunk already contains the complete
+# 160 ms startup frame, while two hidden one-step chunks are still required to
+# provide the same runway. The websocket sender continues to deliver later
+# frames between decoder steps.
 _COLD_CLAIM_WAIT_SECONDS = 0.55
-_COLD_CLAIM_TARGET_CHUNKS = 2
+_COLD_CLAIM_MIN_AUDIO_MS = 160.0
 # Provider chunk_size controls streaming/cancellation cadence, not synthesis
 # identity. Accepted first-phrase playback may intentionally request a smaller
 # chunk than hidden speculation, and cached PCM is reblocked by the live TTS
@@ -485,9 +487,10 @@ def _claim_entry(
         with entry.condition:
             entry.claimed = True
             initial_buffered_chunk_count = len(entry.chunks)
+            initial_buffered_audio_ms = _buffered_audio_ms(entry)
             if (
                 entry.completed
-                or initial_buffered_chunk_count >= _COLD_CLAIM_TARGET_CHUNKS
+                or initial_buffered_audio_ms >= _COLD_CLAIM_MIN_AUDIO_MS
             ):
                 return _CacheClaim(entry=entry, remainder_text=remainder)
 
@@ -495,7 +498,7 @@ def _claim_entry(
     with entry.condition:
         deadline = time.monotonic() + _COLD_CLAIM_WAIT_SECONDS
         while (
-            len(entry.chunks) < _COLD_CLAIM_TARGET_CHUNKS
+            _buffered_audio_ms(entry) < _COLD_CLAIM_MIN_AUDIO_MS
             and not entry.completed
             and not entry.cancelled
             and entry.error is None
@@ -513,6 +516,8 @@ def _claim_entry(
                 generation_id=entry.generation_id,
                 buffered_chunk_count=len(entry.chunks),
                 initial_buffered_chunk_count=initial_buffered_chunk_count,
+                buffered_audio_ms=round(_buffered_audio_ms(entry), 3),
+                initial_buffered_audio_ms=round(initial_buffered_audio_ms, 3),
                 completed=entry.completed,
                 wait_ms=wait_ms,
                 prefix_match=bool(remainder),
@@ -543,6 +548,13 @@ def _claim_entry(
     )
     live_voice_tts_scheduler().notify_priority_change()
     return None
+
+
+def _buffered_audio_ms(entry: _SpeculativeTtsEntry) -> float:
+    return sum(
+        (len(chunk.pcm_bytes) // 2) * 1000.0 / max(1, chunk.sample_rate)
+        for chunk in entry.chunks
+    )
 
 
 def _prefix_remainder(cached_text: str, actual_text: str) -> str | None:
