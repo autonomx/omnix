@@ -69,11 +69,14 @@ jobs:
             src/tests/app/test_live_voice_spoken_style.py \
             src/tests/app/test_lmstudio_loaded_model_resolution.py \
             src/tests/app/test_tts_live_call_startup_frame_policy.py \
-            src/tests/app/test_tts_stream_contract_performance.py \
-            src/tests/e2e/test_live_voice_api.py
+            src/tests/app/test_tts_stream_contract_performance.py
           # The NeMo streaming import is deliberately lazy inside the stream
           # constructor. Keep all other Ruff checks active for that module.
           ruff check --ignore I001 src/app/providers/nemotron_eou_streaming.py
+          # E2E transport guards intentionally translate malformed wire payloads
+          # to RuntimeError and use best-effort cleanup. Keep every other rule,
+          # including parser/import/name checks, active on the API harness.
+          ruff check --ignore TRY004,S110,BLE001 src/tests/e2e/test_live_voice_api.py
 
       - name: Run focused Python tests
         run: >-
