@@ -34,7 +34,14 @@ def _is_live_voice_message(user_message: Any) -> bool:
 
 
 def apply_live_voice_spoken_style(rendered: RenderedPrompt) -> RenderedPrompt:
-    """Insert the live-only style instruction immediately before the current user turn."""
+    """Keep the live-only style instruction inside the stable leading context.
+
+    Stateful LM Studio Responses can continue with only the new user input when
+    every system message precedes the rolling user/assistant history. Placing
+    this stable instruction immediately before the current user turn made an
+    otherwise valid live prompt structurally non-continuable once history was
+    present. Insert it after the existing leading system block instead.
+    """
     if any(
         message.role == "system" and message.content == LIVE_VOICE_SPOKEN_STYLE
         for message in rendered.messages
@@ -42,8 +49,10 @@ def apply_live_voice_spoken_style(rendered: RenderedPrompt) -> RenderedPrompt:
         return rendered
 
     insertion_index = len(rendered.messages)
-    if rendered.messages and rendered.messages[-1].role == "user":
-        insertion_index -= 1
+    for index, message in enumerate(rendered.messages):
+        if message.role in {"user", "assistant"}:
+            insertion_index = index
+            break
     rendered.messages.insert(
         insertion_index,
         RenderedPromptMessage(role="system", content=LIVE_VOICE_SPOKEN_STYLE),
