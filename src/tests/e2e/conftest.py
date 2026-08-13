@@ -14,9 +14,10 @@ import json
 import re
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
@@ -31,11 +32,11 @@ NORMAL_DEADLINE_MS = 140
 
 STRONG_BOUNDARY = re.compile(r"[.!?][\]})\"'’”]*(?=\s|$)")
 WEAK_BOUNDARY = re.compile(r"[,;:][\]})\"'’”]*(?=\s|$)")
-ABBREVIATION = re.compile(r"(?:\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e)|\b[A-Z])\.$", re.I)
+ABBREVIATION = re.compile(r"(?:\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e)|\b[A-Z])\.$", re.IGNORECASE)
 DECIMAL_OR_VERSION = re.compile(r"\d\.\d$")
-URL_TAIL = re.compile(r"(?:https?://|www\.)\S*$", re.I)
+URL_TAIL = re.compile(r"(?:https?://|www\.)\S*$", re.IGNORECASE)
 OPENING_QUOTE = re.compile(r'^[\"“‘]')
-SERIOUS_PATTERN = re.compile(r"\b(?:sorry|grief|loss|afraid|hurt|serious|take your time)\b", re.I)
+SERIOUS_PATTERN = re.compile(r"\b(?:sorry|grief|loss|afraid|hurt|serious|take your time)\b", re.IGNORECASE)
 REASSURANCE_PATTERN = re.compile(r"\b(?:i understand|that sounds|take your time|i'm sorry|i am sorry)\b")
 UNCERTAINTY_PATTERN = re.compile(r"\b(?:maybe|perhaps|might|not sure|uncertain)\b")
 
