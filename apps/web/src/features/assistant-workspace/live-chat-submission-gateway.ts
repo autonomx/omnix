@@ -25,6 +25,12 @@ type SubmissionFetchObserver = (
   response: Promise<Response>,
 ) => void;
 
+type ActiveSubmission = {
+  completion: Promise<void>;
+  abortController: AbortController;
+  chatFetchObserved: boolean;
+};
+
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 
 export function liveSubmissionFetchMatches(
@@ -43,6 +49,7 @@ export function liveSubmissionFetchMatches(
 export class LiveChatSubmissionGateway {
   private handler: LiveChatSubmissionHandler | null = null;
   private fetchInterceptor: LiveChatSubmissionFetchInterceptor | null = null;
+  private activeSubmission: ActiveSubmission | null = null;
 
   register(handler: LiveChatSubmissionHandler): () => void {
     this.handler = handler;
@@ -61,6 +68,8 @@ export class LiveChatSubmissionGateway {
   async submit(input: LiveChatSubmissionInput): Promise<void> {
     const handler = this.handler;
     if (!handler) throw new Error('live_chat_submission_gateway_unavailable');
+
+    await this.retireInterruptedSubmission(input);
 
     let settled = false;
     let submissionFetchObserved = false;
@@ -93,48 +102,81 @@ export class LiveChatSubmissionGateway {
       );
     };
 
+    const abortController = new AbortController();
     let completion: Promise<void>;
     try {
-      completion = this.invokeHandler(input, handler, observeFetch);
+      completion = this.invokeHandler(input, handler, observeFetch, abortController);
     } catch (error) {
       completion = Promise.reject(error);
     }
+
+    const activeSubmission: ActiveSubmission = {
+      completion,
+      abortController,
+      chatFetchObserved: submissionFetchObserved,
+    };
+    this.activeSubmission = activeSubmission;
 
     void completion.then(
       () => {
         // Handlers without a chat-stream fetch retain the original completion
         // semantics. Once the exact submission fetch has been observed, only
-        // that fetch may accept or reject this coordination attempt; failures
-        // from a superseded turn cannot poison the new submission.
+        // that fetch may accept or reject this coordination attempt.
         if (!submissionFetchObserved) accept();
       },
       (error) => {
         if (!submissionFetchObserved) reject(error);
       },
-    );
+    ).finally(() => {
+      if (this.activeSubmission === activeSubmission) this.activeSubmission = null;
+    });
 
     await acceptance;
+  }
+
+  private async retireInterruptedSubmission(input: LiveChatSubmissionInput): Promise<void> {
+    if (!input.interrupted) return;
+    const previous = this.activeSubmission;
+    if (!previous?.chatFetchObserved) return;
+
+    // The prior response may already be open while its workspace handler is
+    // still consuming the body. Retire it before the replacement handler gets
+    // ownership, so its abort/catch/finally cannot race the new voice turn.
+    if (!previous.abortController.signal.aborted) previous.abortController.abort();
+    try {
+      await previous.completion;
+    } catch {
+      // The prior coordination was accepted when its response opened. This is
+      // expected cleanup for the superseded body, not a replacement-turn error.
+    }
+    if (this.activeSubmission === previous) this.activeSubmission = null;
   }
 
   private invokeHandler(
     input: LiveChatSubmissionInput,
     handler: LiveChatSubmissionHandler,
     observeFetch: SubmissionFetchObserver,
+    abortController: AbortController,
   ): Promise<void> {
     if (typeof window.fetch !== 'function') return Promise.resolve(handler(input));
 
     // The workspace handler starts its chat fetch synchronously before its first
-    // await. Scope interception to that call only, instead of replacing
-    // window.fetch for the lifetime of the application. The exact response
-    // promise is also the submission identity used for early acceptance.
+    // await. Scope interception to that call only. The response promise is also
+    // the submission identity used for early acceptance.
     const interceptor = this.fetchInterceptor;
     const originalFetch = window.fetch;
     const next: LiveChatSubmissionFetchNext = originalFetch.bind(window);
     window.fetch = ((request: RequestInfo | URL, init?: RequestInit) => {
+      const existingSignal = init?.signal ?? (request instanceof Request ? request.signal : undefined);
+      if (existingSignal && existingSignal !== abortController.signal) {
+        if (existingSignal.aborted) abortController.abort();
+        else existingSignal.addEventListener('abort', () => abortController.abort(), { once: true });
+      }
+      const scopedInit = { ...init, signal: abortController.signal };
       const response = interceptor
-        ? interceptor(input, request, init, next)
-        : next(request, init);
-      observeFetch(request, init, response);
+        ? interceptor(input, request, scopedInit, next)
+        : next(request, scopedInit);
+      observeFetch(request, scopedInit, response);
       return response;
     }) as typeof window.fetch;
     try {
