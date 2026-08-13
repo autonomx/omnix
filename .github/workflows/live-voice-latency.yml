@@ -66,7 +66,8 @@ jobs:
             src/tests/app/test_live_chat_speculation.py \
             src/tests/app/test_live_voice_speculative_tts.py \
             src/tests/app/test_live_voice_spoken_style.py \
-            src/tests/app/test_lmstudio_loaded_model_resolution.py
+            src/tests/app/test_lmstudio_loaded_model_resolution.py \
+            src/tests/app/test_tts_stream_contract_performance.py
           # The NeMo streaming import is deliberately lazy inside the stream
           # constructor. Keep all other Ruff checks active for that module.
           ruff check --ignore I001 src/app/providers/nemotron_eou_streaming.py
@@ -82,6 +83,7 @@ jobs:
           src/tests/app/test_live_voice_speculative_tts.py
           src/tests/app/test_live_voice_spoken_style.py
           src/tests/app/test_lmstudio_loaded_model_resolution.py
+          src/tests/app/test_tts_stream_contract_performance.py
           -q --tb=short
 
       - name: Typecheck live voice browser path
