@@ -2,9 +2,9 @@ import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
 
 const INSTALLED_KEY = '__omnixLiveTtsAdaptiveBufferInstalled';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
-const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v2';
+const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v3';
 const MAX_TRACKED_ANCILLARY_SEGMENTS = 128;
-const MIN_START_BUFFER_MS = 170;
+const MIN_START_BUFFER_MS = 80;
 
 export type AdaptiveBufferSnapshot = {
   startBufferMs: number;
@@ -34,11 +34,10 @@ export class AdaptiveTtsBufferPolicy {
 
   constructor(initial?: Partial<AdaptiveBufferSnapshot>) {
     this.snapshotValue = {
-      // The accepted-response fast path hands off one 3,840-sample / 160 ms
-      // Qwen startup frame. Starting at or below that frame lets playback drain
-      // the only available block before the next decoder chunk arrives. Keep
-      // the adaptive floor just above one frame so startup still stays low but
-      // waits for a second handoff before consuming speech.
+      // The accepted-response fast path now hands off one 1,920-sample / 80 ms
+      // Qwen startup frame. Start at exactly one frame so stable hardware can
+      // begin playback on the first handoff. The existing underrun feedback
+      // immediately adds 70 ms of reserve when one frame is not sufficient.
       startBufferMs: clamp(initial?.startBufferMs ?? MIN_START_BUFFER_MS, MIN_START_BUFFER_MS, 650),
       rebufferMs: clamp(initial?.rebufferMs ?? 520, 300, 1_200),
       maxRebufferMs: clamp(initial?.maxRebufferMs ?? 1_400, 800, 2_000),
@@ -73,8 +72,8 @@ export class AdaptiveTtsBufferPolicy {
         this.snapshotValue.stableTurns += 1;
         if (this.snapshotValue.stableTurns >= 3) {
           // Decay the post-underrun reserve after three stable turns, but never
-          // below the 170 ms startup floor: the live transport's first frame is
-          // 160 ms, so a lower target can restart the single-frame underrun.
+          // below one 80 ms startup frame. Stable hardware can therefore return
+          // to first-frame playback after a temporary contention event.
           this.snapshotValue.startBufferMs = clamp(
             this.snapshotValue.startBufferMs - 30,
             MIN_START_BUFFER_MS,
