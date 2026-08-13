@@ -151,6 +151,93 @@ class BacktestRunResult(BaseModel):
     artifact: BacktestArtifactReference | None = None
     error_message: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def populate_legacy_flat_result_economics(cls, value):
+        """Upgrade pre-economics flat result constructors without hiding ambiguity.
+
+        Older internal callers sometimes constructed a completed, flat result
+        directly from aggregate fields. That state is deterministic: ending cash
+        equals final equity, position/unrealized P&L are zero, and realized P&L is
+        final equity minus initial cash. A legacy result that ends with an open
+        position cannot be upgraded safely without a mark/cost basis, so it must
+        provide the explicit economics fields.
+        """
+        if not isinstance(value, dict):
+            return value
+        required = {
+            "ending_cash",
+            "ending_position",
+            "ending_mark_price",
+            "realized_pnl",
+            "unrealized_pnl",
+            "economic_result_fingerprint",
+        }
+        if required <= set(value):
+            return value
+
+        data = dict(value)
+        initial_cash = Decimal(str(data["initial_cash"]))
+        final_equity = Decimal(str(data["final_equity"]))
+        curve = data.get("equity_curve") or ()
+        if curve:
+            final_point = curve[-1]
+            if isinstance(final_point, BacktestEquityPoint):
+                ending_cash = final_point.cash
+                ending_position = final_point.position
+            else:
+                ending_cash = Decimal(str(final_point["cash"]))
+                ending_position = Decimal(str(final_point["position"]))
+        else:
+            ending_cash = final_equity
+            ending_position = Decimal("0")
+
+        if ending_position != 0 and not required <= set(data):
+            raise ValueError(
+                "legacy backtest result with an open position requires explicit ending economics"
+            )
+
+        data.setdefault("ending_cash", ending_cash)
+        data.setdefault("ending_position", Decimal("0"))
+        data.setdefault("ending_mark_price", None)
+        data.setdefault("realized_pnl", final_equity - initial_cash)
+        data.setdefault("unrealized_pnl", Decimal("0"))
+        if "economic_result_fingerprint" not in data:
+            legacy_payload = {
+                "schema": "omnix-backtest-legacy-flat-v1",
+                "dataset_fingerprint": data.get("dataset_fingerprint"),
+                "strategy_id": data.get("strategy_id"),
+                "strategy_parameters": data.get("strategy_parameters"),
+                "execution_policy": data.get("execution_policy"),
+                "formula_version": data.get("formula_version"),
+                "status": data.get("status"),
+                "initial_cash": str(initial_cash),
+                "ending_cash": str(data["ending_cash"]),
+                "ending_position": str(data["ending_position"]),
+                "ending_mark_price": data["ending_mark_price"],
+                "realized_pnl": str(data["realized_pnl"]),
+                "unrealized_pnl": str(data["unrealized_pnl"]),
+                "final_equity": str(final_equity),
+                "total_return_percent": str(data.get("total_return_percent")),
+                "max_drawdown_percent": str(data.get("max_drawdown_percent")),
+                "win_rate_percent": str(data.get("win_rate_percent")),
+                "exposure_percent": str(data.get("exposure_percent")),
+                "trade_count": data.get("trade_count"),
+                "mark_to_market_policy": data.get(
+                    "mark_to_market_policy", BACKTEST_MARK_TO_MARKET_POLICY
+                ),
+            }
+            canonical = json.dumps(
+                legacy_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+            data["economic_result_fingerprint"] = hashlib.sha256(
+                canonical.encode("utf-8")
+            ).hexdigest()
+        return data
+
 
 class BacktestEconomicBreakdown(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
