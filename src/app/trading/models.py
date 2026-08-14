@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
-from enum import StrEnum
 from typing import Literal
+
+try:
+    from enum import StrEnum
+except ImportError:  # Python 3.10 compatibility for the desktop launcher runtime.
+    from enum import Enum as _Enum
+
+    class StrEnum(str, _Enum):
+        """Minimal stdlib StrEnum-compatible fallback for Python < 3.11."""
+
+        def __str__(self) -> str:
+            return str(self.value)
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
