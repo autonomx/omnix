@@ -3,6 +3,7 @@ import { TradingAlertsPanel } from './TradingAlertsPanel';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrderType, PaperSide } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
 import './TradingTerminalDock.css';
+import './TradingTerminalDockMinimize.css';
 
 type DockTab = 'positions' | 'orders' | 'alerts' | 'history' | 'logs';
 
@@ -38,6 +39,7 @@ export function TradingTerminalDock({
   bindingId: string | null;
 }) {
   const [tab, setTab] = useState<DockTab>('positions');
+  const [minimized, setMinimized] = useState(false);
   const [accounts, setAccounts] = useState<PaperAccount[]>([]);
   const [accountId, setAccountId] = useState('');
   const [snapshot, setSnapshot] = useState<PaperAccountSnapshot | null>(null);
@@ -144,7 +146,11 @@ export function TradingTerminalDock({
   };
 
   return (
-    <section className="trading-terminal-dock" aria-label="Paper positions and order entry" data-status={status}>
+    <section
+      className={`trading-terminal-dock${minimized ? ' is-minimized' : ''}`}
+      aria-label="Paper positions and order entry"
+      data-status={status}
+    >
       <div className="trading-dock-main">
         <nav role="tablist" aria-label="Paper trading activity">
           {tabs.map((item) => {
@@ -168,9 +174,18 @@ export function TradingTerminalDock({
             );
           })}
           <span className="trading-dock-status">Paper only · {status}</span>
+          <button
+            type="button"
+            className="trading-dock-toggle"
+            aria-label={minimized ? 'Restore paper trading panel' : 'Minimize paper trading panel'}
+            aria-expanded={!minimized}
+            onClick={() => setMinimized((current) => !current)}
+          >
+            {minimized ? 'Show' : 'Minimize'}
+          </button>
         </nav>
 
-        <div className="trading-dock-content" role="tabpanel" tabIndex={0}>
+        {!minimized ? <div className="trading-dock-content" role="tabpanel" tabIndex={0}>
           {!snapshot && tab !== 'alerts' ? (
             <div className="trading-dock-empty">
               <strong>No paper account</strong>
@@ -261,10 +276,10 @@ export function TradingTerminalDock({
               </tbody>
             </table>
           ) : null}
-        </div>
+        </div> : null}
       </div>
 
-      <aside className="trading-order-ticket" aria-label="Paper order ticket">
+      {!minimized ? <aside className="trading-order-ticket" aria-label="Paper order ticket">
         <header>
           <select
             aria-label="Paper account"
@@ -309,7 +324,7 @@ export function TradingTerminalDock({
             <small>Long-only paper model. No leverage and no live brokerage execution.</small>
           </>
         )}
-      </aside>
+      </aside> : null}
     </section>
   );
 }

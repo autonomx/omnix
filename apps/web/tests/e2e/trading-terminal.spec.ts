@@ -44,6 +44,7 @@ const workspacePayload = (name = 'Main Workspace') => ({
     indicators: [
       { id: 'sma', period: 20, enabled: true },
       { id: 'rsi', period: 14, enabled: true },
+      { id: 'macd', period: 9, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, enabled: false },
     ],
   }],
   links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
@@ -296,4 +297,26 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await expect.poll(() => state.alerts.length).toBe(1);
   await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);
   await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);
+});
+
+test('indicator panes expose close, minimize, and reorder controls', async ({ page }) => {
+  await installTradingMocks(page);
+  await page.goto('/trading');
+
+  const rsiControls = page.locator('.trading-indicator-pane-controls[data-indicator-id="rsi"]');
+  await expect(rsiControls).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Move RSI 14 panel up' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move RSI 14 panel down' })).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Minimize RSI 14 panel' }).click();
+  await expect(page.getByRole('button', { name: 'Restore RSI 14 panel' })).toHaveAttribute('aria-expanded', 'false');
+  await page.getByRole('button', { name: 'Restore RSI 14 panel' }).click();
+
+  await page.getByRole('button', { name: 'MACD 9' }).click();
+  await expect(page.locator('.trading-indicator-pane-controls')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Move RSI 14 panel down' }).click();
+  await expect.poll(async () => page.locator('.trading-indicator-pane-controls').evaluateAll((items) => items.map((item) => item.getAttribute('data-indicator-id')))).toEqual(['macd', 'rsi']);
+
+  await page.getByRole('button', { name: 'Close RSI 14 panel' }).click();
+  await expect(page.locator('.trading-indicator-pane-controls[data-indicator-id="rsi"]')).toHaveCount(0);
 });

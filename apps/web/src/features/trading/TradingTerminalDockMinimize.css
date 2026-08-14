@@ -1,0 +1,17 @@
+.trading-terminal-dock.is-minimized {
+  grid-template-columns: 1fr;
+  min-height: 38px;
+}
+
+.trading-terminal-dock.is-minimized .trading-dock-main {
+  border-right: 0;
+}
+
+.trading-terminal-dock.is-minimized .trading-dock-main > nav {
+  border-bottom: 0;
+}
+
+.trading-dock-toggle {
+  color: #9bb0c3 !important;
+  font-size: 9px !important;
+}

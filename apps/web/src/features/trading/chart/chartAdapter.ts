@@ -22,6 +22,12 @@ export type TradingChartType = 'candlestick' | 'bar' | 'line' | 'area' | 'baseli
 export type TradingCrosshairPoint = { time: Time; price: number };
 export type TradingVisibleRange = { from: Time; to: Time };
 export type DrawingCoordinate = { x: number; y: number };
+export type TradingIndicatorPaneGeometry = {
+  id: string;
+  paneIndex: number;
+  top: number;
+  height: number;
+};
 type PriceSeries =
   | ISeriesApi<'Candlestick'>
   | ISeriesApi<'Bar'>
@@ -57,11 +63,19 @@ function indicatorColor(output: IndicatorOutput): string {
   return '#5c7cfa';
 }
 
+function indicatorPaneId(output: IndicatorOutput): string | null {
+  if (output.pane === 0) return null;
+  return output.key.split(':', 1)[0] ?? null;
+}
+
 export class TradingChartAdapter {
   private readonly chart: IChartApi;
   private priceSeries: PriceSeries;
   private readonly volumeSeries: ISeriesApi<'Histogram'>;
   private readonly indicatorSeries = new Map<string, IndicatorSeries>();
+  private readonly indicatorSeriesPanes = new Map<string, number>();
+  private indicatorPaneIds: string[] = [];
+  private readonly restoredPaneHeights = new Map<string, number>();
   private chartType: TradingChartType;
   private readonly revisions = new Map<number, number>();
   private destroyed = false;
@@ -129,26 +143,76 @@ export class TradingChartAdapter {
 
   setIndicatorOutputs(outputs: readonly IndicatorOutput[]): void {
     this.assertActive();
+    const paneIds = outputs.reduce<string[]>((ids, output) => {
+      const paneId = indicatorPaneId(output);
+      if (paneId && !ids.includes(paneId)) ids.push(paneId);
+      return ids;
+    }, []);
+
     const enabled = new Set(outputs.map((output) => output.key));
     for (const [key, series] of this.indicatorSeries) {
       if (!enabled.has(key)) {
         this.chart.removeSeries(series);
         this.indicatorSeries.delete(key);
+        this.indicatorSeriesPanes.delete(key);
       }
     }
     for (const output of outputs) {
+      const paneId = indicatorPaneId(output);
+      const paneIndex = paneId === null ? 0 : paneIds.indexOf(paneId) + 1;
       let series = this.indicatorSeries.get(output.key);
       if (!series) {
         const color = indicatorColor(output);
         series = output.kind === 'histogram'
-          ? this.chart.addSeries(HistogramSeries, { color, title: output.title, priceScaleId: `indicator:${output.key}` }, output.pane)
-          : this.chart.addSeries(LineSeries, { color, lineWidth: 2, title: output.title, priceScaleId: output.pane === 1 ? `indicator:${output.key}` : 'right' }, output.pane);
+          ? this.chart.addSeries(HistogramSeries, { color, title: output.title, priceScaleId: `indicator:${output.key}` }, paneIndex)
+          : this.chart.addSeries(LineSeries, { color, lineWidth: 2, title: output.title, priceScaleId: paneIndex > 0 ? `indicator:${output.key}` : 'right' }, paneIndex);
         this.indicatorSeries.set(output.key, series);
+        this.indicatorSeriesPanes.set(output.key, paneIndex);
+      } else if (this.indicatorSeriesPanes.get(output.key) !== paneIndex) {
+        series.moveToPane(paneIndex);
+        this.indicatorSeriesPanes.set(output.key, paneIndex);
       }
       const data = output.points.map((point) => ({ time: timestamp(point.time), value: point.value }));
       if (output.kind === 'histogram') (series as ISeriesApi<'Histogram'>).setData(data);
       else (series as ISeriesApi<'Line'>).setData(data);
     }
+    this.indicatorPaneIds = paneIds;
+    for (const id of this.restoredPaneHeights.keys()) {
+      if (!paneIds.includes(id)) this.restoredPaneHeights.delete(id);
+    }
+    for (let index = this.chart.panes().length - 1; index > paneIds.length; index -= 1) {
+      const pane = this.chart.panes()[index];
+      if (pane?.getSeries().length === 0) this.chart.removePane(index);
+    }
+  }
+
+  indicatorPaneGeometry(): TradingIndicatorPaneGeometry[] {
+    this.assertActive();
+    const chartElement = this.chart.chartElement();
+    const chartRect = chartElement.getBoundingClientRect();
+    return this.indicatorPaneIds.flatMap((id, index) => {
+      const paneIndex = index + 1;
+      const pane = this.chart.panes()[paneIndex];
+      const element = pane?.getHTMLElement();
+      if (!element) return [];
+      const rect = element.getBoundingClientRect();
+      return [{ id, paneIndex, top: rect.top - chartRect.top, height: rect.height }];
+    });
+  }
+
+  setIndicatorPaneMinimized(id: string, minimized: boolean): void {
+    this.assertActive();
+    const index = this.indicatorPaneIds.indexOf(id);
+    if (index < 0) return;
+    const pane = this.chart.panes()[index + 1];
+    if (!pane) return;
+    if (minimized) {
+      if (!this.restoredPaneHeights.has(id)) this.restoredPaneHeights.set(id, Math.max(100, pane.getHeight()));
+      pane.setHeight(34);
+      return;
+    }
+    pane.setHeight(this.restoredPaneHeights.get(id) ?? 140);
+    this.restoredPaneHeights.delete(id);
   }
 
   updateBar(bar: MarketBar): boolean {

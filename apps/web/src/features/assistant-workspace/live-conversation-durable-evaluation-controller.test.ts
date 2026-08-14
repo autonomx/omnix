@@ -154,6 +154,22 @@ describe('durable Live Conversation evaluation controller', () => {
     expect(serialized).not.toMatch(/transcript|prompt|memory|message_content|utterance_text/);
   });
 
+  it('normalizes transient runtime metadata before posting evidence', () => {
+    liveConversationStore.dispatch({
+      type: 'identity',
+      identity: { profileVersion: 0 },
+    });
+    liveConversationStore.dispatch({
+      type: 'profile',
+      profile: { ...profile, presence_preset: 'legacy' as unknown as typeof profile.presence_preset },
+    });
+
+    const payload = buildDurableEvaluationPayload(activeCall(), '2026-07-11T12:10:00+00:00');
+
+    expect(payload.profile_version).toBeNull();
+    expect(payload.presence_preset).toBe('natural');
+  });
+
   it('posts one record, evaluates the durable aggregate, and counts release observations', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

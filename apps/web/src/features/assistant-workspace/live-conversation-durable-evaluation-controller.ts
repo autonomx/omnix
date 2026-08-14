@@ -108,8 +108,12 @@ export function buildDurableEvaluationPayload(
     browser_version: currentBrowserVersion(),
     os_version: currentOsVersion(),
     character_id: runtime.identity.characterId,
-    profile_version: runtime.identity.profileVersion,
-    presence_preset: runtime.profile?.presence_preset ?? 'natural',
+    // The bridge can briefly observe legacy/runtime metadata while a call is
+    // starting. Keep optional versions and enum values inside the API contract
+    // instead of allowing a stale `0` or unknown local-storage value to make
+    // the whole aggregate POST fail validation.
+    profile_version: positiveIntegerOrNull(runtime.identity.profileVersion),
+    presence_preset: normalizedPresencePreset(runtime.profile?.presence_preset),
     conversation_stance: runtime.profile?.conversation_stance ?? 'automatic',
     configured_duplex_mode: runtime.duplex.configuredMode,
     resolved_duplex_mode: runtime.duplex.resolvedMode,
@@ -163,6 +167,16 @@ export function buildDurableEvaluationPayload(
     listening_score: report.perceivedListeningScore,
     pressure_score: report.perceivedPressureScore,
   };
+}
+
+function normalizedPresencePreset(value: unknown): VoiceSessionEvaluationCreate['presence_preset'] {
+  return value === 'quiet' || value === 'natural' || value === 'engaged' || value === 'listener'
+    ? value
+    : 'natural';
+}
+
+function positiveIntegerOrNull(value: number | null): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null;
 }
 
 async function persistCallEvaluation(call: ActiveCall): Promise<void> {

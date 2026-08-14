@@ -22,6 +22,10 @@ export type CoreIndicatorInstance = {
   anchorTime?: string | null;
 };
 
+export function indicatorUsesSeparatePane(id: CoreIndicatorId): boolean {
+  return id === 'rsi' || id === 'macd' || id === 'atr';
+}
+
 function closes(bars: readonly MarketBar[]): number[] {
   return bars.map((bar) => Number(bar.close));
 }

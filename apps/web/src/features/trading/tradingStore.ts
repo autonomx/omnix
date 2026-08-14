@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
-import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
+import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInstance } from './indicators/coreIndicators';
 
 export type TradingLayout = 'auto' | 'columns-1' | 'columns-2' | 'columns-3' | 'columns-4';
 export const MIN_TRADING_CHARTS = 1;
@@ -15,6 +15,7 @@ export type TradingChartState = {
   chartType: TradingChartType;
   indicators: CoreIndicatorInstance[];
 };
+export type TradingIndicatorMove = 'up' | 'down';
 export type TradingLinkState = {
   instrument: boolean;
   interval: boolean;
@@ -44,6 +45,7 @@ type TradingWorkspaceState = {
   setDrawingSnapMode: (mode: DrawingSnapMode) => void;
   updateChart: (chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) => void;
   toggleIndicator: (chartId: string, id: CoreIndicatorId, period?: number) => void;
+  moveIndicator: (chartId: string, id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   setIndicators: (chartId: string, indicators: CoreIndicatorInstance[]) => void;
   setLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   setPanel: (key: keyof TradingPanelState, open: boolean) => void;
@@ -172,6 +174,26 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
         enabled: !indicator.enabled,
         period: period ?? indicator.period,
       }),
+    }),
+  })),
+  moveIndicator: (chartId, id, direction) => set((state) => ({
+    charts: state.charts.map((chart) => {
+      if (chart.chartId !== chartId || !indicatorUsesSeparatePane(id)) return chart;
+      const paneIndicators = chart.indicators.filter((indicator) => indicatorUsesSeparatePane(indicator.id) && indicator.enabled);
+      const currentIndex = paneIndicators.findIndex((indicator) => indicator.id === id);
+      if (currentIndex < 0) return chart;
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= paneIndicators.length) return chart;
+      const nextPaneIndicators = [...paneIndicators];
+      [nextPaneIndicators[currentIndex], nextPaneIndicators[targetIndex]] = [nextPaneIndicators[targetIndex], nextPaneIndicators[currentIndex]];
+      let paneIndex = 0;
+      const indicators = chart.indicators.map((indicator) => {
+        if (!indicatorUsesSeparatePane(indicator.id) || !indicator.enabled) return indicator;
+        const next = nextPaneIndicators[paneIndex];
+        paneIndex += 1;
+        return next ?? indicator;
+      });
+      return { ...chart, indicators };
     }),
   })),
   setIndicators: (chartId, indicators) => set((state) => ({

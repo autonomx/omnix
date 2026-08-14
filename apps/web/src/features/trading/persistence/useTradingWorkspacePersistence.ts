@@ -144,6 +144,11 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
 
   useEffect(() => {
     cancelledRef.current = false;
+    // React StrictMode intentionally mounts effects twice in development. The
+    // first async initializer must remain cancelled even after the second
+    // mount resets the shared cancellation ref; otherwise both initializers
+    // can observe an empty list and race to create `main`.
+    let disposed = false;
     let unsubscribe: () => void = () => {};
 
     const initialize = async () => {
@@ -152,7 +157,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
           tradingApi.documents('workspaces'),
           tradingDraftRecovery.load().catch(() => null),
         ]);
-        if (cancelledRef.current) return;
+        if (disposed || cancelledRef.current) return;
         recordsRef.current = new Map(records.map((record) => [record.record_id, record]));
         let record = records.find((item) => item.record_id === 'main') ?? records[0] ?? null;
         if (!record) {
@@ -162,9 +167,11 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
             'main',
             currentPayload('Main Workspace') as unknown as Record<string, unknown>,
           );
+          if (disposed || cancelledRef.current) return;
           recordsRef.current.set(created.record_id, created);
           record = created;
         }
+        if (disposed || cancelledRef.current) return;
         activeIdRef.current = record.record_id;
         setActiveWorkspaceId(record.record_id);
         if (!hydrate(record.payload) && draft) hydrate(draft);
@@ -185,12 +192,13 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
           saveTimerRef.current = setTimeout(() => void saveActive(), 700);
         });
       } catch {
-        if (!cancelledRef.current) setStatus('error');
+        if (!disposed && !cancelledRef.current) setStatus('error');
       }
     };
 
     void initialize();
     return () => {
+      disposed = true;
       cancelledRef.current = true;
       unsubscribe();
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);

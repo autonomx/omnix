@@ -91,4 +91,32 @@ describe('Trading multi-chart store', () => {
     useTradingStore.getState().toggleFavoriteInstrument('equity:NASDAQ:AAPL');
     expect(useTradingStore.getState().favoriteInstrumentIds).toEqual([]);
   });
+
+  it('reorders enabled secondary indicators without moving overlays', () => {
+    const indicators = defaultTradingIndicators().map((indicator) => (
+      indicator.id === 'macd' || indicator.id === 'atr' ? { ...indicator, enabled: true } : indicator
+    ));
+    useTradingStore.getState().setIndicators('chart-1', indicators);
+
+    useTradingStore.getState().moveIndicator('chart-1', 'rsi', 'down');
+
+    expect(useTradingStore.getState().charts[0].indicators.map((item) => item.id)).toEqual([
+      'sma', 'ema', 'macd', 'rsi', 'bollinger', 'atr', 'vwap',
+    ]);
+    expect(useTradingStore.getState().charts[0].indicators.find((item) => item.id === 'sma')?.enabled).toBe(true);
+  });
+
+  it('keeps secondary indicator order bounded at the first and last pane', () => {
+    const indicators = defaultTradingIndicators().map((indicator) => (
+      indicator.id === 'macd' ? { ...indicator, enabled: true } : indicator
+    ));
+    useTradingStore.getState().setIndicators('chart-1', indicators);
+    const before = useTradingStore.getState().charts[0].indicators.map((item) => item.id);
+
+    useTradingStore.getState().moveIndicator('chart-1', 'rsi', 'up');
+    expect(useTradingStore.getState().charts[0].indicators.map((item) => item.id)).toEqual(before);
+
+    useTradingStore.getState().moveIndicator('chart-1', 'macd', 'down');
+    expect(useTradingStore.getState().charts[0].indicators.map((item) => item.id)).toEqual(before);
+  });
 });

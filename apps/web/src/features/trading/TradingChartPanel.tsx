@@ -2,16 +2,17 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { tradingApi } from './tradingApi';
-import { TradingChartAdapter, type TradingChartType } from './chart/chartAdapter';
+import { TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
-import type { CoreIndicatorInstance } from './indicators/coreIndicators';
+import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInstance } from './indicators/coreIndicators';
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingStreamHub';
-import { useTradingStore } from './tradingStore';
+import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
+import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 
 const ranges = [
   { label: '1D', days: 1 },
@@ -84,6 +85,8 @@ export function TradingChartPanel({
   indicators,
   active,
   onActivate,
+  onToggleIndicator,
+  onMoveIndicator,
   synchronization,
 }: {
   chartId: string;
@@ -94,6 +97,8 @@ export function TradingChartPanel({
   indicators: CoreIndicatorInstance[];
   active: boolean;
   onActivate: () => void;
+  onToggleIndicator: (id: CoreIndicatorId) => void;
+  onMoveIndicator: (id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   synchronization: TradingChartSynchronization;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -111,7 +116,21 @@ export function TradingChartPanel({
   const [streamError, setStreamError] = useState<string | null>(null);
   const [indicatorError, setIndicatorError] = useState<string | null>(null);
   const [alertPlacement, setAlertPlacement] = useState<ChartAlertPlacement | null>(null);
+  const [indicatorPaneGeometry, setIndicatorPaneGeometry] = useState<TradingIndicatorPaneGeometry[]>([]);
+  const [minimizedIndicators, setMinimizedIndicators] = useState<Set<CoreIndicatorId>>(() => new Set());
+  const minimizedIndicatorsRef = useRef<Set<CoreIndicatorId>>(new Set());
   const clearAlertPlacement = useCallback(() => setAlertPlacement(null), []);
+  const refreshIndicatorPanes = useCallback((targetAdapter?: TradingChartAdapter | null) => {
+    if (!targetAdapter) {
+      setIndicatorPaneGeometry([]);
+      return;
+    }
+    try {
+      setIndicatorPaneGeometry(targetAdapter.indicatorPaneGeometry());
+    } catch {
+      setIndicatorPaneGeometry([]);
+    }
+  }, []);
   const scheduleIndicators = useCallback((delay = 0) => {
     if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
     indicatorTimerRef.current = setTimeout(() => {
@@ -123,12 +142,28 @@ export function TradingChartPanel({
         .then((outputs) => {
           if (outputs && adapterRef.current === targetAdapter) {
             targetAdapter.setIndicatorOutputs(outputs);
+            for (const indicator of indicatorsRef.current) {
+              if (indicatorUsesSeparatePane(indicator.id)) {
+                targetAdapter.setIndicatorPaneMinimized(indicator.id, minimizedIndicatorsRef.current.has(indicator.id));
+              }
+            }
+            refreshIndicatorPanes(targetAdapter);
+            window.requestAnimationFrame(() => {
+              if (adapterRef.current !== targetAdapter) return;
+              for (const indicator of indicatorsRef.current) {
+                if (indicatorUsesSeparatePane(indicator.id)) {
+                  targetAdapter.setIndicatorPaneMinimized(indicator.id, minimizedIndicatorsRef.current.has(indicator.id));
+                }
+              }
+              refreshIndicatorPanes(targetAdapter);
+              window.requestAnimationFrame(() => refreshIndicatorPanes(targetAdapter));
+            });
             setIndicatorError(null);
           }
         })
         .catch((error) => setIndicatorError(error instanceof Error ? error.message : String(error)));
     }, delay);
-  }, []);
+  }, [refreshIndicatorPanes]);
   const chartQuery = useQuery({
     queryKey: ['trading', 'bars', instrumentId, bindingId, interval],
     queryFn: () => tradingApi.bars(instrumentId, interval, 1_000, bindingId),
@@ -143,6 +178,7 @@ export function TradingChartPanel({
     adapterRef.current = next;
     indicatorSchedulerRef.current = scheduler;
     setAdapter(next);
+    setIndicatorPaneGeometry([]);
     const unregister = synchronization.register(chartId, next);
     return () => {
       unregister();
@@ -171,6 +207,36 @@ export function TradingChartPanel({
     indicatorsRef.current = indicators;
     scheduleIndicators();
   }, [indicators, scheduleIndicators]);
+
+  useEffect(() => {
+    const targetAdapter = adapterRef.current;
+    if (!targetAdapter) return;
+    for (const indicator of indicators) {
+      if (indicatorUsesSeparatePane(indicator.id)) {
+        targetAdapter.setIndicatorPaneMinimized(indicator.id, minimizedIndicators.has(indicator.id));
+      }
+    }
+    refreshIndicatorPanes(targetAdapter);
+    const frame = window.requestAnimationFrame(() => refreshIndicatorPanes(targetAdapter));
+    return () => window.cancelAnimationFrame(frame);
+  }, [adapter, indicators, minimizedIndicators, refreshIndicatorPanes]);
+
+  useEffect(() => {
+    if (!adapter) return;
+    const refresh = () => {
+      const frame = window.requestAnimationFrame(() => refreshIndicatorPanes(adapter));
+      return frame;
+    };
+    refresh();
+    window.addEventListener('resize', refresh);
+    const host = hostRef.current;
+    const observer = typeof ResizeObserver === 'undefined' || !host ? null : new ResizeObserver(refresh);
+    if (observer && host) observer.observe(host);
+    return () => {
+      window.removeEventListener('resize', refresh);
+      observer?.disconnect();
+    };
+  }, [adapter, refreshIndicatorPanes]);
 
   useEffect(() => {
     const resolved = chartQuery.data?.binding;
@@ -216,6 +282,27 @@ export function TradingChartPanel({
   const change = latestClose - previousClose;
   const changePercent = previousClose === 0 ? 0 : change / previousClose * 100;
   const direction = change < 0 ? 'negative' : 'positive';
+  const paneIndicators = indicators.filter((indicator) => indicator.enabled && indicatorUsesSeparatePane(indicator.id));
+
+  const toggleMinimizedIndicator = (id: CoreIndicatorId) => {
+    setMinimizedIndicators((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      minimizedIndicatorsRef.current = next;
+      return next;
+    });
+  };
+
+  const closeIndicator = (id: CoreIndicatorId) => {
+    setMinimizedIndicators((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      minimizedIndicatorsRef.current = next;
+      return next;
+    });
+    onToggleIndicator(id);
+  };
 
   const showRange = (days: number | null) => {
     const chart = adapterRef.current?.api();
@@ -294,6 +381,23 @@ export function TradingChartPanel({
       </header>
       <div className="trading-chart-stage">
         <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} />
+        {paneIndicators.map((indicator, index) => {
+          const geometry = indicatorPaneGeometry.find((item) => item.id === indicator.id);
+          if (!geometry) return null;
+          return (
+            <TradingIndicatorPaneControls
+              key={indicator.id}
+              indicator={indicator}
+              geometry={geometry}
+              minimized={minimizedIndicators.has(indicator.id)}
+              canMoveUp={index > 0}
+              canMoveDown={index < paneIndicators.length - 1}
+              onToggleMinimized={() => toggleMinimizedIndicator(indicator.id)}
+              onMove={(direction) => onMoveIndicator(indicator.id, direction)}
+              onClose={() => closeIndicator(indicator.id)}
+            />
+          );
+        })}
         <TradingDrawingOverlay
           adapter={adapter}
           instrumentId={instrumentId}
