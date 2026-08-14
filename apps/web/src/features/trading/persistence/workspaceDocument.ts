@@ -1,4 +1,5 @@
 import type { CoreIndicatorInstance } from '../indicators/coreIndicators';
+import { binanceInstrumentIdFor } from '../cryptoInstrumentDefaults';
 import {
   MAX_TRADING_CHARTS,
   type TradingChartState,
@@ -139,6 +140,19 @@ function migrateLegacyLayout(layout: LegacyLayout): TradingLayout {
   return 'columns-2';
 }
 
+function migrateCryptoChartsToBinance(charts: TradingChartState[]): TradingChartState[] {
+  return charts.map((chart) => {
+    const instrumentId = binanceInstrumentIdFor(chart.instrumentId);
+    return instrumentId === chart.instrumentId
+      ? chart
+      : { ...chart, instrumentId, bindingId: null };
+  });
+}
+
+function migrateCryptoFavoritesToBinance(value: unknown): string[] {
+  return [...new Set(parseFavorites(value).map(binanceInstrumentIdFor))];
+}
+
 export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload | null {
   if (!value || typeof value !== 'object') return null;
   const payload = value as Record<string, unknown>;
@@ -151,31 +165,33 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
     const legacyLayout = payload.layout as LegacyLayout;
     const requestedActive = typeof payload.activeChartId === 'string' ? payload.activeChartId : charts[0].chartId;
     const visibleCharts = migrateLegacyCharts(charts, legacyLayout, requestedActive);
+    const migratedCharts = migrateCryptoChartsToBinance(visibleCharts);
     const activeChartId = visibleCharts.some((chart) => chart.chartId === requestedActive)
       ? requestedActive
-      : visibleCharts[0].chartId;
+      : migratedCharts[0].chartId;
     return {
       schemaVersion: 2,
       name: typeof payload.name === 'string' ? payload.name : 'Main Workspace',
       layout: migrateLegacyLayout(legacyLayout),
       activeChartId,
-      charts: visibleCharts,
+      charts: migratedCharts,
       links,
       panels: parsePanels(payload.panels),
-      favoriteInstrumentIds: parseFavorites(payload.favoriteInstrumentIds),
+      favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
     };
   }
 
   if (payload.schemaVersion !== 2 || typeof payload.layout !== 'string' || !layouts.includes(payload.layout as TradingLayout)) return null;
   const requestedActive = typeof payload.activeChartId === 'string' ? payload.activeChartId : charts[0].chartId;
+  const migratedCharts = migrateCryptoChartsToBinance(charts);
   return {
     schemaVersion: 2,
     name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : 'Main Workspace',
     layout: payload.layout as TradingLayout,
-    activeChartId: charts.some((chart) => chart.chartId === requestedActive) ? requestedActive : charts[0].chartId,
-    charts,
+    activeChartId: migratedCharts.some((chart) => chart.chartId === requestedActive) ? requestedActive : migratedCharts[0].chartId,
+    charts: migratedCharts,
     links,
     panels: parsePanels(payload.panels),
-    favoriteInstrumentIds: parseFavorites(payload.favoriteInstrumentIds),
+    favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
   };
 }

@@ -11,6 +11,7 @@ from app.trading.providers.bar_semantics import (
     equity_bar_times,
     is_final_bar,
 )
+from app.trading.providers.equity import YahooEquityProvider
 from app.trading.providers.http_runtime import ProviderHttpRuntime
 
 
@@ -72,6 +73,43 @@ def test_additional_crypto_latest_open_candle_is_not_marked_final() -> None:
     response = provider.get_bars("crypto:COINBASE:spot:BTC-USD", "1m", 1)
     assert response.bars[0].end_time > response.bars[0].start_time
     assert response.bars[0].is_final is False
+
+
+def test_yahoo_daily_history_keeps_the_full_stock_window() -> None:
+    count = 2_005
+    timestamps = [1_600_000_000 + index * 86_400 for index in range(count)]
+    values = [100 + index for index in range(count)]
+    payload = {
+        "chart": {
+            "result": [{
+                "timestamp": timestamps,
+                "indicators": {
+                    "quote": [{
+                        "open": values,
+                        "high": [value + 1 for value in values],
+                        "low": [value - 1 for value in values],
+                        "close": values,
+                        "volume": [1_000] * count,
+                    }],
+                },
+            }],
+        },
+    }
+    session = FakeSession([FakeResponse(payload)])
+    runtime = ProviderHttpRuntime(
+        "yahoo",
+        session=session,
+        max_attempts=1,
+        initial_backoff_seconds=0,
+    )
+    provider = YahooEquityProvider(runtime=runtime, cache=TradingMarketDataCache())
+
+    response = provider.get_bars("equity:NASDAQ:AAPL", "1d", 5_000)
+
+    assert len(response.bars) == 2_000
+    assert response.bars[0].provider_event_id == str(timestamps[5])
+    assert response.provenance.history_complete is False
+    assert session.calls == 1
 
 
 def test_provider_runtime_retries_and_reports_health() -> None:

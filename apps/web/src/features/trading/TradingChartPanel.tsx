@@ -104,6 +104,12 @@ function applyVisibleRange(chart: IChartApi, days: number | null, total: number,
   });
 }
 
+function chartHistoryLimit(instrumentId: string, interval: string): number {
+  if (instrumentId.startsWith('crypto:BINANCE:') && ['1d', '1w'].includes(interval)) return 5_000;
+  if (instrumentId.startsWith('equity:') && interval === '1d') return 2_000;
+  return 1_000;
+}
+
 export function TradingChartPanel({
   chartId,
   instrumentId,
@@ -202,9 +208,10 @@ export function TradingChartPanel({
         .catch((error) => setIndicatorError(error instanceof Error ? error.message : String(error)));
     }, delay);
   }, [refreshIndicatorPanes]);
+  const historyLimit = chartHistoryLimit(instrumentId, interval);
   const chartQuery = useQuery({
-    queryKey: ['trading', 'bars', instrumentId, bindingId, interval],
-    queryFn: () => tradingApi.bars(instrumentId, interval, 1_000, bindingId),
+    queryKey: ['trading', 'bars', instrumentId, bindingId, interval, historyLimit],
+    queryFn: () => tradingApi.bars(instrumentId, interval, historyLimit, bindingId),
     enabled: Boolean(instrumentId),
     staleTime: 15_000,
   });

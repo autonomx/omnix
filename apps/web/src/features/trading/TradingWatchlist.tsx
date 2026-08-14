@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingApi } from './tradingApi';
+import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import type { CanonicalInstrument, TradingDocument } from './tradingTypes';
 import './TradingWatchlist.css';
 
@@ -33,10 +34,10 @@ function defaultWatchlistInstrumentIds(instruments: CanonicalInstrument[]): stri
   const equities = instruments
     .filter((instrument) => instrument.asset_class === 'equity')
     .map((instrument) => instrument.instrument_id);
-  const otherInstruments = instruments
-    .filter((instrument) => instrument.asset_class !== 'equity')
+  const crypto = instruments
+    .filter((instrument) => instrument.asset_class === 'crypto' && instrument.venue === 'BINANCE')
     .map((instrument) => instrument.instrument_id);
-  return [...equities, ...otherInstruments];
+  return [...equities, ...crypto];
 }
 
 export function TradingWatchlist({
@@ -55,7 +56,11 @@ export function TradingWatchlist({
   const [optionsOpen, setOptionsOpen] = useState(false);
   const selected = records.find((record) => record.record_id === selectedId) ?? records[0] ?? null;
   const current = payload(selected);
-  const instrumentIdsKey = current.instrumentIds.join('\u0000');
+  const normalizedInstrumentIds = useMemo(
+    () => [...new Set(current.instrumentIds.map(binanceInstrumentIdFor))],
+    [current.instrumentIds],
+  );
+  const instrumentIdsKey = normalizedInstrumentIds.join('\u0000');
   const instrumentById = useMemo(
     () => new Map(instruments.map((instrument) => [instrument.instrument_id, instrument])),
     [instruments],
@@ -78,7 +83,8 @@ export function TradingWatchlist({
           const defaultPayload = payload(defaultRecord);
           const orderedInstrumentIds = defaultWatchlistInstrumentIds(instruments);
           const availableIds = new Set(orderedInstrumentIds);
-          const retainedIds = defaultPayload.instrumentIds.filter((instrumentId) => !availableIds.has(instrumentId));
+          const migratedIds = [...new Set(defaultPayload.instrumentIds.map(binanceInstrumentIdFor))];
+          const retainedIds = migratedIds.filter((instrumentId) => !availableIds.has(instrumentId));
           const mergedIds = [...orderedInstrumentIds, ...retainedIds];
           const hasChanged = mergedIds.length !== defaultPayload.instrumentIds.length
             || mergedIds.some((instrumentId, index) => instrumentId !== defaultPayload.instrumentIds[index]);
@@ -181,8 +187,8 @@ export function TradingWatchlist({
   };
 
   const addActive = () => {
-    if (!activeInstrumentId || current.instrumentIds.includes(activeInstrumentId)) return;
-    void save({ ...current, instrumentIds: [...current.instrumentIds, activeInstrumentId] });
+    if (!activeInstrumentId || normalizedInstrumentIds.includes(activeInstrumentId)) return;
+    void save({ ...current, instrumentIds: [...normalizedInstrumentIds, activeInstrumentId] });
   };
 
   const rename = () => {
@@ -193,8 +199,8 @@ export function TradingWatchlist({
 
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
-    if (target < 0 || target >= current.instrumentIds.length) return;
-    const next = [...current.instrumentIds];
+    if (target < 0 || target >= normalizedInstrumentIds.length) return;
+    const next = [...normalizedInstrumentIds];
     [next[index], next[target]] = [next[target], next[index]];
     void save({ ...current, instrumentIds: next });
   };
@@ -231,14 +237,14 @@ export function TradingWatchlist({
         <span>Chg%</span>
       </div>
       <ul>
-        {current.instrumentIds.map((instrumentId, index) => {
+        {normalizedInstrumentIds.map((instrumentId, index) => {
           const instrument = instrumentById.get(instrumentId);
           const symbol = instrument?.display_symbol ?? instrumentId;
           const quote = quotes[instrumentId];
           const baseCurrency = instrument?.base_currency ?? symbol.slice(0, 1);
           return (
             <li key={instrumentId} className={instrumentId === activeInstrumentId ? 'active' : undefined}>
-              <button type="button" onClick={() => onSelect(instrumentId)} aria-label={`Select ${symbol}`}>
+              <button type="button" onClick={() => onSelect(binanceInstrumentIdFor(instrumentId))} aria-label={`Select ${symbol}`}>
                 <span className="trading-watchlist-asset-icon" aria-hidden="true">{baseCurrency.slice(0, 1)}</span>
                 <strong>{symbol}</strong>
               </button>
@@ -249,7 +255,7 @@ export function TradingWatchlist({
               <span className="trading-watchlist-row-actions">
                 <button type="button" onClick={() => move(index, -1)} aria-label={`Move ${symbol} up`}>↑</button>
                 <button type="button" onClick={() => move(index, 1)} aria-label={`Move ${symbol} down`}>↓</button>
-                <button type="button" onClick={() => void save({ ...current, instrumentIds: current.instrumentIds.filter((id) => id !== instrumentId) })} aria-label={`Remove ${symbol}`}>×</button>
+                <button type="button" onClick={() => void save({ ...current, instrumentIds: normalizedInstrumentIds.filter((id) => id !== instrumentId) })} aria-label={`Remove ${symbol}`}>×</button>
               </span>
             </li>
           );

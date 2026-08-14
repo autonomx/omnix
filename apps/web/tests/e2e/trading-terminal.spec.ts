@@ -83,6 +83,7 @@ type MockState = {
   records: Map<string, { record_id: string; record_type: string; revision: number; payload: Record<string, unknown>; status: string }>;
   alerts: Array<Record<string, unknown>>;
   drawingWrites: number;
+  barLimits: number[];
 };
 
 async function fulfill(route: Route, body: unknown, status = 200) {
@@ -101,6 +102,7 @@ async function installTradingMocks(page: Page): Promise<MockState> {
     records: new Map([['main', main]]),
     alerts: [],
     drawingWrites: 0,
+    barLimits: [],
   };
 
   await page.route('**/api/trading/**', async (route) => {
@@ -149,6 +151,7 @@ async function installTradingMocks(page: Page): Promise<MockState> {
       return;
     }
     if (path === '/api/trading/bars') {
+      state.barLimits.push(Number(url.searchParams.get('limit') ?? '0'));
       const dataset = bars();
       await fulfill(route, {
         instrument,
@@ -289,6 +292,7 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
     await expect(timeframe).toHaveValue(interval);
     await expect(rangeNav.getByRole('button', { name: range, exact: true })).toHaveAttribute('aria-pressed', 'true');
   }
+  await expect.poll(() => state.barLimits).toContain(5_000);
 
   await page.getByLabel('Number of charts').selectOption('3');
   await expect(page.locator('.trading-chart-panel')).toHaveCount(3);

@@ -14,13 +14,14 @@ import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
+import { preferredCryptoInstrument } from './cryptoInstrumentDefaults';
 import {
   MAX_TRADING_CHARTS,
   MIN_TRADING_CHARTS,
   useTradingStore,
   type TradingLayout,
 } from './tradingStore';
-import type { ProviderBinding } from './tradingTypes';
+import type { CanonicalInstrument, ProviderBinding } from './tradingTypes';
 import './TradingWorkspace.css';
 import './TradingAdvanced.css';
 import './TradingFlexibleLayout.css';
@@ -74,6 +75,13 @@ function intervalLabel(interval: string): string {
   return interval === '1mo' ? '1M' : interval.toUpperCase();
 }
 
+function preferredInstrument(
+  instrument: CanonicalInstrument,
+  instruments: readonly CanonicalInstrument[],
+): CanonicalInstrument {
+  return preferredCryptoInstrument(instrument, instruments);
+}
+
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [focusMode, setFocusMode] = useState(false);
   const [symbolQuery, setSymbolQuery] = useState('');
@@ -111,9 +119,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   );
   const selectedBinding = availableBindings.find((binding) => binding.binding_id === activeChart.bindingId)
     ?? availableBindings[0];
-  const selectedProvider = (providers.data ?? []).find(
-    (provider) => provider.provider === selectedBinding?.provider,
-  ) ?? null;
+  const visibleInstruments = useMemo(
+    () => (instruments.data ?? []).filter((instrument) => (
+      instrument.asset_class !== 'crypto' || instrument.venue === 'BINANCE'
+    )),
+    [instruments.data],
+  );
   const supportedIntervals = selectedBinding?.supported_intervals ?? [];
   const quickIntervals = quickIntervalPriority.filter((interval) => supportedIntervals.includes(interval));
   const favorite = favoriteInstrumentIds.includes(activeChart.instrumentId);
@@ -140,8 +151,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       || instrument.venue_symbol.toUpperCase().startsWith(query)
     ));
     if (!match) return;
-    updateChart(activeChartId, { instrumentId: match.instrument_id, bindingId: null });
-    setSymbolQuery(match.display_symbol);
+    const next = preferredInstrument(match, instruments.data ?? []);
+    updateChart(activeChartId, { instrumentId: next.instrument_id, bindingId: null });
+    setSymbolQuery(next.display_symbol);
   };
 
   const selectBinding = (bindingId: string) => {
@@ -236,7 +248,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             }}
           />
           <datalist id="trading-instrument-options">
-            {(instruments.data ?? []).map((instrument) => <option key={instrument.instrument_id} value={instrument.display_symbol}>{instrument.venue}</option>)}
+            {visibleInstruments.map((instrument) => <option key={instrument.instrument_id} value={instrument.display_symbol}>{instrument.venue}</option>)}
           </datalist>
         </div>
         <button
@@ -322,7 +334,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid /></section>
         {workspaceHydrated && panels.right ? (
           <TradingSidePanel
-            instruments={instruments.data ?? []}
+            instruments={visibleInstruments}
             activeInstrumentId={activeChart.instrumentId}
             indicators={activeChart.indicators}
             layout={layout}
@@ -331,7 +343,11 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             maximumChartCount={MAX_TRADING_CHARTS}
             links={links}
             snapMode={drawingSnapMode}
-            onSelectInstrument={(instrumentId) => updateChart(activeChartId, { instrumentId, bindingId: null })}
+            onSelectInstrument={(instrumentId) => {
+              const instrument = (instruments.data ?? []).find((item) => item.instrument_id === instrumentId);
+              const next = instrument ? preferredInstrument(instrument, instruments.data ?? []) : null;
+              updateChart(activeChartId, { instrumentId: next?.instrument_id ?? instrumentId, bindingId: null });
+            }}
             onSetIndicators={(next) => setIndicators(activeChartId, next)}
             onSetLayout={setLayout}
             onSetChartCount={setChartCount}

@@ -47,6 +47,32 @@ describe('Trading workspace document', () => {
     expect(migrated?.favoriteInstrumentIds).toEqual(['sol']);
   });
 
+  it('migrates saved Coinbase spot charts and favorites to Binance', () => {
+    const migrated = parseTradingWorkspace({
+      schemaVersion: 2,
+      name: 'Main Workspace',
+      layout: 'auto',
+      activeChartId: 'chart-1',
+      charts: [{
+        chartId: 'chart-1',
+        instrumentId: 'crypto:COINBASE:spot:BTC-USD',
+        bindingId: 'coinbase:rest:crypto:COINBASE:spot:BTC-USD',
+        interval: '1d',
+        chartType: 'candlestick',
+        indicators: [],
+      }],
+      links: state.links,
+      panels: state.panels,
+      favoriteInstrumentIds: ['crypto:COINBASE:spot:BTC-USD'],
+    });
+
+    expect(migrated?.charts[0]).toMatchObject({
+      instrumentId: 'crypto:BINANCE:spot:BTC-USDT',
+      bindingId: null,
+    });
+    expect(migrated?.favoriteInstrumentIds).toEqual(['crypto:BINANCE:spot:BTC-USDT']);
+  });
+
   it('rejects unknown schema versions, layouts, and malformed charts', () => {
     expect(parseTradingWorkspace({ schemaVersion: 3, layout: 'auto', charts: [], links: state.links })).toBeNull();
     expect(parseTradingWorkspace({ schemaVersion: 2, layout: 'four', charts: state.charts, links: state.links })).toBeNull();

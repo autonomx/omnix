@@ -27,6 +27,7 @@ YAHOO_INTERVALS = {
     "1w": ("10y", "1wk"),
     "1mo": ("max", "1mo"),
 }
+MAX_YAHOO_HISTORY_LIMIT = 2_000
 
 
 class YahooEquityProvider:
@@ -73,7 +74,7 @@ class YahooEquityProvider:
         if instrument is None or interval not in YAHOO_INTERVALS:
             raise ValueError(f"unsupported Yahoo request: {instrument_id} {interval}")
         range_value, provider_interval = YAHOO_INTERVALS[interval]
-        clean_limit = max(1, min(int(limit), 2_000))
+        clean_limit = max(1, min(int(limit), MAX_YAHOO_HISTORY_LIMIT))
         key = self.cache.key(
             binding.binding_id,
             instrument_id,
