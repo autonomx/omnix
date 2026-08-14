@@ -16,6 +16,10 @@ import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspac
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
 import { preferredCryptoInstrument } from './cryptoInstrumentDefaults';
 import {
+  intervalCompactLabel,
+  TRADING_VIEW_INTERVAL_GROUPS,
+} from './tradingIntervals';
+import {
   MAX_TRADING_CHARTS,
   MIN_TRADING_CHARTS,
   useTradingStore,
@@ -29,6 +33,7 @@ import './TradingCompactHeader.css';
 import './TradingIndicatorMenuOverlay.css';
 import './TradingToolbarAlignment.css';
 import './TradingChartEnhancements.css';
+import './TradingIntervalMenu.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'cursor', label: 'Cursor', glyph: '↖' },
@@ -72,7 +77,7 @@ function preferredInterval(binding: ProviderBinding, current: string): string {
 }
 
 function intervalLabel(interval: string): string {
-  return interval === '1mo' ? '1M' : interval.toUpperCase();
+  return intervalCompactLabel(interval);
 }
 
 function preferredInstrument(
@@ -278,14 +283,42 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               {intervalLabel(item)}
             </button>
           ))}
-          <select
-            aria-label="All supported Trading intervals"
-            value={activeChart.interval}
-            disabled={supportedIntervals.length === 0}
-            onChange={(event) => updateChart(activeChartId, { interval: event.target.value })}
-          >
-            {supportedIntervals.map((interval) => <option key={interval} value={interval}>{intervalLabel(interval)}</option>)}
-          </select>
+          <details className="trading-interval-manager">
+            <summary
+              role="combobox"
+              aria-label="All supported Trading intervals"
+              aria-haspopup="listbox"
+            >
+              <span>{intervalLabel(activeChart.interval)}</span>
+              <span className="trading-menu-caret" aria-hidden="true">⌄</span>
+            </summary>
+            <div className="trading-interval-menu" role="listbox" aria-label="TradingView intervals">
+              {TRADING_VIEW_INTERVAL_GROUPS.map((group) => (
+                <section key={group.label} className="trading-interval-group" role="group" aria-label={group.label}>
+                  <header>{group.label}<span aria-hidden="true">⌃</span></header>
+                  {group.options.map((option) => {
+                    const supported = supportedIntervals.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={activeChart.interval === option.value}
+                        disabled={!supported}
+                        title={supported ? option.label : `${option.label} is not supported by ${selectedBinding?.provider ?? 'the selected feed'}`}
+                        onClick={(event) => {
+                          updateChart(activeChartId, { interval: option.value });
+                          event.currentTarget.closest('details')?.removeAttribute('open');
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </section>
+              ))}
+            </div>
+          </details>
           </div>
 
           <label className="trading-chart-type-control" title={`Chart type: ${activeChart.chartType}`}>

@@ -284,14 +284,23 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await smaOption.click();
   await expect(page.locator('.trading-timeframe-buttons > button')).toHaveCount(3);
   await expect(page.getByRole('button', { name: '1H' })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'All supported Trading intervals' })).toContainText('1W');
+  await expect(page.getByRole('combobox', { name: 'All supported Trading intervals' })).toContainText('1H');
   const rangeNav = page.getByRole('navigation', { name: 'chart-1 visible range' });
   const timeframe = page.getByRole('combobox', { name: 'All supported Trading intervals' });
   for (const [range, interval] of [['1D', '1m'], ['5D', '5m'], ['1M', '30m'], ['3M', '1h'], ['6M', '2h'], ['YTD', '1d'], ['1Y', '1d'], ['5Y', '1w'], ['All', '1mo']] as const) {
     await rangeNav.getByRole('button', { name: range, exact: true }).click();
-    await expect(timeframe).toHaveValue(interval);
+    const expectedLabel = interval.endsWith('mo') ? interval.replace('mo', 'M') : interval.endsWith('m') ? interval : interval.toUpperCase();
+    await expect(timeframe).toContainText(expectedLabel);
     await expect(rangeNav.getByRole('button', { name: range, exact: true })).toHaveAttribute('aria-pressed', 'true');
   }
+  await timeframe.click();
+  const intervalMenu = page.getByRole('listbox', { name: 'TradingView intervals' });
+  await expect(intervalMenu).toBeVisible();
+  await expect(intervalMenu.getByRole('group', { name: 'Ticks' })).toContainText('1 tick');
+  await expect(intervalMenu.getByRole('group', { name: 'Ranges' })).toContainText('1000 ranges');
+  await expect(intervalMenu.getByRole('option', { name: '2 minutes' })).toBeDisabled();
+  await intervalMenu.getByRole('option', { name: '5 minutes', exact: true }).click();
+  await expect(timeframe).toContainText('5m');
   await expect.poll(() => state.barLimits).toContain(5_000);
 
   await page.getByLabel('Number of charts').selectOption('3');

@@ -14,6 +14,7 @@ import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingS
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
+import { intervalCompactLabel } from './tradingIntervals';
 
 const ranges = [
   { label: '1D', days: 1, interval: '1m' },
@@ -67,11 +68,14 @@ function price(value?: string | null): string {
 }
 
 function intervalMinutes(interval: string): number {
-  const match = interval.match(/^(\d+)(mo|m|h|d|w)$/i);
+  const match = interval.match(/^(\d+)(mo|s|m|h|d|w|t|r)$/i);
   if (!match) return 1_440;
   const amount = Number(match[1]);
   const unit = match[2].toLowerCase();
   if (unit === 'mo') return amount * 43_200;
+  if (unit === 's') return amount / 60;
+  if (unit === 't') return amount / 60;
+  if (unit === 'r') return amount;
   if (unit === 'm') return amount;
   if (unit === 'h') return amount * 60;
   if (unit === 'w') return amount * 10_080;
@@ -79,7 +83,7 @@ function intervalMinutes(interval: string): number {
 }
 
 function intervalLabel(interval: string): string {
-  return interval === '1mo' ? '1M' : interval.toUpperCase();
+  return intervalCompactLabel(interval);
 }
 
 function closestSupportedInterval(target: string, supported: readonly string[]): string {

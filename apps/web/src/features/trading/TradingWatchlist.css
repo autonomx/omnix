@@ -159,14 +159,81 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border: 1px solid rgba(116, 151, 181, 0.35);
   border-radius: 50%;
   background: rgba(116, 151, 181, 0.15);
   color: #dbe8f3;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
+}
+
+.trading-watchlist-asset-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.trading-watchlist-asset-icon.apple {
+  border-color: rgba(210, 220, 232, 0.5);
+  background: #202b38;
+  color: #f0f4f8;
+}
+
+.trading-watchlist-asset-icon.apple svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.trading-watchlist-asset-icon.nvidia {
+  border-color: rgba(118, 213, 83, 0.45);
+  background: rgba(118, 213, 83, 0.16);
+  color: #76d553;
+}
+
+.trading-watchlist-asset-icon.tesla {
+  border-color: rgba(235, 75, 88, 0.5);
+  background: rgba(235, 75, 88, 0.16);
+  color: #ff6570;
+}
+
+.trading-watchlist-asset-icon.spy {
+  border-color: rgba(78, 164, 237, 0.5);
+  background: rgba(78, 164, 237, 0.16);
+  color: #70baff;
+}
+
+.trading-watchlist-asset-icon.bitcoin {
+  border-color: rgba(247, 147, 26, 0.55);
+  background: rgba(247, 147, 26, 0.18);
+  color: #f7931a;
+}
+
+.trading-watchlist-asset-icon.ethereum {
+  border-color: rgba(147, 122, 255, 0.5);
+  background: rgba(147, 122, 255, 0.16);
+  color: #a896ff;
+}
+
+.trading-watchlist-asset-icon.solana {
+  border-color: rgba(72, 226, 198, 0.5);
+  background: linear-gradient(135deg, rgba(72, 226, 198, 0.2), rgba(151, 94, 255, 0.2));
+  color: #64e5cd;
+}
+
+.trading-watchlist-asset-icon.hyperliquid {
+  border-color: rgba(72, 202, 255, 0.5);
+  background: rgba(72, 202, 255, 0.16);
+  color: #6bd2ff;
+}
+
+.trading-watchlist-asset-icon.generic {
+  background: rgba(116, 151, 181, 0.15);
 }
 
 .trading-watchlist li > button strong {
