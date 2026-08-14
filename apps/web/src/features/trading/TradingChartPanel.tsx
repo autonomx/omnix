@@ -14,7 +14,11 @@ import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingS
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
-import { intervalCompactLabel } from './tradingIntervals';
+import {
+  intervalCompactLabel,
+  isIntervalAvailable,
+  tradingIntervalMinutes,
+} from './tradingIntervals';
 
 const ranges = [
   { label: '1D', days: 1, interval: '1m' },
@@ -68,18 +72,7 @@ function price(value?: string | null): string {
 }
 
 function intervalMinutes(interval: string): number {
-  const match = interval.match(/^(\d+)(mo|s|m|h|d|w|t|r)$/i);
-  if (!match) return 1_440;
-  const amount = Number(match[1]);
-  const unit = match[2].toLowerCase();
-  if (unit === 'mo') return amount * 43_200;
-  if (unit === 's') return amount / 60;
-  if (unit === 't') return amount / 60;
-  if (unit === 'r') return amount;
-  if (unit === 'm') return amount;
-  if (unit === 'h') return amount * 60;
-  if (unit === 'w') return amount * 10_080;
-  return amount * 1_440;
+  return tradingIntervalMinutes(interval) ?? 1_440;
 }
 
 function intervalLabel(interval: string): string {
@@ -312,7 +305,8 @@ export function TradingChartPanel({
     const resolved = chartQuery.data?.binding;
     if (!instrumentId || !resolved) return;
     setStreamError(null);
-    if (resolved.feed_type !== 'websocket_and_rest') {
+    const derivedInterval = !resolved.supported_intervals.includes(interval);
+    if (resolved.feed_type !== 'websocket_and_rest' || derivedInterval) {
       setStreamStatus('polling');
       const poll = window.setInterval(() => void chartQuery.refetch(), 30_000);
       return () => window.clearInterval(poll);
@@ -397,7 +391,9 @@ export function TradingChartPanel({
     selectedRangeRef.current = days;
     setSelectedRangeLabel(label);
     const supportedIntervals = chartQuery.data?.binding.supported_intervals ?? [];
-    const nextInterval = closestSupportedInterval(requestedInterval, supportedIntervals);
+    const nextInterval = isIntervalAvailable(requestedInterval, supportedIntervals)
+      ? requestedInterval
+      : closestSupportedInterval(requestedInterval, supportedIntervals);
     pendingRangeIntervalRef.current = interval === nextInterval ? null : nextInterval;
     onChangeInterval(nextInterval);
     const chart = adapterRef.current?.api();

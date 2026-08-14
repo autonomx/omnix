@@ -10,6 +10,11 @@ from app.trading.catalog import BINDINGS, POLICIES, binding_by_id, default_bindi
 from app.trading.models import BarsResponse, ProviderBinding
 
 from .additional_crypto import AdditionalCryptoProvider
+from .aggregation import (
+    aggregate_market_bars,
+    aggregated_dataset_fingerprint,
+    aggregation_plan,
+)
 from .binance import BinanceMarketDataProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .errors import ProviderFallbackEligibleError
@@ -72,6 +77,54 @@ class ProviderRegistry:
             )
         return provider.get_bars(instrument_id, interval, limit)
 
+    def _bars_for_interval(
+        self,
+        provider: Any,
+        binding: ProviderBinding,
+        instrument_id: str,
+        interval: str,
+        limit: int,
+        cancellation: threading.Event | None,
+    ) -> BarsResponse:
+        plan = aggregation_plan(interval, binding.supported_intervals)
+        if plan is None:
+            return self._bars(provider, instrument_id, interval, limit, cancellation)
+
+        base_interval, factor = plan
+        base_limit = min(5_000, max(1, limit * factor + factor - 1))
+        base_response = self._bars(
+            provider,
+            instrument_id,
+            base_interval,
+            base_limit,
+            cancellation,
+        )
+        bars = aggregate_market_bars(
+            base_response.bars,
+            target_interval=interval,
+            base_interval=base_interval,
+            factor=factor,
+        )
+        provenance = base_response.provenance.model_copy(
+            update={
+                "as_of": bars[-1].end_time if bars else base_response.provenance.as_of,
+                "dataset_fingerprint": aggregated_dataset_fingerprint(
+                    base_response.provenance.dataset_fingerprint,
+                    target_interval=interval,
+                    base_interval=base_interval,
+                    factor=factor,
+                ),
+                "history_complete": base_response.provenance.history_complete,
+            }
+        )
+        return base_response.model_copy(
+            update={
+                "interval": interval,
+                "bars": bars,
+                "provenance": provenance,
+            }
+        )
+
     def bars(
         self,
         instrument_id: str,
@@ -82,8 +135,9 @@ class ProviderRegistry:
     ) -> BarsResponse:
         requested = self.resolve_binding(instrument_id, binding_id)
         try:
-            return self._bars(
+            return self._bars_for_interval(
                 self.provider(requested.provider),
+                requested,
                 instrument_id,
                 interval,
                 limit,
@@ -102,8 +156,9 @@ class ProviderRegistry:
             )
             if fallback is None:
                 raise
-            result = self._bars(
+            result = self._bars_for_interval(
                 self.provider("stooq"),
+                fallback,
                 instrument_id,
                 interval,
                 limit,

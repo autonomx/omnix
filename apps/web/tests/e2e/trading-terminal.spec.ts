@@ -298,7 +298,7 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await expect(intervalMenu).toBeVisible();
   await expect(intervalMenu.getByRole('group', { name: 'Ticks' })).toContainText('1 tick');
   await expect(intervalMenu.getByRole('group', { name: 'Ranges' })).toContainText('1000 ranges');
-  await expect(intervalMenu.getByRole('option', { name: '2 minutes' })).toBeDisabled();
+  await expect(intervalMenu.getByRole('option', { name: '2 minutes' })).toBeEnabled();
   await intervalMenu.getByRole('option', { name: '5 minutes', exact: true }).click();
   await expect(timeframe).toContainText('5m');
   await expect.poll(() => state.barLimits).toContain(5_000);

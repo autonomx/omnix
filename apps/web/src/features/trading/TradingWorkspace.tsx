@@ -16,6 +16,8 @@ import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspac
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
 import { preferredCryptoInstrument } from './cryptoInstrumentDefaults';
 import {
+  aggregationBaseInterval,
+  isIntervalAvailable,
   intervalCompactLabel,
   TRADING_VIEW_INTERVAL_GROUPS,
 } from './tradingIntervals';
@@ -69,7 +71,7 @@ const chartTypeGlyphs: Record<TradingChartType, string> = {
 type ToolPanel = 'scanner' | 'replay' | 'paper' | 'research';
 
 function preferredInterval(binding: ProviderBinding, current: string): string {
-  if (binding.supported_intervals.includes(current)) return current;
+  if (isIntervalAvailable(current, binding.supported_intervals)) return current;
   for (const candidate of ['1h', '2h', '4h', '1d', '15m', '5m', '1m', '1w']) {
     if (binding.supported_intervals.includes(candidate)) return candidate;
   }
@@ -131,11 +133,11 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     [instruments.data],
   );
   const supportedIntervals = selectedBinding?.supported_intervals ?? [];
-  const quickIntervals = quickIntervalPriority.filter((interval) => supportedIntervals.includes(interval));
+  const quickIntervals = quickIntervalPriority.filter((interval) => isIntervalAvailable(interval, supportedIntervals));
   const favorite = favoriteInstrumentIds.includes(activeChart.instrumentId);
 
   useEffect(() => {
-    if (!selectedBinding || selectedBinding.supported_intervals.includes(activeChart.interval)) return;
+    if (!selectedBinding || isIntervalAvailable(activeChart.interval, selectedBinding.supported_intervals)) return;
     updateChart(activeChartId, { interval: preferredInterval(selectedBinding, activeChart.interval) });
   }, [activeChart.interval, activeChartId, selectedBinding?.binding_id, updateChart]);
 
@@ -297,7 +299,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <section key={group.label} className="trading-interval-group" role="group" aria-label={group.label}>
                   <header>{group.label}<span aria-hidden="true">⌃</span></header>
                   {group.options.map((option) => {
-                    const supported = supportedIntervals.includes(option.value);
+                    const baseInterval = aggregationBaseInterval(option.value, supportedIntervals);
+                    const supported = baseInterval !== null;
+                    const derived = baseInterval !== null && baseInterval !== option.value;
                     return (
                       <button
                         key={option.value}
@@ -305,7 +309,11 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                         role="option"
                         aria-selected={activeChart.interval === option.value}
                         disabled={!supported}
-                        title={supported ? option.label : `${option.label} is not supported by ${selectedBinding?.provider ?? 'the selected feed'}`}
+                        title={supported
+                          ? derived
+                            ? `${option.label} · calculated from ${intervalLabel(baseInterval)}`
+                            : option.label
+                          : `${option.label} is not supported by ${selectedBinding?.provider ?? 'the selected feed'}`}
                         onClick={(event) => {
                           updateChart(activeChartId, { interval: option.value });
                           event.currentTarget.closest('details')?.removeAttribute('open');

@@ -114,3 +114,41 @@ export function intervalMenuLabel(interval: string): string {
 export function intervalCompactLabel(interval: string): string {
   return optionByValue.get(interval)?.compactLabel ?? (interval === '1mo' ? '1M' : interval.toUpperCase());
 }
+
+function intervalMinutesValue(interval: string): number | null {
+  const match = interval.match(/^(\d+)(mo|m|h|d|w)$/i);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  if (unit === 'mo') return amount * 43_200;
+  if (unit === 'm') return amount;
+  if (unit === 'h') return amount * 60;
+  if (unit === 'd') return amount * 1_440;
+  return amount * 10_080;
+}
+
+export function tradingIntervalMinutes(interval: string): number | null {
+  return intervalMinutesValue(interval);
+}
+
+export function aggregationBaseInterval(
+  targetInterval: string,
+  supportedIntervals: readonly string[],
+): string | null {
+  if (supportedIntervals.includes(targetInterval)) return targetInterval;
+  const targetMinutes = intervalMinutesValue(targetInterval);
+  if (targetMinutes == null) return null;
+  const candidates = supportedIntervals
+    .map((candidate) => ({ candidate, minutes: intervalMinutesValue(candidate) }))
+    .filter((item): item is { candidate: string; minutes: number } => (
+      item.minutes != null
+      && item.minutes <= targetMinutes
+      && Number.isInteger(targetMinutes / item.minutes)
+    ))
+    .sort((left, right) => right.minutes - left.minutes);
+  return candidates[0]?.candidate ?? null;
+}
+
+export function isIntervalAvailable(interval: string, supportedIntervals: readonly string[]): boolean {
+  return aggregationBaseInterval(interval, supportedIntervals) !== null;
+}
