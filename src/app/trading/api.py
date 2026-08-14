@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
@@ -11,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 
-from .catalog import search_instruments
+from .instrument_catalog_service import ProviderBackedInstrumentCatalog, default_instrument_catalog
 from .models import BarsResponse, CanonicalInstrument, ProviderBinding, ProviderPolicy
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .service import TradingMarketDataService, default_market_data_service
@@ -110,6 +111,7 @@ def _stream_payload(update: StreamingBarUpdate) -> dict[str, Any]:
 def create_trading_router(
     repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
     market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
+    instrument_catalog_factory: Callable[[], ProviderBackedInstrumentCatalog] = default_instrument_catalog,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading", tags=["trading"])
 
@@ -127,7 +129,9 @@ def create_trading_router(
 
     @router.get("/instruments/search", response_model=InstrumentSearchResponse)
     async def instruments(query: str = Query(default="", max_length=96)) -> InstrumentSearchResponse:
-        return InstrumentSearchResponse(instruments=search_instruments(query))
+        catalog = instrument_catalog_factory()
+        results = await asyncio.to_thread(catalog.search, query)
+        return InstrumentSearchResponse(instruments=results)
 
     @router.get("/bars", response_model=BarsResponse)
     async def bars(

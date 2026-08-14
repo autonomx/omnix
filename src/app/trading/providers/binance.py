@@ -8,7 +8,7 @@ from typing import Any
 import requests
 
 from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import BINANCE_POLICY, BINDINGS, instrument_by_id, search_instruments
+from app.trading.catalog import BINANCE_POLICY, bindings_for_instrument, instrument_by_id, search_instruments
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
 from .bar_semantics import is_final_bar
@@ -65,7 +65,7 @@ class BinanceMarketDataProvider:
 
     def get_binding(self, instrument_id: str) -> ProviderBinding:
         binding = next(
-            (item for item in BINDINGS if item.instrument_id == instrument_id and item.provider == self.provider_id),
+            (item for item in bindings_for_instrument(instrument_id) if item.provider == self.provider_id),
             None,
         )
         if binding is None:

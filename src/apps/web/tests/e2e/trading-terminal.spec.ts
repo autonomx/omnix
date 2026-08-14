@@ -271,6 +271,15 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await expect(page.locator('.trading-chart-ohlc').first()).toBeVisible();
   await expect(page.locator('.trading-terminal-header .trading-command-bar')).toBeAttached();
   await expect(page.locator('.trading-terminal-header')).toHaveCSS('height', '42px');
+  await page.getByRole('button', { name: 'Open symbol search' }).click();
+  const symbolSearch = page.getByRole('dialog', { name: 'Symbol search' });
+  await expect(symbolSearch).toBeVisible();
+  await expect(symbolSearch.getByRole('button', { name: 'Stocks', exact: true })).toBeVisible();
+  await expect(symbolSearch.getByRole('button', { name: 'Crypto', exact: true })).toBeVisible();
+  await symbolSearch.getByRole('textbox', { name: 'Search symbols' }).fill('BTC');
+  await expect(symbolSearch.getByRole('button', { name: /BTCUSDT/ })).toBeVisible();
+  await symbolSearch.getByRole('button', { name: /BTCUSDT/ }).click();
+  await expect(symbolSearch).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(1);
   await expect(page.getByRole('group', { name: 'Overlay indicators' })).toHaveCount(1);
   await page.getByRole('button', { name: 'Hide SMA 20 overlay' }).click();

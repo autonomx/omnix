@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from threading import RLock
 
 from .models import (
     AdjustmentMode,
@@ -252,14 +253,44 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
     )
 )
 
+_catalog_lock = RLock()
+_dynamic_instruments: dict[str, CanonicalInstrument] = {}
+_dynamic_bindings: dict[str, ProviderBinding] = {}
+
+
+def register_instrument(
+    instrument: CanonicalInstrument,
+    bindings: tuple[ProviderBinding, ...] = (),
+) -> CanonicalInstrument:
+    """Register provider-discovered metadata for the lifetime of this process."""
+    with _catalog_lock:
+        if not any(item.instrument_id == instrument.instrument_id for item in INSTRUMENTS):
+            _dynamic_instruments[instrument.instrument_id] = instrument
+        for binding in bindings:
+            if binding.instrument_id != instrument.instrument_id:
+                raise ValueError("binding instrument_id must match the registered instrument")
+            _dynamic_bindings[binding.binding_id] = binding
+    return instrument
+
+
+def all_instruments() -> list[CanonicalInstrument]:
+    with _catalog_lock:
+        return [*INSTRUMENTS, *_dynamic_instruments.values()]
+
+
+def all_bindings() -> list[ProviderBinding]:
+    with _catalog_lock:
+        return [*BINDINGS, *_dynamic_bindings.values()]
+
 
 def search_instruments(query: str = "") -> list[CanonicalInstrument]:
     clean = query.strip().upper()
+    instruments = all_instruments()
     if not clean:
-        return list(INSTRUMENTS)
+        return instruments
     return [
         item
-        for item in INSTRUMENTS
+        for item in instruments
         if clean in item.display_symbol
         or clean in item.venue_symbol
         or clean in item.instrument_id.upper()
@@ -267,15 +298,19 @@ def search_instruments(query: str = "") -> list[CanonicalInstrument]:
 
 
 def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
+    if instrument_id in _dynamic_instruments:
+        return _dynamic_instruments[instrument_id]
     return next((item for item in INSTRUMENTS if item.instrument_id == instrument_id), None)
 
 
 def binding_by_id(binding_id: str) -> ProviderBinding | None:
+    if binding_id in _dynamic_bindings:
+        return _dynamic_bindings[binding_id]
     return next((item for item in BINDINGS if item.binding_id == binding_id), None)
 
 
 def bindings_for_instrument(instrument_id: str) -> list[ProviderBinding]:
-    return [item for item in BINDINGS if item.instrument_id == instrument_id]
+    return [item for item in all_bindings() if item.instrument_id == instrument_id]
 
 
 def default_binding(instrument_id: str) -> ProviderBinding | None:

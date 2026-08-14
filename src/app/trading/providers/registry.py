@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.trading.cache import TradingMarketDataCache
-from app.trading.catalog import BINDINGS, POLICIES, binding_by_id, default_binding
+from app.trading.catalog import POLICIES, all_bindings, binding_by_id, default_binding
 from app.trading.models import BarsResponse, ProviderBinding
 
 from .additional_crypto import AdditionalCryptoProvider
@@ -149,7 +149,7 @@ class ProviderRegistry:
             fallback = next(
                 (
                     item
-                    for item in BINDINGS
+                    for item in all_bindings()
                     if item.instrument_id == instrument_id and item.provider == "stooq"
                 ),
                 None,
@@ -218,7 +218,7 @@ class ProviderRegistry:
                     "status": snapshot.status if snapshot is not None else "ready",
                     "policy": policy,
                     "bindings": [
-                        binding for binding in BINDINGS if binding.provider == provider_id
+                        binding for binding in all_bindings() if binding.provider == provider_id
                     ],
                     "runtime": runtime_payload,
                 }

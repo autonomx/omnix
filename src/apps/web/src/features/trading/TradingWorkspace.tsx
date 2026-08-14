@@ -9,6 +9,7 @@ import { TradingResearchPanel } from './TradingResearchPanel';
 import { TradingScannerPanel } from './TradingScannerPanel';
 import { TradingSidePanel } from './TradingSidePanel';
 import { TradingTerminalDock } from './TradingTerminalDock';
+import { TradingSymbolSearch } from './TradingSymbolSearch';
 import { tradingApi } from './tradingApi';
 import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
@@ -92,6 +93,9 @@ function preferredInstrument(
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [focusMode, setFocusMode] = useState(false);
   const [symbolQuery, setSymbolQuery] = useState('');
+  const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
+  const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
   const persistence = useTradingWorkspacePersistence();
   const workspaceHydrated = persistence.status !== 'loading';
@@ -132,6 +136,10 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     )),
     [instruments.data],
   );
+  const activeInstrument = useMemo(
+    () => (instruments.data ?? []).find((instrument) => instrument.instrument_id === activeChart.instrumentId),
+    [activeChart.instrumentId, instruments.data],
+  );
   const supportedIntervals = selectedBinding?.supported_intervals ?? [];
   const quickIntervals = quickIntervalPriority.filter((interval) => isIntervalAvailable(interval, supportedIntervals));
   const favorite = favoriteInstrumentIds.includes(activeChart.instrumentId);
@@ -148,19 +156,43 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     links,
   }));
 
-  const selectSymbol = () => {
-    const query = symbolQuery.trim().toUpperCase();
-    if (!query) return;
-    const match = (instruments.data ?? []).find((instrument) => (
-      instrument.display_symbol.toUpperCase() === query
-      || instrument.venue_symbol.toUpperCase() === query
-      || instrument.display_symbol.toUpperCase().startsWith(query)
-      || instrument.venue_symbol.toUpperCase().startsWith(query)
-    ));
-    if (!match) return;
-    const next = preferredInstrument(match, instruments.data ?? []);
+  useEffect(() => {
+    const query = symbolQuery.trim();
+    if (!symbolSearchOpen || !query) {
+      setSymbolSearchResults([]);
+      setSymbolSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSymbolSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      void tradingApi.instruments(query).then((matches) => {
+        if (!cancelled) {
+          setSymbolSearchResults(matches);
+          setSymbolSearchLoading(false);
+        }
+      }).catch(() => {
+        if (!cancelled) {
+          setSymbolSearchResults([]);
+          setSymbolSearchLoading(false);
+        }
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [symbolQuery, symbolSearchOpen]);
+
+  const applySymbolMatch = (match: CanonicalInstrument, candidates: readonly CanonicalInstrument[]) => {
+    const next = preferredInstrument(match, [...(instruments.data ?? []), ...candidates]);
     updateChart(activeChartId, { instrumentId: next.instrument_id, bindingId: null });
     setSymbolQuery(next.display_symbol);
+    setSymbolSearchResults([]);
+    setSymbolSearchOpen(false);
+    void instruments.refetch();
+    void providers.refetch();
   };
 
   const selectBinding = (bindingId: string) => {
@@ -190,6 +222,16 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (persistence.workspaces.length <= 1) return;
     if (window.confirm(`Delete ${persistence.activeWorkspaceName}?`)) void persistence.deleteWorkspace();
   };
+
+  const openSymbolSearch = () => {
+    setSymbolQuery(activeInstrument?.display_symbol ?? '');
+    setSymbolSearchResults([]);
+    setSymbolSearchOpen(true);
+  };
+
+  const activeSymbolLabel = activeInstrument?.display_symbol
+    ?? activeChart.instrumentId.split(':').at(-1)?.replace('-', '/')
+    ?? 'Select symbol';
 
   return (
     <main className={`trading-workspace${focusMode ? ' trading-focus-mode' : ''}`} aria-labelledby="trading-title">
@@ -240,24 +282,38 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-pressed={panels.bottom} onClick={() => setPanel('bottom', !panels.bottom)} disabled={!workspaceHydrated}>Bottom dock</button>
           <button type="button" onClick={exportWorkspace}>Export</button>
           <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus'}</button>
-        </div>
+      </div>
       <section className="trading-command-bar" aria-label="Trading command bar">
-        <div className="trading-symbol-search">
+        <div className="trading-chart-controls" role="group" aria-label="Chart controls">
+        <div className="trading-chart-symbol-options" aria-label="Chart symbol options">
+        <button type="button" className="trading-symbol-trigger" aria-label="Open symbol search" onClick={openSymbolSearch}>
+          <span className="trading-symbol-trigger-icon" aria-hidden="true" />
+          <span className="trading-symbol-trigger-copy">
+            <strong>{activeSymbolLabel}</strong>
+            <small>{activeInstrument?.venue ?? 'Symbol search'}</small>
+          </span>
+          <span className="trading-symbol-trigger-caret" aria-hidden="true">⌄</span>
+        </button>
+        {/* <div className="trading-symbol-search">
           <span aria-hidden="true">⌕</span>
           <input
             list="trading-instrument-options"
             aria-label="Search Trading symbol"
             placeholder="Search symbol…"
             value={symbolQuery}
-            onChange={(event) => setSymbolQuery(event.target.value)}
+            onChange={(event) => {
+              const nextQuery = event.target.value;
+              setSymbolQuery(nextQuery);
+            }}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') selectSymbol();
+              if (event.key === 'Enter') setSymbolSearchOpen(true);
             }}
           />
           <datalist id="trading-instrument-options">
-            {visibleInstruments.map((instrument) => <option key={instrument.instrument_id} value={instrument.display_symbol}>{instrument.venue}</option>)}
+            {(instruments.data ?? []).map((instrument) => <option key={instrument.instrument_id} value={instrument.display_symbol}>{instrument.venue}</option>)}
           </datalist>
         </div>
+        */}
         <button
           type="button"
           className="trading-favorite"
@@ -271,8 +327,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <select aria-label="Active Trading chart" value={activeChartId} onChange={(event) => setActiveChart(event.target.value)}>
           {charts.map((chart, index) => <option key={chart.chartId} value={chart.chartId}>Chart {index + 1}</option>)}
         </select>
+        </div>
 
-        <div className="trading-chart-controls" role="group" aria-label="Chart controls">
           <div className="trading-timeframe-buttons" role="group" aria-label="Trading timeframe">
           {quickIntervals.map((item) => (
             <button
@@ -355,6 +411,17 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </span>
       </section>
       </header>
+
+      <TradingSymbolSearch
+        open={symbolSearchOpen}
+        query={symbolQuery}
+        instruments={[...(instruments.data ?? []), ...symbolSearchResults]}
+        activeInstrumentId={activeChart.instrumentId}
+        loading={symbolSearchLoading}
+        onQueryChange={setSymbolQuery}
+        onSelect={(match) => applySymbolMatch(match, [match])}
+        onClose={() => setSymbolSearchOpen(false)}
+      />
 
       <div className="trading-body">
         <aside className="trading-tools" aria-label="Chart drawing and alert tools">
