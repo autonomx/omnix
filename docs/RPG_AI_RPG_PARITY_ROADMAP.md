@@ -16,7 +16,7 @@ Build a fast, replayable, simulation-authoritative AI RPG where:
 1. Every feature must keep simulation state deterministic.
 2. LLM output must never directly mutate authoritative state.
 3. LLM-derived suggestions must be treated as proposals until a simulation resolver accepts them.
-4. New browser-facing work must use the shared `apps/web` infrastructure and typed backend APIs.
+4. New browser-facing work must use the shared `src/apps/web` infrastructure and typed backend APIs.
 5. Each phase should land as a narrow, auditable PR with tests and a roadmap status update.
 6. Reports and debug surfaces should expose enough metadata to audit what happened without relying on hidden prompts.
 

@@ -11,7 +11,7 @@ from app.trading.indicators.engine import (
 )
 
 
-FIXTURE = Path(__file__).resolve().parents[3] / "apps/web/src/features/trading/indicators/fixtures/coreIndicators.json"
+FIXTURE = Path(__file__).resolve().parents[3] / "src/apps/web/src/features/trading/indicators/fixtures/coreIndicators.json"
 
 
 def load_fixture():

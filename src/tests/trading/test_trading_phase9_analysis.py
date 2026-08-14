@@ -14,7 +14,7 @@ from app.trading.indicators.engine import (
 
 
 FIXTURE = json.loads(
-    Path("apps/web/src/features/trading/indicators/fixtures/advancedIndicators.json").read_text()
+    Path("src/apps/web/src/features/trading/indicators/fixtures/advancedIndicators.json").read_text()
 )
 
 

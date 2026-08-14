@@ -16,7 +16,7 @@
     "test:e2e:trading": "playwright test tests/e2e/trading-terminal.spec.ts --project=chromium",
     "typecheck": "tsc -b",
     "typecheck:trading": "tsc -p tsconfig.trading.json",
-    "api:schema": "python ../../scripts/export_gateway_openapi.py apps/web/src/api/generated/openapi.json",
+    "api:schema": "python ../../../scripts/export_gateway_openapi.py src/api/generated/openapi.json",
     "api:types": "openapi-typescript src/api/generated/openapi.json -o src/api/generated/types.ts",
     "api:generate": "npm run api:schema && npm run api:types",
     "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated/openapi.json src/api/generated/types.ts"

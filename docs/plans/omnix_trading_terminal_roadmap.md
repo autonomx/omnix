@@ -161,7 +161,7 @@ The module must not add a second application header, router, query client, theme
 ### 6.1 Frontend
 
 ```text
-apps/web/src/features/trading/
+src/apps/web/src/features/trading/
   TradingWorkspace.tsx
   TradingWorkspace.css
   TradingToolbar.tsx
@@ -639,9 +639,9 @@ The spike is a go/no-go gate. Provider expansion and production UI work do not b
 
 Update:
 
-- `apps/web/src/app/modules.ts`
-- `apps/web/src/app/router.tsx`
-- `apps/web/src/features/ModuleWorkspace.tsx`
+- `src/apps/web/src/app/modules.ts`
+- `src/apps/web/src/app/router.tsx`
+- `src/apps/web/src/features/ModuleWorkspace.tsx`
 - navigation icon/design primitive mapping
 - module capabilities
 - appearance integration

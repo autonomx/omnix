@@ -1,7 +1,18 @@
 import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 
 import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
+
+function resolveRepositoryRoot(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+  } catch {
+    return resolve(process.cwd(), '../../..');
+  }
+}
+
+const REPOSITORY_ROOT = resolveRepositoryRoot();
 
 const LIVE_VOICE_CRITICAL_PATHS = [
   'src/app/gateway/live_voice_speculative_tts.py',
@@ -18,18 +29,18 @@ const LIVE_VOICE_CRITICAL_PATHS = [
   'src/app/providers/nemotron_eou_streaming.py',
   'src/app/providers/vendor/faster_qwen3_tts/model.py',
   'src/app/providers/vendor/faster_qwen3_tts/streaming.py',
-  'apps/web/src/features/assistant-workspace/live-speculation-controller.ts',
-  'apps/web/src/features/assistant-workspace/live-tts-adaptive-buffer-controller.ts',
-  'apps/web/src/features/assistant-workspace/live-voice-controller.ts',
-  'apps/web/src/features/assistant-workspace/live-voice-turn-coordinator.ts',
-  'apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts',
-  'apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts',
-  'apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.ts',
-  'apps/web/src/features/assistant-workspace/live-voice-natural-timing.ts',
-  'apps/web/src/features/assistant-workspace/live-voice-performance-behavior.ts',
-  'apps/web/src/features/assistant-workspace/live-speech-delivery-plan.ts',
-  'apps/web/src/features/assistant-workspace/live-speech-synthesis-options.ts',
-  'apps/web/src/features/assistant-workspace/live-voice-cue-policy.ts',
+  'src/apps/web/src/features/assistant-workspace/live-speculation-controller.ts',
+  'src/apps/web/src/features/assistant-workspace/live-tts-adaptive-buffer-controller.ts',
+  'src/apps/web/src/features/assistant-workspace/live-voice-controller.ts',
+  'src/apps/web/src/features/assistant-workspace/live-voice-turn-coordinator.ts',
+  'src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts',
+  'src/apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts',
+  'src/apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.ts',
+  'src/apps/web/src/features/assistant-workspace/live-voice-natural-timing.ts',
+  'src/apps/web/src/features/assistant-workspace/live-voice-performance-behavior.ts',
+  'src/apps/web/src/features/assistant-workspace/live-speech-delivery-plan.ts',
+  'src/apps/web/src/features/assistant-workspace/live-speech-synthesis-options.ts',
+  'src/apps/web/src/features/assistant-workspace/live-voice-cue-policy.ts',
 ] as const;
 
 function reactDevtoolsStandalonePlugin(): PluginOption {
@@ -51,7 +62,10 @@ function resolveGitSha(): string {
   const configured = process.env.VITE_GIT_SHA?.trim();
   if (configured) return configured;
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: REPOSITORY_ROOT,
+      encoding: 'utf8',
+    }).trim();
   } catch {
     return 'unknown';
   }
@@ -64,7 +78,7 @@ function resolveGitDirty(): string {
     const status = execFileSync(
       'git',
       ['status', '--porcelain', '--untracked-files=normal'],
-      { encoding: 'utf8' },
+      { cwd: REPOSITORY_ROOT, encoding: 'utf8' },
     ).trim();
     return status ? 'true' : 'false';
   } catch {
@@ -85,7 +99,7 @@ function resolveLiveVoiceCriticalDirtyFiles(): string {
         '--',
         ...LIVE_VOICE_CRITICAL_PATHS,
       ],
-      { encoding: 'utf8' },
+      { cwd: REPOSITORY_ROOT, encoding: 'utf8' },
     ).trim();
     if (!status) return '[]';
     const paths = status

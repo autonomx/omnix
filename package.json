@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "workspaces": [
-    "apps/web"
+    "src/apps/web"
   ],
   "scripts": {
     "web:dev": "npm --workspace @omnix/web run dev",

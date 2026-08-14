@@ -2,7 +2,7 @@
 
 Phase 19 note.
 
-The Settings card should use the browser helper from `apps/web/src/api/hermesClient.ts` for the test action.
+The Settings card should use the browser helper from `src/apps/web/src/api/hermesClient.ts` for the test action.
 
 Expected behavior:
 

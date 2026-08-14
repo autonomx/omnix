@@ -205,16 +205,16 @@ def test_generation_progress_and_discovery_transition_are_structured() -> None:
 
 def test_web_ui_selects_published_worlds_and_keeps_lore_browser() -> None:
     wizard = (
-        REPO_ROOT / "apps/web/src/features/rpg/RpgCreateCampaignWizard.tsx"
+        REPO_ROOT / "src/apps/web/src/features/rpg/RpgCreateCampaignWizard.tsx"
     ).read_text(encoding="utf-8")
     catalog = (
-        REPO_ROOT / "apps/web/src/features/rpg/RpgWorldCampaignCatalog.tsx"
+        REPO_ROOT / "src/apps/web/src/features/rpg/RpgWorldCampaignCatalog.tsx"
     ).read_text(encoding="utf-8")
     lore = (
-        REPO_ROOT / "apps/web/src/features/rpg/RpgLorePanel.tsx"
+        REPO_ROOT / "src/apps/web/src/features/rpg/RpgLorePanel.tsx"
     ).read_text(encoding="utf-8")
     tabs = (
-        REPO_ROOT / "apps/web/src/features/rpg/RpgNarrativeTabs.tsx"
+        REPO_ROOT / "src/apps/web/src/features/rpg/RpgNarrativeTabs.tsx"
     ).read_text(encoding="utf-8")
     routes = (
         REPO_ROOT / "src/app/gateway/rpg_campaign_lore_routes.py"

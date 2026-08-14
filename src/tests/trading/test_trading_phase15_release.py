@@ -179,7 +179,7 @@ def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
 
 def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -> None:
     side_panel = Path(
-        "apps/web/src/features/trading/TradingSidePanel.tsx"
+        "src/apps/web/src/features/trading/TradingSidePanel.tsx"
     ).read_text()
     assert 'role="tablist"' in side_panel
     assert 'role="tab"' in side_panel
@@ -187,7 +187,7 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
     assert "onClick={() => setActiveTab" in side_panel
 
     workspace = Path(
-        "apps/web/src/features/trading/TradingWorkspace.tsx"
+        "src/apps/web/src/features/trading/TradingWorkspace.tsx"
     ).read_text(encoding="utf-8")
     assert "TradingComplianceFooter" not in workspace
     assert "TradingScannerPanel" in workspace
@@ -197,13 +197,13 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
 
     styles = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in Path("apps/web/src/features/trading").glob("*.css")
+        for path in Path("src/apps/web/src/features/trading").glob("*.css")
     )
     assert "prefers-reduced-motion" in styles
     assert ":focus-visible" in styles
 
     assert not Path(
-        "apps/web/src/features/trading/TradingComplianceFooter.tsx"
+        "src/apps/web/src/features/trading/TradingComplianceFooter.tsx"
     ).exists()
 
 

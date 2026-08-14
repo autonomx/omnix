@@ -3,7 +3,7 @@
 ## Feature inventory and image brief
 
 **Prepared:** 2026-07-05  
-**Target:** `apps/web` `/settings` on the `rpg` branch
+**Target:** `src/apps/web` `/settings` on the `rpg` branch
 
 ## Goal
 
@@ -417,25 +417,25 @@ Right status column:
 
 ## Source map
 
-- `apps/web/src/app/modules.ts`
-- `apps/web/src/app/router.tsx`
-- `apps/web/src/features/platform/SettingsWorkspace.tsx`
-- `apps/web/src/features/platform/PlatformModuleWorkspace.tsx`
-- `apps/web/src/features/platform/HermesStatusCard.tsx`
-- `apps/web/src/features/chatbot/ChatbotWorkspace.tsx`
-- `apps/web/src/features/chatbot/AssistantToolSettingsPanel.tsx`
-- `apps/web/src/features/assistant-workspace/preferences.ts`
-- `apps/web/src/features/voice/VoiceWorkspace.tsx`
-- `apps/web/src/features/voice/outputDefaults.ts`
-- `apps/web/src/features/voice-cloning/VoiceCloningWorkspace.tsx`
-- `apps/web/src/features/storyteller/StorytellerWorkspace.tsx`
-- `apps/web/src/features/storyteller/storyReadSettings.ts`
-- `apps/web/src/features/podcast/PodcastWorkspace.tsx`
-- `apps/web/src/features/rpg/RpgWorkspace.tsx`
-- `apps/web/src/features/rpg/RpgCreateCampaignWizard.tsx`
-- `apps/web/src/features/image-generation/ImageGenerationWorkspace.tsx`
-- `apps/web/src/features/stt/SttWorkspace.tsx`
-- `apps/web/src/api/client.ts`
-- `apps/web/src/api/generated/types.ts`
+- `src/apps/web/src/app/modules.ts`
+- `src/apps/web/src/app/router.tsx`
+- `src/apps/web/src/features/platform/SettingsWorkspace.tsx`
+- `src/apps/web/src/features/platform/PlatformModuleWorkspace.tsx`
+- `src/apps/web/src/features/platform/HermesStatusCard.tsx`
+- `src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx`
+- `src/apps/web/src/features/chatbot/AssistantToolSettingsPanel.tsx`
+- `src/apps/web/src/features/assistant-workspace/preferences.ts`
+- `src/apps/web/src/features/voice/VoiceWorkspace.tsx`
+- `src/apps/web/src/features/voice/outputDefaults.ts`
+- `src/apps/web/src/features/voice-cloning/VoiceCloningWorkspace.tsx`
+- `src/apps/web/src/features/storyteller/StorytellerWorkspace.tsx`
+- `src/apps/web/src/features/storyteller/storyReadSettings.ts`
+- `src/apps/web/src/features/podcast/PodcastWorkspace.tsx`
+- `src/apps/web/src/features/rpg/RpgWorkspace.tsx`
+- `src/apps/web/src/features/rpg/RpgCreateCampaignWizard.tsx`
+- `src/apps/web/src/features/image-generation/ImageGenerationWorkspace.tsx`
+- `src/apps/web/src/features/stt/SttWorkspace.tsx`
+- `src/apps/web/src/api/client.ts`
+- `src/apps/web/src/api/generated/types.ts`
 
 Update this document whenever Omnix adds a user-facing preference, provider capability, module default, integration policy, or operational control.

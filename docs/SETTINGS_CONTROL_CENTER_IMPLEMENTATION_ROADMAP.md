@@ -126,8 +126,8 @@ Create pure frontend contracts for:
 
 Suggested location:
 
-- `apps/web/src/features/settings/settingsRegistry.ts`
-- `apps/web/src/features/settings/settingsTypes.ts`
+- `src/apps/web/src/features/settings/settingsRegistry.ts`
+- `src/apps/web/src/features/settings/settingsTypes.ts`
 
 Acceptance:
 
@@ -182,7 +182,7 @@ Replace the loose settings request/response shapes with typed schemas for:
 - revision conflict response
 - safe provider configuration metadata
 
-Regenerate `apps/web/src/api/generated/types.ts`.
+Regenerate `src/apps/web/src/api/generated/types.ts`.
 
 Acceptance:
 
@@ -234,7 +234,7 @@ Acceptance:
 
 ### SCC-2.1 — Typed API client
 
-Update `apps/web/src/api/client.ts` with typed methods for:
+Update `src/apps/web/src/api/client.ts` with typed methods for:
 
 - load settings profile
 - save settings patch
@@ -838,31 +838,31 @@ Launch acceptance:
 
 Primary frontend entry points:
 
-- `apps/web/src/features/platform/SettingsWorkspace.tsx`
-- `apps/web/src/features/platform/PlatformModuleWorkspace.tsx`
-- `apps/web/src/features/platform/HermesStatusCard.tsx`
-- `apps/web/src/api/client.ts`
-- `apps/web/src/api/generated/types.ts`
+- `src/apps/web/src/features/platform/SettingsWorkspace.tsx`
+- `src/apps/web/src/features/platform/PlatformModuleWorkspace.tsx`
+- `src/apps/web/src/features/platform/HermesStatusCard.tsx`
+- `src/apps/web/src/api/client.ts`
+- `src/apps/web/src/api/generated/types.ts`
 
 New frontend area:
 
-- `apps/web/src/features/settings/`
+- `src/apps/web/src/features/settings/`
 
 Module adoption points:
 
-- `apps/web/src/features/assistant-workspace/preferences.ts`
-- `apps/web/src/features/chatbot/ChatbotWorkspace.tsx`
-- `apps/web/src/features/chatbot/AssistantToolSettingsPanel.tsx`
-- `apps/web/src/features/voice/VoiceWorkspace.tsx`
-- `apps/web/src/features/voice/outputDefaults.ts`
-- `apps/web/src/features/voice-cloning/VoiceCloningWorkspace.tsx`
-- `apps/web/src/features/storyteller/StorytellerWorkspace.tsx`
-- `apps/web/src/features/storyteller/storyReadSettings.ts`
-- `apps/web/src/features/podcast/PodcastWorkspace.tsx`
-- `apps/web/src/features/rpg/RpgWorkspace.tsx`
-- `apps/web/src/features/rpg/RpgCreateCampaignWizard.tsx`
-- `apps/web/src/features/image-generation/ImageGenerationWorkspace.tsx`
-- `apps/web/src/features/stt/SttWorkspace.tsx`
+- `src/apps/web/src/features/assistant-workspace/preferences.ts`
+- `src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx`
+- `src/apps/web/src/features/chatbot/AssistantToolSettingsPanel.tsx`
+- `src/apps/web/src/features/voice/VoiceWorkspace.tsx`
+- `src/apps/web/src/features/voice/outputDefaults.ts`
+- `src/apps/web/src/features/voice-cloning/VoiceCloningWorkspace.tsx`
+- `src/apps/web/src/features/storyteller/StorytellerWorkspace.tsx`
+- `src/apps/web/src/features/storyteller/storyReadSettings.ts`
+- `src/apps/web/src/features/podcast/PodcastWorkspace.tsx`
+- `src/apps/web/src/features/rpg/RpgWorkspace.tsx`
+- `src/apps/web/src/features/rpg/RpgCreateCampaignWizard.tsx`
+- `src/apps/web/src/features/image-generation/ImageGenerationWorkspace.tsx`
+- `src/apps/web/src/features/stt/SttWorkspace.tsx`
 
 Backend work should remain in the existing owner of `/api/settings`, its OpenAPI schemas, and the project's established persistence/service layer rather than introducing a second settings service.
 

@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[3]
 ADR = ROOT / "docs/architecture/ADR-0004-omnix-trading-terminal.md"
 INVENTORY = ROOT / "docs/architecture/OMNIX_TRADING_PROTOTYPE_MIGRATION_INVENTORY.md"
 BENCHMARK = ROOT / "docs/architecture/OMNIX_TRADING_SPIKE_BENCHMARK.md"
-EXPERIMENTAL = ROOT / "apps/web/src/features/trading/experimental"
+EXPERIMENTAL = ROOT / "src/apps/web/src/features/trading/experimental"
 
 
 def test_phase0_decisions_and_evidence_contract_exist() -> None:
@@ -27,9 +27,9 @@ def test_phase0_decisions_and_evidence_contract_exist() -> None:
 
 def test_experimental_spike_is_not_production_routed() -> None:
     assert EXPERIMENTAL.is_dir()
-    modules = (ROOT / "apps/web/src/app/modules.ts").read_text(encoding="utf-8")
-    router = (ROOT / "apps/web/src/app/router.tsx").read_text(encoding="utf-8")
-    workspace = (ROOT / "apps/web/src/features/ModuleWorkspace.tsx").read_text(encoding="utf-8")
+    modules = (ROOT / "src/apps/web/src/app/modules.ts").read_text(encoding="utf-8")
+    router = (ROOT / "src/apps/web/src/app/router.tsx").read_text(encoding="utf-8")
+    workspace = (ROOT / "src/apps/web/src/features/ModuleWorkspace.tsx").read_text(encoding="utf-8")
     assert "'trading'" in modules
     assert "TradingWorkspace" in workspace
     assert "TradingChartSpike" not in router
@@ -37,7 +37,7 @@ def test_experimental_spike_is_not_production_routed() -> None:
 
 
 def test_trading_sources_do_not_import_prototype_or_create_file_authority() -> None:
-    roots = (ROOT / "apps/web/src/features/trading", ROOT / "src/app/trading")
+    roots = (ROOT / "src/apps/web/src/features/trading", ROOT / "src/app/trading")
     for trading_root in roots:
         for path in trading_root.rglob("*"):
             if not path.is_file():

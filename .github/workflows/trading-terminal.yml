@@ -4,16 +4,16 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "apps/web/src/features/trading/**"
-      - "apps/web/src/api/generated/**"
-      - "apps/web/src/app/modules.ts"
-      - "apps/web/src/app/router.tsx"
-      - "apps/web/src/design/primitives.tsx"
-      - "apps/web/src/features/ModuleWorkspace.tsx"
-      - "apps/web/tests/e2e/trading-terminal.spec.ts"
-      - "apps/web/playwright.config.ts"
-      - "apps/web/package.json"
-      - "apps/web/tsconfig.trading.json"
+      - "src/apps/web/src/features/trading/**"
+      - "src/apps/web/src/api/generated/**"
+      - "src/apps/web/src/app/modules.ts"
+      - "src/apps/web/src/app/router.tsx"
+      - "src/apps/web/src/design/primitives.tsx"
+      - "src/apps/web/src/features/ModuleWorkspace.tsx"
+      - "src/apps/web/tests/e2e/trading-terminal.spec.ts"
+      - "src/apps/web/playwright.config.ts"
+      - "src/apps/web/package.json"
+      - "src/apps/web/tsconfig.trading.json"
       - "package-lock.json"
       - "scripts/export_gateway_openapi.py"
       - "src/app/trading/**"
@@ -82,8 +82,8 @@ jobs:
         with:
           name: trading-playwright-report
           path: |
-            apps/web/playwright-report
-            apps/web/test-results
+            src/apps/web/playwright-report
+            src/apps/web/test-results
           if-no-files-found: warn
           retention-days: 7
       - name: Generate shared gateway API contract
@@ -94,9 +94,9 @@ jobs:
         with:
           name: trading-generated-api
           path: |
-            apps/web/src/api/generated/openapi.json
-            apps/web/src/api/generated/types.ts
+            src/apps/web/src/api/generated/openapi.json
+            src/apps/web/src/api/generated/types.ts
           if-no-files-found: error
           retention-days: 7
       - name: Verify generated API contract is committed
-        run: git diff --exit-code -- apps/web/src/api/generated/openapi.json apps/web/src/api/generated/types.ts
+        run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
