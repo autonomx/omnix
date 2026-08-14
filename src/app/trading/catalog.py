@@ -61,6 +61,7 @@ BINANCE_POLICY = _policy(
         "1d",
         "3d",
         "1w",
+        "1mo",
     ),
     terms="https://www.binance.com/en/terms",
 )
@@ -69,7 +70,7 @@ YAHOO_POLICY = _policy(
     official=False,
     realtime="unofficial regular-session polling; availability not guaranteed",
     assets=(AssetClass.EQUITY,),
-    intervals=("1m", "5m", "15m", "1h", "1d", "1w"),
+    intervals=("1m", "5m", "15m", "1h", "1d", "1w", "1mo"),
     terms="https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html",
 )
 STOOQ_POLICY = _policy(
@@ -164,6 +165,7 @@ INSTRUMENTS = (
     ),
     _equity("NASDAQ", "AAPL"),
     _equity("NASDAQ", "NVDA"),
+    _equity("NASDAQ", "TSLA"),
     _equity("ARCA", "SPY"),
 )
 

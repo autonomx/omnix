@@ -39,7 +39,7 @@ export function TradingTerminalDock({
   bindingId: string | null;
 }) {
   const [tab, setTab] = useState<DockTab>('positions');
-  const [minimized, setMinimized] = useState(false);
+  const [minimized, setMinimized] = useState(true);
   const [accounts, setAccounts] = useState<PaperAccount[]>([]);
   const [accountId, setAccountId] = useState('');
   const [snapshot, setSnapshot] = useState<PaperAccountSnapshot | null>(null);

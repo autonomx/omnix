@@ -15,6 +15,7 @@ export type CoreIndicatorInstance = {
   id: CoreIndicatorId;
   period: number;
   enabled: boolean;
+  visible?: boolean;
   fastPeriod?: number;
   slowPeriod?: number;
   signalPeriod?: number;

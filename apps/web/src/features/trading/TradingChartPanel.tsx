@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { IChartApi } from 'lightweight-charts';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { tradingApi } from './tradingApi';
 import { TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
@@ -15,15 +16,15 @@ import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 
 const ranges = [
-  { label: '1D', days: 1 },
-  { label: '5D', days: 5 },
-  { label: '1M', days: 30 },
-  { label: '3M', days: 90 },
-  { label: '6M', days: 180 },
-  { label: 'YTD', days: 250 },
-  { label: '1Y', days: 365 },
-  { label: '5Y', days: 1_825 },
-  { label: 'All', days: null },
+  { label: '1D', days: 1, interval: '1m' },
+  { label: '5D', days: 5, interval: '5m' },
+  { label: '1M', days: 30, interval: '30m' },
+  { label: '3M', days: 90, interval: '1h' },
+  { label: '6M', days: 180, interval: '2h' },
+  { label: 'YTD', days: 250, interval: '1d' },
+  { label: '1Y', days: 365, interval: '1d' },
+  { label: '5Y', days: 1_825, interval: '1w' },
+  { label: 'All', days: null, interval: '1mo' },
 ] as const;
 
 function normalizeStreamBar(
@@ -66,14 +67,41 @@ function price(value?: string | null): string {
 }
 
 function intervalMinutes(interval: string): number {
-  const match = interval.match(/^(\d+)(m|h|d|w)$/i);
+  const match = interval.match(/^(\d+)(mo|m|h|d|w)$/i);
   if (!match) return 1_440;
   const amount = Number(match[1]);
   const unit = match[2].toLowerCase();
+  if (unit === 'mo') return amount * 43_200;
   if (unit === 'm') return amount;
   if (unit === 'h') return amount * 60;
   if (unit === 'w') return amount * 10_080;
   return amount * 1_440;
+}
+
+function intervalLabel(interval: string): string {
+  return interval === '1mo' ? '1M' : interval.toUpperCase();
+}
+
+function closestSupportedInterval(target: string, supported: readonly string[]): string {
+  if (supported.length === 0 || supported.includes(target)) return target;
+  const targetMinutes = intervalMinutes(target);
+  return [...supported].sort((left, right) => (
+    Math.abs(intervalMinutes(left) - targetMinutes) - Math.abs(intervalMinutes(right) - targetMinutes)
+  ))[0] ?? target;
+}
+
+function applyVisibleRange(chart: IChartApi, days: number | null, total: number, interval: string): void {
+  if (days === null) {
+    chart.timeScale().fitContent();
+    return;
+  }
+  if (total === 0) return;
+  const requested = Math.max(1, Math.ceil(days * 1_440 / intervalMinutes(interval)));
+  const count = Math.min(total, requested);
+  chart.timeScale().setVisibleLogicalRange({
+    from: Math.max(-0.5, total - count - 0.5),
+    to: total - 0.5,
+  });
 }
 
 export function TradingChartPanel({
@@ -85,7 +113,9 @@ export function TradingChartPanel({
   indicators,
   active,
   onActivate,
+  onChangeInterval,
   onToggleIndicator,
+  onToggleIndicatorVisibility,
   onMoveIndicator,
   synchronization,
 }: {
@@ -97,13 +127,19 @@ export function TradingChartPanel({
   indicators: CoreIndicatorInstance[];
   active: boolean;
   onActivate: () => void;
+  onChangeInterval: (interval: string) => void;
   onToggleIndicator: (id: CoreIndicatorId) => void;
+  onToggleIndicatorVisibility: (id: CoreIndicatorId) => void;
   onMoveIndicator: (id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   synchronization: TradingChartSynchronization;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const adapterRef = useRef<TradingChartAdapter | null>(null);
   const barsRef = useRef<MarketBar[]>([]);
+  const fittedBarsKeyRef = useRef<string | null>(null);
+  const selectedRangeRef = useRef<number | null | undefined>(undefined);
+  const pendingRangeIntervalRef = useRef<string | null>(null);
   const indicatorsRef = useRef<CoreIndicatorInstance[]>(indicators);
   const indicatorSchedulerRef = useRef<TradingIndicatorScheduler | null>(null);
   const indicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,6 +153,8 @@ export function TradingChartPanel({
   const [indicatorError, setIndicatorError] = useState<string | null>(null);
   const [alertPlacement, setAlertPlacement] = useState<ChartAlertPlacement | null>(null);
   const [indicatorPaneGeometry, setIndicatorPaneGeometry] = useState<TradingIndicatorPaneGeometry[]>([]);
+  const [selectedRangeLabel, setSelectedRangeLabel] = useState('All');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [minimizedIndicators, setMinimizedIndicators] = useState<Set<CoreIndicatorId>>(() => new Set());
   const minimizedIndicatorsRef = useRef<Set<CoreIndicatorId>>(new Set());
   const clearAlertPlacement = useCallback(() => setAlertPlacement(null), []);
@@ -177,6 +215,10 @@ export function TradingChartPanel({
     const scheduler = new TradingIndicatorScheduler();
     adapterRef.current = next;
     indicatorSchedulerRef.current = scheduler;
+    fittedBarsKeyRef.current = null;
+    selectedRangeRef.current = undefined;
+    pendingRangeIntervalRef.current = null;
+    setSelectedRangeLabel('All');
     setAdapter(next);
     setIndicatorPaneGeometry([]);
     const unregister = synchronization.register(chartId, next);
@@ -195,13 +237,30 @@ export function TradingChartPanel({
   useEffect(() => {
     const bars = chartQuery.data?.bars ?? [];
     barsRef.current = bars;
-    adapterRef.current?.setBars(bars);
+    const dataKey = chartQuery.data
+      ? `${chartQuery.data.instrument.instrument_id}|${chartQuery.data.binding.binding_id}|${chartQuery.data.interval}`
+      : null;
+    const shouldFit = dataKey !== null && dataKey !== fittedBarsKeyRef.current;
+    const keepSelectedRange = shouldFit && pendingRangeIntervalRef.current === interval;
+    if (shouldFit && !keepSelectedRange) {
+      selectedRangeRef.current = undefined;
+      setSelectedRangeLabel('All');
+    }
+    adapterRef.current?.setBars(bars, shouldFit);
+    if ((!shouldFit || keepSelectedRange) && selectedRangeRef.current !== undefined && bars.length > 0 && adapterRef.current) {
+      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, bars.length, interval);
+    }
+    if (keepSelectedRange) pendingRangeIntervalRef.current = null;
+    if (dataKey !== null && bars.length > 0) fittedBarsKeyRef.current = dataKey;
     scheduleIndicators();
-  }, [chartQuery.data, scheduleIndicators]);
+  }, [chartQuery.data, interval, scheduleIndicators]);
 
   useEffect(() => {
     adapterRef.current?.setChartType(chartType, barsRef.current);
-  }, [chartType]);
+    if (selectedRangeRef.current !== undefined && barsRef.current.length > 0 && adapterRef.current) {
+      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, barsRef.current.length, interval);
+    }
+  }, [chartType, interval]);
 
   useEffect(() => {
     indicatorsRef.current = indicators;
@@ -283,6 +342,25 @@ export function TradingChartPanel({
   const changePercent = previousClose === 0 ? 0 : change / previousClose * 100;
   const direction = change < 0 ? 'negative' : 'positive';
   const paneIndicators = indicators.filter((indicator) => indicator.enabled && indicatorUsesSeparatePane(indicator.id));
+  const overlayIndicators = indicators.filter((indicator) => indicator.enabled && !indicatorUsesSeparatePane(indicator.id));
+
+  useEffect(() => {
+    const syncFullscreenState = () => setIsFullscreen(document.fullscreenElement === panelRef.current);
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement === panelRef.current) {
+        await document.exitFullscreen();
+      } else {
+        await panelRef.current?.requestFullscreen();
+      }
+    } catch {
+      setIsFullscreen(false);
+    }
+  };
 
   const toggleMinimizedIndicator = (id: CoreIndicatorId) => {
     setMinimizedIndicators((current) => {
@@ -304,25 +382,21 @@ export function TradingChartPanel({
     onToggleIndicator(id);
   };
 
-  const showRange = (days: number | null) => {
+  const showRange = (label: string, days: number | null, requestedInterval: string) => {
+    selectedRangeRef.current = days;
+    setSelectedRangeLabel(label);
+    const supportedIntervals = chartQuery.data?.binding.supported_intervals ?? [];
+    const nextInterval = closestSupportedInterval(requestedInterval, supportedIntervals);
+    pendingRangeIntervalRef.current = interval === nextInterval ? null : nextInterval;
+    onChangeInterval(nextInterval);
     const chart = adapterRef.current?.api();
     if (!chart) return;
-    if (days === null) {
-      chart.timeScale().fitContent();
-      return;
-    }
-    const total = barsRef.current.length;
-    if (total === 0) return;
-    const requested = Math.max(1, Math.ceil(days * 1_440 / intervalMinutes(interval)));
-    const count = Math.min(total, requested);
-    chart.timeScale().setVisibleLogicalRange({
-      from: Math.max(-0.5, total - count - 0.5),
-      to: total - 0.5,
-    });
+    if (interval === nextInterval) applyVisibleRange(chart, days, barsRef.current.length, interval);
   };
 
   return (
     <article
+      ref={panelRef}
       className={`trading-chart-panel${active ? ' active' : ''}`}
       data-chart-id={chartId}
       data-stream-status={streamStatus}
@@ -333,7 +407,7 @@ export function TradingChartPanel({
         <div className="trading-chart-heading">
           <div className="trading-chart-title-row">
             <strong>{chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong>
-            <span>· {interval.toUpperCase()} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
+            <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
             <i className={`trading-stream-dot ${streamStatus}`} aria-label={`Feed ${streamStatus}`} />
           </div>
           {latest ? (
@@ -353,6 +427,17 @@ export function TradingChartPanel({
         >
           <span>{resolvedBinding?.provider ?? 'resolving'}</span>
           <span className={`stream-${streamStatus}`}>{streamStatus}</span>
+          <button
+            type="button"
+            className="trading-chart-fullscreen"
+            aria-label={isFullscreen ? 'Exit fullscreen chart' : 'Enter fullscreen chart'}
+            aria-pressed={isFullscreen}
+            title={isFullscreen ? 'Exit fullscreen chart' : 'Enter fullscreen chart'}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => void toggleFullscreen()}
+          >
+            {isFullscreen ? '↙' : '⛶'}
+          </button>
         </div>
 
         {active ? (
@@ -381,6 +466,42 @@ export function TradingChartPanel({
       </header>
       <div className="trading-chart-stage">
         <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} />
+        {overlayIndicators.length > 0 ? (
+          <div
+            className="trading-overlay-indicator-controls"
+            role="group"
+            aria-label="Overlay indicators"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {overlayIndicators.map((indicator) => {
+              const label = `${indicator.id.toUpperCase()} ${indicator.period}`;
+              const visible = indicator.visible !== false;
+              return (
+                <div key={indicator.id} className={`trading-overlay-indicator${visible ? ' active' : ' hidden'}`}>
+                  <span>{label}</span>
+                  <button
+                    type="button"
+                    aria-label={`${visible ? 'Hide' : 'Show'} ${label} overlay`}
+                    aria-pressed={visible}
+                    title={`${visible ? 'Hide' : 'Show'} ${label}`}
+                    onClick={() => onToggleIndicatorVisibility(indicator.id)}
+                  >
+                    {visible ? '◉' : '○'}
+                  </button>
+                  <button
+                    type="button"
+                    className="trading-overlay-indicator-delete"
+                    aria-label={`Delete ${label} overlay`}
+                    title={`Delete ${label}`}
+                    onClick={() => onToggleIndicator(indicator.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
         {paneIndicators.map((indicator, index) => {
           const geometry = indicatorPaneGeometry.find((item) => item.id === indicator.id);
           if (!geometry) return null;
@@ -428,7 +549,14 @@ export function TradingChartPanel({
       <footer>
         <nav aria-label={`${chartId} visible range`} onPointerDown={(event) => event.stopPropagation()}>
           {ranges.map((range) => (
-            <button key={range.label} type="button" onClick={() => showRange(range.days)}>{range.label}</button>
+            <button
+              key={range.label}
+              type="button"
+              aria-pressed={selectedRangeLabel === range.label}
+              onClick={() => showRange(range.label, range.days, range.interval)}
+            >
+              {range.label}
+            </button>
           ))}
         </nav>
         <div className="trading-chart-footer-meta">

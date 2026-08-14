@@ -25,7 +25,7 @@ const binding = {
   realtime_scope: 'mocked e2e feed',
   delay_seconds: 0,
   adjustment_capabilities: ['raw'],
-  supported_intervals: ['1m', '5m', '15m', '1h', '2h', '4h', '1d', '1w'],
+  supported_intervals: ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1d', '1w', '1mo'],
   usage_scope: 'personal_local',
   is_official_api: true,
 } as const;
@@ -266,9 +266,33 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await expect(page.locator('.trading-chart-panel').first()).toBeVisible();
   await expect.poll(() => pageErrors, { message: 'Trading must initialize without browser exceptions' }).toEqual([]);
   await expect(page.locator('.trading-chart-ohlc').first()).toBeVisible();
+  await expect(page.locator('.trading-terminal-header .trading-command-bar')).toBeAttached();
+  await expect(page.locator('.trading-terminal-header')).toHaveCSS('height', '42px');
+  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(1);
+  await expect(page.getByRole('group', { name: 'Overlay indicators' })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Hide SMA 20 overlay' }).click();
+  await expect(page.getByRole('button', { name: 'Show SMA 20 overlay' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show SMA 20 overlay' }).click();
+  await page.getByRole('button', { name: 'Delete SMA 20 overlay' }).click();
+  await expect(page.getByRole('button', { name: 'Delete SMA 20 overlay' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Indicators' }).click();
+  const smaOption = page.getByRole('group', { name: 'Technical indicators' }).getByRole('button', { name: 'SMA 20', exact: true });
+  await expect(smaOption).toHaveAttribute('aria-pressed', 'false');
+  await smaOption.click();
+  await expect(page.locator('.trading-timeframe-buttons > button')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: '1H' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'All supported Trading intervals' })).toContainText('1W');
+  const rangeNav = page.getByRole('navigation', { name: 'chart-1 visible range' });
+  const timeframe = page.getByRole('combobox', { name: 'All supported Trading intervals' });
+  for (const [range, interval] of [['1D', '1m'], ['5D', '5m'], ['1M', '30m'], ['3M', '1h'], ['6M', '2h'], ['YTD', '1d'], ['1Y', '1d'], ['5Y', '1w'], ['All', '1mo']] as const) {
+    await rangeNav.getByRole('button', { name: range, exact: true }).click();
+    await expect(timeframe).toHaveValue(interval);
+    await expect(rangeNav.getByRole('button', { name: range, exact: true })).toHaveAttribute('aria-pressed', 'true');
+  }
 
   await page.getByLabel('Number of charts').selectOption('3');
   await expect(page.locator('.trading-chart-panel')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(3);
   await page.getByLabel('Grid columns').selectOption('columns-3');
 
   page.once('dialog', (dialog) => dialog.accept('Swing Research'));
@@ -312,6 +336,7 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
   await expect(page.getByRole('button', { name: 'Restore RSI 14 panel' })).toHaveAttribute('aria-expanded', 'false');
   await page.getByRole('button', { name: 'Restore RSI 14 panel' }).click();
 
+  await page.getByRole('button', { name: 'Indicators' }).click();
   await page.getByRole('button', { name: 'MACD 9' }).click();
   await expect(page.locator('.trading-indicator-pane-controls')).toHaveCount(2);
   await page.getByRole('button', { name: 'Move RSI 14 panel down' }).click();

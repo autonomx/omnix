@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 
-_INTERVAL = re.compile(r"^(?P<count>[1-9][0-9]*)(?P<unit>[mhdw])$", re.IGNORECASE)
+_INTERVAL = re.compile(r"^(?P<count>[1-9][0-9]*)(?P<unit>mo|m|h|d|w)$", re.IGNORECASE)
 
 
 def interval_duration(interval: str) -> timedelta:
@@ -14,6 +14,8 @@ def interval_duration(interval: str) -> timedelta:
         raise ValueError(f"unsupported Trading interval: {interval}")
     count = int(match.group("count"))
     unit = match.group("unit").lower()
+    if unit == "mo":
+        return timedelta(days=30 * count)
     if unit == "m":
         return timedelta(minutes=count)
     if unit == "h":

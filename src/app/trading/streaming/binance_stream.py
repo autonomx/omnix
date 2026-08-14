@@ -10,6 +10,7 @@ from .manager import StreamingBarUpdate
 
 
 BINANCE_STREAM_BASE_URL = "wss://stream.binance.com:9443/ws"
+BINANCE_INTERVALS = {"1mo": "1M"}
 
 
 def parse_binance_kline(
@@ -24,7 +25,7 @@ def parse_binance_kline(
     kline = event.get("k") if isinstance(event, dict) else None
     if not isinstance(kline, dict):
         raise ValueError("Binance stream payload does not contain a kline")
-    if str(kline.get("i")) != interval:
+    if str(kline.get("i")) != BINANCE_INTERVALS.get(interval, interval):
         raise ValueError(f"unexpected Binance interval: {kline.get('i')}")
     return StreamingBarUpdate(
         binding_id=binding_id,
@@ -67,7 +68,7 @@ class BinanceWebSocketStream:
             from websockets.asyncio.client import connect as websocket_connect
 
             connect = websocket_connect
-        stream_name = f"{provider_symbol.lower()}@kline_{interval}"
+        stream_name = f"{provider_symbol.lower()}@kline_{BINANCE_INTERVALS.get(interval, interval)}"
         async with connect(f"{self.base_url}/{stream_name}", ping_interval=20, ping_timeout=20) as socket:
             revision = 0
             async for raw_message in socket:

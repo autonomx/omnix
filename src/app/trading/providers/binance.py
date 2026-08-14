@@ -31,7 +31,10 @@ INTERVAL_SECONDS = {
     "1d": 86_400,
     "3d": 259_200,
     "1w": 604_800,
+    "1mo": 2_592_000,
 }
+
+BINANCE_INTERVALS = {"1mo": "1M"}
 
 
 class BinanceMarketDataProvider:
@@ -100,7 +103,7 @@ class BinanceMarketDataProvider:
             page_limit = min(1_000, remaining)
             params: dict[str, Any] = {
                 "symbol": symbol,
-                "interval": interval,
+                "interval": BINANCE_INTERVALS.get(interval, interval),
                 "limit": page_limit,
             }
             if end_time is not None:

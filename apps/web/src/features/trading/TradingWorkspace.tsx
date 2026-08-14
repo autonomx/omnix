@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
-import { TradingComplianceFooter } from './TradingComplianceFooter';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
 import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingReplayPanel } from './TradingReplayPanel';
@@ -25,6 +24,10 @@ import type { ProviderBinding } from './tradingTypes';
 import './TradingWorkspace.css';
 import './TradingAdvanced.css';
 import './TradingFlexibleLayout.css';
+import './TradingCompactHeader.css';
+import './TradingIndicatorMenuOverlay.css';
+import './TradingToolbarAlignment.css';
+import './TradingChartEnhancements.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'cursor', label: 'Cursor', glyph: '↖' },
@@ -47,7 +50,15 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'columns-4', label: '4 columns' },
 ];
 
-const quickIntervalPriority = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1d', '1w'];
+const quickIntervalPriority = ['1h', '2h', '4h'];
+
+const chartTypeGlyphs: Record<TradingChartType, string> = {
+  candlestick: 'candles',
+  bar: 'bars',
+  line: 'line',
+  area: 'area',
+  baseline: 'baseline',
+};
 
 type ToolPanel = 'scanner' | 'replay' | 'paper' | 'research';
 
@@ -57,6 +68,10 @@ function preferredInterval(binding: ProviderBinding, current: string): string {
     if (binding.supported_intervals.includes(candidate)) return candidate;
   }
   return binding.supported_intervals[0] ?? current;
+}
+
+function intervalLabel(interval: string): string {
+  return interval === '1mo' ? '1M' : interval.toUpperCase();
 }
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -207,8 +222,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" onClick={exportWorkspace}>Export</button>
           <button type="button" onClick={() => setFocusMode((value) => !value)} aria-pressed={focusMode}>{focusMode ? 'Exit focus' : 'Focus'}</button>
         </div>
-      </header>
-
       <section className="trading-command-bar" aria-label="Trading command bar">
         <div className="trading-symbol-search">
           <span aria-hidden="true">⌕</span>
@@ -240,7 +253,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           {charts.map((chart, index) => <option key={chart.chartId} value={chart.chartId}>Chart {index + 1}</option>)}
         </select>
 
-        <div className="trading-timeframe-buttons" role="group" aria-label="Trading timeframe">
+        <div className="trading-chart-controls" role="group" aria-label="Chart controls">
+          <div className="trading-timeframe-buttons" role="group" aria-label="Trading timeframe">
           {quickIntervals.map((item) => (
             <button
               key={item}
@@ -249,7 +263,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               aria-pressed={activeChart.interval === item}
               onClick={() => updateChart(activeChartId, { interval: item })}
             >
-              {item.toUpperCase()}
+              {intervalLabel(item)}
             </button>
           ))}
           <select
@@ -258,15 +272,19 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             disabled={supportedIntervals.length === 0}
             onChange={(event) => updateChart(activeChartId, { interval: event.target.value })}
           >
-            {supportedIntervals.map((interval) => <option key={interval} value={interval}>{interval.toUpperCase()}</option>)}
+            {supportedIntervals.map((interval) => <option key={interval} value={interval}>{intervalLabel(interval)}</option>)}
           </select>
+          </div>
+
+          <label className="trading-chart-type-control" title={`Chart type: ${activeChart.chartType}`}>
+            <span className={`trading-chart-type-glyph ${chartTypeGlyphs[activeChart.chartType]}`} aria-hidden="true"><i /><i /><i /></span>
+            <select aria-label="Trading chart type" value={activeChart.chartType} onChange={(event) => updateChart(activeChartId, { chartType: event.target.value as TradingChartType })}>
+              {(['candlestick', 'bar', 'line', 'area', 'baseline'] as TradingChartType[]).map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+
+          <TradingIndicatorManager indicators={activeChart.indicators} onToggle={(id) => toggleIndicator(activeChartId, id)} />
         </div>
-
-        <select aria-label="Trading chart type" value={activeChart.chartType} onChange={(event) => updateChart(activeChartId, { chartType: event.target.value as TradingChartType })}>
-          {(['candlestick', 'bar', 'line', 'area', 'baseline'] as TradingChartType[]).map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
-
-        <TradingIndicatorManager indicators={activeChart.indicators} onToggle={(id) => toggleIndicator(activeChartId, id)} />
 
         <select aria-label="Trading data feed" value={selectedBinding?.binding_id ?? ''} onChange={(event) => selectBinding(event.target.value)}>
           {availableBindings.map((binding) => <option key={binding.binding_id} value={binding.binding_id}>{binding.provider}{binding.is_official_api ? '' : ' · unofficial'}</option>)}
@@ -283,6 +301,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <i aria-hidden="true" />{selectedBinding ? selectedBinding.provider : 'No feed'}
         </span>
       </section>
+      </header>
 
       <div className="trading-body">
         <aside className="trading-tools" aria-label="Chart drawing and alert tools">
@@ -346,7 +365,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
       {workspaceHydrated && panels.bottom ? <TradingTerminalDock instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} /> : null}
 
-      <TradingComplianceFooter provider={selectedProvider} binding={selectedBinding ?? null} />
     </main>
   );
 }

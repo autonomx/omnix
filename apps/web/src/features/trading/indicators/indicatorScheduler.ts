@@ -42,7 +42,7 @@ export class TradingIndicatorScheduler {
     if (!this.worker) {
       return Promise.resolve().then(() => {
         const outputs = clonedIndicators
-          .filter((indicator) => indicator.enabled)
+          .filter((indicator) => indicator.enabled && indicator.visible !== false)
           .flatMap((indicator) => indicatorOutputs(clonedBars, indicator));
         return requestId === this.latestRequestId && !this.destroyed ? outputs : null;
       });

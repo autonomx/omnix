@@ -9,7 +9,7 @@ workerScope.addEventListener('message', (event: MessageEvent<IndicatorWorkerRequ
   const request = event.data;
   try {
     const outputs = request.indicators
-      .filter((indicator) => indicator.enabled)
+      .filter((indicator) => indicator.enabled && indicator.visible !== false)
       .flatMap((indicator) => indicatorOutputs(request.bars, indicator));
     const response: IndicatorWorkerResponse = { requestId: request.requestId, outputs };
     workerScope.postMessage(response);

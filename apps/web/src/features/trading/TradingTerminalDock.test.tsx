@@ -24,6 +24,12 @@ describe('TradingTerminalDock', () => {
 
   it('minimizes the dock while keeping the restore control visible', async () => {
     render(<TradingTerminalDock instrumentId="crypto:BINANCE:spot:BTC-USDT" bindingId={null} />);
+    expect(screen.queryByText('No paper account')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Restore paper trading panel' })).toHaveAttribute('aria-expanded', 'false');
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Restore paper trading panel' }).click();
+    });
     await waitFor(() => expect(screen.getByText('No paper account')).toBeInTheDocument());
 
     await act(async () => {

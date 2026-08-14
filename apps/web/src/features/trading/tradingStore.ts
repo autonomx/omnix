@@ -45,6 +45,7 @@ type TradingWorkspaceState = {
   setDrawingSnapMode: (mode: DrawingSnapMode) => void;
   updateChart: (chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) => void;
   toggleIndicator: (chartId: string, id: CoreIndicatorId, period?: number) => void;
+  toggleIndicatorVisibility: (chartId: string, id: CoreIndicatorId) => void;
   moveIndicator: (chartId: string, id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   setIndicators: (chartId: string, indicators: CoreIndicatorInstance[]) => void;
   setLink: (key: keyof TradingLinkState, enabled: boolean) => void;
@@ -172,7 +173,17 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
       indicators: chart.indicators.map((indicator) => indicator.id !== id ? indicator : {
         ...indicator,
         enabled: !indicator.enabled,
+        visible: indicator.enabled ? false : true,
         period: period ?? indicator.period,
+      }),
+    }),
+  })),
+  toggleIndicatorVisibility: (chartId, id) => set((state) => ({
+    charts: state.charts.map((chart) => chart.chartId !== chartId ? chart : {
+      ...chart,
+      indicators: chart.indicators.map((indicator) => indicator.id !== id || !indicator.enabled ? indicator : {
+        ...indicator,
+        visible: indicator.visible === false,
       }),
     }),
   })),

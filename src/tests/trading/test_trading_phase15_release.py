@@ -188,26 +188,23 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
 
     workspace = Path(
         "apps/web/src/features/trading/TradingWorkspace.tsx"
-    ).read_text()
-    assert "TradingComplianceFooter" in workspace
+    ).read_text(encoding="utf-8")
+    assert "TradingComplianceFooter" not in workspace
     assert "TradingScannerPanel" in workspace
     assert "TradingReplayPanel" in workspace
     assert "TradingPaperPanel" in workspace
     assert "TradingResearchPanel" in workspace
 
     styles = "\n".join(
-        path.read_text()
+        path.read_text(encoding="utf-8")
         for path in Path("apps/web/src/features/trading").glob("*.css")
     )
     assert "prefers-reduced-motion" in styles
     assert ":focus-visible" in styles
 
-    footer = Path(
+    assert not Path(
         "apps/web/src/features/trading/TradingComplianceFooter.tsx"
-    ).read_text()
-    assert "Charts powered by TradingView Lightweight Charts™" in footer
-    assert "Provider terms" in footer
-    assert "No live brokerage execution" in footer
+    ).exists()
 
 
 def test_legal_operator_and_roadmap_review_records_are_present() -> None:

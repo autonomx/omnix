@@ -88,6 +88,19 @@ export class TradingChartAdapter {
       grid: { vertLines: { color: 'rgba(120,145,170,.08)' }, horzLines: { color: 'rgba(120,145,170,.08)' } },
       rightPriceScale: { borderColor: 'rgba(140,160,180,.18)' },
       timeScale: { borderColor: 'rgba(140,160,180,.18)', timeVisible: true, secondsVisible: false },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: { time: true, price: true },
+        axisDoubleClickReset: { time: true, price: true },
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      kineticScroll: { mouse: true, touch: true },
     });
     this.priceSeries = this.createPriceSeries(chartType);
     this.volumeSeries = this.chart.addSeries(HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' } });
@@ -137,7 +150,7 @@ export class TradingChartAdapter {
   }
 
   setIndicators(bars: readonly MarketBar[], indicators: readonly CoreIndicatorInstance[]): void {
-    const outputs = indicators.filter((item) => item.enabled).flatMap((item) => indicatorOutputs(bars, item));
+    const outputs = indicators.filter((item) => item.enabled && item.visible !== false).flatMap((item) => indicatorOutputs(bars, item));
     this.setIndicatorOutputs(outputs);
   }
 

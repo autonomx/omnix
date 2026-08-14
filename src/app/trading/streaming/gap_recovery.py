@@ -21,6 +21,7 @@ INTERVAL_DELTAS: dict[str, timedelta] = {
     "1d": timedelta(days=1),
     "3d": timedelta(days=3),
     "1w": timedelta(weeks=1),
+    "1mo": timedelta(days=30),
 }
 
 

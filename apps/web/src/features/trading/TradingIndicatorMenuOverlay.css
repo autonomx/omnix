@@ -1,0 +1,69 @@
+.trading-indicator-manager > button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 29px;
+  padding: 0 7px;
+  border: 1px solid rgba(116, 151, 181, .18);
+  border-radius: 5px;
+  background: #0b1622;
+  color: #b7c8d7;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.trading-indicator-manager > button:hover,
+.trading-indicator-manager > button[aria-expanded='true'] {
+  border-color: rgba(42, 151, 255, .7);
+  background: #0d1b2a;
+  color: #e1edf7;
+}
+
+.trading-indicator-manager.has-active > button {
+  color: #76bdff;
+}
+
+.trading-indicator-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(86px, 1fr));
+  gap: 3px;
+  min-width: 184px;
+  padding: 5px;
+  border: 1px solid rgba(116, 151, 181, .25);
+  border-radius: 6px;
+  background: rgba(7, 16, 27, .98);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .4);
+}
+
+.trading-indicator-menu button {
+  border: 1px solid rgba(116, 151, 181, .18);
+  border-radius: 5px;
+  background: #0b1622;
+  color: #d5e0ea;
+  font: inherit;
+  padding: 5px 6px;
+  font-size: 9px;
+  text-align: left;
+}
+
+.trading-indicator-menu button:hover {
+  border-color: rgba(42, 151, 255, .7);
+  background: #0d1b2a;
+}
+
+.trading-indicator-menu button.active {
+  border-color: rgba(22, 136, 255, .55);
+  background: rgba(22, 136, 255, .16);
+  color: #78c0ff;
+}
+
+.trading-indicator-manager > button:focus-visible,
+.trading-indicator-menu button:focus-visible {
+  outline: 2px solid #1688ff;
+  outline-offset: 1px;
+}

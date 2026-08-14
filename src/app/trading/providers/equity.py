@@ -25,6 +25,7 @@ YAHOO_INTERVALS = {
     "1h": ("3mo", "1h"),
     "1d": ("10y", "1d"),
     "1w": ("10y", "1wk"),
+    "1mo": ("max", "1mo"),
 }
 
 
@@ -123,7 +124,7 @@ class YahooEquityProvider:
         payload, entry, cached = self.cache.get_or_load(
             key,
             load,
-            ttl_seconds=60 if interval not in {"1d", "1w"} else 900,
+            ttl_seconds=60 if interval not in {"1d", "1w", "1mo"} else 900,
             source="yahoo_chart",
         )
         received = datetime.now(timezone.utc)

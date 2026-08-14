@@ -60,6 +60,7 @@ function indicator(value: unknown): value is CoreIndicatorInstance {
   if (!item.id || !ids.includes(item.id)) return false;
   if (typeof item.period !== 'number' || !Number.isInteger(item.period) || item.period < 1) return false;
   if (typeof item.enabled !== 'boolean') return false;
+  if (item.visible !== undefined && typeof item.visible !== 'boolean') return false;
   for (const optionalPeriod of [item.fastPeriod, item.slowPeriod, item.signalPeriod]) {
     if (optionalPeriod !== undefined && (!Number.isInteger(optionalPeriod) || optionalPeriod < 1)) return false;
   }

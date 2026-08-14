@@ -38,6 +38,9 @@ def test_binance_exposes_real_two_hour_and_weekly_intervals() -> None:
     assert INTERVAL_SECONDS["1w"] == 604_800
     assert INTERVAL_DELTAS["2h"].total_seconds() == 7_200
     assert INTERVAL_DELTAS["1w"].total_seconds() == 604_800
+    assert "1mo" in BINANCE_POLICY.supported_intervals
+    assert INTERVAL_SECONDS["1mo"] == 2_592_000
+    assert INTERVAL_DELTAS["1mo"].total_seconds() == 2_592_000
 
 
 def test_two_hour_request_is_forwarded_to_binance_and_normalized() -> None:
@@ -57,3 +60,13 @@ def test_two_hour_recovery_window_uses_the_same_interval_contract() -> None:
         datetime(2026, 8, 5, 12, tzinfo=timezone.utc),
         first_stream,
     )
+
+
+def test_monthly_request_uses_binance_monthly_wire_interval() -> None:
+    session = FakeSession()
+    provider = BinanceMarketDataProvider(session=session, cache=TradingMarketDataCache())
+    result = provider.get_bars(INSTRUMENTS[0].instrument_id, "1mo", 1)
+
+    assert session.calls[0]["params"]["interval"] == "1M"
+    assert result.interval == "1mo"
+    assert result.bars[0].interval == "1mo"

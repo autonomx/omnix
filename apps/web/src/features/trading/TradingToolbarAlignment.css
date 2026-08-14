@@ -1,0 +1,19 @@
+.trading-command-bar > .trading-symbol-search,
+.trading-command-bar > .trading-favorite,
+.trading-command-bar > select[aria-label='Active Trading chart'] {
+  order: 0;
+}
+
+.trading-chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  order: 0 !important;
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.trading-header-actions {
+  order: 2;
+  margin-left: 0;
+}
