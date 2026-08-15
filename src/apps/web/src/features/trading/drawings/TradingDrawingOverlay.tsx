@@ -132,9 +132,35 @@ export function TradingDrawingOverlay({
 
   useEffect(() => {
     if (!adapter) return;
-    const visibleRange = adapter.onVisibleRange(() => {
-      setViewport((value) => ({ ...value, revision: value.revision + 1 }));
-    });
+    let frame: number | null = null;
+    let pointerActive = false;
+    const invalidate = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        setViewport((value) => ({ ...value, revision: value.revision + 1 }));
+      });
+    };
+    const visibleRange = adapter.onVisibleRange(invalidate);
+    const crosshair = adapter.onCrosshair(invalidate);
+    const stage = svgRef.current?.parentElement;
+    const insideStage = (target: EventTarget | null) => target instanceof Node && Boolean(stage?.contains(target));
+    const pointerDown = (event: PointerEvent) => {
+      if (!insideStage(event.target)) return;
+      pointerActive = true;
+      invalidate();
+    };
+    const pointerMove = (event: PointerEvent) => {
+      if (pointerActive && insideStage(event.target)) invalidate();
+    };
+    const pointerUp = () => {
+      if (!pointerActive) return;
+      pointerActive = false;
+      invalidate();
+    };
+    window.addEventListener('pointerdown', pointerDown);
+    window.addEventListener('pointermove', pointerMove);
+    window.addEventListener('pointerup', pointerUp);
     const resize = new ResizeObserver((entries) => {
       const bounds = entries[0]?.contentRect;
       if (!bounds) return;
@@ -147,6 +173,11 @@ export function TradingDrawingOverlay({
     if (svgRef.current) resize.observe(svgRef.current);
     return () => {
       visibleRange();
+      crosshair();
+      window.removeEventListener('pointerdown', pointerDown);
+      window.removeEventListener('pointermove', pointerMove);
+      window.removeEventListener('pointerup', pointerUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
       resize.disconnect();
     };
   }, [adapter]);

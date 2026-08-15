@@ -108,11 +108,44 @@ export function TradingChartAlertOverlay({
 
   useEffect(() => {
     if (!adapter) return;
-    const visibleRange = adapter.onVisibleRange(() => setCoordinateRevision((value) => value + 1));
+    let frame: number | null = null;
+    let pointerActive = false;
+    const invalidate = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        setCoordinateRevision((value) => value + 1);
+      });
+    };
+    const visibleRange = adapter.onVisibleRange(invalidate);
+    const crosshair = adapter.onCrosshair(invalidate);
+    const stage = rootRef.current?.parentElement;
+    const insideStage = (target: EventTarget | null) => target instanceof Node && Boolean(stage?.contains(target));
+    const pointerDown = (event: PointerEvent) => {
+      if (!insideStage(event.target)) return;
+      pointerActive = true;
+      invalidate();
+    };
+    const pointerMove = (event: PointerEvent) => {
+      if (pointerActive && insideStage(event.target)) invalidate();
+    };
+    const pointerUp = () => {
+      if (!pointerActive) return;
+      pointerActive = false;
+      invalidate();
+    };
+    window.addEventListener('pointerdown', pointerDown);
+    window.addEventListener('pointermove', pointerMove);
+    window.addEventListener('pointerup', pointerUp);
     const resize = new ResizeObserver(() => setCoordinateRevision((value) => value + 1));
     if (rootRef.current) resize.observe(rootRef.current);
     return () => {
       visibleRange();
+      crosshair();
+      window.removeEventListener('pointerdown', pointerDown);
+      window.removeEventListener('pointermove', pointerMove);
+      window.removeEventListener('pointerup', pointerUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
       resize.disconnect();
     };
   }, [adapter]);
