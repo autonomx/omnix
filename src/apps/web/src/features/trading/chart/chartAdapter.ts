@@ -20,6 +20,7 @@ import { indicatorOutputs, type CoreIndicatorInstance, type IndicatorOutput } fr
 import type { MarketBar } from '../tradingTypes';
 
 export type TradingChartType = 'candlestick' | 'bar' | 'line' | 'area' | 'baseline';
+export type TradingChartAppearance = 'light' | 'dark';
 export type TradingCrosshairPoint = { time: Time; price: number };
 export type TradingVisibleRange = { from: Time; to: Time };
 export type DrawingCoordinate = { x: number; y: number };
@@ -148,6 +149,21 @@ export class TradingChartAdapter {
     this.priceSeries = this.createPriceSeries(type);
     this.priceSeries.applyOptions({ lastValueVisible: this.latestValueLabelVisible });
     this.setBars(bars, false);
+  }
+
+  setAppearance(appearance: TradingChartAppearance): void {
+    this.assertActive();
+    const light = appearance === 'light';
+    const textColor = light ? '#536273' : '#9eacbd';
+    const gridColor = light ? 'rgba(91,111,132,.14)' : 'rgba(120,145,170,.08)';
+    const borderColor = light ? 'rgba(91,111,132,.28)' : 'rgba(140,160,180,.18)';
+    this.chart.applyOptions({
+      layout: { background: { color: 'transparent' }, textColor },
+      grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+      leftPriceScale: { borderColor },
+      rightPriceScale: { borderColor },
+      timeScale: { borderColor },
+    });
   }
 
   setBars(bars: readonly MarketBar[], fit = true): void {

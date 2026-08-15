@@ -45,6 +45,9 @@ const drawingToolGroups: DrawingToolGroup[] = [
       { label: 'Horizontal ray', glyph: '→', tool: 'horizontal-ray', shortcut: 'Alt + J' },
       { label: 'Vertical line', glyph: '|', tool: 'vertical-line', shortcut: 'Alt + V' },
       { label: 'Crossline', glyph: '+', tool: 'crossline', shortcut: 'Alt + C' },
+      { label: 'Price range', glyph: '↕', tool: 'measurement' },
+      { label: 'Date range', glyph: '↔', available: false },
+      { label: 'Date and price range', glyph: '□', available: false },
     ],
   },
   {
@@ -322,30 +325,68 @@ export function TradingDrawingTools({
 
   return (
     <aside ref={rootRef} className="trading-tools trading-drawing-tools" aria-label="Chart drawing tools">
-      {drawingToolGroups.map((group) => {
-        const active = group.items.some((item) => item.tool === selectedTool);
+      {drawingToolGroups.filter((group) => group.id !== 'measurers').map((group) => {
+        const isCursorGroup = group.id === 'cursor';
+        const active = isCursorGroup ? selectedTool === 'cursor' : group.items.some((item) => item.tool === selectedTool);
         const expanded = openGroup === group.id;
         return (
           <div key={group.id} className="trading-drawing-tool-group">
-            <button
-              type="button"
-              className={active ? 'active' : undefined}
-              aria-label={group.label}
-              aria-expanded={expanded}
-              aria-haspopup="menu"
-              title={group.label}
-              onClick={(event) => {
-                if (openGroup === group.id) {
-                  setOpenGroup(null);
-                  return;
-                }
-                const bounds = event.currentTarget.getBoundingClientRect();
-                setMenuPosition({ top: bounds.top, left: bounds.right + 7 });
-                setOpenGroup(group.id);
-              }}
-            >
-              <span aria-hidden="true">{group.glyph}</span>
-            </button>
+            {isCursorGroup ? (
+              <div className="trading-drawing-tool-cursor-control">
+                <button
+                  type="button"
+                  className={active ? 'active' : undefined}
+                  aria-label="Cursor"
+                  aria-pressed={active}
+                  title="Cursor: grab, select, and pan"
+                  onClick={() => {
+                    onSelect('cursor');
+                    setOpenGroup(null);
+                  }}
+                >
+                  <span aria-hidden="true">{group.glyph}</span>
+                </button>
+                <button
+                  type="button"
+                  className="trading-drawing-tool-cursor-menu-toggle"
+                  aria-label="More cursor tools"
+                  aria-expanded={expanded}
+                  aria-haspopup="menu"
+                  title="More cursor tools"
+                  onClick={(event) => {
+                    if (openGroup === group.id) {
+                      setOpenGroup(null);
+                      return;
+                    }
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    setMenuPosition({ top: bounds.top, left: bounds.right + 7 });
+                    setOpenGroup(group.id);
+                  }}
+                >
+                  <span aria-hidden="true">⌄</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={active ? 'active' : undefined}
+                aria-label={group.label}
+                aria-expanded={expanded}
+                aria-haspopup="menu"
+                title={group.label}
+                onClick={(event) => {
+                  if (openGroup === group.id) {
+                    setOpenGroup(null);
+                    return;
+                  }
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  setMenuPosition({ top: bounds.top, left: bounds.right + 7 });
+                  setOpenGroup(group.id);
+                }}
+              >
+                <span aria-hidden="true">{group.glyph}</span>
+              </button>
+            )}
             {expanded ? (
               <div
                 ref={menuRef}

@@ -1,0 +1,9 @@
+.trading-drawing-overlay .trading-measurement{pointer-events:none}
+.trading-drawing-overlay .trading-measurement-area{pointer-events:all;cursor:pointer}
+.trading-drawing-overlay .trading-measurement-edge,.trading-drawing-overlay .trading-measurement-axis,.trading-drawing-overlay .trading-measurement-arrow{fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
+.trading-drawing-overlay .trading-measurement-axis{stroke-width:2.25}
+.trading-drawing-overlay .trading-measurement-arrow{stroke-linecap:round;stroke-linejoin:round}
+.trading-drawing-overlay .trading-measurement-label{pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.2))}
+.trading-drawing-overlay .trading-measurement-label rect{fill:#fff;stroke:rgba(105,105,105,.28);stroke-width:1;vector-effect:non-scaling-stroke}
+.trading-drawing-overlay .trading-measurement-label text{fill:#202124;stroke:none;font-size:13px;font-weight:500;paint-order:normal}
+.trading-drawing-overlay .trading-measurement-handle{fill:#fff;stroke:#2962ff;stroke-width:2;vector-effect:non-scaling-stroke;cursor:grab;pointer-events:auto}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TradingAlertsPanel } from './TradingAlertsPanel';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrderType, PaperSide } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
+import type { TradingAlert } from './tradingTypes';
 import './TradingTerminalDock.css';
 import './TradingTerminalDockMinimize.css';
 
@@ -34,9 +35,11 @@ function signedClass(value?: string | null): string {
 export function TradingTerminalDock({
   instrumentId,
   bindingId,
+  onSelectAlert,
 }: {
   instrumentId: string;
   bindingId: string | null;
+  onSelectAlert?: (alert: TradingAlert) => void;
 }) {
   const [tab, setTab] = useState<DockTab>('positions');
   const [minimized, setMinimized] = useState(true);
@@ -237,7 +240,7 @@ export function TradingTerminalDock({
           ) : null}
 
           {tab === 'alerts' ? (
-            <TradingAlertsPanel instrumentId={instrumentId} bindingId={bindingId} />
+            <TradingAlertsPanel instrumentId={instrumentId} bindingId={bindingId} onSelectAlert={onSelectAlert} />
           ) : null}
 
           {snapshot && tab === 'history' ? (

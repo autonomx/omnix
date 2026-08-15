@@ -16,6 +16,7 @@ import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingS
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
+import { OMNIX_APPEARANCE_CHANGE_EVENT } from '../settings/appearanceEffects';
 import {
   intervalCompactLabel,
   isIntervalAvailable,
@@ -153,6 +154,7 @@ export function TradingChartPanel({
   const indicatorSchedulerRef = useRef<TradingIndicatorScheduler | null>(null);
   const indicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drawingTool = useTradingStore((state) => state.drawingTool);
+  const setDrawingTool = useTradingStore((state) => state.setDrawingTool);
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
   const drawings = useTradingDrawings(instrumentId);
   const selectedDrawing = drawings.state.drawings.find((drawing) => drawing.drawingId === drawings.state.selectedId) ?? null;
@@ -252,6 +254,16 @@ export function TradingChartPanel({
       setAdapter(null);
     };
   }, [chartId, synchronization]);
+
+  useEffect(() => {
+    if (!adapter) return;
+    const applyAppearance = () => {
+      adapter.setAppearance(document.documentElement.dataset.omnixAppearance === 'light' ? 'light' : 'dark');
+    };
+    applyAppearance();
+    window.addEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, applyAppearance);
+    return () => window.removeEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, applyAppearance);
+  }, [adapter]);
 
   useEffect(() => {
     const bars = chartQuery.data?.bars ?? [];
@@ -453,7 +465,7 @@ export function TradingChartPanel({
   const handleStageContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     const target = event.target as Element;
-    if (target.closest('.trading-chart-context-menu, .trading-price-scale-menu, .trading-price-scale-trigger, .trading-price-scale-plus, .trading-chart-alert-editor, .trading-chart-table-view, .trading-chart-object-tree, .trading-chart-settings')) return;
+    if (target.closest('.trading-chart-context-menu, .trading-price-scale-menu, .trading-price-scale-trigger, .trading-chart-alert-editor, .trading-chart-table-view, .trading-chart-object-tree, .trading-chart-settings')) return;
     const stage = event.currentTarget;
     const bounds = stage.getBoundingClientRect();
     const x = event.clientX - bounds.left;
@@ -578,18 +590,6 @@ export function TradingChartPanel({
             >
               ⋮
             </button>
-            {priceScaleSettings.plusButtonVisible ? (
-              <button
-                type="button"
-                className="trading-price-scale-plus"
-                aria-label="Open price scale settings"
-                title="Price scale"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => setPriceScaleMenuOpen(true)}
-              >
-                +
-              </button>
-            ) : null}
             {priceScaleMenuOpen ? (
               <TradingPriceScaleMenu
                 adapter={adapter}
@@ -657,6 +657,7 @@ export function TradingChartPanel({
         <TradingDrawingOverlay
           adapter={adapter}
           instrumentId={instrumentId}
+          interval={interval}
           tool={active ? drawingTool : 'cursor'}
           snapMode={drawingSnapMode}
           drawings={drawings.state.drawings}
@@ -666,6 +667,7 @@ export function TradingChartPanel({
           onMovePoint={drawings.movePoint}
           onTranslateDrawing={drawings.translate}
           onRemove={drawings.remove}
+          onToolComplete={() => setDrawingTool('cursor')}
           onAlertAtPoint={active ? setAlertPlacement : undefined}
           onContextMenu={active ? openContextMenu : undefined}
         />

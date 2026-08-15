@@ -7,7 +7,7 @@ import { TradingWatchlist } from './TradingWatchlist';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
 import type { CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
-import type { CanonicalInstrument } from './tradingTypes';
+import type { CanonicalInstrument, TradingAlert } from './tradingTypes';
 
 export type TradingSideTab = 'watchlist' | 'indicators' | 'alerts' | 'news' | 'layout';
 
@@ -34,6 +34,7 @@ export function TradingSidePanel({
   links,
   snapMode,
   onSelectInstrument,
+  onSelectAlert,
   onSetIndicators,
   onSetLayout,
   onSetChartCount,
@@ -57,6 +58,7 @@ export function TradingSidePanel({
   links: TradingLinkState;
   snapMode: DrawingSnapMode;
   onSelectInstrument: (instrumentId: string) => void;
+  onSelectAlert: (alert: TradingAlert) => void;
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
   onSetLayout: (layout: TradingLayout) => void;
   onSetChartCount: (count: number) => void;
@@ -107,7 +109,12 @@ export function TradingSidePanel({
           <TradingIndicatorPresets indicators={indicators} onApply={onSetIndicators} />
         ) : null}
         {activeTab === 'alerts' ? (
-          <TradingAlertsPanel instrumentId={activeInstrumentId} bindingId={bindingId} interval={interval} />
+          <TradingAlertsPanel
+            instrumentId={activeInstrumentId}
+            bindingId={bindingId}
+            interval={interval}
+            onSelectAlert={onSelectAlert}
+          />
         ) : null}
         {activeTab === 'news' ? <TradingNewsPanel onOpenResearch={onOpenResearch} /> : null}
         {activeTab === 'layout' ? (

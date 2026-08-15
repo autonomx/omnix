@@ -15,6 +15,7 @@ import type {
 } from './tradingTypes';
 import './TradingChartAlertOverlay.css';
 import './TradingAlertsPanel.css';
+import './TradingAlertTooltip.css';
 
 type AlertsTab = 'alerts' | 'log';
 
@@ -105,6 +106,23 @@ function formatLogTime(value: string): string {
     : 'Unknown time';
 }
 
+function formatAlertDateTime(value?: string | null): string {
+  if (!value) return 'Never';
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat(undefined, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(date)
+    : 'Unknown';
+}
+
 function editorDefaults(): TradingAlertEditorState {
   return {
     mode: 'create',
@@ -148,10 +166,12 @@ export function TradingAlertsPanel({
   instrumentId,
   bindingId,
   interval = '1m',
+  onSelectAlert,
 }: {
   instrumentId: string;
   bindingId: string | null;
   interval?: string;
+  onSelectAlert?: (alert: TradingAlert) => void;
 }) {
   const [tab, setTab] = useState<AlertsTab>('alerts');
   const [alerts, setAlerts] = useState<TradingAlert[]>([]);
@@ -163,6 +183,7 @@ export function TradingAlertsPanel({
   const [sortBySymbol, setSortBySymbol] = useState(false);
   const [listMenuOpen, setListMenuOpen] = useState(false);
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ alert: TradingAlert; top: number; right: number } | null>(null);
 
   const refresh = async () => {
     try {
@@ -238,6 +259,16 @@ export function TradingAlertsPanel({
   const openEdit = (alert: TradingAlert) => {
     setRowMenuId(null);
     setEditor(editorForAlert(alert));
+  };
+
+  const showTooltip = (alert: TradingAlert, anchor: HTMLElement) => {
+    const bounds = anchor.getBoundingClientRect();
+    const tooltipHeight = 150;
+    setTooltip({
+      alert,
+      top: Math.max(10, Math.min(window.innerHeight - tooltipHeight - 10, bounds.top + (bounds.height - tooltipHeight) / 2)),
+      right: Math.max(10, window.innerWidth - bounds.left + 12),
+    });
   };
 
   const saveEditor = async () => {
@@ -321,14 +352,33 @@ export function TradingAlertsPanel({
           </div>
           {searchOpen ? <input className="trading-alert-search" aria-label="Search alerts" placeholder="Search alerts" value={search} onChange={(event) => setSearch(event.target.value)} /> : null}
           {visibleAlerts.length > 0 ? (
-            <ul className="trading-alert-list">
-              {visibleAlerts.map((alert) => {
+            <>
+              <ul className="trading-alert-list">
+                {visibleAlerts.map((alert) => {
                 const symbol = symbolForInstrumentId(alert.instrument_id);
                 const title = alertTitle(alert);
                 const state = alertStatus(alert);
                 return (
-                  <li key={alert.alert_id} data-alert-state={alertVisualState(alert)} className={alert.instrument_id === instrumentId ? 'current' : undefined}>
-                    <button type="button" className="trading-alert-row-main" onClick={() => openEdit(alert)} aria-label={`Edit ${title}`}>
+                  <li
+                    key={alert.alert_id}
+                    data-alert-state={alertVisualState(alert)}
+                    className={alert.instrument_id === instrumentId ? 'current' : undefined}
+                    onMouseEnter={(event) => showTooltip(alert, event.currentTarget)}
+                    onMouseLeave={() => setTooltip((current) => current?.alert.alert_id === alert.alert_id ? null : current)}
+                    onFocus={(event) => showTooltip(alert, event.currentTarget)}
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                        setTooltip((current) => current?.alert.alert_id === alert.alert_id ? null : current);
+                      }
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="trading-alert-row-main"
+                      onClick={() => onSelectAlert?.(alert)}
+                      aria-label={`Open ${symbol} chart for ${title}`}
+                      aria-describedby={tooltip?.alert.alert_id === alert.alert_id ? `trading-alert-tooltip-${alert.alert_id}` : undefined}
+                    >
                       <span className="trading-alert-symbol-badge" aria-hidden="true">{symbol.slice(0, 1)}</span>
                       <span className="trading-alert-row-copy">
                         <span className="trading-alert-row-heading"><b className="trading-alert-row-symbol" title={`Symbol ${symbol}`}>{symbol}</b><strong title={title}>{title}</strong></span>
@@ -347,8 +397,38 @@ export function TradingAlertsPanel({
                     </div>
                   </li>
                 );
-              })}
-            </ul>
+                })}
+              </ul>
+              {tooltip ? (
+                <div
+                  id={`trading-alert-tooltip-${tooltip.alert.alert_id}`}
+                  className="trading-alert-tooltip"
+                  role="tooltip"
+                  style={{ top: tooltip.top, right: tooltip.right }}
+                >
+                  {(() => {
+                    const alert = tooltip.alert;
+                    const symbol = symbolForInstrumentId(alert.instrument_id);
+                    const title = alertTitle(alert);
+                    const state = alertStatus(alert);
+                    return (
+                      <>
+                        <strong className="trading-alert-tooltip-title">{title}</strong>
+                        <span className="trading-alert-tooltip-meta">
+                          <b>{symbol}, {alert.evaluation_policy.interval}</b>
+                          <i>•</i>
+                          <em className={`state-${state.className}`}>{state.label}</em>
+                        </span>
+                        <span className="trading-alert-tooltip-detail">Created: {formatAlertDateTime(alert.created_at)}</span>
+                        <span className="trading-alert-tooltip-detail">Last triggered: {formatAlertDateTime(alert.last_triggered_at)}</span>
+                        {alert.expires_at ? <span className="trading-alert-tooltip-detail">Expires: {formatAlertDateTime(alert.expires_at)}</span> : null}
+                        {alert.parameters.trigger_policy ? <span className="trading-alert-tooltip-detail">Trigger: {alert.parameters.trigger_policy.replaceAll('_', ' ')}</span> : null}
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="trading-alerts-empty"><strong>No alerts</strong><span>Create an alert with + to monitor this workspace.</span></div>
           )}

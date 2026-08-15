@@ -32,7 +32,7 @@ import {
   useTradingStore,
   type TradingLayout,
 } from './tradingStore';
-import type { CanonicalInstrument, ProviderBinding } from './tradingTypes';
+import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
 import './TradingWorkspace.css';
 import './TradingAdvanced.css';
 import './TradingFlexibleLayout.css';
@@ -43,6 +43,8 @@ import './TradingChartEnhancements.css';
 import './TradingIntervalMenu.css';
 import './TradingSideRail.css';
 import './TradingLayoutConstraints.css';
+import './TradingLightTheme.css';
+import './TradingTypography.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'cursor', label: 'Cursor', glyph: '↖' },
@@ -209,6 +211,33 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       bindingId: binding.binding_id,
       interval: preferredInterval(binding, activeChart.interval),
     });
+  };
+
+  const navigateToAlert = (alert: TradingAlert) => {
+    const alertInterval = alert.evaluation_policy.interval;
+    const matchingChart = charts.find((chart) => (
+      chart.instrumentId === alert.instrument_id
+      && Boolean(alert.binding_id)
+      && chart.bindingId === alert.binding_id
+    )) ?? charts.find((chart) => chart.instrumentId === alert.instrument_id);
+
+    if (matchingChart) {
+      updateChart(matchingChart.chartId, {
+        interval: alertInterval,
+        ...(alert.binding_id ? { bindingId: alert.binding_id } : {}),
+      });
+      setActiveChart(matchingChart.chartId);
+      return;
+    }
+
+    const instrument = (instruments.data ?? []).find((item) => item.instrument_id === alert.instrument_id);
+    const preferred = instrument ? preferredInstrument(instrument, instruments.data ?? []) : null;
+    updateChart(activeChartId, {
+      instrumentId: preferred?.instrument_id ?? alert.instrument_id,
+      bindingId: alert.binding_id ?? null,
+      interval: alertInterval,
+    });
+    setActiveChart(activeChartId);
   };
 
   const toggleToolPanel = (panel: ToolPanel) => {
@@ -456,6 +485,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   const next = instrument ? preferredInstrument(instrument, instruments.data ?? []) : null;
                   updateChart(activeChartId, { instrumentId: next?.instrument_id ?? instrumentId, bindingId: null });
                 }}
+                onSelectAlert={navigateToAlert}
                 onSetIndicators={(next) => setIndicators(activeChartId, next)}
                 onSetLayout={setLayout}
                 onSetChartCount={setChartCount}
@@ -495,7 +525,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </section>
       ) : null}
 
-      {workspaceHydrated && panels.bottom ? <TradingTerminalDock instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} /> : null}
+      {workspaceHydrated && panels.bottom ? (
+        <TradingTerminalDock
+          instrumentId={activeChart.instrumentId}
+          bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+          onSelectAlert={navigateToAlert}
+        />
+      ) : null}
 
     </main>
   );

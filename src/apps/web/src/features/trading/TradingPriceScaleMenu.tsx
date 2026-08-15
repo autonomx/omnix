@@ -16,7 +16,6 @@ export type TradingPriceScaleMenuState = {
   priceScaleLinesVisible: boolean;
   gridLinesVisible: boolean;
   scalePriceOnly: boolean;
-  plusButtonVisible: boolean;
 };
 
 export const defaultTradingPriceScaleMenuState: TradingPriceScaleMenuState = {
@@ -29,7 +28,6 @@ export const defaultTradingPriceScaleMenuState: TradingPriceScaleMenuState = {
   priceScaleLinesVisible: true,
   gridLinesVisible: true,
   scalePriceOnly: false,
-  plusButtonVisible: true,
 };
 
 const modeLabels: Array<{ id: TradingPriceScaleMode; label: string; shortcut?: string }> = [
@@ -202,10 +200,6 @@ export function TradingPriceScaleMenu({
           <MenuRow checked={state.priceScaleLinesVisible} onClick={() => setPriceScaleLines(!state.priceScaleLinesVisible)}>Price scale border</MenuRow>
         </div>
       ) : null}
-      <MenuRow checked={state.plusButtonVisible} onClick={() => onChange({ plusButtonVisible: !state.plusButtonVisible })}>
-        Plus button
-      </MenuRow>
-
       <div className="trading-price-scale-menu-separator" />
       <MenuRow onClick={() => { onClose(); onSettings(); }}>
         ◇&nbsp; More settings…
