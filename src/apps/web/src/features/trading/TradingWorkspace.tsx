@@ -13,6 +13,7 @@ import type { TradingSideTab } from './TradingSidePanel';
 import { TradingTerminalDock } from './TradingTerminalDock';
 import { TradingSymbolSearch } from './TradingSymbolSearch';
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
+import { TradingDrawingTools } from './TradingDrawingTools';
 import { tradingApi } from './tradingApi';
 import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
@@ -41,6 +42,7 @@ import './TradingToolbarAlignment.css';
 import './TradingChartEnhancements.css';
 import './TradingIntervalMenu.css';
 import './TradingSideRail.css';
+import './TradingLayoutConstraints.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'cursor', label: 'Cursor', glyph: '↖' },
@@ -430,21 +432,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       <TradingAlertToastLayer />
 
       <div className="trading-body">
-        <aside className="trading-tools" aria-label="Chart drawing and alert tools">
-          {drawingTools.map((tool) => (
-            <button
-              key={tool.id}
-              type="button"
-              className={drawingTool === tool.id ? 'active' : undefined}
-              aria-pressed={drawingTool === tool.id}
-              title={tool.label}
-              aria-label={tool.label}
-              onClick={() => setDrawingTool(tool.id)}
-            >
-              {tool.glyph}
-            </button>
-          ))}
-        </aside>
+        <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />
         <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid /></section>
         {workspaceHydrated ? (
           <div className={`trading-right-dock ${panels.right ? 'is-expanded' : 'is-collapsed'}`}>

@@ -1,0 +1,19 @@
+.trading-drawing-tools{position:relative;z-index:20;gap:2px;overflow:visible}
+.trading-drawing-tool-group{position:relative;flex:0 0 auto}
+.trading-drawing-tool-group>button{display:grid;place-items:center;width:34px;height:34px;border-color:transparent;background:transparent;padding:0;color:#8496aa;font-size:17px;line-height:1}
+.trading-drawing-tool-group>button:hover,.trading-drawing-tool-group>button[aria-expanded=true]{border-color:rgba(22,136,255,.55);background:rgba(22,136,255,.14);color:#dceeff}
+.trading-drawing-tool-group>button.active{border-color:#22b8cf;background:rgba(34,184,207,.18);color:#66d9e8}
+.trading-drawing-tool-menu{position:fixed;top:0;left:0;z-index:1000;width:min(310px,calc(100vw - 72px));max-height:calc(100vh - 16px);overflow:auto;padding:8px;border:1px solid rgba(117,151,181,.26);border-radius:8px;background:rgba(10,19,30,.98);box-shadow:0 16px 40px rgba(0,0,0,.45);color:#d7e2ec}
+.trading-drawing-tool-menu header{padding:3px 8px 8px;border-bottom:1px solid rgba(117,151,181,.15);color:#8497aa;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.trading-drawing-tool-row{display:flex;align-items:center;min-height:38px;border-bottom:1px solid rgba(117,151,181,.08)}
+.trading-drawing-tool-row:last-child{border-bottom:0}
+.trading-drawing-tool-row.selected{background:rgba(22,136,255,.14)}
+.trading-drawing-tool-item{display:grid!important;grid-template-columns:28px minmax(0,1fr) auto auto;align-items:center;flex:1;gap:8px;min-width:0!important;width:auto!important;height:36px!important;border:0!important;border-radius:5px!important;background:transparent!important;padding:0 6px!important;color:#d7e2ec!important;font-size:11px!important;text-align:left}
+.trading-drawing-tool-item:hover:not(:disabled){background:rgba(22,136,255,.16)!important;color:#fff!important}
+.trading-drawing-tool-item:disabled{cursor:not-allowed;opacity:.42}
+.trading-drawing-tool-glyph{display:grid;place-items:center;color:#c8d8e7;font-size:18px;line-height:1}
+.trading-drawing-tool-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trading-drawing-tool-shortcut{color:#76899d;font-size:9px;white-space:nowrap}
+.trading-drawing-tool-soon{color:#71859a;font-size:8px;text-transform:uppercase;white-space:nowrap}
+.trading-drawing-tool-row .trading-drawing-tool-favorite{display:grid!important;place-items:center;width:24px!important;height:36px!important;flex:0 0 24px;border:0!important;border-radius:4px!important;background:transparent!important;padding:0!important;color:#8798a9!important;font-size:19px!important;line-height:1}
+.trading-drawing-tool-row .trading-drawing-tool-favorite:hover{background:rgba(22,136,255,.16)!important;color:#ffd866!important}

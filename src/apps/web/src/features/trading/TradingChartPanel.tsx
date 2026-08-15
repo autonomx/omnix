@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { IChartApi } from 'lightweight-charts';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
+import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
 import { TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
@@ -161,6 +162,8 @@ export function TradingChartPanel({
   const [indicatorError, setIndicatorError] = useState<string | null>(null);
   const [alertPlacement, setAlertPlacement] = useState<ChartAlertPlacement | null>(null);
   const [contextMenu, setContextMenu] = useState<ChartAlertPlacement | null>(null);
+  const [priceScaleMenuOpen, setPriceScaleMenuOpen] = useState(false);
+  const [priceScaleSettings, setPriceScaleSettings] = useState<TradingPriceScaleMenuState>(defaultTradingPriceScaleMenuState);
   const [tableVisible, setTableVisible] = useState(false);
   const [objectTreeVisible, setObjectTreeVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -233,6 +236,8 @@ export function TradingChartPanel({
     selectedRangeRef.current = undefined;
     pendingRangeIntervalRef.current = null;
     setSelectedRangeLabel('All');
+    setPriceScaleMenuOpen(false);
+    setPriceScaleSettings(defaultTradingPriceScaleMenuState);
     setAdapter(next);
     setIndicatorPaneGeometry([]);
     const unregister = synchronization.register(chartId, next);
@@ -282,17 +287,25 @@ export function TradingChartPanel({
   }, [indicators, scheduleIndicators]);
 
   useEffect(() => {
-    if (!active || !selectedDrawing) return;
-    const removeSelectedDrawing = (event: KeyboardEvent) => {
-      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+    if (!active) return;
+    const handleDrawingKeyboard = (event: KeyboardEvent) => {
       const target = event.target;
       if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const key = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && key === 'z') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.shiftKey) drawings.redo();
+        else drawings.undo();
+        return;
+      }
+      if (!selectedDrawing || (event.key !== 'Delete' && event.key !== 'Backspace')) return;
       event.preventDefault();
       event.stopPropagation();
       drawings.removeSelected();
     };
-    window.addEventListener('keydown', removeSelectedDrawing);
-    return () => window.removeEventListener('keydown', removeSelectedDrawing);
+    window.addEventListener('keydown', handleDrawingKeyboard);
+    return () => window.removeEventListener('keydown', handleDrawingKeyboard);
   }, [active, drawings, selectedDrawing]);
 
   useEffect(() => {
@@ -440,7 +453,7 @@ export function TradingChartPanel({
   const handleStageContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     const target = event.target as Element;
-    if (target.closest('.trading-chart-context-menu, .trading-chart-alert-editor, .trading-chart-table-view, .trading-chart-object-tree, .trading-chart-settings')) return;
+    if (target.closest('.trading-chart-context-menu, .trading-price-scale-menu, .trading-price-scale-trigger, .trading-price-scale-plus, .trading-chart-alert-editor, .trading-chart-table-view, .trading-chart-object-tree, .trading-chart-settings')) return;
     const stage = event.currentTarget;
     const bounds = stage.getBoundingClientRect();
     const x = event.clientX - bounds.left;
@@ -551,6 +564,43 @@ export function TradingChartPanel({
       </header>
       <div className="trading-chart-stage" onContextMenu={handleStageContextMenu}>
         <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} />
+        {active && adapter ? (
+          <>
+            <button
+              type="button"
+              className="trading-price-scale-trigger"
+              aria-label="Open price scale settings"
+              aria-expanded={priceScaleMenuOpen}
+              title="Price scale settings"
+              onPointerDown={(event) => event.stopPropagation()}
+              onContextMenu={(event) => event.stopPropagation()}
+              onClick={() => setPriceScaleMenuOpen((value) => !value)}
+            >
+              ⋮
+            </button>
+            {priceScaleSettings.plusButtonVisible ? (
+              <button
+                type="button"
+                className="trading-price-scale-plus"
+                aria-label="Open price scale settings"
+                title="Price scale"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setPriceScaleMenuOpen(true)}
+              >
+                +
+              </button>
+            ) : null}
+            {priceScaleMenuOpen ? (
+              <TradingPriceScaleMenu
+                adapter={adapter}
+                state={priceScaleSettings}
+                onChange={(patch) => setPriceScaleSettings((current) => ({ ...current, ...patch }))}
+                onClose={() => setPriceScaleMenuOpen(false)}
+                onSettings={() => setSettingsVisible(true)}
+              />
+            ) : null}
+          </>
+        ) : null}
         {overlayIndicators.length > 0 ? (
           <div
             className="trading-overlay-indicator-controls"
@@ -615,6 +665,7 @@ export function TradingChartPanel({
           onSelect={drawings.select}
           onMovePoint={drawings.movePoint}
           onTranslateDrawing={drawings.translate}
+          onRemove={drawings.remove}
           onAlertAtPoint={active ? setAlertPlacement : undefined}
           onContextMenu={active ? openContextMenu : undefined}
         />
@@ -663,7 +714,7 @@ export function TradingChartPanel({
             cursorLocked={cursorLocked}
             tableVisible={tableVisible}
             onClose={() => setContextMenu(null)}
-            onReset={() => { adapterRef.current?.fitContent(); setSelectedRangeLabel('All'); }}
+            onReset={() => { adapterRef.current?.fitContent(); setPriceScaleSettings((current) => ({ ...current, autoScale: true })); setSelectedRangeLabel('All'); }}
             onCopyPrice={copyContextPrice}
             onPastePrice={pasteContextPrice}
             onAddAlert={contextMenuAlert}

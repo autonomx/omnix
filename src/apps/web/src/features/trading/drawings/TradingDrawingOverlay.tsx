@@ -9,7 +9,16 @@ import {
   type TradingDrawing,
 } from './drawingCommands';
 
-const twoPointTools = new Set<DrawingTool>(['trend-line', 'ray', 'rectangle', 'fibonacci', 'measurement']);
+const twoPointTools = new Set<DrawingTool>([
+  'trend-line',
+  'ray',
+  'arrow',
+  'rectangle',
+  'circle',
+  'ellipse',
+  'fibonacci',
+  'measurement',
+]);
 const fibonacciLevels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
 export type ChartAlertPlacement = DrawingPoint & { x: number; y: number; source: 'tool' | 'context-menu' };
@@ -40,6 +49,7 @@ export function TradingDrawingOverlay({
   onSelect,
   onMovePoint,
   onTranslateDrawing,
+  onRemove,
   onAlertAtPoint,
   onContextMenu: onChartContextMenu,
 }: {
@@ -53,6 +63,7 @@ export function TradingDrawingOverlay({
   onSelect: (id: string | null) => void;
   onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
   onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
+  onRemove: (id: string) => void;
   onAlertAtPoint?: (placement: ChartAlertPlacement) => void;
   onContextMenu?: (placement: ChartAlertPlacement) => void;
 }) {
@@ -99,7 +110,7 @@ export function TradingDrawingOverlay({
   );
 
   const createDrawing = (points: DrawingPoint[]) => {
-    if (tool === 'cursor' || tool === 'alert') return;
+    if (tool === 'cursor' || tool === 'alert' || tool === 'eraser') return;
     onAdd({
       drawingId: crypto.randomUUID(),
       instrumentId,
@@ -153,6 +164,14 @@ export function TradingDrawingOverlay({
     if (point) onChartContextMenu?.({ ...point, source: 'context-menu' });
   };
 
+  const onWheel = (event: React.WheelEvent<SVGSVGElement>) => {
+    if (!adapter) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    event.preventDefault();
+    event.stopPropagation();
+    adapter.zoomAtCoordinate(event.clientX - bounds.left, event.deltaY);
+  };
+
   const dragHandle = (drawing: TradingDrawing, index: number) => (event: React.PointerEvent<SVGCircleElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -175,6 +194,10 @@ export function TradingDrawingOverlay({
   const dragDrawing = (drawing: TradingDrawing) => (event: React.PointerEvent<SVGGElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    if (tool === 'eraser') {
+      onRemove(drawing.drawingId);
+      return;
+    }
     onSelect(drawing.drawingId);
     if (tool !== 'cursor' || drawing.locked || !adapter) return;
     const start = pointFromClient(event.clientX, event.clientY);
@@ -222,6 +245,7 @@ export function TradingDrawingOverlay({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onWheel={onWheel}
       onContextMenu={onContextMenu}
     >
       {projected.map(({ drawing, points }) => {
@@ -236,6 +260,7 @@ export function TradingDrawingOverlay({
           strokeWidth: style.lineWidth,
           strokeDasharray: style.lineStyle === 'dashed' ? '6 4' : undefined,
         };
+        const arrowMarkerId = `trading-drawing-arrow-${drawing.drawingId}`;
         const ray = (() => {
           if (drawing.toolType !== 'ray' || !second) return null;
           const dx = second.x - first.x;
@@ -249,15 +274,28 @@ export function TradingDrawingOverlay({
         return (
           <g
             key={drawing.drawingId}
+            data-drawing-id={drawing.drawingId}
             data-locked={drawing.locked}
             data-selected={selected}
             onPointerDown={dragDrawing(drawing)}
           >
+            {drawing.toolType === 'arrow' ? (
+              <defs>
+                <marker id={arrowMarkerId} markerHeight="6" markerWidth="6" orient="auto" refX="5" refY="3" markerUnits="strokeWidth">
+                  <path d="M 0 0 L 6 3 L 0 6 z" fill={style.color} />
+                </marker>
+              </defs>
+            ) : null}
+            {drawing.toolType === 'dot' ? <circle className={`drawing-dot${selected ? ' selected' : ''}`} cx={first.x} cy={first.y} r={selected ? 5 : 4} fill={style.color} stroke={selected ? '#ffd43b' : style.color} strokeWidth={style.lineWidth} /> : null}
             {drawing.toolType === 'horizontal-line' ? <line {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /> : null}
+            {drawing.toolType === 'horizontal-ray' ? <line {...lineProps} x1={first.x} x2="100%" y1={first.y} y2={first.y} /> : null}
             {drawing.toolType === 'vertical-line' ? <line {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /> : null}
-            {(drawing.toolType === 'trend-line' || drawing.toolType === 'measurement') && second ? <line {...lineProps} x1={first.x} y1={first.y} x2={second.x} y2={second.y} /> : null}
+            {drawing.toolType === 'crossline' ? <><line {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /><line {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /></> : null}
+            {(drawing.toolType === 'trend-line' || drawing.toolType === 'measurement' || drawing.toolType === 'arrow') && second ? <line {...lineProps} markerEnd={drawing.toolType === 'arrow' ? `url(#${arrowMarkerId})` : undefined} x1={first.x} y1={first.y} x2={second.x} y2={second.y} /> : null}
             {ray ? <line {...lineProps} x1={first.x} y1={first.y} x2={ray.x} y2={ray.y} /> : null}
             {drawing.toolType === 'rectangle' && second ? <rect {...lineProps} x={Math.min(first.x, second.x)} y={Math.min(first.y, second.y)} width={Math.abs(second.x - first.x)} height={Math.abs(second.y - first.y)} fill={`${style.color}20`} /> : null}
+            {drawing.toolType === 'circle' && second ? <ellipse {...lineProps} cx={(first.x + second.x) / 2} cy={(first.y + second.y) / 2} rx={Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2} ry={Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2} fill={`${style.color}20`} /> : null}
+            {drawing.toolType === 'ellipse' && second ? <ellipse {...lineProps} cx={(first.x + second.x) / 2} cy={(first.y + second.y) / 2} rx={Math.abs(second.x - first.x) / 2} ry={Math.abs(second.y - first.y) / 2} fill={`${style.color}20`} /> : null}
             {drawing.toolType === 'fibonacci' && second ? fibonacciLevels.map((level) => {
               const y = first.y + (second.y - first.y) * level;
               return <g key={level}><line {...lineProps} x1={Math.min(first.x, second.x)} x2={Math.max(first.x, second.x)} y1={y} y2={y} /><text x={Math.max(first.x, second.x) + 4} y={y - 2}>{level}</text></g>;

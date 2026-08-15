@@ -3,6 +3,7 @@ import { tradingApi } from '../tradingApi';
 import type { TradingDocument } from '../tradingTypes';
 import {
   addDrawing,
+  deleteDrawing,
   deleteAllDrawings,
   deleteSelectedDrawing,
   emptyDrawingState,
@@ -182,6 +183,7 @@ export function useTradingDrawings(instrumentId: string) {
     movePoint: (id: string, index: number, point: DrawingPoint) => persist(entry, moveDrawingPoint(entry.state, id, index, point)),
     translate: (id: string, from: DrawingPoint, to: DrawingPoint) => persist(entry, translateDrawing(entry.state, id, from, to)),
     updateSelected: (patch: { style?: DrawingStyle; locked?: boolean; hidden?: boolean; text?: string }) => persist(entry, updateSelectedDrawing(entry.state, patch)),
+    remove: (id: string) => persist(entry, deleteDrawing(entry.state, id)),
     removeSelected: () => persist(entry, deleteSelectedDrawing(entry.state)),
     removeAll: () => persist(entry, deleteAllDrawings(entry.state)),
     undo: () => persist(entry, undoDrawing(entry.state)),

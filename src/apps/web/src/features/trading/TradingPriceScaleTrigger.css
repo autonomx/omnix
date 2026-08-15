@@ -1,0 +1,7 @@
+.trading-price-scale-trigger{top:auto;right:4px;bottom:5px;width:24px;height:24px;border:0!important;border-radius:4px;background:transparent!important;box-shadow:none;padding:0;color:transparent;font-size:0}
+.trading-price-scale-trigger::before{position:absolute;inset:3px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:#92a5b5;content:""}
+.trading-price-scale-trigger::after{position:absolute;inset:6px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:radial-gradient(circle at center,#07101a 0 1.5px,#92a5b5 1.5px 2.5px,#07101a 2.5px 4px,transparent 4px),#07101a;content:""}
+.trading-price-scale-trigger:hover,.trading-price-scale-trigger[aria-expanded=true]{background:transparent!important}
+.trading-price-scale-trigger:hover::before,.trading-price-scale-trigger[aria-expanded=true]::before{background:#d9efff}
+.trading-price-scale-trigger:hover::after,.trading-price-scale-trigger[aria-expanded=true]::after{background:radial-gradient(circle at center,#07101a 0 2px,#d9efff 2px 3px,#07101a 3px 5px,transparent 5px),#07101a}
+.trading-price-scale-menu{top:auto;right:31px;bottom:7px}

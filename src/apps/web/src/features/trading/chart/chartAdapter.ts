@@ -5,6 +5,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  PriceScaleMode,
   createChart,
   type CandlestickData,
   type HistogramData,
@@ -28,6 +29,7 @@ export type TradingIndicatorPaneGeometry = {
   top: number;
   height: number;
 };
+export type TradingPriceScaleSide = 'left' | 'right';
 type PriceSeries =
   | ISeriesApi<'Candlestick'>
   | ISeriesApi<'Bar'>
@@ -35,6 +37,7 @@ type PriceSeries =
   | ISeriesApi<'Area'>
   | ISeriesApi<'Baseline'>;
 type IndicatorSeries = ISeriesApi<'Line'> | ISeriesApi<'Histogram'>;
+type LogicalRange = { from: number; to: number };
 
 function timestamp(value: string): UTCTimestamp {
   const milliseconds = Date.parse(value);
@@ -76,6 +79,12 @@ export class TradingChartAdapter {
   private readonly indicatorSeriesPanes = new Map<string, number>();
   private indicatorPaneIds: string[] = [];
   private readonly restoredPaneHeights = new Map<string, number>();
+  private maxZoomOutRange: LogicalRange | null = null;
+  private priceScaleSide: TradingPriceScaleSide = 'right';
+  private priceScaleLabelsVisible = true;
+  private priceScaleLinesVisible = true;
+  private gridLinesVisible = true;
+  private latestValueLabelVisible = true;
   private chartType: TradingChartType;
   private readonly revisions = new Map<number, number>();
   private destroyed = false;
@@ -137,6 +146,7 @@ export class TradingChartAdapter {
     this.chart.removeSeries(this.priceSeries);
     this.chartType = type;
     this.priceSeries = this.createPriceSeries(type);
+    this.priceSeries.applyOptions({ lastValueVisible: this.latestValueLabelVisible });
     this.setBars(bars, false);
   }
 
@@ -146,7 +156,7 @@ export class TradingChartAdapter {
     for (const bar of bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
     this.setPriceData(bars);
     this.volumeSeries.setData(bars.map(volumeData));
-    if (fit) this.chart.timeScale().fitContent();
+    if (fit) this.fitContent();
   }
 
   setIndicators(bars: readonly MarketBar[], indicators: readonly CoreIndicatorInstance[]): void {
@@ -178,7 +188,7 @@ export class TradingChartAdapter {
         const color = indicatorColor(output);
         series = output.kind === 'histogram'
           ? this.chart.addSeries(HistogramSeries, { color, title: output.title, priceScaleId: `indicator:${output.key}` }, paneIndex)
-          : this.chart.addSeries(LineSeries, { color, lineWidth: 2, title: output.title, priceScaleId: paneIndex > 0 ? `indicator:${output.key}` : 'right' }, paneIndex);
+          : this.chart.addSeries(LineSeries, { color, lineWidth: 2, title: output.title, priceScaleId: paneIndex > 0 ? `indicator:${output.key}` : this.priceScaleSide }, paneIndex);
         this.indicatorSeries.set(output.key, series);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       } else if (this.indicatorSeriesPanes.get(output.key) !== paneIndex) {
@@ -254,6 +264,89 @@ export class TradingChartAdapter {
     return { time: new Date(time * 1_000).toISOString(), price };
   }
 
+  zoomAtCoordinate(x: number, deltaY: number): void {
+    this.assertActive();
+    const timeScale = this.chart.timeScale();
+    const range = timeScale.getVisibleLogicalRange();
+    const anchor = timeScale.coordinateToLogical(x);
+    if (!range || anchor === null || !Number.isFinite(deltaY)) return;
+    const normalizedDelta = Math.max(-0.35, Math.min(0.35, deltaY / 500));
+    const factor = Math.exp(normalizedDelta);
+    const nextRange: LogicalRange = {
+      from: anchor - (anchor - range.from) * factor,
+      to: anchor + (range.to - anchor) * factor,
+    };
+    const maxRange = this.maxZoomOutRange;
+    if (maxRange) {
+      nextRange.from = Math.max(nextRange.from, maxRange.from);
+      nextRange.to = Math.min(nextRange.to, maxRange.to);
+    }
+    timeScale.setVisibleLogicalRange(nextRange);
+  }
+
+  setPriceScaleAutoScale(autoScale: boolean): void {
+    this.assertActive();
+    this.chart.priceScale(this.priceScaleSide).setAutoScale(autoScale);
+  }
+
+  setPriceScaleMode(mode: PriceScaleMode): void {
+    this.assertActive();
+    this.chart.priceScale(this.priceScaleSide).applyOptions({ mode });
+  }
+
+  setPriceScaleInvert(invertScale: boolean): void {
+    this.assertActive();
+    this.chart.priceScale(this.priceScaleSide).applyOptions({ invertScale });
+  }
+
+  setPriceScaleSide(side: TradingPriceScaleSide): void {
+    this.assertActive();
+    this.priceScaleSide = side;
+    this.priceSeries.applyOptions({ priceScaleId: side });
+    for (const [key, series] of this.indicatorSeries) {
+      if (this.indicatorSeriesPanes.get(key) === 0) series.applyOptions({ priceScaleId: side });
+    }
+    this.chart.applyOptions({
+      leftPriceScale: { visible: side === 'left' && this.priceScaleLabelsVisible, borderVisible: this.priceScaleLinesVisible, ticksVisible: this.priceScaleLinesVisible },
+      rightPriceScale: { visible: side === 'right' && this.priceScaleLabelsVisible, borderVisible: this.priceScaleLinesVisible, ticksVisible: this.priceScaleLinesVisible },
+    });
+  }
+
+  setPriceScaleLabelsVisible(visible: boolean): void {
+    this.assertActive();
+    this.priceScaleLabelsVisible = visible;
+    this.chart.applyOptions({
+      leftPriceScale: { visible: this.priceScaleSide === 'left' && visible },
+      rightPriceScale: { visible: this.priceScaleSide === 'right' && visible },
+    });
+  }
+
+  setLatestValueLabelVisible(visible: boolean): void {
+    this.assertActive();
+    this.latestValueLabelVisible = visible;
+    this.priceSeries.applyOptions({ lastValueVisible: visible });
+  }
+
+  setPriceScaleLinesVisible(visible: boolean): void {
+    this.assertActive();
+    this.priceScaleLinesVisible = visible;
+    this.chart.applyOptions({
+      leftPriceScale: { borderVisible: visible, ticksVisible: visible },
+      rightPriceScale: { borderVisible: visible, ticksVisible: visible },
+    });
+  }
+
+  setGridLinesVisible(visible: boolean): void {
+    this.assertActive();
+    this.gridLinesVisible = visible;
+    this.chart.applyOptions({ grid: { vertLines: { visible }, horzLines: { visible } } });
+  }
+
+  setScalePriceOnly(enabled: boolean): void {
+    this.assertActive();
+    this.chart.applyOptions({ handleScale: { axisPressedMouseMove: { time: !enabled, price: true } } });
+  }
+
   priceToCoordinate(price: number): number | null {
     this.assertActive();
     return this.priceSeries.priceToCoordinate(price);
@@ -283,7 +376,14 @@ export class TradingChartAdapter {
   setCrosshair(point: TradingCrosshairPoint | null): void { this.assertActive(); if (point === null) this.chart.clearCrosshairPosition(); else this.chart.setCrosshairPosition(point.price, point.time, this.priceSeries); }
   onVisibleRange(listener: (range: TradingVisibleRange | null) => void): () => void { this.assertActive(); const handler = (range: TradingVisibleRange | null) => listener(range); this.chart.timeScale().subscribeVisibleTimeRangeChange(handler); return () => this.chart.timeScale().unsubscribeVisibleTimeRangeChange(handler); }
   setVisibleRange(range: TradingVisibleRange): void { this.assertActive(); this.chart.timeScale().setVisibleRange(range); }
-  fitContent(): void { this.assertActive(); this.chart.timeScale().fitContent(); }
+  fitContent(): void {
+    this.assertActive();
+    const timeScale = this.chart.timeScale();
+    timeScale.fitContent();
+    this.chart.priceScale(this.priceScaleSide).setAutoScale(true);
+    const range = timeScale.getVisibleLogicalRange();
+    if (range) this.maxZoomOutRange = { from: range.from, to: range.to };
+  }
   api(): IChartApi { this.assertActive(); return this.chart; }
   destroy(): void { if (this.destroyed) return; this.destroyed = true; this.revisions.clear(); this.indicatorSeries.clear(); this.chart.remove(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }

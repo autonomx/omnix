@@ -2,20 +2,27 @@ export type DrawingPoint = { time: string; price: number };
 export type DrawingTool =
   | 'cursor'
   | 'alert'
+  | 'dot'
+  | 'arrow'
   | 'horizontal-line'
+  | 'horizontal-ray'
   | 'trend-line'
   | 'vertical-line'
+  | 'crossline'
   | 'ray'
   | 'rectangle'
+  | 'circle'
+  | 'ellipse'
   | 'fibonacci'
   | 'text'
-  | 'measurement';
+  | 'measurement'
+  | 'eraser';
 export type DrawingSnapMode = 'none' | 'time' | 'price' | 'ohlc';
 export type DrawingStyle = { color: string; lineWidth: number; lineStyle: 'solid' | 'dashed' };
 export type TradingDrawing = {
   drawingId: string;
   instrumentId: string;
-  toolType: Exclude<DrawingTool, 'cursor' | 'alert'>;
+  toolType: Exclude<DrawingTool, 'cursor' | 'alert' | 'eraser'>;
   points: DrawingPoint[];
   selected: boolean;
   revision: number;
@@ -128,8 +135,17 @@ export function updateSelectedDrawing(
 
 export function deleteSelectedDrawing(state: DrawingState): DrawingState {
   if (!state.selectedId) return state;
+  return deleteDrawing(state, state.selectedId);
+}
+
+export function deleteDrawing(state: DrawingState, drawingId: string): DrawingState {
+  if (!state.drawings.some((drawing) => drawing.drawingId === drawingId)) return state;
   const next = snapshot(state);
-  return { ...next, drawings: next.drawings.filter((drawing) => drawing.drawingId !== state.selectedId), selectedId: null };
+  return {
+    ...next,
+    drawings: next.drawings.filter((drawing) => drawing.drawingId !== drawingId),
+    selectedId: state.selectedId === drawingId ? null : state.selectedId,
+  };
 }
 
 export function deleteAllDrawings(state: DrawingState): DrawingState {

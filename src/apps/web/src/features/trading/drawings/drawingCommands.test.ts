@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDrawing,
+  deleteDrawing,
   deleteSelectedDrawing,
   emptyDrawingState,
   moveDrawingPoint,
@@ -72,5 +73,15 @@ describe('Trading drawing command engine', () => {
     expect(text).toContain('2026-08-05T00:00:00Z');
     expect(text).not.toContain('pixel');
     expect(text).not.toContain('clientX');
+  });
+
+  it('erases a drawing by id without changing another selection', () => {
+    const second = { ...drawing, drawingId: 'trend-2' };
+    let state = addDrawing(emptyDrawingState(), drawing);
+    state = addDrawing(state, second);
+    state = selectDrawing(state, second.drawingId);
+    state = deleteDrawing(state, drawing.drawingId);
+    expect(state.drawings.map((item) => item.drawingId)).toEqual([second.drawingId]);
+    expect(state.selectedId).toBe(second.drawingId);
   });
 });
