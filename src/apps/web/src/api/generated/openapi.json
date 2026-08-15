@@ -7148,7 +7148,12 @@
               "indicator_cross_above",
               "indicator_cross_below",
               "volume_above",
-              "volume_below"
+              "volume_below",
+              "trendline_crossing",
+              "trendline_crossing_up",
+              "trendline_crossing_down",
+              "trendline_above",
+              "trendline_below"
             ],
             "title": "Condition Type",
             "type": "string"
@@ -7235,7 +7240,7 @@
             "title": "Last Triggered At"
           },
           "parameters": {
-            "$ref": "#/components/schemas/TradingAlertParameters"
+            "$ref": "#/components/schemas/TradingAlertParameters-Output"
           },
           "revision": {
             "default": 1,
@@ -7302,7 +7307,12 @@
               "indicator_cross_above",
               "indicator_cross_below",
               "volume_above",
-              "volume_below"
+              "volume_below",
+              "trendline_crossing",
+              "trendline_crossing_up",
+              "trendline_crossing_down",
+              "trendline_above",
+              "trendline_below"
             ],
             "title": "Condition Type",
             "type": "string"
@@ -7336,7 +7346,7 @@
             "type": "string"
           },
           "parameters": {
-            "$ref": "#/components/schemas/TradingAlertParameters"
+            "$ref": "#/components/schemas/TradingAlertParameters-Input"
           },
           "threshold": {
             "anyOf": [
@@ -7525,7 +7535,7 @@
         "title": "TradingAlertListResponse",
         "type": "object"
       },
-      "TradingAlertParameters": {
+      "TradingAlertParameters-Input": {
         "additionalProperties": false,
         "properties": {
           "anchor_bars_ago": {
@@ -7583,6 +7593,25 @@
             "title": "Lookback Bars",
             "type": "integer"
           },
+          "message": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Message",
+            "type": "string"
+          },
+          "notification_channels": {
+            "items": {
+              "enum": [
+                "app",
+                "toast",
+                "sound"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Notification Channels",
+            "type": "array"
+          },
           "period": {
             "default": 14,
             "maximum": 500.0,
@@ -7603,6 +7632,196 @@
             "minimum": 1.0,
             "title": "Slow Period",
             "type": "integer"
+          },
+          "trendline_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "crossing",
+                  "crossing_up",
+                  "crossing_down",
+                  "greater_than",
+                  "less_than"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trendline Mode"
+          },
+          "trendline_points": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TrendlineAlertPoint-Input"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trendline Points"
+          },
+          "trigger_policy": {
+            "default": "every_time",
+            "enum": [
+              "once",
+              "once_per_bar",
+              "every_time"
+            ],
+            "title": "Trigger Policy",
+            "type": "string"
+          }
+        },
+        "title": "TradingAlertParameters",
+        "type": "object"
+      },
+      "TradingAlertParameters-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_bars_ago": {
+            "default": 0,
+            "maximum": 499.0,
+            "minimum": 0.0,
+            "title": "Anchor Bars Ago",
+            "type": "integer"
+          },
+          "component": {
+            "default": "value",
+            "enum": [
+              "value",
+              "line",
+              "signal",
+              "histogram",
+              "upper",
+              "middle",
+              "lower"
+            ],
+            "title": "Component",
+            "type": "string"
+          },
+          "fast_period": {
+            "default": 12,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Fast Period",
+            "type": "integer"
+          },
+          "indicator_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sma",
+                  "ema",
+                  "rsi",
+                  "macd",
+                  "bollinger",
+                  "atr",
+                  "vwap"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicator Id"
+          },
+          "lookback_bars": {
+            "default": 1,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Lookback Bars",
+            "type": "integer"
+          },
+          "message": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Message",
+            "type": "string"
+          },
+          "notification_channels": {
+            "items": {
+              "enum": [
+                "app",
+                "toast",
+                "sound"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Notification Channels",
+            "type": "array"
+          },
+          "period": {
+            "default": 14,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Period",
+            "type": "integer"
+          },
+          "signal_period": {
+            "default": 9,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Signal Period",
+            "type": "integer"
+          },
+          "slow_period": {
+            "default": 26,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Slow Period",
+            "type": "integer"
+          },
+          "trendline_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "crossing",
+                  "crossing_up",
+                  "crossing_down",
+                  "greater_than",
+                  "less_than"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trendline Mode"
+          },
+          "trendline_points": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TrendlineAlertPoint-Output"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trendline Points"
+          },
+          "trigger_policy": {
+            "default": "every_time",
+            "enum": [
+              "once",
+              "once_per_bar",
+              "every_time"
+            ],
+            "title": "Trigger Policy",
+            "type": "string"
           }
         },
         "title": "TradingAlertParameters",
@@ -7637,7 +7856,12 @@
               "indicator_cross_above",
               "indicator_cross_below",
               "volume_above",
-              "volume_below"
+              "volume_below",
+              "trendline_crossing",
+              "trendline_crossing_up",
+              "trendline_crossing_down",
+              "trendline_above",
+              "trendline_below"
             ],
             "title": "Condition Type",
             "type": "string"
@@ -7753,7 +7977,12 @@
               "indicator_cross_above",
               "indicator_cross_below",
               "volume_above",
-              "volume_below"
+              "volume_below",
+              "trendline_crossing",
+              "trendline_crossing_up",
+              "trendline_crossing_down",
+              "trendline_above",
+              "trendline_below"
             ],
             "title": "Condition Type",
             "type": "string"
@@ -7792,7 +8021,7 @@
             "type": "string"
           },
           "parameters": {
-            "$ref": "#/components/schemas/TradingAlertParameters"
+            "$ref": "#/components/schemas/TradingAlertParameters-Input"
           },
           "threshold": {
             "anyOf": [
@@ -8495,6 +8724,55 @@
           "definition_snapshot"
         ],
         "title": "TradingScannerRun",
+        "type": "object"
+      },
+      "TrendlineAlertPoint-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Price"
+          },
+          "time": {
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time",
+          "price"
+        ],
+        "title": "TrendlineAlertPoint",
+        "type": "object"
+      },
+      "TrendlineAlertPoint-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price",
+            "type": "string"
+          },
+          "time": {
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time",
+          "price"
+        ],
+        "title": "TrendlineAlertPoint",
         "type": "object"
       },
       "UsageScope": {

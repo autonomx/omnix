@@ -28,8 +28,27 @@ AlertCondition = Literal[
     "indicator_cross_below",
     "volume_above",
     "volume_below",
+    "trendline_crossing",
+    "trendline_crossing_up",
+    "trendline_crossing_down",
+    "trendline_above",
+    "trendline_below",
 ]
 IndicatorId = Literal["sma", "ema", "rsi", "macd", "bollinger", "atr", "vwap"]
+TrendlineMode = Literal[
+    "crossing",
+    "crossing_up",
+    "crossing_down",
+    "greater_than",
+    "less_than",
+]
+
+
+class TrendlineAlertPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    time: datetime
+    price: Decimal
 
 
 class TradingAlertParameters(BaseModel):
@@ -51,6 +70,12 @@ class TradingAlertParameters(BaseModel):
         max_length=3,
     )
     trigger_policy: Literal["once", "once_per_bar", "every_time"] = "every_time"
+    trendline_points: list[TrendlineAlertPoint] | None = Field(
+        default=None,
+        min_length=2,
+        max_length=2,
+    )
+    trendline_mode: TrendlineMode | None = None
 
 
 class TradingAlertEvaluationPolicy(BaseModel):
@@ -93,6 +118,20 @@ class _AlertContract(BaseModel):
             raise ValueError("MACD fast_period must be smaller than slow_period")
         if self.expires_at is not None and self.expires_at.tzinfo is None:
             raise ValueError("expires_at must include a timezone")
+        if self.condition_type.startswith("trendline_"):
+            if self.parameters.trendline_points is None:
+                raise ValueError("trendline conditions require two trendline points")
+            if self.threshold != 0:
+                raise ValueError("trendline conditions use a zero threshold")
+            expected_mode = {
+                "trendline_crossing": "crossing",
+                "trendline_crossing_up": "crossing_up",
+                "trendline_crossing_down": "crossing_down",
+                "trendline_above": "greater_than",
+                "trendline_below": "less_than",
+            }[self.condition_type]
+            if self.parameters.trendline_mode not in (None, expected_mode):
+                raise ValueError("trendline_mode must match condition_type")
         return self
 
 
@@ -161,7 +200,10 @@ class UnitOfWorkFactory(Protocol):
 
 
 def _is_above(condition_type: AlertCondition) -> bool:
-    return condition_type.endswith("_above")
+    return condition_type.endswith("_above") or condition_type in {
+        "trendline_crossing_up",
+        "trendline_above",
+    }
 
 
 def crossed_threshold(
@@ -172,6 +214,10 @@ def crossed_threshold(
 ) -> bool:
     if previous_value is None:
         return False
+    if condition_type == "trendline_crossing":
+        return (previous_value < threshold <= observed_value) or (
+            previous_value > threshold >= observed_value
+        )
     if _is_above(condition_type):
         return previous_value < threshold <= observed_value
     return previous_value > threshold >= observed_value
@@ -204,6 +250,20 @@ def alert_condition_value(
     alert: TradingAlert,
     evaluation: TradingAlertEvaluation,
 ) -> Decimal | None:
+    if alert.condition_type.startswith("trendline_"):
+        points = alert.parameters.trendline_points
+        if points is None or len(points) != 2:
+            return None
+        first, second = points
+        first_time = first.time.astimezone(timezone.utc)
+        second_time = second.time.astimezone(timezone.utc)
+        observed_time = evaluation.observed_at.astimezone(timezone.utc)
+        duration = Decimal(str((second_time - first_time).total_seconds()))
+        if duration == 0:
+            return None
+        elapsed = Decimal(str((observed_time - first_time).total_seconds()))
+        line_price = first.price + (second.price - first.price) * elapsed / duration
+        return evaluation.observed_price - line_price
     if alert.condition_type.startswith("price_"):
         return evaluation.observed_price
     if alert.condition_type.startswith("volume_"):

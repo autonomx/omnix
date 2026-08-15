@@ -21,13 +21,22 @@ export type TradingAlertEditorState = {
   indicator: TradingAlertIndicatorId;
   period: string;
   lookback: string;
+  trendlinePoints?: Array<{ time: string; price: number }>;
 }
 
-const conditionOptions: Array<{ value: TradingAlertCondition; label: string }> = [
+const priceConditionOptions: Array<{ value: TradingAlertCondition; label: string }> = [
   { value: 'price_above', label: 'Price' },
   { value: 'percent_change_above', label: 'Percent change' },
   { value: 'indicator_above', label: 'Indicator' },
   { value: 'volume_above', label: 'Volume' },
+];
+
+const trendlineModeOptions: Array<{ value: TradingAlertCondition; label: string }> = [
+  { value: 'trendline_crossing', label: 'Crossing' },
+  { value: 'trendline_crossing_up', label: 'Crossing Up' },
+  { value: 'trendline_crossing_down', label: 'Crossing Down' },
+  { value: 'trendline_above', label: 'Greater Than' },
+  { value: 'trendline_below', label: 'Less Than' },
 ];
 
 const notificationOptions: Array<{ value: TradingAlertNotificationChannel; label: string }> = [
@@ -37,6 +46,7 @@ const notificationOptions: Array<{ value: TradingAlertNotificationChannel; label
 ];
 
 function conditionFamily(condition: TradingAlertCondition): TradingAlertCondition {
+  if (condition.startsWith('trendline_')) return 'trendline_crossing';
   if (condition.startsWith('percent_change_')) return 'percent_change_above';
   if (condition.startsWith('indicator_')) return 'indicator_above';
   if (condition.startsWith('volume_')) return 'volume_above';
@@ -86,6 +96,7 @@ export function TradingAlertDialog({
   const [showConditionNote, setShowConditionNote] = useState(false);
   const family = conditionFamily(editor.condition);
   const direction = conditionDirection(editor.condition);
+  const isTrendline = editor.condition.startsWith('trendline_');
   const isIndicator = family === 'indicator_above';
   const isPercent = family === 'percent_change_above';
 
@@ -125,28 +136,33 @@ export function TradingAlertDialog({
               value={family}
               onChange={(event) => onChange({ condition: updateCondition(event.target.value as TradingAlertCondition, direction) })}
             >
-              {conditionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {(isTrendline ? [{ value: 'trendline_crossing', label: 'Trendline' }] : priceConditionOptions).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <select
               aria-label="Alert crossing"
-              value={direction}
-              onChange={(event) => onChange({ condition: updateCondition(family, event.target.value as 'above' | 'below') })}
+              value={isTrendline ? editor.condition : direction}
+              onChange={(event) => onChange({ condition: isTrendline ? event.target.value as TradingAlertCondition : updateCondition(family, event.target.value as 'above' | 'below') })}
             >
-              <option value="above">Crossing above</option>
-              <option value="below">Crossing below</option>
+              {isTrendline
+                ? trendlineModeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)
+                : <><option value="above">Crossing above</option><option value="below">Crossing below</option></>}
             </select>
           </div>
-          <div className="trading-alert-value-row">
-            <span>Value</span>
-            <input
-              aria-label="Alert value"
-              autoFocus
-              inputMode="decimal"
-              value={editor.threshold}
-              placeholder={Number.isFinite(latestPrice) ? String(latestPrice) : 'Value'}
-              onChange={(event) => onChange({ threshold: event.target.value })}
-            />
-          </div>
+          {isTrendline ? (
+            <div className="trading-alert-value-row"><span>Line</span><strong>Selected trendline</strong></div>
+          ) : (
+            <div className="trading-alert-value-row">
+              <span>Value</span>
+              <input
+                aria-label="Alert value"
+                autoFocus
+                inputMode="decimal"
+                value={editor.threshold}
+                placeholder={Number.isFinite(latestPrice) ? String(latestPrice) : 'Value'}
+                onChange={(event) => onChange({ threshold: event.target.value })}
+              />
+            </div>
+          )}
           {isPercent ? (
             <label className="trading-alert-inline-field">Lookback bars<input inputMode="numeric" value={editor.lookback} onChange={(event) => onChange({ lookback: event.target.value })} /></label>
           ) : null}
@@ -178,7 +194,7 @@ export function TradingAlertDialog({
           </div>
           <div>
             <dt>Message</dt>
-            <dd><input aria-label="Alert message" value={editor.message} placeholder={`${symbol} crossing ${editor.threshold || 'value'}`} maxLength={500} onChange={(event) => onChange({ message: event.target.value })} /></dd>
+            <dd><input aria-label="Alert message" value={editor.message} placeholder={isTrendline ? `${symbol} crossing trendline` : `${symbol} crossing ${editor.threshold || 'value'}`} maxLength={500} onChange={(event) => onChange({ message: event.target.value })} /></dd>
           </div>
           <div>
             <dt>Notifications</dt>

@@ -4878,7 +4878,7 @@ export interface components {
              * Condition Type
              * @enum {string}
              */
-            condition_type: "price_above" | "price_below" | "percent_change_above" | "percent_change_below" | "indicator_above" | "indicator_below" | "indicator_cross_above" | "indicator_cross_below" | "volume_above" | "volume_below";
+            condition_type: "price_above" | "price_below" | "percent_change_above" | "percent_change_below" | "indicator_above" | "indicator_below" | "indicator_cross_above" | "indicator_cross_below" | "volume_above" | "volume_below" | "trendline_crossing" | "trendline_crossing_up" | "trendline_crossing_down" | "trendline_above" | "trendline_below";
             /**
              * Cooldown Seconds
              * @default 0
@@ -4902,7 +4902,7 @@ export interface components {
             last_observed_value?: string | null;
             /** Last Triggered At */
             last_triggered_at?: string | null;
-            parameters?: components["schemas"]["TradingAlertParameters"];
+            parameters?: components["schemas"]["TradingAlertParameters-Output"];
             /**
              * Revision
              * @default 1
@@ -4923,7 +4923,7 @@ export interface components {
              * Condition Type
              * @enum {string}
              */
-            condition_type: "price_above" | "price_below" | "percent_change_above" | "percent_change_below" | "indicator_above" | "indicator_below" | "indicator_cross_above" | "indicator_cross_below" | "volume_above" | "volume_below";
+            condition_type: "price_above" | "price_below" | "percent_change_above" | "percent_change_below" | "indicator_above" | "indicator_below" | "indicator_cross_above" | "indicator_cross_below" | "volume_above" | "volume_below" | "trendline_crossing" | "trendline_crossing_up" | "trendline_crossing_down" | "trendline_above" | "trendline_below";
             /**
              * Cooldown Seconds
              * @default 0
@@ -4934,7 +4934,7 @@ export interface components {
             expires_at?: string | null;
             /** Instrument Id */
             instrument_id: string;
-            parameters?: components["schemas"]["TradingAlertParameters"];
+            parameters?: components["schemas"]["TradingAlertParameters-Input"];
             /** Threshold */
             threshold: number | string;
         };
@@ -5005,7 +5005,7 @@ export interface components {
             alerts: components["schemas"]["TradingAlert"][];
         };
         /** TradingAlertParameters */
-        TradingAlertParameters: {
+        "TradingAlertParameters-Input": {
             /**
              * Anchor Bars Ago
              * @default 0
@@ -5030,6 +5030,13 @@ export interface components {
              */
             lookback_bars: number;
             /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Notification Channels */
+            notification_channels?: ("app" | "toast" | "sound")[];
+            /**
              * Period
              * @default 14
              */
@@ -5044,6 +5051,74 @@ export interface components {
              * @default 26
              */
             slow_period: number;
+            /** Trendline Mode */
+            trendline_mode?: ("crossing" | "crossing_up" | "crossing_down" | "greater_than" | "less_than") | null;
+            /** Trendline Points */
+            trendline_points?: components["schemas"]["TrendlineAlertPoint-Input"][] | null;
+            /**
+             * Trigger Policy
+             * @default every_time
+             * @enum {string}
+             */
+            trigger_policy: "once" | "once_per_bar" | "every_time";
+        };
+        /** TradingAlertParameters */
+        "TradingAlertParameters-Output": {
+            /**
+             * Anchor Bars Ago
+             * @default 0
+             */
+            anchor_bars_ago: number;
+            /**
+             * Component
+             * @default value
+             * @enum {string}
+             */
+            component: "value" | "line" | "signal" | "histogram" | "upper" | "middle" | "lower";
+            /**
+             * Fast Period
+             * @default 12
+             */
+            fast_period: number;
+            /** Indicator Id */
+            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap") | null;
+            /**
+             * Lookback Bars
+             * @default 1
+             */
+            lookback_bars: number;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /** Notification Channels */
+            notification_channels?: ("app" | "toast" | "sound")[];
+            /**
+             * Period
+             * @default 14
+             */
+            period: number;
+            /**
+             * Signal Period
+             * @default 9
+             */
+            signal_period: number;
+            /**
+             * Slow Period
+             * @default 26
+             */
+            slow_period: number;
+            /** Trendline Mode */
+            trendline_mode?: ("crossing" | "crossing_up" | "crossing_down" | "greater_than" | "less_than") | null;
+            /** Trendline Points */
+            trendline_points?: components["schemas"]["TrendlineAlertPoint-Output"][] | null;
+            /**
+             * Trigger Policy
+             * @default every_time
+             * @enum {string}
+             */
+            trigger_policy: "once" | "once_per_bar" | "every_time";
         };
         /** TradingAlertTrigger */
         TradingAlertTrigger: {
@@ -5055,7 +5130,7 @@ export interface components {
              * Condition Type
              * @enum {string}
              */
-            condition_type: "price_above" | "price_below" | "percent_change_above" | "percent_change_below" | "indicator_above" | "indicator_below" | "indicator_cross_above" | "indicator_cross_below" | "volume_above" | "volume_below";
+            condition_type: "price_above" | "price_below" | "percent_change_above" | "percent_change_below" | "indicator_above" | "indicator_below" | "indicator_cross_above" | "indicator_cross_below" | "volume_above" | "volume_below" | "trendline_crossing" | "trendline_crossing_up" | "trendline_crossing_down" | "trendline_above" | "trendline_below";
             /**
              * Evaluated At
              * Format: date-time
@@ -5098,7 +5173,7 @@ export interface components {
              * Condition Type
              * @enum {string}
              */
-            condition_type: "price_above" | "price_below" | "percent_change_above" | "percent_change_below" | "indicator_above" | "indicator_below" | "indicator_cross_above" | "indicator_cross_below" | "volume_above" | "volume_below";
+            condition_type: "price_above" | "price_below" | "percent_change_above" | "percent_change_below" | "indicator_above" | "indicator_below" | "indicator_cross_above" | "indicator_cross_below" | "volume_above" | "volume_below" | "trendline_crossing" | "trendline_crossing_up" | "trendline_crossing_down" | "trendline_above" | "trendline_below";
             /**
              * Cooldown Seconds
              * @default 0
@@ -5114,7 +5189,7 @@ export interface components {
             expires_at?: string | null;
             /** Instrument Id */
             instrument_id: string;
-            parameters?: components["schemas"]["TradingAlertParameters"];
+            parameters?: components["schemas"]["TradingAlertParameters-Input"];
             /** Threshold */
             threshold: number | string;
         };
@@ -5413,6 +5488,26 @@ export interface components {
             universe_count: number;
             /** Updated At */
             updated_at?: string | null;
+        };
+        /** TrendlineAlertPoint */
+        "TrendlineAlertPoint-Input": {
+            /** Price */
+            price: number | string;
+            /**
+             * Time
+             * Format: date-time
+             */
+            time: string;
+        };
+        /** TrendlineAlertPoint */
+        "TrendlineAlertPoint-Output": {
+            /** Price */
+            price: string;
+            /**
+             * Time
+             * Format: date-time
+             */
+            time: string;
         };
         /**
          * UsageScope

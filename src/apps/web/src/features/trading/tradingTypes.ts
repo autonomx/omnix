@@ -26,7 +26,7 @@ export type TradingDocument = Schemas['TradingDocumentResponse'];
 export type TradingAlertCondition = Schemas['TradingAlert']['condition_type'];
 export type TradingAlertNotificationChannel = 'app' | 'toast' | 'sound';
 export type TradingAlertTriggerPolicy = 'once' | 'once_per_bar' | 'every_time';
-export type TradingAlertParameters = Schemas['TradingAlertParameters'] & {
+export type TradingAlertParameters = Omit<Schemas['TradingAlertParameters-Output'], 'message' | 'trigger_policy'> & {
   message?: string;
   notification_channels?: TradingAlertNotificationChannel[];
   trigger_policy?: TradingAlertTriggerPolicy;

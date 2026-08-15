@@ -134,13 +134,18 @@ class FakeMarketService:
         )
 
 
-def alert(alert_id: str, condition_type: str, **parameters) -> TradingAlert:
+def alert(
+    alert_id: str,
+    condition_type: str,
+    threshold: Decimal = Decimal("100"),
+    **parameters,
+) -> TradingAlert:
     return TradingAlert(
         alert_id=alert_id,
         instrument_id=INSTRUMENT,
         binding_id="fixture:requested",
         condition_type=condition_type,
-        threshold=Decimal("100"),
+        threshold=threshold,
         parameters=parameters,
         evaluation_policy={"interval": "1m", "allow_partial_bars": False},
         enabled=True,
@@ -151,6 +156,9 @@ def alert(alert_id: str, condition_type: str, **parameters) -> TradingAlert:
 
 def test_alert_migration_uses_dedicated_complete_authority_tables() -> None:
     migration = Path("src/app/persistence/migrations/0020_trading_alerts.sql").read_text()
+    trendline_migration = Path(
+        "src/app/persistence/migrations/0036_trading_trendline_alerts.sql"
+    ).read_text()
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_alerts" in migration
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_alert_triggers" in migration
     assert "percent_change_above" in migration
@@ -160,6 +168,8 @@ def test_alert_migration_uses_dedicated_complete_authority_tables() -> None:
     assert "evaluated_at TIMESTAMPTZ" in migration
     assert "UNIQUE (workspace_id, idempotency_key)" in migration
     assert "omnix_module_records" not in migration
+    assert "trendline_crossing_up" in trendline_migration
+    assert "trendline_below" in trendline_migration
 
 
 def test_all_alert_families_use_restart_safe_threshold_crossings() -> None:
@@ -218,6 +228,28 @@ def test_condition_values_and_finalized_bar_policy_are_explicit() -> None:
     source = Path("src/app/trading/alerts.py").read_text()
     assert "not evaluation.is_final" in source
     assert "allow_partial_bars" in source
+
+
+def test_trendline_alerts_compare_price_with_extrapolated_line() -> None:
+    trendline = alert(
+        "trendline",
+        "trendline_crossing_up",
+        threshold=Decimal("0"),
+        trendline_points=[
+            {"time": NOW.isoformat(), "price": "100"},
+            {"time": (NOW + timedelta(minutes=10)).isoformat(), "price": "110"},
+        ],
+        trendline_mode="crossing_up",
+    )
+    evaluation = TradingAlertEvaluation(
+        instrument_id=INSTRUMENT,
+        observed_price=Decimal("116"),
+        observed_at=NOW + timedelta(minutes=15),
+    )
+    assert alert_condition_value(trendline, evaluation) == Decimal("1")
+    assert crossed_threshold("trendline_crossing_up", Decimal("-1"), Decimal("1"), Decimal("0"))
+    assert not crossed_threshold("trendline_crossing_up", Decimal("1"), Decimal("2"), Decimal("0"))
+    assert crossed_threshold("trendline_crossing", Decimal("1"), Decimal("-1"), Decimal("0"))
 
 
 def test_cooldown_and_idempotency_boundaries_are_deterministic() -> None:

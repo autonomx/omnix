@@ -695,7 +695,7 @@ export function TradingChartPanel({
           drawings={drawings.state.drawings}
           selectedId={drawings.state.selectedId}
           onAdd={drawings.add}
-          onSelect={drawings.select}
+          onSelect={(id) => { onActivate(); drawings.select(id); }}
           onMovePoint={drawings.movePoint}
           onTranslateDrawing={drawings.translate}
           onRemove={drawings.remove}
@@ -742,7 +742,7 @@ export function TradingChartPanel({
         {contextMenu ? (
           <TradingChartContextMenu
             point={contextMenu}
-            symbol={chartQuery.data?.instrument.display_symbol ?? instrumentId}
+            symbol={contextMenu?.drawingTool === 'trend-line' ? 'trendline' : (chartQuery.data?.instrument.display_symbol ?? instrumentId)}
             drawingCount={drawings.state.drawings.length}
             indicatorCount={indicators.filter((indicator) => indicator.enabled).length}
             cursorLocked={cursorLocked}

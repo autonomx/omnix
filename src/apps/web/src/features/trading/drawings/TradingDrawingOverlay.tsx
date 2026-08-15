@@ -23,7 +23,14 @@ const twoPointTools = new Set<DrawingTool>([
 ]);
 const fibonacciLevels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
-export type ChartAlertPlacement = DrawingPoint & { x: number; y: number; source: 'tool' | 'context-menu' };
+export type ChartAlertPlacement = DrawingPoint & {
+  x: number;
+  y: number;
+  source: 'tool' | 'context-menu';
+  drawingId?: string;
+  drawingTool?: DrawingTool;
+  trendlinePoints?: DrawingPoint[];
+};
 
 type HandlePreview = { drawingId: string; index: number; point: DrawingPoint };
 type TranslationPreview = { drawingId: string; from: DrawingPoint; to: DrawingPoint };
@@ -212,7 +219,19 @@ export function TradingDrawingOverlay({
     const point = pointFromEvent(event);
     event.preventDefault();
     event.stopPropagation();
-    if (point) onChartContextMenu?.({ ...point, source: 'context-menu' });
+    if (!point) return;
+    const target = event.target instanceof Element
+      ? event.target.closest<SVGGElement>('[data-drawing-id]')
+      : null;
+    const drawingId = target?.dataset.drawingId;
+    const drawing = drawingId ? drawings.find((item) => item.drawingId === drawingId) : undefined;
+    onChartContextMenu?.({
+      ...point,
+      source: 'context-menu',
+      drawingId: drawing?.drawingId,
+      drawingTool: drawing?.toolType,
+      trendlinePoints: drawing?.toolType === 'trend-line' ? drawing.points.slice(0, 2) : undefined,
+    });
   };
 
   const onWheel = (event: React.WheelEvent<SVGSVGElement>) => {
@@ -403,6 +422,7 @@ export function TradingDrawingOverlay({
               return <g key={level}><line {...lineProps} x1={Math.min(first.x, second.x)} x2={Math.max(first.x, second.x)} y1={y} y2={y} /><text x={Math.max(first.x, second.x) + 4} y={y - 2}>{level}</text></g>;
             }) : null}
             {drawing.toolType === 'text' ? <text className={selected ? 'selected' : undefined} x={first.x} y={first.y} fill={style.color}>{drawing.text || 'Market note'}</text> : null}
+            {drawing.toolType === 'arrow' && second ? <circle className="drawing-hit-target" cx={second.x} cy={second.y} r="11" /> : null}
             {selected && !drawing.locked && drawing.toolType !== 'measurement' ? points.map((point, index) => point ? <circle key={index} cx={point.x} cy={point.y} r="6" onPointerDown={dragHandle(drawing, index)} /> : null) : null}
           </g>
         );

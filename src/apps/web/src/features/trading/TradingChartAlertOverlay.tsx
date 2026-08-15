@@ -17,6 +17,14 @@ import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
 import './TradingChartAlertOverlay.css';
 
 type DragState = { alert: TradingAlert; threshold: number };
+type TrendlineMode = NonNullable<TradingAlert['parameters']['trendline_mode']>;
+
+function trendlineModeForCondition(condition: string): TrendlineMode | null {
+  if (condition === 'trendline_above') return 'greater_than';
+  if (condition === 'trendline_below') return 'less_than';
+  if (condition.startsWith('trendline_')) return condition.replace('trendline_', '') as TrendlineMode;
+  return null;
+}
 
 function localDateTime(value?: string | null): string {
   if (!value) return '';
@@ -45,13 +53,14 @@ function formattedPrice(value: number): string {
 }
 
 function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): TradingAlertEditorState {
+  const isTrendline = placement.drawingTool === 'trend-line' && placement.trendlinePoints?.length === 2;
   return {
     mode: 'create',
     alertId: null,
     x: placement.x,
     y: placement.y,
-    threshold: String(placement.price),
-    condition: placement.price >= latestPrice ? 'price_above' : 'price_below',
+    threshold: isTrendline ? '0' : String(placement.price),
+    condition: isTrendline ? 'trendline_crossing' : (placement.price >= latestPrice ? 'price_above' : 'price_below'),
     expiresAt: '',
     expiration: 'never',
     triggerPolicy: 'every_time',
@@ -60,6 +69,7 @@ function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): Tr
     indicator: 'rsi',
     period: '14',
     lookback: '1',
+    trendlinePoints: isTrendline ? placement.trendlinePoints?.map((point) => ({ ...point })) : undefined,
   };
 }
 
@@ -116,8 +126,10 @@ export function TradingChartAlertOverlay({
   const visibleAlerts = useMemo(() => alerts.filter((alert) => (
     alert.instrument_id === instrumentId
     && (!alert.binding_id || !bindingId || alert.binding_id === bindingId)
-    && alert.condition_type.startsWith('price_')
+    && (alert.condition_type.startsWith('price_') || alert.condition_type.startsWith('trendline_'))
   )), [alerts, bindingId, instrumentId]);
+  const staticAlerts = visibleAlerts.filter((alert) => alert.condition_type.startsWith('price_'));
+  const trendlineAlerts = visibleAlerts.filter((alert) => alert.condition_type.startsWith('trendline_'));
 
   const runMutation = async (mutation: () => Promise<TradingAlert>) => {
     setStatus('saving');
@@ -136,27 +148,37 @@ export function TradingChartAlertOverlay({
 
   const saveEditor = async () => {
     if (!editor || editor.mode !== 'edit') return;
-    const threshold = Number(editor.threshold);
-    if (!Number.isFinite(threshold)) {
+    const isTrendline = editor.condition.startsWith('trendline_');
+    const threshold = isTrendline ? 0 : Number(editor.threshold);
+    if (!Number.isFinite(threshold) || (isTrendline && editor.trendlinePoints?.length !== 2)) {
       setStatus('error');
       return;
     }
     const alert = alerts.find((item) => item.alert_id === editor.alertId);
     if (!alert) return;
-    await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, {
+    const input = chartAlertUpdateInput(alert, {
       threshold: String(threshold),
       condition_type: editor.condition,
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy,
       message: editor.message,
       notification_channels: editor.notifications,
-    })));
+    });
+    if (isTrendline) {
+      input.parameters = {
+        ...input.parameters,
+        trendline_points: editor.trendlinePoints?.map((point) => ({ ...point, price: String(point.price) })),
+        trendline_mode: trendlineModeForCondition(editor.condition),
+      };
+    }
+    await runMutation(() => tradingApi.updateAlert(alert, input));
   };
 
   const createAlert = async () => {
     if (!editor || editor.mode !== 'create') return;
-    const threshold = Number(editor.threshold);
-    if (!Number.isFinite(threshold)) {
+    const isTrendline = editor.condition.startsWith('trendline_');
+    const threshold = isTrendline ? 0 : Number(editor.threshold);
+    if (!Number.isFinite(threshold) || (isTrendline && editor.trendlinePoints?.length !== 2)) {
       setStatus('error');
       return;
     }
@@ -179,6 +201,8 @@ export function TradingChartAlertOverlay({
       indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
       period: Number(editor.period) || 14,
       lookback_bars: Number(editor.lookback) || 1,
+      trendline_points: isTrendline ? editor.trendlinePoints?.map((point) => ({ ...point, price: String(point.price) })) : null,
+      trendline_mode: isTrendline ? trendlineModeForCondition(editor.condition) : null,
     };
     input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at;
     await runMutation(() => tradingApi.createAlert(input));
@@ -201,6 +225,7 @@ export function TradingChartAlertOverlay({
       indicator: alert.parameters.indicator_id ?? 'rsi',
       period: String(alert.parameters.period ?? 14),
       lookback: String(alert.parameters.lookback_bars ?? 1),
+      trendlinePoints: alert.parameters.trendline_points?.map((point) => ({ time: point.time, price: Number(point.price) })),
     });
   };
 
@@ -234,16 +259,39 @@ export function TradingChartAlertOverlay({
   return (
     <div ref={rootRef} className="trading-chart-alert-overlay" data-status={status}>
       <svg aria-label="Chart alert lines">
-        {visibleAlerts.map((alert) => {
+        {staticAlerts.map((alert) => {
           const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
           const y = adapter?.priceToCoordinate(threshold);
           if (y === null || y === undefined) return null;
           const state = alertVisualState(alert);
           return <line key={alert.alert_id} className={`trading-alert-line state-${state}`} x1="0" x2="100%" y1={y} y2={y} stroke={alertColor(state)} onPointerDown={beginDrag(alert)} />;
         })}
+        {trendlineAlerts.map((alert) => {
+          const points = alert.parameters.trendline_points;
+          const first = points?.[0];
+          const second = points?.[1];
+          if (!first || !second || !adapter) return null;
+          const firstCoordinate = adapter.projectDrawingPoint({ time: first.time, price: Number(first.price) });
+          const secondCoordinate = adapter.projectDrawingPoint({ time: second.time, price: Number(second.price) });
+          if (!firstCoordinate || !secondCoordinate) return null;
+          const state = alertVisualState(alert);
+          return (
+            <line
+              key={alert.alert_id}
+              className={`trading-alert-line trading-alert-trendline state-${state}`}
+              x1={firstCoordinate.x}
+              y1={firstCoordinate.y}
+              x2={secondCoordinate.x}
+              y2={secondCoordinate.y}
+              stroke={alertColor(state)}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => openEditor(alert, secondCoordinate.y)}
+            />
+          );
+        })}
       </svg>
 
-      {visibleAlerts.map((alert) => {
+      {staticAlerts.map((alert) => {
         const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
         const y = adapter?.priceToCoordinate(threshold);
         if (y === null || y === undefined) return null;
