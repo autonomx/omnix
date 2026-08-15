@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, lineData, volumeData } from './chartAdapter';
+import { candlestickData, constrainZoomOutRange, lineData, volumeData } from './chartAdapter';
 import type { MarketBar } from '../tradingTypes';
 
 const bar: MarketBar = {
@@ -40,5 +40,10 @@ describe('Trading chart adapter normalization', () => {
 
   it('rejects invalid provider timestamps', () => {
     expect(() => candlestickData({ ...bar, start_time: 'not-a-date' })).toThrow(/Invalid Trading timestamp/);
+  });
+
+  it('caps zoom width without pulling a panned chart back over the data', () => {
+    expect(constrainZoomOutRange({ from: 130, to: 330 }, { from: 0, to: 100 }, 230)).toEqual({ from: 180, to: 280 });
+    expect(constrainZoomOutRange({ from: -330, to: -130 }, { from: 0, to: 100 }, -230)).toEqual({ from: -280, to: -180 });
   });
 });

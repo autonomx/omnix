@@ -40,6 +40,20 @@ type PriceSeries =
 type IndicatorSeries = ISeriesApi<'Line'> | ISeriesApi<'Histogram'>;
 type LogicalRange = { from: number; to: number };
 
+export function constrainZoomOutRange(
+  nextRange: LogicalRange,
+  maxRange: LogicalRange | null,
+  anchor: number,
+): LogicalRange {
+  if (!maxRange) return nextRange;
+  const maxWidth = maxRange.to - maxRange.from;
+  const nextWidth = nextRange.to - nextRange.from;
+  if (maxWidth <= 0 || nextWidth <= maxWidth) return nextRange;
+  const anchorRatio = (anchor - nextRange.from) / nextWidth;
+  const from = anchor - maxWidth * anchorRatio;
+  return { from, to: from + maxWidth };
+}
+
 function timestamp(value: string): UTCTimestamp {
   const milliseconds = Date.parse(value);
   if (!Number.isFinite(milliseconds)) throw new Error(`Invalid Trading timestamp: ${value}`);
@@ -97,7 +111,13 @@ export class TradingChartAdapter {
       layout: { background: { color: 'transparent' }, textColor: '#9eacbd' },
       grid: { vertLines: { color: 'rgba(120,145,170,.08)' }, horzLines: { color: 'rgba(120,145,170,.08)' } },
       rightPriceScale: { borderColor: 'rgba(140,160,180,.18)' },
-      timeScale: { borderColor: 'rgba(140,160,180,.18)', timeVisible: true, secondsVisible: false },
+      timeScale: {
+        borderColor: 'rgba(140,160,180,.18)',
+        timeVisible: true,
+        secondsVisible: false,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+      },
       handleScale: {
         mouseWheel: true,
         pinch: true,
@@ -168,11 +188,13 @@ export class TradingChartAdapter {
 
   setBars(bars: readonly MarketBar[], fit = true): void {
     this.assertActive();
+    const visibleRange = fit ? null : this.chart.timeScale().getVisibleLogicalRange();
     this.revisions.clear();
     for (const bar of bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
     this.setPriceData(bars);
     this.volumeSeries.setData(bars.map(volumeData));
     if (fit) this.fitContent();
+    else if (visibleRange) this.chart.timeScale().setVisibleLogicalRange(visibleRange);
   }
 
   setIndicators(bars: readonly MarketBar[], indicators: readonly CoreIndicatorInstance[]): void {
@@ -292,12 +314,7 @@ export class TradingChartAdapter {
       from: anchor - (anchor - range.from) * factor,
       to: anchor + (range.to - anchor) * factor,
     };
-    const maxRange = this.maxZoomOutRange;
-    if (maxRange) {
-      nextRange.from = Math.max(nextRange.from, maxRange.from);
-      nextRange.to = Math.min(nextRange.to, maxRange.to);
-    }
-    timeScale.setVisibleLogicalRange(nextRange);
+    timeScale.setVisibleLogicalRange(constrainZoomOutRange(nextRange, this.maxZoomOutRange, anchor));
   }
 
   setPriceScaleAutoScale(autoScale: boolean): void {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TradingStreamHub } from './tradingStreamHub';
 
 class FakeSocket {
@@ -53,5 +53,42 @@ describe('Trading stream hub', () => {
     expect(hub.upstreamCount).toBe(2);
     hub.dispose();
     expect(hub.upstreamCount).toBe(0);
+  });
+
+  it('reconnects a closed socket while charts are still subscribed', () => {
+    vi.useFakeTimers();
+    try {
+      const sockets: FakeSocket[] = [];
+      const statuses: string[] = [];
+      const received: string[] = [];
+      const hub = new TradingStreamHub(() => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      });
+      const unsubscribe = hub.subscribe(
+        'chart-1',
+        'btc',
+        '1m',
+        (message) => received.push(message.type),
+        (status) => statuses.push(status),
+      );
+
+      sockets[0].emit('close', new Event('close'));
+      expect(statuses).toEqual(['connecting', 'closed']);
+      vi.advanceTimersByTime(500);
+      expect(sockets).toHaveLength(2);
+      expect(statuses.at(-1)).toBe('connecting');
+
+      sockets[1].emit('open', new Event('open'));
+      sockets[1].emit('message', new MessageEvent('message', {
+        data: JSON.stringify({ type: 'error', code: 'test', message: 'test' }),
+      }));
+      expect(statuses.at(-1)).toBe('live');
+      expect(received).toEqual(['error']);
+      unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

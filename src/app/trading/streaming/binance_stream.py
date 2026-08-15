@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -64,12 +65,22 @@ class BinanceWebSocketStream:
         interval: str,
     ) -> AsyncIterator[StreamingBarUpdate]:
         connect = self.connect_factory
+        connect_kwargs: dict[str, Any] = {
+            "ping_interval": 20,
+            "ping_timeout": 20,
+        }
         if connect is None:
             from websockets.asyncio.client import connect as websocket_connect
 
             connect = websocket_connect
+            # websockets 16 automatically discovers proxy variables by default.
+            # A partially speaking local proxy can make the TLS handshake fail
+            # with ASN1/NOT_ENOUGH_DATA before Binance receives the request. Keep
+            # direct connections as the default and allow an explicit proxy when
+            # the runtime requires one.
+            connect_kwargs["proxy"] = os.getenv("OMNIX_BINANCE_WS_PROXY") or None
         stream_name = f"{provider_symbol.lower()}@kline_{BINANCE_INTERVALS.get(interval, interval)}"
-        async with connect(f"{self.base_url}/{stream_name}", ping_interval=20, ping_timeout=20) as socket:
+        async with connect(f"{self.base_url}/{stream_name}", **connect_kwargs) as socket:
             revision = 0
             async for raw_message in socket:
                 revision += 1

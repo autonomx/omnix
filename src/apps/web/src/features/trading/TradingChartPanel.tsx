@@ -38,6 +38,7 @@ const ranges = [
 function normalizeStreamBar(
   message: Extract<TradingStreamMessage, { type: 'bar' }>,
   provider: string,
+  ingestionRevision: number,
 ): MarketBar {
   return {
     instrument_id: message.bar.instrument_id,
@@ -55,7 +56,7 @@ function normalizeStreamBar(
     provider,
     provider_event_id: message.bar.provider_event_id,
     provider_sequence: message.bar.provider_sequence,
-    ingestion_revision: message.bar.ingestion_revision,
+    ingestion_revision: ingestionRevision,
     received_at: new Date().toISOString(),
   };
 }
@@ -148,6 +149,9 @@ export function TradingChartPanel({
   const adapterRef = useRef<TradingChartAdapter | null>(null);
   const barsRef = useRef<MarketBar[]>([]);
   const fittedBarsKeyRef = useRef<string | null>(null);
+  const streamDataKeyRef = useRef<string | null>(null);
+  const streamRevisionRef = useRef(1);
+  const [, forceLiveRender] = useState(0);
   const selectedRangeRef = useRef<number | null | undefined>(undefined);
   const pendingRangeIntervalRef = useRef<string | null>(null);
   const indicatorsRef = useRef<CoreIndicatorInstance[]>(indicators);
@@ -235,6 +239,8 @@ export function TradingChartPanel({
     adapterRef.current = next;
     indicatorSchedulerRef.current = scheduler;
     fittedBarsKeyRef.current = null;
+    streamDataKeyRef.current = null;
+    streamRevisionRef.current = 1;
     selectedRangeRef.current = undefined;
     pendingRangeIntervalRef.current = null;
     setSelectedRangeLabel('All');
@@ -271,6 +277,14 @@ export function TradingChartPanel({
     const dataKey = chartQuery.data
       ? `${chartQuery.data.instrument.instrument_id}|${chartQuery.data.binding.binding_id}|${chartQuery.data.interval}`
       : null;
+    if (dataKey !== null && dataKey !== streamDataKeyRef.current) {
+      streamDataKeyRef.current = dataKey;
+      streamRevisionRef.current = Math.max(
+        1,
+        ...bars.map((bar) => Number(bar.ingestion_revision) || 1),
+      );
+    }
+    forceLiveRender((value) => value + 1);
     const shouldFit = dataKey !== null && dataKey !== fittedBarsKeyRef.current;
     const keepSelectedRange = shouldFit && pendingRangeIntervalRef.current === interval;
     if (shouldFit && !keepSelectedRange) {
@@ -278,7 +292,7 @@ export function TradingChartPanel({
       setSelectedRangeLabel('All');
     }
     adapterRef.current?.setBars(bars, shouldFit);
-    if ((!shouldFit || keepSelectedRange) && selectedRangeRef.current !== undefined && bars.length > 0 && adapterRef.current) {
+    if (keepSelectedRange && selectedRangeRef.current !== undefined && bars.length > 0 && adapterRef.current) {
       applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, bars.length, interval);
     }
     if (keepSelectedRange) pendingRangeIntervalRef.current = null;
@@ -366,19 +380,28 @@ export function TradingChartPanel({
       interval,
       (message) => {
         if (message.type === 'error') {
-          setStreamError(message.message);
+          // The gateway reports upstream disconnects before the hub retries.
+          // Keep those transient transport errors out of the chart overlay;
+          // the stream status indicator still shows the reconnect state, and
+          // non-transport/configuration errors remain visible.
+          if (message.code !== 'stream_failed') setStreamError(message.message);
           return;
         }
-        const bar = normalizeStreamBar(message, resolved.provider);
+        const providerRevision = Number(message.bar.ingestion_revision) || 0;
+        const ingestionRevision = Math.max(streamRevisionRef.current + 1, providerRevision);
+        streamRevisionRef.current = ingestionRevision;
+        const bar = normalizeStreamBar(message, resolved.provider, ingestionRevision);
         if (adapterRef.current?.updateBar(bar)) {
           const index = barsRef.current.findIndex((item) => item.start_time === bar.start_time);
           if (index >= 0) barsRef.current[index] = bar;
           else barsRef.current = [...barsRef.current, bar];
+          forceLiveRender((value) => value + 1);
           scheduleIndicators(bar.is_final ? 0 : 100);
         }
       },
       (status) => {
         setStreamStatus(status);
+        if (status === 'live') setStreamError(null);
         if (status === 'closed' || status === 'error') void chartQuery.refetch();
       },
       resolved.binding_id,
@@ -387,7 +410,7 @@ export function TradingChartPanel({
 
   const provenance = chartQuery.data?.provenance;
   const resolvedBinding = chartQuery.data?.binding;
-  const bars = chartQuery.data?.bars ?? [];
+  const bars = barsRef.current.length > 0 ? barsRef.current : chartQuery.data?.bars ?? [];
   const latest = bars[bars.length - 1];
   const previous = bars[bars.length - 2];
   const latestClose = Number(latest?.close ?? 0);
@@ -504,6 +527,15 @@ export function TradingChartPanel({
     if (contextMenu) setAlertPlacement(contextMenu);
   };
 
+  const handleChartWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    const targetAdapter = adapterRef.current;
+    if (!targetAdapter) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    targetAdapter.zoomAtCoordinate(event.clientX - bounds.left, event.deltaY);
+  };
+
   return (
     <article
       ref={panelRef}
@@ -575,7 +607,7 @@ export function TradingChartPanel({
         ) : null}
       </header>
       <div className="trading-chart-stage" onContextMenu={handleStageContextMenu}>
-        <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} />
+        <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
         {active && adapter ? (
           <>
             <button
@@ -716,7 +748,7 @@ export function TradingChartPanel({
             cursorLocked={cursorLocked}
             tableVisible={tableVisible}
             onClose={() => setContextMenu(null)}
-            onReset={() => { adapterRef.current?.fitContent(); setPriceScaleSettings((current) => ({ ...current, autoScale: true })); setSelectedRangeLabel('All'); }}
+            onReset={() => { selectedRangeRef.current = null; adapterRef.current?.fitContent(); setPriceScaleSettings((current) => ({ ...current, autoScale: true })); setSelectedRangeLabel('All'); }}
             onCopyPrice={copyContextPrice}
             onPastePrice={pasteContextPrice}
             onAddAlert={contextMenuAlert}
@@ -748,8 +780,8 @@ export function TradingChartPanel({
           ))}
         </nav>
         <div className="trading-chart-footer-meta">
-          <span>{provenance?.as_of ? new Date(provenance.as_of).toLocaleTimeString() : 'Awaiting data'}</span>
-          <span>{provenance?.cached ? 'cached' : 'live source'}</span>
+          <span>{latest?.end_time ? new Date(latest.end_time).toLocaleTimeString() : provenance?.as_of ? new Date(provenance.as_of).toLocaleTimeString() : 'Awaiting data'}</span>
+          <span>{streamStatus === 'live' ? 'live source' : provenance?.cached ? 'cached' : 'live source'}</span>
           <span>{drawings.status}</span>
         </div>
       </footer>
