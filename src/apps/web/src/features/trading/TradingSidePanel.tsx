@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TradingAlertsPanel } from './TradingAlertsPanel';
 import { TradingIndicatorPresets } from './TradingIndicatorPresets';
 import { TradingLayoutPanel } from './TradingLayoutPanel';
 import { TradingNewsPanel } from './TradingNewsPanel';
@@ -8,11 +9,12 @@ import type { CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument } from './tradingTypes';
 
-type SideTab = 'watchlist' | 'indicators' | 'news' | 'layout';
+export type TradingSideTab = 'watchlist' | 'indicators' | 'alerts' | 'news' | 'layout';
 
-const tabs: Array<{ id: SideTab; label: string }> = [
+const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
   { id: 'indicators', label: 'Indicators' },
+  { id: 'alerts', label: 'Alerts' },
   { id: 'news', label: 'News' },
   { id: 'layout', label: 'Layout' },
 ];
@@ -20,6 +22,10 @@ const tabs: Array<{ id: SideTab; label: string }> = [
 export function TradingSidePanel({
   instruments,
   activeInstrumentId,
+  bindingId,
+  interval,
+  selectedTab,
+  onTabChange,
   indicators,
   layout,
   chartCount,
@@ -39,6 +45,10 @@ export function TradingSidePanel({
 }: {
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
+  bindingId: string | null;
+  interval: string;
+  selectedTab?: TradingSideTab;
+  onTabChange?: (tab: TradingSideTab) => void;
   indicators: CoreIndicatorInstance[];
   layout: TradingLayout;
   chartCount: number;
@@ -56,7 +66,12 @@ export function TradingSidePanel({
   onSetSnapMode: (mode: DrawingSnapMode) => void;
   onOpenResearch: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<SideTab>('watchlist');
+  const [internalTab, setInternalTab] = useState<TradingSideTab>('watchlist');
+  const activeTab = selectedTab ?? internalTab;
+  const setActiveTab = (tab: TradingSideTab) => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
   return (
     <aside className="trading-side-panel" aria-label="Trading side panel">
       <nav role="tablist" aria-label="Trading side panel sections">
@@ -90,6 +105,9 @@ export function TradingSidePanel({
         ) : null}
         {activeTab === 'indicators' ? (
           <TradingIndicatorPresets indicators={indicators} onApply={onSetIndicators} />
+        ) : null}
+        {activeTab === 'alerts' ? (
+          <TradingAlertsPanel instrumentId={activeInstrumentId} bindingId={bindingId} interval={interval} />
         ) : null}
         {activeTab === 'news' ? <TradingNewsPanel onOpenResearch={onOpenResearch} /> : null}
         {activeTab === 'layout' ? (

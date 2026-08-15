@@ -41,6 +41,7 @@ export function TradingDrawingOverlay({
   onMovePoint,
   onTranslateDrawing,
   onAlertAtPoint,
+  onContextMenu: onChartContextMenu,
 }: {
   adapter: TradingChartAdapter | null;
   instrumentId: string;
@@ -53,6 +54,7 @@ export function TradingDrawingOverlay({
   onMovePoint: (id: string, index: number, point: DrawingPoint) => void;
   onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
   onAlertAtPoint?: (placement: ChartAlertPlacement) => void;
+  onContextMenu?: (placement: ChartAlertPlacement) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draftStart, setDraftStart] = useState<DrawingPoint | null>(null);
@@ -146,9 +148,9 @@ export function TradingDrawingOverlay({
 
   const onContextMenu = (event: React.MouseEvent<SVGSVGElement>) => {
     const point = pointFromEvent(event);
-    if (!point || !onAlertAtPoint) return;
     event.preventDefault();
-    onAlertAtPoint({ ...point, source: 'context-menu' });
+    event.stopPropagation();
+    if (point) onChartContextMenu?.({ ...point, source: 'context-menu' });
   };
 
   const dragHandle = (drawing: TradingDrawing, index: number) => (event: React.PointerEvent<SVGCircleElement>) => {

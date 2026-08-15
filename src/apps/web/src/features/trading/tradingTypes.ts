@@ -24,7 +24,13 @@ export type TradingStreamMessage =
 
 export type TradingDocument = Schemas['TradingDocumentResponse'];
 export type TradingAlertCondition = Schemas['TradingAlert']['condition_type'];
-export type TradingAlertParameters = Schemas['TradingAlertParameters'];
+export type TradingAlertNotificationChannel = 'app' | 'toast' | 'sound';
+export type TradingAlertTriggerPolicy = 'once' | 'once_per_bar' | 'every_time';
+export type TradingAlertParameters = Schemas['TradingAlertParameters'] & {
+  message?: string;
+  notification_channels?: TradingAlertNotificationChannel[];
+  trigger_policy?: TradingAlertTriggerPolicy;
+};
 export type TradingAlertIndicatorId = NonNullable<TradingAlertParameters['indicator_id']>;
 export type TradingAlertEvaluationPolicy = Schemas['TradingAlertEvaluationPolicy'];
 export type TradingAlert = Omit<Schemas['TradingAlert'], 'parameters' | 'evaluation_policy'> & {
@@ -34,7 +40,10 @@ export type TradingAlert = Omit<Schemas['TradingAlert'], 'parameters' | 'evaluat
 export type TradingAlertTrigger = Omit<Schemas['TradingAlertTrigger'], 'payload'> & {
   payload: Record<string, unknown>;
 };
-export type TradingAlertCreateInput = Schemas['TradingAlertCreate'];
+export type TradingAlertCreateInput = Omit<Schemas['TradingAlertCreate'], 'parameters' | 'evaluation_policy'> & {
+  parameters: TradingAlertParameters;
+  evaluation_policy: TradingAlertEvaluationPolicy;
+};
 export type TradingAlertUpdateInput = Omit<Schemas['TradingAlertUpdate'], 'parameters' | 'evaluation_policy'> & {
   parameters: TradingAlertParameters;
   evaluation_policy: TradingAlertEvaluationPolicy;

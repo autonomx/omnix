@@ -182,6 +182,18 @@ async function installTradingMocks(page: Page): Promise<MockState> {
       await fulfill(route, { records: [...state.records.values()] });
       return;
     }
+    if (path === '/api/trading/watchlists' && method === 'GET') {
+      await fulfill(route, {
+        records: [{
+          record_id: 'default',
+          record_type: 'watchlist',
+          revision: 1,
+          payload: { name: 'Default Watchlist', instrumentIds: [instrument.instrument_id] },
+          status: 'active',
+        }],
+      });
+      return;
+    }
     if (path === '/api/trading/workspaces' && method === 'POST') {
       const input = request.postDataJSON() as { record_id: string; payload: Record<string, unknown> };
       const record = { record_id: input.record_id, record_type: 'workspace', revision: 1, payload: input.payload, status: 'active' };
@@ -271,6 +283,21 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await expect(page.locator('.trading-chart-ohlc').first()).toBeVisible();
   await expect(page.locator('.trading-terminal-header .trading-command-bar')).toBeAttached();
   await expect(page.locator('.trading-terminal-header')).toHaveCSS('height', '42px');
+  const sideRail = page.getByRole('complementary', { name: 'Trading side panel rail' });
+  await expect(sideRail).toBeVisible();
+  await expect(sideRail.getByRole('button', { name: 'Expand right panel' })).toBeVisible();
+  await page.getByRole('button', { name: 'Right panel', exact: true }).click();
+  const sidePanel = page.getByRole('complementary', { name: 'Trading side panel', exact: true });
+  await expect(sidePanel.getByRole('tab', { name: 'Alerts', exact: true })).toBeVisible();
+  await sidePanel.getByRole('tab', { name: 'Alerts', exact: true }).click();
+  await expect(sidePanel.locator('.trading-alerts-panel')).toBeVisible();
+  await sidePanel.getByRole('tab', { name: /Log/ }).click();
+  await expect(sidePanel.locator('.trading-alert-log-panel')).toBeVisible();
+  await sidePanel.getByRole('tablist', { name: 'Trading alerts sections' }).getByRole('tab', { name: 'Alerts', exact: true }).click();
+  await sidePanel.getByRole('button', { name: 'Add alert' }).click();
+  const sideAlertDialog = page.getByRole('dialog', { name: /Create alert on BTCUSDT/ });
+  await expect(sideAlertDialog).toBeVisible();
+  await sideAlertDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('button', { name: 'Open symbol search' }).click();
   const symbolSearch = page.getByRole('dialog', { name: 'Symbol search' });
   await expect(symbolSearch).toBeVisible();
@@ -287,7 +314,7 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await page.getByRole('button', { name: 'Show SMA 20 overlay' }).click();
   await page.getByRole('button', { name: 'Delete SMA 20 overlay' }).click();
   await expect(page.getByRole('button', { name: 'Delete SMA 20 overlay' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Indicators' }).click();
+  await page.locator('.trading-indicator-manager').getByRole('button', { name: 'Indicators' }).click();
   const smaOption = page.getByRole('group', { name: 'Technical indicators' }).getByRole('button', { name: 'SMA 20', exact: true });
   await expect(smaOption).toHaveAttribute('aria-pressed', 'false');
   await smaOption.click();
@@ -338,11 +365,36 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
 
   await page.getByRole('button', { name: 'Place price alert' }).click();
   await overlay.click({ position: { x: 180, y: 100 } });
-  await expect(page.getByText('Add alert at price')).toBeVisible();
-  await page.getByRole('button', { name: 'Create alert' }).click();
+  await expect(page.getByRole('dialog', { name: /Create alert on BTCUSDT/ })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Alert trigger' })).toHaveValue('every_time');
+  await expect(page.getByRole('checkbox', { name: 'App' })).toBeChecked();
+  await page.getByRole('textbox', { name: 'Alert message' }).fill('BTC alert');
+  await page.getByRole('dialog', { name: /Create alert on BTCUSDT/ }).getByRole('button', { name: 'Create alert' }).click();
   await expect.poll(() => state.alerts.length).toBe(1);
+  expect((state.alerts[0].parameters as Record<string, unknown>).message).toBe('BTC alert');
   await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);
   await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);
+
+  const chartStage = page.locator('.trading-chart-panel.active .trading-chart-stage');
+  const chartStageBox = await chartStage.boundingBox();
+  expect(chartStageBox).not.toBeNull();
+  if (chartStageBox) {
+    await chartStage.click({
+      button: 'right',
+      position: { x: chartStageBox.width / 2, y: Math.max(12, chartStageBox.height * 0.2) },
+      force: true,
+    });
+  }
+  const chartMenu = page.getByRole('menu', { name: 'Chart context menu' });
+  await expect(chartMenu).toBeVisible();
+  await expect(chartMenu.getByRole('menuitem', { name: /Reset chart view/ })).toBeVisible();
+  await expect(chartMenu.getByRole('menuitem', { name: /Add alert on BTCUSDT/ })).toBeVisible();
+  await chartMenu.getByRole('menuitemcheckbox', { name: 'Table view' }).click();
+  await expect(page.getByRole('dialog', { name: /Chart table view/ })).toBeVisible();
+  await sideRail.getByRole('button', { name: 'Collapse right panel' }).click();
+  await expect(sidePanel).toHaveCount(0);
+  await sideRail.getByRole('button', { name: 'Expand right panel' }).click();
+  await expect(sidePanel).toBeVisible();
 });
 
 test('indicator panes expose close, minimize, and reorder controls', async ({ page }) => {
@@ -358,7 +410,7 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
   await expect(page.getByRole('button', { name: 'Restore RSI 14 panel' })).toHaveAttribute('aria-expanded', 'false');
   await page.getByRole('button', { name: 'Restore RSI 14 panel' }).click();
 
-  await page.getByRole('button', { name: 'Indicators' }).click();
+  await page.locator('.trading-indicator-manager').getByRole('button', { name: 'Indicators' }).click();
   await page.getByRole('button', { name: 'MACD 9' }).click();
   await expect(page.locator('.trading-indicator-pane-controls')).toHaveCount(2);
   await page.getByRole('button', { name: 'Move RSI 14 panel down' }).click();

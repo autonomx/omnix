@@ -45,6 +45,12 @@ class TradingAlertParameters(BaseModel):
         "value", "line", "signal", "histogram", "upper", "middle", "lower"
     ] = "value"
     anchor_bars_ago: int = Field(default=0, ge=0, le=499)
+    message: str = Field(default="", max_length=500)
+    notification_channels: list[Literal["app", "toast", "sound"]] = Field(
+        default_factory=lambda: ["app", "toast"],
+        max_length=3,
+    )
+    trigger_policy: Literal["once", "once_per_bar", "every_time"] = "every_time"
 
 
 class TradingAlertEvaluationPolicy(BaseModel):

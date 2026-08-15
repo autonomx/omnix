@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { IChartApi } from 'lightweight-charts';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
+import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { tradingApi } from './tradingApi';
 import { TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
@@ -117,7 +118,9 @@ export function TradingChartPanel({
   active,
   onActivate,
   onChangeInterval,
+  onChangeChartType,
   onToggleIndicator,
+  onClearIndicators,
   onToggleIndicatorVisibility,
   onMoveIndicator,
   synchronization,
@@ -131,7 +134,9 @@ export function TradingChartPanel({
   active: boolean;
   onActivate: () => void;
   onChangeInterval: (interval: string) => void;
+  onChangeChartType: (chartType: TradingChartType) => void;
   onToggleIndicator: (id: CoreIndicatorId) => void;
+  onClearIndicators: () => void;
   onToggleIndicatorVisibility: (id: CoreIndicatorId) => void;
   onMoveIndicator: (id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   synchronization: TradingChartSynchronization;
@@ -155,6 +160,11 @@ export function TradingChartPanel({
   const [streamError, setStreamError] = useState<string | null>(null);
   const [indicatorError, setIndicatorError] = useState<string | null>(null);
   const [alertPlacement, setAlertPlacement] = useState<ChartAlertPlacement | null>(null);
+  const [contextMenu, setContextMenu] = useState<ChartAlertPlacement | null>(null);
+  const [tableVisible, setTableVisible] = useState(false);
+  const [objectTreeVisible, setObjectTreeVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [cursorLocked, setCursorLocked] = useState(false);
   const [indicatorPaneGeometry, setIndicatorPaneGeometry] = useState<TradingIndicatorPaneGeometry[]>([]);
   const [selectedRangeLabel, setSelectedRangeLabel] = useState('All');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -270,6 +280,20 @@ export function TradingChartPanel({
     indicatorsRef.current = indicators;
     scheduleIndicators();
   }, [indicators, scheduleIndicators]);
+
+  useEffect(() => {
+    if (!active || !selectedDrawing) return;
+    const removeSelectedDrawing = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      drawings.removeSelected();
+    };
+    window.addEventListener('keydown', removeSelectedDrawing);
+    return () => window.removeEventListener('keydown', removeSelectedDrawing);
+  }, [active, drawings, selectedDrawing]);
 
   useEffect(() => {
     const targetAdapter = adapterRef.current;
@@ -401,6 +425,60 @@ export function TradingChartPanel({
     if (interval === nextInterval) applyVisibleRange(chart, days, barsRef.current.length, interval);
   };
 
+  const openContextMenu = (point: ChartAlertPlacement) => {
+    if (!active) onActivate();
+    const stage = hostRef.current?.parentElement;
+    const width = stage?.clientWidth ?? 0;
+    const height = stage?.clientHeight ?? 0;
+    setContextMenu({
+      ...point,
+      x: Math.max(6, Math.min(point.x, Math.max(6, width - 286))),
+      y: Math.max(6, Math.min(point.y, Math.max(6, height - 420))),
+    });
+  };
+
+  const handleStageContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const target = event.target as Element;
+    if (target.closest('.trading-chart-context-menu, .trading-chart-alert-editor, .trading-chart-table-view, .trading-chart-object-tree, .trading-chart-settings')) return;
+    const stage = event.currentTarget;
+    const bounds = stage.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const point = adapterRef.current?.drawingPointFromCoordinate(x, y);
+    if (point) openContextMenu({ ...point, x, y, source: 'context-menu' });
+  };
+
+  const copyContextPrice = () => {
+    if (!contextMenu) return;
+    void navigator.clipboard?.writeText(String(contextMenu.price));
+  };
+
+  const pasteContextPrice = () => {
+    if (!contextMenu) return;
+    void navigator.clipboard?.readText().then((value) => {
+      const pasted = Number(value.trim());
+      if (Number.isFinite(pasted)) setAlertPlacement({ ...contextMenu, price: pasted, source: 'context-menu' });
+    }).catch(() => undefined);
+  };
+
+  const applyChartTemplate = (template: 'default' | 'clean' | 'momentum') => {
+    if (template === 'clean') {
+      onClearIndicators();
+      drawings.removeAll();
+      return;
+    }
+    if (template === 'momentum') {
+      for (const id of ['rsi', 'macd'] as CoreIndicatorId[]) {
+        if (!indicators.some((indicator) => indicator.id === id && indicator.enabled)) onToggleIndicator(id);
+      }
+    }
+  };
+
+  const contextMenuAlert = () => {
+    if (contextMenu) setAlertPlacement(contextMenu);
+  };
+
   return (
     <article
       ref={panelRef}
@@ -471,7 +549,7 @@ export function TradingChartPanel({
           </div>
         ) : null}
       </header>
-      <div className="trading-chart-stage">
+      <div className="trading-chart-stage" onContextMenu={handleStageContextMenu}>
         <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} />
         {overlayIndicators.length > 0 ? (
           <div
@@ -538,6 +616,7 @@ export function TradingChartPanel({
           onMovePoint={drawings.movePoint}
           onTranslateDrawing={drawings.translate}
           onAlertAtPoint={active ? setAlertPlacement : undefined}
+          onContextMenu={active ? openContextMenu : undefined}
         />
         <TradingChartAlertOverlay
           adapter={adapter}
@@ -545,9 +624,58 @@ export function TradingChartPanel({
           bindingId={provenance?.requested_binding ?? bindingId ?? resolvedBinding?.binding_id ?? null}
           interval={interval}
           latestPrice={latestClose}
+          symbol={chartQuery.data?.instrument.display_symbol ?? instrumentId}
           placement={alertPlacement}
           onPlacementConsumed={clearAlertPlacement}
         />
+        {tableVisible ? (
+          <div className="trading-chart-table-view" role="dialog" aria-label="Chart table view" onPointerDown={(event) => event.stopPropagation()}>
+            <header><strong>Table view · {chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong><button type="button" onClick={() => setTableVisible(false)} aria-label="Close table view">×</button></header>
+            <table>
+              <thead><tr><th>Time</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead>
+              <tbody>{bars.slice(-12).reverse().map((bar) => <tr key={bar.start_time}><td>{new Date(bar.start_time).toLocaleString()}</td><td>{price(bar.open)}</td><td>{price(bar.high)}</td><td>{price(bar.low)}</td><td>{price(bar.close)}</td><td>{price(bar.volume)}</td></tr>)}</tbody>
+            </table>
+          </div>
+        ) : null}
+        {objectTreeVisible ? (
+          <aside className="trading-chart-object-tree" role="dialog" aria-label="Object tree" onPointerDown={(event) => event.stopPropagation()}>
+            <header><strong>Object tree</strong><button type="button" onClick={() => setObjectTreeVisible(false)} aria-label="Close object tree">×</button></header>
+            <ul>
+              {drawings.state.drawings.map((drawing) => <li key={drawing.drawingId}><span>{drawing.toolType}{drawing.locked ? ' · locked' : ''}</span><button type="button" onClick={() => { drawings.select(drawing.drawingId); setObjectTreeVisible(false); }}>Select</button></li>)}
+              {indicators.filter((indicator) => indicator.enabled).map((indicator) => <li key={indicator.id}><span>{indicator.id.toUpperCase()} {indicator.period}</span><button type="button" onClick={() => onToggleIndicator(indicator.id)}>Remove</button></li>)}
+              {drawings.state.drawings.length === 0 && indicators.every((indicator) => !indicator.enabled) ? <li><span>No chart objects</span></li> : null}
+            </ul>
+          </aside>
+        ) : null}
+        {settingsVisible ? (
+          <aside className="trading-chart-settings" role="dialog" aria-label="Chart settings" onPointerDown={(event) => event.stopPropagation()}>
+            <header><strong>Chart settings</strong><button type="button" onClick={() => setSettingsVisible(false)} aria-label="Close chart settings">×</button></header>
+            <label>Chart type<select value={chartType} onChange={(event) => onChangeChartType(event.target.value as TradingChartType)}>{(['candlestick', 'bar', 'line', 'area', 'baseline'] as TradingChartType[]).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label>Snap mode<select value={drawingSnapMode} disabled><option>{drawingSnapMode}</option></select></label>
+          </aside>
+        ) : null}
+        {contextMenu ? (
+          <TradingChartContextMenu
+            point={contextMenu}
+            symbol={chartQuery.data?.instrument.display_symbol ?? instrumentId}
+            drawingCount={drawings.state.drawings.length}
+            indicatorCount={indicators.filter((indicator) => indicator.enabled).length}
+            cursorLocked={cursorLocked}
+            tableVisible={tableVisible}
+            onClose={() => setContextMenu(null)}
+            onReset={() => { adapterRef.current?.fitContent(); setSelectedRangeLabel('All'); }}
+            onCopyPrice={copyContextPrice}
+            onPastePrice={pasteContextPrice}
+            onAddAlert={contextMenuAlert}
+            onToggleCursor={() => setCursorLocked((value) => !value)}
+            onToggleTable={() => setTableVisible((value) => !value)}
+            onObjectTree={() => setObjectTreeVisible(true)}
+            onApplyTemplate={applyChartTemplate}
+            onRemoveDrawings={() => drawings.removeAll()}
+            onRemoveIndicators={onClearIndicators}
+            onSettings={() => setSettingsVisible(true)}
+          />
+        ) : null}
       </div>
       {chartQuery.isLoading ? <div className="trading-chart-state">Loading historical bars…</div> : null}
       {chartQuery.error ? <div className="trading-chart-state error">{chartQuery.error.message}</div> : null}

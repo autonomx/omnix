@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.trading.catalog import bindings_for_instrument, default_binding, instrument_by_id
+from app.trading.catalog import (
+    binding_by_id,
+    bindings_for_instrument,
+    default_binding,
+    instrument_by_id,
+)
 from app.trading.instrument_catalog_service import ProviderBackedInstrumentCatalog
 
 
@@ -101,3 +106,29 @@ def test_short_queries_do_not_hit_provider_catalogs() -> None:
 
     assert binance.calls == []
     assert yahoo.calls == []
+
+
+def test_persisted_dynamic_equity_id_rehydrates_bindings() -> None:
+    instrument_id = "equity:BTS:SPYI"
+
+    binding = default_binding(instrument_id)
+
+    assert binding is not None
+    assert binding.provider == "yahoo"
+    assert binding.provider_symbol == "SPYI"
+    assert instrument_by_id(instrument_id) is not None
+    assert {item.provider for item in bindings_for_instrument(instrument_id)} == {
+        "yahoo",
+        "stooq",
+    }
+    assert binding_by_id(binding.binding_id) == binding
+
+
+def test_persisted_dynamic_equity_binding_id_rehydrates_catalog() -> None:
+    binding_id = "stooq:historical_daily:equity:BTS:SPYI"
+
+    binding = binding_by_id(binding_id)
+
+    assert binding is not None
+    assert binding.binding_id == binding_id
+    assert binding.instrument_id == "equity:BTS:SPYI"

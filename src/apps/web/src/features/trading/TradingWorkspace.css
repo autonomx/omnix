@@ -13,3 +13,7 @@
 .trading-chart-symbol-options>.trading-symbol-trigger{order:1}
 .trading-chart-symbol-options>select{order:2}
 .trading-chart-symbol-options>.trading-favorite{order:3}
+.trading-side-panel>nav{grid-template-columns:repeat(5,minmax(0,1fr))}
+.trading-body{grid-template-columns:44px minmax(0,1fr) auto}
+@media(max-width:1300px){.trading-body{grid-template-columns:42px minmax(0,1fr) auto}.trading-right-dock{width:308px}}
+@media(max-width:1000px){.trading-body{grid-template-columns:42px minmax(0,1fr)}.trading-right-dock{display:none}}

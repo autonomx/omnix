@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
+import { TradingAlertDialog, type TradingAlertEditorState } from './TradingAlertDialog';
 import type { ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import {
   alertLastTriggeredLabel,
   alertVisualState,
   chartAlertCreateInput,
   chartAlertUpdateInput,
+  expirationTimestamp,
   notifyTradingAlertsChanged,
   type TradingChartAlertState,
 } from './tradingChartAlerts';
@@ -13,16 +15,6 @@ import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
 import { useTradingAlertMutations, useTradingAlerts } from './useTradingAlerts';
 import './TradingChartAlertOverlay.css';
-
-type EditorState = {
-  mode: 'create' | 'edit';
-  alertId: string | null;
-  x: number;
-  y: number;
-  threshold: string;
-  condition: 'price_above' | 'price_below';
-  expiresAt: string;
-};
 
 type DragState = { alert: TradingAlert; threshold: number };
 
@@ -52,12 +44,32 @@ function formattedPrice(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
+function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): TradingAlertEditorState {
+  return {
+    mode: 'create',
+    alertId: null,
+    x: placement.x,
+    y: placement.y,
+    threshold: String(placement.price),
+    condition: placement.price >= latestPrice ? 'price_above' : 'price_below',
+    expiresAt: '',
+    expiration: 'never',
+    triggerPolicy: 'every_time',
+    message: '',
+    notifications: ['app', 'toast'],
+    indicator: 'rsi',
+    period: '14',
+    lookback: '1',
+  };
+}
+
 export function TradingChartAlertOverlay({
   adapter,
   instrumentId,
   bindingId,
   interval,
   latestPrice,
+  symbol,
   placement,
   onPlacementConsumed,
 }: {
@@ -66,6 +78,7 @@ export function TradingChartAlertOverlay({
   bindingId: string | null;
   interval: string;
   latestPrice: number;
+  symbol: string;
   placement: ChartAlertPlacement | null;
   onPlacementConsumed: () => void;
 }) {
@@ -74,7 +87,7 @@ export function TradingChartAlertOverlay({
   const alertMutations = useTradingAlertMutations();
   const alerts = alertsQuery.data ?? [];
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'conflict' | 'error'>('loading');
-  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [editor, setEditor] = useState<TradingAlertEditorState | null>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [, setCoordinateRevision] = useState(0);
 
@@ -96,15 +109,7 @@ export function TradingChartAlertOverlay({
 
   useEffect(() => {
     if (!placement) return;
-    setEditor({
-      mode: 'create',
-      alertId: null,
-      x: placement.x,
-      y: placement.y,
-      threshold: String(placement.price),
-      condition: placement.price >= latestPrice ? 'price_above' : 'price_below',
-      expiresAt: '',
-    });
+    setEditor(editorDefaults(placement, latestPrice));
     onPlacementConsumed();
   }, [latestPrice, onPlacementConsumed, placement]);
 
@@ -141,7 +146,10 @@ export function TradingChartAlertOverlay({
     await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, {
       threshold: String(threshold),
       condition_type: editor.condition,
-      expires_at: isoDateTime(editor.expiresAt),
+      expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
+      trigger_policy: editor.triggerPolicy,
+      message: editor.message,
+      notification_channels: editor.notifications,
     })));
   };
 
@@ -159,10 +167,20 @@ export function TradingChartAlertOverlay({
       interval,
       threshold,
       latestPrice,
-      condition: editor.condition,
-      expiration: 'never',
+      condition: editor.condition === 'price_above' || editor.condition === 'price_below' ? editor.condition : undefined,
+      expiration: editor.expiration,
+      triggerPolicy: editor.triggerPolicy,
+      message: editor.message,
+      notificationChannels: editor.notifications,
     });
-    input.expires_at = isoDateTime(editor.expiresAt);
+    input.condition_type = editor.condition;
+    input.parameters = {
+      ...input.parameters,
+      indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
+      period: Number(editor.period) || 14,
+      lookback_bars: Number(editor.lookback) || 1,
+    };
+    input.expires_at = editor.expiresAt ? isoDateTime(editor.expiresAt) : input.expires_at;
     await runMutation(() => tradingApi.createAlert(input));
   };
 
@@ -173,8 +191,16 @@ export function TradingChartAlertOverlay({
       x: Math.max(8, (rootRef.current?.clientWidth ?? 320) - 260),
       y,
       threshold: alert.threshold,
-      condition: alert.condition_type === 'price_below' ? 'price_below' : 'price_above',
+      condition: alert.condition_type,
       expiresAt: localDateTime(alert.expires_at),
+      expiration: alert.expires_at ? '1d' : 'never',
+      triggerPolicy: alert.parameters.trigger_policy
+        ?? (alert.cooldown_seconds > 0 ? 'once_per_bar' : 'every_time'),
+      message: alert.parameters.message ?? '',
+      notifications: alert.parameters.notification_channels ?? ['app', 'toast'],
+      indicator: alert.parameters.indicator_id ?? 'rsi',
+      period: String(alert.parameters.period ?? 14),
+      lookback: String(alert.parameters.lookback_bars ?? 1),
     });
   };
 
@@ -201,8 +227,8 @@ export function TradingChartAlertOverlay({
   };
 
   const editorStyle = editor && rootRef.current ? {
-    left: Math.max(8, Math.min(editor.x, rootRef.current.clientWidth - 250)),
-    top: Math.max(8, Math.min(editor.y + 8, rootRef.current.clientHeight - 235)),
+    left: Math.max(8, Math.min(editor.x, rootRef.current.clientWidth - 450)),
+    top: Math.max(8, Math.min(editor.y + 8, rootRef.current.clientHeight - 520)),
   } : undefined;
 
   return (
@@ -213,18 +239,7 @@ export function TradingChartAlertOverlay({
           const y = adapter?.priceToCoordinate(threshold);
           if (y === null || y === undefined) return null;
           const state = alertVisualState(alert);
-          return (
-            <line
-              key={alert.alert_id}
-              className={`trading-alert-line state-${state}`}
-              x1="0"
-              x2="100%"
-              y1={y}
-              y2={y}
-              stroke={alertColor(state)}
-              onPointerDown={beginDrag(alert)}
-            />
-          );
+          return <line key={alert.alert_id} className={`trading-alert-line state-${state}`} x1="0" x2="100%" y1={y} y2={y} stroke={alertColor(state)} onPointerDown={beginDrag(alert)} />;
         })}
       </svg>
 
@@ -250,30 +265,25 @@ export function TradingChartAlertOverlay({
       })}
 
       {editor ? (
-        <form
-          className="trading-chart-alert-editor"
-          style={editorStyle}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void (editor.mode === 'create' ? createAlert() : saveEditor());
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <header><strong>{editor.mode === 'create' ? 'Add alert at price' : 'Edit chart alert'}</strong><button type="button" onClick={() => setEditor(null)} aria-label="Close alert editor">×</button></header>
-          <label>Condition<select value={editor.condition} onChange={(event) => setEditor({ ...editor, condition: event.target.value as EditorState['condition'] })}><option value="price_above">Crosses above</option><option value="price_below">Crosses below</option></select></label>
-          <label>Threshold<input autoFocus inputMode="decimal" value={editor.threshold} onChange={(event) => setEditor({ ...editor, threshold: event.target.value })} /></label>
-          <label>Interval<input value={interval.toUpperCase()} disabled /></label>
-          <label>Expires<input type="datetime-local" value={editor.expiresAt} onChange={(event) => setEditor({ ...editor, expiresAt: event.target.value })} /><small>Leave empty for no expiration.</small></label>
-          <div className="trading-chart-alert-editor-actions">
-            <button type="submit" disabled={status === 'saving'}>{editor.mode === 'create' ? 'Create alert' : 'Save'}</button>
-            {editor.mode === 'edit' ? (() => {
+        <div style={editorStyle} className="trading-chart-alert-editor-positioner">
+          <TradingAlertDialog
+            editor={editor}
+            symbol={symbol}
+            latestPrice={latestPrice}
+            status={status}
+            onChange={(patch) => setEditor((current) => current ? { ...current, ...patch } : current)}
+            onSubmit={() => void (editor.mode === 'create' ? createAlert() : saveEditor())}
+            onClose={() => setEditor(null)}
+            onToggle={editor.mode === 'edit' ? () => {
               const alert = alerts.find((item) => item.alert_id === editor.alertId);
-              if (!alert) return null;
-              return <><button type="button" onClick={() => void runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { enabled: !alert.enabled })))}>{alert.enabled ? 'Disable' : 'Enable'}</button><button type="button" className="danger" onClick={() => void runMutation(() => tradingApi.archiveAlert(alert))}>Archive</button></>;
-            })() : null}
-          </div>
-          <small className="trading-chart-alert-editor-status">Server state: {status}</small>
-        </form>
+              if (alert) void runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { enabled: !alert.enabled })));
+            } : undefined}
+            onArchive={editor.mode === 'edit' ? () => {
+              const alert = alerts.find((item) => item.alert_id === editor.alertId);
+              if (alert) void runMutation(() => tradingApi.archiveAlert(alert));
+            } : undefined}
+          />
+        </div>
       ) : null}
     </div>
   );

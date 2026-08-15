@@ -3,6 +3,7 @@ import {
   alertVisualState,
   chartAlertCreateInput,
   chartAlertUpdateInput,
+  cooldownForTriggerPolicy,
   expirationTimestamp,
   priceConditionForThreshold,
 } from './tradingChartAlerts';
@@ -64,6 +65,25 @@ describe('chart-native Trading alerts', () => {
     expect(input.evaluation_policy?.interval).toBe('2h');
     expect(input.expires_at).toBe('2026-08-07T07:00:00.000Z');
     expect(expirationTimestamp('never')).toBeNull();
+  });
+
+  it('maps TradingView trigger choices to server-owned alert policy fields', () => {
+    const input = chartAlertCreateInput({
+      alertId: 'chart-alert-policy',
+      instrumentId: baseAlert.instrument_id,
+      bindingId: baseAlert.binding_id ?? null,
+      interval: '5m',
+      threshold: 71_000,
+      latestPrice: 70_000,
+      expiration: 'never',
+      triggerPolicy: 'once_per_bar',
+      message: 'Watch the breakout',
+      notificationChannels: ['app', 'toast'],
+    });
+    expect(input.cooldown_seconds).toBe(300);
+    expect(input.parameters.trigger_policy).toBe('once_per_bar');
+    expect(input.parameters.message).toBe('Watch the breakout');
+    expect(cooldownForTriggerPolicy('once', '1h')).toBe(31_536_000);
   });
 
   it('preserves policy and revision-owned fields when dragging a threshold', () => {

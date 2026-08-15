@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from threading import RLock
 
@@ -256,6 +257,59 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
 _catalog_lock = RLock()
 _dynamic_instruments: dict[str, CanonicalInstrument] = {}
 _dynamic_bindings: dict[str, ProviderBinding] = {}
+_CANONICAL_EQUITY_TOKEN = re.compile(r"^[A-Z0-9._^=-]+$")
+
+
+def _restore_dynamic_equity(instrument_id: str) -> CanonicalInstrument | None:
+    """Rehydrate a discovered equity saved in a workspace after a restart.
+
+    Provider-discovered catalog entries are process-local, but workspace documents
+    persist their canonical IDs.  Equity bindings are deterministic from that ID,
+    so a saved symbol can be restored without requiring a search request first.
+    """
+    parts = instrument_id.split(":")
+    if len(parts) != 3 or parts[0] != "equity":
+        return None
+    _, venue, symbol = parts
+    if not venue or not symbol or any(
+        not _CANONICAL_EQUITY_TOKEN.fullmatch(value)
+        for value in (venue, symbol)
+    ):
+        return None
+
+    instrument = CanonicalInstrument(
+        instrument_id=instrument_id,
+        asset_class=AssetClass.EQUITY,
+        instrument_type=InstrumentType.EQUITY,
+        venue=venue,
+        venue_symbol=symbol,
+        display_symbol=symbol,
+        base_currency=None,
+        quote_currency="USD",
+        exchange_timezone="America/New_York",
+        session_calendar="XNYS",
+        price_scale=100,
+        minimum_tick=Decimal("0.01"),
+        status="active",
+    )
+    register_instrument(
+        instrument,
+        (
+            _binding(
+                instrument,
+                "yahoo",
+                symbol,
+                FeedType.HISTORICAL_POLLING,
+            ),
+            _binding(
+                instrument,
+                "stooq",
+                f"{symbol}.US",
+                FeedType.HISTORICAL_DAILY,
+            ),
+        ),
+    )
+    return instrument
 
 
 def register_instrument(
@@ -306,10 +360,24 @@ def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
 def binding_by_id(binding_id: str) -> ProviderBinding | None:
     if binding_id in _dynamic_bindings:
         return _dynamic_bindings[binding_id]
-    return next((item for item in BINDINGS if item.binding_id == binding_id), None)
+    binding = next((item for item in BINDINGS if item.binding_id == binding_id), None)
+    if binding is not None:
+        return binding
+
+    # A persisted workspace may contain an explicit binding for a symbol that was
+    # discovered in a previous process lifetime.  Recreate the dynamic catalog
+    # entry before looking up that binding.
+    parts = binding_id.split(":", 2)
+    if len(parts) == 3 and parts[0] in {"yahoo", "stooq"}:
+        _restore_dynamic_equity(parts[2])
+    return _dynamic_bindings.get(binding_id)
 
 
 def bindings_for_instrument(instrument_id: str) -> list[ProviderBinding]:
+    bindings = [item for item in all_bindings() if item.instrument_id == instrument_id]
+    if bindings:
+        return bindings
+    _restore_dynamic_equity(instrument_id)
     return [item for item in all_bindings() if item.instrument_id == instrument_id]
 
 

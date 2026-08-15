@@ -8,8 +8,11 @@ import { TradingReplayPanel } from './TradingReplayPanel';
 import { TradingResearchPanel } from './TradingResearchPanel';
 import { TradingScannerPanel } from './TradingScannerPanel';
 import { TradingSidePanel } from './TradingSidePanel';
+import { TradingSideRail } from './TradingSideRail';
+import type { TradingSideTab } from './TradingSidePanel';
 import { TradingTerminalDock } from './TradingTerminalDock';
 import { TradingSymbolSearch } from './TradingSymbolSearch';
+import { TradingAlertToastLayer } from './TradingAlertToastLayer';
 import { tradingApi } from './tradingApi';
 import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
@@ -37,6 +40,7 @@ import './TradingIndicatorMenuOverlay.css';
 import './TradingToolbarAlignment.css';
 import './TradingChartEnhancements.css';
 import './TradingIntervalMenu.css';
+import './TradingSideRail.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'cursor', label: 'Cursor', glyph: '↖' },
@@ -97,6 +101,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
+  const [sidePanelTab, setSidePanelTab] = useState<TradingSideTab>('watchlist');
   const persistence = useTradingWorkspacePersistence();
   const workspaceHydrated = persistence.status !== 'loading';
   const providers = useQuery({ queryKey: ['trading', 'providers'], queryFn: tradingApi.providers });
@@ -422,6 +427,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         onSelect={(match) => applySymbolMatch(match, [match])}
         onClose={() => setSymbolSearchOpen(false)}
       />
+      <TradingAlertToastLayer />
 
       <div className="trading-body">
         <aside className="trading-tools" aria-label="Chart drawing and alert tools">
@@ -440,31 +446,45 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           ))}
         </aside>
         <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid /></section>
-        {workspaceHydrated && panels.right ? (
-          <TradingSidePanel
-            instruments={visibleInstruments}
-            activeInstrumentId={activeChart.instrumentId}
-            indicators={activeChart.indicators}
-            layout={layout}
-            chartCount={charts.length}
-            minimumChartCount={MIN_TRADING_CHARTS}
-            maximumChartCount={MAX_TRADING_CHARTS}
-            links={links}
-            snapMode={drawingSnapMode}
-            onSelectInstrument={(instrumentId) => {
-              const instrument = (instruments.data ?? []).find((item) => item.instrument_id === instrumentId);
-              const next = instrument ? preferredInstrument(instrument, instruments.data ?? []) : null;
-              updateChart(activeChartId, { instrumentId: next?.instrument_id ?? instrumentId, bindingId: null });
-            }}
-            onSetIndicators={(next) => setIndicators(activeChartId, next)}
-            onSetLayout={setLayout}
-            onSetChartCount={setChartCount}
-            onAddChart={addChart}
-            onRemoveChart={() => removeChart()}
-            onSetLink={setLink}
-            onSetSnapMode={(mode: DrawingSnapMode) => setDrawingSnapMode(mode)}
-            onOpenResearch={() => setToolPanel('research')}
-          />
+        {workspaceHydrated ? (
+          <div className={`trading-right-dock ${panels.right ? 'is-expanded' : 'is-collapsed'}`}>
+            {panels.right ? (
+              <TradingSidePanel
+                instruments={visibleInstruments}
+                activeInstrumentId={activeChart.instrumentId}
+                bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+                interval={activeChart.interval}
+                selectedTab={sidePanelTab}
+                onTabChange={setSidePanelTab}
+                indicators={activeChart.indicators}
+                layout={layout}
+                chartCount={charts.length}
+                minimumChartCount={MIN_TRADING_CHARTS}
+                maximumChartCount={MAX_TRADING_CHARTS}
+                links={links}
+                snapMode={drawingSnapMode}
+                onSelectInstrument={(instrumentId) => {
+                  const instrument = (instruments.data ?? []).find((item) => item.instrument_id === instrumentId);
+                  const next = instrument ? preferredInstrument(instrument, instruments.data ?? []) : null;
+                  updateChart(activeChartId, { instrumentId: next?.instrument_id ?? instrumentId, bindingId: null });
+                }}
+                onSetIndicators={(next) => setIndicators(activeChartId, next)}
+                onSetLayout={setLayout}
+                onSetChartCount={setChartCount}
+                onAddChart={addChart}
+                onRemoveChart={() => removeChart()}
+                onSetLink={setLink}
+                onSetSnapMode={(mode: DrawingSnapMode) => setDrawingSnapMode(mode)}
+                onOpenResearch={() => setToolPanel('research')}
+              />
+            ) : null}
+            <TradingSideRail
+              activeTab={sidePanelTab}
+              collapsed={!panels.right}
+              onSelectTab={setSidePanelTab}
+              onToggle={() => setPanel('right', !panels.right)}
+            />
+          </div>
         ) : null}
       </div>
 

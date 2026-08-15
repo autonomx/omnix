@@ -2,6 +2,8 @@ import type {
   TradingAlert,
   TradingAlertCondition,
   TradingAlertCreateInput,
+  TradingAlertNotificationChannel,
+  TradingAlertTriggerPolicy,
   TradingAlertUpdateInput,
 } from './tradingTypes';
 
@@ -10,6 +12,7 @@ export const TRADING_ALERT_TRIGGER_HIGHLIGHT_MS = 15_000;
 
 export type TradingChartAlertState = 'active' | 'triggered' | 'disabled' | 'expired';
 export type TradingAlertExpiration = 'never' | '1h' | '1d' | '1w';
+export type { TradingAlertNotificationChannel, TradingAlertTriggerPolicy };
 
 export function notifyTradingAlertsChanged(): void {
   window.dispatchEvent(new CustomEvent(TRADING_ALERTS_CHANGED_EVENT));
@@ -44,6 +47,32 @@ export function priceConditionForThreshold(threshold: number, latestPrice: numbe
   return threshold >= latestPrice ? 'price_above' : 'price_below';
 }
 
+export function cooldownForTriggerPolicy(
+  policy: TradingAlertTriggerPolicy,
+  interval: string,
+): number {
+  if (policy === 'once') return 31_536_000;
+  if (policy === 'every_time') return 0;
+  const intervalSeconds: Record<string, number> = {
+    '1m': 60,
+    '3m': 180,
+    '5m': 300,
+    '15m': 900,
+    '30m': 1_800,
+    '1h': 3_600,
+    '2h': 7_200,
+    '4h': 14_400,
+    '6h': 21_600,
+    '8h': 28_800,
+    '12h': 43_200,
+    '1d': 86_400,
+    '3d': 259_200,
+    '1w': 604_800,
+    '1mo': 2_592_000,
+  };
+  return intervalSeconds[interval] ?? 60;
+}
+
 export function chartAlertCreateInput(input: {
   alertId: string;
   instrumentId: string;
@@ -53,8 +82,12 @@ export function chartAlertCreateInput(input: {
   latestPrice: number;
   condition?: 'price_above' | 'price_below';
   expiration: TradingAlertExpiration;
+  triggerPolicy?: TradingAlertTriggerPolicy;
+  message?: string;
+  notificationChannels?: TradingAlertNotificationChannel[];
   now?: number;
 }): TradingAlertCreateInput {
+  const triggerPolicy = input.triggerPolicy ?? 'every_time';
   return {
     alert_id: input.alertId,
     instrument_id: input.instrumentId,
@@ -70,30 +103,51 @@ export function chartAlertCreateInput(input: {
       signal_period: 9,
       component: 'value',
       anchor_bars_ago: 0,
+      message: input.message ?? '',
+      notification_channels: input.notificationChannels ?? ['app', 'toast'],
+      trigger_policy: triggerPolicy,
     },
     evaluation_policy: {
       interval: input.interval,
       allow_partial_bars: false,
       formula_version: 'omnix-indicators-v2',
     },
-    cooldown_seconds: 0,
+    cooldown_seconds: cooldownForTriggerPolicy(triggerPolicy, input.interval),
     expires_at: expirationTimestamp(input.expiration, input.now),
   };
 }
 
 export function chartAlertUpdateInput(
   alert: TradingAlert,
-  patch: Partial<Pick<TradingAlertUpdateInput, 'threshold' | 'condition_type' | 'enabled' | 'expires_at'>>,
+  patch: Partial<Pick<TradingAlertUpdateInput, 'threshold' | 'condition_type' | 'enabled' | 'expires_at'>> & {
+    trigger_policy?: TradingAlertTriggerPolicy;
+    message?: string;
+    notification_channels?: TradingAlertNotificationChannel[];
+  },
 ): TradingAlertUpdateInput {
+  const triggerPolicy = patch.trigger_policy ?? alert.parameters.trigger_policy ?? 'every_time';
   return {
     instrument_id: alert.instrument_id,
     binding_id: alert.binding_id ?? null,
     condition_type: patch.condition_type ?? alert.condition_type,
     threshold: patch.threshold ?? alert.threshold,
-    parameters: { ...alert.parameters },
+    parameters: {
+      ...alert.parameters,
+      ...(patch.message !== undefined || alert.parameters.message !== undefined
+        ? { message: patch.message ?? alert.parameters.message ?? '' }
+        : {}),
+      ...(patch.notification_channels !== undefined || alert.parameters.notification_channels !== undefined
+        ? { notification_channels: patch.notification_channels ?? alert.parameters.notification_channels ?? ['app', 'toast'] }
+        : {}),
+      ...(patch.trigger_policy !== undefined || alert.parameters.trigger_policy !== undefined
+        ? { trigger_policy: triggerPolicy }
+        : {}),
+    },
     evaluation_policy: { ...alert.evaluation_policy },
     enabled: patch.enabled ?? alert.enabled,
-    cooldown_seconds: alert.cooldown_seconds,
+    cooldown_seconds: patch.trigger_policy
+      ? cooldownForTriggerPolicy(triggerPolicy, alert.evaluation_policy.interval)
+      : alert.cooldown_seconds,
     expires_at: patch.expires_at === undefined ? alert.expires_at ?? null : patch.expires_at,
   };
 }

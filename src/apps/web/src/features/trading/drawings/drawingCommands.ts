@@ -132,6 +132,12 @@ export function deleteSelectedDrawing(state: DrawingState): DrawingState {
   return { ...next, drawings: next.drawings.filter((drawing) => drawing.drawingId !== state.selectedId), selectedId: null };
 }
 
+export function deleteAllDrawings(state: DrawingState): DrawingState {
+  if (state.drawings.length === 0) return state;
+  const next = snapshot(state);
+  return { ...next, drawings: [], selectedId: null };
+}
+
 export function undoDrawing(state: DrawingState): DrawingState {
   const previous = state.history.at(-1);
   if (!previous) return state;
