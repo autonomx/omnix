@@ -6,7 +6,6 @@ const paperApi = vi.hoisted(() => ({
   snapshot: vi.fn(),
   createAccount: vi.fn(),
   placeOrder: vi.fn(),
-  cancelOrder: vi.fn(),
   resetAccount: vi.fn(),
   archiveAccount: vi.fn(),
 }));
@@ -54,8 +53,24 @@ describe('TradingPaperPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Order not placed: insufficient available paper cash.',
+      'Order not placed: insufficient available paper cash. Check reserved funds or wait for an open order to fill.',
     );
     expect(paperApi.placeOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({ quantity: '3' }));
+  });
+
+  it('shows a confirmation tooltip after a paper order is accepted', async () => {
+    paperApi.placeOrder.mockResolvedValue({ status: 'filled' });
+
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+
+    const quantity = await screen.findByRole('textbox', { name: 'Order quantity' });
+    fireEvent.change(quantity, { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ }));
+
+    const confirmation = await screen.findByRole('status');
+    expect(confirmation).toHaveClass('trading-paper-confirmation-toast');
+    expect(confirmation).toHaveTextContent('Market order executed on');
+    expect(confirmation).toHaveTextContent('BINANCE:SOLUSDT');
+    expect(confirmation).toHaveTextContent('Buy 3');
   });
 });

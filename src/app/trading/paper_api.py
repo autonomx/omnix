@@ -98,16 +98,14 @@ def create_trading_paper_router(
     @router.delete(
         "/accounts/{account_id}/orders/{order_id}",
         response_model=PaperOrder,
+        include_in_schema=False,
     )
     async def cancel_order(account_id: str, order_id: str):
-        try:
-            return await asyncio.to_thread(
-                repository_factory().cancel_order,
-                account_id,
-                order_id,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        del account_id, order_id
+        raise HTTPException(
+            status_code=409,
+            detail="paper_order_cancellation_disabled",
+        )
 
     @router.post(
         "/accounts/{account_id}/observations",

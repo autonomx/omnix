@@ -7,7 +7,6 @@ const paperApi = vi.hoisted(() => ({
   snapshot: vi.fn(),
   createAccount: vi.fn(),
   placeOrder: vi.fn(),
-  cancelOrder: vi.fn(),
 }));
 
 vi.mock('./tradingPaperApi', () => ({ tradingPaperApi: paperApi }));
@@ -45,5 +44,39 @@ describe('TradingTerminalDock', () => {
       screen.getByRole('button', { name: 'Restore paper trading panel' }).click();
     });
     expect(screen.getByText('No paper account')).toBeInTheDocument();
+  });
+
+  it('projects a working order into the open positions view', async () => {
+    const account = {
+      account_id: 'paper-1', name: 'Paper account', base_currency: 'USD', commission_bps: '0',
+      enabled: true, revision: 1,
+    };
+    const workingOrder = {
+      account_id: account.account_id, order_id: 'order-1', instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
+      binding_id: null, side: 'buy', order_type: 'market', quantity: '3', limit_price: null,
+      stop_price: null, reference_price: '75.17', status: 'open', filled_quantity: '0',
+      average_fill_price: null, idempotency_key: 'key-1', rejection_reason: null, reserved_cash: '0',
+    };
+    paperApi.accounts.mockResolvedValue([account]);
+    paperApi.snapshot.mockResolvedValue({
+      account,
+      balances: [{ currency: 'USD', available: '100000', reserved: '0' }],
+      positions: [],
+      open_orders: [workingOrder],
+      order_history: [workingOrder],
+      recent_fills: [],
+      recent_ledger: [],
+    });
+
+    render(<TradingTerminalDock instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await waitFor(() => expect(paperApi.snapshot).toHaveBeenCalledWith(account.account_id));
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Restore paper trading panel' }).click();
+    });
+
+    expect(screen.getByRole('tab', { name: 'Positions 1' })).toBeInTheDocument();
+    expect(screen.getByText('BINANCE:SOLUSDT')).toBeInTheDocument();
+    expect(screen.getByText('Working')).toBeInTheDocument();
   });
 });

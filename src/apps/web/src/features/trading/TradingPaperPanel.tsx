@@ -6,10 +6,24 @@ import './TradingPaper.css';
 
 type PaperTicketTab = 'order' | 'dom';
 type PaperNotice = { kind: 'success' | 'error'; message: string };
+type PaperConfirmation = {
+  title: string;
+  market: string;
+  side: PaperSide;
+  quantity: string;
+  price: string;
+};
 
 function displaySymbol(instrumentId: string): string {
   const raw = instrumentId.split(':').at(-1) ?? instrumentId;
   return raw.replace('-', '/');
+}
+
+function displayMarket(instrumentId: string): string {
+  const parts = instrumentId.split(':');
+  const venue = parts[1] ?? 'Market';
+  const rawSymbol = parts.at(-1) ?? instrumentId;
+  return `${venue}:${rawSymbol.replaceAll('-', '')}`;
 }
 
 function number(value?: string | null, digits = 2): string {
@@ -27,7 +41,7 @@ function parsePositive(value: string): number | null {
 function paperErrorMessage(error: unknown, action = 'Order'): string {
   const raw = error instanceof Error ? error.message : String(error);
   if (raw.includes('insufficient_paper_cash')) {
-    return 'Order not placed: insufficient available paper cash. Check reserved funds, cancel an open order, or reset the account.';
+    return 'Order not placed: insufficient available paper cash. Check reserved funds or wait for an open order to fill. Reset the account only to clear the simulation.';
   }
   if (raw.includes('insufficient_paper_position')) {
     return 'Order not placed: insufficient paper position to sell.';
@@ -66,6 +80,7 @@ export function TradingPaperPanel({
   const [stopLoss, setStopLoss] = useState('');
   const [quote, setQuote] = useState<Record<string, string> | null>(null);
   const [notice, setNotice] = useState<PaperNotice | null>(null);
+  const [confirmation, setConfirmation] = useState<PaperConfirmation | null>(null);
 
   const activeAccount = useMemo(
     () => accounts.find((account) => account.account_id === accountId) ?? accounts[0] ?? null,
@@ -125,10 +140,13 @@ export function TradingPaperPanel({
   }, [bindingId, instrumentId]);
 
   useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 4_500);
+    if (!notice && !confirmation) return;
+    const timer = window.setTimeout(() => {
+      setNotice(null);
+      setConfirmation(null);
+    }, 4_500);
     return () => window.clearTimeout(timer);
-  }, [notice]);
+  }, [confirmation, notice]);
 
   const mutate = async (operation: () => Promise<unknown>, preferredId?: string) => {
     setStatus('saving');
@@ -176,6 +194,7 @@ export function TradingPaperPanel({
     const orderId = `paper-order-${Date.now()}`;
     setStatus('saving');
     setNotice(null);
+    setConfirmation(null);
     try {
       const order = await tradingPaperApi.placeOrder(activeAccount.account_id, {
         order_id: orderId,
@@ -190,7 +209,17 @@ export function TradingPaperPanel({
         idempotency_key: orderId,
       });
       await refresh(activeAccount.account_id);
-      setNotice({ kind: 'success', message: `${order.status === 'filled' ? 'Trade filled' : 'Order submitted'} · ${quantity} ${symbol}` });
+      const orderPrice = order.average_fill_price
+        ?? order.limit_price
+        ?? order.stop_price
+        ?? (side === 'buy' ? askPrice : bidPrice);
+      setConfirmation({
+        title: `${orderType[0].toUpperCase()}${orderType.slice(1)} order ${order.status === 'filled' ? 'executed' : 'submitted'} on`,
+        market: displayMarket(instrumentId),
+        side,
+        quantity,
+        price: orderPrice === null || orderPrice === undefined ? '—' : number(String(orderPrice), 2),
+      });
     } catch (error) {
       setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
       setNotice({ kind: 'error', message: paperErrorMessage(error) });
@@ -314,7 +343,7 @@ export function TradingPaperPanel({
             <strong>{side === 'buy' ? 'Buy' : 'Sell'}</strong>
             <span>{quantity || '0'} {symbol} {orderType.toUpperCase()}</span>
           </button>
-          {notice ? <div className={`trading-paper-notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'} aria-live="polite">{notice.message}</div> : null}
+          {notice?.kind === 'error' ? <div className="trading-paper-notice error" role="alert" aria-live="polite">{notice.message}</div> : null}
           <small className="trading-paper-disclaimer">Paper only · no live brokerage execution</small>
         </div>
       ) : (
@@ -344,7 +373,7 @@ export function TradingPaperPanel({
                 <li key={order.order_id}>
                   <strong>{order.side} {order.quantity} · {order.order_type}</strong>
                   <span>{displaySymbol(order.instrument_id)}</span>
-                  <button type="button" onClick={() => void mutate(() => tradingPaperApi.cancelOrder(snapshot.account.account_id, order.order_id), snapshot.account.account_id)}>Cancel</button>
+                  <span>Awaiting fill</span>
                 </li>
               ))}
               {snapshot.open_orders.length === 0 ? <li className="empty">No open orders.</li> : null}
@@ -357,6 +386,18 @@ export function TradingPaperPanel({
               <button type="button" disabled={!snapshot.account.enabled} onClick={() => void mutate(() => tradingPaperApi.archiveAccount(snapshot.account), snapshot.account.account_id)}>Archive</button>
             </div>
           </details>
+        </div>
+      ) : null}
+
+      {confirmation ? (
+        <div className="trading-paper-confirmation-toast" role="status" aria-live="polite">
+          <div className="trading-paper-confirmation-check" aria-hidden="true">✓</div>
+          <div className="trading-paper-confirmation-copy">
+            <div>{confirmation.title}</div>
+            <strong className="trading-paper-confirmation-market"><span aria-hidden="true">≋</span>{confirmation.market}</strong>
+            <div className="trading-paper-confirmation-result"><span className={confirmation.side}>{confirmation.side === 'buy' ? 'Buy' : 'Sell'} {confirmation.quantity}</span><span>at <strong>{confirmation.price}</strong></span></div>
+          </div>
+          <button type="button" className="trading-paper-confirmation-close" aria-label="Dismiss order confirmation" onClick={() => setConfirmation(null)}>×</button>
         </div>
       ) : null}
     </section>

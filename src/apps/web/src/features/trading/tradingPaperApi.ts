@@ -40,11 +40,6 @@ export const tradingPaperApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  cancelOrder: (accountId: string, orderId: string) =>
-    requestJson<PaperOrder>(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}`,
-      { method: 'DELETE' },
-    ),
   resetAccount: (account: PaperAccount, initialCash: string) =>
     requestJson<PaperAccountSnapshot>(
       `/api/trading/paper/accounts/${encodeURIComponent(account.account_id)}/reset`,

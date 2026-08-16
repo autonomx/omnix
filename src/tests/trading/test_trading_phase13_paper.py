@@ -278,6 +278,13 @@ def test_paper_routes_support_orders_reset_archive_and_revision_conflicts() -> N
     assert placed.status_code == 201
     assert placed.json()["status"] == "open"
 
+    cancel = client.delete(
+        "/api/trading/paper/accounts/paper-1/orders/api-order",
+    )
+    assert cancel.status_code == 409
+    assert cancel.json()["detail"] == "paper_order_cancellation_disabled"
+    assert repository.current.open_orders[0].status == "open"
+
     reset = client.post(
         "/api/trading/paper/accounts/paper-1/reset",
         headers={"If-Match": "1"},
