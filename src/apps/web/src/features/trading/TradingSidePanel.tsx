@@ -3,16 +3,18 @@ import { TradingAlertsPanel } from './TradingAlertsPanel';
 import { TradingIndicatorPresets } from './TradingIndicatorPresets';
 import { TradingLayoutPanel } from './TradingLayoutPanel';
 import { TradingNewsPanel } from './TradingNewsPanel';
+import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingWatchlist } from './TradingWatchlist';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
 import type { CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, TradingAlert } from './tradingTypes';
 
-export type TradingSideTab = 'watchlist' | 'indicators' | 'alerts' | 'news' | 'layout';
+export type TradingSideTab = 'watchlist' | 'paper' | 'indicators' | 'alerts' | 'news' | 'layout';
 
 const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
+  { id: 'paper', label: 'Trade' },
   { id: 'indicators', label: 'Indicators' },
   { id: 'alerts', label: 'Alerts' },
   { id: 'news', label: 'News' },
@@ -26,6 +28,8 @@ export function TradingSidePanel({
   interval,
   selectedTab,
   onTabChange,
+  paperAccountId,
+  onPaperAccountChange,
   indicators,
   layout,
   chartCount,
@@ -50,6 +54,8 @@ export function TradingSidePanel({
   interval: string;
   selectedTab?: TradingSideTab;
   onTabChange?: (tab: TradingSideTab) => void;
+  paperAccountId?: string | null;
+  onPaperAccountChange?: (accountId: string) => void;
   indicators: CoreIndicatorInstance[];
   layout: TradingLayout;
   chartCount: number;
@@ -102,7 +108,16 @@ export function TradingSidePanel({
           <TradingWatchlist
             instruments={instruments}
             activeInstrumentId={activeInstrumentId}
+            interval={interval}
             onSelect={onSelectInstrument}
+          />
+        ) : null}
+        {activeTab === 'paper' ? (
+          <TradingPaperPanel
+            instrumentId={activeInstrumentId}
+            bindingId={bindingId}
+            preferredAccountId={paperAccountId}
+            onAccountChange={onPaperAccountChange}
           />
         ) : null}
         {activeTab === 'indicators' ? (

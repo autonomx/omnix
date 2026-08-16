@@ -31,6 +31,7 @@ describe('TradingTerminalDock', () => {
       screen.getByRole('button', { name: 'Restore paper trading panel' }).click();
     });
     await waitFor(() => expect(screen.getByText('No paper account')).toBeInTheDocument());
+    expect(screen.queryByRole('complementary', { name: 'Paper order ticket' })).not.toBeInTheDocument();
 
     await act(async () => {
       screen.getByRole('button', { name: 'Minimize paper trading panel' }).click();

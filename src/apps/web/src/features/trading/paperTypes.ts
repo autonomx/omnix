@@ -38,6 +38,7 @@ export interface PaperOrder {
   quantity: string;
   limit_price?: string | null;
   stop_price?: string | null;
+  reference_price?: string | null;
   status: PaperOrderStatus;
   filled_quantity: string;
   average_fill_price?: string | null;
@@ -69,6 +70,7 @@ export interface PaperLedgerEntry {
   fill_id?: string | null;
   idempotency_key: string;
   payload: Record<string, unknown>;
+  created_at?: string | null;
 }
 
 export interface PaperAccountSnapshot {
@@ -76,6 +78,7 @@ export interface PaperAccountSnapshot {
   balances: PaperBalance[];
   positions: PaperPosition[];
   open_orders: PaperOrder[];
+  order_history?: PaperOrder[];
   recent_fills: PaperFill[];
   recent_ledger: PaperLedgerEntry[];
 }
@@ -97,5 +100,6 @@ export interface PaperOrderInput {
   quantity: string;
   limit_price?: string | null;
   stop_price?: string | null;
+  reference_price?: string | null;
   idempotency_key: string;
 }

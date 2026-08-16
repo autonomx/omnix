@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { tradingApi } from './tradingApi';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import type { CanonicalInstrument, TradingDocument } from './tradingTypes';
+import { tradingIntervalMinutes } from './tradingIntervals';
+import { percentChangeFromBars, percentChangeFromLookback } from './tradingWatchlistChange';
 import {
   formatWatchlistPrice,
   watchlistDisplaySymbol,
@@ -11,6 +13,52 @@ import './TradingWatchlist.css';
 
 type WatchlistPayload = { name: string; instrumentIds: string[] };
 type QuoteSnapshot = { price: string | null; changePercent: number | null };
+
+const fallbackIntervals = ['1mo', '1w', '1d', '12h', '8h', '6h', '4h', '2h', '1h', '30m', '15m', '5m', '3m', '1m'];
+
+function fallbackIntervalCandidates(interval: string): string[] {
+  const targetMinutes = tradingIntervalMinutes(interval);
+  if (targetMinutes == null) return [];
+  return fallbackIntervals.filter((candidate) => {
+    const candidateMinutes = tradingIntervalMinutes(candidate);
+    return candidate !== interval && candidateMinutes != null && candidateMinutes < targetMinutes;
+  });
+}
+
+function fallbackLimit(interval: string, baseInterval: string): number {
+  const targetMinutes = tradingIntervalMinutes(interval) ?? 1;
+  const baseMinutes = tradingIntervalMinutes(baseInterval) ?? targetMinutes;
+  return Math.min(5_000, Math.max(2, Math.ceil(targetMinutes / baseMinutes) + 3));
+}
+
+async function intervalChange(
+  instrumentId: string,
+  interval: string,
+  quotePrice: string | null | undefined,
+  directBars: Awaited<ReturnType<typeof tradingApi.bars>> | null,
+): Promise<{ price: string | null; changePercent: number | null }> {
+  const directHistory = directBars?.bars ?? [];
+  const directPrice = quotePrice ?? directHistory.at(-1)?.close?.toString() ?? null;
+  const directIntervalIsNative = directBars?.binding.supported_intervals.includes(interval) ?? false;
+  const directChange = directIntervalIsNative
+    ? percentChangeFromBars(quotePrice, directHistory)
+    : null;
+  if (directChange != null) return { price: directPrice, changePercent: directChange };
+
+  for (const baseInterval of fallbackIntervalCandidates(interval)) {
+    const fallback = await tradingApi.bars(instrumentId, baseInterval, fallbackLimit(interval, baseInterval)).catch(() => null);
+    const fallbackBars = fallback?.bars ?? [];
+    const derivedChange = percentChangeFromLookback(quotePrice, fallbackBars, interval);
+    if (derivedChange != null) {
+      return {
+        price: quotePrice ?? fallbackBars.at(-1)?.close?.toString() ?? directPrice,
+        changePercent: derivedChange,
+      };
+    }
+  }
+
+  return { price: directPrice, changePercent: null };
+}
 
 function payload(record: TradingDocument | null): WatchlistPayload {
   const value = record?.payload as Partial<WatchlistPayload> | undefined;
@@ -86,10 +134,12 @@ function defaultWatchlistInstrumentIds(instruments: CanonicalInstrument[]): stri
 export function TradingWatchlist({
   instruments,
   activeInstrumentId,
+  interval,
   onSelect,
 }: {
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
+  interval: string;
   onSelect: (instrumentId: string) => void;
 }) {
   const [records, setRecords] = useState<TradingDocument[]>([]);
@@ -166,13 +216,11 @@ export function TradingWatchlist({
       const next: Record<string, QuoteSnapshot> = {};
       await Promise.all(instrumentIds.map(async (instrumentId) => {
         try {
-          const quote = await tradingApi.quote(instrumentId);
-          const rawChange = quote.change_percent ?? quote.changePercent ?? quote.percent_change;
-          const parsedChange = rawChange == null ? Number.NaN : Number(rawChange);
-          next[instrumentId] = {
-            price: quote.price ?? null,
-            changePercent: Number.isFinite(parsedChange) ? parsedChange : null,
-          };
+          const [quote, bars] = await Promise.all([
+            tradingApi.quote(instrumentId).catch(() => null),
+            tradingApi.bars(instrumentId, interval, 2).catch(() => null),
+          ]);
+          next[instrumentId] = await intervalChange(instrumentId, interval, quote?.price, bars);
         } catch {
           next[instrumentId] = { price: null, changePercent: null };
         }
@@ -181,7 +229,7 @@ export function TradingWatchlist({
     })();
 
     return () => { cancelled = true; };
-  }, [instrumentIdsKey]);
+  }, [instrumentIdsKey, interval]);
 
   const replace = (record: TradingDocument) => {
     setRecords((items) => items.map((item) => item.record_id === record.record_id ? record : item));
@@ -277,7 +325,7 @@ export function TradingWatchlist({
       <div className="trading-watchlist-columns" aria-hidden="true">
         <span>Symbol</span>
         <span>Last</span>
-        <span>Chg%</span>
+        <span title={`Change over ${interval}`}>Chg%</span>
       </div>
       <ul>
         {normalizedInstrumentIds.map((instrumentId, index) => {

@@ -58,22 +58,23 @@ def _order(row) -> PaperOrder:
         quantity=Decimal(row[6]),
         limit_price=Decimal(row[7]) if row[7] is not None else None,
         stop_price=Decimal(row[8]) if row[8] is not None else None,
-        status=str(row[9]),
-        filled_quantity=Decimal(row[10]),
-        average_fill_price=Decimal(row[11]) if row[11] is not None else None,
-        idempotency_key=str(row[12]),
-        rejection_reason=str(row[13]) if row[13] is not None else None,
-        reserved_cash=Decimal(row[14]),
-        created_at=row[15],
-        updated_at=row[16],
+        reference_price=Decimal(row[9]) if row[9] is not None else None,
+        status=str(row[10]),
+        filled_quantity=Decimal(row[11]),
+        average_fill_price=Decimal(row[12]) if row[12] is not None else None,
+        idempotency_key=str(row[13]),
+        rejection_reason=str(row[14]) if row[14] is not None else None,
+        reserved_cash=Decimal(row[15]),
+        created_at=row[16],
+        updated_at=row[17],
     )
 
 
 _ORDER_COLUMNS = """
     account_id, order_id, instrument_id, binding_id, side, order_type,
-    quantity, limit_price, stop_price, status, filled_quantity,
-    average_fill_price, idempotency_key, rejection_reason, reserved_cash,
-    created_at, updated_at
+    quantity, limit_price, stop_price, reference_price, status,
+    filled_quantity, average_fill_price, idempotency_key, rejection_reason,
+    reserved_cash, created_at, updated_at
 """
 
 
@@ -261,8 +262,8 @@ class TradingPaperRepository:
                 INSERT INTO omnix_trading_paper_orders (
                     workspace_id, account_id, order_id, instrument_id, binding_id,
                     side, order_type, quantity, limit_price, stop_price,
-                    status, idempotency_key, reserved_cash
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)
+                    reference_price, status, idempotency_key, reserved_cash
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)
                 RETURNING {_ORDER_COLUMNS}
                 """,
                 (
@@ -276,6 +277,7 @@ class TradingPaperRepository:
                     request.quantity,
                     request.limit_price,
                     request.stop_price,
+                    request.reference_price,
                     request.idempotency_key,
                     reserved_cash,
                 ),
@@ -709,6 +711,13 @@ class TradingPaperRepository:
                     (self.context.workspace_id, account_id),
                 ).fetchall()
             ]
+            order_history = [
+                _order(row)
+                for row in uow.connection.execute(
+                    f"SELECT {_ORDER_COLUMNS} FROM omnix_trading_paper_orders WHERE workspace_id = %s AND account_id = %s ORDER BY created_at DESC, order_id DESC LIMIT 200",
+                    (self.context.workspace_id, account_id),
+                ).fetchall()
+            ]
             fills = [
                 PaperFill(
                     fill_id=str(row[0]),
@@ -737,9 +746,10 @@ class TradingPaperRepository:
                     fill_id=str(row[5]) if row[5] else None,
                     idempotency_key=str(row[6]),
                     payload=dict(row[7] or {}),
+                    created_at=row[8],
                 )
                 for row in uow.connection.execute(
-                    "SELECT ledger_id, entry_type, currency, amount, order_id, fill_id, idempotency_key, payload FROM omnix_trading_paper_ledger WHERE workspace_id = %s AND account_id = %s ORDER BY created_at DESC LIMIT 200",
+                    "SELECT ledger_id, entry_type, currency, amount, order_id, fill_id, idempotency_key, payload, created_at FROM omnix_trading_paper_ledger WHERE workspace_id = %s AND account_id = %s ORDER BY created_at DESC LIMIT 200",
                     (self.context.workspace_id, account_id),
                 ).fetchall()
             ]
@@ -748,6 +758,7 @@ class TradingPaperRepository:
                 balances=balances,
                 positions=positions,
                 open_orders=orders,
+                order_history=order_history,
                 recent_fills=fills,
                 recent_ledger=ledger,
             )

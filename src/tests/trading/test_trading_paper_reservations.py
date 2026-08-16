@@ -106,6 +106,13 @@ def test_buying_power_reservation_is_deterministic_and_conservative() -> None:
         commission_bps=Decimal("10"),
     ) == Decimal("750")
 
+    quoted_market = market.model_copy(update={"reference_price": Decimal("100")})
+    assert paper_buy_reservation(
+        quoted_market,
+        available_cash=Decimal("750"),
+        commission_bps=Decimal("10"),
+    ) == Decimal("100.1")
+
 
 def test_idempotency_key_reuse_requires_identical_semantic_payload() -> None:
     request = PaperOrderRequest(

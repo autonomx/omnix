@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
-import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingReplayPanel } from './TradingReplayPanel';
 import { TradingResearchPanel } from './TradingResearchPanel';
 import { TradingScannerPanel } from './TradingScannerPanel';
@@ -77,7 +76,9 @@ const chartTypeGlyphs: Record<TradingChartType, string> = {
   baseline: 'baseline',
 };
 
-type ToolPanel = 'scanner' | 'replay' | 'paper' | 'research';
+type ToolPanel = 'scanner' | 'replay' | 'research';
+
+// TradingSidePanel mounts TradingPaperPanel in the dedicated Trade tab.
 
 function preferredInterval(binding: ProviderBinding, current: string): string {
   if (isIntervalAvailable(current, binding.supported_intervals)) return current;
@@ -106,6 +107,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
   const [sidePanelTab, setSidePanelTab] = useState<TradingSideTab>('watchlist');
+  const [paperAccountId, setPaperAccountId] = useState<string | null>(null);
   const persistence = useTradingWorkspacePersistence();
   const workspaceHydrated = persistence.status !== 'loading';
   const providers = useQuery({ queryKey: ['trading', 'providers'], queryFn: tradingApi.providers });
@@ -152,6 +154,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const supportedIntervals = selectedBinding?.supported_intervals ?? [];
   const quickIntervals = quickIntervalPriority.filter((interval) => isIntervalAvailable(interval, supportedIntervals));
   const favorite = favoriteInstrumentIds.includes(activeChart.instrumentId);
+
+  useEffect(() => {
+    if (!activeInstrument) return;
+    const preferred = preferredInstrument(activeInstrument, instruments.data ?? []);
+    if (preferred.instrument_id === activeChart.instrumentId) return;
+    updateChart(activeChartId, { instrumentId: preferred.instrument_id, bindingId: null });
+  }, [activeChart.instrumentId, activeChartId, activeInstrument, instruments.data, updateChart]);
 
   useEffect(() => {
     if (!selectedBinding || isIntervalAvailable(activeChart.interval, selectedBinding.supported_intervals)) return;
@@ -242,6 +251,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   const toggleToolPanel = (panel: ToolPanel) => {
     setToolPanel((current) => current === panel ? null : panel);
+  };
+
+  const openPaperTrading = () => {
+    setSidePanelTab('paper');
+    setPanel('right', true);
+    setToolPanel(null);
   };
 
   const createWorkspace = () => {
@@ -438,7 +453,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <div className="trading-tool-shortcuts" role="group" aria-label="Trading tools">
           <button type="button" aria-pressed={toolPanel === 'scanner'} onClick={() => toggleToolPanel('scanner')}>Scanner</button>
           <button type="button" aria-pressed={toolPanel === 'replay'} onClick={() => toggleToolPanel('replay')}>Backtest</button>
-          <button type="button" aria-pressed={toolPanel === 'paper'} onClick={() => toggleToolPanel('paper')}>Paper</button>
+          <button type="button" aria-pressed={sidePanelTab === 'paper' && panels.right} onClick={openPaperTrading}>Trade</button>
           <button type="button" aria-pressed={toolPanel === 'research'} onClick={() => toggleToolPanel('research')}>AI Research</button>
         </div>
 
@@ -462,7 +477,18 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
       <div className="trading-body">
         <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />
-        <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid /></section>
+        <div className="trading-chart-column">
+          <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid /></section>
+          {workspaceHydrated && panels.bottom ? (
+            <TradingTerminalDock
+              instrumentId={activeChart.instrumentId}
+              bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+              preferredAccountId={paperAccountId}
+              onAccountChange={setPaperAccountId}
+              onSelectAlert={navigateToAlert}
+            />
+          ) : null}
+        </div>
         {workspaceHydrated ? (
           <div className={`trading-right-dock ${panels.right ? 'is-expanded' : 'is-collapsed'}`}>
             {panels.right ? (
@@ -473,6 +499,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 interval={activeChart.interval}
                 selectedTab={sidePanelTab}
                 onTabChange={setSidePanelTab}
+                paperAccountId={paperAccountId}
+                onPaperAccountChange={setPaperAccountId}
                 indicators={activeChart.indicators}
                 layout={layout}
                 chartCount={charts.length}
@@ -509,7 +537,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       {toolPanel ? (
         <section className="trading-tool-drawer" aria-label="Trading analysis tool">
           <header>
-            <strong>{toolPanel === 'scanner' ? 'Market scanner' : toolPanel === 'replay' ? 'Replay & backtest' : toolPanel === 'paper' ? 'Paper account manager' : 'AI market research'}</strong>
+            <strong>{toolPanel === 'scanner' ? 'Market scanner' : toolPanel === 'replay' ? 'Replay & backtest' : 'AI market research'}</strong>
             <button type="button" onClick={() => setToolPanel(null)} aria-label="Close analysis tool">×</button>
           </header>
           <div>
@@ -517,20 +545,11 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             {toolPanel === 'replay' ? (
               <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
             ) : null}
-            {toolPanel === 'paper' ? <TradingPaperPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} /> : null}
             {toolPanel === 'research' ? (
               <TradingResearchPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
             ) : null}
           </div>
         </section>
-      ) : null}
-
-      {workspaceHydrated && panels.bottom ? (
-        <TradingTerminalDock
-          instrumentId={activeChart.instrumentId}
-          bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
-          onSelectAlert={navigateToAlert}
-        />
       ) : null}
 
     </main>

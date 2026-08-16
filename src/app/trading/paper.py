@@ -67,6 +67,7 @@ class PaperOrderRequest(BaseModel):
     quantity: Decimal = Field(gt=0)
     limit_price: Decimal | None = Field(default=None, gt=0)
     stop_price: Decimal | None = Field(default=None, gt=0)
+    reference_price: Decimal | None = Field(default=None, gt=0)
     idempotency_key: str = Field(min_length=1, max_length=240)
 
     @model_validator(mode="after")
@@ -79,6 +80,8 @@ class PaperOrderRequest(BaseModel):
             self.limit_price is not None or self.stop_price is not None
         ):
             raise ValueError("market orders cannot include limit_price or stop_price")
+        if self.order_type != "market" and self.reference_price is not None:
+            raise ValueError("reference_price is only valid for market orders")
         return self
 
 
@@ -94,6 +97,7 @@ class PaperOrder(BaseModel):
     quantity: Decimal
     limit_price: Decimal | None = None
     stop_price: Decimal | None = None
+    reference_price: Decimal | None = None
     status: PaperOrderStatus = "open"
     filled_quantity: Decimal = Decimal("0")
     average_fill_price: Decimal | None = None
@@ -159,6 +163,7 @@ class PaperLedgerEntry(BaseModel):
     fill_id: str | None = None
     idempotency_key: str
     payload: dict[str, object] = Field(default_factory=dict)
+    created_at: datetime | None = None
 
 
 class PaperAccountSnapshot(BaseModel):
@@ -168,6 +173,7 @@ class PaperAccountSnapshot(BaseModel):
     balances: list[PaperBalance]
     positions: list[PaperPosition]
     open_orders: list[PaperOrder]
+    order_history: list[PaperOrder] = Field(default_factory=list)
     recent_fills: list[PaperFill]
     recent_ledger: list[PaperLedgerEntry]
 
@@ -183,6 +189,7 @@ def paper_order_request_matches(order: PaperOrder, request: PaperOrderRequest) -
         and order.quantity == request.quantity
         and order.limit_price == request.limit_price
         and order.stop_price == request.stop_price
+        and order.reference_price == request.reference_price
     )
 
 
@@ -236,14 +243,16 @@ def paper_buy_reservation(
     """Compute the cash hold for an open buy order.
 
     Limit and stop orders reserve their deterministic trigger-price notional plus
-    commission. A market order has no authoritative price at placement time, so
-    it conservatively reserves all currently available buying power until the
-    first market observation fills or rejects it.
+    commission. A market order uses the caller's current quote when available;
+    callers without a quote retain the conservative full-buying-power reservation.
     """
     if request.side != "buy":
         return Decimal("0")
     if request.order_type == "market":
-        return available_cash
+        if request.reference_price is None:
+            return available_cash
+        notional = request.quantity * request.reference_price
+        return notional + paper_commission(notional, commission_bps)
     reference_price = request.limit_price if request.order_type == "limit" else request.stop_price
     assert reference_price is not None
     notional = request.quantity * reference_price
