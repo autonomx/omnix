@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true
+  },
+  "include": [
+    "src/features/trading/**/*.ts",
+    "src/features/trading/**/*.tsx"
+  ],
+  "exclude": [
+    "src/features/trading/**/*.test.ts",
+    "src/features/trading/**/*.test.tsx"
+  ]
+}

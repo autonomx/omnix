@@ -1,6 +1,6 @@
 # Omnix Trading Terminal — Final Implementation Roadmap
 
-**Status:** Final roadmap, ready to merge and implement  
+**Status:** Final roadmap, maintained as the implementation and qualification contract  
 **Target route:** `/trading`  
 **Target module name:** `Trading`  
 **Roadmap branch:** `agent/trading-terminal-roadmap`  
@@ -34,6 +34,7 @@ The existing `tradingview-mcp` repository is a validated prototype and code dono
 14. **Charting Beta is crypto-only.** Equity support begins only after the charting foundation passes qualification.
 15. **Incremental delivery.** Every phase is independently reviewable and testable. Alerts, scanning, replay, paper trading, and AI research remain blocked until their prerequisite gates pass.
 16. **Attribution and licensing are preserved.** Lightweight Charts attribution remains compliant, and substantial MIT-licensed code migrated from the prototype retains the required notice.
+17. **Layout capacity is adaptive, not a fixed preset model.** Workspaces may add or remove charts within the supported capacity and reflow automatically or by an explicit column choice. One-, two-, and four-chart arrangements are qualification/examples, not the only product layouts.
 
 ## 3. Delivery milestones
 
@@ -46,7 +47,7 @@ Phases `OTT-0` and `OTT-1` prove the renderer, drawing interaction model, live-d
 Phases `OTT-2` through `OTT-7` deliver the first useful release:
 
 - Binance spot historical and live crypto data
-- one- and four-chart layouts
+- adaptive multi-chart grid, Beta-qualified through four active charts
 - synchronized crosshair and visible range
 - watchlists and saved workspaces
 - candlestick, line, and volume
@@ -60,11 +61,11 @@ Phases `OTT-2` through `OTT-7` deliver the first useful release:
 
 ### Milestone C — Technical Analysis MVP
 
-Phases `OTT-8` and `OTT-9` add experimental stocks, more crypto providers, advanced indicators, panes, chart types, drawing tools, and stronger provider fallback.
+Phases `OTT-8` and `OTT-9` add experimental stocks, more crypto providers, advanced indicators, panes, chart types, drawing tools, flexible multi-panel arrangements, and stronger provider fallback.
 
 ### Milestone D — Market Research Suite
 
-Phases `OTT-10` through `OTT-13` add alerts, scanner, replay, deterministic backtesting, and paper simulation.
+Phases `OTT-10` through `OTT-13` add alerts, restart-safe scanner execution, replay, deterministic backtesting, and paper simulation.
 
 ### Milestone E — Omnix Intelligence and release hardening
 
@@ -78,7 +79,7 @@ Phases `OTT-14` and `OTT-15` add optional local-LLM research, accessibility, per
 - Sidebar navigation entry
 - Dedicated focus mode that can collapse the Omnix shell for maximum chart area
 - Binance spot historical and live candles
-- One-chart and four-chart layouts
+- Adaptive multi-chart grid, with one through four active charts covered by Beta qualification
 - Candlestick, line, and volume displays
 - Instrument, venue, provider/feed, and timeframe selection
 - Explicit active chart
@@ -97,7 +98,7 @@ Phases `OTT-14` and `OTT-15` add optional local-LLM research, accessibility, per
 - Experimental Yahoo-derived equity adapter with personal/local-use labeling
 - Stooq whole-dataset fallback for eligible daily equity data
 - Coinbase, Kraken, and optionally Hyperliquid adapters
-- Two-horizontal and two-vertical layouts
+- Flexible multi-chart and multi-panel arrangements, including horizontal and vertical splits
 - Bar, area, and baseline chart types
 - MACD, Bollinger Bands, ATR, and explicitly anchored VWAP
 - Indicator panes and presets
@@ -144,7 +145,7 @@ The Trading workspace follows the approved Omnix visual direction:
 - Compact trading toolbar below the global Omnix top bar
 - Instrument search, venue/provider selector, timeframe selector, chart type selector, indicator menu, layout selector, link-group controls, undo/redo, snapshot, and fullscreen controls
 - Vertical drawing-tools rail beside the chart grid
-- One-, two-, and four-chart layouts as milestones permit
+- Adaptive chart grid that reflows as charts are added/removed and supports explicit column arrangements within the supported capacity
 - Right drawer with Watchlist, Indicators, Data, and Layout tabs
 - Bottom drawer added only when Alerts, Replay, Backtests, Paper, or Logs are implemented
 - Clear active-chart focus and keyboard shortcuts
@@ -160,7 +161,7 @@ The module must not add a second application header, router, query client, theme
 ### 6.1 Frontend
 
 ```text
-apps/web/src/features/trading/
+src/apps/web/src/features/trading/
   TradingWorkspace.tsx
   TradingWorkspace.css
   TradingToolbar.tsx
@@ -275,6 +276,7 @@ Every mutation uses optimistic concurrency through `revision` or `If-Match`. Mul
 Use dedicated relational schemas when query or transaction requirements justify them:
 
 - alerts and alert evaluations
+- scanner runs, incremental progress, and results
 - backtest runs and trade records
 - paper accounts, orders, fills, positions, balances, and ledger entries
 
@@ -550,6 +552,7 @@ The OpenAPI schema is the source for frontend API types. Hand-maintained duplica
 - Provider errors do not erase the last valid chart state
 - Provider changes visibly reload and relabel the complete dataset
 - Secrets never appear in browser payloads, logs, fixtures, or diagnostics
+- Scanner execution persists incremental progress and obeys shared global/provider budgets
 - AI research remains read-only unless a later paper-simulation contract explicitly allows writes
 
 ## 10. Implementation phases
@@ -636,9 +639,9 @@ The spike is a go/no-go gate. Provider expansion and production UI work do not b
 
 Update:
 
-- `apps/web/src/app/modules.ts`
-- `apps/web/src/app/router.tsx`
-- `apps/web/src/features/ModuleWorkspace.tsx`
+- `src/apps/web/src/app/modules.ts`
+- `src/apps/web/src/app/router.tsx`
+- `src/apps/web/src/features/ModuleWorkspace.tsx`
 - navigation icon/design primitive mapping
 - module capabilities
 - appearance integration
@@ -747,15 +750,16 @@ Acceptance:
 - A recoverable provider failure keeps the last valid chart visible.
 - Provider/feed/freshness information is always readable.
 
-## Phase OTT-4 — Four-chart layout and synchronization
+## Phase OTT-4 — Flexible multi-chart layout and synchronization
 
 ### OTT-4.1 — Layout and active-chart model
 
-Support one-chart and four-chart layouts for Beta.
+Support an adaptive multi-chart grid for Beta and qualify one through four active charts without defining those counts as the only product layouts.
 
 Acceptance:
 
-- Layout changes preserve per-chart state.
+- Charts can be added/removed within the supported capacity and the grid reflows without losing per-chart state.
+- Explicit column arrangements preserve the same chart-state model.
 - Active chart is visually and semantically explicit.
 - Resize does not create chart recreation loops.
 
@@ -897,7 +901,7 @@ Acceptance:
 
 Add:
 
-- two-horizontal and two-vertical layouts
+- flexible multi-chart and multi-panel arrangements, including horizontal and vertical splits
 - bar, area, and baseline chart types
 - MACD, Bollinger Bands, ATR, and anchored VWAP
 - indicator presets
@@ -935,7 +939,11 @@ Implement deterministic backend scans over normalized snapshots.
 Acceptance:
 
 - Scanner formulas reuse versioned indicator specifications.
-- Progress and cancellation use Omnix jobs/events where appropriate.
+- Incremental per-instrument progress and matched-result evidence are persisted while a run is executing.
+- A queued/running scan survives gateway restart and resumes only instruments that do not already have persisted completion evidence.
+- Cancellation is persisted and reconciled to a terminal cancelled state before or after restart.
+- Per-run concurrency remains bounded and all runs share explicit process-wide/global and per-provider concurrency budgets.
+- Duplicate retries or recovery cannot duplicate completed instrument progress or scanner results.
 - Results show provider and freshness metadata.
 - Rate limits and scan universe sizes are bounded.
 
@@ -957,7 +965,10 @@ Acceptance:
 
 - Strategies declare formula version and parameters.
 - Commission, slippage, warm-up, fill timing, and position sizing are explicit.
-- Re-running the same strategy over the same dataset fingerprint produces the same result.
+- Ending cash, ending position, and the ending mark price are explicit.
+- Open positions are marked under a disclosed deterministic mark-to-market policy.
+- Realized and unrealized P&L reconcile to total economic P&L.
+- Re-running economically identical input produces the same deterministic economic-result fingerprint independent of run ID, wall-clock run timestamps, or artifact storage identity.
 - Trade log, equity curve, drawdown, win rate, and exposure are available.
 
 ## Phase OTT-13 — Paper simulation
@@ -969,6 +980,10 @@ Acceptance:
 - Paper positions reference canonical instruments, not data providers.
 - Paper state is separate from real brokerage concepts.
 - Orders validate quantity, side, type, and optional prices.
+- Open BUY orders reserve buying power and open SELL orders reserve position quantity so pending orders cannot double-spend either resource.
+- Reusing an idempotency key with a different semantic order payload is rejected; an identical retry is harmless.
+- Limit and stop simulation evaluates normalized observation high/low ranges when available and uses deterministic configured trigger-price fills.
+- Cancellation, rejection, and fill release or consume reservations atomically with order/balance/position/ledger state.
 - Fills and ledger updates are atomic.
 - P&L is reproducible from persisted fills and marks.
 - Reset/archive operations are explicit.
@@ -1006,6 +1021,7 @@ Acceptance:
 - PostgreSQL revision-conflict tests
 - listener/subscription leak testing
 - bounded memory for inactive workspaces
+- restart/recovery and shared-budget qualification for scanner execution
 
 ### Security and legal
 
@@ -1020,7 +1036,7 @@ Acceptance:
 The program is release-ready when:
 
 - Charting Beta and Technical Analysis MVP gates have passed
-- required frontend, backend, API, persistence, streaming, Playwright, accessibility, and performance suites pass on the exact head
+- required frontend, backend, API, persistence, streaming, Playwright, accessibility, and performance suites pass on the exact immutable pull-request head
 - PostgreSQL is the sole user-state authority
 - provider source and freshness are visible throughout the product
 - all displayed controls are functional
@@ -1035,7 +1051,7 @@ The program is release-ready when:
 4. Binance historical provider and cache/coalescing
 5. Single historical/live chart
 6. Binance shared streaming and exact gap recovery
-7. Four-chart layout and synchronization
+7. Flexible multi-chart layout and synchronization
 8. Watchlists, workspace revisions, and draft recovery
 9. SMA, EMA, RSI, and golden fixtures
 10. Beta horizontal/trend-line drawing engine
@@ -1060,13 +1076,13 @@ The program succeeds when Omnix provides a reliable local-first trading research
 
 - inspect canonical crypto and equity instruments with explicit data provenance
 - switch provider bindings without duplicating watchlists or losing drawings
-- use one or four synchronized charts without instability
+- use flexible synchronized multi-chart workspaces without instability
 - receive and recover live crypto updates without gaps or duplicates
 - save revisioned watchlists and workspaces
 - calculate trustworthy indicators
 - create and persist real chart drawings
 - add advanced analysis features without changing underlying instrument truth
-- run alerts, scans, replay, backtests, and paper simulations deterministically
+- run alerts, restart-safe scans, replay, backtests, and paper simulations deterministically
 - optionally ask local models for bounded, read-only research
 
 The product should feel visually comparable to a modern trading workstation while remaining honest about provider limitations, licensing scope, delayed data, and unsupported capabilities.

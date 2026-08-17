@@ -91,9 +91,9 @@ resources/data/
 .coverage
 htmlcov/
 node_modules/
-apps/web/test-results/
-apps/web/playwright-report/
-apps/web/tsconfig.tsbuildinfo
+src/apps/web/test-results/
+src/apps/web/playwright-report/
+src/apps/web/tsconfig.tsbuildinfo
 
 # Jupyter
 .ipynb_checkpoints/

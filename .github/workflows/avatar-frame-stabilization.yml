@@ -11,17 +11,17 @@ on:
       - "src/tests/unit/characters/test_avatar_frame_stabilization.py"
       - "src/tests/unit/characters/test_avatar_viseme_generation.py"
       - "src/tests/unit/characters/test_live2d_avatar_api.py"
-      - "apps/web/src/features/chatbot/CharacterAvatarPanel.tsx"
-      - "apps/web/src/features/chatbot/CharacterAvatarPanel.css"
-      - "apps/web/src/features/chatbot/characterAvatarClient.ts"
-      - "apps/web/src/features/chatbot/characterClient.ts"
-      - "apps/web/src/features/chatbot/liveCharacterAvatarBridge.css"
-      - "apps/web/src/features/chatbot/liveCharacterAvatarBridge.ts"
-      - "apps/web/src/features/chatbot/liveCharacterAvatarBridge.test.ts"
-      - "apps/web/src/features/chatbot/liveCharacterVisemeBridge.ts"
-      - "apps/web/src/features/chatbot/liveCharacterVisemeBridge.test.ts"
-      - "apps/web/src/features/chatbot/live2dCharacterRenderer.ts"
-      - "apps/web/src/features/chatbot/live2dCharacterRenderer.test.ts"
+      - "src/apps/web/src/features/chatbot/CharacterAvatarPanel.tsx"
+      - "src/apps/web/src/features/chatbot/CharacterAvatarPanel.css"
+      - "src/apps/web/src/features/chatbot/characterAvatarClient.ts"
+      - "src/apps/web/src/features/chatbot/characterClient.ts"
+      - "src/apps/web/src/features/chatbot/liveCharacterAvatarBridge.css"
+      - "src/apps/web/src/features/chatbot/liveCharacterAvatarBridge.ts"
+      - "src/apps/web/src/features/chatbot/liveCharacterAvatarBridge.test.ts"
+      - "src/apps/web/src/features/chatbot/liveCharacterVisemeBridge.ts"
+      - "src/apps/web/src/features/chatbot/liveCharacterVisemeBridge.test.ts"
+      - "src/apps/web/src/features/chatbot/live2dCharacterRenderer.ts"
+      - "src/apps/web/src/features/chatbot/live2dCharacterRenderer.test.ts"
       - "docs/character-mode/live-avatar-phases.md"
       - ".github/workflows/avatar-frame-stabilization.yml"
   workflow_dispatch:
@@ -73,7 +73,7 @@ jobs:
           src/tests/unit/characters/test_live2d_avatar_api.py
       - name: Typecheck character avatar production modules
         run: |
-          cat > apps/web/tsconfig.avatar.json <<'JSON'
+          cat > src/apps/web/tsconfig.avatar.json <<'JSON'
           {
             "extends": "./tsconfig.json",
             "include": [
@@ -87,7 +87,7 @@ jobs:
             "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
           }
           JSON
-          cd apps/web
+          cd src/apps/web
           npx tsc -p tsconfig.avatar.json
       - name: Verify browser avatar playback
         run: >-

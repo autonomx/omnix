@@ -71,7 +71,7 @@ def _gateway_smoke(root: Path) -> list[dict[str, Any]]:
         }
     )
 
-    checked_in_schema = json.loads((root / "apps/web/src/api/generated/openapi.json").read_text(encoding="utf-8"))
+    checked_in_schema = json.loads((root / "src/apps/web/src/api/generated/openapi.json").read_text(encoding="utf-8"))
     live_schema = create_gateway_app().openapi()
     checks.append(
         {

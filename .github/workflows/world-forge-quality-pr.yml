@@ -9,8 +9,8 @@ on:
       - "src/tests/rpg/response_generation/test_world_forge_*.py"
       - "src/tests/rpg/response_generation/test_world_profile_creation.py"
       - "src/tests/rpg/worlds/test_*world*.py"
-      - "apps/web/src/features/rpg/RpgWorldCompletionModels.ts"
-      - "apps/web/src/features/rpg/RpgWorldCompletionModels.test.ts"
+      - "src/apps/web/src/features/rpg/RpgWorldCompletionModels.ts"
+      - "src/apps/web/src/features/rpg/RpgWorldCompletionModels.test.ts"
       - ".github/workflows/world-forge-quality-pr.yml"
   workflow_dispatch:
 

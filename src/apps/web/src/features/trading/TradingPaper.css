@@ -1,0 +1,80 @@
+.trading-side-panel>nav{grid-template-columns:repeat(6,minmax(0,1fr))}
+.trading-paper-panel{display:grid;align-content:start;gap:12px;min-height:100%;margin:-10px;padding:10px;background:#07111c;color:#d7e2ec}
+.trading-paper-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:2px}
+.trading-paper-symbol{display:flex;align-items:center;gap:8px;min-width:0}
+.trading-paper-symbol-mark{display:grid;place-items:center;width:27px;height:27px;border-radius:6px;background:#2c79ff;color:#fff;font-size:12px;font-weight:800}
+.trading-paper-symbol>div{display:grid;gap:2px;min-width:0}
+.trading-paper-symbol strong{overflow:hidden;color:#eef5fb;font-size:14px;text-overflow:ellipsis;white-space:nowrap}
+.trading-paper-symbol small,.trading-paper-disclaimer{color:#8093a8;font-size:9px}
+.trading-paper-header-actions{display:flex;align-items:center;gap:6px}
+.trading-paper-status{border:1px solid rgba(52,214,154,.25);border-radius:999px;background:rgba(52,214,154,.1);padding:4px 7px;color:#55dca6;font-size:8px;text-transform:uppercase;letter-spacing:.06em}
+.trading-paper-header-actions button{width:27px;height:27px;border:0;background:transparent;padding:0;color:#8ca0b4;font-size:18px;line-height:1}
+.trading-paper-mode{display:grid;grid-template-columns:1fr 1fr;gap:2px;border-radius:7px;background:rgba(116,151,181,.12);padding:3px}
+.trading-paper-mode button,.trading-paper-order-types button{border:0;border-radius:5px;background:transparent;padding:7px;color:#8598ab;font-size:11px}
+.trading-paper-mode button[aria-selected=true]{background:#152638;color:#f1f6fb;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.trading-paper-account-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:7px}
+.trading-paper-account-row label,.trading-paper-create label,.trading-paper-price-field,.trading-paper-units{display:grid;gap:5px;color:#8396aa;font-size:9px;text-transform:uppercase;letter-spacing:.06em}
+.trading-paper-account-row select,.trading-paper-create input,.trading-paper-price-field input,.trading-paper-units input{min-width:0;padding:8px 9px}
+.trading-paper-new-account{height:31px;border-color:rgba(116,151,181,.2)!important;background:#0d1a27!important;color:#b7c7d7!important;font-size:9px!important;white-space:nowrap}
+.trading-paper-order{display:grid;gap:12px}
+.trading-paper-quotes{display:grid;grid-template-columns:1fr 1fr;gap:1px;overflow:hidden;border-radius:8px;background:rgba(116,151,181,.16)}
+.trading-paper-quote{display:grid;gap:4px;border:0!important;border-radius:0!important;padding:10px 11px!important;background:#111f2d!important;text-align:left}
+.trading-paper-quote span{font-size:11px;font-weight:600}
+.trading-paper-quote strong{font-size:14px;line-height:1}
+.trading-paper-quote.sell{color:#ff8187}.trading-paper-quote.buy{color:#6fbcff}
+.trading-paper-quote.active.sell{background:rgba(190,57,67,.18)!important;box-shadow:inset 0 -2px #ff5d68}
+.trading-paper-quote.active.buy{background:rgba(40,130,227,.2)!important;box-shadow:inset 0 -2px #3c9dff}
+.trading-paper-order-types{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid rgba(116,151,181,.14)}
+.trading-paper-order-types button{border-radius:0;padding:7px 4px}
+.trading-paper-order-types button[aria-selected=true]{box-shadow:inset 0 -2px #2f8cff;color:#eaf4ff}
+.trading-paper-units>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;border:1px solid rgba(116,151,181,.18);border-radius:5px;background:#0b1622}
+.trading-paper-units input{border:0!important;background:transparent!important;outline:0!important}
+.trading-paper-units>div>span{padding:0 10px;color:#7e91a6;font-size:10px;text-transform:none}
+.trading-paper-price-field input{margin-top:0}
+.trading-paper-metrics{display:grid;gap:0;margin:0;border-radius:8px;background:rgba(116,151,181,.08);padding:9px 11px}
+.trading-paper-metrics div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0}
+.trading-paper-metrics dt{color:#8b9caf;font-size:10px}.trading-paper-metrics dd{margin:0;color:#edf5fb;font-size:10px;text-align:right}
+.trading-paper-exits{display:grid;gap:8px}
+.trading-paper-exits>summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#e2ebf3;font-size:12px;list-style:none}
+.trading-paper-exits>summary::-webkit-details-marker{display:none}
+.trading-paper-exits>summary span{color:#8295aa;font-size:15px}
+.trading-paper-exit-row{display:grid;grid-template-columns:minmax(0,1fr) 35px;align-items:center;gap:8px;min-height:34px}
+.trading-paper-exit-row label{display:flex;align-items:center;gap:7px;min-width:0;color:#8396aa;font-size:10px}
+.trading-paper-exit-row label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trading-paper-exit-row input{width:88px;min-width:0;padding:6px 7px}
+.trading-paper-exit-row>button{position:relative;width:34px;height:21px;border:0!important;border-radius:999px!important;background:#566575!important;padding:0!important}
+.trading-paper-exit-row>button i{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#f5f8fb;transition:transform .15s ease}
+.trading-paper-exit-row>button.active{background:#2f8cff!important}.trading-paper-exit-row>button.active i{transform:translateX(13px)}
+.trading-paper-submit-wrap{position:relative;display:grid}
+.trading-paper-submit{display:grid;gap:3px;border:0!important;border-radius:9px!important;padding:11px!important;color:#fff!important;text-align:center}
+.trading-paper-submit.buy{background:linear-gradient(180deg,#2f70ff,#245ae0)!important}.trading-paper-submit.sell{background:linear-gradient(180deg,#db4c58,#b63844)!important}
+.trading-paper-submit strong{font-size:13px}.trading-paper-submit span{font-size:9px;font-weight:600;opacity:.9}
+.trading-paper-submit:disabled{cursor:not-allowed;opacity:.55}
+.trading-paper-confirmation-toast{position:fixed;z-index:200;top:20px;right:18px;display:grid;grid-template-columns:56px minmax(0,1fr) 24px;width:min(390px,calc(100vw - 36px));min-height:104px;overflow:hidden;border:1px solid rgba(85,104,121,.16);border-radius:8px;background:#fff;color:#1d2731;box-shadow:0 8px 24px rgba(31,45,57,.2);animation:trading-paper-confirmation-in .18s ease-out}
+.trading-paper-confirmation-check{display:grid;place-items:center;background:#e6f5f3;color:#087f70;font-size:22px}
+.trading-paper-confirmation-copy{display:grid;align-content:center;gap:5px;padding:14px 12px;font-size:16px;line-height:1.15}.trading-paper-confirmation-market{display:flex;align-items:center;gap:5px;width:max-content;max-width:100%;border-radius:12px;background:#edf0f3;padding:3px 7px;color:#303a44;font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.trading-paper-confirmation-market>span{display:grid;place-items:center;width:15px;height:15px;border-radius:50%;background:#233b55;color:#8dd4ed;font-size:11px;font-weight:800}
+.trading-paper-confirmation-result{display:flex;align-items:center;gap:7px;font-size:15px}.trading-paper-confirmation-result>span:first-child{border-radius:5px;background:#e8efff;padding:3px 6px;color:#1f57d6;font-weight:700}.trading-paper-confirmation-result>span:first-child.sell{background:#ffebee;color:#c12f43}.trading-paper-confirmation-result>span:last-child{color:#52606b}.trading-paper-confirmation-result strong{color:#26313b}.trading-paper-confirmation-close{align-self:start;justify-self:end;width:30px;height:30px;border:0!important;background:transparent!important;padding:0!important;color:#1c252c!important;font-size:25px!important;font-weight:300!important;line-height:1}.trading-paper-confirmation-close:hover{background:#f0f3f5!important}
+@keyframes trading-paper-confirmation-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.trading-paper-notice{margin-top:-4px;border:1px solid;border-radius:6px;padding:7px 8px;font-size:9px;line-height:1.35;box-shadow:0 5px 18px rgba(0,0,0,.18)}
+.trading-paper-notice.success{border-color:rgba(63,218,158,.25);background:rgba(32,201,151,.1);color:#8ce8c3}
+.trading-paper-notice.error{border-color:rgba(255,107,107,.35);background:rgba(255,107,107,.1);color:#ff9a9f}
+.trading-paper-create{display:grid;gap:9px;padding:14px;border:1px solid rgba(116,151,181,.14);border-radius:8px;background:rgba(116,151,181,.06)}
+.trading-paper-create strong{color:#ecf4fb;font-size:13px}.trading-paper-create>span{color:#8295aa;font-size:10px;line-height:1.45}
+.trading-paper-create button{border:0;background:#2f70ff;color:#fff;font-weight:700}
+.trading-paper-dom{display:grid;gap:8px;min-height:220px}
+.trading-paper-dom-header,.trading-paper-dom-footer{display:flex;justify-content:space-between;padding:7px 9px;color:#7f91a6;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+.trading-paper-dom-header{border-bottom:1px solid rgba(116,151,181,.12)}
+.trading-paper-dom-empty{display:grid;place-content:center;gap:5px;min-height:150px;border:1px solid rgba(116,151,181,.12);border-radius:7px;color:#74889d;text-align:center}
+.trading-paper-dom-empty strong{color:#c8d5e1;font-size:12px}.trading-paper-dom-empty span{max-width:190px;font-size:10px;line-height:1.45}
+.trading-paper-dom-footer{border-top:1px solid rgba(116,151,181,.12);text-transform:none;letter-spacing:0}.trading-paper-dom-footer strong{color:#e8f2fb}
+.trading-paper-activity{display:grid;gap:6px;border-top:1px solid rgba(116,151,181,.12);padding-top:4px}
+.trading-paper-activity details{border-bottom:1px solid rgba(116,151,181,.1);padding:5px 0}
+.trading-paper-activity summary{display:flex;justify-content:space-between;cursor:pointer;color:#9cafc1;font-size:10px}.trading-paper-activity summary span{color:#d9e7f2}
+.trading-paper-list{display:grid;gap:5px;margin:7px 0 0;padding:0;list-style:none}
+.trading-paper-list li{display:grid;gap:2px;padding:6px 7px;border-radius:5px;background:rgba(116,151,181,.07)}
+.trading-paper-list li strong{color:#dbe7f1;font-size:10px}.trading-paper-list li span{color:#8194a8;font-size:9px}.trading-paper-list li.empty{color:#8194a8;font-size:9px}
+.trading-paper-list li button{justify-self:start;padding:4px 7px;font-size:9px}
+.trading-paper-danger-actions{display:flex;gap:6px;padding-top:8px}.trading-paper-danger-actions button{font-size:9px}
+.trading-paper-panel[data-status=conflict] .trading-paper-status,.trading-paper-panel[data-status=error] .trading-paper-status{border-color:rgba(255,107,107,.3);background:rgba(255,107,107,.1);color:#ff858b}
+@media(max-width:1200px){.trading-paper-account-row{grid-template-columns:1fr}.trading-paper-new-account{width:100%}}
+@media(prefers-reduced-motion:reduce){.trading-paper-panel *{scroll-behavior:auto!important;transition:none!important}}

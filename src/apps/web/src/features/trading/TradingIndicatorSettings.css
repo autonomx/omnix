@@ -1,0 +1,31 @@
+.trading-indicator-settings-backdrop{position:fixed;z-index:2100;inset:0;display:grid;place-items:center;padding:20px;background:rgba(1,7,13,.54);backdrop-filter:blur(3px)}
+.trading-indicator-settings{display:grid;width:min(480px,calc(100vw - 32px));max-height:min(720px,calc(100vh - 32px));grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden;border:1px solid rgba(116,151,181,.28);border-radius:10px;background:#f8fafc;color:#111923;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.trading-indicator-settings-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 24px 14px;background:#fff}
+.trading-indicator-settings-header h2{margin:0;font-size:22px;line-height:1.2;letter-spacing:-.02em}
+.trading-indicator-settings-close{display:grid;place-items:center;width:32px;height:32px;border:0!important;border-radius:6px!important;background:transparent!important;color:#1c2632!important;font-size:28px;line-height:1;font-weight:300}
+.trading-indicator-settings-close:hover{background:#edf1f5!important}
+.trading-indicator-settings-tabs{display:flex;gap:28px;padding:0 24px;border-bottom:1px solid #e8ebee;background:#fff}
+.trading-indicator-settings-tabs button{position:relative;border:0!important;border-radius:0!important;background:transparent!important;padding:0 0 12px;color:#54606c;font-size:15px;font-weight:600}
+.trading-indicator-settings-tabs button.active{color:#111923}
+.trading-indicator-settings-tabs button.active:after{position:absolute;right:0;bottom:-1px;left:0;height:3px;border-radius:3px 3px 0 0;background:#303236;content:""}
+.trading-indicator-settings-body{display:grid;align-content:start;gap:14px;overflow:auto;padding:28px 24px;background:#fff}
+.trading-indicator-settings-section-label{margin-top:2px;color:#6b7580;font-size:11px;letter-spacing:.05em;text-transform:uppercase}
+.trading-indicator-settings-field{display:grid;grid-template-columns:minmax(0,1fr) minmax(130px,190px);align-items:center;gap:14px;color:#18212c;font-size:14px}
+.trading-indicator-settings-field input,.trading-indicator-settings-field select{min-width:0;width:100%;height:40px;border:1px solid #d9dee3!important;border-radius:8px!important;background:#fff!important;padding:7px 10px!important;color:#18212c!important;font-size:14px}
+.trading-indicator-settings-field input:disabled,.trading-indicator-settings-field select:disabled{background:#f4f6f8!important;color:#6d7782!important}
+.trading-indicator-settings-help{margin:0;color:#697581;font-size:12px;line-height:1.5}
+.trading-indicator-settings-plot-list{display:grid;gap:8px}
+.trading-indicator-settings-plot{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px}
+.trading-indicator-settings-plot label,.trading-indicator-settings-check{display:flex;align-items:center;gap:9px;color:#18212c;font-size:14px}
+.trading-indicator-settings-plot input[type=checkbox],.trading-indicator-settings-check input[type=checkbox]{width:20px;height:20px;accent-color:#303236}
+.trading-indicator-settings-plot-actions{display:flex;align-items:center;gap:8px}
+.trading-indicator-settings-plot input[type=color]{width:56px;height:36px;border:1px solid #d9dee3;border-radius:7px;background:#fff;padding:3px}
+.trading-indicator-settings-plot-actions select{width:48px;height:36px;border:1px solid #d9dee3!important;border-radius:7px!important;background:#fff!important;padding:3px!important;color:#18212c!important;font-size:20px!important}
+.trading-indicator-settings-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px;border-top:1px solid #e5e8eb;background:#fff}
+.trading-indicator-settings-footer>div{display:flex;gap:8px}
+.trading-indicator-settings-footer button{min-width:78px;height:40px;border:1px solid #20252b!important;border-radius:8px!important;background:#fff!important;padding:7px 14px!important;color:#141a20!important;font-size:14px}
+.trading-indicator-settings-footer button:hover{background:#f1f3f5!important}
+.trading-indicator-settings-footer button.primary{border-color:#303236!important;background:#303236!important;color:#fff!important}
+.trading-indicator-settings-footer button.primary:hover{background:#17191c!important}
+.trading-indicator-settings-footer .trading-indicator-settings-defaults{min-width:100px;border-color:#d9dee3!important;color:#29313a!important;text-align:left}
+@media(max-width:560px){.trading-indicator-settings-backdrop{padding:0}.trading-indicator-settings{width:100vw;max-height:100vh;height:100vh;border:0;border-radius:0}.trading-indicator-settings-header{padding:18px 16px 14px}.trading-indicator-settings-tabs{padding:0 16px}.trading-indicator-settings-body{padding:24px 16px}.trading-indicator-settings-footer{padding:12px 16px}}

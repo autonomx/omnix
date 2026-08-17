@@ -46,7 +46,7 @@ Character Mode builds on:
 - `src/app/assistant_memory` for curated memory, pending candidates, snapshots, history recall, compaction, privacy, and Hermes adaptation.
 - `src/app/assets` for voice-profile assets.
 - `src/app/chat` and `src/app/gateway` for session persistence and typed APIs.
-- `apps/web/src/features/chatbot` for Chat, live voice, personality, voice selection, and memory management.
+- `src/apps/web/src/features/chatbot` for Chat, live voice, personality, voice selection, and memory management.
 
 No separate character-memory database or transcript replay mechanism should be introduced.
 

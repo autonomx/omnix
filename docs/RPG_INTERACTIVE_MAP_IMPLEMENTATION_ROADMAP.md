@@ -20,8 +20,8 @@ The RPG already has useful pieces that should be extended rather than replaced:
 
 - `src/app/rpg/world_graph.py` defines deterministic location nodes, routes, discovery stubs, and safe-route instant-travel decisions.
 - `src/app/rpg/world_runtime.py` adapts saved runtime state into the world graph and exposes report-oriented map metadata. It is a report adapter, not yet a production-authoritative map projection.
-- `apps/web/src/features/rpg/RpgWorldRail.tsx` has a compact map card, but live sessions currently expose only a location placeholder rather than an interactive map.
-- `apps/web/public/rpg/glimmerdeep-pass-map.svg` proves that static SVG map art is already supported.
+- `src/apps/web/src/features/rpg/RpgWorldRail.tsx` has a compact map card, but live sessions currently expose only a location placeholder rather than an interactive map.
+- `src/apps/web/public/rpg/glimmerdeep-pass-map.svg` proves that static SVG map art is already supported.
 - The shared Image Generation Workspace can create and persist image assets that a later map-art pipeline can reuse.
 
 The missing layer is a canonical renderable map document, a lossless authoritative projection, cacheable definition and overlay resources, and a frontend renderer bound to current RPG state.

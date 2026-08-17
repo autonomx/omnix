@@ -26,7 +26,7 @@ def get_diagnostics_payload(model_residency_records: list[ModelResidencyRecord] 
         workers=workers,
         event_stream={
             "transport": "sse",
-            "client": "apps/web/src/events/eventClient.ts",
+            "client": "src/apps/web/src/events/eventClient.ts",
             "status": "available",
         },
         model_residency=get_model_residency_diagnostics(model_residency_records),
