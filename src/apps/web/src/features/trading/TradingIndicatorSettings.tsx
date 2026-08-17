@@ -275,7 +275,7 @@ export function TradingIndicatorSettings({
                   {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((value) => <option key={value} value={value}>{value} decimal{value === 1 ? '' : 's'}</option>)}
                 </select>
               </label>
-              <label className="trading-indicator-settings-check"><input type="checkbox" checked={style?.labelsOnPriceScale !== false} onChange={(event) => setStyle({ labelsOnPriceScale: event.target.checked })} /><span>Labels on price scale</span></label>
+              <label className="trading-indicator-settings-check"><input type="checkbox" checked={style?.labelsOnPriceScale === true} onChange={(event) => setStyle({ labelsOnPriceScale: event.target.checked })} /><span>Show price levels</span></label>
               <label className="trading-indicator-settings-check"><input type="checkbox" checked={style?.valuesInStatusLine !== false} onChange={(event) => setStyle({ valuesInStatusLine: event.target.checked })} /><span>Values in status line</span></label>
               <div className="trading-indicator-settings-section-label">Input values</div>
               <label className="trading-indicator-settings-check"><input type="checkbox" checked={style?.inputsInStatusLine !== false} onChange={(event) => setStyle({ inputsInStatusLine: event.target.checked })} /><span>Inputs in status line</span></label>

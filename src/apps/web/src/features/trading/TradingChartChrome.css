@@ -1,0 +1,82 @@
+/* Keep the chart chrome inside the header instead of floating over the plot. */
+.trading-chart-header .trading-drawing-manager {
+  top: 5px;
+  right: 118px;
+  z-index: 7;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.trading-chart-header .trading-drawing-manager button,
+.trading-chart-header .trading-drawing-manager input {
+  border: 0;
+  box-shadow: none;
+}
+
+.trading-chart-header .trading-drawing-manager button {
+  background: transparent;
+}
+
+.trading-chart-header .trading-drawing-manager button:hover {
+  background: rgba(22, 136, 255, 0.14);
+}
+
+/* Match the currency control to the narrow price-scale column. */
+.trading-y-axis-controls {
+  width: 88px;
+}
+
+.trading-y-axis-currency-row {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.trading-y-axis-controls .trading-y-axis-currency-trigger {
+  width: 88px;
+  min-width: 0;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  padding: 0 8px;
+  color: inherit;
+  font-size: 10px;
+}
+
+.trading-y-axis-controls .trading-y-axis-currency-trigger:hover {
+  border: 0;
+  background: rgba(22, 136, 255, 0.12);
+}
+
+.trading-y-axis-controls .trading-y-axis-action {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  line-height: 1;
+  text-align: center;
+}
+
+/* Overlay labels must remain readable against the dark chart surface. */
+.trading-overlay-indicator,
+.trading-overlay-indicator.active,
+.trading-overlay-indicator.hidden {
+  color: #d7e2ec;
+}
+
+:root[data-omnix-appearance='light'] .trading-overlay-indicator,
+:root[data-omnix-appearance='light'] .trading-overlay-indicator.active,
+:root[data-omnix-appearance='light'] .trading-overlay-indicator.hidden {
+  color: var(--trading-light-text) !important;
+}
+
+@media (max-width: 700px) {
+  .trading-y-axis-controls {
+    width: 88px;
+  }
+}

@@ -54,4 +54,16 @@ describe('versioned core indicators', () => {
       expect(outputs.every((output) => output.points.every((point) => Number.isFinite(point.value)))).toBe(true);
     }
   });
+
+  it('hides indicator price levels by default and allows explicit opt-in', () => {
+    const bars: MarketBar[] = Array.from({ length: 30 }, (_, index) => ({
+      instrument_id: 'fixture', interval: '1d',
+      start_time: new Date(Date.UTC(2025, 0, index + 1)).toISOString(),
+      end_time: new Date(Date.UTC(2025, 0, index + 2)).toISOString(),
+      open: '100', high: '102', low: '98', close: String(100 + index), volume: '1000',
+      is_final: true, adjustment_mode: 'raw', session: 'regular', provider: 'fixture', ingestion_revision: 1, received_at: new Date().toISOString(),
+    }));
+    expect(indicatorOutputs(bars, { id: 'sma', period: 5, enabled: true })[0].labelsOnPriceScale).toBe(false);
+    expect(indicatorOutputs(bars, { id: 'sma', period: 5, enabled: true, style: { labelsOnPriceScale: true } })[0].labelsOnPriceScale).toBe(true);
+  });
 });

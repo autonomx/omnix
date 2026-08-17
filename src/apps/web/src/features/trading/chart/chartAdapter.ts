@@ -254,7 +254,7 @@ export class TradingChartAdapter {
         const commonOptions = {
           color,
           title: output.valuesInStatusLine === false ? '' : output.title,
-          lastValueVisible: output.labelsOnPriceScale !== false,
+          lastValueVisible: output.labelsOnPriceScale === true,
           ...indicatorPriceFormat(output.precision),
         };
         series = output.kind === 'histogram'
@@ -270,7 +270,7 @@ export class TradingChartAdapter {
         (series as ISeriesApi<'Histogram'>).applyOptions({
           color: output.color ?? indicatorColor(output),
           title: output.valuesInStatusLine === false ? '' : output.title,
-          lastValueVisible: output.labelsOnPriceScale !== false,
+          lastValueVisible: output.labelsOnPriceScale === true,
           ...indicatorPriceFormat(output.precision),
         });
       } else {
@@ -278,7 +278,7 @@ export class TradingChartAdapter {
         (series as ISeriesApi<'Line'>).applyOptions({
           color: output.color ?? indicatorColor(output),
           title: output.valuesInStatusLine === false ? '' : output.title,
-          lastValueVisible: output.labelsOnPriceScale !== false,
+          lastValueVisible: output.labelsOnPriceScale === true,
           lineWidth: output.lineWidth ?? 2,
           ...(lineStyle === undefined ? {} : { lineStyle }),
           ...indicatorPriceFormat(output.precision),

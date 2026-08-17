@@ -378,3 +378,115 @@
 :root[data-omnix-appearance='light'] .trading-alert-tooltip-detail {
   color: #536273 !important;
 }
+
+/* Paper trading side panel */
+:root[data-omnix-appearance='light'] .trading-paper-panel {
+  background: var(--trading-light-surface-muted) !important;
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-symbol strong,
+:root[data-omnix-appearance='light'] .trading-paper-exits > summary,
+:root[data-omnix-appearance='light'] .trading-paper-create strong,
+:root[data-omnix-appearance='light'] .trading-paper-dom-empty strong {
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-symbol small,
+:root[data-omnix-appearance='light'] .trading-paper-disclaimer,
+:root[data-omnix-appearance='light'] .trading-paper-account-row label,
+:root[data-omnix-appearance='light'] .trading-paper-create label,
+:root[data-omnix-appearance='light'] .trading-paper-price-field,
+:root[data-omnix-appearance='light'] .trading-paper-units,
+:root[data-omnix-appearance='light'] .trading-paper-exit-row label,
+:root[data-omnix-appearance='light'] .trading-paper-create > span,
+:root[data-omnix-appearance='light'] .trading-paper-dom-header,
+:root[data-omnix-appearance='light'] .trading-paper-dom-footer,
+:root[data-omnix-appearance='light'] .trading-paper-metrics dt {
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-header-actions button,
+:root[data-omnix-appearance='light'] .trading-paper-exits > summary span {
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-mode,
+:root[data-omnix-appearance='light'] .trading-paper-quotes,
+:root[data-omnix-appearance='light'] .trading-paper-order-types {
+  background: var(--trading-light-line-soft) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-mode button,
+:root[data-omnix-appearance='light'] .trading-paper-order-types button {
+  background: transparent !important;
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-mode button[aria-selected='true'] {
+  background: var(--trading-light-surface) !important;
+  color: var(--trading-light-text) !important;
+  box-shadow: 0 1px 4px rgba(50, 70, 92, 0.16) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-account-row select,
+:root[data-omnix-appearance='light'] .trading-paper-create input,
+:root[data-omnix-appearance='light'] .trading-paper-price-field input,
+:root[data-omnix-appearance='light'] .trading-paper-units > div,
+:root[data-omnix-appearance='light'] .trading-paper-exit-row input {
+  border-color: var(--trading-light-line) !important;
+  background: var(--trading-light-surface) !important;
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-new-account {
+  border-color: var(--trading-light-line) !important;
+  background: var(--trading-light-surface) !important;
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-quote {
+  background: var(--trading-light-surface) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-quote.sell {
+  color: #c43e4b !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-quote.buy {
+  color: #1769b0 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-quote.active.sell {
+  background: #fff2f3 !important;
+  box-shadow: inset 0 -2px #e05260 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-quote.active.buy {
+  background: #eef6ff !important;
+  box-shadow: inset 0 -2px #2e86d1 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-order-types button[aria-selected='true'] {
+  color: #1769b0 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-units > div > span {
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-metrics,
+:root[data-omnix-appearance='light'] .trading-paper-list li,
+:root[data-omnix-appearance='light'] .trading-paper-create {
+  border-color: var(--trading-light-line-soft) !important;
+  background: rgba(91, 111, 132, 0.06) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-paper-metrics dd,
+:root[data-omnix-appearance='light'] .trading-paper-list li strong,
+:root[data-omnix-appearance='light'] .trading-paper-list li span,
+:root[data-omnix-appearance='light'] .trading-paper-list li.empty,
+:root[data-omnix-appearance='light'] .trading-paper-activity summary,
+:root[data-omnix-appearance='light'] .trading-paper-activity summary span {
+  color: var(--trading-light-text) !important;
+}

@@ -561,7 +561,7 @@ export function indicatorOutputs(
       backgroundVisible: instance.style?.backgroundVisible !== false,
       backgroundColor: instance.style?.backgroundColor ?? indicatorDefaultBackgroundColor(instance.id),
       precision: instance.style?.precision,
-      labelsOnPriceScale: instance.style?.labelsOnPriceScale,
+      labelsOnPriceScale: instance.style?.labelsOnPriceScale === true,
       valuesInStatusLine: instance.style?.valuesInStatusLine,
       inputsInStatusLine: instance.style?.inputsInStatusLine,
     }))
