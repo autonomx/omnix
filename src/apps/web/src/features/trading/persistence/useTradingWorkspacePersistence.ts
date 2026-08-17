@@ -88,6 +88,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     useTradingStore.setState({
       layout: payload.layout,
       activeChartId: payload.activeChartId,
+      replayMode: false,
       charts: payload.charts,
       links: payload.links,
       panels: payload.panels,

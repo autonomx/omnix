@@ -30,6 +30,7 @@ export type TradingPanelState = {
 type TradingWorkspaceState = {
   layout: TradingLayout;
   activeChartId: string;
+  replayMode: boolean;
   drawingTool: DrawingTool;
   drawingSnapMode: DrawingSnapMode;
   charts: TradingChartState[];
@@ -38,6 +39,7 @@ type TradingWorkspaceState = {
   favoriteInstrumentIds: string[];
   setLayout: (layout: TradingLayout) => void;
   setActiveChart: (chartId: string) => void;
+  setReplayMode: (enabled: boolean) => void;
   addChart: () => void;
   removeChart: (chartId?: string) => void;
   setChartCount: (count: number) => void;
@@ -98,6 +100,7 @@ function boundedChartCount(count: number): number {
 export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   layout: 'auto',
   activeChartId: 'chart-1',
+  replayMode: false,
   drawingTool: 'cursor',
   drawingSnapMode: 'ohlc',
   charts: [initialChart()],
@@ -108,6 +111,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   setActiveChart: (activeChartId) => set((state) => (
     state.charts.some((chart) => chart.chartId === activeChartId) ? { activeChartId } : state
   )),
+  setReplayMode: (replayMode) => set({ replayMode }),
   addChart: () => set((state) => {
     if (state.charts.length >= MAX_TRADING_CHARTS) return state;
     const source = state.charts.find((chart) => chart.chartId === state.activeChartId) ?? state.charts[0] ?? initialChart();

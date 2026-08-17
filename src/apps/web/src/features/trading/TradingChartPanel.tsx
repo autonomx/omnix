@@ -151,6 +151,8 @@ export function TradingChartPanel({
   const panelRef = useRef<HTMLElement | null>(null);
   const adapterRef = useRef<TradingChartAdapter | null>(null);
   const barsRef = useRef<MarketBar[]>([]);
+  const allBarsRef = useRef<MarketBar[]>([]);
+  const replayWasVisibleRef = useRef(false);
   const fittedBarsKeyRef = useRef<string | null>(null);
   const streamDataKeyRef = useRef<string | null>(null);
   const streamRevisionRef = useRef(1);
@@ -163,10 +165,12 @@ export function TradingChartPanel({
   const drawingTool = useTradingStore((state) => state.drawingTool);
   const setDrawingTool = useTradingStore((state) => state.setDrawingTool);
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
+  const replayMode = useTradingStore((state) => state.replayMode);
+  const setReplayMode = useTradingStore((state) => state.setReplayMode);
   const drawings = useTradingDrawings(instrumentId);
   const selectedDrawing = drawings.state.drawings.find((drawing) => drawing.drawingId === drawings.state.selectedId) ?? null;
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
-  const [streamStatus, setStreamStatus] = useState<TradingStreamStatus>('connecting');
+  const [streamStatus, setStreamStatus] = useState<TradingStreamStatus | 'replay'>('connecting');
   const [streamError, setStreamError] = useState<string | null>(null);
   const [indicatorError, setIndicatorError] = useState<string | null>(null);
   const [alertPlacement, setAlertPlacement] = useState<ChartAlertPlacement | null>(null);
@@ -180,6 +184,11 @@ export function TradingChartPanel({
   const [indicatorPaneGeometry, setIndicatorPaneGeometry] = useState<TradingIndicatorPaneGeometry[]>([]);
   const [selectedRangeLabel, setSelectedRangeLabel] = useState('All');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [replayStartIndex, setReplayStartIndex] = useState<number | null>(null);
+  const [replayCursorIndex, setReplayCursorIndex] = useState<number | null>(null);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState('1');
+  const [replayMarkerX, setReplayMarkerX] = useState<number | null>(null);
   const [minimizedIndicators, setMinimizedIndicators] = useState<Set<CoreIndicatorId>>(() => new Set());
   const minimizedIndicatorsRef = useRef<Set<CoreIndicatorId>>(new Set());
   const clearAlertPlacement = useCallback(() => setAlertPlacement(null), []);
@@ -234,6 +243,7 @@ export function TradingChartPanel({
     enabled: Boolean(instrumentId),
     staleTime: 15_000,
   });
+  const replayVisible = replayMode && active && replayCursorIndex !== null;
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -275,8 +285,8 @@ export function TradingChartPanel({
   }, [adapter]);
 
   useEffect(() => {
-    const bars = chartQuery.data?.bars ?? [];
-    barsRef.current = bars;
+    const bars = (chartQuery.data?.bars ?? []) as MarketBar[];
+    allBarsRef.current = bars;
     const dataKey = chartQuery.data
       ? `${chartQuery.data.instrument.instrument_id}|${chartQuery.data.binding.binding_id}|${chartQuery.data.interval}`
       : null;
@@ -288,20 +298,59 @@ export function TradingChartPanel({
       );
     }
     forceLiveRender((value) => value + 1);
-    const shouldFit = dataKey !== null && dataKey !== fittedBarsKeyRef.current;
-    const keepSelectedRange = shouldFit && pendingRangeIntervalRef.current === interval;
-    if (shouldFit && !keepSelectedRange) {
+    const dataChanged = dataKey !== null && dataKey !== fittedBarsKeyRef.current;
+    const replayViewChanged = replayWasVisibleRef.current !== replayVisible;
+    replayWasVisibleRef.current = replayVisible;
+    const shouldFit = dataChanged || replayViewChanged;
+    const keepSelectedRange = dataChanged && pendingRangeIntervalRef.current === interval;
+    if (dataChanged && !keepSelectedRange) {
       selectedRangeRef.current = undefined;
       setSelectedRangeLabel('All');
     }
-    adapterRef.current?.setBars(bars, shouldFit);
-    if (keepSelectedRange && selectedRangeRef.current !== undefined && bars.length > 0 && adapterRef.current) {
-      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, bars.length, interval);
+    const visibleBars = replayVisible
+      ? bars.slice(0, Math.min(bars.length, (replayCursorIndex ?? 0) + 1))
+      : bars;
+    barsRef.current = visibleBars;
+    adapterRef.current?.setBars(visibleBars, shouldFit);
+    if (keepSelectedRange && selectedRangeRef.current !== undefined && visibleBars.length > 0 && adapterRef.current) {
+      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, visibleBars.length, interval);
     }
     if (keepSelectedRange) pendingRangeIntervalRef.current = null;
     if (dataKey !== null && bars.length > 0) fittedBarsKeyRef.current = dataKey;
     scheduleIndicators();
-  }, [chartQuery.data, interval, scheduleIndicators]);
+  }, [chartQuery.data, interval, replayCursorIndex, replayVisible, scheduleIndicators]);
+
+  useEffect(() => {
+    setReplayStartIndex(null);
+    setReplayCursorIndex(null);
+    setReplayPlaying(false);
+  }, [instrumentId, bindingId, interval]);
+
+  useEffect(() => {
+    if (!replayMode || !active) {
+      setReplayPlaying(false);
+      return;
+    }
+    if (replayCursorIndex === null || replayCursorIndex >= allBarsRef.current.length - 1) {
+      setReplayPlaying(false);
+    }
+  }, [active, replayCursorIndex, replayMode]);
+
+  useEffect(() => {
+    if (!replayPlaying || !replayVisible || replayCursorIndex === null) return;
+    const numericSpeed = Math.max(0.25, Math.min(8, Number(replaySpeed) || 1));
+    const timer = window.setInterval(() => {
+      setReplayCursorIndex((current) => {
+        const lastIndex = allBarsRef.current.length - 1;
+        if (current === null || current >= lastIndex) {
+          setReplayPlaying(false);
+          return current;
+        }
+        return current + 1;
+      });
+    }, Math.max(100, 1_000 / numericSpeed));
+    return () => window.clearInterval(timer);
+  }, [replayCursorIndex, replayPlaying, replaySpeed, replayVisible]);
 
   useEffect(() => {
     adapterRef.current?.setChartType(chartType, barsRef.current);
@@ -370,6 +419,10 @@ export function TradingChartPanel({
   useEffect(() => {
     const resolved = chartQuery.data?.binding;
     if (!instrumentId || !resolved) return;
+    if (replayMode && active) {
+      setStreamStatus('replay');
+      return;
+    }
     setStreamError(null);
     const derivedInterval = !resolved.supported_intervals.includes(interval);
     if (resolved.feed_type !== 'websocket_and_rest' || derivedInterval) {
@@ -398,6 +451,9 @@ export function TradingChartPanel({
           const index = barsRef.current.findIndex((item) => item.start_time === bar.start_time);
           if (index >= 0) barsRef.current[index] = bar;
           else barsRef.current = [...barsRef.current, bar];
+          const allIndex = allBarsRef.current.findIndex((item) => item.start_time === bar.start_time);
+          if (allIndex >= 0) allBarsRef.current[allIndex] = bar;
+          else allBarsRef.current = [...allBarsRef.current, bar];
           forceLiveRender((value) => value + 1);
           scheduleIndicators(bar.is_final ? 0 : 100);
         }
@@ -409,7 +465,7 @@ export function TradingChartPanel({
       },
       resolved.binding_id,
     );
-  }, [chartId, instrumentId, interval, chartQuery.data?.binding.binding_id, scheduleIndicators]);
+  }, [active, chartId, instrumentId, interval, replayMode, chartQuery.data?.binding.binding_id, scheduleIndicators]);
 
   const provenance = chartQuery.data?.provenance;
   const resolvedBinding = chartQuery.data?.binding;
@@ -539,6 +595,54 @@ export function TradingChartPanel({
     targetAdapter.zoomAtCoordinate(event.clientX - bounds.left, event.deltaY);
   };
 
+  const handleReplayStageClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!replayMode || !active || !adapter || allBarsRef.current.length === 0) return;
+    const target = event.target as Element;
+    if (target.closest('button, input, select, textarea, [role="dialog"], .trading-drawing-overlay')) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const index = adapter.barIndexAtCoordinate(event.clientX - bounds.left, allBarsRef.current.length);
+    if (index === null) return;
+    setReplayPlaying(false);
+    setReplayStartIndex(index);
+    setReplayCursorIndex(index);
+  };
+
+  const resetReplay = () => {
+    if (replayStartIndex === null) return;
+    setReplayPlaying(false);
+    setReplayCursorIndex(replayStartIndex);
+  };
+
+  const exitReplay = () => {
+    setReplayPlaying(false);
+    setReplayMode(false);
+  };
+
+  useEffect(() => {
+    if (!adapter || !replayMode || !active || replayStartIndex === null) {
+      setReplayMarkerX(null);
+      return;
+    }
+    const updateMarker = () => {
+      const startBar = allBarsRef.current[replayStartIndex];
+      setReplayMarkerX(startBar ? adapter.timeToCoordinate(startBar.start_time) : null);
+    };
+    const frame = window.requestAnimationFrame(updateMarker);
+    window.addEventListener('resize', updateMarker);
+    const host = hostRef.current;
+    const observer = typeof ResizeObserver === 'undefined' || !host ? null : new ResizeObserver(updateMarker);
+    observer?.observe(host as Element);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateMarker);
+      observer?.disconnect();
+    };
+  }, [active, adapter, replayCursorIndex, replayMode, replayStartIndex]);
+
+  const replayStartBar = replayStartIndex === null ? null : allBarsRef.current[replayStartIndex] ?? null;
+  const replayCurrentBar = replayCursorIndex === null ? null : allBarsRef.current[replayCursorIndex] ?? null;
+  const replayHasNextBar = replayCursorIndex !== null && replayCursorIndex < allBarsRef.current.length - 1;
+
   return (
     <article
       ref={panelRef}
@@ -609,8 +713,18 @@ export function TradingChartPanel({
           </div>
         ) : null}
       </header>
-      <div className="trading-chart-stage" onContextMenu={handleStageContextMenu}>
+      <div className={`trading-chart-stage${replayMode && active ? ' is-replay-mode' : ''}`} onClickCapture={handleReplayStageClick} onContextMenu={handleStageContextMenu}>
         <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
+        {replayMode && active && replayMarkerX !== null ? (
+          <div className="trading-replay-marker" style={{ left: `${replayMarkerX}px` }} aria-hidden="true">
+            <span>Replay start</span>
+          </div>
+        ) : null}
+        {replayMode && active ? (
+          <div className="trading-replay-mode-hint" role="status">
+            {replayStartBar ? `Replay starts ${new Date(replayStartBar.start_time).toLocaleString()}` : 'Click a candle to choose the replay start'}
+          </div>
+        ) : null}
         {active && adapter ? (
           <>
             <button
@@ -717,6 +831,20 @@ export function TradingChartPanel({
           onPlacementConsumed={clearAlertPlacement}
         />
         <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
+        {replayMode && active ? (
+          <div className="trading-replay-toolbar" role="group" aria-label="Chart replay controls" onPointerDown={(event) => event.stopPropagation()}>
+            <button type="button" onClick={exitReplay} aria-label="Exit replay mode" title="Exit replay mode">×</button>
+            <button type="button" onClick={() => setReplayCursorIndex(null)} disabled={replayStartIndex === null} aria-label="Choose replay start" title="Choose replay start">Select bar</button>
+            <button type="button" onClick={resetReplay} disabled={replayStartIndex === null} aria-label="Reset replay" title="Reset replay">↤</button>
+            <button type="button" onClick={() => setReplayCursorIndex((current) => current === null || replayStartIndex === null ? current : Math.max(replayStartIndex, current - 1))} disabled={replayCursorIndex === null || replayCursorIndex <= replayStartIndex!} aria-label="Replay previous bar" title="Previous bar">|‹</button>
+            <button type="button" className="trading-replay-play" onClick={() => setReplayPlaying((value) => !value)} disabled={replayStartIndex === null || !replayHasNextBar} aria-label={replayPlaying ? 'Pause replay' : 'Play replay'} title={replayPlaying ? 'Pause replay' : 'Play replay'}>{replayPlaying ? 'Ⅱ' : '▶'}</button>
+            <button type="button" onClick={() => setReplayCursorIndex((current) => current === null || replayStartIndex === null ? current : Math.min(allBarsRef.current.length - 1, Math.max(replayStartIndex, current + 1)))} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Next bar">›|</button>
+            <select aria-label="Replay speed" value={replaySpeed} onChange={(event) => setReplaySpeed(event.target.value)}>
+              {['0.5', '1', '2', '4', '8'].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}
+            </select>
+            <span className="trading-replay-progress">{replayCurrentBar ? new Date(replayCurrentBar.end_time).toLocaleDateString() : 'Select a bar'} · {replayCursorIndex === null ? 0 : replayCursorIndex + 1}/{allBarsRef.current.length}</span>
+          </div>
+        ) : null}
         {tableVisible ? (
           <div className="trading-chart-table-view" role="dialog" aria-label="Chart table view" onPointerDown={(event) => event.stopPropagation()}>
             <header><strong>Table view · {chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong><button type="button" onClick={() => setTableVisible(false)} aria-label="Close table view">×</button></header>

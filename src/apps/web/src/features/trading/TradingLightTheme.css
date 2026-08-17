@@ -140,6 +140,22 @@
   color: #c43e4b !important;
 }
 
+:root[data-omnix-appearance='light'] .trading-replay-mode-hint,
+:root[data-omnix-appearance='light'] .trading-replay-toolbar {
+  border-color: var(--trading-light-line) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 6px 18px rgba(50, 70, 92, 0.16) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-replay-mode-hint {
+  color: #1769aa !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-replay-toolbar button,
+:root[data-omnix-appearance='light'] .trading-replay-toolbar select {
+  color: #536273 !important;
+}
+
 :root[data-omnix-appearance='light'] .trading-tools button,
 :root[data-omnix-appearance='light'] .trading-drawing-tool-group > button,
 :root[data-omnix-appearance='light'] .trading-drawing-tool-cursor-control > button,

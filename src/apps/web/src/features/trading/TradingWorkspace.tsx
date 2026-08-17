@@ -115,6 +115,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const layout = useTradingStore((state) => state.layout);
   const charts = useTradingStore((state) => state.charts);
   const activeChartId = useTradingStore((state) => state.activeChartId);
+  const replayMode = useTradingStore((state) => state.replayMode);
   const drawingTool = useTradingStore((state) => state.drawingTool);
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
   const links = useTradingStore((state) => state.links);
@@ -125,6 +126,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const addChart = useTradingStore((state) => state.addChart);
   const removeChart = useTradingStore((state) => state.removeChart);
   const setActiveChart = useTradingStore((state) => state.setActiveChart);
+  const setReplayMode = useTradingStore((state) => state.setReplayMode);
   const setDrawingTool = useTradingStore((state) => state.setDrawingTool);
   const setDrawingSnapMode = useTradingStore((state) => state.setDrawingSnapMode);
   const updateChart = useTradingStore((state) => state.updateChart);
@@ -444,6 +446,17 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </label>
 
           <TradingIndicatorManager indicators={activeChart.indicators} onToggle={(id) => toggleIndicator(activeChartId, id)} />
+          <button
+            type="button"
+            className="trading-replay-trigger trading-topbar-replay"
+            aria-label={replayMode ? 'Exit replay mode' : 'Replay'}
+            aria-pressed={replayMode}
+            title={replayMode ? 'Exit replay mode' : 'Replay chart from a selected bar'}
+            onClick={() => setReplayMode(!replayMode)}
+          >
+            <span className="trading-replay-trigger-icon" aria-hidden="true">◀◀</span>
+            <span>Replay</span>
+          </button>
         </div>
 
         <select aria-label="Trading data feed" value={selectedBinding?.binding_id ?? ''} onChange={(event) => selectBinding(event.target.value)}>

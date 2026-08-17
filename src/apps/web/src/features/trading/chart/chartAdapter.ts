@@ -409,6 +409,17 @@ export class TradingChartAdapter {
   setCrosshair(point: TradingCrosshairPoint | null): void { this.assertActive(); if (point === null) this.chart.clearCrosshairPosition(); else this.chart.setCrosshairPosition(point.price, point.time, this.priceSeries); }
   onVisibleRange(listener: (range: TradingVisibleRange | null) => void): () => void { this.assertActive(); const handler = (range: TradingVisibleRange | null) => listener(range); this.chart.timeScale().subscribeVisibleTimeRangeChange(handler); return () => this.chart.timeScale().unsubscribeVisibleTimeRangeChange(handler); }
   setVisibleRange(range: TradingVisibleRange): void { this.assertActive(); this.chart.timeScale().setVisibleRange(range); }
+  timeToCoordinate(value: string): number | null {
+    this.assertActive();
+    return this.chart.timeScale().timeToCoordinate(timestamp(value));
+  }
+  barIndexAtCoordinate(x: number, barCount: number): number | null {
+    this.assertActive();
+    const logical = this.chart.timeScale().coordinateToLogical(x);
+    if (logical === null || !Number.isFinite(logical)) return null;
+    const index = Math.round(logical);
+    return index >= 0 && index < barCount ? index : null;
+  }
   fitContent(): void {
     this.assertActive();
     const timeScale = this.chart.timeScale();
