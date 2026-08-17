@@ -259,6 +259,20 @@ def paper_buy_reservation(
     return notional + paper_commission(notional, commission_bps)
 
 
+def paper_fill_is_fundable(
+    order: PaperOrder,
+    *,
+    total_cost: Decimal,
+    available_cash: Decimal,
+) -> bool:
+    """Allow a market order to consume available cash for quote slippage."""
+    if order.side != "buy":
+        return True
+    if order.order_type == "market":
+        return order.reserved_cash + available_cash >= total_cost
+    return order.reserved_cash >= total_cost
+
+
 def paper_fill_key(
     account_id: str,
     order_id: str,

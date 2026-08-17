@@ -4,6 +4,7 @@ import type {
   PaperAccountSnapshot,
   PaperOrder,
   PaperOrderInput,
+  PaperMarketObservationInput,
 } from './paperTypes';
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -37,6 +38,11 @@ export const tradingPaperApi = {
     requestJson<PaperAccountSnapshot>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}`),
   placeOrder: (accountId: string, input: PaperOrderInput) =>
     requestJson<PaperOrder>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  processObservation: (accountId: string, input: PaperMarketObservationInput) =>
+    requestJson<{ fills: unknown[] }>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}/observations`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),

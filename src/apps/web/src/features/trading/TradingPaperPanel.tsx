@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrderType, PaperSide } from './paperTypes';
 import { tradingApi } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
+import { writePaperPositionProtection } from './paperPositionProtection';
 import './TradingPaper.css';
 
 type PaperTicketTab = 'order' | 'dom';
@@ -109,7 +110,23 @@ export function TradingPaperPanel({
       const nextId = preferredId || retainedId || nextAccounts[0]?.account_id || '';
       setAccountId(nextId);
       onAccountChange?.(nextId);
-      setSnapshot(nextId ? await tradingPaperApi.snapshot(nextId) : null);
+      let nextSnapshot = nextId ? await tradingPaperApi.snapshot(nextId) : null;
+      const openMarketOrders = nextSnapshot?.open_orders.filter(
+        (order) => order.order_type === 'market' && order.status === 'open' && order.reference_price,
+      ) ?? [];
+      if (nextId && openMarketOrders.length > 0) {
+        const now = new Date().toISOString();
+        await Promise.allSettled(openMarketOrders.map((order) => tradingPaperApi.processObservation(nextId, {
+          instrument_id: order.instrument_id,
+          binding_id: order.binding_id,
+          provider: 'paper-reference',
+          price: String(order.reference_price),
+          source_time: order.created_at ?? now,
+          evaluated_at: now,
+        })));
+        nextSnapshot = await tradingPaperApi.snapshot(nextId);
+      }
+      setSnapshot(nextSnapshot);
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -186,9 +203,16 @@ export function TradingPaperPanel({
     }
     const numericQuantity = parsePositive(quantity);
     const numericTrigger = parsePositive(triggerPrice);
-    if (numericQuantity === null || (orderType !== 'market' && numericTrigger === null)) {
+    const numericTakeProfit = takeProfitEnabled ? parsePositive(takeProfit) : null;
+    const numericStopLoss = stopLossEnabled ? parsePositive(stopLoss) : null;
+    if (
+      numericQuantity === null
+      || (orderType !== 'market' && numericTrigger === null)
+      || (takeProfitEnabled && numericTakeProfit === null)
+      || (stopLossEnabled && numericStopLoss === null)
+    ) {
       setStatus('error');
-      setNotice({ kind: 'error', message: 'Enter a valid order quantity and price.' });
+      setNotice({ kind: 'error', message: 'Enter a valid order quantity, price, take-profit, and stop-loss value.' });
       return;
     }
     const orderId = `paper-order-${Date.now()}`;
@@ -205,8 +229,32 @@ export function TradingPaperPanel({
         quantity,
         limit_price: orderType === 'limit' ? triggerPrice : null,
         stop_price: orderType === 'stop' ? triggerPrice : null,
-        reference_price: orderType === 'market' && side === 'buy' && askPrice !== null ? String(askPrice) : null,
+        reference_price: orderType === 'market'
+          ? (side === 'buy' ? askPrice : bidPrice) === null
+            ? null
+            : String(side === 'buy' ? askPrice : bidPrice)
+          : null,
         idempotency_key: orderId,
+      });
+      const marketReference = order.reference_price ?? (side === 'buy' ? askPrice : bidPrice);
+      if (orderType === 'market' && order.status === 'open' && marketReference !== null) {
+        const now = new Date().toISOString();
+        try {
+          await tradingPaperApi.processObservation(activeAccount.account_id, {
+            instrument_id: instrumentId,
+            binding_id: bindingId,
+            provider: 'paper-reference',
+            price: String(marketReference),
+            source_time: now,
+            evaluated_at: now,
+          });
+        } catch {
+          // The monitor can retry an accepted order if the immediate observation is unavailable.
+        }
+      }
+      writePaperPositionProtection(activeAccount.account_id, instrumentId, {
+        takeProfit: numericTakeProfit,
+        stopLoss: numericStopLoss,
       });
       await refresh(activeAccount.account_id);
       const orderPrice = order.average_fill_price

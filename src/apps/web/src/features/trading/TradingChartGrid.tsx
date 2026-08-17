@@ -14,7 +14,7 @@ export function tradingGridColumns(layout: TradingLayout, chartCount: number): n
   return Math.max(1, Math.min(4, Math.ceil(Math.sqrt(Math.max(1, chartCount)))));
 }
 
-export function TradingChartGrid() {
+export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string | null }) {
   const layout = useTradingStore((state) => state.layout);
   const charts = useTradingStore((state) => state.charts);
   const activeChartId = useTradingStore((state) => state.activeChartId);
@@ -59,6 +59,7 @@ export function TradingChartGrid() {
             onToggleIndicatorVisibility={(id) => toggleIndicatorVisibility(chart.chartId, id)}
             onMoveIndicator={(id, direction) => moveIndicator(chart.chartId, id, direction)}
             synchronization={synchronization}
+            paperAccountId={paperAccountId}
           />
         </div>
       ))}

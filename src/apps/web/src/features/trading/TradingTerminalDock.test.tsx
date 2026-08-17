@@ -79,4 +79,40 @@ describe('TradingTerminalDock', () => {
     expect(screen.getByText('BINANCE:SOLUSDT')).toBeInTheDocument();
     expect(screen.getByText('Working')).toBeInTheDocument();
   });
+
+  it('shows the rejection reason in an order status tooltip', async () => {
+    const account = {
+      account_id: 'paper-1', name: 'Paper account', base_currency: 'USD', commission_bps: '0',
+      enabled: true, revision: 1,
+    };
+    const rejectedOrder = {
+      account_id: account.account_id, order_id: 'order-rejected', instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
+      binding_id: null, side: 'buy', order_type: 'market', quantity: '5', limit_price: null,
+      stop_price: null, reference_price: '74.55', status: 'rejected', filled_quantity: '0',
+      average_fill_price: null, idempotency_key: 'key-rejected', rejection_reason: 'insufficient_paper_cash',
+      reserved_cash: '0',
+    };
+    paperApi.accounts.mockResolvedValue([account]);
+    paperApi.snapshot.mockResolvedValue({
+      account,
+      balances: [{ currency: 'USD', available: '100000', reserved: '0' }],
+      positions: [],
+      open_orders: [],
+      order_history: [rejectedOrder],
+      recent_fills: [],
+      recent_ledger: [],
+    });
+
+    render(<TradingTerminalDock instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await waitFor(() => expect(paperApi.snapshot).toHaveBeenCalledWith(account.account_id));
+    await act(async () => {
+      screen.getByRole('button', { name: 'Restore paper trading panel' }).click();
+    });
+    await act(async () => {
+      screen.getByRole('tab', { name: 'Orders' }).click();
+    });
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Insufficient available paper cash at the fill price.');
+    expect(screen.getByTitle('Insufficient available paper cash at the fill price.')).toBeInTheDocument();
+  });
 });

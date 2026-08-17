@@ -6,6 +6,7 @@ const paperApi = vi.hoisted(() => ({
   snapshot: vi.fn(),
   createAccount: vi.fn(),
   placeOrder: vi.fn(),
+  processObservation: vi.fn(),
   resetAccount: vi.fn(),
   archiveAccount: vi.fn(),
 }));
@@ -40,6 +41,7 @@ describe('TradingPaperPanel', () => {
       recent_ledger: [],
     });
     tradingApi.quote.mockResolvedValue({ price: '75.61', bid: '75.60', ask: '75.62' });
+    paperApi.processObservation.mockResolvedValue({ fills: [] });
     paperApi.placeOrder.mockRejectedValue(new Error('Paper Trading request failed (422): insufficient_paper_cash'));
   });
 
@@ -72,5 +74,22 @@ describe('TradingPaperPanel', () => {
     expect(confirmation).toHaveTextContent('Market order executed on');
     expect(confirmation).toHaveTextContent('BINANCE:SOLUSDT');
     expect(confirmation).toHaveTextContent('Buy 3');
+  });
+
+  it('immediately observes an accepted market order that is still open', async () => {
+    paperApi.placeOrder.mockResolvedValue({ status: 'open', reference_price: '75.62' });
+
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+
+    const quantity = await screen.findByRole('textbox', { name: 'Order quantity' });
+    fireEvent.change(quantity, { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ }));
+
+    await screen.findByRole('status');
+    expect(paperApi.processObservation).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+      instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
+      provider: 'paper-reference',
+      price: '75.62',
+    }));
   });
 });

@@ -71,12 +71,17 @@ class TradingPaperMonitor:
         repository = self.repository_factory()
         accounts = await asyncio.to_thread(repository.list_accounts, 100)
         targets: dict[tuple[str, str | None], set[str]] = defaultdict(set)
+        market_references: dict[tuple[str, str | None], list[tuple[str, Decimal]]] = defaultdict(list)
         for account in accounts:
             if not account.enabled:
                 continue
             snapshot = await asyncio.to_thread(repository.snapshot, account.account_id)
             for order in snapshot.open_orders:
                 targets[(order.instrument_id, order.binding_id)].add(account.account_id)
+                if order.order_type == "market" and order.reference_price is not None:
+                    market_references[(order.instrument_id, order.binding_id)].append(
+                        (account.account_id, order.reference_price)
+                    )
 
         service = self.market_service_factory()
         filled = 0
@@ -111,6 +116,25 @@ class TradingPaperMonitor:
                     filled += len(fills)
             except Exception as exc:
                 self.last_error = f"{type(exc).__name__}: {exc}"
+                for account_id, reference_price in market_references.get(
+                    (instrument_id, requested_binding),
+                    [],
+                ):
+                    now = datetime.now(timezone.utc)
+                    fallback_observation = PaperMarketObservation(
+                        instrument_id=instrument_id,
+                        binding_id=requested_binding,
+                        provider="paper-reference",
+                        price=reference_price,
+                        source_time=now,
+                        evaluated_at=now,
+                    )
+                    fills = await asyncio.to_thread(
+                        repository.process_observation,
+                        account_id,
+                        fallback_observation,
+                    )
+                    filled += len(fills)
         self.fill_count += filled
         self.last_run_at = datetime.now(timezone.utc)
         return filled

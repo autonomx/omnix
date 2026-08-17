@@ -103,3 +103,12 @@ export interface PaperOrderInput {
   reference_price?: string | null;
   idempotency_key: string;
 }
+
+export interface PaperMarketObservationInput {
+  instrument_id: string;
+  binding_id?: string | null;
+  provider?: string;
+  price: string;
+  source_time: string;
+  evaluated_at?: string;
+}

@@ -47,7 +47,7 @@ function quantity(value?: string | number | null): string {
   if (value === undefined || value === null || value === '') return '—';
   const parsed = Number(value);
   return Number.isFinite(parsed)
-    ? parsed.toLocaleString(undefined, { maximumFractionDigits: 6 })
+    ? Math.abs(parsed).toLocaleString(undefined, { maximumFractionDigits: 6 })
     : String(value);
 }
 
@@ -85,6 +85,33 @@ function orderPrice(order: PaperOrder): string {
   if (order.average_fill_price !== undefined && order.average_fill_price !== null) return number(order.average_fill_price);
   if (order.order_type === 'market') return order.status === 'open' ? 'Market' : '—';
   return number(order.limit_price ?? order.stop_price);
+}
+
+function rejectionMessage(reason?: string | null): string {
+  switch (reason) {
+    case 'insufficient_paper_cash': return 'Insufficient available paper cash at the fill price.';
+    case 'insufficient_paper_position': return 'Insufficient paper position available to sell.';
+    case 'paper_account_disabled': return 'This paper account is disabled.';
+    default: return reason ? `Order rejected: ${reason.replaceAll('_', ' ')}` : 'The order was rejected.';
+  }
+}
+
+function OrderStatus({ order }: { order: PaperOrder }) {
+  const label = order.status === 'open' ? 'Working' : order.status[0].toUpperCase() + order.status.slice(1);
+  if (order.status !== 'rejected') {
+    return <span className={order.status === 'filled' ? 'positive' : undefined}>{label}</span>;
+  }
+  const tooltipId = `paper-order-rejection-${order.order_id}`;
+  const message = rejectionMessage(order.rejection_reason);
+  return <span
+    className="trading-order-rejected-status"
+    tabIndex={0}
+    title={message}
+    aria-describedby={tooltipId}
+  >
+    {label}
+    <span id={tooltipId} className="trading-order-rejection-tooltip" role="tooltip">{message}</span>
+  </span>;
 }
 
 function defaultSettings(account?: PaperAccount | null): PaperAccountSettings {
@@ -173,7 +200,7 @@ export function TradingTerminalDock({
   const ordersMargin = Number(baseBalance?.reserved ?? 0);
   const accountMargin = positions.reduce((total, position) => {
     const leverage = Number.parseFloat(activeSettings.leverage.crypto) || 1;
-    return total + (Number(position.average_cost) * Number(position.quantity)) / leverage;
+    return total + (Number(position.average_cost) * Math.abs(Number(position.quantity))) / leverage;
   }, 0);
   const marginBuffer = equity > 0 ? (Number(baseBalance?.available ?? 0) / equity) * 100 : 0;
   const commissionByOrder = useMemo(() => {
@@ -354,9 +381,10 @@ export function TradingTerminalDock({
                 <table className="trading-positions-table"><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Avg fill price</th><th>Take profit</th><th>Stop loss</th><th>Last price</th><th>Unrealized PnL ↑</th><th>Unrealized PnL %</th><th aria-label="Actions" /></tr></thead><tbody>
                   {displayedPositions.map((position) => {
                     const pnl = Number(position.unrealized_pnl);
-                    const notional = Number(position.average_cost) * Number(position.quantity);
+                    const notional = Number(position.average_cost) * Math.abs(Number(position.quantity));
                     const pnlPercent = notional ? (pnl / notional) * 100 : 0;
-                    return <tr key={`${position.instrument_id}-${position.pending ? position.pendingOrderId : 'open'}`}><td><MarketBadge instrumentId={position.instrument_id} /></td><td className="positive">{position.pendingSide === 'sell' ? 'Exit' : 'Long'}</td><td>{quantity(position.quantity)}</td><td>{number(position.average_cost)}</td><td>—</td><td>—</td><td>{number(position.last_price)}</td><td className={signedClass(pnl)}>{signedNumber(pnl)} <small>{activeAccount?.base_currency}</small></td><td className={signedClass(pnlPercent)}>{signedNumber(pnlPercent)}%</td><td className="trading-row-actions"><span className={position.pending ? 'trading-pending-position' : 'trading-open-position'}>{position.pending ? 'Working' : 'Open'}</span><button type="button" aria-label={`Edit ${symbol(position.instrument_id)} position`}>⌑</button><button type="button" aria-label={`Close ${symbol(position.instrument_id)} position`}>×</button></td></tr>;
+                    const side = position.pendingSide === 'sell' ? 'Exit' : position.pending ? 'Long' : Number(position.quantity) < 0 ? 'Short' : 'Long';
+                    return <tr key={`${position.instrument_id}-${position.pending ? position.pendingOrderId : 'open'}`}><td><MarketBadge instrumentId={position.instrument_id} /></td><td className="positive">{side}</td><td>{quantity(position.quantity)}</td><td>{number(position.average_cost)}</td><td>—</td><td>—</td><td>{number(position.last_price)}</td><td className={signedClass(pnl)}>{signedNumber(pnl)} <small>{activeAccount?.base_currency}</small></td><td className={signedClass(pnlPercent)}>{signedNumber(pnlPercent)}%</td><td className="trading-row-actions"><span className={position.pending ? 'trading-pending-position' : 'trading-open-position'}>{position.pending ? 'Working' : 'Open'}</span><button type="button" aria-label={`Edit ${symbol(position.instrument_id)} position`}>⌑</button><button type="button" aria-label={`Close ${symbol(position.instrument_id)} position`}>×</button></td></tr>;
                   })}
                   {displayedPositions.length === 0 ? <tr><td colSpan={10}>No open positions.</td></tr> : null}
                 </tbody></table>
@@ -364,13 +392,13 @@ export function TradingTerminalDock({
             ) : null}
             {snapshot && tab === 'orders' ? (
               <div className="trading-dock-table-scroll"><table className="trading-orders-table"><thead><tr><th>Symbol</th><th>Type</th><th>Quantity</th><th>Limit price</th><th>Stop price</th><th>Fill price</th><th>Take profit</th><th>Stop loss</th><th>Instruction</th><th>Status</th></tr></thead><tbody>
-                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td>{order.order_type[0].toUpperCase() + order.order_type.slice(1)}</td><td>{quantity(order.filled_quantity !== '0' ? order.filled_quantity : order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td>—</td><td>—</td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td className={order.status === 'rejected' ? 'negative' : order.status === 'filled' ? 'positive' : undefined}>{order.status === 'open' ? 'Working' : order.status[0].toUpperCase() + order.status.slice(1)}</td></tr>)}
+                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td>{order.order_type[0].toUpperCase() + order.order_type.slice(1)}</td><td>{quantity(order.filled_quantity !== '0' ? order.filled_quantity : order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td>—</td><td>—</td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td></tr>)}
                 {filteredOrders.length === 0 ? <tr><td colSpan={10}>No orders in this filter.</td></tr> : null}
               </tbody></table></div>
             ) : null}
             {snapshot && tab === 'history' ? (
               <div className="trading-dock-table-scroll trading-order-history-scroll"><table className="trading-order-history-table"><thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Quantity</th><th>Limit price</th><th>Stop price</th><th>Fill price</th><th>Status</th><th>Commission</th><th>Placing time ↓</th><th>Closing time</th><th>Order ID</th><th>Level ID</th><th>Leverage</th><th>Margin</th></tr></thead><tbody>
-                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td>{order.order_type[0].toUpperCase() + order.order_type.slice(1)}</td><td>{quantity(order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td className={order.status === 'rejected' ? 'negative' : order.status === 'filled' ? 'positive' : undefined}>{order.status[0].toUpperCase() + order.status.slice(1)}</td><td>{number(commissionByOrder.get(order.order_id))}</td><td>{tableTime(order.created_at)}</td><td>{order.status === 'open' ? '—' : tableTime(order.updated_at)}</td><td>{order.order_id}</td><td>—</td><td>{activeSettings.leverage.crypto}</td><td>{number(String(Number(order.quantity) * Number(order.average_fill_price ?? order.limit_price ?? order.stop_price ?? 0) / Math.max(1, Number.parseFloat(activeSettings.leverage.crypto))))} <small>{activeAccount?.base_currency}</small></td></tr>)}
+                {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td>{order.order_type[0].toUpperCase() + order.order_type.slice(1)}</td><td>{quantity(order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td><td>{number(commissionByOrder.get(order.order_id))}</td><td>{tableTime(order.created_at)}</td><td>{order.status === 'open' ? '—' : tableTime(order.updated_at)}</td><td>{order.order_id}</td><td>—</td><td>{activeSettings.leverage.crypto}</td><td>{number(String(Number(order.quantity) * Number(order.average_fill_price ?? order.limit_price ?? order.stop_price ?? 0) / Math.max(1, Number.parseFloat(activeSettings.leverage.crypto))))} <small>{activeAccount?.base_currency}</small></td></tr>)}
                 {filteredOrders.length === 0 ? <tr><td colSpan={15}>No orders in this filter.</td></tr> : null}
               </tbody></table></div>
             ) : null}

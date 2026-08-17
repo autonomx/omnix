@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { IChartApi } from 'lightweight-charts';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
+import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
@@ -127,6 +128,7 @@ export function TradingChartPanel({
   onToggleIndicatorVisibility,
   onMoveIndicator,
   synchronization,
+  paperAccountId,
 }: {
   chartId: string;
   instrumentId: string;
@@ -143,6 +145,7 @@ export function TradingChartPanel({
   onToggleIndicatorVisibility: (id: CoreIndicatorId) => void;
   onMoveIndicator: (id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   synchronization: TradingChartSynchronization;
+  paperAccountId?: string | null;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
@@ -713,6 +716,7 @@ export function TradingChartPanel({
           placement={alertPlacement}
           onPlacementConsumed={clearAlertPlacement}
         />
+        <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
         {tableVisible ? (
           <div className="trading-chart-table-view" role="dialog" aria-label="Chart table view" onPointerDown={(event) => event.stopPropagation()}>
             <header><strong>Table view · {chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong><button type="button" onClick={() => setTableVisible(false)} aria-label="Close table view">×</button></header>

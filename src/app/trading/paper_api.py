@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -85,11 +86,36 @@ def create_trading_paper_router(
     )
     async def place_order(account_id: str, request: PaperOrderRequest):
         try:
-            return await asyncio.to_thread(
-                repository_factory().place_order,
+            repository = repository_factory()
+            order = await asyncio.to_thread(
+                repository.place_order,
                 account_id,
                 request,
             )
+            if order.order_type == "market" and request.reference_price is not None:
+                now = datetime.now(timezone.utc)
+                await asyncio.to_thread(
+                    repository.process_observation,
+                    account_id,
+                    PaperMarketObservation(
+                        instrument_id=request.instrument_id,
+                        binding_id=request.binding_id,
+                        provider="paper-reference",
+                        price=request.reference_price,
+                        source_time=now,
+                        evaluated_at=now,
+                    ),
+                )
+                snapshot = await asyncio.to_thread(repository.snapshot, account_id)
+                order = next(
+                    (
+                        candidate
+                        for candidate in [*snapshot.order_history, *snapshot.open_orders]
+                        if candidate.order_id == request.order_id
+                    ),
+                    order,
+                )
+            return order
         except ValueError as exc:
             detail = str(exc)
             status = 404 if "not_found" in detail else 422

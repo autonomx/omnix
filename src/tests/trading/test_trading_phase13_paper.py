@@ -25,6 +25,7 @@ from app.trading.paper import (
     PaperPosition,
     paper_commission,
     paper_fill_decision,
+    paper_fill_is_fundable,
     paper_fill_key,
     paper_realized_pnl,
     paper_unrealized_pnl,
@@ -127,6 +128,18 @@ def test_paper_accounting_math_and_fill_idempotency_are_reproducible() -> None:
     assert paper_commission(Decimal("1000"), Decimal("10")) == Decimal("1")
     assert paper_unrealized_pnl(Decimal("2"), Decimal("100"), Decimal("110")) == Decimal("20")
     assert paper_realized_pnl(Decimal("2"), Decimal("100"), Decimal("90")) == Decimal("-20")
+    market_order = order("market", reference_price=Decimal("100"), reserved_cash=Decimal("200"))
+    assert paper_fill_is_fundable(
+        market_order,
+        total_cost=Decimal("202"),
+        available_cash=Decimal("2"),
+    )
+    limit_order = order("limit", reserved_cash=Decimal("200"))
+    assert not paper_fill_is_fundable(
+        limit_order,
+        total_cost=Decimal("202"),
+        available_cash=Decimal("2"),
+    )
     key = paper_fill_key("paper-1", "order-1", observation("101"))
     assert key == paper_fill_key("paper-1", "order-1", observation("101"))
     assert key != paper_fill_key("paper-1", "order-1", observation("102"))

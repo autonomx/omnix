@@ -22,6 +22,7 @@ from .paper import (
     PaperPosition,
     paper_buy_reservation,
     paper_commission,
+    paper_fill_is_fundable,
     paper_fill_decision,
     paper_fill_key,
     paper_order_request_matches,
@@ -240,22 +241,23 @@ class TradingPaperRepository:
                 ).fetchone()
                 quantity = Decimal(position_row[0]) if position_row else Decimal("0")
                 already_reserved = Decimal(position_row[1]) if position_row else Decimal("0")
-                if quantity - already_reserved < request.quantity:
+                if quantity > 0 and quantity - already_reserved < request.quantity:
                     raise ValueError("insufficient_paper_position")
-                uow.connection.execute(
-                    """
-                    UPDATE omnix_trading_paper_positions
-                       SET reserved_quantity = reserved_quantity + %s,
-                           updated_at = CURRENT_TIMESTAMP
-                     WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
-                    """,
-                    (
-                        request.quantity,
-                        self.context.workspace_id,
-                        account_id,
-                        request.instrument_id,
-                    ),
-                )
+                if quantity > 0:
+                    uow.connection.execute(
+                        """
+                        UPDATE omnix_trading_paper_positions
+                           SET reserved_quantity = reserved_quantity + %s,
+                               updated_at = CURRENT_TIMESTAMP
+                         WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+                        """,
+                        (
+                            request.quantity,
+                            self.context.workspace_id,
+                            account_id,
+                            request.instrument_id,
+                        ),
+                    )
 
             row = uow.connection.execute(
                 f"""
@@ -433,9 +435,13 @@ class TradingPaperRepository:
                 commission = paper_commission(notional, account.commission_bps)
                 total_cost = notional + commission
                 rejection = None
-                if order.side == "buy" and order.reserved_cash < total_cost:
+                if not paper_fill_is_fundable(
+                    order,
+                    total_cost=total_cost,
+                    available_cash=cash_available,
+                ):
                     rejection = "insufficient_paper_cash"
-                if order.side == "sell" and (
+                if order.side == "sell" and position_quantity > 0 and (
                     position_quantity < order.quantity or reserved_quantity < order.quantity
                 ):
                     rejection = "insufficient_paper_position"
@@ -491,19 +497,43 @@ class TradingPaperRepository:
                     prior_cost = position_quantity * average_cost
                     cash_reserved -= order.reserved_cash
                     cash_available += order.reserved_cash - total_cost
-                    position_quantity += order.quantity
-                    average_cost = (prior_cost + notional) / position_quantity
-                    realized_delta = Decimal("0")
-                else:
-                    reserved_quantity -= order.quantity
-                    cash_available += notional - commission
-                    realized_delta = paper_realized_pnl(
-                        order.quantity,
-                        average_cost,
-                        decision.fill_price,
-                    )
+                    if position_quantity >= 0:
+                        position_quantity += order.quantity
+                        average_cost = (prior_cost + notional) / position_quantity
+                        realized_delta = Decimal("0")
+                    elif order.quantity <= abs(position_quantity):
+                        realized_delta = (average_cost - decision.fill_price) * order.quantity
+                        position_quantity += order.quantity
+                    else:
+                        covered = abs(position_quantity)
+                        realized_delta = (average_cost - decision.fill_price) * covered
+                        position_quantity = order.quantity - covered
+                        average_cost = decision.fill_price
                     realized_pnl += realized_delta
-                    position_quantity -= order.quantity
+                    if position_quantity == 0:
+                        average_cost = Decimal("0")
+                else:
+                    if position_quantity > 0:
+                        reserved_quantity -= order.quantity
+                        close_quantity = min(position_quantity, order.quantity)
+                        realized_delta = paper_realized_pnl(
+                            close_quantity,
+                            average_cost,
+                            decision.fill_price,
+                        )
+                        position_quantity -= close_quantity
+                        if order.quantity > close_quantity:
+                            position_quantity = -(order.quantity - close_quantity)
+                            average_cost = decision.fill_price
+                    else:
+                        prior_short_quantity = abs(position_quantity)
+                        position_quantity -= order.quantity
+                        average_cost = (
+                            (prior_short_quantity * average_cost) + notional
+                        ) / abs(position_quantity)
+                        realized_delta = Decimal("0")
+                    cash_available += notional - commission
+                    realized_pnl += realized_delta
                     if position_quantity == 0:
                         average_cost = Decimal("0")
 
@@ -580,12 +610,16 @@ class TradingPaperRepository:
                             currency, amount, order_id, fill_id,
                             idempotency_key, payload
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
-                        ON CONFLICT (workspace_id, account_id, idempotency_key) DO NOTHING
+                        -- Keep the entry type in the ledger ID.  Truncating the
+                        -- hash before this point made trade_cash and commission
+                        -- collide on the ledger primary key and rolled back the
+                        -- otherwise valid fill.
+                        ON CONFLICT DO NOTHING
                         """,
                         (
                             self.context.workspace_id,
                             account_id,
-                            ledger_key[:64],
+                            ledger_key,
                             entry_type,
                             account.base_currency,
                             amount,
