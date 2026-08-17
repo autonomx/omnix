@@ -289,6 +289,68 @@ export function TradingChartPanel({
   }, [chartId, synchronization]);
 
   useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !adapter || (replayMode && active)) return;
+    let pan: { pointerId: number; lastX: number; lastY: number; mode: 'time' | 'price-scale' | 'price-pan' } | null = null;
+    const insideHost = (event: PointerEvent) => event.target instanceof Node && host.contains(event.target);
+    const pointerDown = (event: PointerEvent) => {
+      if (!insideHost(event)) return;
+      const isPrimaryPan = event.button === 0 && drawingTool === 'cursor';
+      const isMiddlePan = event.button === 1;
+      if ((!isPrimaryPan && !isMiddlePan) || event.pointerType === 'touch') return;
+      const bounds = host.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const onPriceScale = adapter.isPriceScaleCoordinate(x);
+      pan = {
+        pointerId: event.pointerId,
+        lastX: event.clientX,
+        lastY: event.clientY,
+        mode: onPriceScale ? 'price-scale' : event.shiftKey ? 'price-pan' : 'time',
+      };
+      host.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+    const pointerMove = (event: PointerEvent) => {
+      if (!pan || pan.pointerId !== event.pointerId) return;
+      const deltaX = event.clientX - pan.lastX;
+      const deltaY = event.clientY - pan.lastY;
+      const bounds = host.getBoundingClientRect();
+      if (pan.mode === 'price-scale') adapter.zoomPriceScaleAtCoordinate(event.clientY - bounds.top, deltaY);
+      else if (pan.mode === 'price-pan') adapter.panPriceScaleByPixels(deltaY);
+      else adapter.panTimeByPixels(deltaX);
+      pan.lastX = event.clientX;
+      pan.lastY = event.clientY;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+    const pointerUp = (event: PointerEvent) => {
+      if (!pan || pan.pointerId !== event.pointerId) return;
+      pan = null;
+      if (host.hasPointerCapture(event.pointerId)) host.releasePointerCapture(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
+    const lostPointerCapture = () => { pan = null; };
+    window.addEventListener('pointerdown', pointerDown, true);
+    window.addEventListener('pointermove', pointerMove, true);
+    window.addEventListener('pointerup', pointerUp, true);
+    window.addEventListener('pointercancel', pointerUp, true);
+    host.addEventListener('lostpointercapture', lostPointerCapture, true);
+    return () => {
+      window.removeEventListener('pointerdown', pointerDown, true);
+      window.removeEventListener('pointermove', pointerMove, true);
+      window.removeEventListener('pointerup', pointerUp, true);
+      window.removeEventListener('pointercancel', pointerUp, true);
+      host.removeEventListener('lostpointercapture', lostPointerCapture, true);
+      pan = null;
+    };
+  }, [active, adapter, drawingTool, replayMode]);
+
+  useEffect(() => {
     if (!adapter) return;
     const applyAppearance = () => {
       adapter.setAppearance(document.documentElement.dataset.omnixAppearance === 'light' ? 'light' : 'dark');
@@ -607,7 +669,21 @@ export function TradingChartPanel({
     event.preventDefault();
     event.stopPropagation();
     const bounds = event.currentTarget.getBoundingClientRect();
-    targetAdapter.zoomAtCoordinate(event.clientX - bounds.left, event.deltaY);
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    if (targetAdapter.isPriceScaleCoordinate(x)) {
+      targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
+      return;
+    }
+    if (event.deltaX !== 0) {
+      targetAdapter.panTimeByPixels(-event.deltaX);
+      return;
+    }
+    if (event.shiftKey) {
+      targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
+      return;
+    }
+    targetAdapter.zoomAtCoordinate(x, event.deltaY);
   };
 
   const handleReplayStageClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -728,7 +804,11 @@ export function TradingChartPanel({
           </div>
         ) : null}
       </header>
-      <div className={`trading-chart-stage${replayMode && active ? ' is-replay-mode' : ''}`} onClickCapture={handleReplayStageClick} onContextMenu={handleStageContextMenu}>
+      <div
+        className={`trading-chart-stage${replayMode && active ? ' is-replay-mode' : ''}`}
+        onClickCapture={handleReplayStageClick}
+        onContextMenu={handleStageContextMenu}
+      >
         <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
         {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={indicatorOutputs} /> : null}
         {replayMode && active && replayMarkerX !== null ? (

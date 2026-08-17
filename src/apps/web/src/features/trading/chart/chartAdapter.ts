@@ -141,12 +141,12 @@ export class TradingChartAdapter {
       handleScale: {
         mouseWheel: true,
         pinch: true,
-        axisPressedMouseMove: { time: true, price: true },
+        axisPressedMouseMove: { time: false, price: false },
         axisDoubleClickReset: { time: true, price: true },
       },
       handleScroll: {
         mouseWheel: true,
-        pressedMouseMove: true,
+        pressedMouseMove: false,
         horzTouchDrag: true,
         vertTouchDrag: true,
       },
@@ -370,6 +370,59 @@ export class TradingChartAdapter {
       to: anchor + (range.to - anchor) * factor,
     };
     timeScale.setVisibleLogicalRange(constrainZoomOutRange(nextRange, this.maxZoomOutRange, anchor));
+  }
+
+  panTimeByPixels(deltaX: number): void {
+    this.assertActive();
+    if (!Number.isFinite(deltaX) || deltaX === 0) return;
+    const timeScale = this.chart.timeScale();
+    const range = timeScale.getVisibleLogicalRange();
+    if (!range) return;
+
+    // Use the current bar spacing instead of converting the range endpoints
+    // back to coordinates. Once a drag moves past the loaded data, the chart
+    // clamps both out-of-range logical coordinates to the same edge, making
+    // that coordinate-based calculation return zero and stopping the drag.
+    const pixelsPerLogical = timeScale.options().barSpacing;
+    if (!Number.isFinite(pixelsPerLogical) || pixelsPerLogical <= 0) return;
+    const logicalDelta = deltaX / pixelsPerLogical;
+    timeScale.setVisibleLogicalRange({ from: range.from - logicalDelta, to: range.to - logicalDelta });
+  }
+
+  panPriceScaleByPixels(deltaY: number): void {
+    this.assertActive();
+    if (!Number.isFinite(deltaY) || deltaY === 0) return;
+    const priceScale = this.chart.priceScale(this.priceScaleSide);
+    const range = priceScale.getVisibleRange();
+    const paneHeight = this.chart.panes()[0]?.getHeight() ?? this.chart.chartElement().getBoundingClientRect().height;
+    if (!range || !Number.isFinite(paneHeight) || paneHeight <= 0) return;
+    const priceDelta = deltaY / paneHeight * (range.to - range.from);
+    priceScale.setAutoScale(false);
+    priceScale.setVisibleRange({ from: range.from - priceDelta, to: range.to - priceDelta });
+  }
+
+  zoomPriceScaleAtCoordinate(y: number, deltaY: number): void {
+    this.assertActive();
+    const priceScale = this.chart.priceScale(this.priceScaleSide);
+    const range = priceScale.getVisibleRange();
+    const anchor = this.priceSeries.coordinateToPrice(y);
+    if (!range || anchor === null || !Number.isFinite(deltaY)) return;
+    const normalizedDelta = Math.max(-0.35, Math.min(0.35, deltaY / 500));
+    const factor = Math.exp(normalizedDelta);
+    const nextRange = {
+      from: anchor - (anchor - range.from) * factor,
+      to: anchor + (range.to - anchor) * factor,
+    };
+    priceScale.setAutoScale(false);
+    priceScale.setVisibleRange(nextRange);
+  }
+
+  isPriceScaleCoordinate(x: number): boolean {
+    this.assertActive();
+    const width = this.chart.chartElement().getBoundingClientRect().width;
+    const priceScaleWidth = this.chart.priceScale(this.priceScaleSide).width();
+    if (!Number.isFinite(x) || priceScaleWidth <= 0) return false;
+    return this.priceScaleSide === 'right' ? x >= width - priceScaleWidth : x <= priceScaleWidth;
   }
 
   setPriceScaleAutoScale(autoScale: boolean): void {
