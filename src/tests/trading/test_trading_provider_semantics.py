@@ -112,6 +112,33 @@ def test_yahoo_daily_history_keeps_the_full_stock_window() -> None:
     assert session.calls == 1
 
 
+def test_yahoo_currency_rate_normalizes_stablecoins_and_caches() -> None:
+    payload = {
+        "chart": {
+            "result": [{
+                "indicators": {"quote": [{"close": [None, 1.4]}]},
+            }],
+        },
+    }
+    session = FakeSession([FakeResponse(payload)])
+    runtime = ProviderHttpRuntime(
+        "yahoo",
+        session=session,
+        max_attempts=1,
+        initial_backoff_seconds=0,
+    )
+    provider = YahooEquityProvider(runtime=runtime, cache=TradingMarketDataCache())
+
+    first = provider.get_currency_rate("USDT", "CAD")
+    second = provider.get_currency_rate("USD", "CAD")
+
+    assert first["base_currency"] == "USD"
+    assert first["quote_currency"] == "CAD"
+    assert first["rate"] == 1.4
+    assert second["rate"] == 1.4
+    assert session.calls == 1
+
+
 def test_provider_runtime_retries_and_reports_health() -> None:
     session = FakeSession([FakeResponse({}, status_code=503), FakeResponse({"ok": True})])
     runtime = ProviderHttpRuntime(

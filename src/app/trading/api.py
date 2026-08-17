@@ -63,6 +63,16 @@ class QuoteResponse(BaseModel):
     freshness_mode: str
 
 
+class CurrencyRateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    base_currency: str
+    quote_currency: str
+    rate: float
+    provider: str
+    received_at: str
+    freshness_mode: str
+
+
 class TradingDiagnosticsResponse(BaseModel):
     ok: bool = True
     diagnostics: dict[str, Any]
@@ -172,6 +182,22 @@ def create_trading_router(
             raise HTTPException(
                 status_code=502,
                 detail={"code": "quote_failed", "message": str(exc)},
+            ) from exc
+
+    @router.get("/currency-rates", response_model=CurrencyRateResponse)
+    async def currency_rate(
+        base_currency: str = Query(min_length=3, max_length=16),
+        quote_currency: str = Query(min_length=3, max_length=16),
+    ) -> CurrencyRateResponse:
+        try:
+            result = market_service_factory().currency_rate(base_currency, quote_currency)
+            return CurrencyRateResponse.model_validate(result)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "currency_rate_failed", "message": str(exc)},
             ) from exc
 
     @router.get("/diagnostics", response_model=TradingDiagnosticsResponse)

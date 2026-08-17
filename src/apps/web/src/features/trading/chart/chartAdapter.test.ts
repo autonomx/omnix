@@ -32,6 +32,15 @@ describe('Trading chart adapter normalization', () => {
     expect(volumeData(bar).value).toBe(45.5);
   });
 
+  it('applies a selected display-currency multiplier to price data', () => {
+    const converted = candlestickData(bar, 1.4);
+    expect(converted.open).toBeCloseTo(140.35);
+    expect(converted.high).toBeCloseTo(144.2);
+    expect(converted.low).toBeCloseTo(139.3);
+    expect(converted.close).toBeCloseTo(143.85);
+    expect(lineData(bar, 1.4).value).toBeCloseTo(143.85);
+  });
+
   it('uses epoch seconds and deterministic volume direction colors', () => {
     expect(candlestickData(bar).time).toBe(Date.parse(bar.start_time) / 1_000);
     expect(volumeData(bar).color).toContain('32,201,151');

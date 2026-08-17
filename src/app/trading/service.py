@@ -59,6 +59,14 @@ class TradingMarketDataService:
     ) -> dict[str, object]:
         return self.registry.quote(instrument_id, binding_id, cancellation)
 
+    def currency_rate(
+        self,
+        base_currency: str,
+        quote_currency: str,
+        cancellation: threading.Event | None = None,
+    ) -> dict[str, object]:
+        return self.registry.currency_rate(base_currency, quote_currency, cancellation)
+
     async def stream_updates(
         self,
         instrument_id: str,

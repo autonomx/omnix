@@ -12,6 +12,15 @@ import type {
 
 export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets';
 
+export type TradingCurrencyRate = {
+  base_currency: string;
+  quote_currency: string;
+  rate: number;
+  provider: string;
+  received_at: string;
+  freshness_mode: string;
+};
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -89,6 +98,10 @@ export const tradingApi = {
     requestJson<Record<string, string>>(
       `/api/trading/quotes?${marketQuery(instrumentId, bindingId)}`,
     ),
+  currencyRate: (baseCurrency: string, quoteCurrency: string) => {
+    const query = new URLSearchParams({ base_currency: baseCurrency, quote_currency: quoteCurrency });
+    return requestJson<TradingCurrencyRate>(`/api/trading/currency-rates?${query.toString()}`);
+  },
   diagnostics: () => requestJson<{ ok: boolean; diagnostics: Record<string, unknown> }>('/api/trading/diagnostics'),
   documents: async (kind: TradingDocumentKind) => {
     const payload = await requestJson<unknown>(`/api/trading/${kind}`);

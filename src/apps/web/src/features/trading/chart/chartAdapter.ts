@@ -61,10 +61,10 @@ function timestamp(value: string): UTCTimestamp {
   return Math.floor(milliseconds / 1_000) as UTCTimestamp;
 }
 
-export function candlestickData(bar: MarketBar): CandlestickData<UTCTimestamp> {
-  return { time: timestamp(bar.start_time), open: Number(bar.open), high: Number(bar.high), low: Number(bar.low), close: Number(bar.close) };
+export function candlestickData(bar: MarketBar, multiplier = 1): CandlestickData<UTCTimestamp> {
+  return { time: timestamp(bar.start_time), open: Number(bar.open) * multiplier, high: Number(bar.high) * multiplier, low: Number(bar.low) * multiplier, close: Number(bar.close) * multiplier };
 }
-export function lineData(bar: MarketBar): LineData<UTCTimestamp> { return { time: timestamp(bar.start_time), value: Number(bar.close) }; }
+export function lineData(bar: MarketBar, multiplier = 1): LineData<UTCTimestamp> { return { time: timestamp(bar.start_time), value: Number(bar.close) * multiplier }; }
 export function volumeData(bar: MarketBar): HistogramData<UTCTimestamp> {
   return { time: timestamp(bar.start_time), value: Number(bar.volume), color: Number(bar.close) >= Number(bar.open) ? 'rgba(32,201,151,.45)' : 'rgba(255,107,107,.42)' };
 }
@@ -122,6 +122,9 @@ export class TradingChartAdapter {
   private latestValueLabelVisible = true;
   private chartType: TradingChartType;
   private readonly revisions = new Map<number, number>();
+  private bars: MarketBar[] = [];
+  private indicatorOutputs: IndicatorOutput[] = [];
+  private priceScaleMultiplier = 1;
   private destroyed = false;
 
   constructor(container: HTMLElement, chartType: TradingChartType = 'candlestick') {
@@ -166,19 +169,19 @@ export class TradingChartAdapter {
   }
 
   private setPriceData(bars: readonly MarketBar[]): void {
-    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).setData(bars.map(candlestickData));
-    else if (this.chartType === 'bar') (this.priceSeries as ISeriesApi<'Bar'>).setData(bars.map(candlestickData));
-    else if (this.chartType === 'area') (this.priceSeries as ISeriesApi<'Area'>).setData(bars.map(lineData));
-    else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).setData(bars.map(lineData));
-    else (this.priceSeries as ISeriesApi<'Line'>).setData(bars.map(lineData));
+    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).setData(bars.map((bar) => candlestickData(bar, this.priceScaleMultiplier)));
+    else if (this.chartType === 'bar') (this.priceSeries as ISeriesApi<'Bar'>).setData(bars.map((bar) => candlestickData(bar, this.priceScaleMultiplier)));
+    else if (this.chartType === 'area') (this.priceSeries as ISeriesApi<'Area'>).setData(bars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
+    else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).setData(bars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
+    else (this.priceSeries as ISeriesApi<'Line'>).setData(bars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
   }
 
   private updatePriceData(bar: MarketBar): void {
-    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).update(candlestickData(bar));
-    else if (this.chartType === 'bar') (this.priceSeries as ISeriesApi<'Bar'>).update(candlestickData(bar));
-    else if (this.chartType === 'area') (this.priceSeries as ISeriesApi<'Area'>).update(lineData(bar));
-    else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).update(lineData(bar));
-    else (this.priceSeries as ISeriesApi<'Line'>).update(lineData(bar));
+    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).update(candlestickData(bar, this.priceScaleMultiplier));
+    else if (this.chartType === 'bar') (this.priceSeries as ISeriesApi<'Bar'>).update(candlestickData(bar, this.priceScaleMultiplier));
+    else if (this.chartType === 'area') (this.priceSeries as ISeriesApi<'Area'>).update(lineData(bar, this.priceScaleMultiplier));
+    else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).update(lineData(bar, this.priceScaleMultiplier));
+    else (this.priceSeries as ISeriesApi<'Line'>).update(lineData(bar, this.priceScaleMultiplier));
   }
 
   setChartType(type: TradingChartType, bars: readonly MarketBar[]): void {
@@ -209,6 +212,7 @@ export class TradingChartAdapter {
   setBars(bars: readonly MarketBar[], fit = true): void {
     this.assertActive();
     const visibleRange = fit ? null : this.chart.timeScale().getVisibleLogicalRange();
+    this.bars = [...bars];
     this.revisions.clear();
     for (const bar of bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
     this.setPriceData(bars);
@@ -224,6 +228,7 @@ export class TradingChartAdapter {
 
   setIndicatorOutputs(outputs: readonly IndicatorOutput[]): void {
     this.assertActive();
+    this.indicatorOutputs = [...outputs];
     const paneIds = outputs.reduce<string[]>((ids, output) => {
       const paneId = indicatorPaneId(output);
       if (paneId && !ids.includes(paneId)) ids.push(paneId);
@@ -279,7 +284,10 @@ export class TradingChartAdapter {
           ...indicatorPriceFormat(output.precision),
         });
       }
-      const data = output.points.map((point) => ({ time: timestamp(point.time), value: point.value }));
+      const data = output.points.map((point) => ({
+        time: timestamp(point.time),
+        value: output.pane === 0 ? point.value * this.priceScaleMultiplier : point.value,
+      }));
       if (output.kind === 'histogram') (series as ISeriesApi<'Histogram'>).setData(data);
       else (series as ISeriesApi<'Line'>).setData(data);
     }
@@ -328,6 +336,9 @@ export class TradingChartAdapter {
     const previousRevision = this.revisions.get(time) ?? 0;
     if (bar.ingestion_revision < previousRevision) return false;
     this.revisions.set(time, bar.ingestion_revision);
+    const existingIndex = this.bars.findIndex((item) => timestamp(item.start_time) === time);
+    if (existingIndex >= 0) this.bars[existingIndex] = bar;
+    else this.bars.push(bar);
     this.updatePriceData(bar);
     this.volumeSeries.update(volumeData(bar));
     return true;
@@ -336,7 +347,7 @@ export class TradingChartAdapter {
   projectDrawingPoint(point: DrawingPoint): DrawingCoordinate | null {
     this.assertActive();
     const x = this.chart.timeScale().timeToCoordinate(timestamp(point.time));
-    const y = this.priceSeries.priceToCoordinate(point.price);
+    const y = this.priceSeries.priceToCoordinate(point.price * this.priceScaleMultiplier);
     return x === null || y === null ? null : { x, y };
   }
 
@@ -345,7 +356,7 @@ export class TradingChartAdapter {
     const series = this.indicatorSeries.get(key);
     if (!series) return null;
     const x = this.chart.timeScale().timeToCoordinate(timestamp(point.time));
-    const y = series.priceToCoordinate(point.value);
+    const y = series.priceToCoordinate(this.indicatorSeriesPanes.get(key) === 0 ? point.value * this.priceScaleMultiplier : point.value);
     return x === null || y === null ? null : { x, y };
   }
 
@@ -354,7 +365,7 @@ export class TradingChartAdapter {
     const time = this.chart.timeScale().coordinateToTime(x);
     const price = this.priceSeries.coordinateToPrice(y);
     if (typeof time !== 'number' || price === null) return null;
-    return { time: new Date(time * 1_000).toISOString(), price };
+    return { time: new Date(time * 1_000).toISOString(), price: price / this.priceScaleMultiplier };
   }
 
   zoomAtCoordinate(x: number, deltaY: number): void {
@@ -428,6 +439,18 @@ export class TradingChartAdapter {
   setPriceScaleAutoScale(autoScale: boolean): void {
     this.assertActive();
     this.chart.priceScale(this.priceScaleSide).setAutoScale(autoScale);
+  }
+
+  setPriceScaleMultiplier(multiplier: number): void {
+    this.assertActive();
+    const nextMultiplier = Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1;
+    if (Math.abs(nextMultiplier - this.priceScaleMultiplier) < 1e-12) return;
+    const visibleRange = this.chart.timeScale().getVisibleLogicalRange();
+    this.priceScaleMultiplier = nextMultiplier;
+    this.setPriceData(this.bars);
+    this.setIndicatorOutputs(this.indicatorOutputs);
+    this.chart.priceScale(this.priceScaleSide).setAutoScale(true);
+    if (visibleRange) this.chart.timeScale().setVisibleLogicalRange(visibleRange);
   }
 
   setPriceScaleMode(mode: PriceScaleMode): void {
@@ -509,12 +532,12 @@ export class TradingChartAdapter {
       if (parameter.time === undefined) { listener(null); return; }
       const datum = parameter.seriesData.get(this.priceSeries) as { close?: number; value?: number } | undefined;
       const price = datum?.close ?? datum?.value;
-      listener(typeof price === 'number' ? { time: parameter.time, price } : null);
+      listener(typeof price === 'number' ? { time: parameter.time, price: price / this.priceScaleMultiplier } : null);
     };
     this.chart.subscribeCrosshairMove(handler);
     return () => this.chart.unsubscribeCrosshairMove(handler);
   }
-  setCrosshair(point: TradingCrosshairPoint | null): void { this.assertActive(); if (point === null) this.chart.clearCrosshairPosition(); else this.chart.setCrosshairPosition(point.price, point.time, this.priceSeries); }
+  setCrosshair(point: TradingCrosshairPoint | null): void { this.assertActive(); if (point === null) this.chart.clearCrosshairPosition(); else this.chart.setCrosshairPosition(point.price * this.priceScaleMultiplier, point.time, this.priceSeries); }
   onVisibleRange(listener: (range: TradingVisibleRange | null) => void): () => void { this.assertActive(); const handler = (range: TradingVisibleRange | null) => listener(range); this.chart.timeScale().subscribeVisibleTimeRangeChange(handler); return () => this.chart.timeScale().unsubscribeVisibleTimeRangeChange(handler); }
   onViewportChange(listener: () => void): () => void {
     this.assertActive();
@@ -548,6 +571,6 @@ export class TradingChartAdapter {
     if (range) this.maxZoomOutRange = { from: range.from, to: range.to };
   }
   api(): IChartApi { this.assertActive(); return this.chart; }
-  destroy(): void { if (this.destroyed) return; this.destroyed = true; this.revisions.clear(); this.indicatorSeries.clear(); this.chart.remove(); }
+  destroy(): void { if (this.destroyed) return; this.destroyed = true; this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.indicatorSeries.clear(); this.chart.remove(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }
 }

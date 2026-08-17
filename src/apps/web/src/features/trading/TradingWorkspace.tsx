@@ -43,6 +43,7 @@ import './TradingIntervalMenu.css';
 import './TradingSideRail.css';
 import './TradingLayoutConstraints.css';
 import './TradingLightTheme.css';
+import './TradingChartPan.css';
 import './TradingTypography.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [

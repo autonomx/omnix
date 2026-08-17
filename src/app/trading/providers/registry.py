@@ -188,6 +188,20 @@ class ProviderRegistry:
             return provider.get_quote(instrument_id, cancellation=cancellation)
         return provider.get_quote(instrument_id)
 
+    def currency_rate(
+        self,
+        base_currency: str,
+        quote_currency: str,
+        cancellation: threading.Event | None = None,
+    ) -> dict[str, object]:
+        provider = self.provider("yahoo")
+        method = getattr(provider, "get_currency_rate", None)
+        if not callable(method):
+            raise ValueError("Yahoo provider does not support currency conversion")
+        if self._supports_cancellation(method):
+            return method(base_currency, quote_currency, cancellation=cancellation)
+        return method(base_currency, quote_currency)
+
     def descriptors(self) -> list[dict[str, object]]:
         descriptors: list[dict[str, object]] = []
         for provider_id, policy in POLICIES.items():

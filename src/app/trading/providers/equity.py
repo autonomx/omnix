@@ -14,7 +14,7 @@ from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by
 from app.trading.models import AdjustmentMode, BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
 
 from .bar_semantics import equity_bar_times, equity_session_bounds, is_final_bar
-from .errors import ProviderContractError, ProviderDataUnavailableError
+from .errors import ProviderContractError, ProviderDataUnavailableError, ProviderFallbackEligibleError
 from .http_runtime import ProviderHttpRuntime
 
 
@@ -28,6 +28,7 @@ YAHOO_INTERVALS = {
     "1mo": ("max", "1mo"),
 }
 MAX_YAHOO_HISTORY_LIMIT = 2_000
+STABLE_CURRENCY_CODES = {"BUSD", "USDC", "USDT"}
 
 
 class YahooEquityProvider:
@@ -191,6 +192,84 @@ class YahooEquityProvider:
             "received_at": response.provenance.received_at.isoformat(),
             "source_time": last.end_time.isoformat(),
             "freshness_mode": response.provenance.freshness_mode,
+        }
+
+    def get_currency_rate(
+        self,
+        base_currency: str,
+        quote_currency: str,
+        cancellation: threading.Event | None = None,
+    ) -> dict[str, object]:
+        base = base_currency.strip().upper()
+        quote = quote_currency.strip().upper()
+        if base in STABLE_CURRENCY_CODES:
+            base = "USD"
+        if quote in STABLE_CURRENCY_CODES:
+            quote = "USD"
+        if not base or not quote or not base.isalpha() or not quote.isalpha():
+            raise ValueError("currency codes must contain letters only")
+        if base == quote:
+            return {
+                "base_currency": base,
+                "quote_currency": quote,
+                "rate": 1.0,
+                "provider": self.provider_id,
+                "received_at": datetime.now(timezone.utc).isoformat(),
+                "freshness_mode": "identity",
+            }
+
+        key = self.cache.key("yahoo_fx", base, quote)
+
+        def load() -> dict[str, Any]:
+            def read_pair(pair_base: str, pair_quote: str) -> float:
+                response = self.runtime.get(
+                    f"https://query1.finance.yahoo.com/v8/finance/chart/{pair_base}{pair_quote}=X",
+                    params={"range": "5d", "interval": "1d", "events": ""},
+                    headers={"User-Agent": "Mozilla/5.0 Omnix local research"},
+                    timeout=20,
+                    cancellation=cancellation,
+                )
+                try:
+                    payload = response.json()
+                except ValueError as exc:
+                    raise ProviderContractError("Yahoo returned invalid FX JSON") from exc
+                result = ((payload.get("chart") or {}).get("result") or [None])[0]
+                if not isinstance(result, dict):
+                    raise ProviderDataUnavailableError("Yahoo returned no FX result")
+                quote_payload = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+                closes = quote_payload.get("close") if isinstance(quote_payload, dict) else None
+                if not isinstance(closes, list):
+                    raise ProviderContractError("Yahoo FX payload is malformed")
+                for value in reversed(closes):
+                    try:
+                        rate = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if rate > 0:
+                        return rate
+                raise ProviderDataUnavailableError("Yahoo returned no FX close")
+
+            try:
+                return {"rate": read_pair(base, quote)}
+            except (ProviderFallbackEligibleError, requests.RequestException):
+                inverse = read_pair(quote, base)
+                if inverse <= 0:
+                    raise ProviderDataUnavailableError("Yahoo returned an invalid FX rate")
+                return {"rate": 1.0 / inverse}
+
+        payload, _, cached = self.cache.get_or_load(
+            key,
+            load,
+            ttl_seconds=300,
+            source="yahoo_fx",
+        )
+        return {
+            "base_currency": base,
+            "quote_currency": quote,
+            "rate": float(payload["rate"]),
+            "provider": self.provider_id,
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "freshness_mode": "cached" if cached else "polled",
         }
 
 

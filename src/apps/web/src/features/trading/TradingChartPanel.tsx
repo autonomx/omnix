@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { IChartApi } from 'lightweight-charts';
+import { PriceScaleMode, type IChartApi } from 'lightweight-charts';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
@@ -19,6 +19,8 @@ import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 import { TradingIndicatorSettings } from './TradingIndicatorSettings';
 import { TradingIndicatorBackgroundOverlay } from './TradingIndicatorBackgroundOverlay';
+import { TradingYAxisControls } from './TradingYAxisControls';
+import './TradingChartOverlayLayout.css';
 import { OMNIX_APPEARANCE_CHANGE_EVENT } from '../settings/appearanceEffects';
 import {
   intervalCompactLabel,
@@ -76,6 +78,11 @@ function price(value?: string | null): string {
   if (!Number.isFinite(parsed)) return String(value ?? '—');
   const digits = Math.abs(parsed) >= 1_000 ? 2 : Math.abs(parsed) >= 1 ? 4 : 6;
   return parsed.toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
+function convertedPrice(value: string | number | null | undefined, multiplier: number): string {
+  const parsed = Number(value ?? 0);
+  return price(Number.isFinite(parsed) ? String(parsed * multiplier) : null);
 }
 
 function intervalMinutes(interval: string): number {
@@ -186,10 +193,13 @@ export function TradingChartPanel({
   const [contextMenu, setContextMenu] = useState<ChartAlertPlacement | null>(null);
   const [priceScaleMenuOpen, setPriceScaleMenuOpen] = useState(false);
   const [priceScaleSettings, setPriceScaleSettings] = useState<TradingPriceScaleMenuState>(defaultTradingPriceScaleMenuState);
+  const [priceScaleCurrency, setPriceScaleCurrency] = useState('USD');
+  const [priceScaleHovered, setPriceScaleHovered] = useState(false);
   const [tableVisible, setTableVisible] = useState(false);
   const [objectTreeVisible, setObjectTreeVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [cursorLocked, setCursorLocked] = useState(false);
+  const [chartPanning, setChartPanning] = useState(false);
   const [indicatorPaneGeometry, setIndicatorPaneGeometry] = useState<TradingIndicatorPaneGeometry[]>([]);
   const [indicatorOutputs, setIndicatorOutputs] = useState<IndicatorOutput[]>([]);
   const [settingsIndicator, setSettingsIndicator] = useState<CoreIndicatorInstance | null>(null);
@@ -202,6 +212,7 @@ export function TradingChartPanel({
   const [replayMarkerX, setReplayMarkerX] = useState<number | null>(null);
   const [minimizedIndicators, setMinimizedIndicators] = useState<Set<CoreIndicatorId>>(() => new Set());
   const minimizedIndicatorsRef = useRef<Set<CoreIndicatorId>>(new Set());
+
   const clearAlertPlacement = useCallback(() => setAlertPlacement(null), []);
   const refreshIndicatorPanes = useCallback((targetAdapter?: TradingChartAdapter | null) => {
     if (!targetAdapter) {
@@ -255,6 +266,27 @@ export function TradingChartPanel({
     enabled: Boolean(instrumentId),
     staleTime: 15_000,
   });
+  const sourceCurrency = chartQuery.data?.instrument.quote_currency?.toUpperCase() ?? 'USD';
+  const currencyRateQuery = useQuery({
+    queryKey: ['trading', 'currency-rate', sourceCurrency, priceScaleCurrency],
+    queryFn: () => tradingApi.currencyRate(sourceCurrency, priceScaleCurrency),
+    enabled: Boolean(sourceCurrency && priceScaleCurrency && sourceCurrency !== priceScaleCurrency),
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const priceScaleMultiplier = sourceCurrency === priceScaleCurrency
+    ? 1
+    : currencyRateQuery.data?.rate ?? 1;
+
+  useEffect(() => {
+    setPriceScaleCurrency(sourceCurrency);
+  }, [sourceCurrency, instrumentId]);
+
+  useEffect(() => {
+    if (!adapter) return;
+    adapter.setPriceScaleMultiplier(priceScaleMultiplier);
+  }, [adapter, priceScaleMultiplier]);
+
   const replayVisible = replayMode && active && replayCursorIndex !== null;
 
   useEffect(() => {
@@ -291,7 +323,7 @@ export function TradingChartPanel({
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !adapter || (replayMode && active)) return;
-    let pan: { pointerId: number; lastX: number; lastY: number; mode: 'time' | 'price-scale' | 'price-pan' } | null = null;
+    let pan: { pointerId: number; lastX: number; lastY: number; mode: 'chart-pan' | 'price-scale' | 'price-pan' } | null = null;
     const insideHost = (event: PointerEvent) => event.target instanceof Node && host.contains(event.target);
     const pointerDown = (event: PointerEvent) => {
       if (!insideHost(event)) return;
@@ -305,8 +337,9 @@ export function TradingChartPanel({
         pointerId: event.pointerId,
         lastX: event.clientX,
         lastY: event.clientY,
-        mode: onPriceScale ? 'price-scale' : event.shiftKey ? 'price-pan' : 'time',
+        mode: onPriceScale ? 'price-scale' : event.shiftKey ? 'price-pan' : 'chart-pan',
       };
+      setChartPanning(!onPriceScale);
       host.setPointerCapture(event.pointerId);
       event.preventDefault();
       event.stopPropagation();
@@ -318,8 +351,15 @@ export function TradingChartPanel({
       const deltaY = event.clientY - pan.lastY;
       const bounds = host.getBoundingClientRect();
       if (pan.mode === 'price-scale') adapter.zoomPriceScaleAtCoordinate(event.clientY - bounds.top, deltaY);
-      else if (pan.mode === 'price-pan') adapter.panPriceScaleByPixels(deltaY);
-      else adapter.panTimeByPixels(deltaX);
+      else if (pan.mode === 'price-pan') adapter.panPriceScaleByPixels(-deltaY);
+      else {
+        // TradingView-style chart dragging: horizontal motion pans time and
+        // vertical motion translates the visible price range at the same time.
+        adapter.panTimeByPixels(deltaX);
+        // Invert the screen delta so dragging upward moves the visible chart
+        // downward, matching the requested TradingView-style y-axis feel.
+        adapter.panPriceScaleByPixels(-deltaY);
+      }
       pan.lastX = event.clientX;
       pan.lastY = event.clientY;
       event.preventDefault();
@@ -329,12 +369,16 @@ export function TradingChartPanel({
     const pointerUp = (event: PointerEvent) => {
       if (!pan || pan.pointerId !== event.pointerId) return;
       pan = null;
+      setChartPanning(false);
       if (host.hasPointerCapture(event.pointerId)) host.releasePointerCapture(event.pointerId);
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
     };
-    const lostPointerCapture = () => { pan = null; };
+    const lostPointerCapture = () => {
+      pan = null;
+      setChartPanning(false);
+    };
     window.addEventListener('pointerdown', pointerDown, true);
     window.addEventListener('pointermove', pointerMove, true);
     window.addEventListener('pointerup', pointerUp, true);
@@ -347,6 +391,7 @@ export function TradingChartPanel({
       window.removeEventListener('pointercancel', pointerUp, true);
       host.removeEventListener('lostpointercapture', lostPointerCapture, true);
       pan = null;
+      setChartPanning(false);
     };
   }, [active, adapter, drawingTool, replayMode]);
 
@@ -633,6 +678,24 @@ export function TradingChartPanel({
     if (point) openContextMenu({ ...point, x, y, source: 'context-menu' });
   };
 
+  const handleStagePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const targetAdapter = adapterRef.current;
+    const target = event.target as Element;
+    if (target.closest('.trading-y-axis-controls')) {
+      setPriceScaleHovered(true);
+      return;
+    }
+    if (!targetAdapter) {
+      setPriceScaleHovered(false);
+      return;
+    }
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const nextHovered = targetAdapter.isPriceScaleCoordinate(event.clientX - bounds.left);
+    setPriceScaleHovered((current) => current === nextHovered ? current : nextHovered);
+  };
+
+  const handleStagePointerLeave = () => setPriceScaleHovered(false);
+
   const copyContextPrice = () => {
     if (!contextMenu) return;
     void navigator.clipboard?.writeText(String(contextMenu.price));
@@ -752,11 +815,11 @@ export function TradingChartPanel({
           </div>
           {latest ? (
             <div className="trading-chart-ohlc">
-              <span>O <b>{price(latest.open)}</b></span>
-              <span>H <b>{price(latest.high)}</b></span>
-              <span>L <b>{price(latest.low)}</b></span>
-              <span>C <b>{price(latest.close)}</b></span>
-              <span className={direction}>{change >= 0 ? '+' : ''}{price(String(change))} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+              <span>O <b>{convertedPrice(latest.open, priceScaleMultiplier)}</b></span>
+              <span>H <b>{convertedPrice(latest.high, priceScaleMultiplier)}</b></span>
+              <span>L <b>{convertedPrice(latest.low, priceScaleMultiplier)}</b></span>
+              <span>C <b>{convertedPrice(latest.close, priceScaleMultiplier)}</b></span>
+              <span className={direction}>{change >= 0 ? '+' : ''}{convertedPrice(change, priceScaleMultiplier)} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
             </div>
           ) : null}
         </div>
@@ -808,8 +871,10 @@ export function TradingChartPanel({
         className={`trading-chart-stage${replayMode && active ? ' is-replay-mode' : ''}`}
         onClickCapture={handleReplayStageClick}
         onContextMenu={handleStageContextMenu}
+        onPointerMove={handleStagePointerMove}
+        onPointerLeave={handleStagePointerLeave}
       >
-        <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
+        <div ref={hostRef} className={`trading-chart-canvas${chartPanning ? ' is-grabbing' : ''}`} aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
         {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={indicatorOutputs} /> : null}
         {replayMode && active && replayMarkerX !== null ? (
           <div className="trading-replay-marker" style={{ left: `${replayMarkerX}px` }} aria-hidden="true">
@@ -823,6 +888,23 @@ export function TradingChartPanel({
         ) : null}
         {active && adapter ? (
           <>
+            <TradingYAxisControls
+              side={priceScaleSettings.side}
+              currency={priceScaleCurrency}
+              autoScale={priceScaleSettings.autoScale}
+              logarithmic={priceScaleSettings.mode === 'logarithmic'}
+              visible={priceScaleHovered}
+              onCurrencyChange={setPriceScaleCurrency}
+              onAutoFit={() => {
+                adapter.setPriceScaleAutoScale(true);
+                setPriceScaleSettings((current) => ({ ...current, autoScale: true }));
+              }}
+              onToggleLogarithmic={() => {
+                const logarithmic = priceScaleSettings.mode !== 'logarithmic';
+                adapter.setPriceScaleMode(logarithmic ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal);
+                setPriceScaleSettings((current) => ({ ...current, mode: logarithmic ? 'logarithmic' : 'normal' }));
+              }}
+            />
             <button
               type="button"
               className="trading-price-scale-trigger"
@@ -962,7 +1044,7 @@ export function TradingChartPanel({
             <header><strong>Table view · {chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong><button type="button" onClick={() => setTableVisible(false)} aria-label="Close table view">×</button></header>
             <table>
               <thead><tr><th>Time</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead>
-              <tbody>{bars.slice(-12).reverse().map((bar) => <tr key={bar.start_time}><td>{new Date(bar.start_time).toLocaleString()}</td><td>{price(bar.open)}</td><td>{price(bar.high)}</td><td>{price(bar.low)}</td><td>{price(bar.close)}</td><td>{price(bar.volume)}</td></tr>)}</tbody>
+              <tbody>{bars.slice(-12).reverse().map((bar) => <tr key={bar.start_time}><td>{new Date(bar.start_time).toLocaleString()}</td><td>{convertedPrice(bar.open, priceScaleMultiplier)}</td><td>{convertedPrice(bar.high, priceScaleMultiplier)}</td><td>{convertedPrice(bar.low, priceScaleMultiplier)}</td><td>{convertedPrice(bar.close, priceScaleMultiplier)}</td><td>{price(bar.volume)}</td></tr>)}</tbody>
             </table>
           </div>
         ) : null}
