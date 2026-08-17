@@ -5,6 +5,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  LineStyle,
   PriceScaleMode,
   createChart,
   type CandlestickData,
@@ -69,6 +70,11 @@ export function volumeData(bar: MarketBar): HistogramData<UTCTimestamp> {
 }
 
 function indicatorColor(output: IndicatorOutput): string {
+  if (output.key.startsWith('bull-market-band:sma')) return '#ff6b6b';
+  if (output.key.startsWith('bull-market-band:ema')) return '#40ad50';
+  if (output.key.includes('support') || output.key.includes('value-area-low')) return '#20c997';
+  if (output.key.includes('resistance') || output.key.includes('value-area-high')) return '#ff6b6b';
+  if (output.key.includes('poc')) return '#ffd43b';
   if (output.key.includes('upper')) return '#74c0fc';
   if (output.key.includes('lower')) return '#74c0fc';
   if (output.key.includes('middle')) return '#a5d8ff';
@@ -84,6 +90,20 @@ function indicatorColor(output: IndicatorOutput): string {
 function indicatorPaneId(output: IndicatorOutput): string | null {
   if (output.pane === 0) return null;
   return output.key.split(':', 1)[0] ?? null;
+}
+
+function indicatorLineStyle(value: IndicatorOutput['lineStyle']): LineStyle | undefined {
+  if (value === 'dotted') return LineStyle.Dotted;
+  if (value === 'dashed') return LineStyle.Dashed;
+  if (value === 'large-dashed') return LineStyle.LargeDashed;
+  if (value === 'sparse-dotted') return LineStyle.SparseDotted;
+  if (value === 'solid') return LineStyle.Solid;
+  return undefined;
+}
+
+function indicatorPriceFormat(precision: number | null | undefined): { priceFormat?: { type: 'price'; precision: number; minMove: number } } {
+  if (precision === null || precision === undefined) return {};
+  return { priceFormat: { type: 'price', precision, minMove: 10 ** -precision } };
 }
 
 export class TradingChartAdapter {
@@ -219,19 +239,45 @@ export class TradingChartAdapter {
       }
     }
     for (const output of outputs) {
+      if (output.visible === false) continue;
       const paneId = indicatorPaneId(output);
       const paneIndex = paneId === null ? 0 : paneIds.indexOf(paneId) + 1;
       let series = this.indicatorSeries.get(output.key);
       if (!series) {
-        const color = indicatorColor(output);
+        const color = output.color ?? indicatorColor(output);
+        const lineStyle = indicatorLineStyle(output.lineStyle);
+        const commonOptions = {
+          color,
+          title: output.valuesInStatusLine === false ? '' : output.title,
+          lastValueVisible: output.labelsOnPriceScale !== false,
+          ...indicatorPriceFormat(output.precision),
+        };
         series = output.kind === 'histogram'
-          ? this.chart.addSeries(HistogramSeries, { color, title: output.title, priceScaleId: `indicator:${output.key}` }, paneIndex)
-          : this.chart.addSeries(LineSeries, { color, lineWidth: 2, title: output.title, priceScaleId: paneIndex > 0 ? `indicator:${output.key}` : this.priceScaleSide }, paneIndex);
+          ? this.chart.addSeries(HistogramSeries, { ...commonOptions, priceScaleId: `indicator:${output.key}` }, paneIndex)
+          : this.chart.addSeries(LineSeries, { ...commonOptions, ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 2, priceScaleId: paneIndex > 0 ? `indicator:${output.key}` : this.priceScaleSide }, paneIndex);
         this.indicatorSeries.set(output.key, series);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       } else if (this.indicatorSeriesPanes.get(output.key) !== paneIndex) {
         series.moveToPane(paneIndex);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
+      }
+      if (output.kind === 'histogram') {
+        (series as ISeriesApi<'Histogram'>).applyOptions({
+          color: output.color ?? indicatorColor(output),
+          title: output.valuesInStatusLine === false ? '' : output.title,
+          lastValueVisible: output.labelsOnPriceScale !== false,
+          ...indicatorPriceFormat(output.precision),
+        });
+      } else {
+        const lineStyle = indicatorLineStyle(output.lineStyle);
+        (series as ISeriesApi<'Line'>).applyOptions({
+          color: output.color ?? indicatorColor(output),
+          title: output.valuesInStatusLine === false ? '' : output.title,
+          lastValueVisible: output.labelsOnPriceScale !== false,
+          lineWidth: output.lineWidth ?? 2,
+          ...(lineStyle === undefined ? {} : { lineStyle }),
+          ...indicatorPriceFormat(output.precision),
+        });
       }
       const data = output.points.map((point) => ({ time: timestamp(point.time), value: point.value }));
       if (output.kind === 'histogram') (series as ISeriesApi<'Histogram'>).setData(data);
@@ -291,6 +337,15 @@ export class TradingChartAdapter {
     this.assertActive();
     const x = this.chart.timeScale().timeToCoordinate(timestamp(point.time));
     const y = this.priceSeries.priceToCoordinate(point.price);
+    return x === null || y === null ? null : { x, y };
+  }
+
+  indicatorPointToCoordinate(key: string, point: { time: string; value: number }): DrawingCoordinate | null {
+    this.assertActive();
+    const series = this.indicatorSeries.get(key);
+    if (!series) return null;
+    const x = this.chart.timeScale().timeToCoordinate(timestamp(point.time));
+    const y = series.priceToCoordinate(point.value);
     return x === null || y === null ? null : { x, y };
   }
 
@@ -408,6 +463,17 @@ export class TradingChartAdapter {
   }
   setCrosshair(point: TradingCrosshairPoint | null): void { this.assertActive(); if (point === null) this.chart.clearCrosshairPosition(); else this.chart.setCrosshairPosition(point.price, point.time, this.priceSeries); }
   onVisibleRange(listener: (range: TradingVisibleRange | null) => void): () => void { this.assertActive(); const handler = (range: TradingVisibleRange | null) => listener(range); this.chart.timeScale().subscribeVisibleTimeRangeChange(handler); return () => this.chart.timeScale().unsubscribeVisibleTimeRangeChange(handler); }
+  onViewportChange(listener: () => void): () => void {
+    this.assertActive();
+    const logicalRangeHandler = () => listener();
+    const sizeHandler = () => listener();
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRangeHandler);
+    this.chart.timeScale().subscribeSizeChange(sizeHandler);
+    return () => {
+      this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(logicalRangeHandler);
+      this.chart.timeScale().unsubscribeSizeChange(sizeHandler);
+    };
+  }
   setVisibleRange(range: TradingVisibleRange): void { this.assertActive(); this.chart.timeScale().setVisibleRange(range); }
   timeToCoordinate(value: string): number | null {
     this.assertActive();

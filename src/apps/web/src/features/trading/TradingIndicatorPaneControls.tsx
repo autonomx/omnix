@@ -9,6 +9,7 @@ export function TradingIndicatorPaneControls({
   canMoveUp,
   canMoveDown,
   onToggleMinimized,
+  onSettings,
   onMove,
   onClose,
 }: {
@@ -18,6 +19,7 @@ export function TradingIndicatorPaneControls({
   canMoveUp: boolean;
   canMoveDown: boolean;
   onToggleMinimized: () => void;
+  onSettings: () => void;
   onMove: (direction: TradingIndicatorMove) => void;
   onClose: () => void;
 }) {
@@ -42,6 +44,7 @@ export function TradingIndicatorPaneControls({
       >
         {minimized ? '⌃' : '⌄'}
       </button>
+      <button type="button" title={`Open ${label} settings`} aria-label={`Open ${label} settings`} onClick={onSettings}>⚙</button>
       <button type="button" title={`Close ${label} panel`} aria-label={`Close ${label} panel`} onClick={onClose}>×</button>
     </div>
   );

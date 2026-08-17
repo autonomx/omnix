@@ -24,6 +24,7 @@ export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string |
   const toggleIndicator = useTradingStore((state) => state.toggleIndicator);
   const setIndicators = useTradingStore((state) => state.setIndicators);
   const toggleIndicatorVisibility = useTradingStore((state) => state.toggleIndicatorVisibility);
+  const updateIndicator = useTradingStore((state) => state.updateIndicator);
   const moveIndicator = useTradingStore((state) => state.moveIndicator);
   const synchronization = useMemo(() => new TradingChartSynchronization(), []);
   const columns = tradingGridColumns(layout, charts.length);
@@ -57,6 +58,7 @@ export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string |
             onToggleIndicator={(id) => toggleIndicator(chart.chartId, id)}
             onClearIndicators={() => setIndicators(chart.chartId, [])}
             onToggleIndicatorVisibility={(id) => toggleIndicatorVisibility(chart.chartId, id)}
+            onUpdateIndicator={(id, patch) => updateIndicator(chart.chartId, id, patch)}
             onMoveIndicator={(id, direction) => moveIndicator(chart.chartId, id, direction)}
             synchronization={synchronization}
             paperAccountId={paperAccountId}

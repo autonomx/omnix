@@ -48,6 +48,7 @@ type TradingWorkspaceState = {
   updateChart: (chartId: string, patch: Partial<Omit<TradingChartState, 'chartId'>>) => void;
   toggleIndicator: (chartId: string, id: CoreIndicatorId, period?: number) => void;
   toggleIndicatorVisibility: (chartId: string, id: CoreIndicatorId) => void;
+  updateIndicator: (chartId: string, id: CoreIndicatorId, patch: Partial<CoreIndicatorInstance>) => void;
   moveIndicator: (chartId: string, id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   setIndicators: (chartId: string, indicators: CoreIndicatorInstance[]) => void;
   setLink: (key: keyof TradingLinkState, enabled: boolean) => void;
@@ -65,6 +66,31 @@ export const defaultTradingIndicators = (): CoreIndicatorInstance[] => [
   { id: 'atr', period: 14, enabled: false },
   { id: 'vwap', period: 1, anchorTime: null, enabled: false },
 ];
+
+function newIndicatorInstance(id: CoreIndicatorId, period?: number): CoreIndicatorInstance {
+  const defaults: CoreIndicatorInstance = id === 'death-cross' || id === 'golden-cross'
+    ? { id, period: 50, fastPeriod: 50, slowPeriod: 200, enabled: true, visible: true }
+    : id === 'bull-market-band'
+      ? { id, period: 20, fastPeriod: 20, slowPeriod: 21, enabled: true, visible: true }
+    : id === 'ema-stack'
+      ? { id, period: 9, enabled: true, visible: true }
+      : id === 'fair-value-gap'
+        ? { id, period: 3, enabled: true, visible: true }
+        : id === 'ideal-bb'
+          ? { id, period: 120, enabled: true, visible: true }
+          : id === 'log-macd' || id === 'macd-dema'
+            ? { id, period: 9, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, enabled: true, visible: true }
+            : id === 'rsi-divergence'
+              ? { id, period: 14, fastPeriod: 5, enabled: true, visible: true }
+              : id === 'stochastic-rsi'
+                ? { id, period: 14, fastPeriod: 3, signalPeriod: 3, enabled: true, visible: true }
+                : id === 'swing-liquidity'
+                  ? { id, period: 5, enabled: true, visible: true }
+                  : id === 'volume-profile'
+                    ? { id, period: 100, enabled: true, visible: true }
+                    : { id, period: 20, enabled: true, visible: true };
+  return period === undefined ? defaults : { ...defaults, period };
+}
 
 function initialChart(): TradingChartState {
   return {
@@ -172,14 +198,19 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
     };
   }),
   toggleIndicator: (chartId, id, period) => set((state) => ({
-    charts: state.charts.map((chart) => chart.chartId !== chartId ? chart : {
-      ...chart,
-      indicators: chart.indicators.map((indicator) => indicator.id !== id ? indicator : {
-        ...indicator,
-        enabled: !indicator.enabled,
-        visible: indicator.enabled ? false : true,
-        period: period ?? indicator.period,
-      }),
+    charts: state.charts.map((chart) => {
+      if (chart.chartId !== chartId) return chart;
+      const existing = chart.indicators.find((indicator) => indicator.id === id);
+      if (!existing) return { ...chart, indicators: [...chart.indicators, newIndicatorInstance(id, period)] };
+      return {
+        ...chart,
+        indicators: chart.indicators.map((indicator) => indicator.id !== id ? indicator : {
+          ...indicator,
+          enabled: !indicator.enabled,
+          visible: indicator.enabled ? false : true,
+          period: period ?? indicator.period,
+        }),
+      };
     }),
   })),
   toggleIndicatorVisibility: (chartId, id) => set((state) => ({
@@ -189,6 +220,12 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
         ...indicator,
         visible: indicator.visible === false,
       }),
+    }),
+  })),
+  updateIndicator: (chartId, id, patch) => set((state) => ({
+    charts: state.charts.map((chart) => chart.chartId !== chartId ? chart : {
+      ...chart,
+      indicators: chart.indicators.map((indicator) => indicator.id === id ? { ...indicator, ...patch, id: indicator.id } : indicator),
     }),
   })),
   moveIndicator: (chartId, id, direction) => set((state) => ({

@@ -1,4 +1,4 @@
-import type { CoreIndicatorInstance } from '../indicators/coreIndicators';
+import type { CoreIndicatorInstance, CoreIndicatorStyle } from '../indicators/coreIndicators';
 import { binanceInstrumentIdFor } from '../cryptoInstrumentDefaults';
 import {
   MAX_TRADING_CHARTS,
@@ -57,7 +57,7 @@ export function serializeTradingWorkspace(input: {
 function indicator(value: unknown): value is CoreIndicatorInstance {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<CoreIndicatorInstance>;
-  const ids = ['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'vwap'];
+  const ids = ['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'vwap', 'bull-market-band', 'death-cross', 'ema-stack', 'fair-value-gap', 'golden-cross', 'ideal-bb', 'log-macd', 'macd-dema', 'rsi-divergence', 'stochastic-rsi', 'swing-liquidity', 'volume-profile'];
   if (!item.id || !ids.includes(item.id)) return false;
   if (typeof item.period !== 'number' || !Number.isInteger(item.period) || item.period < 1) return false;
   if (typeof item.enabled !== 'boolean') return false;
@@ -67,6 +67,26 @@ function indicator(value: unknown): value is CoreIndicatorInstance {
   }
   if (item.standardDeviations !== undefined && (!Number.isFinite(item.standardDeviations) || item.standardDeviations <= 0)) return false;
   if (item.anchorTime !== undefined && item.anchorTime !== null && typeof item.anchorTime !== 'string') return false;
+  if (item.style !== undefined) {
+    if (!item.style || typeof item.style !== 'object') return false;
+    const style = item.style as CoreIndicatorStyle;
+    if (style.lineWidth !== undefined && (!Number.isInteger(style.lineWidth) || style.lineWidth < 1 || style.lineWidth > 4)) return false;
+    for (const [key, visible] of Object.entries(style.plots ?? {})) {
+      if (!key || typeof visible !== 'boolean') return false;
+    }
+    for (const [key, lineStyle] of Object.entries(style.lineStyles ?? {})) {
+      if (!key || !['solid', 'dotted', 'dashed', 'large-dashed', 'sparse-dotted'].includes(lineStyle)) return false;
+    }
+    for (const [key, color] of Object.entries(style.colors ?? {})) {
+      if (!key || typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return false;
+    }
+    if (style.backgroundVisible !== undefined && typeof style.backgroundVisible !== 'boolean') return false;
+    if (style.backgroundColor !== undefined && (typeof style.backgroundColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(style.backgroundColor))) return false;
+    if (style.precision !== undefined && style.precision !== null && (!Number.isInteger(style.precision) || style.precision < 0 || style.precision > 8)) return false;
+    for (const statusLineOption of [style.labelsOnPriceScale, style.valuesInStatusLine, style.inputsInStatusLine]) {
+      if (statusLineOption !== undefined && typeof statusLineOption !== 'boolean') return false;
+    }
+  }
   return true;
 }
 

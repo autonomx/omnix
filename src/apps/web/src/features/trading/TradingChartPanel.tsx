@@ -11,12 +11,14 @@ import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
 import { useTradingDrawings } from './drawings/useTradingDrawings';
-import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInstance } from './indicators/coreIndicators';
+import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from './indicators/coreIndicators';
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
+import { TradingIndicatorSettings } from './TradingIndicatorSettings';
+import { TradingIndicatorBackgroundOverlay } from './TradingIndicatorBackgroundOverlay';
 import { OMNIX_APPEARANCE_CHANGE_EVENT } from '../settings/appearanceEffects';
 import {
   intervalCompactLabel,
@@ -106,8 +108,13 @@ function applyVisibleRange(chart: IChartApi, days: number | null, total: number,
   });
 }
 
-function chartHistoryLimit(instrumentId: string, interval: string): number {
-  if (instrumentId.startsWith('crypto:BINANCE:') && ['1d', '1w'].includes(interval)) return 5_000;
+function chartHistoryLimit(
+  instrumentId: string,
+  interval: string,
+  indicators: readonly CoreIndicatorInstance[],
+): number {
+  const needsExtendedHistory = indicators.some((indicator) => indicator.enabled && indicator.id === 'bull-market-band');
+  if (instrumentId.startsWith('crypto:BINANCE:') && (['1d', '1w'].includes(interval) || needsExtendedHistory)) return 5_000;
   if (instrumentId.startsWith('equity:') && interval === '1d') return 2_000;
   return 1_000;
 }
@@ -126,6 +133,7 @@ export function TradingChartPanel({
   onToggleIndicator,
   onClearIndicators,
   onToggleIndicatorVisibility,
+  onUpdateIndicator,
   onMoveIndicator,
   synchronization,
   paperAccountId,
@@ -143,6 +151,7 @@ export function TradingChartPanel({
   onToggleIndicator: (id: CoreIndicatorId) => void;
   onClearIndicators: () => void;
   onToggleIndicatorVisibility: (id: CoreIndicatorId) => void;
+  onUpdateIndicator: (id: CoreIndicatorId, patch: Partial<CoreIndicatorInstance>) => void;
   onMoveIndicator: (id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   synchronization: TradingChartSynchronization;
   paperAccountId?: string | null;
@@ -182,6 +191,8 @@ export function TradingChartPanel({
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [cursorLocked, setCursorLocked] = useState(false);
   const [indicatorPaneGeometry, setIndicatorPaneGeometry] = useState<TradingIndicatorPaneGeometry[]>([]);
+  const [indicatorOutputs, setIndicatorOutputs] = useState<IndicatorOutput[]>([]);
+  const [settingsIndicator, setSettingsIndicator] = useState<CoreIndicatorInstance | null>(null);
   const [selectedRangeLabel, setSelectedRangeLabel] = useState('All');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [replayStartIndex, setReplayStartIndex] = useState<number | null>(null);
@@ -214,6 +225,7 @@ export function TradingChartPanel({
         .then((outputs) => {
           if (outputs && adapterRef.current === targetAdapter) {
             targetAdapter.setIndicatorOutputs(outputs);
+            setIndicatorOutputs(outputs);
             for (const indicator of indicatorsRef.current) {
               if (indicatorUsesSeparatePane(indicator.id)) {
                 targetAdapter.setIndicatorPaneMinimized(indicator.id, minimizedIndicatorsRef.current.has(indicator.id));
@@ -236,7 +248,7 @@ export function TradingChartPanel({
         .catch((error) => setIndicatorError(error instanceof Error ? error.message : String(error)));
     }, delay);
   }, [refreshIndicatorPanes]);
-  const historyLimit = chartHistoryLimit(instrumentId, interval);
+  const historyLimit = chartHistoryLimit(instrumentId, interval, indicators);
   const chartQuery = useQuery({
     queryKey: ['trading', 'bars', instrumentId, bindingId, interval, historyLimit],
     queryFn: () => tradingApi.bars(instrumentId, interval, historyLimit, bindingId),
@@ -260,6 +272,7 @@ export function TradingChartPanel({
     setPriceScaleMenuOpen(false);
     setPriceScaleSettings(defaultTradingPriceScaleMenuState);
     setAdapter(next);
+    setIndicatorOutputs([]);
     setIndicatorPaneGeometry([]);
     const unregister = synchronization.register(chartId, next);
     return () => {
@@ -271,6 +284,7 @@ export function TradingChartPanel({
       indicatorSchedulerRef.current = null;
       adapterRef.current = null;
       setAdapter(null);
+      setIndicatorOutputs([]);
     };
   }, [chartId, synchronization]);
 
@@ -288,7 +302,7 @@ export function TradingChartPanel({
     const bars = (chartQuery.data?.bars ?? []) as MarketBar[];
     allBarsRef.current = bars;
     const dataKey = chartQuery.data
-      ? `${chartQuery.data.instrument.instrument_id}|${chartQuery.data.binding.binding_id}|${chartQuery.data.interval}`
+      ? `${chartQuery.data.instrument.instrument_id}|${chartQuery.data.binding.binding_id}|${chartQuery.data.interval}|${historyLimit}`
       : null;
     if (dataKey !== null && dataKey !== streamDataKeyRef.current) {
       streamDataKeyRef.current = dataKey;
@@ -509,6 +523,7 @@ export function TradingChartPanel({
   };
 
   const closeIndicator = (id: CoreIndicatorId) => {
+    setSettingsIndicator((current) => current?.id === id ? null : current);
     setMinimizedIndicators((current) => {
       const next = new Set(current);
       next.delete(id);
@@ -715,6 +730,7 @@ export function TradingChartPanel({
       </header>
       <div className={`trading-chart-stage${replayMode && active ? ' is-replay-mode' : ''}`} onClickCapture={handleReplayStageClick} onContextMenu={handleStageContextMenu}>
         <div ref={hostRef} className="trading-chart-canvas" aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
+        {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={indicatorOutputs} /> : null}
         {replayMode && active && replayMarkerX !== null ? (
           <div className="trading-replay-marker" style={{ left: `${replayMarkerX}px` }} aria-hidden="true">
             <span>Replay start</span>
@@ -774,6 +790,14 @@ export function TradingChartPanel({
                   </button>
                   <button
                     type="button"
+                    aria-label={`Open ${label} settings`}
+                    title={`Open ${label} settings`}
+                    onClick={() => setSettingsIndicator(indicator)}
+                  >
+                    ⚙
+                  </button>
+                  <button
+                    type="button"
                     className="trading-overlay-indicator-delete"
                     aria-label={`Delete ${label} overlay`}
                     title={`Delete ${label}`}
@@ -798,11 +822,19 @@ export function TradingChartPanel({
               canMoveUp={index > 0}
               canMoveDown={index < paneIndicators.length - 1}
               onToggleMinimized={() => toggleMinimizedIndicator(indicator.id)}
+              onSettings={() => setSettingsIndicator(indicator)}
               onMove={(direction) => onMoveIndicator(indicator.id, direction)}
               onClose={() => closeIndicator(indicator.id)}
             />
           );
         })}
+        {settingsIndicator ? (
+          <TradingIndicatorSettings
+            indicator={settingsIndicator}
+            onApply={(patch) => onUpdateIndicator(settingsIndicator.id, patch)}
+            onClose={() => setSettingsIndicator(null)}
+          />
+        ) : null}
         <TradingDrawingOverlay
           adapter={adapter}
           instrumentId={instrumentId}

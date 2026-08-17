@@ -104,6 +104,12 @@ describe('Trading multi-chart store', () => {
     expect(deleted?.enabled).toBe(false);
   });
 
+  it('adds a community indicator to legacy charts when selected', () => {
+    useTradingStore.getState().toggleIndicator('chart-1', 'ema-stack');
+    const added = useTradingStore.getState().charts[0].indicators.find((item) => item.id === 'ema-stack');
+    expect(added).toMatchObject({ id: 'ema-stack', period: 9, enabled: true, visible: true });
+  });
+
   it('reorders enabled secondary indicators without moving overlays', () => {
     const indicators = defaultTradingIndicators().map((indicator) => (
       indicator.id === 'macd' || indicator.id === 'atr' ? { ...indicator, enabled: true } : indicator
