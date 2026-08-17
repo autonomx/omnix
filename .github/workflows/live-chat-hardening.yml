@@ -288,7 +288,7 @@ jobs:
           path: |
             web-typecheck-output.txt
             web-unit-test-output.txt
-            apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts
-            apps/web/src/features/assistant-workspace/live-output-coordinator.ts
-            apps/web/src/features/assistant-workspace/live-output-coordinator.test.ts
-            apps/web/src/features/assistant-workspace/live-full-duplex-evaluation.test.ts
+            src/apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts
+            src/apps/web/src/features/assistant-workspace/live-output-coordinator.ts
+            src/apps/web/src/features/assistant-workspace/live-output-coordinator.test.ts
+            src/apps/web/src/features/assistant-workspace/live-full-duplex-evaluation.test.ts

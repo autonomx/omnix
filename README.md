@@ -6,7 +6,7 @@ Omnix is a modular local-first AI workstation by Autonomx. It brings chat, RPG s
 
 ## Platform Direction
 
-Omnix is no longer treated as a collection of standalone AI demos. All browser-facing features are converging on one shared web app infrastructure under `apps/web`.
+Omnix is no longer treated as a collection of standalone AI demos. All browser-facing features are converging on one shared web app infrastructure under `src/apps/web`.
 
 ```text
 Omnix Platform
@@ -36,7 +36,7 @@ See [`SPEC.md`](SPEC.md) and [`docs/WEB_APP_INFRASTRUCTURE.md`](docs/WEB_APP_INF
 
 ## Web App Infrastructure
 
-The shared browser app lives in `apps/web`.
+The shared browser app lives in `src/apps/web`.
 
 ```text
 Frontend runtime: React + TypeScript + Vite
@@ -122,7 +122,7 @@ Start the gateway used by the shared web app:
 PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
 ```
 
-The classic `src/templates` and `src/static` browser UI is retired in favor of `apps/web`. `src/run_app.py` may still host backend compatibility routes and generated media, but it is no longer the supported browser app. See [`docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md`](docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md).
+The classic `src/templates` and `src/static` browser UI is retired in favor of `src/apps/web`. `src/run_app.py` may still host backend compatibility routes and generated media, but it is no longer the supported browser app. See [`docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md`](docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md).
 
 Release and validation guidance lives in [`docs/WEB_APP_RELEASE_READINESS.md`](docs/WEB_APP_RELEASE_READINESS.md).
 
@@ -138,7 +138,7 @@ npm run web:preview
 
 ## Development Rules
 
-1. All new browser UI must live under `apps/web`.
+1. All new browser UI must live under `src/apps/web`.
 2. Feature modules must use the shared API client.
 3. Streaming/progress must use the shared event client.
 4. Long-running work must use the shared job/run model.
@@ -151,20 +151,21 @@ npm run web:preview
 
 ```text
 omnix/
-├── apps/
-│   └── web/
-│       ├── package.json
-│       ├── vite.config.ts
-│       ├── src/
-│       │   ├── app/
-│       │   ├── api/
-│       │   ├── components/
-│       │   ├── design-system/
-│       │   ├── events/
-│       │   ├── features/
-│       │   └── state/
-│       └── tests/
 ├── src/
+│   ├── app/
+│   ├── apps/
+│   │   └── web/
+│   │       ├── package.json
+│   │       ├── vite.config.ts
+│   │       ├── src/
+│   │       │   ├── app/
+│   │       │   ├── api/
+│   │       │   ├── components/
+│   │       │   ├── design-system/
+│   │       │   ├── events/
+│   │       │   ├── features/
+│   │       │   └── state/
+│   │       └── tests/
 │   ├── api/
 │   ├── services/
 │   ├── providers/

@@ -1,0 +1,9 @@
+.trading-alert-tooltip{position:fixed;z-index:10000;display:grid;gap:5px;width:min(390px,calc(100vw - 24px));padding:15px 18px;border:1px solid rgba(255,255,255,.08);border-radius:6px;background:#25272b;box-shadow:0 12px 30px rgba(0,0,0,.34);color:#dfe3e8;pointer-events:none;font-size:13px;line-height:1.25}
+.trading-alert-tooltip::after{position:absolute;top:50%;right:-9px;width:0;height:0;transform:translateY(-50%);border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:9px solid #25272b;content:""}
+.trading-alert-tooltip-title{overflow:hidden;color:#f6f7f8;font-size:15px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.trading-alert-tooltip-meta{display:flex;align-items:center;gap:7px;color:#c5cbd2}
+.trading-alert-tooltip-meta b{font-weight:500}
+.trading-alert-tooltip-meta i{color:#8e969f;font-style:normal}
+.trading-alert-tooltip-meta em{font-style:normal}
+.trading-alert-tooltip-meta .state-active{color:#25c69a}.trading-alert-tooltip-meta .state-triggered{color:#ffad23}.trading-alert-tooltip-meta .state-expired,.trading-alert-tooltip-meta .state-stopped{color:#ff6874}
+.trading-alert-tooltip-detail{color:#b7bec7;font-size:13px}

@@ -107,7 +107,7 @@ The frontend must not decide whether an action uses instant travel or a narrated
 
 ## 6. Browser refresh and mutation flow
 
-`apps/web/src/features/rpg/RpgWorkspace.tsx` uses React Query for:
+`src/apps/web/src/features/rpg/RpgWorkspace.tsx` uses React Query for:
 
 - replay/session inventory;
 - the selected live session;
@@ -159,7 +159,7 @@ Map definition JSON carries asset IDs and declared logical dimensions, not data 
 
 ## 8. Static preview and live UI audit
 
-`apps/web/src/features/rpg/RpgWorldRail.tsx` currently:
+`src/apps/web/src/features/rpg/RpgWorldRail.tsx` currently:
 
 - renders `/rpg/glimmerdeep-pass-map.svg` only for preview state;
 - renders a non-interactive `Live location` placeholder for a live session;

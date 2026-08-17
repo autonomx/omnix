@@ -89,7 +89,7 @@ def test_run_app_root_is_backend_status_not_classic_html() -> None:
     assert response.headers["content-type"].startswith("application/json")
     payload = response.json()
     assert payload["ok"] is True
-    assert payload["browser_ui"] == "apps/web"
+    assert payload["browser_ui"] == "src/apps/web"
     assert payload["gateway"] == "app.gateway.main:app"
 
 

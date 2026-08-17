@@ -409,11 +409,11 @@ app = FastAPI(title="Omnix FastAPI", lifespan=lifespan)
 
 @app.get("/")
 async def root():
-    """Return backend status; browser UI is served by apps/web."""
+    """Return backend status; browser UI is served by src/apps/web."""
     return {
         "ok": True,
         "service": "omnix-backend",
-        "browser_ui": "apps/web",
+        "browser_ui": "src/apps/web",
         "gateway": "app.gateway.main:app",
     }
 

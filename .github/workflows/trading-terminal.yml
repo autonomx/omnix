@@ -1,0 +1,102 @@
+name: Omnix Trading terminal gates
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/apps/web/src/features/trading/**"
+      - "src/apps/web/src/api/generated/**"
+      - "src/apps/web/src/app/modules.ts"
+      - "src/apps/web/src/app/router.tsx"
+      - "src/apps/web/src/design/primitives.tsx"
+      - "src/apps/web/src/features/ModuleWorkspace.tsx"
+      - "src/apps/web/tests/e2e/trading-terminal.spec.ts"
+      - "src/apps/web/playwright.config.ts"
+      - "src/apps/web/package.json"
+      - "src/apps/web/tsconfig.trading.json"
+      - "package-lock.json"
+      - "scripts/export_gateway_openapi.py"
+      - "src/app/trading/**"
+      - "src/app/gateway/trading_routes.py"
+      - "src/app/gateway/__init__.py"
+      - "src/app/persistence/migrations/*_trading_*.sql"
+      - "src/tests/trading/**"
+      - "docs/architecture/ADR-0004-omnix-trading-terminal.md"
+      - "docs/architecture/OMNIX_TRADING_**"
+      - "docs/plans/omnix_trading_terminal_roadmap.md"
+      - "docs/plans/omnix_trading_terminal_roadmap_review.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - ".github/workflows/trading-terminal.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trading-terminal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: src
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - name: Check out immutable workflow head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact checked-out head
+        shell: bash
+        run: |
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          echo "Expected head: ${expected}"
+          echo "Checked out:   ${actual}"
+          test "${actual}" = "${expected}"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Trading test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+      - name: Trading architecture and backend tests
+        run: python -m pytest src/tests/trading -q --tb=short
+      - name: Trading frontend tests
+        run: npm --workspace @omnix/web run test:trading
+      - name: Trading TypeScript typecheck
+        run: npm --workspace @omnix/web run typecheck:trading
+      - name: Install Trading browser
+        run: npx playwright install --with-deps chromium
+      - name: Trading Playwright smoke
+        run: npm --workspace @omnix/web run test:e2e:trading
+      - name: Upload Trading Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-playwright-report
+          path: |
+            src/apps/web/playwright-report
+            src/apps/web/test-results
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Generate shared gateway API contract
+        run: npm --workspace @omnix/web run api:generate
+      - name: Upload generated API contract
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-generated-api
+          path: |
+            src/apps/web/src/api/generated/openapi.json
+            src/apps/web/src/api/generated/types.ts
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify generated API contract is committed
+        run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts

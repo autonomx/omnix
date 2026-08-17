@@ -317,34 +317,35 @@ Compose mode:
 
 ```text
 omnix/
-├── apps/
-│   └── web/
-│       ├── package.json
-│       ├── vite.config.ts
-│       ├── tsconfig.json
-│       ├── src/
-│       │   ├── app/
-│       │   ├── api/
-│       │   ├── components/
-│       │   ├── design-system/
-│       │   ├── events/
-│       │   ├── features/
-│       │   │   ├── rpg/
-│       │   │   ├── chatbot/
-│       │   │   ├── storyteller/
-│       │   │   ├── podcast/
-│       │   │   ├── voice/
-│       │   │   ├── voice-cloning/
-│       │   │   ├── stt/
-│       │   │   ├── image-generation/
-│       │   │   ├── providers/
-│       │   │   ├── jobs/
-│       │   │   ├── assets/
-│       │   │   ├── settings/
-│       │   │   └── diagnostics/
-│       │   └── state/
-│       └── tests/
 ├── src/
+│   ├── app/
+│   ├── apps/
+│   │   └── web/
+│   │       ├── package.json
+│   │       ├── vite.config.ts
+│   │       ├── tsconfig.json
+│   │       ├── src/
+│   │       │   ├── app/
+│   │       │   ├── api/
+│   │       │   ├── components/
+│   │       │   ├── design-system/
+│   │       │   ├── events/
+│   │       │   ├── features/
+│   │       │   │   ├── rpg/
+│   │       │   │   ├── chatbot/
+│   │       │   │   ├── storyteller/
+│   │       │   │   ├── podcast/
+│   │       │   │   ├── voice/
+│   │       │   │   ├── voice-cloning/
+│   │       │   │   ├── stt/
+│   │       │   │   ├── image-generation/
+│   │       │   │   ├── providers/
+│   │       │   │   ├── jobs/
+│   │       │   │   ├── assets/
+│   │       │   │   ├── settings/
+│   │       │   │   └── diagnostics/
+│   │       │   └── state/
+│   │       └── tests/
 │   ├── api/
 │   ├── services/
 │   ├── providers/
