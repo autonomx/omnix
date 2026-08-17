@@ -42,6 +42,10 @@ export function TradingSideRail({
             aria-pressed={activeTab === tab.id}
             title={tab.label}
             onClick={() => {
+              if (!collapsed && activeTab === tab.id) {
+                onToggle();
+                return;
+              }
               onSelectTab(tab.id);
               if (collapsed) onToggle();
             }}
