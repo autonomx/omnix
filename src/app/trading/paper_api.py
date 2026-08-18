@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -19,10 +18,7 @@ from .paper import (
     PaperOrder,
     PaperOrderRequest,
 )
-from .paper_lifecycle import (
-    TradingPaperLifecycle,
-    default_paper_lifecycle,
-)
+from .paper_lifecycle import TradingPaperLifecycle, default_paper_lifecycle
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
 
@@ -53,29 +49,20 @@ def create_trading_paper_router(
     @router.get("/accounts", response_model=PaperAccountListResponse)
     async def list_accounts(limit: int = Query(default=100, ge=1, le=500)):
         return PaperAccountListResponse(
-            accounts=await asyncio.to_thread(
-                repository_factory().list_accounts,
-                limit,
-            )
+            accounts=await asyncio.to_thread(repository_factory().list_accounts, limit)
         )
 
     @router.post("/accounts", response_model=PaperAccountSnapshot, status_code=201)
     async def create_account(request: PaperAccountCreate):
         try:
-            return await asyncio.to_thread(
-                repository_factory().create_account,
-                request,
-            )
+            return await asyncio.to_thread(repository_factory().create_account, request)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/accounts/{account_id}", response_model=PaperAccountSnapshot)
     async def account_snapshot(account_id: str):
         try:
-            return await asyncio.to_thread(
-                repository_factory().snapshot,
-                account_id,
-            )
+            return await asyncio.to_thread(repository_factory().snapshot, account_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -85,37 +72,17 @@ def create_trading_paper_router(
         status_code=201,
     )
     async def place_order(account_id: str, request: PaperOrderRequest):
+        """Accept an order without manufacturing a fill from caller price data.
+
+        reference_price is reservation-only.  A market order remains open until
+        the server-side monitor receives an execution-eligible market observation.
+        """
         try:
-            repository = repository_factory()
-            order = await asyncio.to_thread(
-                repository.place_order,
+            return await asyncio.to_thread(
+                repository_factory().place_order,
                 account_id,
                 request,
             )
-            if order.order_type == "market" and request.reference_price is not None:
-                now = datetime.now(timezone.utc)
-                await asyncio.to_thread(
-                    repository.process_observation,
-                    account_id,
-                    PaperMarketObservation(
-                        instrument_id=request.instrument_id,
-                        binding_id=request.binding_id,
-                        provider="paper-reference",
-                        price=request.reference_price,
-                        source_time=now,
-                        evaluated_at=now,
-                    ),
-                )
-                snapshot = await asyncio.to_thread(repository.snapshot, account_id)
-                order = next(
-                    (
-                        candidate
-                        for candidate in [*snapshot.order_history, *snapshot.open_orders]
-                        if candidate.order_id == request.order_id
-                    ),
-                    order,
-                )
-            return order
         except ValueError as exc:
             detail = str(exc)
             status = 404 if "not_found" in detail else 422
@@ -128,29 +95,25 @@ def create_trading_paper_router(
     )
     async def cancel_order(account_id: str, order_id: str):
         del account_id, order_id
-        raise HTTPException(
-            status_code=409,
-            detail="paper_order_cancellation_disabled",
-        )
+        raise HTTPException(status_code=409, detail="paper_order_cancellation_disabled")
 
     @router.post(
         "/accounts/{account_id}/observations",
         response_model=PaperFillListResponse,
+        include_in_schema=False,
     )
     async def process_observation(
         account_id: str,
         observation: PaperMarketObservation,
     ):
-        try:
-            return PaperFillListResponse(
-                fills=await asyncio.to_thread(
-                    repository_factory().process_observation,
-                    account_id,
-                    observation,
-                )
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        """Legacy compatibility endpoint; browser-supplied observations never fill.
+
+        Execution observations are server authority and are injected only by the
+        paper monitor. Keeping this endpoint as a no-op avoids breaking old web
+        clients while removing the previous caller-price execution surface.
+        """
+        del account_id, observation
+        return PaperFillListResponse(fills=[])
 
     @router.post(
         "/accounts/{account_id}/reset",
