@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
 
@@ -11,11 +11,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 
+from .catalyst_repository import TradingCatalystRepository, default_catalyst_repository
 from .gapper_dataset import (
     GapperCandidate,
     GapperUniverseSnapshot,
     freeze_gapper_universe,
 )
+from .gapper_discovery import discover_yahoo_gappers
 from .models import MarketBar
 from .paper import PaperExecutionPolicy
 from .strategies.gap_pullback import evaluate_gap_pullback
@@ -66,6 +68,19 @@ class GapperUniverseFreezeRequest(BaseModel):
     candidates: list[GapperCandidate] = Field(min_length=1, max_length=2_000)
 
 
+class YahooGapperDiscoveryRequest(BaseModel):
+    """Current-only Yahoo discovery request; historical reconstruction is forbidden."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    universe_id: str = Field(min_length=1, max_length=200)
+    evaluation_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    count: int = Field(default=30, ge=1, le=100)
+    minimum_gap_pct: Decimal = Field(default=Decimal("20"), ge=0, le=1000)
+    minimum_price: Decimal = Field(default=Decimal("0.50"), gt=0)
+    maximum_price: Decimal = Field(default=Decimal("20"), gt=0)
+
+
 class GapPullbackBacktestRequest(BaseModel):
     """Frozen multi-symbol morning backtest request.
 
@@ -88,10 +103,32 @@ class GapPullbackBacktestRequest(BaseModel):
 
 
 RepositoryFactory = Callable[[], TradingStrategyRepository]
+CatalystRepositoryFactory = Callable[[], TradingCatalystRepository]
+
+
+def _validate_catalyst_provenance(
+    snapshot: GapperUniverseSnapshot,
+    catalyst_repository: TradingCatalystRepository,
+) -> None:
+    evaluation = snapshot.evaluation_time.astimezone(timezone.utc)
+    for candidate in snapshot.candidates:
+        if not candidate.catalyst_evidence_ids:
+            continue
+        evidence = catalyst_repository.evidence_by_ids(
+            candidate.instrument_id,
+            candidate.catalyst_evidence_ids,
+        )
+        for item in evidence:
+            if item.published_at > evaluation or item.captured_at > evaluation:
+                raise ValueError(
+                    "catalyst_evidence_after_universe_freeze:"
+                    f"{candidate.instrument_id}:{item.evidence_id}"
+                )
 
 
 def create_trading_strategy_router(
     repository_factory: RepositoryFactory = default_strategy_repository,
+    catalyst_repository_factory: CatalystRepositoryFactory = default_catalyst_repository,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/strategies", tags=["trading-strategies"])
 
@@ -118,6 +155,7 @@ def create_trading_strategy_router(
     async def backtest_gap_pullback(request: GapPullbackBacktestRequest):
         """Run deterministic portfolio backtest using the paper fill engine."""
         try:
+            _validate_catalyst_provenance(request.universe, catalyst_repository_factory())
             dataset = await asyncio.to_thread(
                 freeze_backtest_session,
                 session_date=request.session_date,
@@ -137,6 +175,29 @@ def create_trading_strategy_router(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post(
+        "/universes/discover-yahoo",
+        response_model=GapperUniverseSnapshot,
+        status_code=201,
+    )
+    async def discover_yahoo_universe(request: YahooGapperDiscoveryRequest):
+        """Discover current Yahoo gainers and freeze the exact point-in-time universe."""
+        try:
+            if request.maximum_price <= request.minimum_price:
+                raise ValueError("maximum_price must exceed minimum_price")
+            snapshot = await asyncio.to_thread(
+                discover_yahoo_gappers,
+                universe_id=request.universe_id,
+                evaluation_time=request.evaluation_time,
+                count=request.count,
+                minimum_gap_pct=request.minimum_gap_pct,
+                minimum_price=request.minimum_price,
+                maximum_price=request.maximum_price,
+            )
+            return await asyncio.to_thread(repository_factory().save_universe, snapshot)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post(
         "/universes/freeze",
         response_model=GapperUniverseSnapshot,
         status_code=201,
@@ -151,6 +212,7 @@ def create_trading_strategy_router(
                 discovery_source=request.discovery_source,
                 candidates=request.candidates,
             )
+            _validate_catalyst_provenance(snapshot, catalyst_repository_factory())
             return await asyncio.to_thread(repository_factory().save_universe, snapshot)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -162,6 +224,19 @@ def create_trading_strategy_router(
     )
     async def save_universe(snapshot: GapperUniverseSnapshot):
         try:
+            # Recompute point-in-time validation from the supplied immutable data;
+            # do not trust a caller-provided fingerprint alone.
+            validated = await asyncio.to_thread(
+                freeze_gapper_universe,
+                universe_id=snapshot.universe_id,
+                session_date=snapshot.session_date,
+                evaluation_time=snapshot.evaluation_time,
+                discovery_source=snapshot.discovery_source,
+                candidates=snapshot.candidates,
+            )
+            if validated.source_fingerprint != snapshot.source_fingerprint:
+                raise ValueError("gapper_universe_fingerprint_mismatch")
+            _validate_catalyst_provenance(snapshot, catalyst_repository_factory())
             return await asyncio.to_thread(repository_factory().save_universe, snapshot)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
