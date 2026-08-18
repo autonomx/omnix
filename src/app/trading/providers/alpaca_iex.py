@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from datetime import datetime, time, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import requests
 
@@ -17,6 +16,7 @@ from app.trading.execution import (
     execution_observation_from_quote,
 )
 from app.trading.models import ProviderBinding
+from app.trading.us_equity_calendar import us_equity_session
 
 from .alpaca_iex_status import default_alpaca_iex_status_cache
 from .errors import ProviderContractError, ProviderDataUnavailableError
@@ -25,7 +25,6 @@ from .http_runtime import ProviderHttpRuntime
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"
 ALPACA_IEX_PARTIAL_MARKET = True
-_ET = ZoneInfo("America/New_York")
 
 
 def _api_key() -> str:
@@ -46,20 +45,6 @@ def _api_secret() -> str:
 
 def alpaca_iex_configured() -> bool:
     return bool(_api_key() and _api_secret())
-
-
-def _session(source_time: datetime) -> str:
-    local = source_time.astimezone(_ET)
-    if local.weekday() >= 5:
-        return "closed"
-    local_time = local.timetz().replace(tzinfo=None)
-    if time(4, 0) <= local_time < time(9, 30):
-        return "extended_pre"
-    if time(9, 30) <= local_time < time(16, 0):
-        return "regular"
-    if time(16, 0) <= local_time < time(20, 0):
-        return "extended_post"
-    return "closed"
 
 
 def _parse_timestamp(value: Any, *, field: str) -> datetime:
@@ -215,7 +200,7 @@ class AlpacaIexExecutionProvider:
             "cumulative_volume": cumulative_volume,
             "source_time": source_time,
             "received_at": now.isoformat(),
-            "session": _session(source_time),
+            "session": us_equity_session(source_time),
             "freshness_mode": "live",
             "halted": default_alpaca_iex_status_cache().halted(binding.provider_symbol),
         }
