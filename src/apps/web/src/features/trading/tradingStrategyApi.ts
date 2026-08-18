@@ -1,4 +1,6 @@
 import type {
+  GapperUniverse,
+  GapperUniverseFreezeInput,
   StrategyEvent,
   StrategyProtection,
   TradingStrategyConfig,
@@ -49,4 +51,11 @@ export const tradingStrategyApi = {
     );
     return Array.isArray(payload.protections) ? payload.protections : [];
   },
+  freezeUniverse: (input: GapperUniverseFreezeInput) =>
+    requestJson<GapperUniverse>('/api/trading/strategies/universes/freeze', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  universe: (universeId: string) =>
+    requestJson<GapperUniverse>(`/api/trading/strategies/universes/${encodeURIComponent(universeId)}`),
 };
