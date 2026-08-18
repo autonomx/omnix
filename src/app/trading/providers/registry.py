@@ -7,6 +7,12 @@ from typing import Any
 
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, all_bindings, binding_by_id, default_binding
+from app.trading.execution import (
+    ExecutionEligibilityPolicy,
+    ExecutionObservation,
+    assess_execution_observation,
+    execution_observation_from_quote,
+)
 from app.trading.models import BarsResponse, ProviderBinding
 
 from .additional_crypto import AdditionalCryptoProvider
@@ -17,6 +23,7 @@ from .aggregation import (
 )
 from .binance import BinanceMarketDataProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
+from .equity_execution import yahoo_execution_observation
 from .errors import ProviderFallbackEligibleError
 
 
@@ -187,6 +194,31 @@ class ProviderRegistry:
         if self._supports_cancellation(provider.get_quote):
             return provider.get_quote(instrument_id, cancellation=cancellation)
         return provider.get_quote(instrument_id)
+
+    def execution_observation(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        policy: ExecutionEligibilityPolicy | None = None,
+        cancellation: threading.Event | None = None,
+    ) -> ExecutionObservation:
+        binding = self.resolve_binding(instrument_id, binding_id)
+        provider = self.provider(binding.provider)
+        if binding.provider == "yahoo":
+            return yahoo_execution_observation(
+                provider,
+                instrument_id,
+                policy=policy,
+                cancellation=cancellation,
+            )
+        quote = self.quote(instrument_id, binding.binding_id, cancellation)
+        observation = execution_observation_from_quote(
+            quote,
+            binding_id=binding.binding_id,
+            provider=binding.provider,
+        )
+        return assess_execution_observation(observation, policy)
 
     def currency_rate(
         self,
