@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Any
 
 from .cache import TradingMarketDataCache
+from .execution import ExecutionEligibilityPolicy, ExecutionObservation
 from .models import FeedType
 from .providers.binance import BinanceMarketDataProvider
 from .providers.registry import ProviderRegistry
@@ -59,6 +60,21 @@ class TradingMarketDataService:
     ) -> dict[str, object]:
         return self.registry.quote(instrument_id, binding_id, cancellation)
 
+    def execution_observation(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        policy: ExecutionEligibilityPolicy | None = None,
+        cancellation: threading.Event | None = None,
+    ) -> ExecutionObservation:
+        return self.registry.execution_observation(
+            instrument_id,
+            binding_id,
+            policy=policy,
+            cancellation=cancellation,
+        )
+
     def currency_rate(
         self,
         base_currency: str,
@@ -110,6 +126,11 @@ class TradingMarketDataService:
                 "max_entries": self.cache.max_entries,
                 "disk_bounded": True,
                 "atomic_writes": True,
+            },
+            "execution": {
+                "policy_version": ExecutionEligibilityPolicy().policy_version,
+                "fail_closed": True,
+                "synthetic_reference_prices_allowed": False,
             },
             "streams": self.subscriptions.status(),
             "upstream_subscription_count": self.subscriptions.upstream_subscription_count,
