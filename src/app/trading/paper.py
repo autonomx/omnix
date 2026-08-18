@@ -13,6 +13,24 @@ PaperOrderType = Literal["market", "limit", "stop"]
 PaperOrderStatus = Literal["open", "filled", "cancelled", "rejected"]
 
 
+class PaperExecutionPolicy(BaseModel):
+    """Deterministic, pessimistic paper-fill assumptions.
+
+    The repository remains full-fill-or-no-fill.  Volume participation therefore
+    fails closed when the complete remaining order would exceed the configured
+    participation cap instead of pretending a partial fill completed.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy_version: Literal["paper-execution-v2"] = "paper-execution-v2"
+    slippage_bps: Decimal = Field(default=Decimal("10"), ge=0, le=5_000)
+    stop_slippage_bps: Decimal = Field(default=Decimal("25"), ge=0, le=10_000)
+    max_volume_participation_pct: Decimal = Field(default=Decimal("0.10"), gt=0, le=1)
+    max_observation_age_seconds: Decimal = Field(default=Decimal("5"), gt=0, le=300)
+    require_execution_eligible: bool = True
+
+
 class PaperAccountCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -115,16 +133,31 @@ class PaperMarketObservation(BaseModel):
     binding_id: str | None = None
     provider: str | None = None
     price: Decimal = Field(gt=0)
+    bid: Decimal | None = Field(default=None, gt=0)
+    ask: Decimal | None = Field(default=None, gt=0)
     high: Decimal | None = Field(default=None, gt=0)
     low: Decimal | None = Field(default=None, gt=0)
+    volume: Decimal | None = Field(default=None, ge=0)
     source_time: datetime
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    execution_eligible: bool = True
+    freshness_mode: str = "unknown"
+    rejection_reasons: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def validate_range(self):
+        if self.source_time.tzinfo is None or self.evaluated_at.tzinfo is None:
+            raise ValueError("paper observation timestamps must be timezone-aware")
         if self.high is not None and self.low is not None and self.low > self.high:
             raise ValueError("paper observation low cannot exceed high")
+        if self.bid is not None and self.ask is not None and self.bid > self.ask:
+            raise ValueError("paper observation bid cannot exceed ask")
         return self
+
+    @property
+    def age_seconds(self) -> Decimal:
+        seconds = (self.evaluated_at - self.source_time).total_seconds()
+        return max(Decimal("0"), Decimal(str(seconds)))
 
 
 class PaperFillDecision(BaseModel):
@@ -132,7 +165,9 @@ class PaperFillDecision(BaseModel):
 
     should_fill: bool
     fill_price: Decimal | None = None
+    fill_quantity: Decimal | None = None
     reason: str
+    policy_version: str = "paper-execution-v2"
 
 
 class PaperFill(BaseModel):
@@ -179,7 +214,6 @@ class PaperAccountSnapshot(BaseModel):
 
 
 def paper_order_request_matches(order: PaperOrder, request: PaperOrderRequest) -> bool:
-    """Return whether an idempotency retry is semantically the same order request."""
     return (
         order.order_id == request.order_id
         and order.instrument_id == request.instrument_id
@@ -193,21 +227,49 @@ def paper_order_request_matches(order: PaperOrder, request: PaperOrderRequest) -
     )
 
 
+def _worse_price(price: Decimal, side: PaperSide, bps: Decimal) -> Decimal:
+    fraction = bps / Decimal("10000")
+    return price * (Decimal("1") + fraction if side == "buy" else Decimal("1") - fraction)
+
+
 def paper_fill_decision(
     order: PaperOrder,
     observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy | None = None,
 ) -> PaperFillDecision:
+    active = policy or PaperExecutionPolicy()
     if order.status != "open":
         return PaperFillDecision(should_fill=False, reason="order_not_open")
     if order.instrument_id != observation.instrument_id:
         return PaperFillDecision(should_fill=False, reason="instrument_mismatch")
     if order.binding_id and order.binding_id != observation.binding_id:
         return PaperFillDecision(should_fill=False, reason="binding_mismatch")
+    if active.require_execution_eligible and not observation.execution_eligible:
+        return PaperFillDecision(should_fill=False, reason="execution_data_ineligible")
+    if observation.age_seconds > active.max_observation_age_seconds:
+        return PaperFillDecision(should_fill=False, reason="stale_market_data")
+
+    remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
+    if remaining <= 0:
+        return PaperFillDecision(should_fill=False, reason="order_already_filled")
+    if observation.volume is not None:
+        participation_capacity = observation.volume * active.max_volume_participation_pct
+        if remaining > participation_capacity:
+            return PaperFillDecision(should_fill=False, reason="volume_participation_exceeded")
+
     if order.order_type == "market":
+        base = (
+            observation.ask
+            if order.side == "buy" and observation.ask is not None
+            else observation.bid
+            if order.side == "sell" and observation.bid is not None
+            else observation.price
+        )
         return PaperFillDecision(
             should_fill=True,
-            fill_price=observation.price,
-            reason="market_observation",
+            fill_price=_worse_price(base, order.side, active.slippage_bps),
+            fill_quantity=remaining,
+            reason="market_execution_observation",
         )
 
     high = observation.high if observation.high is not None else observation.price
@@ -215,18 +277,34 @@ def paper_fill_decision(
     if order.order_type == "limit":
         assert order.limit_price is not None
         triggered = low <= order.limit_price if order.side == "buy" else high >= order.limit_price
+        if not triggered:
+            return PaperFillDecision(should_fill=False, reason="limit_range_not_reached")
+        market_side = observation.ask if order.side == "buy" else observation.bid
+        if market_side is None:
+            fill_price = order.limit_price
+        elif order.side == "buy":
+            fill_price = min(order.limit_price, market_side)
+        else:
+            fill_price = max(order.limit_price, market_side)
         return PaperFillDecision(
-            should_fill=bool(triggered),
-            fill_price=order.limit_price if triggered else None,
-            reason="limit_range_reached" if triggered else "limit_range_not_reached",
+            should_fill=True,
+            fill_price=fill_price,
+            fill_quantity=remaining,
+            reason="limit_range_reached",
         )
 
     assert order.stop_price is not None
     triggered = high >= order.stop_price if order.side == "buy" else low <= order.stop_price
+    if not triggered:
+        return PaperFillDecision(should_fill=False, reason="stop_range_not_triggered")
+    market_side = observation.ask if order.side == "buy" else observation.bid
+    observed = market_side if market_side is not None else observation.price
+    gap_through = max(order.stop_price, observed) if order.side == "buy" else min(order.stop_price, observed)
     return PaperFillDecision(
-        should_fill=bool(triggered),
-        fill_price=order.stop_price if triggered else None,
-        reason="stop_range_triggered" if triggered else "stop_range_not_triggered",
+        should_fill=True,
+        fill_price=_worse_price(gap_through, order.side, active.stop_slippage_bps),
+        fill_quantity=remaining,
+        reason="stop_range_triggered_gap_aware",
     )
 
 
@@ -242,9 +320,7 @@ def paper_buy_reservation(
 ) -> Decimal:
     """Compute the cash hold for an open buy order.
 
-    Limit and stop orders reserve their deterministic trigger-price notional plus
-    commission. A market order uses the caller's current quote when available;
-    callers without a quote retain the conservative full-buying-power reservation.
+    reference_price is reservation-only evidence.  It never authorizes a fill.
     """
     if request.side != "buy":
         return Decimal("0")
@@ -265,7 +341,6 @@ def paper_fill_is_fundable(
     total_cost: Decimal,
     available_cash: Decimal,
 ) -> bool:
-    """Allow a market order to consume available cash for quote slippage."""
     if order.side != "buy":
         return True
     if order.order_type == "market":
@@ -281,7 +356,8 @@ def paper_fill_key(
     raw = (
         f"{account_id}|{order_id}|{observation.instrument_id}|"
         f"{observation.source_time.isoformat()}|{observation.price}|"
-        f"{observation.high}|{observation.low}"
+        f"{observation.bid}|{observation.ask}|{observation.high}|{observation.low}|"
+        f"{observation.volume}"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
