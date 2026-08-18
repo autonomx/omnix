@@ -12,9 +12,10 @@ Gateway lifecycle services:
 - replay/backtest routes
 - paper simulation monitor
 - deterministic strategy monitor
+- Alpaca IEX trading-status monitor when credentials are configured
 - read-only AI research route
 - catalyst evidence and shadow classification routes
-- shadow-only statistical-model training/scoring routes
+- shadow-only statistical-model training/scoring/validation routes
 
 ## Environment controls
 
@@ -43,26 +44,43 @@ The paper monitor owns market observations and manual paper stop/target protecti
 
 Market-data providers and the optional research model use Omnix provider configuration. Do not place credentials, tokens, or base URLs in Trading workspace records, scanner definitions, research requests, or browser storage.
 
-Execution-grade data is a stricter contract than chart/research data. An execution observation must pass source-time freshness, session, bid/ask, and spread policy before it can drive a paper fill. The Yahoo equity adapter is deliberately research/diagnostic only and returns `PROVIDER_NOT_EXECUTION_GRADE`; therefore US-equity AUTO PAPER remains fail-closed until an approved execution-grade feed is configured. Never remove that rejection merely to make a simulation fill.
+US-equity data uses a split-source architecture:
+
+- **Yahoo** is discovery/history/chart research only and can never authorize a paper fill.
+- **Alpaca IEX** is the authoritative real-time US-equity paper-execution quote source. It is explicitly partial-market IEX data, not consolidated SIP/NBBO.
+
+Configure Alpaca Paper Only / market-data credentials with:
+
+```text
+OMNIX_ALPACA_API_KEY_ID=<key>
+OMNIX_ALPACA_API_SECRET_KEY=<secret>
+```
+
+`APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` are accepted fallbacks. `OMNIX_ALPACA_DATA_URL` can override the REST data URL for controlled testing.
+
+The optional IEX trading-status channel is enabled by default when credentials exist. Set `OMNIX_ALPACA_STATUS_STREAM=0` to disable it, or `OMNIX_ALPACA_STREAM_URL` to use a controlled alternate endpoint.
+
+Execution data is stricter than chart/research data. An observation must pass source-time freshness and future-clock-skew checks, recurring US-equity session classification, bid/ask and spread policy, and known-halt rejection before it can drive a paper fill. Missing Alpaca credentials or provider failures fail closed. Never route Yahoo/reference prices into `PaperExecutionService` to make a simulation fill.
 
 ## Provider outage procedure
 
 1. Open the Trading **Data** tab and record provider/stream diagnostics.
 2. Confirm the selected feed, official/unofficial status, usage scope, and terms reference in the Trading footer.
 3. Disable affected background monitors if repeated failures could consume rate limits.
-4. Preserve the exact instrument, requested binding, resolved binding, provider, dataset fingerprint, source time, and error.
-5. Do not merge partial data from two providers. A fallback replaces the complete requested dataset.
+4. Preserve the exact instrument, requested binding, resolved binding, provider, dataset fingerprint, source time, displayed bid/ask size and error.
+5. Do not merge partial data from two providers. A fallback replaces the complete requested research dataset; execution does not fall back from Alpaca IEX to Yahoo.
 6. Restore the provider or select an allowed compatible binding.
 7. Re-enable monitors and verify that retries do not duplicate alert triggers, paper fills, ledger entries, scanner results, strategy events, or protections.
 8. Attach the outage/recovery evidence to the release certification record.
 
-Missing, stale, cached, fallback, unknown-session, bookless, or over-wide execution data must produce no paper fill. `reference_price` is reservation evidence only and is never a market observation fallback.
+Missing, stale, future-dated, cached, fallback, unknown-session, bookless, over-wide, closed-session, or known-halted execution data must produce no paper fill. `reference_price` is reservation evidence only and is never a market-observation fallback.
 
 ## Streaming recovery
 
 - Symbol, interval, or binding changes must close the prior subscription before opening the replacement.
 - Sequence gaps require deterministic REST repair before live updates continue.
 - Repeated duplicate or out-of-order events should be recorded with binding and provider sequence metadata.
+- The Alpaca status channel retains a known halt across disconnect. A prior resume is no longer affirmative while disconnected because a later halt could have been missed.
 - Stop the Trading gateway if sockets or reconnect attempts become unbounded; do not leave a degraded reconnect loop unattended.
 
 ## PostgreSQL migrations and rollback
@@ -83,6 +101,7 @@ After upgrade:
 4. Verify backtest artifact checksums.
 5. Confirm monitor diagnostics and absence of duplicate state changes.
 6. Confirm strategy/model migrations preserve `shadow_only` and paper-only constraints.
+7. With Alpaca configured, verify the execution provider reports `alpaca_iex`; do not accept Yahoo as execution authority.
 
 Rollback must preserve Trading records and BlobStore artifacts unless a reviewed data migration explicitly removes them. Do not invent legacy signal/fill indices; pre-index backtests retain NULL sequencing evidence.
 
@@ -119,7 +138,9 @@ A BlobStore write can succeed before a database transaction fails. The runtime a
 - Scanner, strategy-event, evidence, model-score, and backtest history are evidence, not disposable browser cache.
 - Before deleting local artifacts, verify that no run metadata references their storage key.
 
-## Scanner operations
+## Scanner and gapper discovery operations
+
+Legacy scanner limits remain:
 
 - Maximum allowlist: 200 unique instruments.
 - Maximum history: 500 bars per instrument.
@@ -128,7 +149,11 @@ A BlobStore write can succeed before a database transaction fails. The runtime a
 - Maximum run timeout: 300 seconds.
 - Default formulas are versioned as `omnix-indicators-v2`.
 
-Cancel scans that exceed provider policy or operational expectations. Do not broaden the legacy scanner universe dynamically beyond the stored allowlist. The gapper-universe import is a separate point-in-time dataset and must not be reconstructed from eventual winners after the session.
+Cancel scans that exceed provider policy or operational expectations. Do not broaden the legacy scanner universe dynamically beyond the stored allowlist.
+
+Gap-pullback discovery is a separate point-in-time flow. `POST /api/trading/strategies/universes/discover-yahoo` obtains the **current** Yahoo top-gainer research set and freezes it immediately. It intentionally refuses historical screener reconstruction. Each provider/scanner candidate requires an observation timestamp, and field-level evidence timestamps later than the universe freeze are rejected.
+
+Time-of-day RVOL compares current cumulative volume with prior sessions truncated at the same New York clock minute. Missing secondary evidence remains explicit rather than causing the candidate to disappear from the denominator.
 
 ## Paper simulation operations
 
@@ -140,8 +165,10 @@ Paper simulation is not brokerage execution.
 - Reset deletes simulated state, records a new explicit deposit, cancels protections, and turns related strategy automation off.
 - Archive disables the account, releases reservations, cancels open orders/protections, and turns related strategy automation off without deleting evidence.
 - Fill, cash, position, order, and ledger changes commit together under row locks.
-- `paper-execution-v2` applies deterministic spread-side pricing, slippage, stop gap-through behavior, observation latency, max volume participation, partial fills, stale-data rejection, and halt rejection.
+- `paper-execution-v2` applies deterministic spread-side pricing, slippage, stop gap-through behavior, observation latency, max liquidity participation, partial fills, stale-data rejection, and halt rejection.
 - Manual take-profit/stop-loss protection is PostgreSQL authority. Browser `localStorage` is not a protection source of truth.
+
+For **live** Alpaca IEX observations, liquidity participation uses the displayed size on the side being consumed: ask size for buys and bid size for sells. Alpaca round-lot sizes are normalized to shares. Cumulative daily volume is diagnostic only and must never be interpreted as immediately executable size. Historical backtests fall back to the individual one-minute bar volume because no real-time book exists.
 
 If duplicate fills or ledger entries are suspected, stop the paper monitor and inspect idempotency keys before resuming.
 
@@ -151,14 +178,17 @@ The thesis is **buy the first failed sell-off**, not the first sell-off. `gap_pu
 
 Operational sequence:
 
-1. Before trading, freeze a point-in-time daily gapper universe through **Trading → Strategies → Freeze point-in-time gapper universe** or `POST /api/trading/strategies/universes/freeze`. Preserve every candidate that qualified at that time, including eventual fades/failures.
-2. Candidate evidence should include previous close, premarket price/gap, premarket volume and dollar volume, time-of-day RVOL, spread when available, market cap/float when available, catalyst evidence IDs, dilution flags, and discovery rank.
-3. Start new configurations in `shadow`. Inspect candidate state/reason codes and rejected candidates before enabling `auto_paper`.
-4. Run the frozen multi-symbol strategy backtest with `POST /api/trading/strategies/backtest/gap-pullback`. Entry is next-bar, and the backtester uses the same `paper_fill_decision` engine as the paper monitor.
-5. Validate prefix invariance/causality: a pivot is unknown until its configured right-side bars exist. Future bars must never alter an already evaluated prefix.
-6. `auto_paper` may submit only to the existing paper repository. It additionally requires an execution-eligible observation and server risk approval.
-7. Risk gates include account-risk sizing, daily loss, aggregate open risk, max positions, max trades/day, one trade/symbol/day, max notional, spread, entry window, force-flat time, and kill switch.
-8. Every automated entry receives persisted strategy stop/target protection. At force-flat time the strategy submits a paper exit if execution data is eligible.
+1. Before trading, freeze a point-in-time daily gapper universe through the Yahoo discovery API or **Trading → Strategies → Freeze point-in-time gapper universe**. Preserve every candidate captured at that time, including eventual fades/failures.
+2. Candidate evidence should include previous close, premarket/current price and gap, premarket volume/dollar volume, time-of-day RVOL, spread when available, market cap/float when available, catalyst evidence IDs, dilution flags, discovery rank, and observation timestamps when provider/scanner sourced.
+3. Any referenced catalyst evidence must have both publication and capture timestamps no later than the universe evaluation time.
+4. Start new configurations in `shadow`. Inspect candidate state/reason codes and rejected candidates before enabling `auto_paper`.
+5. Run the frozen multi-symbol strategy backtest with `POST /api/trading/strategies/backtest/gap-pullback`. Entry is next-bar.
+6. Backtest portfolio arbitration uses `(entry_time, discovery_rank, instrument_id)` and calls the same `size_strategy_entry`, `paper_fill_decision`, and shared protection-trigger policy used by paper automation.
+7. Validate prefix invariance/causality: a pivot is unknown until its configured right-side bars exist. Future bars must never alter an already evaluated prefix.
+8. `auto_paper` may submit only to the existing paper repository. It additionally requires an execution-eligible Alpaca IEX observation and server risk approval.
+9. Risk gates include account-risk sizing, daily loss, aggregate open risk, max positions, max trades/day, one trade/symbol/day, max notional, spread, entry window, force-flat time, and kill switch.
+10. Every automated entry receives persisted strategy stop/target protection. Manual paper protection, strategy protection and backtests use the same pessimistic stop-before-target helper. A live whole-minute range is used only when the minute started at or after protection activation.
+11. At force-flat time the strategy submits a paper exit only when execution data remains eligible.
 
 If AUTO PAPER is unexpectedly active, set the strategy kill switch and mode to `off`, or set `OMNIX_TRADING_STRATEGY_MONITOR=0` and restart the gateway. Do not use data/research model failures as a reason to bypass execution eligibility.
 
@@ -181,21 +211,25 @@ The bounce model label is `P(+2R before -1R within 90 minutes)`. Same-bar stop/t
 - `POST /api/trading/models/bounce/train` fits a standardized logistic regression from explicit labeled examples and persists coefficients, intercept, feature means/scales, training metadata, log loss, and a SHA-256 artifact fingerprint.
 - A model version is immutable: reusing a version with a different fingerprint is rejected.
 - `POST /api/trading/models/bounce/score-shadow` persists a shadow score for later out-of-sample evaluation.
-- Model artifacts and scores are deliberately absent from the deterministic strategy monitor. Promotion into any strategy gate requires a separate reviewed change and out-of-sample evidence.
+- `POST /api/trading/models/bounce/validate-shadow` evaluates a locked artifact on dated OOS examples and reports log loss vs base-rate log loss, Brier score, calibration error/bins, example count and independent-session count.
+- Default sufficiency thresholds are 100 OOS examples across at least 20 sessions. Sufficiency is not a profitability claim; it only marks when model metrics begin to have a minimally interpretable evidence volume.
+- Model artifacts, validation and scores are deliberately absent from the deterministic strategy monitor. Promotion into any strategy gate requires a separate reviewed change and incremental OOS evidence.
 
-Do not interpret training fit or a paper backtest as proof of future profitability.
+Before interpreting strategy expectancy, review the approximate 95% expectancy interval and adverse spread/slippage/latency stress cases rather than only the point estimate.
+
+Do not interpret training fit, paper results, or a historical backtest as proof of future profitability.
 
 ## Research operations
 
 Research is optional and read-only.
 
 - It uses the configured Omnix provider registry.
-- It accepts no credentials.
+- It accepts no credentials in requests.
 - It uses at most 200 finalized bars and a bounded context.
 - Invalid model JSON is rejected; no generic narrative fallback is saved.
 - It cannot place orders, create alerts, or mutate scanner/backtest/paper state.
 
-Provider/model errors should not block charting, alerts, scanner use, replay, or paper simulation.
+Provider/model errors should not block charting, alerts, scanner use, replay, or paper simulation. Execution-provider failures, however, intentionally block US-equity paper fills.
 
 ## Incident record
 
@@ -205,8 +239,11 @@ For Trading incidents record:
 - workspace/user scope;
 - canonical instrument and binding;
 - provider and policy scope;
-- source and evaluation timestamps;
+- source/evaluation timestamps and future-skew assessment;
+- bid/ask plus displayed sizes when execution-related;
+- recurring session classification and known provider halt status;
 - frozen universe/dataset fingerprint or artifact checksum;
+- candidate/evidence observation timestamps;
 - strategy ID/version/mode and candidate reason code when relevant;
 - model/evidence fingerprints when relevant;
 - relevant revision/idempotency key;
