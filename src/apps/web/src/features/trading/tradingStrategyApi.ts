@@ -4,6 +4,7 @@ import type {
   StrategyEvent,
   StrategyProtection,
   TradingStrategyConfig,
+  YahooGapperDiscoveryInput,
 } from './tradingStrategyTypes';
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -51,6 +52,10 @@ export const tradingStrategyApi = {
     );
     return Array.isArray(payload.protections) ? payload.protections : [];
   },
+  discoverYahooUniverse: (input: YahooGapperDiscoveryInput) => requestJson<GapperUniverse>(
+    '/api/trading/strategies/universes/discover-yahoo',
+    { method: 'POST', body: JSON.stringify(input) },
+  ),
   freezeUniverse: (input: GapperUniverseFreezeInput) =>
     requestJson<GapperUniverse>('/api/trading/strategies/universes/freeze', {
       method: 'POST',
