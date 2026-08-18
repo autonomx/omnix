@@ -1,22 +1,33 @@
 export type StrategyMode = 'off' | 'shadow' | 'auto_paper';
+export type FloatPreferenceMode = 'ignore' | 'score' | 'require';
 
 export type GapPullbackConfig = {
   strategy_id: 'gap_pullback_v1';
-  strategy_version: '1.0.0';
+  strategy_version: '1.1.0';
   minimum_gap_pct: string | number;
   minimum_price: string | number;
   maximum_price: string | number;
   minimum_premarket_dollar_volume: string | number;
   minimum_tod_rvol: string | number;
   maximum_spread_bps: string | number;
+  preferred_float_min_shares: string | number;
+  preferred_float_max_shares: string | number;
+  float_preference_mode: FloatPreferenceMode;
+  require_catalyst_evidence: boolean;
+  reject_dilution_flags: string[];
   opening_impulse_min_pct: string | number;
   pullback_min_pct: string | number;
   pullback_max_pct: string | number;
+  pullback_volume_max_ratio: string | number;
   higher_low_buffer_bps: string | number;
   breakout_volume_ratio: string | number;
   pivot_left_bars: number;
   pivot_right_bars: number;
   volume_lookback_bars: number;
+  require_breakout_hold: boolean;
+  breakout_hold_bars: number;
+  breakout_hold_tolerance_bps: string | number;
+  minimum_quality_score: number;
   stop_buffer_bps: string | number;
   reward_multiple: string | number;
   entry_start_et: string;
@@ -121,4 +132,31 @@ export type StrategyProtection = {
   status: 'pending_entry' | 'active' | 'exit_submitted' | 'closed' | 'cancelled';
   trigger_reason?: string | null;
   revision: number;
+};
+
+export type CatalystShadowClassification = {
+  classifier_id: string;
+  classifier_version: string;
+  catalyst_class: string;
+  directional_bias: 'positive' | 'negative' | 'mixed' | 'unknown';
+  novelty: 'new' | 'recycled' | 'unclear';
+  dilution_risk: 'none_seen' | 'possible' | 'explicit' | 'unknown';
+  confidence: number;
+  evidence_ids: string[];
+  rationale: string;
+  shadow_only: true;
+};
+
+export type StrategyResearchReview = {
+  instrument_id: string;
+  status: 'reviewed' | 'missing_evidence' | 'error';
+  classification?: CatalystShadowClassification | null;
+  detail?: string | null;
+};
+
+export type StrategyResearchReviewResponse = {
+  strategy_id: string;
+  universe_id: string;
+  shadow_only: true;
+  reviews: StrategyResearchReview[];
 };
