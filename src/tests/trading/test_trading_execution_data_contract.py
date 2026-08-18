@@ -26,12 +26,16 @@ def observation(**overrides) -> ExecutionObservation:
         "provider": "fixture",
         "bid": Decimal("9.99"),
         "ask": Decimal("10.01"),
+        "bid_size": Decimal("1000"),
+        "ask_size": Decimal("1200"),
         "last": Decimal("10"),
+        "bar_volume": Decimal("5000"),
         "cumulative_volume": Decimal("1000000"),
         "source_time": NOW - timedelta(milliseconds=200),
         "received_at": NOW,
         "session": "regular",
         "freshness_mode": "polled",
+        "halted": False,
     }
     payload.update(overrides)
     return ExecutionObservation(**payload)
@@ -51,6 +55,13 @@ def test_execution_observation_is_fail_closed_and_spread_aware() -> None:
     assert stale.execution_eligible is False
     assert "STALE_MARKET_DATA" in stale.rejection_reasons
 
+    future = assess_execution_observation(
+        observation(source_time=NOW + timedelta(seconds=5)),
+        policy,
+    )
+    assert future.execution_eligible is False
+    assert "SOURCE_TIME_IN_FUTURE" in future.rejection_reasons
+
     no_book = assess_execution_observation(observation(bid=None, ask=None), policy)
     assert no_book.execution_eligible is False
     assert "BID_ASK_UNAVAILABLE" in no_book.rejection_reasons
@@ -61,6 +72,10 @@ def test_execution_observation_is_fail_closed_and_spread_aware() -> None:
     )
     assert wide.execution_eligible is False
     assert "SPREAD_TOO_WIDE" in wide.rejection_reasons
+
+    halted = assess_execution_observation(observation(halted=True), policy)
+    assert halted.execution_eligible is False
+    assert "MARKET_HALTED" in halted.rejection_reasons
 
 
 def test_cached_or_unknown_prices_can_never_be_execution_eligible() -> None:
@@ -73,18 +88,25 @@ def test_cached_or_unknown_prices_can_never_be_execution_eligible() -> None:
     assert "SESSION_NOT_EXECUTABLE" in closed.rejection_reasons
 
 
-def test_provider_quote_normalization_preserves_source_time_and_book() -> None:
+def test_provider_quote_normalization_preserves_source_time_book_and_liquidity() -> None:
     quote = {
         "instrument_id": "equity:NASDAQ:TEST",
         "binding_id": "binding",
         "provider": "fixture",
         "bid": "1.99",
         "ask": "2.01",
+        "bid_size": "800",
+        "ask_size": "900",
         "last": "2.00",
+        "high": "2.05",
+        "low": "1.95",
+        "bar_volume": "4500",
+        "bar_start_time": (NOW - timedelta(minutes=1)).isoformat(),
         "cumulative_volume": "500000",
         "source_time": (NOW - timedelta(milliseconds=50)).isoformat(),
         "session": "extended_pre",
         "freshness_mode": "polled",
+        "halted": False,
     }
     value = execution_observation_from_quote(
         quote,
@@ -94,6 +116,11 @@ def test_provider_quote_normalization_preserves_source_time_and_book() -> None:
     )
     assert value.bid == Decimal("1.99")
     assert value.ask == Decimal("2.01")
+    assert value.bid_size == Decimal("800")
+    assert value.ask_size == Decimal("900")
+    assert value.high == Decimal("2.05")
+    assert value.low == Decimal("1.95")
+    assert value.bar_volume == Decimal("4500")
     assert value.last == Decimal("2.00")
     assert value.session == "extended_pre"
     assert value.age_seconds == Decimal("0.05")
