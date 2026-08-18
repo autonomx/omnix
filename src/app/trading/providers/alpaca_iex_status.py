@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-import websockets
 from fastapi import FastAPI
 
 
@@ -145,6 +144,16 @@ class AlpacaIexStatusMonitor:
             raise RuntimeError(f"Alpaca IEX status stream did not confirm {expected}")
 
     async def _session(self) -> None:
+        # Keep websockets optional at import time. Several shared gateway/RPG
+        # verification jobs intentionally install only a minimal dependency set;
+        # they must still be able to construct the gateway when Alpaca status
+        # streaming is disabled/unconfigured. A configured runtime without the
+        # dependency records a monitor error and retries without affecting fills.
+        try:
+            import websockets
+        except ImportError as exc:
+            raise RuntimeError("Alpaca IEX status stream requires the websockets package") from exc
+
         url = os.environ.get("OMNIX_ALPACA_STREAM_URL", ALPACA_IEX_STREAM_URL).strip()
         async with websockets.connect(url, ping_interval=20, close_timeout=5) as socket:
             await self._receive_control(socket, "connected")
