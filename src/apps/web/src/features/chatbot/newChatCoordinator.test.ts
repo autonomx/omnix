@@ -30,7 +30,7 @@ describe('new chat coordinator', () => {
   });
 
   it('restores the missing New Chat control and selects the created empty session', async () => {
-    const fetchMock = vi.fn(async () => Response.json({
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
       id: 'chat:new-session',
       title: 'New chat',
       messages: [],
@@ -90,7 +90,7 @@ describe('new chat coordinator', () => {
   });
 
   it('does not intercept unrelated buttons outside the sessions panel', () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
     const unrelated = document.createElement('button');
     unrelated.textContent = '+ New';
