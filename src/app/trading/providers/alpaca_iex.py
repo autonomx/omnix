@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, time, timezone
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -16,6 +17,7 @@ from app.trading.execution import (
 )
 from app.trading.models import ProviderBinding
 
+from .alpaca_iex_status import default_alpaca_iex_status_cache
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
 
@@ -69,6 +71,19 @@ def _parse_timestamp(value: Any, *, field: str) -> datetime:
     if parsed.tzinfo is None:
         raise ProviderContractError(f"Alpaca IEX {field} timestamp must be timezone-aware")
     return parsed.astimezone(timezone.utc)
+
+
+def _round_lot_shares(value: Any) -> Decimal | None:
+    """Alpaca stock quote sizes are expressed in 100-share round lots."""
+    if value in {None, ""}:
+        return None
+    try:
+        lots = Decimal(str(value))
+    except Exception as exc:
+        raise ProviderContractError("Alpaca IEX returned invalid quote size") from exc
+    if lots < 0:
+        raise ProviderContractError("Alpaca IEX quote size cannot be negative")
+    return lots * Decimal("100")
 
 
 class AlpacaIexExecutionProvider:
@@ -160,6 +175,20 @@ class AlpacaIexExecutionProvider:
         # logic safely. Use the older source timestamp so the normal freshness
         # policy fails closed when either side of the observation is stale.
         source_time = min(quote_time, trade_time)
+
+        minute_bar = payload.get("minuteBar")
+        bar_start_time: datetime | None = None
+        bar_high = None
+        bar_low = None
+        bar_volume = None
+        if isinstance(minute_bar, dict):
+            timestamp = minute_bar.get("t")
+            if timestamp not in {None, ""}:
+                bar_start_time = _parse_timestamp(timestamp, field="minute bar")
+            bar_high = minute_bar.get("h")
+            bar_low = minute_bar.get("l")
+            bar_volume = minute_bar.get("v")
+
         daily_bar = payload.get("dailyBar")
         cumulative_volume = (
             daily_bar.get("v")
@@ -173,12 +202,22 @@ class AlpacaIexExecutionProvider:
             "provider": self.provider_id,
             "bid": latest_quote.get("bp"),
             "ask": latest_quote.get("ap"),
+            "bid_size": _round_lot_shares(latest_quote.get("bs")),
+            "ask_size": _round_lot_shares(latest_quote.get("as")),
             "last": latest_trade.get("p"),
+            "high": bar_high,
+            "low": bar_low,
+            "bar_volume": bar_volume,
+            "bar_start_time": bar_start_time.isoformat() if bar_start_time else None,
             "cumulative_volume": cumulative_volume,
             "source_time": source_time,
             "received_at": now.isoformat(),
             "session": _session(source_time),
             "freshness_mode": "live",
+            # Trading-status messages are supplied by Alpaca's IEX WebSocket
+            # status channel. Unknown means no status evidence has been observed;
+            # a known halt is always rejected by execution-data-v1.
+            "halted": default_alpaca_iex_status_cache().halted(binding.provider_symbol),
         }
         try:
             observation = execution_observation_from_quote(
