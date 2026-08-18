@@ -10,8 +10,13 @@ from app.gateway.main import create_gateway_app
 
 
 def test_shared_asset_store_reads_legacy_voice_clone_profiles(tmp_path, monkeypatch) -> None:
+    import app.assets as assets_module
     import app.shared as shared
 
+    # This test exercises the compatibility voice source in isolation. The
+    # production store intentionally scans resources/voice_clones independently
+    # of compatibility overrides, so suppress that separate canonical source here.
+    monkeypatch.setattr(assets_module, "discover_canonical_voice_clone_assets", lambda: [])
     voice_dir = tmp_path / "voice_clones"
     voice_dir.mkdir()
     (voice_dir / "narrator.wav").write_bytes(b"RIFF")
@@ -258,8 +263,12 @@ def test_manifest_asset_overrides_matching_legacy_document_artifact(tmp_path, mo
 
 
 def test_legacy_non_image_dry_run_reports_collisions_without_mutating(tmp_path, monkeypatch) -> None:
+    import app.assets as assets_module
     import app.shared as shared
 
+    # The dry-run assertions below are about the fixtures created by this test,
+    # not whatever canonical voice profiles happen to be checked into the repo.
+    monkeypatch.setattr(assets_module, "discover_canonical_voice_clone_assets", lambda: [])
     tts_dir = tmp_path / "tts"
     story_dir = tmp_path / "stories"
     voice_dir = tmp_path / "voice_clones"
