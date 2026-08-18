@@ -190,7 +190,7 @@ class ProviderBackedInstrumentCatalog:
     def _search_binance(self, query: str) -> list[CanonicalInstrument]:
         with self._lock:
             now = time.monotonic()
-            if now - self._binance_loaded_at >= self.ttl_seconds:
+            if self._binance_loaded_at <= 0.0 or now - self._binance_loaded_at >= self.ttl_seconds:
                 self._refresh_binance()
             return [
                 instrument
