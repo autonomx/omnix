@@ -1,0 +1,147 @@
+.trading-strategies-panel {
+  display: grid;
+  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  min-height: 430px;
+  gap: 12px;
+}
+
+.trading-strategies-panel > aside {
+  border-right: 1px solid var(--border, #2b3440);
+  padding-right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trading-strategies-heading,
+.trading-strategy-editor-header,
+.trading-strategy-monitoring section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trading-strategies-heading div,
+.trading-strategy-editor-header div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trading-strategies-panel small {
+  opacity: .72;
+}
+
+.trading-strategies-panel > aside > button {
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  padding: 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.trading-strategies-panel > aside > button.active {
+  border-color: currentColor;
+}
+
+.trading-strategies-panel > aside > button span {
+  text-transform: capitalize;
+  opacity: .72;
+}
+
+.trading-strategy-editor-header {
+  margin-bottom: 10px;
+}
+
+.trading-strategy-notice {
+  padding: 8px 10px;
+  border: 1px solid var(--border, #2b3440);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.trading-strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.trading-strategy-grid label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.trading-strategy-grid input:not([type='checkbox']),
+.trading-strategy-grid select {
+  min-width: 0;
+  width: 100%;
+}
+
+.trading-strategy-safety {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--border, #2b3440);
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 12px;
+  font-size: 12px;
+}
+
+.trading-strategy-safety strong {
+  grid-column: 1 / -1;
+}
+
+.trading-strategy-monitoring {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.trading-strategy-monitoring section {
+  min-width: 0;
+  border: 1px solid var(--border, #2b3440);
+  border-radius: 6px;
+  padding: 9px;
+}
+
+.trading-strategy-table {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.trading-strategy-table > div {
+  display: grid;
+  grid-template-columns: minmax(80px, .8fr) minmax(100px, 1fr) minmax(130px, 1.4fr);
+  gap: 7px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, .08);
+}
+
+.trading-strategy-table > div[data-tone='ready'] {
+  outline: 1px solid rgba(80, 170, 110, .45);
+}
+
+.trading-strategy-table > div[data-tone='rejected'] {
+  outline: 1px solid rgba(200, 90, 90, .4);
+}
+
+@media (max-width: 900px) {
+  .trading-strategies-panel,
+  .trading-strategy-monitoring {
+    grid-template-columns: 1fr;
+  }
+
+  .trading-strategies-panel > aside {
+    border-right: 0;
+    border-bottom: 1px solid var(--border, #2b3440);
+    padding: 0 0 10px;
+  }
+}
