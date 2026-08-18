@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
 from .paper import PaperAccountSnapshot
 from .strategies.models import StrategyRiskProfile, StrategySignal
+
+
+_ET = ZoneInfo("America/New_York")
 
 
 class StrategyRiskDecision(BaseModel):
@@ -31,6 +36,25 @@ def paper_account_equity(snapshot: PaperAccountSnapshot) -> Decimal:
     return cash + mark_value
 
 
+def paper_daily_realized_pnl(
+    snapshot: PaperAccountSnapshot,
+    *,
+    observed_at: datetime | None = None,
+) -> Decimal:
+    """Net today's realized PnL and commissions from the authoritative ledger."""
+    now = (observed_at or datetime.now(timezone.utc)).astimezone(_ET)
+    total = Decimal("0")
+    for entry in snapshot.recent_ledger:
+        if entry.entry_type not in {"realized_pnl", "commission"}:
+            continue
+        if entry.created_at is None:
+            continue
+        if entry.created_at.astimezone(_ET).date() != now.date():
+            continue
+        total += entry.amount
+    return total
+
+
 def size_strategy_entry(
     snapshot: PaperAccountSnapshot,
     signal: StrategySignal,
@@ -39,19 +63,34 @@ def size_strategy_entry(
     spread_bps: Decimal | None,
     trades_today: int = 0,
     traded_symbols_today: set[str] | None = None,
-    daily_realized_pnl: Decimal = Decimal("0"),
+    daily_realized_pnl: Decimal | None = None,
     open_strategy_risk: Decimal = Decimal("0"),
+    observed_at: datetime | None = None,
 ) -> StrategyRiskDecision:
     equity = paper_account_equity(snapshot)
+    now_et = (observed_at or datetime.now(timezone.utc)).astimezone(_ET)
     if risk.kill_switch:
         return StrategyRiskDecision(allowed=False, reason_code="KILL_SWITCH", account_equity=equity)
+    if now_et.time() < risk.entry_start_et:
+        return StrategyRiskDecision(allowed=False, reason_code="ENTRY_WINDOW_NOT_OPEN", account_equity=equity)
+    if now_et.time() > risk.last_entry_et or now_et.time() >= risk.force_flat_et:
+        return StrategyRiskDecision(allowed=False, reason_code="ENTRY_WINDOW_CLOSED", account_equity=equity)
     if equity <= 0:
         return StrategyRiskDecision(allowed=False, reason_code="NO_ACCOUNT_EQUITY", account_equity=equity)
     if spread_bps is None:
         return StrategyRiskDecision(allowed=False, reason_code="SPREAD_MISSING", account_equity=equity)
     if spread_bps > risk.max_spread_bps:
         return StrategyRiskDecision(allowed=False, reason_code="SPREAD_TOO_WIDE", account_equity=equity)
-    if len([position for position in snapshot.positions if position.quantity != 0]) >= risk.max_positions:
+
+    active_instruments = {
+        position.instrument_id for position in snapshot.positions if position.quantity != 0
+    }
+    active_instruments.update(
+        order.instrument_id
+        for order in snapshot.open_orders
+        if order.status == "open" and order.side == "buy"
+    )
+    if len(active_instruments) >= risk.max_positions:
         return StrategyRiskDecision(allowed=False, reason_code="MAX_POSITIONS", account_equity=equity)
     if trades_today >= risk.max_trades_per_day:
         return StrategyRiskDecision(allowed=False, reason_code="MAX_TRADES_PER_DAY", account_equity=equity)
@@ -62,8 +101,13 @@ def size_strategy_entry(
     ):
         return StrategyRiskDecision(allowed=False, reason_code="SYMBOL_ALREADY_TRADED", account_equity=equity)
 
+    realized_today = (
+        paper_daily_realized_pnl(snapshot, observed_at=now_et)
+        if daily_realized_pnl is None
+        else daily_realized_pnl
+    )
     max_daily_loss = equity * risk.max_daily_loss_pct / Decimal("100")
-    if daily_realized_pnl <= -max_daily_loss:
+    if realized_today <= -max_daily_loss:
         return StrategyRiskDecision(allowed=False, reason_code="MAX_DAILY_LOSS", account_equity=equity)
     max_open_risk = equity * risk.max_open_risk_pct / Decimal("100")
     if open_strategy_risk >= max_open_risk:
