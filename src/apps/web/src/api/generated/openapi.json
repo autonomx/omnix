@@ -1646,7 +1646,7 @@
         "properties": {
           "bars": {
             "items": {
-              "$ref": "#/components/schemas/MarketBar"
+              "$ref": "#/components/schemas/MarketBar-Output"
             },
             "title": "Bars",
             "type": "array"
@@ -1673,6 +1673,765 @@
           "bars"
         ],
         "title": "BarsResponse",
+        "type": "object"
+      },
+      "BounceFeatureVector-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "atr_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Atr Pct"
+          },
+          "breakout_volume_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Breakout Volume Ratio"
+          },
+          "catalyst_negative": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Catalyst Negative"
+          },
+          "catalyst_positive": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Catalyst Positive"
+          },
+          "dilution_flag": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Dilution Flag"
+          },
+          "float_shares_log10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Float Shares Log10"
+          },
+          "gap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Gap Pct"
+          },
+          "hod_distance_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Hod Distance Pct"
+          },
+          "l2_over_l1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "L2 Over L1"
+          },
+          "market_cap_log10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Cap Log10"
+          },
+          "minutes_since_open": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Minutes Since Open"
+          },
+          "opening_impulse_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Opening Impulse Pct"
+          },
+          "premarket_dollar_volume_log10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Premarket Dollar Volume Log10"
+          },
+          "pullback_depth_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Pullback Depth Pct"
+          },
+          "pullback_volume_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Pullback Volume Ratio"
+          },
+          "spread_bps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Spread Bps"
+          },
+          "tod_rvol": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Tod Rvol"
+          },
+          "vwap_distance_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Vwap Distance Pct"
+          },
+          "vwap_slope_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Vwap Slope Pct"
+          }
+        },
+        "required": [
+          "gap_pct",
+          "premarket_dollar_volume_log10",
+          "tod_rvol",
+          "spread_bps",
+          "opening_impulse_pct",
+          "hod_distance_pct",
+          "pullback_depth_pct",
+          "pullback_volume_ratio",
+          "l2_over_l1",
+          "vwap_distance_pct",
+          "vwap_slope_pct",
+          "breakout_volume_ratio",
+          "atr_pct",
+          "minutes_since_open"
+        ],
+        "title": "BounceFeatureVector",
+        "type": "object"
+      },
+      "BounceFeatureVector-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "atr_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Atr Pct",
+            "type": "string"
+          },
+          "breakout_volume_ratio": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Breakout Volume Ratio",
+            "type": "string"
+          },
+          "catalyst_negative": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Catalyst Negative",
+            "type": "string"
+          },
+          "catalyst_positive": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Catalyst Positive",
+            "type": "string"
+          },
+          "dilution_flag": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Dilution Flag",
+            "type": "string"
+          },
+          "float_shares_log10": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Float Shares Log10"
+          },
+          "gap_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Gap Pct",
+            "type": "string"
+          },
+          "hod_distance_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Hod Distance Pct",
+            "type": "string"
+          },
+          "l2_over_l1": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "L2 Over L1",
+            "type": "string"
+          },
+          "market_cap_log10": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Cap Log10"
+          },
+          "minutes_since_open": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minutes Since Open",
+            "type": "string"
+          },
+          "opening_impulse_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Opening Impulse Pct",
+            "type": "string"
+          },
+          "premarket_dollar_volume_log10": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Premarket Dollar Volume Log10",
+            "type": "string"
+          },
+          "pullback_depth_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Pullback Depth Pct",
+            "type": "string"
+          },
+          "pullback_volume_ratio": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Pullback Volume Ratio",
+            "type": "string"
+          },
+          "spread_bps": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Spread Bps",
+            "type": "string"
+          },
+          "tod_rvol": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tod Rvol",
+            "type": "string"
+          },
+          "vwap_distance_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Vwap Distance Pct",
+            "type": "string"
+          },
+          "vwap_slope_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Vwap Slope Pct",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gap_pct",
+          "premarket_dollar_volume_log10",
+          "tod_rvol",
+          "spread_bps",
+          "opening_impulse_pct",
+          "hod_distance_pct",
+          "pullback_depth_pct",
+          "pullback_volume_ratio",
+          "l2_over_l1",
+          "vwap_distance_pct",
+          "vwap_slope_pct",
+          "breakout_volume_ratio",
+          "atr_pct",
+          "minutes_since_open"
+        ],
+        "title": "BounceFeatureVector",
+        "type": "object"
+      },
+      "BounceModelArtifact": {
+        "additionalProperties": false,
+        "description": "Versioned, auditable logistic-regression artifact kept shadow-only.",
+        "properties": {
+          "coefficients": {
+            "additionalProperties": {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            "title": "Coefficients",
+            "type": "object"
+          },
+          "feature_means": {
+            "additionalProperties": {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            "title": "Feature Means",
+            "type": "object"
+          },
+          "feature_names": {
+            "default": [
+              "gap_pct",
+              "premarket_dollar_volume_log10",
+              "tod_rvol",
+              "float_shares_log10",
+              "market_cap_log10",
+              "spread_bps",
+              "opening_impulse_pct",
+              "hod_distance_pct",
+              "pullback_depth_pct",
+              "pullback_volume_ratio",
+              "l2_over_l1",
+              "vwap_distance_pct",
+              "vwap_slope_pct",
+              "breakout_volume_ratio",
+              "atr_pct",
+              "minutes_since_open",
+              "catalyst_positive",
+              "catalyst_negative",
+              "dilution_flag"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Names",
+            "type": "array"
+          },
+          "feature_scales": {
+            "additionalProperties": {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            "title": "Feature Scales",
+            "type": "object"
+          },
+          "fingerprint": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "intercept": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Intercept",
+            "type": "string"
+          },
+          "iterations": {
+            "exclusiveMinimum": 0.0,
+            "title": "Iterations",
+            "type": "integer"
+          },
+          "l2_penalty": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "L2 Penalty",
+            "type": "string"
+          },
+          "label_definition": {
+            "const": "P(+2R before -1R within 90 minutes)",
+            "default": "P(+2R before -1R within 90 minutes)",
+            "title": "Label Definition",
+            "type": "string"
+          },
+          "learning_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Learning Rate",
+            "type": "string"
+          },
+          "model_id": {
+            "const": "gap_pullback_logistic",
+            "default": "gap_pullback_logistic",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_version": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model Version",
+            "type": "string"
+          },
+          "positive_examples": {
+            "minimum": 0.0,
+            "title": "Positive Examples",
+            "type": "integer"
+          },
+          "shadow_only": {
+            "const": true,
+            "default": true,
+            "title": "Shadow Only",
+            "type": "boolean"
+          },
+          "trained_at": {
+            "format": "date-time",
+            "title": "Trained At",
+            "type": "string"
+          },
+          "training_examples": {
+            "exclusiveMinimum": 0.0,
+            "title": "Training Examples",
+            "type": "integer"
+          },
+          "training_log_loss": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Training Log Loss",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_version",
+          "trained_at",
+          "coefficients",
+          "intercept",
+          "feature_means",
+          "feature_scales",
+          "training_examples",
+          "positive_examples",
+          "iterations",
+          "learning_rate",
+          "l2_penalty",
+          "training_log_loss",
+          "fingerprint"
+        ],
+        "title": "BounceModelArtifact",
+        "type": "object"
+      },
+      "BounceModelListResponse": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/BounceModelArtifact"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "models"
+        ],
+        "title": "BounceModelListResponse",
+        "type": "object"
+      },
+      "BounceModelScore": {
+        "additionalProperties": false,
+        "properties": {
+          "features": {
+            "$ref": "#/components/schemas/BounceFeatureVector-Output"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "label_definition": {
+            "default": "P(+2R before -1R within 90 minutes)",
+            "title": "Label Definition",
+            "type": "string"
+          },
+          "model_id": {
+            "default": "gap_pullback_logistic",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_version": {
+            "default": "1.0.0-baseline",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "probability": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Probability",
+            "type": "string"
+          },
+          "shadow_only": {
+            "default": true,
+            "title": "Shadow Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "observed_at",
+          "probability",
+          "features",
+          "fingerprint"
+        ],
+        "title": "BounceModelScore",
+        "type": "object"
+      },
+      "BounceModelScoreRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "features": {
+            "$ref": "#/components/schemas/BounceFeatureVector-Input"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "score_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Score Id",
+            "type": "string"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          }
+        },
+        "required": [
+          "score_id",
+          "instrument_id",
+          "features"
+        ],
+        "title": "BounceModelScoreRequest",
+        "type": "object"
+      },
+      "BounceModelTrainRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/BounceTrainingExample"
+            },
+            "maxItems": 20000,
+            "minItems": 20,
+            "title": "Examples",
+            "type": "array"
+          },
+          "iterations": {
+            "default": 800,
+            "maximum": 20000.0,
+            "minimum": 1.0,
+            "title": "Iterations",
+            "type": "integer"
+          },
+          "l2_penalty": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.001",
+            "title": "L2 Penalty"
+          },
+          "learning_rate": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 2.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.05",
+            "title": "Learning Rate"
+          },
+          "model_version": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model Version",
+            "type": "string"
+          },
+          "trained_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trained At"
+          }
+        },
+        "required": [
+          "model_version",
+          "examples"
+        ],
+        "title": "BounceModelTrainRequest",
+        "type": "object"
+      },
+      "BounceTrainingExample": {
+        "additionalProperties": false,
+        "properties": {
+          "features": {
+            "$ref": "#/components/schemas/BounceFeatureVector-Input"
+          },
+          "label": {
+            "enum": [
+              0,
+              1
+            ],
+            "title": "Label",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "features",
+          "label"
+        ],
+        "title": "BounceTrainingExample",
         "type": "object"
       },
       "CancelJobRequest": {
@@ -1837,6 +2596,317 @@
           "display_symbol"
         ],
         "title": "CanonicalInstrument",
+        "type": "object"
+      },
+      "CatalystClassificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "instrument_id"
+        ],
+        "title": "CatalystClassificationRequest",
+        "type": "object"
+      },
+      "CatalystEvidence": {
+        "additionalProperties": false,
+        "description": "Timestamped immutable evidence; never a naked bullish/bearish flag.",
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "dilution_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Dilution Flags",
+            "type": "array"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "facts": {
+            "additionalProperties": true,
+            "title": "Facts",
+            "type": "object"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline"
+          },
+          "immutable_fingerprint": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "source_locator": {
+            "title": "Source Locator",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "sec",
+              "company",
+              "news",
+              "manual"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "text_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Text Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "instrument_id",
+          "source_type",
+          "source_locator",
+          "published_at",
+          "captured_at",
+          "content",
+          "text_hash",
+          "immutable_fingerprint"
+        ],
+        "title": "CatalystEvidence",
+        "type": "object"
+      },
+      "CatalystEvidenceCaptureRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "facts": {
+            "additionalProperties": true,
+            "title": "Facts",
+            "type": "object"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "raw_text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Raw Text",
+            "type": "string"
+          },
+          "source_locator": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Source Locator",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "sec",
+              "company",
+              "news",
+              "manual"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "instrument_id",
+          "source_type",
+          "source_locator",
+          "published_at",
+          "raw_text"
+        ],
+        "title": "CatalystEvidenceCaptureRequest",
+        "type": "object"
+      },
+      "CatalystEvidenceListResponse": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/CatalystEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "evidence"
+        ],
+        "title": "CatalystEvidenceListResponse",
+        "type": "object"
+      },
+      "CatalystShadowClassification": {
+        "additionalProperties": false,
+        "description": "Read-only classifier output. It is not an execution authorization.",
+        "properties": {
+          "catalyst_class": {
+            "default": "unknown",
+            "enum": [
+              "earnings",
+              "regulatory",
+              "contract_partnership",
+              "financing",
+              "corporate_action",
+              "clinical",
+              "legal",
+              "other",
+              "unknown"
+            ],
+            "title": "Catalyst Class",
+            "type": "string"
+          },
+          "classifier_id": {
+            "title": "Classifier Id",
+            "type": "string"
+          },
+          "classifier_version": {
+            "title": "Classifier Version",
+            "type": "string"
+          },
+          "confidence": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "dilution_risk": {
+            "default": "unknown",
+            "enum": [
+              "none_seen",
+              "possible",
+              "explicit",
+              "unknown"
+            ],
+            "title": "Dilution Risk",
+            "type": "string"
+          },
+          "directional_bias": {
+            "default": "unknown",
+            "enum": [
+              "positive",
+              "negative",
+              "mixed",
+              "unknown"
+            ],
+            "title": "Directional Bias",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "novelty": {
+            "default": "unclear",
+            "enum": [
+              "new",
+              "recycled",
+              "unclear"
+            ],
+            "title": "Novelty",
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "title": "Rationale",
+            "type": "string"
+          },
+          "shadow_only": {
+            "const": true,
+            "default": true,
+            "title": "Shadow Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "classifier_id",
+          "classifier_version",
+          "evidence_ids"
+        ],
+        "title": "CatalystShadowClassification",
         "type": "object"
       },
       "ChatMessage": {
@@ -2751,6 +3821,45 @@
         "title": "CreateJobRequest",
         "type": "object"
       },
+      "CurrencyRateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "base_currency": {
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "freshness_mode": {
+            "title": "Freshness Mode",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "quote_currency": {
+            "title": "Quote Currency",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "number"
+          },
+          "received_at": {
+            "title": "Received At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_currency",
+          "quote_currency",
+          "rate",
+          "provider",
+          "received_at",
+          "freshness_mode"
+        ],
+        "title": "CurrencyRateResponse",
+        "type": "object"
+      },
       "DatasetListResponse": {
         "properties": {
           "datasets": {
@@ -2908,6 +4017,138 @@
           "workers"
         ],
         "title": "DiagnosticsPayload",
+        "type": "object"
+      },
+      "ExecutionObservation": {
+        "additionalProperties": false,
+        "description": "Normalized observation accepted by the shared paper/backtest execution layer.",
+        "properties": {
+          "ask": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ask"
+          },
+          "bid": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bid"
+          },
+          "binding_id": {
+            "title": "Binding Id",
+            "type": "string"
+          },
+          "cumulative_volume": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Volume"
+          },
+          "execution_eligible": {
+            "default": false,
+            "title": "Execution Eligible",
+            "type": "boolean"
+          },
+          "freshness_mode": {
+            "default": "unknown",
+            "enum": [
+              "live",
+              "polled",
+              "delayed",
+              "cached",
+              "fallback",
+              "unknown"
+            ],
+            "title": "Freshness Mode",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "last": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Last",
+            "type": "string"
+          },
+          "policy_version": {
+            "default": "execution-data-v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Sequence"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "rejection_reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Rejection Reasons",
+            "type": "array"
+          },
+          "session": {
+            "default": "unknown",
+            "enum": [
+              "extended_pre",
+              "regular",
+              "extended_post",
+              "closed",
+              "unknown"
+            ],
+            "title": "Session",
+            "type": "string"
+          },
+          "source_time": {
+            "format": "date-time",
+            "title": "Source Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "binding_id",
+          "provider",
+          "last",
+          "source_time"
+        ],
+        "title": "ExecutionObservation",
         "type": "object"
       },
       "FailJobRequest": {
@@ -3214,6 +4455,1532 @@
           "bars"
         ],
         "title": "FrozenDatasetSnapshot",
+        "type": "object"
+      },
+      "GapPullbackBacktestRequest": {
+        "additionalProperties": false,
+        "description": "Frozen multi-symbol morning backtest request.\n\nCandidate membership is supplied by an immutable point-in-time universe;\nthere is no hindsight symbol discovery inside the backtester.",
+        "properties": {
+          "assumed_spread_bps": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "40",
+            "title": "Assumed Spread Bps"
+          },
+          "bars_by_instrument": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/MarketBar-Input"
+              },
+              "type": "array"
+            },
+            "title": "Bars By Instrument",
+            "type": "object"
+          },
+          "config": {
+            "$ref": "#/components/schemas/GapPullbackConfig-Input"
+          },
+          "execution_policy": {
+            "$ref": "#/components/schemas/PaperExecutionPolicy"
+          },
+          "max_concurrent_positions": {
+            "default": 3,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Concurrent Positions",
+            "type": "integer"
+          },
+          "max_hold_minutes": {
+            "default": 90,
+            "maximum": 390.0,
+            "minimum": 1.0,
+            "title": "Max Hold Minutes",
+            "type": "integer"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "universe": {
+            "$ref": "#/components/schemas/GapperUniverseSnapshot-Input"
+          }
+        },
+        "required": [
+          "session_date",
+          "universe",
+          "bars_by_instrument"
+        ],
+        "title": "GapPullbackBacktestRequest",
+        "type": "object"
+      },
+      "GapPullbackBacktestResult": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_fingerprint": {
+            "title": "Dataset Fingerprint",
+            "type": "string"
+          },
+          "execution_policy_version": {
+            "title": "Execution Policy Version",
+            "type": "string"
+          },
+          "strategy_id": {
+            "default": "gap_pullback_v1",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_version": {
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/GapPullbackBacktestSummary"
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/GapPullbackBacktestTrade"
+            },
+            "title": "Trades",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dataset_fingerprint",
+          "execution_policy_version",
+          "trades",
+          "summary"
+        ],
+        "title": "GapPullbackBacktestResult",
+        "type": "object"
+      },
+      "GapPullbackBacktestSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "average_entry_slippage_bps": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Entry Slippage Bps",
+            "type": "string"
+          },
+          "average_exit_slippage_bps": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Exit Slippage Bps",
+            "type": "string"
+          },
+          "average_hold_minutes": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Hold Minutes",
+            "type": "string"
+          },
+          "average_mae_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Mae R",
+            "type": "string"
+          },
+          "average_mfe_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Mfe R",
+            "type": "string"
+          },
+          "candidate_count": {
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "candidate_to_trade_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Candidate To Trade Rate",
+            "type": "string"
+          },
+          "candidate_to_trigger_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Candidate To Trigger Rate",
+            "type": "string"
+          },
+          "entry_execution_rejection_count": {
+            "title": "Entry Execution Rejection Count",
+            "type": "integer"
+          },
+          "exit_execution_rejection_count": {
+            "title": "Exit Execution Rejection Count",
+            "type": "integer"
+          },
+          "expectancy_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expectancy R",
+            "type": "string"
+          },
+          "invalid_risk_count": {
+            "title": "Invalid Risk Count",
+            "type": "integer"
+          },
+          "loss_count": {
+            "title": "Loss Count",
+            "type": "integer"
+          },
+          "no_next_bar_count": {
+            "title": "No Next Bar Count",
+            "type": "integer"
+          },
+          "partial_entry_count": {
+            "title": "Partial Entry Count",
+            "type": "integer"
+          },
+          "portfolio_capacity_rejection_count": {
+            "title": "Portfolio Capacity Rejection Count",
+            "type": "integer"
+          },
+          "profit_factor": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profit Factor"
+          },
+          "stop_count": {
+            "title": "Stop Count",
+            "type": "integer"
+          },
+          "target_count": {
+            "title": "Target Count",
+            "type": "integer"
+          },
+          "time_exit_count": {
+            "title": "Time Exit Count",
+            "type": "integer"
+          },
+          "trade_count": {
+            "title": "Trade Count",
+            "type": "integer"
+          },
+          "trades_per_day": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Trades Per Day",
+            "type": "string"
+          },
+          "trigger_count": {
+            "title": "Trigger Count",
+            "type": "integer"
+          },
+          "trigger_to_trade_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Trigger To Trade Rate",
+            "type": "string"
+          },
+          "win_count": {
+            "title": "Win Count",
+            "type": "integer"
+          },
+          "win_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Win Rate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_count",
+          "trigger_count",
+          "trade_count",
+          "no_next_bar_count",
+          "entry_execution_rejection_count",
+          "exit_execution_rejection_count",
+          "invalid_risk_count",
+          "portfolio_capacity_rejection_count",
+          "partial_entry_count",
+          "win_count",
+          "loss_count",
+          "win_rate",
+          "expectancy_r",
+          "profit_factor",
+          "average_mfe_r",
+          "average_mae_r",
+          "candidate_to_trigger_rate",
+          "trigger_to_trade_rate",
+          "candidate_to_trade_rate",
+          "average_hold_minutes",
+          "average_entry_slippage_bps",
+          "average_exit_slippage_bps",
+          "trades_per_day",
+          "stop_count",
+          "target_count",
+          "time_exit_count"
+        ],
+        "title": "GapPullbackBacktestSummary",
+        "type": "object"
+      },
+      "GapPullbackBacktestTrade": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_bar_index": {
+            "title": "Entry Bar Index",
+            "type": "integer"
+          },
+          "entry_fill_quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Entry Fill Quantity",
+            "type": "string"
+          },
+          "entry_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Entry Price",
+            "type": "string"
+          },
+          "entry_slippage_bps": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Entry Slippage Bps",
+            "type": "string"
+          },
+          "entry_time": {
+            "format": "date-time",
+            "title": "Entry Time",
+            "type": "string"
+          },
+          "exit_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Exit Price",
+            "type": "string"
+          },
+          "exit_reason": {
+            "enum": [
+              "stop",
+              "target",
+              "time",
+              "eod"
+            ],
+            "title": "Exit Reason",
+            "type": "string"
+          },
+          "exit_slippage_bps": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Exit Slippage Bps",
+            "type": "string"
+          },
+          "exit_time": {
+            "format": "date-time",
+            "title": "Exit Time",
+            "type": "string"
+          },
+          "hold_minutes": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Hold Minutes",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "mae_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mae R",
+            "type": "string"
+          },
+          "mfe_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mfe R",
+            "type": "string"
+          },
+          "pnl_per_share": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Pnl Per Share",
+            "type": "string"
+          },
+          "r_multiple": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "R Multiple",
+            "type": "string"
+          },
+          "stop_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Stop Price",
+            "type": "string"
+          },
+          "target_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Target Price",
+            "type": "string"
+          },
+          "trigger_bar_index": {
+            "title": "Trigger Bar Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "entry_time",
+          "exit_time",
+          "entry_price",
+          "exit_price",
+          "entry_fill_quantity",
+          "entry_slippage_bps",
+          "exit_slippage_bps",
+          "stop_price",
+          "target_price",
+          "exit_reason",
+          "pnl_per_share",
+          "r_multiple",
+          "mfe_r",
+          "mae_r",
+          "hold_minutes",
+          "trigger_bar_index",
+          "entry_bar_index"
+        ],
+        "title": "GapPullbackBacktestTrade",
+        "type": "object"
+      },
+      "GapPullbackConfig-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "breakout_volume_ratio": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1.25",
+            "title": "Breakout Volume Ratio"
+          },
+          "entry_start_et": {
+            "default": "09:35:00",
+            "format": "time",
+            "title": "Entry Start Et",
+            "type": "string"
+          },
+          "higher_low_buffer_bps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Higher Low Buffer Bps"
+          },
+          "last_entry_et": {
+            "default": "11:30:00",
+            "format": "time",
+            "title": "Last Entry Et",
+            "type": "string"
+          },
+          "maximum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Maximum Price"
+          },
+          "maximum_spread_bps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "150",
+            "title": "Maximum Spread Bps"
+          },
+          "minimum_gap_pct": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Minimum Gap Pct"
+          },
+          "minimum_premarket_dollar_volume": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1000000",
+            "title": "Minimum Premarket Dollar Volume"
+          },
+          "minimum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.50",
+            "title": "Minimum Price"
+          },
+          "minimum_tod_rvol": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "2",
+            "title": "Minimum Tod Rvol"
+          },
+          "opening_impulse_min_pct": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "8",
+            "title": "Opening Impulse Min Pct"
+          },
+          "pivot_left_bars": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Pivot Left Bars",
+            "type": "integer"
+          },
+          "pivot_right_bars": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Pivot Right Bars",
+            "type": "integer"
+          },
+          "pullback_max_pct": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "35",
+            "title": "Pullback Max Pct"
+          },
+          "pullback_min_pct": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "3",
+            "title": "Pullback Min Pct"
+          },
+          "reward_multiple": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "2",
+            "title": "Reward Multiple"
+          },
+          "stop_buffer_bps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "15",
+            "title": "Stop Buffer Bps"
+          },
+          "strategy_id": {
+            "const": "gap_pullback_v1",
+            "default": "gap_pullback_v1",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "volume_lookback_bars": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Volume Lookback Bars",
+            "type": "integer"
+          }
+        },
+        "title": "GapPullbackConfig",
+        "type": "object"
+      },
+      "GapPullbackConfig-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "breakout_volume_ratio": {
+            "default": "1.25",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Breakout Volume Ratio",
+            "type": "string"
+          },
+          "entry_start_et": {
+            "default": "09:35:00",
+            "format": "time",
+            "title": "Entry Start Et",
+            "type": "string"
+          },
+          "higher_low_buffer_bps": {
+            "default": "20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Higher Low Buffer Bps",
+            "type": "string"
+          },
+          "last_entry_et": {
+            "default": "11:30:00",
+            "format": "time",
+            "title": "Last Entry Et",
+            "type": "string"
+          },
+          "maximum_price": {
+            "default": "20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Price",
+            "type": "string"
+          },
+          "maximum_spread_bps": {
+            "default": "150",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Spread Bps",
+            "type": "string"
+          },
+          "minimum_gap_pct": {
+            "default": "20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Gap Pct",
+            "type": "string"
+          },
+          "minimum_premarket_dollar_volume": {
+            "default": "1000000",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Premarket Dollar Volume",
+            "type": "string"
+          },
+          "minimum_price": {
+            "default": "0.50",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Price",
+            "type": "string"
+          },
+          "minimum_tod_rvol": {
+            "default": "2",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Tod Rvol",
+            "type": "string"
+          },
+          "opening_impulse_min_pct": {
+            "default": "8",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Opening Impulse Min Pct",
+            "type": "string"
+          },
+          "pivot_left_bars": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Pivot Left Bars",
+            "type": "integer"
+          },
+          "pivot_right_bars": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Pivot Right Bars",
+            "type": "integer"
+          },
+          "pullback_max_pct": {
+            "default": "35",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Pullback Max Pct",
+            "type": "string"
+          },
+          "pullback_min_pct": {
+            "default": "3",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Pullback Min Pct",
+            "type": "string"
+          },
+          "reward_multiple": {
+            "default": "2",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reward Multiple",
+            "type": "string"
+          },
+          "stop_buffer_bps": {
+            "default": "15",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Stop Buffer Bps",
+            "type": "string"
+          },
+          "strategy_id": {
+            "const": "gap_pullback_v1",
+            "default": "gap_pullback_v1",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "volume_lookback_bars": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Volume Lookback Bars",
+            "type": "integer"
+          }
+        },
+        "title": "GapPullbackConfig",
+        "type": "object"
+      },
+      "GapPullbackFeatures": {
+        "additionalProperties": false,
+        "properties": {
+          "b1": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "B1"
+          },
+          "breakout_volume_ratio": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakout Volume Ratio"
+          },
+          "gap_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Gap Pct",
+            "type": "string"
+          },
+          "l1": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L1"
+          },
+          "l2": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L2"
+          },
+          "minutes_since_open": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes Since Open"
+          },
+          "opening_impulse_pct": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening Impulse Pct"
+          },
+          "pullback_depth_pct": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pullback Depth Pct"
+          },
+          "session_vwap": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Vwap"
+          },
+          "spread_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Bps"
+          },
+          "tod_rvol": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tod Rvol"
+          },
+          "vwap_distance_pct": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap Distance Pct"
+          }
+        },
+        "required": [
+          "gap_pct"
+        ],
+        "title": "GapPullbackFeatures",
+        "type": "object"
+      },
+      "GapPullbackResult": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluated_bar_count": {
+            "minimum": 0.0,
+            "title": "Evaluated Bar Count",
+            "type": "integer"
+          },
+          "features": {
+            "$ref": "#/components/schemas/GapPullbackFeatures"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "signal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StrategySignal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "discovered",
+              "qualified_gap",
+              "opening_impulse",
+              "first_pullback",
+              "first_low_confirmed",
+              "bounce_high_confirmed",
+              "second_pullback",
+              "higher_low_confirmed",
+              "vwap_reclaim",
+              "lower_high_break",
+              "entry_ready",
+              "rejected",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "transitions": {
+            "items": {
+              "enum": [
+                "discovered",
+                "qualified_gap",
+                "opening_impulse",
+                "first_pullback",
+                "first_low_confirmed",
+                "bounce_high_confirmed",
+                "second_pullback",
+                "higher_low_confirmed",
+                "vwap_reclaim",
+                "lower_high_break",
+                "entry_ready",
+                "rejected",
+                "expired"
+              ],
+              "type": "string"
+            },
+            "title": "Transitions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "state",
+          "reason_code",
+          "features",
+          "transitions",
+          "evaluated_bar_count"
+        ],
+        "title": "GapPullbackResult",
+        "type": "object"
+      },
+      "GapperCandidate-Input": {
+        "additionalProperties": false,
+        "description": "Point-in-time candidate evidence used by research/backtests and paper runs.\n\n`previous_close` is always the split/corporate-action-normalized close in the\nsame share basis as `premarket_price`. When raw evidence is available it is\npreserved separately with the adjustment factor so the gap can be audited.",
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "catalyst_evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Catalyst Evidence Ids",
+            "type": "array"
+          },
+          "corporate_action_evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Corporate Action Evidence Ids",
+            "type": "array"
+          },
+          "dilution_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Dilution Flags",
+            "type": "array"
+          },
+          "discovery_rank": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovery Rank"
+          },
+          "float_shares": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Float Shares"
+          },
+          "gap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Gap Pct"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "market_cap": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Cap"
+          },
+          "premarket_dollar_volume": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Premarket Dollar Volume"
+          },
+          "premarket_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Premarket Price"
+          },
+          "premarket_volume": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Premarket Volume"
+          },
+          "previous_close": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Previous Close"
+          },
+          "raw_previous_close": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Previous Close"
+          },
+          "split_adjustment_factor": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1",
+            "title": "Split Adjustment Factor"
+          },
+          "spread_bps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Bps"
+          },
+          "tod_rvol": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tod Rvol"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "previous_close",
+          "premarket_price",
+          "gap_pct"
+        ],
+        "title": "GapperCandidate",
+        "type": "object"
+      },
+      "GapperCandidate-Output": {
+        "additionalProperties": false,
+        "description": "Point-in-time candidate evidence used by research/backtests and paper runs.\n\n`previous_close` is always the split/corporate-action-normalized close in the\nsame share basis as `premarket_price`. When raw evidence is available it is\npreserved separately with the adjustment factor so the gap can be audited.",
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "catalyst_evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Catalyst Evidence Ids",
+            "type": "array"
+          },
+          "corporate_action_evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Corporate Action Evidence Ids",
+            "type": "array"
+          },
+          "dilution_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Dilution Flags",
+            "type": "array"
+          },
+          "discovery_rank": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovery Rank"
+          },
+          "float_shares": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Float Shares"
+          },
+          "gap_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Gap Pct",
+            "type": "string"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "market_cap": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Cap"
+          },
+          "premarket_dollar_volume": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Premarket Dollar Volume",
+            "type": "string"
+          },
+          "premarket_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Premarket Price",
+            "type": "string"
+          },
+          "premarket_volume": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Premarket Volume",
+            "type": "string"
+          },
+          "previous_close": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Previous Close",
+            "type": "string"
+          },
+          "raw_previous_close": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Previous Close"
+          },
+          "split_adjustment_factor": {
+            "default": "1",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Split Adjustment Factor",
+            "type": "string"
+          },
+          "spread_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Bps"
+          },
+          "tod_rvol": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tod Rvol"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "previous_close",
+          "premarket_price",
+          "gap_pct"
+        ],
+        "title": "GapperCandidate",
+        "type": "object"
+      },
+      "GapperUniverseFreezeRequest": {
+        "additionalProperties": false,
+        "description": "Raw point-in-time candidate list; fingerprint is computed by the server.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/GapperCandidate-Input"
+            },
+            "maxItems": 2000,
+            "minItems": 1,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "discovery_source": {
+            "default": "import",
+            "enum": [
+              "manual",
+              "import",
+              "scanner",
+              "provider"
+            ],
+            "title": "Discovery Source",
+            "type": "string"
+          },
+          "evaluation_time": {
+            "format": "date-time",
+            "title": "Evaluation Time",
+            "type": "string"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "universe_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Universe Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "universe_id",
+          "session_date",
+          "evaluation_time",
+          "candidates"
+        ],
+        "title": "GapperUniverseFreezeRequest",
+        "type": "object"
+      },
+      "GapperUniverseSnapshot-Input": {
+        "additionalProperties": false,
+        "description": "Immutable daily candidate universe, including eventual failures/fades.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/GapperCandidate-Input"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "discovery_source": {
+            "enum": [
+              "manual",
+              "import",
+              "scanner",
+              "provider"
+            ],
+            "title": "Discovery Source",
+            "type": "string"
+          },
+          "evaluation_time": {
+            "format": "date-time",
+            "title": "Evaluation Time",
+            "type": "string"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "source_fingerprint": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Source Fingerprint",
+            "type": "string"
+          },
+          "universe_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Universe Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "universe_id",
+          "session_date",
+          "evaluation_time",
+          "discovery_source",
+          "candidates",
+          "source_fingerprint"
+        ],
+        "title": "GapperUniverseSnapshot",
+        "type": "object"
+      },
+      "GapperUniverseSnapshot-Output": {
+        "additionalProperties": false,
+        "description": "Immutable daily candidate universe, including eventual failures/fades.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/GapperCandidate-Output"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "discovery_source": {
+            "enum": [
+              "manual",
+              "import",
+              "scanner",
+              "provider"
+            ],
+            "title": "Discovery Source",
+            "type": "string"
+          },
+          "evaluation_time": {
+            "format": "date-time",
+            "title": "Evaluation Time",
+            "type": "string"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "source_fingerprint": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Source Fingerprint",
+            "type": "string"
+          },
+          "universe_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Universe Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "universe_id",
+          "session_date",
+          "evaluation_time",
+          "discovery_source",
+          "candidates",
+          "source_fingerprint"
+        ],
+        "title": "GapperUniverseSnapshot",
         "type": "object"
       },
       "GatewayHealth": {
@@ -3926,7 +6693,155 @@
         "title": "LegacySuccessResponse",
         "type": "object"
       },
-      "MarketBar": {
+      "MarketBar-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "adjustment_mode": {
+            "$ref": "#/components/schemas/AdjustmentMode",
+            "default": "raw"
+          },
+          "close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Close"
+          },
+          "end_time": {
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "High"
+          },
+          "ingestion_revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Ingestion Revision",
+            "type": "integer"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "string"
+          },
+          "is_final": {
+            "default": true,
+            "title": "Is Final",
+            "type": "boolean"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Low"
+          },
+          "open": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Open"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Event Id"
+          },
+          "provider_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Sequence"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "session": {
+            "default": "regular",
+            "title": "Session",
+            "type": "string"
+          },
+          "start_time": {
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Volume"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "interval",
+          "start_time",
+          "end_time",
+          "open",
+          "high",
+          "low",
+          "close",
+          "provider"
+        ],
+        "title": "MarketBar",
+        "type": "object"
+      },
+      "MarketBar-Output": {
         "additionalProperties": false,
         "properties": {
           "adjustment_mode": {
@@ -4572,6 +7487,13 @@
             "title": "Open Orders",
             "type": "array"
           },
+          "order_history": {
+            "items": {
+              "$ref": "#/components/schemas/PaperOrder"
+            },
+            "title": "Order History",
+            "type": "array"
+          },
           "positions": {
             "items": {
               "$ref": "#/components/schemas/PaperPosition"
@@ -4629,6 +7551,97 @@
           "available"
         ],
         "title": "PaperBalance",
+        "type": "object"
+      },
+      "PaperExecutionPolicy": {
+        "additionalProperties": false,
+        "description": "Deterministic, pessimistic paper-fill assumptions shared with backtests.",
+        "properties": {
+          "latency_ms": {
+            "default": 250,
+            "maximum": 60000.0,
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "max_observation_age_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "5",
+            "title": "Max Observation Age Seconds"
+          },
+          "max_volume_participation_pct": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.10",
+            "title": "Max Volume Participation Pct"
+          },
+          "policy_version": {
+            "const": "paper-execution-v2",
+            "default": "paper-execution-v2",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "reject_halted": {
+            "default": true,
+            "title": "Reject Halted",
+            "type": "boolean"
+          },
+          "require_execution_eligible": {
+            "default": true,
+            "title": "Require Execution Eligible",
+            "type": "boolean"
+          },
+          "slippage_bps": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "10",
+            "title": "Slippage Bps"
+          },
+          "stop_slippage_bps": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "25",
+            "title": "Stop Slippage Bps"
+          }
+        },
+        "title": "PaperExecutionPolicy",
         "type": "object"
       },
       "PaperFill": {
@@ -4699,22 +7712,6 @@
         "title": "PaperFill",
         "type": "object"
       },
-      "PaperFillListResponse": {
-        "properties": {
-          "fills": {
-            "items": {
-              "$ref": "#/components/schemas/PaperFill"
-            },
-            "title": "Fills",
-            "type": "array"
-          }
-        },
-        "required": [
-          "fills"
-        ],
-        "title": "PaperFillListResponse",
-        "type": "object"
-      },
       "PaperLedgerEntry": {
         "additionalProperties": false,
         "properties": {
@@ -4722,6 +7719,18 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Amount",
             "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
           },
           "currency": {
             "title": "Currency",
@@ -4782,99 +7791,6 @@
           "idempotency_key"
         ],
         "title": "PaperLedgerEntry",
-        "type": "object"
-      },
-      "PaperMarketObservation": {
-        "additionalProperties": false,
-        "properties": {
-          "binding_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Binding Id"
-          },
-          "evaluated_at": {
-            "format": "date-time",
-            "title": "Evaluated At",
-            "type": "string"
-          },
-          "high": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "type": "number"
-              },
-              {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "High"
-          },
-          "instrument_id": {
-            "title": "Instrument Id",
-            "type": "string"
-          },
-          "low": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "type": "number"
-              },
-              {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Low"
-          },
-          "price": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "type": "number"
-              },
-              {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-                "type": "string"
-              }
-            ],
-            "title": "Price"
-          },
-          "provider": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider"
-          },
-          "source_time": {
-            "format": "date-time",
-            "title": "Source Time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "instrument_id",
-          "price",
-          "source_time"
-        ],
-        "title": "PaperMarketObservation",
         "type": "object"
       },
       "PaperOrder": {
@@ -4962,6 +7878,18 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Quantity",
             "type": "string"
+          },
+          "reference_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Price"
           },
           "rejection_reason": {
             "anyOf": [
@@ -5107,6 +8035,22 @@
             ],
             "title": "Quantity"
           },
+          "reference_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Price"
+          },
           "side": {
             "enum": [
               "buy",
@@ -5197,6 +8141,224 @@
           "realized_pnl"
         ],
         "title": "PaperPosition",
+        "type": "object"
+      },
+      "PaperPositionProtection": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "entry_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Order Id"
+          },
+          "exit_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Order Id"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending_entry",
+              "active",
+              "exit_submitted",
+              "closed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_loss": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Loss"
+          },
+          "take_profit": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take Profit"
+          },
+          "trigger_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Reason"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "account_id",
+          "instrument_id",
+          "status"
+        ],
+        "title": "PaperPositionProtection",
+        "type": "object"
+      },
+      "PaperProtectionListResponse": {
+        "properties": {
+          "protections": {
+            "items": {
+              "$ref": "#/components/schemas/PaperPositionProtection"
+            },
+            "title": "Protections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "protections"
+        ],
+        "title": "PaperProtectionListResponse",
+        "type": "object"
+      },
+      "PaperProtectionUpsert": {
+        "additionalProperties": false,
+        "description": "Server-authoritative OCO-style stop/target protection for a paper position.",
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "entry_order_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Order Id"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "stop_loss": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Loss"
+          },
+          "take_profit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take Profit"
+          }
+        },
+        "required": [
+          "instrument_id"
+        ],
+        "title": "PaperProtectionUpsert",
         "type": "object"
       },
       "PaperResetRequest": {
@@ -5446,7 +8608,8 @@
             "enum": [
               "ready",
               "degraded",
-              "unavailable"
+              "unavailable",
+              "unconfigured"
             ],
             "title": "Status",
             "type": "string"
@@ -7118,6 +10281,532 @@
         "title": "StateHashResponse",
         "type": "object"
       },
+      "StrategyConfigListResponse": {
+        "properties": {
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/TradingStrategyConfigDocument-Output"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "strategies"
+        ],
+        "title": "StrategyConfigListResponse",
+        "type": "object"
+      },
+      "StrategyEvaluationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/MarketBar-Input"
+            },
+            "maxItems": 1000,
+            "title": "Bars",
+            "type": "array"
+          },
+          "candidate": {
+            "additionalProperties": true,
+            "title": "Candidate",
+            "type": "object"
+          },
+          "config": {
+            "$ref": "#/components/schemas/GapPullbackConfig-Input"
+          }
+        },
+        "required": [
+          "candidate"
+        ],
+        "title": "StrategyEvaluationRequest",
+        "type": "object"
+      },
+      "StrategyEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "event_id",
+          "instrument_id",
+          "event_type",
+          "state",
+          "observed_at",
+          "idempotency_key"
+        ],
+        "title": "StrategyEvent",
+        "type": "object"
+      },
+      "StrategyEventListResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "StrategyEventListResponse",
+        "type": "object"
+      },
+      "StrategyProtection": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "entry_order_id": {
+            "title": "Entry Order Id",
+            "type": "string"
+          },
+          "exit_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Order Id"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "protection_id": {
+            "title": "Protection Id",
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "default": "pending_entry",
+            "enum": [
+              "pending_entry",
+              "active",
+              "exit_submitted",
+              "closed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Stop Price",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "target_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Target Price",
+            "type": "string"
+          },
+          "trigger_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Reason"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "protection_id",
+          "account_id",
+          "instrument_id",
+          "entry_order_id",
+          "stop_price",
+          "target_price",
+          "quantity"
+        ],
+        "title": "StrategyProtection",
+        "type": "object"
+      },
+      "StrategyProtectionListResponse": {
+        "properties": {
+          "protections": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyProtection"
+            },
+            "title": "Protections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "protections"
+        ],
+        "title": "StrategyProtectionListResponse",
+        "type": "object"
+      },
+      "StrategyRiskProfile-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_start_et": {
+            "default": "09:35:00",
+            "format": "time",
+            "title": "Entry Start Et",
+            "type": "string"
+          },
+          "force_flat_et": {
+            "default": "15:55:00",
+            "format": "time",
+            "title": "Force Flat Et",
+            "type": "string"
+          },
+          "kill_switch": {
+            "default": false,
+            "title": "Kill Switch",
+            "type": "boolean"
+          },
+          "last_entry_et": {
+            "default": "11:30:00",
+            "format": "time",
+            "title": "Last Entry Et",
+            "type": "string"
+          },
+          "max_daily_loss_pct": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 20.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1.5",
+            "title": "Max Daily Loss Pct"
+          },
+          "max_open_risk_pct": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 20.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1.0",
+            "title": "Max Open Risk Pct"
+          },
+          "max_positions": {
+            "default": 3,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Positions",
+            "type": "integer"
+          },
+          "max_spread_bps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "150",
+            "title": "Max Spread Bps"
+          },
+          "max_trade_value": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "25000",
+            "title": "Max Trade Value"
+          },
+          "max_trades_per_day": {
+            "default": 5,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Trades Per Day",
+            "type": "integer"
+          },
+          "one_trade_per_symbol_per_day": {
+            "default": true,
+            "title": "One Trade Per Symbol Per Day",
+            "type": "boolean"
+          },
+          "risk_per_trade_pct": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 5.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.35",
+            "title": "Risk Per Trade Pct"
+          }
+        },
+        "title": "StrategyRiskProfile",
+        "type": "object"
+      },
+      "StrategyRiskProfile-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_start_et": {
+            "default": "09:35:00",
+            "format": "time",
+            "title": "Entry Start Et",
+            "type": "string"
+          },
+          "force_flat_et": {
+            "default": "15:55:00",
+            "format": "time",
+            "title": "Force Flat Et",
+            "type": "string"
+          },
+          "kill_switch": {
+            "default": false,
+            "title": "Kill Switch",
+            "type": "boolean"
+          },
+          "last_entry_et": {
+            "default": "11:30:00",
+            "format": "time",
+            "title": "Last Entry Et",
+            "type": "string"
+          },
+          "max_daily_loss_pct": {
+            "default": "1.5",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max Daily Loss Pct",
+            "type": "string"
+          },
+          "max_open_risk_pct": {
+            "default": "1.0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max Open Risk Pct",
+            "type": "string"
+          },
+          "max_positions": {
+            "default": 3,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Positions",
+            "type": "integer"
+          },
+          "max_spread_bps": {
+            "default": "150",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max Spread Bps",
+            "type": "string"
+          },
+          "max_trade_value": {
+            "default": "25000",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max Trade Value",
+            "type": "string"
+          },
+          "max_trades_per_day": {
+            "default": 5,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Trades Per Day",
+            "type": "integer"
+          },
+          "one_trade_per_symbol_per_day": {
+            "default": true,
+            "title": "One Trade Per Symbol Per Day",
+            "type": "boolean"
+          },
+          "risk_per_trade_pct": {
+            "default": "0.35",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Risk Per Trade Pct",
+            "type": "string"
+          }
+        },
+        "title": "StrategyRiskProfile",
+        "type": "object"
+      },
+      "StrategySignal": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Entry Price",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "risk_per_share": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Risk Per Share",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "discovered",
+              "qualified_gap",
+              "opening_impulse",
+              "first_pullback",
+              "first_low_confirmed",
+              "bounce_high_confirmed",
+              "second_pullback",
+              "higher_low_confirmed",
+              "vwap_reclaim",
+              "lower_high_break",
+              "entry_ready",
+              "rejected",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stop_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Stop Price",
+            "type": "string"
+          },
+          "target_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Target Price",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "state",
+          "entry_price",
+          "stop_price",
+          "target_price",
+          "risk_per_share",
+          "reason_code"
+        ],
+        "title": "StrategySignal",
+        "type": "object"
+      },
       "TradingAlert": {
         "additionalProperties": false,
         "properties": {
@@ -8724,6 +12413,198 @@
           "definition_snapshot"
         ],
         "title": "TradingScannerRun",
+        "type": "object"
+      },
+      "TradingStrategyConfigDocument-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Account Id",
+            "type": "string"
+          },
+          "active_universe_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Universe Id"
+          },
+          "config": {
+            "$ref": "#/components/schemas/GapPullbackConfig-Input"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "off",
+            "enum": [
+              "off",
+              "shadow",
+              "auto_paper"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "risk": {
+            "$ref": "#/components/schemas/StrategyRiskProfile-Input"
+          },
+          "strategy_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_kind": {
+            "const": "gap_pullback_v1",
+            "default": "gap_pullback_v1",
+            "title": "Strategy Kind",
+            "type": "string"
+          },
+          "strategy_version": {
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "account_id"
+        ],
+        "title": "TradingStrategyConfigDocument",
+        "type": "object"
+      },
+      "TradingStrategyConfigDocument-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Account Id",
+            "type": "string"
+          },
+          "active_universe_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Universe Id"
+          },
+          "config": {
+            "$ref": "#/components/schemas/GapPullbackConfig-Output"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "off",
+            "enum": [
+              "off",
+              "shadow",
+              "auto_paper"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "risk": {
+            "$ref": "#/components/schemas/StrategyRiskProfile-Output"
+          },
+          "strategy_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_kind": {
+            "const": "gap_pullback_v1",
+            "default": "gap_pullback_v1",
+            "title": "Strategy Kind",
+            "type": "string"
+          },
+          "strategy_version": {
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "account_id"
+        ],
+        "title": "TradingStrategyConfigDocument",
         "type": "object"
       },
       "TrendlineAlertPoint-Input": {
@@ -12211,6 +16092,197 @@
         ]
       }
     },
+    "/api/trading/catalysts/classify-shadow": {
+      "post": {
+        "operationId": "classify_shadow_api_trading_catalysts_classify_shadow_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalystClassificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalystShadowClassification"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Classify Shadow",
+        "tags": [
+          "trading-catalysts"
+        ]
+      }
+    },
+    "/api/trading/catalysts/evidence": {
+      "post": {
+        "operationId": "capture_api_trading_catalysts_evidence_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalystEvidenceCaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalystEvidence"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capture",
+        "tags": [
+          "trading-catalysts"
+        ]
+      }
+    },
+    "/api/trading/catalysts/evidence/{instrument_id}": {
+      "get": {
+        "operationId": "list_evidence_api_trading_catalysts_evidence__instrument_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalystEvidenceListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence",
+        "tags": [
+          "trading-catalysts"
+        ]
+      }
+    },
+    "/api/trading/currency-rates": {
+      "get": {
+        "operationId": "currency_rate_api_trading_currency_rates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "base_currency",
+            "required": true,
+            "schema": {
+              "maxLength": 16,
+              "minLength": 3,
+              "title": "Base Currency",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote_currency",
+            "required": true,
+            "schema": {
+              "maxLength": 16,
+              "minLength": 3,
+              "title": "Quote Currency",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrencyRateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Currency Rate",
+        "tags": [
+          "trading"
+        ]
+      }
+    },
     "/api/trading/diagnostics": {
       "get": {
         "operationId": "diagnostics_api_trading_diagnostics_get",
@@ -12465,6 +16537,67 @@
         "summary": "Update Trading Drawing",
         "tags": [
           "trading"
+        ]
+      }
+    },
+    "/api/trading/execution/observation": {
+      "get": {
+        "operationId": "observation_api_trading_execution_observation_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "binding_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionObservation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Observation",
+        "tags": [
+          "trading-execution"
         ]
       }
     },
@@ -12748,6 +16881,177 @@
         ]
       }
     },
+    "/api/trading/models/bounce": {
+      "get": {
+        "operationId": "list_bounce_models_api_trading_models_bounce_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BounceModelListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Bounce Models",
+        "tags": [
+          "trading-models"
+        ]
+      }
+    },
+    "/api/trading/models/bounce/score-shadow": {
+      "post": {
+        "description": "Score only. The result is persisted for evaluation but cannot authorize an order.",
+        "operationId": "score_bounce_shadow_api_trading_models_bounce_score_shadow_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BounceModelScoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BounceModelScore"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Score Bounce Shadow",
+        "tags": [
+          "trading-models"
+        ]
+      }
+    },
+    "/api/trading/models/bounce/train": {
+      "post": {
+        "description": "Fit and persist a transparent logistic artifact; never change execution.",
+        "operationId": "train_bounce_model_api_trading_models_bounce_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BounceModelTrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BounceModelArtifact"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Train Bounce Model",
+        "tags": [
+          "trading-models"
+        ]
+      }
+    },
+    "/api/trading/models/bounce/{model_version}": {
+      "get": {
+        "operationId": "get_bounce_model_api_trading_models_bounce__model_version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_version",
+            "required": true,
+            "schema": {
+              "title": "Model Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BounceModelArtifact"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Bounce Model",
+        "tags": [
+          "trading-models"
+        ]
+      }
+    },
     "/api/trading/paper/accounts": {
       "get": {
         "operationId": "list_accounts_api_trading_paper_accounts_get",
@@ -12924,60 +17228,9 @@
         ]
       }
     },
-    "/api/trading/paper/accounts/{account_id}/observations": {
-      "post": {
-        "operationId": "process_observation_api_trading_paper_accounts__account_id__observations_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "account_id",
-            "required": true,
-            "schema": {
-              "title": "Account Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PaperMarketObservation"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaperFillListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Process Observation",
-        "tags": [
-          "trading-paper"
-        ]
-      }
-    },
     "/api/trading/paper/accounts/{account_id}/orders": {
       "post": {
+        "description": "Accept an order without manufacturing a fill from caller price data.\n\nreference_price is reservation-only. A market order remains open until\nthe server-side monitor receives an execution-eligible market observation.",
         "operationId": "place_order_api_trading_paper_accounts__account_id__orders_post",
         "parameters": [
           {
@@ -13028,9 +17281,9 @@
         ]
       }
     },
-    "/api/trading/paper/accounts/{account_id}/orders/{order_id}": {
-      "delete": {
-        "operationId": "cancel_order_api_trading_paper_accounts__account_id__orders__order_id__delete",
+    "/api/trading/paper/accounts/{account_id}/protections": {
+      "get": {
+        "operationId": "list_protections_api_trading_paper_accounts__account_id__protections_get",
         "parameters": [
           {
             "in": "path",
@@ -13042,12 +17295,13 @@
             }
           },
           {
-            "in": "path",
-            "name": "order_id",
-            "required": true,
+            "in": "query",
+            "name": "active_only",
+            "required": false,
             "schema": {
-              "title": "Order Id",
-              "type": "string"
+              "default": true,
+              "title": "Active Only",
+              "type": "boolean"
             }
           }
         ],
@@ -13056,7 +17310,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaperOrder"
+                  "$ref": "#/components/schemas/PaperProtectionListResponse"
                 }
               }
             },
@@ -13073,7 +17327,157 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Cancel Order",
+        "summary": "List Protections",
+        "tags": [
+          "trading-paper"
+        ]
+      },
+      "put": {
+        "operationId": "upsert_protection_api_trading_paper_accounts__account_id__protections_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperProtectionUpsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperPositionProtection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert Protection",
+        "tags": [
+          "trading-paper"
+        ]
+      }
+    },
+    "/api/trading/paper/accounts/{account_id}/protections/{instrument_id}": {
+      "delete": {
+        "operationId": "clear_protection_api_trading_paper_accounts__account_id__protections__instrument_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperPositionProtection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Protection",
+        "tags": [
+          "trading-paper"
+        ]
+      },
+      "get": {
+        "operationId": "get_protection_api_trading_paper_accounts__account_id__protections__instrument_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperPositionProtection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Protection",
         "tags": [
           "trading-paper"
         ]
@@ -13878,6 +18282,504 @@
         "summary": "Start Run",
         "tags": [
           "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/strategies": {
+      "get": {
+        "operationId": "list_strategies_api_trading_strategies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyConfigListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Strategies",
+        "tags": [
+          "trading-strategies"
+        ]
+      },
+      "post": {
+        "operationId": "create_strategy_api_trading_strategies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingStrategyConfigDocument-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingStrategyConfigDocument-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Strategy",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/backtest/gap-pullback": {
+      "post": {
+        "description": "Run deterministic portfolio backtest using the paper fill engine.",
+        "operationId": "backtest_gap_pullback_api_trading_strategies_backtest_gap_pullback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GapPullbackBacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapPullbackBacktestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Backtest Gap Pullback",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/evaluate/gap-pullback": {
+      "post": {
+        "description": "Pure read-only evaluation; never persists or places an order.",
+        "operationId": "evaluate_strategy_api_trading_strategies_evaluate_gap_pullback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StrategyEvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapPullbackResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Strategy",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/universes": {
+      "post": {
+        "operationId": "save_universe_api_trading_strategies_universes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GapperUniverseSnapshot-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapperUniverseSnapshot-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Universe",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/universes/freeze": {
+      "post": {
+        "operationId": "freeze_universe_api_trading_strategies_universes_freeze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GapperUniverseFreezeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapperUniverseSnapshot-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Freeze Universe",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/universes/{universe_id}": {
+      "get": {
+        "operationId": "get_universe_api_trading_strategies_universes__universe_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "universe_id",
+            "required": true,
+            "schema": {
+              "title": "Universe Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapperUniverseSnapshot-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Universe",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}": {
+      "get": {
+        "operationId": "get_strategy_api_trading_strategies__strategy_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingStrategyConfigDocument-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Strategy",
+        "tags": [
+          "trading-strategies"
+        ]
+      },
+      "put": {
+        "operationId": "update_strategy_api_trading_strategies__strategy_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingStrategyConfigDocument-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingStrategyConfigDocument-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Strategy",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/events": {
+      "get": {
+        "operationId": "recent_events_api_trading_strategies__strategy_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyEventListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recent Events",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/protections": {
+      "get": {
+        "operationId": "protections_api_trading_strategies__strategy_id__protections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active_only",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Active Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyProtectionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Protections",
+        "tags": [
+          "trading-strategies"
         ]
       }
     },
