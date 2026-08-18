@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,8 +12,14 @@ from app.persistence.errors import RevisionConflict
 
 from .gapper_dataset import GapperUniverseSnapshot
 from .models import MarketBar
+from .paper import PaperExecutionPolicy
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult
+from .strategy_backtest import (
+    GapPullbackBacktestResult,
+    freeze_backtest_session,
+    run_gap_pullback_backtest,
+)
 from .strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -41,6 +49,27 @@ class StrategyEvaluationRequest(BaseModel):
     config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
 
 
+class GapPullbackBacktestRequest(BaseModel):
+    """Frozen multi-symbol morning backtest request.
+
+    Candidate membership is supplied by an immutable point-in-time universe;
+    there is no hindsight symbol discovery inside the backtester.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    session_date: date
+    universe: GapperUniverseSnapshot
+    bars_by_instrument: dict[str, list[MarketBar]]
+    config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
+    execution_policy: PaperExecutionPolicy = Field(
+        default_factory=lambda: PaperExecutionPolicy(max_volume_participation_pct=Decimal("1"))
+    )
+    assumed_spread_bps: Decimal = Field(default=Decimal("40"), ge=0, le=10_000)
+    max_hold_minutes: int = Field(default=90, ge=1, le=390)
+    max_concurrent_positions: int = Field(default=3, ge=1, le=50)
+
+
 RepositoryFactory = Callable[[], TradingStrategyRepository]
 
 
@@ -62,6 +91,69 @@ def create_trading_strategy_router(
     async def create_strategy(document: TradingStrategyConfigDocument):
         try:
             return await asyncio.to_thread(repository_factory().create_config, document)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post(
+        "/backtest/gap-pullback",
+        response_model=GapPullbackBacktestResult,
+    )
+    async def backtest_gap_pullback(request: GapPullbackBacktestRequest):
+        """Run deterministic portfolio backtest using the paper fill engine."""
+        try:
+            dataset = await asyncio.to_thread(
+                freeze_backtest_session,
+                session_date=request.session_date,
+                universe=request.universe,
+                bars_by_instrument=request.bars_by_instrument,
+            )
+            return await asyncio.to_thread(
+                run_gap_pullback_backtest,
+                dataset,
+                request.config,
+                request.execution_policy,
+                assumed_spread_bps=request.assumed_spread_bps,
+                max_hold_minutes=request.max_hold_minutes,
+                max_concurrent_positions=request.max_concurrent_positions,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post(
+        "/universes",
+        response_model=GapperUniverseSnapshot,
+        status_code=201,
+    )
+    async def save_universe(snapshot: GapperUniverseSnapshot):
+        try:
+            return await asyncio.to_thread(repository_factory().save_universe, snapshot)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.get("/universes/{universe_id}", response_model=GapperUniverseSnapshot)
+    async def get_universe(universe_id: str):
+        try:
+            return await asyncio.to_thread(repository_factory().get_universe, universe_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @router.post(
+        "/evaluate/gap-pullback",
+        response_model=GapPullbackResult,
+        include_in_schema=True,
+    )
+    async def evaluate_strategy(request: StrategyEvaluationRequest):
+        """Pure read-only evaluation; never persists or places an order."""
+        from .gapper_dataset import GapperCandidate
+
+        try:
+            candidate = GapperCandidate.model_validate(request.candidate)
+            return await asyncio.to_thread(
+                evaluate_gap_pullback,
+                candidate,
+                request.bars,
+                request.config,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -124,43 +216,5 @@ def create_trading_strategy_router(
             return StrategyProtectionListResponse(protections=values)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    @router.post(
-        "/universes",
-        response_model=GapperUniverseSnapshot,
-        status_code=201,
-    )
-    async def save_universe(snapshot: GapperUniverseSnapshot):
-        try:
-            return await asyncio.to_thread(repository_factory().save_universe, snapshot)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @router.get("/universes/{universe_id}", response_model=GapperUniverseSnapshot)
-    async def get_universe(universe_id: str):
-        try:
-            return await asyncio.to_thread(repository_factory().get_universe, universe_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    @router.post(
-        "/evaluate/gap-pullback",
-        response_model=GapPullbackResult,
-        include_in_schema=True,
-    )
-    async def evaluate_strategy(request: StrategyEvaluationRequest):
-        """Pure read-only evaluation; never persists or places an order."""
-        from .gapper_dataset import GapperCandidate
-
-        try:
-            candidate = GapperCandidate.model_validate(request.candidate)
-            return await asyncio.to_thread(
-                evaluate_gap_pullback,
-                candidate,
-                request.bars,
-                request.config,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return router
