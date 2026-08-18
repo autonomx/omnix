@@ -32,17 +32,42 @@
 }
 
 .trading-header-actions {
-  order: 2;
+  order: 1;
   flex: 0 0 auto;
   margin-left: auto;
 }
 
+/*
+ * Scanner / Backtest / Strategies / Trade / AI Research are primary terminal
+ * navigation, not overflow-only controls. Keep the group visible at the right
+ * edge even when the compact header itself needs horizontal scrolling.
+ */
 .trading-tool-shortcuts {
-  margin-left: 0;
+  position: sticky;
+  z-index: 8;
+  right: 0;
+  order: 3 !important;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 2px 3px;
+  border-left: 1px solid rgba(117, 151, 181, .16);
+  background: rgba(7, 16, 26, .98);
+  box-shadow: -14px 0 20px rgba(5, 12, 21, .92);
+}
+
+.trading-provider-status {
+  order: 2 !important;
 }
 
 @media (max-width: 1000px) {
   .trading-terminal-header {
     height: 42px;
+  }
+
+  .trading-tool-shortcuts {
+    position: static;
+    order: 1 !important;
+    margin-left: 0;
+    box-shadow: none;
   }
 }
