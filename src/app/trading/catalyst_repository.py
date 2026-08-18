@@ -69,6 +69,25 @@ class TradingCatalystRepository:
             for row in rows
         ]
 
+    def evidence_by_ids(
+        self,
+        instrument_id: str,
+        evidence_ids: tuple[str, ...] | list[str],
+    ) -> tuple[CatalystEvidence, ...]:
+        requested = tuple(dict.fromkeys(str(value) for value in evidence_ids if str(value)))
+        if not requested:
+            return ()
+        # Universes are bounded to 2,000 candidates and catalyst lists are tiny;
+        # use the existing workspace/instrument-scoped read path rather than a
+        # second SQL contract so provenance checks remain tenant-isolated.
+        available = {item.evidence_id: item for item in self.list_evidence(instrument_id, 1000)}
+        missing = [evidence_id for evidence_id in requested if evidence_id not in available]
+        if missing:
+            raise ValueError(
+                "catalyst_evidence_not_found:" + ",".join(sorted(missing))
+            )
+        return tuple(available[evidence_id] for evidence_id in requested)
+
     def save_model_score(
         self,
         *,
