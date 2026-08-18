@@ -27,6 +27,7 @@ from .paper import (
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from .strategy_risk import size_strategy_entry
+from .strategy_timeframes import proposal_priority, resample_final_bars
 
 
 _ET = ZoneInfo("America/New_York")
@@ -59,7 +60,7 @@ class BacktestSessionDataset(BaseModel):
             if any(not bar.is_final for bar in bars):
                 raise ValueError(f"backtest requires finalized bars: {instrument_id}")
             if any(bar.interval != "1m" for bar in bars):
-                raise ValueError(f"gap_pullback_v1 backtest requires 1m bars: {instrument_id}")
+                raise ValueError(f"gap_pullback_v1 backtest requires canonical 1m source bars: {instrument_id}")
             if any(bar.start_time.astimezone(_ET).date() != self.session_date for bar in bars):
                 raise ValueError(f"backtest bars cross session_date: {instrument_id}")
         return self
@@ -70,6 +71,9 @@ class GapPullbackBacktestTrade(BaseModel):
 
     instrument_id: str
     discovery_rank: int | None = None
+    quality_score: int = Field(default=0, ge=0, le=10)
+    structure_interval: str = "1m"
+    execution_interval: str = "1m"
     entry_time: datetime
     exit_time: datetime
     signal_entry_price: Decimal
@@ -279,24 +283,44 @@ def _find_trade(
     max_hold_minutes: int,
     quantity: Decimal = Decimal("1"),
 ) -> _TradeAttempt:
+    execution_bars = tuple(resample_final_bars(bars, config.execution_interval))
+    structure_bars = tuple(resample_final_bars(bars, config.structure_interval))
+    if not execution_bars or not structure_bars:
+        return _TradeAttempt()
+
     trigger_index: int | None = None
     signal = None
-    for index in range(1, len(bars) + 1):
-        result = evaluate_gap_pullback(candidate, bars[:index], config)
+    trigger_time: datetime | None = None
+    for index in range(1, len(structure_bars) + 1):
+        result = evaluate_gap_pullback(candidate, structure_bars[:index], config)
         if result.state == "entry_ready" and result.signal is not None:
-            trigger_index = index - 1
+            trigger_time = structure_bars[index - 1].end_time
             signal = result.signal
+            eligible_trigger_indexes = [
+                execution_index
+                for execution_index, bar in enumerate(execution_bars)
+                if bar.end_time <= trigger_time
+            ]
+            trigger_index = eligible_trigger_indexes[-1] if eligible_trigger_indexes else None
             break
-    if trigger_index is None or signal is None:
+    if trigger_index is None or trigger_time is None or signal is None:
         return _TradeAttempt()
-    if trigger_index + 1 >= len(bars):
+
+    entry_index = next(
+        (
+            index
+            for index, bar in enumerate(execution_bars)
+            if bar.start_time >= trigger_time
+        ),
+        None,
+    )
+    if entry_index is None:
         return _TradeAttempt(
             trigger_bar_index=trigger_index,
             rejection_reason="no_next_bar",
         )
 
-    entry_index = trigger_index + 1
-    entry_bar = bars[entry_index]
+    entry_bar = execution_bars[entry_index]
     entry_order = PaperOrder(
         account_id="backtest",
         order_id=f"entry:{candidate.instrument_id}:{entry_index}",
@@ -349,8 +373,8 @@ def _find_trade(
     exit_reason: Literal["stop", "target", "time", "eod"] | None = None
     last_exit_rejection: str | None = None
 
-    for index in range(entry_index, len(bars)):
-        bar = bars[index]
+    for index in range(entry_index, len(execution_bars)):
+        bar = execution_bars[index]
         max_high = max(max_high, bar.high)
         min_low = min(min_low, bar.low)
         observation = _bar_observation(
@@ -441,7 +465,7 @@ def _find_trade(
             last_exit_rejection = f"exit_execution:{decision.reason}"
 
     if exit_price is None:
-        last_bar = bars[-1]
+        last_bar = execution_bars[-1]
         decision = _exit_market_decision(
             candidate=candidate,
             bar=last_bar,
@@ -478,6 +502,9 @@ def _find_trade(
     trade = GapPullbackBacktestTrade(
         instrument_id=candidate.instrument_id,
         discovery_rank=candidate.discovery_rank,
+        quality_score=signal.quality_score,
+        structure_interval=config.structure_interval,
+        execution_interval=config.execution_interval,
         entry_time=entry_bar.start_time,
         exit_time=exit_time,
         signal_entry_price=signal.entry_price,
@@ -606,10 +633,11 @@ def run_gap_pullback_backtest(
         if attempt.trade is not None:
             proposed.append((candidate, attempt.trade))
     proposed.sort(
-        key=lambda item: (
-            item[1].entry_time,
-            item[0].discovery_rank or 10**9,
-            item[1].instrument_id,
+        key=lambda item: proposal_priority(
+            observed_at=item[1].entry_time,
+            quality_score=item[1].quality_score,
+            discovery_rank=item[0].discovery_rank,
+            instrument_id=item[1].instrument_id,
         )
     )
 
@@ -632,6 +660,7 @@ def run_gap_pullback_backtest(
             target_price=proposal.signal_entry_price + proposal.signal_risk_per_share * active.reward_multiple,
             risk_per_share=proposal.signal_risk_per_share,
             reason_code="FAILED_SELL_OFF_CONFIRMED",
+            quality_score=proposal.quality_score,
         )
         decision = size_strategy_entry(
             snapshot,
@@ -732,8 +761,8 @@ def run_gap_pullback_backtest(
             (trade.entry_slippage_bps for trade in selected), Decimal("0")
         ) / divisor,
         average_exit_slippage_bps=sum(
-            (trade.exit_slippage_bps for trade in selected), Decimal("0")
-        ) / divisor,
+            (trade.exit_slippage_bps for trade in selected), Decimal("0"))
+        / divisor,
         trades_per_day=Decimal(count),
         stop_count=sum(1 for trade in selected if trade.exit_reason == "stop"),
         target_count=sum(1 for trade in selected if trade.exit_reason == "target"),
@@ -742,6 +771,7 @@ def run_gap_pullback_backtest(
         ),
     )
     return GapPullbackBacktestResult(
+        strategy_version=active.strategy_version,
         dataset_fingerprint=dataset.dataset_fingerprint,
         execution_policy_version=policy.policy_version,
         risk_policy=risk,
