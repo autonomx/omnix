@@ -16,6 +16,11 @@ from .bounce_training import (
     fit_bounce_logistic,
     score_fitted_bounce_model,
 )
+from .bounce_validation import (
+    BounceValidationExample,
+    BounceValidationMetrics,
+    validate_bounce_artifact,
+)
 from .catalyst_repository import TradingCatalystRepository, default_catalyst_repository
 
 
@@ -43,6 +48,18 @@ class BounceModelScoreRequest(BaseModel):
     features: BounceFeatureVector
     observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     model_version: str | None = Field(default=None, max_length=200)
+
+
+class BounceModelValidateRequest(BaseModel):
+    """Out-of-sample validation request; validation remains shadow-only."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_version: str = Field(min_length=1, max_length=200)
+    examples: list[BounceValidationExample] = Field(min_length=2, max_length=50_000)
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    minimum_examples: int = Field(default=100, ge=1, le=50_000)
+    minimum_sessions: int = Field(default=20, ge=1, le=10_000)
 
 
 ModelRepositoryFactory = Callable[[], TradingBounceModelRepository]
@@ -82,6 +99,25 @@ def create_trading_model_router(
                 l2_penalty=request.l2_penalty,
             )
             return await asyncio.to_thread(model_repository_factory().save, artifact)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/bounce/validate-shadow", response_model=BounceValidationMetrics)
+    async def validate_bounce_shadow(request: BounceModelValidateRequest):
+        """Evaluate locked artifacts on dated OOS examples; never gate paper orders."""
+        try:
+            artifact = await asyncio.to_thread(
+                model_repository_factory().get,
+                request.model_version,
+            )
+            return await asyncio.to_thread(
+                validate_bounce_artifact,
+                artifact,
+                request.examples,
+                observed_at=request.observed_at,
+                minimum_examples=request.minimum_examples,
+                minimum_sessions=request.minimum_sessions,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
