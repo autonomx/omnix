@@ -137,6 +137,8 @@ class TradingStrategyMonitor:
         snapshot = await asyncio.to_thread(paper_repository.snapshot, config.account_id)
         history = {order.order_id: order for order in snapshot.order_history}
         positions = {position.instrument_id: position for position in snapshot.positions}
+        now_et = datetime.now(timezone.utc).astimezone(_ET)
+        force_flat = now_et.time() >= config.risk.force_flat_et
         for protection in protections:
             entry_order = history.get(protection.entry_order_id)
             if protection.status == "pending_entry":
@@ -184,7 +186,9 @@ class TradingStrategyMonitor:
             if not execution.execution_eligible:
                 continue
             trigger = None
-            if execution.last <= protection.stop_price:
+            if force_flat:
+                trigger = "force_flat"
+            elif execution.last <= protection.stop_price:
                 trigger = "protective_stop"
             elif execution.last >= protection.target_price:
                 trigger = "profit_target"
@@ -247,6 +251,7 @@ class TradingStrategyMonitor:
             if event.event_type == "entry_order_submitted"
             and event.observed_at.astimezone(_ET).date() == today_et
         ]
+        trades_today = len(entry_events)
         traded_symbols = {event.instrument_id for event in entry_events}
         protections = await asyncio.to_thread(
             strategy_repository.list_protections,
@@ -342,7 +347,7 @@ class TradingStrategyMonitor:
                 result.signal,
                 config.risk,
                 spread_bps=execution.spread_bps,
-                trades_today=len(entry_events),
+                trades_today=trades_today,
                 traded_symbols_today=traded_symbols,
                 open_strategy_risk=open_risk,
             )
@@ -420,18 +425,10 @@ class TradingStrategyMonitor:
                 },
             )
             self.paper_order_count += 1
+            trades_today += 1
             traded_symbols.add(candidate.instrument_id)
             protected_symbols.add(candidate.instrument_id)
-            entry_events.append(recent_events[0] if recent_events else StrategyEvent(
-                strategy_id=config.strategy_id,
-                event_id="synthetic-local-count",
-                instrument_id=candidate.instrument_id,
-                event_type="entry_order_submitted",
-                state="entry_ready",
-                reason_code=None,
-                observed_at=observed_at,
-                idempotency_key=order_key,
-            ))
+            open_risk += decision.estimated_risk
 
     async def run_once(self) -> int:
         strategy_repository = self.strategy_repository_factory()
