@@ -39,17 +39,17 @@ export const TRADING_STRATEGY_DEFINITIONS: Record<'gap_pullback_v1', TradingStra
       {
         id: 'deterministic',
         label: '4. Deterministic setup',
-        description: 'Wait for contracting sell volume, L1 → B1 → higher L2, VWAP reclaim, B1 break, breakout volume and optional hold.',
+        description: 'Evaluate finalized structure bars for contracting sell volume, L1 → B1 → higher L2, VWAP reclaim, B1 break, breakout volume and optional hold.',
       },
       {
         id: 'selection',
         label: '5. Daily selection',
-        description: 'Only candidates meeting hard gates and the configured 0–10 quality threshold become entry-ready.',
+        description: 'Only hard-gate passes above the configured 0–10 quality threshold become entry-ready; simultaneous names are ordered by quality score, then scan rank.',
       },
       {
         id: 'execution',
         label: '6. Auto paper',
-        description: 'Server risk sizing, Alpaca IEX execution evidence, deterministic paper fills, stop/target protection and EOD flatten.',
+        description: 'Use the configured execution resolution plus live Alpaca IEX evidence for server risk sizing, deterministic paper fills, stop/target protection and EOD flatten.',
         safety: 'Paper only. No live broker path.',
       },
     ],
