@@ -96,7 +96,7 @@ def test_all_trading_product_routes_are_registered_in_openapi() -> None:
     required = {
         "/api/trading/instruments/search",
         "/api/trading/providers/status",
-        "/api/trading/execution/quote/{instrument_id}",
+        "/api/trading/execution/observation",
         "/api/trading/alerts",
         "/api/trading/scanners",
         "/api/trading/replay/datasets",
