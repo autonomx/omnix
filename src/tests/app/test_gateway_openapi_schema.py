@@ -51,7 +51,7 @@ def _route_surface(schema: dict[str, Any]) -> dict[str, Any]:
 
 def test_generated_gateway_openapi_schema_is_current() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    generated_path = repo_root / "apps" / "web" / "src" / "api" / "generated" / "openapi.json"
+    generated_path = repo_root / "src" / "apps" / "web" / "src" / "api" / "generated" / "openapi.json"
 
     generated_schema = _normalize_openapi(_route_surface(json.loads(generated_path.read_text(encoding="utf-8"))))
     current_schema = _normalize_openapi(_route_surface(create_gateway_app().openapi()))
