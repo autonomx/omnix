@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type {
+  GapperCandidate,
+  GapperUniverseFreezeInput,
   StrategyEvent,
   StrategyMode,
   StrategyProtection,
@@ -43,6 +45,39 @@ function eventTone(event: StrategyEvent): string {
   return 'working';
 }
 
+function universeImport(
+  raw: string,
+  fallbackUniverseId: string | null,
+): GapperUniverseFreezeInput {
+  const parsed: unknown = JSON.parse(raw);
+  const object = Array.isArray(parsed)
+    ? { candidates: parsed }
+    : parsed && typeof parsed === 'object'
+      ? parsed as Record<string, unknown>
+      : null;
+  if (!object || !Array.isArray(object.candidates) || object.candidates.length === 0) {
+    throw new Error('Universe JSON must be a candidate array or an object with a non-empty candidates array.');
+  }
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const universeId = typeof object.universe_id === 'string' && object.universe_id.trim()
+    ? object.universe_id.trim()
+    : fallbackUniverseId?.trim() || `gappers-${today}`;
+  const discovery = typeof object.discovery_source === 'string'
+    ? object.discovery_source
+    : 'import';
+  if (!['manual', 'import', 'scanner', 'provider'].includes(discovery)) {
+    throw new Error('discovery_source must be manual, import, scanner, or provider.');
+  }
+  return {
+    universe_id: universeId,
+    session_date: typeof object.session_date === 'string' ? object.session_date : today,
+    evaluation_time: typeof object.evaluation_time === 'string' ? object.evaluation_time : now.toISOString(),
+    discovery_source: discovery as GapperUniverseFreezeInput['discovery_source'],
+    candidates: object.candidates as GapperCandidate[],
+  };
+}
+
 export function TradingStrategiesPanel() {
   const [strategies, setStrategies] = useState<TradingStrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -51,6 +86,8 @@ export function TradingStrategiesPanel() {
   const [protections, setProtections] = useState<StrategyProtection[]>([]);
   const [accounts, setAccounts] = useState<Array<{ account_id: string; name: string }>>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
+  const [universeJson, setUniverseJson] = useState('');
+  const [freezingUniverse, setFreezingUniverse] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const selected = useMemo(
@@ -145,6 +182,27 @@ export function TradingStrategiesPanel() {
     }
   };
 
+  const freezeUniverse = async () => {
+    if (!draft) return;
+    if (!universeJson.trim()) {
+      setNotice('Paste point-in-time candidate JSON before freezing a universe.');
+      return;
+    }
+    setFreezingUniverse(true);
+    try {
+      const request = universeImport(universeJson, draft.active_universe_id);
+      const frozen = await tradingStrategyApi.freezeUniverse(request);
+      setDraft((current) => current ? { ...current, active_universe_id: frozen.universe_id } : current);
+      setNotice(
+        `Frozen ${frozen.candidates.length} candidates as ${frozen.universe_id} · ${frozen.source_fingerprint.slice(0, 12)}…`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setFreezingUniverse(false);
+    }
+  };
+
   const setMode = (mode: StrategyMode) => {
     setDraft((current) => current ? { ...current, mode } : current);
   };
@@ -230,6 +288,22 @@ export function TradingStrategiesPanel() {
                 <input type="checkbox" checked={draft.risk.kill_switch} onChange={(event) => setDraft({ ...draft, risk: { ...draft.risk, kill_switch: event.target.checked } })} />
               </label>
             </div>
+
+            <section className="trading-universe-import">
+              <header>
+                <div><strong>Freeze point-in-time gapper universe</strong><small>Paste normalized candidates from your morning screener/import.</small></div>
+                <button type="button" onClick={() => void freezeUniverse()} disabled={freezingUniverse}>
+                  {freezingUniverse ? 'Freezing…' : 'Freeze & attach'}
+                </button>
+              </header>
+              <textarea
+                aria-label="Gapper universe JSON"
+                value={universeJson}
+                onChange={(event) => setUniverseJson(event.target.value)}
+                placeholder={'[{"instrument_id":"equity:NASDAQ:XYZ","binding_id":"provider:XYZ","previous_close":"1.00","premarket_price":"1.30","gap_pct":"30","premarket_volume":"1000000","premarket_dollar_volume":"1300000","tod_rvol":"5","spread_bps":"80","discovery_rank":1}]'}
+              />
+              <small>The server computes the immutable fingerprint. Historical backtests should reuse the exact frozen universe, including eventual fades and failures.</small>
+            </section>
 
             <div className="trading-strategy-safety">
               <strong>Execution gates</strong>
