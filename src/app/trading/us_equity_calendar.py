@@ -105,11 +105,16 @@ def us_equity_session(source_time: datetime) -> str:
     if local.weekday() >= 5 or session_date in regular_holidays(session_date.year):
         return "closed"
     clock = local.timetz().replace(tzinfo=None)
-    regular_close = early_close_time(session_date) or time(16, 0)
+    early_close = early_close_time(session_date)
+    regular_close = early_close or time(16, 0)
+    # Nasdaq extended trading ends at 17:00 ET on standard 13:00 early-close
+    # sessions rather than the normal 20:00 ET. Keep this explicit so a fresh
+    # quote after that cutoff cannot be mislabeled as executable extended-post.
+    extended_close = time(17, 0) if early_close is not None else time(20, 0)
     if time(4, 0) <= clock < time(9, 30):
         return "extended_pre"
     if time(9, 30) <= clock < regular_close:
         return "regular"
-    if regular_close <= clock < time(20, 0):
+    if regular_close <= clock < extended_close:
         return "extended_post"
     return "closed"
