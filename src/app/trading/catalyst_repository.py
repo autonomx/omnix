@@ -21,9 +21,9 @@ class TradingCatalystRepository:
                 """
                 INSERT INTO omnix_trading_catalyst_evidence (
                     workspace_id, evidence_id, instrument_id, source_type,
-                    source_locator, published_at, captured_at, headline, text_hash,
-                    facts, dilution_flags, immutable_fingerprint
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                    source_locator, published_at, captured_at, headline, content,
+                    text_hash, facts, dilution_flags, immutable_fingerprint
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
                 ON CONFLICT (workspace_id, immutable_fingerprint) DO NOTHING
                 RETURNING evidence_id
                 """,
@@ -36,6 +36,7 @@ class TradingCatalystRepository:
                     evidence.published_at,
                     evidence.captured_at,
                     evidence.headline,
+                    evidence.content,
                     evidence.text_hash,
                     json.dumps(evidence.facts, default=str),
                     json.dumps(list(evidence.dilution_flags)),
@@ -50,8 +51,8 @@ class TradingCatalystRepository:
             rows = uow.connection.execute(
                 """
                 SELECT evidence_id, instrument_id, source_type, source_locator,
-                       published_at, captured_at, headline, text_hash, facts,
-                       dilution_flags, immutable_fingerprint
+                       published_at, captured_at, headline, content, text_hash,
+                       facts, dilution_flags, immutable_fingerprint
                   FROM omnix_trading_catalyst_evidence
                  WHERE workspace_id = %s AND instrument_id = %s
                  ORDER BY published_at DESC, captured_at DESC LIMIT %s
@@ -61,8 +62,9 @@ class TradingCatalystRepository:
         return [
             CatalystEvidence(
                 evidence_id=row[0], instrument_id=row[1], source_type=row[2], source_locator=row[3],
-                published_at=row[4], captured_at=row[5], headline=row[6], text_hash=row[7],
-                facts=row[8], dilution_flags=tuple(row[9]), immutable_fingerprint=row[10],
+                published_at=row[4], captured_at=row[5], headline=row[6], content=row[7],
+                text_hash=row[8], facts=row[9], dilution_flags=tuple(row[10]),
+                immutable_fingerprint=row[11],
             )
             for row in rows
         ]
