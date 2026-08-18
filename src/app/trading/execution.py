@@ -18,6 +18,7 @@ class ExecutionEligibilityPolicy(BaseModel):
 
     policy_version: Literal["execution-data-v1"] = "execution-data-v1"
     max_age_seconds: Decimal = Field(default=Decimal("5"), gt=0, le=300)
+    max_future_skew_seconds: Decimal = Field(default=Decimal("2"), ge=0, le=60)
     max_spread_bps: Decimal = Field(default=Decimal("300"), gt=0, le=10_000)
     allowed_sessions: tuple[ExecutionSession, ...] = (
         "extended_pre",
@@ -37,13 +38,20 @@ class ExecutionObservation(BaseModel):
     provider: str
     bid: Decimal | None = Field(default=None, gt=0)
     ask: Decimal | None = Field(default=None, gt=0)
+    bid_size: Decimal | None = Field(default=None, ge=0)
+    ask_size: Decimal | None = Field(default=None, ge=0)
     last: Decimal = Field(gt=0)
+    high: Decimal | None = Field(default=None, gt=0)
+    low: Decimal | None = Field(default=None, gt=0)
+    bar_volume: Decimal | None = Field(default=None, ge=0)
+    bar_start_time: datetime | None = None
     cumulative_volume: Decimal | None = Field(default=None, ge=0)
     source_time: datetime
     received_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     session: ExecutionSession = "unknown"
     freshness_mode: ExecutionFreshness = "unknown"
     provider_sequence: int | None = None
+    halted: bool | None = None
     execution_eligible: bool = False
     rejection_reasons: tuple[str, ...] = ()
     policy_version: str = "execution-data-v1"
@@ -52,8 +60,12 @@ class ExecutionObservation(BaseModel):
     def validate_times_and_book(self):
         if self.source_time.tzinfo is None or self.received_at.tzinfo is None:
             raise ValueError("execution observation timestamps must be timezone-aware")
+        if self.bar_start_time is not None and self.bar_start_time.tzinfo is None:
+            raise ValueError("execution bar_start_time must be timezone-aware")
         if self.bid is not None and self.ask is not None and self.bid > self.ask:
             raise ValueError("execution bid cannot exceed ask")
+        if self.high is not None and self.low is not None and self.low > self.high:
+            raise ValueError("execution low cannot exceed high")
         return self
 
     @property
@@ -71,9 +83,13 @@ class ExecutionObservation(BaseModel):
         return (self.ask - self.bid) / midpoint * Decimal("10000")
 
     @property
-    def age_seconds(self) -> Decimal:
+    def signed_age_seconds(self) -> Decimal:
         delta = self.received_at.astimezone(timezone.utc) - self.source_time.astimezone(timezone.utc)
-        return max(Decimal("0"), Decimal(str(delta.total_seconds())))
+        return Decimal(str(delta.total_seconds()))
+
+    @property
+    def age_seconds(self) -> Decimal:
+        return max(Decimal("0"), self.signed_age_seconds)
 
 
 def _time(value: Any, fallback: datetime) -> datetime:
@@ -88,6 +104,12 @@ def _time(value: Any, fallback: datetime) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _decimal_optional(value: object) -> Decimal | None:
+    if value in {None, ""}:
+        return None
+    return Decimal(str(value))
 
 
 def execution_observation_from_quote(
@@ -107,18 +129,26 @@ def execution_observation_from_quote(
     session = str(quote.get("session") or "unknown")
     if session not in {"extended_pre", "regular", "extended_post", "closed", "unknown"}:
         session = "unknown"
+    halted_value = quote.get("halted")
+    halted = halted_value if isinstance(halted_value, bool) else None
     return ExecutionObservation(
         instrument_id=str(quote["instrument_id"]),
         binding_id=str(quote.get("binding_id") or binding_id),
         provider=str(quote.get("provider") or provider),
-        bid=Decimal(str(quote["bid"])) if quote.get("bid") not in {None, ""} else None,
-        ask=Decimal(str(quote["ask"])) if quote.get("ask") not in {None, ""} else None,
+        bid=_decimal_optional(quote.get("bid")),
+        ask=_decimal_optional(quote.get("ask")),
+        bid_size=_decimal_optional(quote.get("bid_size")),
+        ask_size=_decimal_optional(quote.get("ask_size")),
         last=Decimal(str(last_value)),
-        cumulative_volume=(
-            Decimal(str(quote["cumulative_volume"]))
-            if quote.get("cumulative_volume") not in {None, ""}
+        high=_decimal_optional(quote.get("high")),
+        low=_decimal_optional(quote.get("low")),
+        bar_volume=_decimal_optional(quote.get("bar_volume")),
+        bar_start_time=(
+            _time(quote.get("bar_start_time"), received)
+            if quote.get("bar_start_time") not in {None, ""}
             else None
         ),
+        cumulative_volume=_decimal_optional(quote.get("cumulative_volume")),
         source_time=_time(quote.get("source_time") or quote.get("received_at"), received),
         received_at=received,
         session=session,  # type: ignore[arg-type]
@@ -128,6 +158,7 @@ def execution_observation_from_quote(
             if quote.get("provider_sequence") is not None
             else None
         ),
+        halted=halted,
     )
 
 
@@ -141,7 +172,9 @@ def assess_execution_observation(
     reasons: list[str] = []
     if observation.session not in active.allowed_sessions:
         reasons.append("SESSION_NOT_EXECUTABLE")
-    if observation.age_seconds > active.max_age_seconds:
+    if observation.signed_age_seconds < -active.max_future_skew_seconds:
+        reasons.append("SOURCE_TIME_IN_FUTURE")
+    elif observation.age_seconds > active.max_age_seconds:
         reasons.append("STALE_MARKET_DATA")
     if active.require_bid_ask and (observation.bid is None or observation.ask is None):
         reasons.append("BID_ASK_UNAVAILABLE")
@@ -150,6 +183,8 @@ def assess_execution_observation(
         reasons.append("SPREAD_TOO_WIDE")
     if observation.freshness_mode in {"cached", "fallback", "unknown"}:
         reasons.append("NON_EXECUTION_FRESHNESS")
+    if observation.halted is True:
+        reasons.append("MARKET_HALTED")
     return observation.model_copy(
         update={
             "execution_eligible": not reasons,
