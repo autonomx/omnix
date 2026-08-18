@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 
-from .gapper_dataset import GapperUniverseSnapshot
+from .gapper_dataset import (
+    GapperCandidate,
+    GapperUniverseSnapshot,
+    freeze_gapper_universe,
+)
 from .models import MarketBar
 from .paper import PaperExecutionPolicy
 from .strategies.gap_pullback import evaluate_gap_pullback
@@ -47,6 +52,18 @@ class StrategyEvaluationRequest(BaseModel):
     candidate: dict[str, object]
     bars: list[MarketBar] = Field(default_factory=list, max_length=1000)
     config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
+
+
+class GapperUniverseFreezeRequest(BaseModel):
+    """Raw point-in-time candidate list; fingerprint is computed by the server."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    universe_id: str = Field(min_length=1, max_length=200)
+    session_date: date
+    evaluation_time: datetime
+    discovery_source: Literal["manual", "import", "scanner", "provider"] = "import"
+    candidates: list[GapperCandidate] = Field(min_length=1, max_length=2_000)
 
 
 class GapPullbackBacktestRequest(BaseModel):
@@ -120,6 +137,25 @@ def create_trading_strategy_router(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post(
+        "/universes/freeze",
+        response_model=GapperUniverseSnapshot,
+        status_code=201,
+    )
+    async def freeze_universe(request: GapperUniverseFreezeRequest):
+        try:
+            snapshot = await asyncio.to_thread(
+                freeze_gapper_universe,
+                universe_id=request.universe_id,
+                session_date=request.session_date,
+                evaluation_time=request.evaluation_time,
+                discovery_source=request.discovery_source,
+                candidates=request.candidates,
+            )
+            return await asyncio.to_thread(repository_factory().save_universe, snapshot)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post(
         "/universes",
         response_model=GapperUniverseSnapshot,
         status_code=201,
@@ -144,8 +180,6 @@ def create_trading_strategy_router(
     )
     async def evaluate_strategy(request: StrategyEvaluationRequest):
         """Pure read-only evaluation; never persists or places an order."""
-        from .gapper_dataset import GapperCandidate
-
         try:
             candidate = GapperCandidate.model_validate(request.candidate)
             return await asyncio.to_thread(
