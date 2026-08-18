@@ -55,11 +55,7 @@ def _confirmed_pivots(
     right: int,
     low: bool,
 ) -> list[int]:
-    """Return only pivots knowable from the supplied prefix.
-
-    A candidate at j is not emitted until j + right exists, preventing future-bar
-    leakage when the same function is called incrementally.
-    """
+    """Return only pivots knowable from the supplied prefix."""
     output: list[int] = []
     for j in range(left, len(bars) - right):
         value = bars[j].low if low else bars[j].high
@@ -70,6 +66,32 @@ def _confirmed_pivots(
         elif not low and value == max(values):
             output.append(j)
     return output
+
+
+def _average_volume(bars: list[MarketBar]) -> Decimal:
+    if not bars:
+        return Decimal("0")
+    return sum((bar.volume for bar in bars), Decimal("0")) / Decimal(len(bars))
+
+
+def _breakout_volume_ratio(
+    regular: list[MarketBar],
+    index: int,
+    lookback_bars: int,
+) -> Decimal:
+    prior = regular[max(0, index - lookback_bars) : index]
+    average = _average_volume(prior)
+    return regular[index].volume / average if average > 0 else Decimal("0")
+
+
+def _quality_total(features: GapPullbackFeatures) -> int:
+    return (
+        features.catalyst_score
+        + features.supply_score
+        + features.opening_structure_score
+        + features.pullback_quality_score
+        + features.reclaim_break_score
+    )
 
 
 def _result(
@@ -85,7 +107,7 @@ def _result(
         instrument_id=candidate.instrument_id,
         state=state,
         reason_code=reason,
-        features=features,
+        features=features.model_copy(update={"quality_score": _quality_total(features)}),
         transitions=tuple(transitions),
         signal=signal,
         evaluated_bar_count=len(bars),
@@ -97,14 +119,35 @@ def evaluate_gap_pullback(
     bars: list[MarketBar] | tuple[MarketBar, ...],
     config: GapPullbackConfig | None = None,
 ) -> GapPullbackResult:
-    """Evaluate the first failed sell-off as a causal state machine."""
+    """Evaluate the first failed sell-off as a causal, inspectable state machine.
+
+    Research/LLM annotations may help operators inspect candidates, but AUTO PAPER
+    is authorized only by the deterministic candidate evidence and structure
+    gates evaluated here.
+    """
     active = config or GapPullbackConfig()
     regular = _regular_bars(bars)
     transitions: list[GapPullbackState] = ["discovered"]
+
+    severe_dilution = tuple(
+        flag for flag in candidate.dilution_flags if flag in set(active.reject_dilution_flags)
+    )
+    float_in_preferred = (
+        candidate.float_shares is not None
+        and active.preferred_float_min_shares <= candidate.float_shares <= active.preferred_float_max_shares
+    )
+    catalyst_score = 2 if candidate.catalyst_evidence_ids else 0
+    supply_score = 0 if severe_dilution else (2 if float_in_preferred else 1)
+
     base_features = GapPullbackFeatures(
         gap_pct=candidate.gap_pct,
         spread_bps=candidate.spread_bps,
         tod_rvol=candidate.tod_rvol,
+        float_shares=candidate.float_shares,
+        catalyst_evidence_count=len(candidate.catalyst_evidence_ids),
+        dilution_flags=tuple(candidate.dilution_flags),
+        catalyst_score=catalyst_score,
+        supply_score=supply_score,
     )
 
     rejection: str | None = None
@@ -122,23 +165,38 @@ def evaluate_gap_pullback(
         rejection = "SPREAD_MISSING"
     elif candidate.spread_bps > active.maximum_spread_bps:
         rejection = "SPREAD_TOO_WIDE"
+    elif active.require_catalyst_evidence and not candidate.catalyst_evidence_ids:
+        rejection = "CATALYST_EVIDENCE_REQUIRED"
+    elif severe_dilution:
+        rejection = "DILUTION_SUPPLY_RISK"
+    elif active.float_preference_mode == "require" and not float_in_preferred:
+        rejection = "FLOAT_OUTSIDE_REQUIRED_RANGE"
+
     if rejection:
         transitions.append("rejected")
         return _result(candidate, "rejected", rejection, transitions, base_features, regular)
 
     transitions.append("qualified_gap")
     if not regular:
-        return _result(candidate, "qualified_gap", "WAITING_FOR_REGULAR_SESSION", transitions, base_features, regular)
+        return _result(
+            candidate,
+            "qualified_gap",
+            "WAITING_FOR_REGULAR_SESSION",
+            transitions,
+            base_features,
+            regular,
+        )
 
     current_et = regular[-1].end_time.astimezone(_ET)
     minutes_since_open = max(0, current_et.hour * 60 + current_et.minute - (9 * 60 + 30))
+    base_features = base_features.model_copy(update={"minutes_since_open": minutes_since_open})
     if current_et.time() < active.entry_start_et:
         return _result(
             candidate,
             "qualified_gap",
             "ENTRY_WINDOW_NOT_OPEN",
             transitions,
-            base_features.model_copy(update={"minutes_since_open": minutes_since_open}),
+            base_features,
             regular,
         )
 
@@ -153,13 +211,26 @@ def evaluate_gap_pullback(
         if current_et.time() > active.last_entry_et:
             transitions.append("expired")
             return _result(candidate, "expired", "NO_OPENING_IMPULSE", transitions, base_features, regular)
-        return _result(candidate, "qualified_gap", "WAITING_FOR_OPENING_IMPULSE", transitions, base_features, regular)
+        return _result(
+            candidate,
+            "qualified_gap",
+            "WAITING_FOR_OPENING_IMPULSE",
+            transitions,
+            base_features,
+            regular,
+        )
 
     transitions.append("opening_impulse")
     impulse_high = max(bar.high for bar in regular[: impulse_idx + 1])
     impulse_pct = (impulse_high / opening_price - Decimal("1")) * Decimal("100")
+    impulse_average_volume = _average_volume(regular[: impulse_idx + 1])
+    opening_score = 2 if impulse_pct >= active.opening_impulse_min_pct * Decimal("1.5") else 1
     features = base_features.model_copy(
-        update={"opening_impulse_pct": impulse_pct, "minutes_since_open": minutes_since_open}
+        update={
+            "opening_impulse_pct": impulse_pct,
+            "impulse_average_volume": impulse_average_volume,
+            "opening_structure_score": opening_score,
+        }
     )
 
     lows = _confirmed_pivots(
@@ -194,7 +265,14 @@ def evaluate_gap_pullback(
     )
     b1_idx = next((idx for idx in highs if idx > l1_idx), None)
     if b1_idx is None:
-        return _result(candidate, "first_low_confirmed", "WAITING_FOR_BOUNCE_HIGH", transitions, features, regular)
+        return _result(
+            candidate,
+            "first_low_confirmed",
+            "WAITING_FOR_BOUNCE_HIGH",
+            transitions,
+            features,
+            regular,
+        )
     b1 = regular[b1_idx].high
     features = features.model_copy(update={"b1": b1})
     transitions.append("bounce_high_confirmed")
@@ -206,44 +284,194 @@ def evaluate_gap_pullback(
         if current_et.time() > active.last_entry_et:
             transitions.append("expired")
             state = "expired"
-        return _result(candidate, state, "WAITING_FOR_SECOND_LOW_CONFIRMATION", transitions, features, regular)
+        return _result(
+            candidate,
+            state,
+            "WAITING_FOR_SECOND_LOW_CONFIRMATION",
+            transitions,
+            features,
+            regular,
+        )
 
     l2 = regular[l2_idx].low
-    features = features.model_copy(update={"l2": l2})
     transitions.append("second_pullback")
-    minimum_higher_low = l1 * (Decimal("1") + active.higher_low_buffer_bps / Decimal("10000"))
+    minimum_higher_low = l1 * (
+        Decimal("1") + active.higher_low_buffer_bps / Decimal("10000")
+    )
+    features = features.model_copy(update={"l2": l2})
     if l2 <= minimum_higher_low:
         transitions.append("rejected")
         return _result(candidate, "rejected", "SECOND_LOW_NOT_HIGHER", transitions, features, regular)
-    transitions.append("higher_low_confirmed")
 
-    vwap = session_vwap(regular)
-    if vwap is None:
-        return _result(candidate, "higher_low_confirmed", "VWAP_UNAVAILABLE", transitions, features, regular)
-    current = regular[-1]
-    vwap_distance = (current.close / vwap - Decimal("1")) * Decimal("100")
-    lookback = regular[max(0, len(regular) - active.volume_lookback_bars - 1) : -1]
-    average_volume = (
-        sum((bar.volume for bar in lookback), Decimal("0")) / Decimal(len(lookback))
-        if lookback
+    selling_bars = [
+        bar for bar in regular[impulse_idx + 1 : l2_idx + 1] if bar.close < bar.open
+    ]
+    pullback_selling_average = _average_volume(selling_bars)
+    pullback_volume_ratio = (
+        pullback_selling_average / impulse_average_volume
+        if impulse_average_volume > 0
         else Decimal("0")
     )
-    volume_ratio = current.volume / average_volume if average_volume > 0 else Decimal("0")
+    pullback_score = (
+        2
+        if pullback_volume_ratio <= active.pullback_volume_max_ratio * Decimal("0.70")
+        else 1
+        if pullback_volume_ratio <= active.pullback_volume_max_ratio
+        else 0
+    )
     features = features.model_copy(
         update={
-            "session_vwap": vwap,
-            "vwap_distance_pct": vwap_distance,
-            "breakout_volume_ratio": volume_ratio,
+            "pullback_selling_average_volume": pullback_selling_average,
+            "pullback_volume_ratio": pullback_volume_ratio,
+            "pullback_quality_score": pullback_score,
         }
     )
-    if current.close <= vwap:
-        return _result(candidate, "higher_low_confirmed", "WAITING_FOR_VWAP_RECLAIM", transitions, features, regular)
-    transitions.append("vwap_reclaim")
-    if current.close <= b1:
-        return _result(candidate, "vwap_reclaim", "WAITING_FOR_B1_BREAK", transitions, features, regular)
-    transitions.append("lower_high_break")
-    if volume_ratio < active.breakout_volume_ratio:
-        return _result(candidate, "lower_high_break", "BREAKOUT_VOLUME_TOO_LOW", transitions, features, regular)
+    if pullback_volume_ratio > active.pullback_volume_max_ratio:
+        transitions.append("rejected")
+        return _result(
+            candidate,
+            "rejected",
+            "PULLBACK_SELLING_VOLUME_TOO_HIGH",
+            transitions,
+            features,
+            regular,
+        )
+    transitions.append("higher_low_confirmed")
+
+    current_vwap = session_vwap(regular)
+    if current_vwap is None:
+        return _result(
+            candidate,
+            "higher_low_confirmed",
+            "VWAP_UNAVAILABLE",
+            transitions,
+            features,
+            regular,
+        )
+    current = regular[-1]
+    features = features.model_copy(
+        update={
+            "session_vwap": current_vwap,
+            "vwap_distance_pct": (current.close / current_vwap - Decimal("1")) * Decimal("100"),
+        }
+    )
+
+    breakout_idx: int | None = None
+    breakout_ratio = Decimal("0")
+    for index in range(l2_idx + 1, len(regular)):
+        prefix_vwap = session_vwap(regular[: index + 1])
+        if prefix_vwap is None:
+            continue
+        ratio = _breakout_volume_ratio(regular, index, active.volume_lookback_bars)
+        bar = regular[index]
+        if (
+            bar.close > prefix_vwap
+            and bar.close > b1
+            and ratio >= active.breakout_volume_ratio
+        ):
+            breakout_idx = index
+            breakout_ratio = ratio
+            break
+
+    if breakout_idx is None:
+        if current.close <= current_vwap:
+            return _result(
+                candidate,
+                "higher_low_confirmed",
+                "WAITING_FOR_VWAP_RECLAIM",
+                transitions,
+                features,
+                regular,
+            )
+        transitions.append("vwap_reclaim")
+        if current.close <= b1:
+            return _result(
+                candidate,
+                "vwap_reclaim",
+                "WAITING_FOR_B1_BREAK",
+                transitions,
+                features,
+                regular,
+            )
+        transitions.append("lower_high_break")
+        ratio = _breakout_volume_ratio(regular, len(regular) - 1, active.volume_lookback_bars)
+        features = features.model_copy(update={"breakout_volume_ratio": ratio})
+        if ratio < active.breakout_volume_ratio:
+            return _result(
+                candidate,
+                "lower_high_break",
+                "BREAKOUT_VOLUME_TOO_LOW",
+                transitions,
+                features,
+                regular,
+            )
+        return _result(
+            candidate,
+            "lower_high_break",
+            "WAITING_FOR_CAUSAL_BREAKOUT_CONFIRMATION",
+            transitions,
+            features,
+            regular,
+        )
+
+    transitions.extend(["vwap_reclaim", "lower_high_break"])
+    features = features.model_copy(update={"breakout_volume_ratio": breakout_ratio})
+
+    hold_count = len(regular) - breakout_idx - 1
+    if active.require_breakout_hold:
+        if hold_count < active.breakout_hold_bars:
+            features = features.model_copy(update={"breakout_hold_bars": hold_count})
+            return _result(
+                candidate,
+                "lower_high_break",
+                "WAITING_FOR_BREAKOUT_HOLD",
+                transitions,
+                features,
+                regular,
+            )
+        hold_floor = b1 * (
+            Decimal("1") - active.breakout_hold_tolerance_bps / Decimal("10000")
+        )
+        hold_bars = regular[
+            breakout_idx + 1 : breakout_idx + 1 + active.breakout_hold_bars
+        ]
+        if any(bar.low < hold_floor or bar.close < b1 for bar in hold_bars):
+            transitions.append("rejected")
+            return _result(
+                candidate,
+                "rejected",
+                "BREAKOUT_HOLD_FAILED",
+                transitions,
+                features.model_copy(update={"breakout_hold_bars": len(hold_bars)}),
+                regular,
+            )
+        transitions.append("breakout_hold")
+        features = features.model_copy(
+            update={
+                "breakout_hold_bars": len(hold_bars),
+                "reclaim_break_score": 2,
+            }
+        )
+    else:
+        features = features.model_copy(
+            update={
+                "breakout_hold_bars": 0,
+                "reclaim_break_score": 2,
+            }
+        )
+
+    quality_score = _quality_total(features)
+    if quality_score < active.minimum_quality_score:
+        transitions.append("rejected")
+        return _result(
+            candidate,
+            "rejected",
+            "QUALITY_SCORE_BELOW_MINIMUM",
+            transitions,
+            features,
+            regular,
+        )
+
     if current_et.time() > active.last_entry_et:
         transitions.append("expired")
         return _result(candidate, "expired", "ENTRY_WINDOW_CLOSED", transitions, features, regular)
@@ -253,7 +481,14 @@ def evaluate_gap_pullback(
     risk_per_share = entry - stop
     if risk_per_share <= 0:
         transitions.append("rejected")
-        return _result(candidate, "rejected", "NON_POSITIVE_RISK_DISTANCE", transitions, features, regular)
+        return _result(
+            candidate,
+            "rejected",
+            "NON_POSITIVE_RISK_DISTANCE",
+            transitions,
+            features,
+            regular,
+        )
     target = entry + risk_per_share * active.reward_multiple
     transitions.append("entry_ready")
     signal = StrategySignal(
@@ -264,5 +499,14 @@ def evaluate_gap_pullback(
         target_price=target,
         risk_per_share=risk_per_share,
         reason_code="FAILED_SELL_OFF_CONFIRMED",
+        quality_score=quality_score,
     )
-    return _result(candidate, "entry_ready", "FAILED_SELL_OFF_CONFIRMED", transitions, features, regular, signal)
+    return _result(
+        candidate,
+        "entry_ready",
+        "FAILED_SELL_OFF_CONFIRMED",
+        transitions,
+        features,
+        regular,
+        signal,
+    )
