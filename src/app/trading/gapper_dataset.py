@@ -10,13 +10,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class GapperCandidate(BaseModel):
-    """Point-in-time candidate evidence used by research/backtests and paper runs."""
+    """Point-in-time candidate evidence used by research/backtests and paper runs.
+
+    `previous_close` is always the split/corporate-action-normalized close in the
+    same share basis as `premarket_price`. When raw evidence is available it is
+    preserved separately with the adjustment factor so the gap can be audited.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     instrument_id: str = Field(min_length=3, max_length=200)
     binding_id: str | None = Field(default=None, max_length=240)
     previous_close: Decimal = Field(gt=0)
+    raw_previous_close: Decimal | None = Field(default=None, gt=0)
+    split_adjustment_factor: Decimal = Field(default=Decimal("1"), gt=0)
+    corporate_action_evidence_ids: tuple[str, ...] = ()
     premarket_price: Decimal = Field(gt=0)
     gap_pct: Decimal
     premarket_volume: Decimal = Field(default=Decimal("0"), ge=0)
@@ -30,10 +38,21 @@ class GapperCandidate(BaseModel):
     discovery_rank: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
-    def validate_gap(self):
+    def validate_gap_and_adjustment(self):
+        if self.raw_previous_close is not None:
+            adjusted = self.raw_previous_close * self.split_adjustment_factor
+            tolerance = max(Decimal("0.0001"), self.previous_close * Decimal("0.0001"))
+            if abs(adjusted - self.previous_close) > tolerance:
+                raise ValueError(
+                    "previous_close must equal raw_previous_close * split_adjustment_factor"
+                )
+            if self.split_adjustment_factor != Decimal("1") and not self.corporate_action_evidence_ids:
+                raise ValueError("non-unit split adjustment requires corporate_action_evidence_ids")
+        elif self.split_adjustment_factor != Decimal("1"):
+            raise ValueError("non-unit split adjustment requires raw_previous_close")
         implied = (self.premarket_price / self.previous_close - Decimal("1")) * Decimal("100")
         if abs(implied - self.gap_pct) > Decimal("0.25"):
-            raise ValueError("gap_pct does not match point-in-time previous_close/premarket_price")
+            raise ValueError("gap_pct does not match normalized previous_close/premarket_price")
         return self
 
 
@@ -55,6 +74,24 @@ class GapperUniverseSnapshot(BaseModel):
         if value.tzinfo is None:
             raise ValueError("evaluation_time must be timezone-aware")
         return value.astimezone(timezone.utc)
+
+
+def time_of_day_relative_volume(
+    current_cumulative_volume: Decimal | int | str,
+    historical_cumulative_volumes: list[Decimal | int | str] | tuple[Decimal | int | str, ...],
+) -> Decimal | None:
+    """Current cumulative volume / historical mean at the same clock minute."""
+    current = Decimal(str(current_cumulative_volume))
+    samples = [Decimal(str(value)) for value in historical_cumulative_volumes]
+    samples = [value for value in samples if value >= 0]
+    if current < 0:
+        raise ValueError("current cumulative volume cannot be negative")
+    if not samples:
+        return None
+    baseline = sum(samples, Decimal("0")) / Decimal(len(samples))
+    if baseline <= 0:
+        return None
+    return current / baseline
 
 
 def gapper_universe_fingerprint(
@@ -85,6 +122,8 @@ def freeze_gapper_universe(
     discovery_source: Literal["manual", "import", "scanner", "provider"],
     candidates: list[GapperCandidate] | tuple[GapperCandidate, ...],
 ) -> GapperUniverseSnapshot:
+    if not candidates:
+        raise ValueError("gapper universe requires at least one candidate")
     ordered = tuple(sorted(candidates, key=lambda item: (item.discovery_rank or 10**9, item.instrument_id)))
     fingerprint = gapper_universe_fingerprint(
         universe_id=universe_id,
