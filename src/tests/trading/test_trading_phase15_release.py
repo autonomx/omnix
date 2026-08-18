@@ -13,12 +13,16 @@ from app.persistence.tenant import local_tenant_context
 from app.trading.alerts_api import create_trading_alert_router
 from app.trading.api import create_trading_router
 from app.trading.backtest import BacktestLogEntry, BacktestRunResult
+from app.trading.catalyst_api import create_trading_catalyst_router
+from app.trading.execution_api import create_trading_execution_router
+from app.trading.model_api import create_trading_model_router
 from app.trading.paper_api import create_trading_paper_router
 from app.trading.replay_api import create_trading_replay_router
 from app.trading.replay_repository import TradingReplayRepository
 from app.trading.replay_runtime_repository import TradingReplayRuntimeRepository
 from app.trading.research_api import create_trading_research_router
 from app.trading.scanner_api import create_trading_scanner_router
+from app.trading.strategy_api import create_trading_strategy_router
 
 
 NOW = datetime(2026, 8, 6, tzinfo=timezone.utc)
@@ -77,36 +81,54 @@ def test_all_trading_product_routes_are_registered_in_openapi() -> None:
     app = FastAPI()
     for router in (
         create_trading_router(),
+        create_trading_execution_router(),
         create_trading_alert_router(),
         create_trading_scanner_router(),
         create_trading_replay_router(),
         create_trading_paper_router(),
         create_trading_research_router(),
+        create_trading_strategy_router(),
+        create_trading_catalyst_router(),
+        create_trading_model_router(),
     ):
         app.include_router(router)
     paths = set(app.openapi()["paths"])
     required = {
         "/api/trading/instruments/search",
         "/api/trading/providers/status",
+        "/api/trading/execution/quote/{instrument_id}",
         "/api/trading/alerts",
         "/api/trading/scanners",
         "/api/trading/replay/datasets",
         "/api/trading/replay/backtests",
         "/api/trading/paper/accounts",
+        "/api/trading/paper/accounts/{account_id}/protections",
         "/api/trading/research",
+        "/api/trading/strategies",
+        "/api/trading/strategies/universes/freeze",
+        "/api/trading/strategies/backtest/gap-pullback",
+        "/api/trading/catalysts/evidence",
+        "/api/trading/catalysts/classify-shadow",
+        "/api/trading/models/bounce/train",
+        "/api/trading/models/bounce/score-shadow",
     }
     assert required <= paths
 
     gateway = Path("src/app/gateway/trading_routes.py").read_text()
     for registration in (
         "create_trading_router",
+        "create_trading_execution_router",
         "create_trading_alert_router",
         "create_trading_scanner_router",
         "create_trading_replay_router",
         "create_trading_paper_router",
         "create_trading_research_router",
+        "create_trading_strategy_router",
+        "create_trading_catalyst_router",
+        "create_trading_model_router",
         "register_trading_alert_monitor",
         "register_trading_paper_monitor",
+        "register_trading_strategy_monitor",
     ):
         assert registration in gateway
 
@@ -176,6 +198,12 @@ def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
     ):
         assert forbidden not in research
 
+    strategy_monitor = Path("src/app/trading/strategy_monitor.py").read_text()
+    assert '"live_broker_enabled": False' in strategy_monitor
+    assert '"ai_order_placement_enabled": False' in strategy_monitor
+    assert "bounce_model" not in strategy_monitor.lower()
+    assert "catalyst_shadow" not in strategy_monitor.lower()
+
 
 def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -> None:
     side_panel = Path(
@@ -194,6 +222,14 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
     assert "TradingReplayPanel" in workspace
     assert "TradingPaperPanel" in workspace
     assert "TradingResearchPanel" in workspace
+    assert "TradingStrategiesPanel" in workspace
+
+    strategy_panel = Path(
+        "src/apps/web/src/features/trading/TradingStrategiesPanel.tsx"
+    ).read_text(encoding="utf-8")
+    assert "Freeze point-in-time gapper universe" in strategy_panel
+    assert "AI and model scores are shadow-only" in strategy_panel
+    assert "No live broker route" in strategy_panel
 
     styles = "\n".join(
         path.read_text(encoding="utf-8")
@@ -234,6 +270,16 @@ def test_legal_operator_and_roadmap_review_records_are_present() -> None:
     assert "Provider outage procedure" in operations
     assert "Corrupt or missing artifact" in operations
     assert "Rollback" in operations
+    assert "Gap-pullback automation" in operations
+    assert "execution-grade" in operations.lower()
+    assert "AUTO PAPER" in operations
+
+    strategy_plan = Path(
+        "docs/plans/omnix_gap_pullback_automation.md"
+    ).read_text()
+    assert "Don't predict the bottom" in strategy_plan
+    assert "prefix invariance" in strategy_plan.lower()
+    assert "shadow-only" in strategy_plan.lower()
 
     security = Path(
         "docs/architecture/OMNIX_TRADING_SECURITY_LEGAL.md"
@@ -263,3 +309,26 @@ def test_release_migrations_preserve_integrity_evidence() -> None:
     ):
         assert column in artifacts
     assert "length(artifact_checksum_sha256) = 64" in artifacts
+
+    strategy = Path(
+        "src/app/persistence/migrations/0038_trading_strategy_automation.sql"
+    ).read_text()
+    for table in (
+        "omnix_trading_strategy_configs",
+        "omnix_trading_strategy_events",
+        "omnix_trading_gapper_universes",
+        "omnix_trading_catalyst_evidence",
+        "omnix_trading_model_scores",
+    ):
+        assert f"CREATE TABLE IF NOT EXISTS {table}" in strategy
+
+    paper_protection = Path(
+        "src/app/persistence/migrations/0039_trading_paper_protections.sql"
+    ).read_text()
+    assert "CREATE TABLE IF NOT EXISTS omnix_trading_paper_protections" in paper_protection
+
+    model_artifacts = Path(
+        "src/app/persistence/migrations/0040_trading_model_artifacts.sql"
+    ).read_text()
+    assert "CREATE TABLE IF NOT EXISTS omnix_trading_model_artifacts" in model_artifacts
+    assert "CHECK (shadow_only = TRUE)" in model_artifacts
