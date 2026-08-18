@@ -41,7 +41,11 @@ def paper_daily_realized_pnl(
     *,
     observed_at: datetime | None = None,
 ) -> Decimal:
-    """Net today's realized PnL and commissions from the authoritative ledger."""
+    """Net today's realized PnL and commissions from the snapshot ledger window.
+
+    Live automation passes a complete relational daily aggregate when available;
+    this helper keeps pure tests and detached callers deterministic.
+    """
     now = (observed_at or datetime.now(timezone.utc)).astimezone(_ET)
     total = Decimal("0")
     for entry in snapshot.recent_ledger:
@@ -63,6 +67,7 @@ def size_strategy_entry(
     spread_bps: Decimal | None,
     trades_today: int = 0,
     traded_symbols_today: set[str] | None = None,
+    reserved_instruments: set[str] | None = None,
     daily_realized_pnl: Decimal | None = None,
     open_strategy_risk: Decimal = Decimal("0"),
     observed_at: datetime | None = None,
@@ -90,7 +95,9 @@ def size_strategy_entry(
         for order in snapshot.open_orders
         if order.status == "open" and order.side == "buy"
     )
-    if len(active_instruments) >= risk.max_positions:
+    if reserved_instruments:
+        active_instruments.update(reserved_instruments)
+    if signal.instrument_id not in active_instruments and len(active_instruments) >= risk.max_positions:
         return StrategyRiskDecision(allowed=False, reason_code="MAX_POSITIONS", account_equity=equity)
     if trades_today >= risk.max_trades_per_day:
         return StrategyRiskDecision(allowed=False, reason_code="MAX_TRADES_PER_DAY", account_equity=equity)
