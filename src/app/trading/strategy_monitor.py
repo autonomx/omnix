@@ -217,7 +217,7 @@ class TradingStrategyMonitor:
                 elif exit_order is not None and exit_order.status in {"rejected", "cancelled"}:
                     protection.status = "active"
                     protection.exit_order_id = None
-                    protection.trigger_reason = f"exit_{entry_order.status}_retry" if entry_order is not None else "exit_retry"
+                    protection.trigger_reason = f"exit_{exit_order.status}_retry"
                     await asyncio.to_thread(strategy_repository.save_protection, protection)
                 continue
 
