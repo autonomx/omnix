@@ -109,16 +109,33 @@ def test_lmstudio_live_voice_disables_thinking_without_affecting_text_chat(monke
     payloads: list[dict[str, Any]] = []
 
     class FakeResponse:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self.payload = payload
+
         def json(self) -> dict[str, Any]:
-            return {
+            return self.payload
+
+    def fake_make_request(method: str, endpoint: str, **kwargs: Any) -> FakeResponse:
+        if endpoint == "/api/v1/models":
+            return FakeResponse(
+                {
+                    "models": [
+                        {
+                            "key": "qwen",
+                            "display_name": "qwen",
+                            "loaded_instances": [{"id": "qwen", "config": {}}],
+                        }
+                    ]
+                }
+            )
+        payloads.append(dict(kwargs["json"]))
+        return FakeResponse(
+            {
                 "model": "qwen",
                 "choices": [{"message": {"content": "Hello"}, "finish_reason": "stop"}],
                 "usage": {},
             }
-
-    def fake_make_request(method: str, endpoint: str, **kwargs: Any) -> FakeResponse:
-        payloads.append(dict(kwargs["json"]))
-        return FakeResponse()
+        )
 
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
 
