@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 PaperSide = Literal["buy", "sell"]
 PaperOrderType = Literal["market", "limit", "stop"]
 PaperOrderStatus = Literal["open", "filled", "cancelled", "rejected"]
+ProtectionTrigger = Literal["stop", "target"]
 
 
 class PaperExecutionPolicy(BaseModel):
@@ -132,9 +133,12 @@ class PaperMarketObservation(BaseModel):
     price: Decimal = Field(gt=0)
     bid: Decimal | None = Field(default=None, gt=0)
     ask: Decimal | None = Field(default=None, gt=0)
+    bid_size: Decimal | None = Field(default=None, ge=0)
+    ask_size: Decimal | None = Field(default=None, ge=0)
     high: Decimal | None = Field(default=None, gt=0)
     low: Decimal | None = Field(default=None, gt=0)
     volume: Decimal | None = Field(default=None, ge=0)
+    bar_start_time: datetime | None = None
     source_time: datetime
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     execution_eligible: bool = True
@@ -146,6 +150,8 @@ class PaperMarketObservation(BaseModel):
     def validate_range(self):
         if self.source_time.tzinfo is None or self.evaluated_at.tzinfo is None:
             raise ValueError("paper observation timestamps must be timezone-aware")
+        if self.bar_start_time is not None and self.bar_start_time.tzinfo is None:
+            raise ValueError("paper bar_start_time must be timezone-aware")
         if self.high is not None and self.low is not None and self.low > self.high:
             raise ValueError("paper observation low cannot exceed high")
         if self.bid is not None and self.ask is not None and self.bid > self.ask:
@@ -230,6 +236,62 @@ def _worse_price(price: Decimal, side: PaperSide, bps: Decimal) -> Decimal:
     return price * (Decimal("1") + fraction if side == "buy" else Decimal("1") - fraction)
 
 
+def _liquidity_capacity(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy,
+) -> Decimal | None:
+    """Return side-specific executable capacity.
+
+    Live observations prefer displayed top-of-book size. Historical/backtest
+    observations do not have a quote book and fall back to the bar's traded
+    volume. Cumulative daily volume is intentionally not accepted here.
+    """
+    displayed = observation.ask_size if order.side == "buy" else observation.bid_size
+    source = displayed if displayed is not None else observation.volume
+    if source is None:
+        return None
+    return source * policy.max_volume_participation_pct
+
+
+def paper_protection_trigger(
+    *,
+    is_long: bool,
+    stop_price: Decimal | None,
+    target_price: Decimal | None,
+    observation: PaperMarketObservation,
+    activated_at: datetime | None = None,
+) -> ProtectionTrigger | None:
+    """Apply the same pessimistic stop-before-target trigger semantics everywhere.
+
+    A live minute bar may contain trades that happened before an entry filled in
+    that same minute. In that case only the current executable price is used; a
+    whole-bar high/low is trusted only when the bar started at or after activation.
+    """
+    use_range = observation.high is not None and observation.low is not None
+    if activated_at is not None:
+        if observation.bar_start_time is None:
+            use_range = False
+        else:
+            use_range = use_range and (
+                observation.bar_start_time.astimezone(timezone.utc)
+                >= activated_at.astimezone(timezone.utc)
+            )
+    high = observation.high if use_range and observation.high is not None else observation.price
+    low = observation.low if use_range and observation.low is not None else observation.price
+    if is_long:
+        if stop_price is not None and low <= stop_price:
+            return "stop"
+        if target_price is not None and high >= target_price:
+            return "target"
+    else:
+        if stop_price is not None and high >= stop_price:
+            return "stop"
+        if target_price is not None and low <= target_price:
+            return "target"
+    return None
+
+
 def paper_fill_decision(
     order: PaperOrder,
     observation: PaperMarketObservation,
@@ -257,8 +319,8 @@ def paper_fill_decision(
     if remaining <= 0:
         return PaperFillDecision(should_fill=False, reason="order_already_filled")
     fill_quantity = remaining
-    if observation.volume is not None:
-        participation_capacity = observation.volume * active.max_volume_participation_pct
+    participation_capacity = _liquidity_capacity(order, observation, active)
+    if participation_capacity is not None:
         if participation_capacity <= 0:
             return PaperFillDecision(should_fill=False, reason="no_executable_volume")
         fill_quantity = min(remaining, participation_capacity)
@@ -364,8 +426,8 @@ def paper_fill_key(
     raw = (
         f"{account_id}|{order_id}|{observation.instrument_id}|"
         f"{observation.source_time.isoformat()}|{observation.price}|"
-        f"{observation.bid}|{observation.ask}|{observation.high}|{observation.low}|"
-        f"{observation.volume}|{observation.halted}"
+        f"{observation.bid}|{observation.ask}|{observation.bid_size}|{observation.ask_size}|"
+        f"{observation.high}|{observation.low}|{observation.volume}|{observation.halted}"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
