@@ -353,6 +353,7 @@ class TradingPaperRepository:
                 ),
             )
         elif order.side == "sell":
+            remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
             uow.connection.execute(
                 """
                 UPDATE omnix_trading_paper_positions
@@ -362,11 +363,11 @@ class TradingPaperRepository:
                    AND reserved_quantity >= %s
                 """,
                 (
-                    order.quantity,
+                    remaining,
                     self.context.workspace_id,
                     account.account_id,
                     order.instrument_id,
-                    order.quantity,
+                    remaining,
                 ),
             )
 
@@ -429,9 +430,20 @@ class TradingPaperRepository:
             for row in order_rows:
                 order = _order(row)
                 decision = paper_fill_decision(order, observation)
-                if not decision.should_fill or decision.fill_price is None:
+                if (
+                    not decision.should_fill
+                    or decision.fill_price is None
+                    or decision.fill_quantity is None
+                    or decision.fill_quantity <= 0
+                ):
                     continue
-                notional = order.quantity * decision.fill_price
+                fill_quantity = min(
+                    decision.fill_quantity,
+                    max(Decimal("0"), order.quantity - order.filled_quantity),
+                )
+                if fill_quantity <= 0:
+                    continue
+                notional = fill_quantity * decision.fill_price
                 commission = paper_commission(notional, account.commission_bps)
                 total_cost = notional + commission
                 rejection = None
@@ -442,7 +454,7 @@ class TradingPaperRepository:
                 ):
                     rejection = "insufficient_paper_cash"
                 if order.side == "sell" and position_quantity > 0 and (
-                    position_quantity < order.quantity or reserved_quantity < order.quantity
+                    position_quantity < fill_quantity or reserved_quantity < fill_quantity
                 ):
                     rejection = "insufficient_paper_position"
                 if rejection:
@@ -450,7 +462,8 @@ class TradingPaperRepository:
                         cash_available += order.reserved_cash
                         cash_reserved -= order.reserved_cash
                     else:
-                        release_quantity = min(reserved_quantity, order.quantity)
+                        remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
+                        release_quantity = min(reserved_quantity, remaining)
                         reserved_quantity -= release_quantity
                     uow.connection.execute(
                         """
@@ -482,7 +495,7 @@ class TradingPaperRepository:
                         order.order_id,
                         order.instrument_id,
                         order.side,
-                        order.quantity,
+                        fill_quantity,
                         decision.fill_price,
                         commission,
                         observation.source_time,
@@ -493,41 +506,49 @@ class TradingPaperRepository:
                 if inserted is None:
                     continue
 
+                remaining_before = max(Decimal("0"), order.quantity - order.filled_quantity)
                 if order.side == "buy":
+                    reservation_release = (
+                        order.reserved_cash
+                        if fill_quantity >= remaining_before or remaining_before <= 0
+                        else order.reserved_cash * fill_quantity / remaining_before
+                    )
+                    next_reserved_cash = max(Decimal("0"), order.reserved_cash - reservation_release)
+                    cash_reserved -= reservation_release
+                    cash_available += reservation_release - total_cost
                     prior_cost = position_quantity * average_cost
-                    cash_reserved -= order.reserved_cash
-                    cash_available += order.reserved_cash - total_cost
                     if position_quantity >= 0:
-                        position_quantity += order.quantity
+                        position_quantity += fill_quantity
                         average_cost = (prior_cost + notional) / position_quantity
                         realized_delta = Decimal("0")
-                    elif order.quantity <= abs(position_quantity):
-                        realized_delta = (average_cost - decision.fill_price) * order.quantity
-                        position_quantity += order.quantity
+                    elif fill_quantity <= abs(position_quantity):
+                        realized_delta = (average_cost - decision.fill_price) * fill_quantity
+                        position_quantity += fill_quantity
                     else:
                         covered = abs(position_quantity)
                         realized_delta = (average_cost - decision.fill_price) * covered
-                        position_quantity = order.quantity - covered
+                        position_quantity = fill_quantity - covered
                         average_cost = decision.fill_price
                     realized_pnl += realized_delta
                     if position_quantity == 0:
                         average_cost = Decimal("0")
                 else:
+                    next_reserved_cash = Decimal("0")
                     if position_quantity > 0:
-                        reserved_quantity -= order.quantity
-                        close_quantity = min(position_quantity, order.quantity)
+                        reserved_quantity -= fill_quantity
+                        close_quantity = min(position_quantity, fill_quantity)
                         realized_delta = paper_realized_pnl(
                             close_quantity,
                             average_cost,
                             decision.fill_price,
                         )
                         position_quantity -= close_quantity
-                        if order.quantity > close_quantity:
-                            position_quantity = -(order.quantity - close_quantity)
+                        if fill_quantity > close_quantity:
+                            position_quantity = -(fill_quantity - close_quantity)
                             average_cost = decision.fill_price
                     else:
                         prior_short_quantity = abs(position_quantity)
-                        position_quantity -= order.quantity
+                        position_quantity -= fill_quantity
                         average_cost = (
                             (prior_short_quantity * average_cost) + notional
                         ) / abs(position_quantity)
@@ -584,15 +605,36 @@ class TradingPaperRepository:
                         unrealized,
                     ),
                 )
+
+                new_filled_quantity = order.filled_quantity + fill_quantity
+                prior_fill_notional = (
+                    order.average_fill_price * order.filled_quantity
+                    if order.average_fill_price is not None
+                    else Decimal("0")
+                )
+                new_average_fill = (
+                    prior_fill_notional + decision.fill_price * fill_quantity
+                ) / new_filled_quantity
+                new_status = "filled" if new_filled_quantity >= order.quantity else "open"
                 uow.connection.execute(
                     """
                     UPDATE omnix_trading_paper_orders
-                       SET status = 'filled', filled_quantity = quantity,
-                           average_fill_price = %s, reserved_cash = 0,
+                       SET status = %s,
+                           filled_quantity = %s,
+                           average_fill_price = %s,
+                           reserved_cash = %s,
                            updated_at = CURRENT_TIMESTAMP
                      WHERE workspace_id = %s AND account_id = %s AND order_id = %s
                     """,
-                    (decision.fill_price, self.context.workspace_id, account_id, order.order_id),
+                    (
+                        new_status,
+                        new_filled_quantity,
+                        new_average_fill,
+                        next_reserved_cash,
+                        self.context.workspace_id,
+                        account_id,
+                        order.order_id,
+                    ),
                 )
 
                 ledger_rows = [
@@ -610,10 +652,6 @@ class TradingPaperRepository:
                             currency, amount, order_id, fill_id,
                             idempotency_key, payload
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
-                        -- Keep the entry type in the ledger ID.  Truncating the
-                        -- hash before this point made trade_cash and commission
-                        -- collide on the ledger primary key and rolled back the
-                        -- otherwise valid fill.
                         ON CONFLICT DO NOTHING
                         """,
                         (
@@ -633,6 +671,8 @@ class TradingPaperRepository:
                                     "source_time": observation.source_time.isoformat(),
                                     "high": str(observation.high) if observation.high is not None else None,
                                     "low": str(observation.low) if observation.low is not None else None,
+                                    "fill_quantity": str(fill_quantity),
+                                    "order_filled_quantity": str(new_filled_quantity),
                                 }
                             ),
                         ),
@@ -643,7 +683,7 @@ class TradingPaperRepository:
                         order_id=order.order_id,
                         instrument_id=order.instrument_id,
                         side=order.side,
-                        quantity=order.quantity,
+                        quantity=fill_quantity,
                         price=decision.fill_price,
                         commission=commission,
                         source_time=observation.source_time,
