@@ -23,6 +23,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.alerts_api import create_trading_alert_router
     from app.trading.alerts_monitor import register_trading_alert_monitor
     from app.trading.api import create_trading_router
+    from app.trading.execution_api import create_trading_execution_router
     from app.trading.paper_api import create_trading_paper_router
     from app.trading.paper_monitor import register_trading_paper_monitor
     from app.trading.replay_api import create_trading_replay_router
@@ -30,6 +31,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.scanner_api import create_trading_scanner_router
 
     gateway.include_router(create_trading_router())
+    gateway.include_router(create_trading_execution_router())
     gateway.include_router(create_trading_alert_router())
     gateway.include_router(create_trading_scanner_router())
     gateway.include_router(create_trading_replay_router())
