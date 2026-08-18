@@ -1,6 +1,7 @@
 export type PaperSide = 'buy' | 'sell';
 export type PaperOrderType = 'market' | 'limit' | 'stop';
 export type PaperOrderStatus = 'open' | 'filled' | 'cancelled' | 'rejected';
+export type PaperProtectionStatus = 'pending_entry' | 'active' | 'exit_submitted' | 'closed' | 'cancelled';
 
 export interface PaperAccount {
   account_id: string;
@@ -73,6 +74,21 @@ export interface PaperLedgerEntry {
   created_at?: string | null;
 }
 
+export interface PaperPositionProtection {
+  account_id: string;
+  instrument_id: string;
+  binding_id?: string | null;
+  entry_order_id?: string | null;
+  exit_order_id?: string | null;
+  take_profit?: string | null;
+  stop_loss?: string | null;
+  status: PaperProtectionStatus;
+  trigger_reason?: string | null;
+  revision: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface PaperAccountSnapshot {
   account: PaperAccount;
   balances: PaperBalance[];
@@ -104,11 +120,10 @@ export interface PaperOrderInput {
   idempotency_key: string;
 }
 
-export interface PaperMarketObservationInput {
+export interface PaperProtectionInput {
   instrument_id: string;
   binding_id?: string | null;
-  provider?: string;
-  price: string;
-  source_time: string;
-  evaluated_at?: string;
+  entry_order_id?: string | null;
+  take_profit?: string | null;
+  stop_loss?: string | null;
 }
