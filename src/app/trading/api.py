@@ -38,7 +38,7 @@ class ProviderDescriptor(BaseModel):
     provider: str
     display_name: str
     enabled: bool
-    status: Literal["ready", "degraded", "unavailable"]
+    status: Literal["ready", "degraded", "unavailable", "unconfigured"]
     policy: ProviderPolicy
     bindings: list[ProviderBinding]
     runtime: ProviderRuntimeStatus = Field(default_factory=ProviderRuntimeStatus)
