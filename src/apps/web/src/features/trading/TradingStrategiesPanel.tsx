@@ -88,6 +88,7 @@ export function TradingStrategiesPanel() {
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
   const [universeJson, setUniverseJson] = useState('');
   const [freezingUniverse, setFreezingUniverse] = useState(false);
+  const [discoveringUniverse, setDiscoveringUniverse] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const selected = useMemo(
@@ -179,6 +180,33 @@ export function TradingStrategiesPanel() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
       setStatus('error');
+    }
+  };
+
+  const discoverYahooUniverse = async () => {
+    if (!draft) return;
+    setDiscoveringUniverse(true);
+    try {
+      const now = new Date();
+      const timestamp = now.toISOString();
+      const generatedId = `yahoo-gappers-${timestamp.slice(0, 10)}-${timestamp.slice(11, 16).replace(':', '')}`;
+      const frozen = await tradingStrategyApi.discoverYahooUniverse({
+        universe_id: draft.active_universe_id?.trim() || generatedId,
+        evaluation_time: timestamp,
+        count: 50,
+        minimum_gap_pct: draft.config.minimum_gap_pct,
+        minimum_price: draft.config.minimum_price,
+        maximum_price: draft.config.maximum_price,
+      });
+      setDraft((current) => current ? { ...current, active_universe_id: frozen.universe_id } : current);
+      setUniverseJson(JSON.stringify(frozen, null, 2));
+      setNotice(
+        `Yahoo discovered and froze ${frozen.candidates.length} point-in-time candidates as ${frozen.universe_id} · ${frozen.source_fingerprint.slice(0, 12)}…`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDiscoveringUniverse(false);
     }
   };
 
@@ -291,10 +319,18 @@ export function TradingStrategiesPanel() {
 
             <section className="trading-universe-import">
               <header>
-                <div><strong>Freeze point-in-time gapper universe</strong><small>Paste normalized candidates from your morning screener/import.</small></div>
-                <button type="button" onClick={() => void freezeUniverse()} disabled={freezingUniverse}>
-                  {freezingUniverse ? 'Freezing…' : 'Freeze & attach'}
-                </button>
+                <div>
+                  <strong>Freeze point-in-time gapper universe</strong>
+                  <small>Discover current Yahoo gainers automatically or paste an externally captured universe.</small>
+                </div>
+                <div>
+                  <button type="button" onClick={() => void discoverYahooUniverse()} disabled={discoveringUniverse || freezingUniverse}>
+                    {discoveringUniverse ? 'Discovering…' : 'Discover Yahoo & attach'}
+                  </button>
+                  <button type="button" onClick={() => void freezeUniverse()} disabled={freezingUniverse || discoveringUniverse}>
+                    {freezingUniverse ? 'Freezing…' : 'Freeze JSON & attach'}
+                  </button>
+                </div>
               </header>
               <textarea
                 aria-label="Gapper universe JSON"
@@ -302,12 +338,13 @@ export function TradingStrategiesPanel() {
                 onChange={(event) => setUniverseJson(event.target.value)}
                 placeholder={'[{"instrument_id":"equity:NASDAQ:XYZ","binding_id":"provider:XYZ","previous_close":"1.00","premarket_price":"1.30","gap_pct":"30","premarket_volume":"1000000","premarket_dollar_volume":"1300000","tod_rvol":"5","spread_bps":"80","discovery_rank":1}]'}
               />
-              <small>The server computes the immutable fingerprint. Historical backtests should reuse the exact frozen universe, including eventual fades and failures.</small>
+              <small>Yahoo discovery is current-only and freezes server observation timestamps. Historical backtests reuse the exact frozen universe, including eventual fades and failures.</small>
             </section>
 
             <div className="trading-strategy-safety">
               <strong>Execution gates</strong>
-              <span>Execution-grade quote required</span><span>Stale data → no fill</span>
+              <span>Alpaca IEX execution quote required</span><span>Stale/future data → no fill</span>
+              <span>Known halt → no fill</span><span>Displayed liquidity limits fills</span>
               <span>One trade / symbol / day</span><span>Server-side stop + target protection</span>
               <span>AI and model scores are shadow-only</span><span>No live broker route</span>
             </div>
