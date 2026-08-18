@@ -4339,6 +4339,11 @@ export interface components {
              * Format: date-time
              */
             entry_time: string;
+            /**
+             * Execution Interval
+             * @default 1m
+             */
+            execution_interval: string;
             /** Exit Price */
             exit_price: string;
             /**
@@ -4363,6 +4368,11 @@ export interface components {
             mfe_r: string;
             /** Pnl Per Share */
             pnl_per_share: string;
+            /**
+             * Quality Score
+             * @default 0
+             */
+            quality_score: number;
             /** R Multiple */
             r_multiple: string;
             /** Requested Quantity */
@@ -4373,6 +4383,11 @@ export interface components {
             signal_risk_per_share: string;
             /** Stop Price */
             stop_price: string;
+            /**
+             * Structure Interval
+             * @default 1m
+             */
+            structure_interval: string;
             /** Target Price */
             target_price: string;
             /** Trigger Bar Index */
@@ -4408,6 +4423,12 @@ export interface components {
              * @default 09:35:00
              */
             entry_start_et: string;
+            /**
+             * Execution Interval
+             * @default 1m
+             * @enum {string}
+             */
+            execution_interval: "1m" | "5m";
             /**
              * Float Preference Mode
              * @default ignore
@@ -4538,6 +4559,12 @@ export interface components {
              */
             strategy_version: "1.0.0" | "1.1.0";
             /**
+             * Structure Interval
+             * @default 1m
+             * @enum {string}
+             */
+            structure_interval: "1m" | "5m";
+            /**
              * Volume Lookback Bars
              * @default 10
              */
@@ -4573,6 +4600,12 @@ export interface components {
              * @default 09:35:00
              */
             entry_start_et: string;
+            /**
+             * Execution Interval
+             * @default 1m
+             * @enum {string}
+             */
+            execution_interval: "1m" | "5m";
             /**
              * Float Preference Mode
              * @default ignore
@@ -4702,6 +4735,12 @@ export interface components {
              * @enum {string}
              */
             strategy_version: "1.0.0" | "1.1.0";
+            /**
+             * Structure Interval
+             * @default 1m
+             * @enum {string}
+             */
+            structure_interval: "1m" | "5m";
             /**
              * Volume Lookback Bars
              * @default 10

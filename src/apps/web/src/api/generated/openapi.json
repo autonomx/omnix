@@ -5126,6 +5126,11 @@
             "title": "Entry Time",
             "type": "string"
           },
+          "execution_interval": {
+            "default": "1m",
+            "title": "Execution Interval",
+            "type": "string"
+          },
           "exit_price": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Exit Price",
@@ -5175,6 +5180,13 @@
             "title": "Pnl Per Share",
             "type": "string"
           },
+          "quality_score": {
+            "default": 0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Quality Score",
+            "type": "integer"
+          },
           "r_multiple": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "R Multiple",
@@ -5198,6 +5210,11 @@
           "stop_price": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Stop Price",
+            "type": "string"
+          },
+          "structure_interval": {
+            "default": "1m",
+            "title": "Structure Interval",
             "type": "string"
           },
           "target_price": {
@@ -5280,6 +5297,15 @@
             "default": "09:35:00",
             "format": "time",
             "title": "Entry Start Et",
+            "type": "string"
+          },
+          "execution_interval": {
+            "default": "1m",
+            "enum": [
+              "1m",
+              "5m"
+            ],
+            "title": "Execution Interval",
             "type": "string"
           },
           "float_preference_mode": {
@@ -5564,6 +5590,15 @@
             "title": "Strategy Version",
             "type": "string"
           },
+          "structure_interval": {
+            "default": "1m",
+            "enum": [
+              "1m",
+              "5m"
+            ],
+            "title": "Structure Interval",
+            "type": "string"
+          },
           "volume_lookback_bars": {
             "default": 10,
             "maximum": 100.0,
@@ -5602,6 +5637,15 @@
             "default": "09:35:00",
             "format": "time",
             "title": "Entry Start Et",
+            "type": "string"
+          },
+          "execution_interval": {
+            "default": "1m",
+            "enum": [
+              "1m",
+              "5m"
+            ],
+            "title": "Execution Interval",
             "type": "string"
           },
           "float_preference_mode": {
@@ -5762,6 +5806,15 @@
               "1.1.0"
             ],
             "title": "Strategy Version",
+            "type": "string"
+          },
+          "structure_interval": {
+            "default": "1m",
+            "enum": [
+              "1m",
+              "5m"
+            ],
+            "title": "Structure Interval",
             "type": "string"
           },
           "volume_lookback_bars": {
