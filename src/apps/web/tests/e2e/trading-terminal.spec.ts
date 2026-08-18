@@ -257,7 +257,6 @@ async function installTradingMocks(page: Page): Promise<MockState> {
       await fulfill(route, updated);
       return;
     }
-
     await fulfill(route, { records: [], alerts: [], triggers: [] });
   });
 
@@ -351,7 +350,8 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await page.getByRole('button', { name: 'Favorite active instrument' }).click();
   await expect(page.getByRole('button', { name: 'Remove active instrument from favorites' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Trend line' }).click();
+  await page.getByRole('button', { name: 'Lines' }).click();
+  await page.getByRole('menu', { name: 'Lines' }).getByRole('menuitem', { name: 'Trend line', exact: true }).click();
   const overlay = page.locator('.trading-chart-panel.active .trading-drawing-overlay');
   const box = await overlay.boundingBox();
   expect(box).not.toBeNull();

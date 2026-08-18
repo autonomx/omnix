@@ -10,10 +10,8 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
-from PIL import Image
 
 from app.assets import AssetRecord, AssetType, default_asset_store
-from app.image.output_normalization import normalize_generated_image
 
 _ROUTE_SENTINEL = "_omnix_image_asset_file_registered"
 _HOOK_SENTINEL = "_omnix_image_asset_file_hook_installed"
@@ -91,9 +89,19 @@ def _normalized_browser_preview(
     asset: AssetRecord,
     headers: dict[str, str],
 ) -> Response | None:
-    """Re-encode unusual raster assets without mutating the stored original."""
+    """Re-encode unusual raster assets without mutating the stored original.
+
+    Pillow is intentionally imported only on the preview-normalization path so
+    importing unrelated gateway modules does not require image dependencies.
+    """
 
     if asset.mime_type.lower() not in NORMALIZABLE_IMAGE_MIME_TYPES:
+        return None
+    try:
+        from PIL import Image
+
+        from app.image.output_normalization import normalize_generated_image
+    except ImportError:
         return None
     try:
         with Image.open(path) as source:

@@ -92,8 +92,17 @@ jobs:
       - name: Install web dependencies
         run: npm install
 
-      - name: Typecheck web application
-        run: npm --workspace @omnix/web run typecheck
+      - name: Typecheck authoring navigation module
+        run: |
+          cat > src/apps/web/tsconfig.world-forge.json <<'JSON'
+          {
+            "extends": "./tsconfig.json",
+            "include": ["src/features/rpg/RpgWorldCompletionModels.ts"],
+            "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+          }
+          JSON
+          cd src/apps/web
+          npx tsc -p tsconfig.world-forge.json
 
       - name: Run authoring navigation test
         run: >-

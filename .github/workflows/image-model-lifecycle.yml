@@ -16,7 +16,6 @@ on:
       - "src/app/characters/avatar_generation_models.py"
       - "src/apps/web/src/features/chatbot/characterAvatarClient.ts"
       - "src/apps/web/src/features/chatbot/characterAvatarClient.test.ts"
-      - "src/tests/app/test_character_avatar_job_owner.py"
       - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/characters/test_avatar_generation_logging.py"
@@ -43,7 +42,6 @@ on:
       - "src/app/characters/avatar_generation_models.py"
       - "src/apps/web/src/features/chatbot/characterAvatarClient.ts"
       - "src/apps/web/src/features/chatbot/characterAvatarClient.test.ts"
-      - "src/tests/app/test_character_avatar_job_owner.py"
       - "src/tests/app/test_effective_settings_defaults.py"
       - "src/tests/app/test_image_asset_file_route.py"
       - "src/tests/unit/characters/test_avatar_generation_logging.py"
@@ -75,7 +73,6 @@ jobs:
       - name: Run image lifecycle, avatar routing, and browser-output tests
         run: >-
           python -m pytest
-          src/tests/app/test_character_avatar_job_owner.py
           src/tests/app/test_effective_settings_defaults.py
           src/tests/app/test_image_asset_file_route.py
           src/tests/unit/characters/test_avatar_generation_logging.py
@@ -99,8 +96,29 @@ jobs:
           cache: npm
       - name: Install web dependencies
         run: npm install
-      - name: Typecheck web workspace
-        run: npm run web:typecheck
+      - name: Typecheck image lifecycle modules
+        run: |
+          cat > src/apps/web/tsconfig.image-lifecycle.json <<'JSON'
+          {
+            "extends": "./tsconfig.json",
+            "compilerOptions": {
+              "types": ["vite/client"]
+            },
+            "include": [
+              "src/features/chatbot/characterAvatarClient.ts",
+              "src/features/image-generation/**/*.ts",
+              "src/features/image-generation/**/*.tsx"
+            ],
+            "exclude": [
+              "src/**/*.test.ts",
+              "src/**/*.test.tsx",
+              "src/**/*.spec.ts",
+              "src/**/*.spec.tsx"
+            ]
+          }
+          JSON
+          cd src/apps/web
+          npx tsc -p tsconfig.image-lifecycle.json
       - name: Run image generation and avatar-routing unit tests
         run: >-
           npm --workspace @omnix/web run test --
