@@ -54,7 +54,7 @@ class GapPullbackConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     strategy_id: Literal["gap_pullback_v1"] = "gap_pullback_v1"
-    strategy_version: Literal["1.1.0"] = "1.1.0"
+    strategy_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
 
     # Phase 1: discovery / liquidity
     minimum_gap_pct: Decimal = Field(default=Decimal("20"), ge=0)
