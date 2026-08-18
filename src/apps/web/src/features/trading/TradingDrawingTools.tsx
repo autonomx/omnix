@@ -36,7 +36,7 @@ const drawingToolGroups: DrawingToolGroup[] = [
     label: 'Lines',
     glyph: '/',
     items: [
-      { label: 'Trendline', glyph: '/', tool: 'trend-line', shortcut: 'Alt + T' },
+      { label: 'Trend line', glyph: '/', tool: 'trend-line', shortcut: 'Alt + T' },
       { label: 'Ray', glyph: '↗', tool: 'ray' },
       { label: 'Info line', glyph: '↗', available: false },
       { label: 'Extended line', glyph: '↗', available: false },
