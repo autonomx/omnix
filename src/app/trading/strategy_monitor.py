@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
-from .paper import PaperOrderRequest
+from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
@@ -51,6 +51,29 @@ def _interval_seconds() -> float:
 
 def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
+
+
+def _paper_observation(execution) -> PaperMarketObservation:
+    return PaperMarketObservation(
+        instrument_id=execution.instrument_id,
+        binding_id=execution.binding_id,
+        provider=execution.provider,
+        price=execution.last,
+        bid=execution.bid,
+        ask=execution.ask,
+        bid_size=execution.bid_size,
+        ask_size=execution.ask_size,
+        high=execution.high,
+        low=execution.low,
+        volume=execution.bar_volume,
+        bar_start_time=execution.bar_start_time,
+        source_time=execution.source_time,
+        evaluated_at=datetime.now(timezone.utc),
+        execution_eligible=execution.execution_eligible,
+        freshness_mode=execution.freshness_mode,
+        rejection_reasons=execution.rejection_reasons,
+        halted=execution.halted is True,
+    )
 
 
 class TradingStrategyMonitor:
@@ -209,10 +232,21 @@ class TradingStrategyMonitor:
             trigger = None
             if force_flat:
                 trigger = "force_flat"
-            elif execution.last <= protection.stop_price:
-                trigger = "protective_stop"
-            elif execution.last >= protection.target_price:
-                trigger = "profit_target"
+            else:
+                activated_at = None
+                if entry_order is not None:
+                    activated_at = entry_order.updated_at or entry_order.created_at
+                trigger_kind = paper_protection_trigger(
+                    is_long=True,
+                    stop_price=protection.stop_price,
+                    target_price=protection.target_price,
+                    observation=_paper_observation(execution),
+                    activated_at=activated_at,
+                )
+                if trigger_kind == "stop":
+                    trigger = "protective_stop"
+                elif trigger_kind == "target":
+                    trigger = "profit_target"
             if trigger is None:
                 continue
             quantity = min(protection.quantity, position.quantity)
