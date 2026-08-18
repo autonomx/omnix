@@ -57,6 +57,9 @@ export type GapperCandidate = {
   instrument_id: string;
   binding_id?: string | null;
   previous_close: string | number;
+  raw_previous_close?: string | number | null;
+  split_adjustment_factor?: string | number;
+  corporate_action_evidence_ids?: string[];
   premarket_price: string | number;
   gap_pct: string | number;
   premarket_volume?: string | number;
