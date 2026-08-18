@@ -101,12 +101,20 @@ jobs:
           cat > src/apps/web/tsconfig.image-lifecycle.json <<'JSON'
           {
             "extends": "./tsconfig.json",
+            "compilerOptions": {
+              "types": ["vite/client"]
+            },
             "include": [
               "src/features/chatbot/characterAvatarClient.ts",
               "src/features/image-generation/**/*.ts",
               "src/features/image-generation/**/*.tsx"
             ],
-            "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+            "exclude": [
+              "src/**/*.test.ts",
+              "src/**/*.test.tsx",
+              "src/**/*.spec.ts",
+              "src/**/*.spec.tsx"
+            ]
           }
           JSON
           cd src/apps/web
