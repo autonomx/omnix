@@ -235,14 +235,18 @@ class ProviderRegistry:
         policy: ExecutionEligibilityPolicy | None = None,
         cancellation: threading.Event | None = None,
     ) -> ExecutionObservation:
-        binding = self.resolve_execution_binding(instrument_id, binding_id)
+        requested = self.resolve_binding(instrument_id, binding_id)
+        binding = self.resolve_execution_binding(instrument_id, requested.binding_id)
         provider = self.provider(binding.provider)
         if binding.provider == "alpaca_iex":
-            return provider.execution_observation(
+            observation = provider.execution_observation(
                 instrument_id,
                 policy=policy,
                 cancellation=cancellation,
             )
+            if requested.binding_id != binding.binding_id:
+                observation = observation.model_copy(update={"binding_id": requested.binding_id})
+            return observation
         if binding.provider == "yahoo":
             return yahoo_execution_observation(
                 provider,
