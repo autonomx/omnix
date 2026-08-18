@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 
@@ -14,12 +14,7 @@ PaperOrderStatus = Literal["open", "filled", "cancelled", "rejected"]
 
 
 class PaperExecutionPolicy(BaseModel):
-    """Deterministic, pessimistic paper-fill assumptions.
-
-    The repository remains full-fill-or-no-fill.  Volume participation therefore
-    fails closed when the complete remaining order would exceed the configured
-    participation cap instead of pretending a partial fill completed.
-    """
+    """Deterministic, pessimistic paper-fill assumptions shared with backtests."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -28,7 +23,9 @@ class PaperExecutionPolicy(BaseModel):
     stop_slippage_bps: Decimal = Field(default=Decimal("25"), ge=0, le=10_000)
     max_volume_participation_pct: Decimal = Field(default=Decimal("0.10"), gt=0, le=1)
     max_observation_age_seconds: Decimal = Field(default=Decimal("5"), gt=0, le=300)
+    latency_ms: int = Field(default=250, ge=0, le=60_000)
     require_execution_eligible: bool = True
+    reject_halted: bool = True
 
 
 class PaperAccountCreate(BaseModel):
@@ -143,6 +140,7 @@ class PaperMarketObservation(BaseModel):
     execution_eligible: bool = True
     freshness_mode: str = "unknown"
     rejection_reasons: tuple[str, ...] = ()
+    halted: bool = False
 
     @model_validator(mode="after")
     def validate_range(self):
@@ -248,13 +246,23 @@ def paper_fill_decision(
         return PaperFillDecision(should_fill=False, reason="execution_data_ineligible")
     if observation.age_seconds > active.max_observation_age_seconds:
         return PaperFillDecision(should_fill=False, reason="stale_market_data")
+    if active.reject_halted and observation.halted:
+        return PaperFillDecision(should_fill=False, reason="market_halted")
+    if order.created_at is not None:
+        eligible_time = order.created_at.astimezone(timezone.utc) + timedelta(milliseconds=active.latency_ms)
+        if observation.source_time.astimezone(timezone.utc) < eligible_time:
+            return PaperFillDecision(should_fill=False, reason="execution_latency_not_elapsed")
 
     remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
     if remaining <= 0:
         return PaperFillDecision(should_fill=False, reason="order_already_filled")
+    fill_quantity = remaining
     if observation.volume is not None:
         participation_capacity = observation.volume * active.max_volume_participation_pct
-        if remaining > participation_capacity:
+        if participation_capacity <= 0:
+            return PaperFillDecision(should_fill=False, reason="no_executable_volume")
+        fill_quantity = min(remaining, participation_capacity)
+        if fill_quantity <= 0:
             return PaperFillDecision(should_fill=False, reason="volume_participation_exceeded")
 
     if order.order_type == "market":
@@ -268,7 +276,7 @@ def paper_fill_decision(
         return PaperFillDecision(
             should_fill=True,
             fill_price=_worse_price(base, order.side, active.slippage_bps),
-            fill_quantity=remaining,
+            fill_quantity=fill_quantity,
             reason="market_execution_observation",
         )
 
@@ -289,7 +297,7 @@ def paper_fill_decision(
         return PaperFillDecision(
             should_fill=True,
             fill_price=fill_price,
-            fill_quantity=remaining,
+            fill_quantity=fill_quantity,
             reason="limit_range_reached",
         )
 
@@ -303,7 +311,7 @@ def paper_fill_decision(
     return PaperFillDecision(
         should_fill=True,
         fill_price=_worse_price(gap_through, order.side, active.stop_slippage_bps),
-        fill_quantity=remaining,
+        fill_quantity=fill_quantity,
         reason="stop_range_triggered_gap_aware",
     )
 
@@ -320,7 +328,7 @@ def paper_buy_reservation(
 ) -> Decimal:
     """Compute the cash hold for an open buy order.
 
-    reference_price is reservation-only evidence.  It never authorizes a fill.
+    reference_price is reservation-only evidence. It never authorizes a fill.
     """
     if request.side != "buy":
         return Decimal("0")
@@ -357,7 +365,7 @@ def paper_fill_key(
         f"{account_id}|{order_id}|{observation.instrument_id}|"
         f"{observation.source_time.isoformat()}|{observation.price}|"
         f"{observation.bid}|{observation.ask}|{observation.high}|{observation.low}|"
-        f"{observation.volume}"
+        f"{observation.volume}|{observation.halted}"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
