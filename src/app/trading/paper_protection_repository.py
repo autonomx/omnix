@@ -123,21 +123,43 @@ class TradingPaperProtectionRepository:
                 (self.context.workspace_id, account_id, request.instrument_id),
             ).fetchone()
             has_position = position is not None and Decimal(position[0]) != 0
-            has_entry_order = False
-            if request.entry_order_id:
+
+            entry_order_id = request.entry_order_id
+            binding_id = request.binding_id
+            entry = None
+            if entry_order_id:
                 entry = uow.connection.execute(
                     """
-                    SELECT status, instrument_id
+                    SELECT status, instrument_id, binding_id
                       FROM omnix_trading_paper_orders
                      WHERE workspace_id = %s AND account_id = %s AND order_id = %s
                     """,
-                    (self.context.workspace_id, account_id, request.entry_order_id),
+                    (self.context.workspace_id, account_id, entry_order_id),
                 ).fetchone()
                 if entry is None:
                     raise ValueError("paper_protection_entry_order_not_found")
                 if str(entry[1]) != request.instrument_id:
                     raise ValueError("paper_protection_entry_order_instrument_mismatch")
-                has_entry_order = str(entry[0]) in {"open", "filled"}
+            elif not has_position:
+                # The current UI can attach protection immediately after placing
+                # an order. Infer that newest still-open entry so browser state is
+                # never required for authority or recovery after a reload.
+                entry = uow.connection.execute(
+                    """
+                    SELECT status, instrument_id, binding_id, order_id
+                      FROM omnix_trading_paper_orders
+                     WHERE workspace_id = %s AND account_id = %s
+                       AND instrument_id = %s AND status = 'open'
+                     ORDER BY created_at DESC, order_id DESC
+                     LIMIT 1
+                    """,
+                    (self.context.workspace_id, account_id, request.instrument_id),
+                ).fetchone()
+                if entry is not None:
+                    entry_order_id = str(entry[3])
+            has_entry_order = entry is not None and str(entry[0]) in {"open", "filled"}
+            if binding_id is None and entry is not None and entry[2] is not None:
+                binding_id = str(entry[2])
             if not has_position and not has_entry_order:
                 raise ValueError("paper_protection_requires_position_or_entry_order")
 
@@ -165,8 +187,8 @@ class TradingPaperProtectionRepository:
                     self.context.workspace_id,
                     account_id,
                     request.instrument_id,
-                    request.binding_id,
-                    request.entry_order_id,
+                    binding_id,
+                    entry_order_id,
                     request.take_profit,
                     request.stop_loss,
                     status,
