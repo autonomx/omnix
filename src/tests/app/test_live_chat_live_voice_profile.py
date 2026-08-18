@@ -111,6 +111,7 @@ def test_lmstudio_live_voice_disables_thinking_without_affecting_text_chat(monke
     class FakeResponse:
         def __init__(self, payload: dict[str, Any]) -> None:
             self.payload = payload
+            self.headers: dict[str, str] = {}
 
         def json(self) -> dict[str, Any]:
             return self.payload
