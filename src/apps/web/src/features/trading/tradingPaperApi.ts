@@ -4,7 +4,8 @@ import type {
   PaperAccountSnapshot,
   PaperOrder,
   PaperOrderInput,
-  PaperMarketObservationInput,
+  PaperPositionProtection,
+  PaperProtectionInput,
 } from './paperTypes';
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,11 +42,37 @@ export const tradingPaperApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  processObservation: (accountId: string, input: PaperMarketObservationInput) =>
-    requestJson<{ fills: unknown[] }>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}/observations`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
+  protections: async (accountId: string) => {
+    const payload = await requestJson<{ protections?: PaperPositionProtection[] }>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections?active_only=true`,
+    );
+    return Array.isArray(payload.protections) ? payload.protections : [];
+  },
+  protection: async (accountId: string, instrumentId: string) => {
+    const response = await fetch(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections/${encodeURIComponent(instrumentId)}`,
+      { headers: { 'content-type': 'application/json' } },
+    );
+    if (response.status === 404) return null;
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = typeof payload?.detail === 'string'
+        ? payload.detail
+        : JSON.stringify(payload?.detail ?? payload);
+      throw new Error(`Paper Trading request failed (${response.status}): ${detail}`);
+    }
+    return payload as PaperPositionProtection;
+  },
+  setProtection: (accountId: string, input: PaperProtectionInput) =>
+    requestJson<PaperPositionProtection>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections`,
+      { method: 'PUT', body: JSON.stringify(input) },
+    ),
+  clearProtection: (accountId: string, instrumentId: string) =>
+    requestJson<PaperPositionProtection>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections/${encodeURIComponent(instrumentId)}`,
+      { method: 'DELETE' },
+    ),
   resetAccount: (account: PaperAccount, initialCash: string) =>
     requestJson<PaperAccountSnapshot>(
       `/api/trading/paper/accounts/${encodeURIComponent(account.account_id)}/reset`,
