@@ -1,9 +1,12 @@
 export type StrategyMode = 'off' | 'shadow' | 'auto_paper';
 export type FloatPreferenceMode = 'ignore' | 'score' | 'require';
+export type StrategyBarInterval = '1m' | '5m';
 
 export type GapPullbackConfig = {
   strategy_id: 'gap_pullback_v1';
   strategy_version: '1.0.0' | '1.1.0';
+  structure_interval: StrategyBarInterval;
+  execution_interval: StrategyBarInterval;
   minimum_gap_pct: string | number;
   minimum_price: string | number;
   maximum_price: string | number;
