@@ -185,6 +185,7 @@ export function TradingStrategiesPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
   const [discovering, setDiscovering] = useState(false);
+  const [capturingEvidence, setCapturingEvidence] = useState(false);
   const [freezing, setFreezing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
@@ -282,11 +283,7 @@ export function TradingStrategiesPanel() {
 
   const upgradeToStrictV11 = () => {
     if (!draft) return;
-    setDraft({
-      ...draft,
-      strategy_version: '1.1.0',
-      config: strictV11Config(),
-    });
+    setDraft({ ...draft, strategy_version: '1.1.0', config: strictV11Config() });
     setNotice('Loaded the strict v1.1 failed-selloff baseline. Review every value, then save to persist it.');
   };
 
@@ -338,11 +335,43 @@ export function TradingStrategiesPanel() {
       setUniverseJson(JSON.stringify(frozen, null, 2));
       setSelectedCandidates(new Set(frozen.candidates.map((candidate) => candidate.instrument_id)));
       setDraft((current) => current ? { ...current, active_universe_id: frozen.universe_id } : current);
-      setNotice(`Scan complete: ${frozen.candidates.length} current Yahoo gapper candidates were frozen for ${frozen.session_date}.`);
+      setNotice(`Scan complete: ${frozen.candidates.length} current Yahoo gapper candidates were frozen for ${frozen.session_date}. Save the strategy, then collect catalyst evidence.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     } finally {
       setDiscovering(false);
+    }
+  };
+
+  const captureYahooEvidence = async () => {
+    if (!draft || !strategies.some((item) => item.strategy_id === draft.strategy_id)) {
+      setNotice('Save the strategy and scanned universe before collecting catalyst evidence.');
+      return;
+    }
+    if (!draft.active_universe_id) {
+      setNotice('Scan or attach a frozen universe before collecting catalyst evidence.');
+      return;
+    }
+    if (draft.mode === 'auto_paper') {
+      setNotice('Pause AUTO PAPER before changing the daily research universe.');
+      return;
+    }
+    setCapturingEvidence(true);
+    try {
+      const response = await tradingStrategyApi.captureYahooResearch(draft.strategy_id);
+      setStrategies((current) => [response.strategy, ...current.filter((item) => item.strategy_id !== response.strategy.strategy_id)]);
+      setDraft(structuredClone(response.strategy));
+      setUniverse(response.universe);
+      setUniverseJson(JSON.stringify(response.universe, null, 2));
+      setSelectedCandidates(new Set(response.universe.candidates.map((candidate) => candidate.instrument_id)));
+      setResearchReviews([]);
+      const failed = Object.keys(response.errors).length;
+      setNotice(`Research capture complete: ${response.evidence_count} timestamped Yahoo headlines across ${response.candidates_with_evidence}/${response.universe.candidates.length} candidates${failed ? ` · ${failed} provider errors` : ''}. Review evidence/supply flags, then run optional LLM research.`);
+      await refreshDetail(response.strategy.strategy_id);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCapturingEvidence(false);
     }
   };
 
@@ -361,7 +390,7 @@ export function TradingStrategiesPanel() {
       setUniverseJson(JSON.stringify(frozen, null, 2));
       setSelectedCandidates(new Set(frozen.candidates.map((candidate) => candidate.instrument_id)));
       setDraft((current) => current ? { ...current, active_universe_id: frozen.universe_id } : current);
-      setNotice(`Research evidence snapshot frozen: ${frozen.universe_id}.`);
+      setNotice(`Research evidence snapshot frozen: ${frozen.universe_id}. Save the strategy to persist this attachment.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     } finally {
@@ -390,7 +419,7 @@ export function TradingStrategiesPanel() {
       setUniverseJson(JSON.stringify(frozen, null, 2));
       setSelectedCandidates(new Set(frozen.candidates.map((candidate) => candidate.instrument_id)));
       setDraft((current) => current ? { ...current, active_universe_id: frozen.universe_id } : current);
-      setNotice(`Daily selection frozen: ${frozen.candidates.length} candidates remain attached to the strategy.`);
+      setNotice(`Daily selection frozen: ${frozen.candidates.length} candidates remain. Save the strategy to attach this final daily universe.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     } finally {
@@ -428,9 +457,7 @@ export function TradingStrategiesPanel() {
       for (const review of researchReviews) {
         const classification = review.classification;
         if (!classification) continue;
-        if (classification.directional_bias === 'negative' || classification.dilution_risk === 'explicit') {
-          next.delete(review.instrument_id);
-        }
+        if (classification.directional_bias === 'negative' || classification.dilution_risk === 'explicit') next.delete(review.instrument_id);
       }
       return next;
     });
@@ -446,13 +473,7 @@ export function TradingStrategiesPanel() {
       const classification = localReview?.classification
         ? localReview.classification as unknown as Record<string, unknown>
         : eventClassification(research);
-      return {
-        candidate,
-        deterministic,
-        research,
-        classification,
-        score: eventQuality(deterministic),
-      };
+      return { candidate, deterministic, research, classification, score: eventQuality(deterministic) };
     });
   }, [universe, latestDeterministic, latestResearch, researchReviews]);
 
@@ -497,18 +518,11 @@ export function TradingStrategiesPanel() {
 
       <section>
         {!draft ? (
-          <div className="trading-strategies-empty">
-            <strong>{definition.label}</strong>
-            <p>{definition.thesis}</p>
-            <button type="button" onClick={startNew}>Create strategy</button>
-          </div>
+          <div className="trading-strategies-empty"><strong>{definition.label}</strong><p>{definition.thesis}</p><button type="button" onClick={startNew}>Create strategy</button></div>
         ) : (
           <>
             <header className="trading-strategy-editor-header">
-              <div>
-                <strong>{draft.strategy_id}</strong>
-                <small>{definition.label} · config v{draft.config.strategy_version} · revision {draft.revision}</small>
-              </div>
+              <div><strong>{draft.strategy_id}</strong><small>{definition.label} · config v{draft.config.strategy_version} · revision {draft.revision}</small></div>
               <div className="trading-strategy-header-actions">
                 {draft.config.strategy_version === '1.0.0' ? <button type="button" onClick={upgradeToStrictV11}>Load v1.1 baseline</button> : null}
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
@@ -519,32 +533,16 @@ export function TradingStrategiesPanel() {
             {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
 
             <section className="trading-strategy-overview">
-              <div>
-                <strong>{definition.thesis}</strong>
-                <small>Higher low + VWAP reclaim + lower-high break remain mandatory. A high quality score cannot compensate for broken price structure.</small>
-              </div>
+              <div><strong>{definition.thesis}</strong><small>Higher low + VWAP reclaim + lower-high break remain mandatory. A high quality score cannot compensate for broken price structure.</small></div>
               <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
-                {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => (
-                  <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => setDraft({ ...draft, mode })}>
-                    {mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}
-                  </button>
-                ))}
+                {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>)}
               </div>
             </section>
 
             <section className="trading-strategy-pipeline">
               <header><div><strong>Daily strategy phases</strong><small>Scan → research → LLM review → deterministic setup → select → paper trade.</small></div></header>
               <div className="trading-strategy-phase-grid">
-                {definition.phases.map((phase) => {
-                  const state = phaseState(phase.id);
-                  return (
-                    <article key={phase.id} data-tone={state.tone}>
-                      <header><strong>{phase.label}</strong><span>{state.text}</span></header>
-                      <p>{phase.description}</p>
-                      {phase.safety ? <small>{phase.safety}</small> : null}
-                    </article>
-                  );
-                })}
+                {definition.phases.map((phase) => { const state = phaseState(phase.id); return <article key={phase.id} data-tone={state.tone}><header><strong>{phase.label}</strong><span>{state.text}</span></header><p>{phase.description}</p>{phase.safety ? <small>{phase.safety}</small> : null}</article>; })}
               </div>
             </section>
 
@@ -611,9 +609,7 @@ export function TradingStrategiesPanel() {
                     <label><span>Entry starts ET</span><input type="time" step="1" value={draft.config.entry_start_et} onChange={(event) => setConfig('entry_start_et', event.target.value)} /></label>
                     <label><span>Last entry ET</span><input type="time" step="1" value={draft.config.last_entry_et} onChange={(event) => setConfig('last_entry_et', event.target.value)} /></label>
                   </div>
-                  <div className="quality-score-explainer">
-                    <span><b>0–2</b> fresh catalyst</span><span><b>0–2</b> supply / float</span><span><b>0–2</b> opening structure</span><span><b>0–2</b> controlled pullback</span><span><b>0–2</b> reclaim + break + hold</span>
-                  </div>
+                  <div className="quality-score-explainer"><span><b>0–2</b> fresh catalyst</span><span><b>0–2</b> supply / float</span><span><b>0–2</b> opening structure</span><span><b>0–2</b> controlled pullback</span><span><b>0–2</b> reclaim + break + hold</span></div>
                 </div>
 
                 <div className="trading-config-block">
@@ -636,10 +632,11 @@ export function TradingStrategiesPanel() {
 
             <section className="trading-research-workbench">
               <header>
-                <div><strong>Freeze point-in-time gapper universe</strong><small>Research workbench: scan, add evidence, narrow, run optional LLM review, then attach the selected daily universe.</small></div>
+                <div><strong>Freeze point-in-time gapper universe</strong><small>Research workbench: scan, collect timestamped evidence, narrow, run optional LLM review, then attach the selected daily universe.</small></div>
                 <div className="workbench-actions">
-                  <button type="button" onClick={() => void discoverYahoo()} disabled={discovering || freezing}>{discovering ? 'Scanning…' : 'Scan Yahoo & freeze'}</button>
-                  <button type="button" onClick={() => void freezeEdited()} disabled={freezing || discovering || !universeJson.trim()}>{freezing ? 'Freezing…' : 'Freeze edited evidence'}</button>
+                  <button type="button" onClick={() => void discoverYahoo()} disabled={discovering || freezing || capturingEvidence}>{discovering ? 'Scanning…' : 'Scan Yahoo & freeze'}</button>
+                  <button type="button" onClick={() => void captureYahooEvidence()} disabled={capturingEvidence || draft.mode === 'auto_paper'}>{capturingEvidence ? 'Collecting…' : 'Collect Yahoo catalyst evidence'}</button>
+                  <button type="button" onClick={() => void freezeEdited()} disabled={freezing || discovering || capturingEvidence || !universeJson.trim()}>{freezing ? 'Freezing…' : 'Freeze edited evidence'}</button>
                 </div>
               </header>
 
@@ -654,66 +651,23 @@ export function TradingStrategiesPanel() {
                 <>
                   <div className="candidate-toolbar">
                     <div><strong>{universe.universe_id}</strong><small>{universe.session_date} · {universe.discovery_source} · {universe.candidates.length} captured · {selectedCandidates.size} selected</small></div>
-                    <div>
-                      <button type="button" onClick={() => setSelectedCandidates(new Set(universe.candidates.map((candidate) => candidate.instrument_id)))}>Select all</button>
-                      <button type="button" onClick={() => setSelectedCandidates(new Set())}>Select none</button>
-                      <button type="button" className="primary" onClick={() => void freezeSelected()} disabled={freezing || !selectedCandidates.size}>Freeze selected & attach</button>
-                    </div>
+                    <div><button type="button" onClick={() => setSelectedCandidates(new Set(universe.candidates.map((candidate) => candidate.instrument_id)))}>Select all</button><button type="button" onClick={() => setSelectedCandidates(new Set())}>Select none</button><button type="button" className="primary" onClick={() => void freezeSelected()} disabled={freezing || !selectedCandidates.size}>Freeze selected & attach</button></div>
                   </div>
                   <div className="candidate-table-wrap">
                     <table className="strategy-candidate-table">
                       <thead><tr><th>Use</th><th>Candidate</th><th>Gap</th><th>Price</th><th>RVOL</th><th>$ volume</th><th>Float</th><th>Spread</th><th>Catalyst</th><th>Supply</th><th>LLM</th><th>Deterministic state</th><th>Score</th></tr></thead>
-                      <tbody>
-                        {candidateRows.map(({ candidate, deterministic, research, classification, score }) => (
-                          <tr key={candidate.instrument_id} data-tone={deterministic ? eventTone(deterministic) : 'working'}>
-                            <td><input type="checkbox" aria-label={`Use ${candidate.instrument_id}`} checked={selectedCandidates.has(candidate.instrument_id)} onChange={(event) => setSelectedCandidates((current) => { const next = new Set(current); if (event.target.checked) next.add(candidate.instrument_id); else next.delete(candidate.instrument_id); return next; })} /></td>
-                            <td><strong>{candidate.instrument_id.split(':').at(-1) ?? candidate.instrument_id}</strong><small>rank {candidate.discovery_rank ?? '—'}</small></td>
-                            <td>{percent(candidate.gap_pct)}</td>
-                            <td>${numberValue(candidate.premarket_price)?.toFixed(2) ?? '—'}</td>
-                            <td>{numberValue(candidate.tod_rvol)?.toFixed(1) ?? '—'}×</td>
-                            <td>${compact(candidate.premarket_dollar_volume)}</td>
-                            <td>{compact(candidate.float_shares)}</td>
-                            <td>{numberValue(candidate.spread_bps)?.toFixed(0) ?? '—'} bps</td>
-                            <td>{(candidate.catalyst_evidence_ids?.length ?? 0) > 0 ? <span className="pass">{candidate.catalyst_evidence_ids?.length} evidence</span> : <span className="warn">missing</span>}</td>
-                            <td>{candidate.dilution_flags?.length ? <span className="fail">{candidate.dilution_flags.join(', ')}</span> : <span className="pass">clean flags</span>}</td>
-                            <td>{classification ? <span title={String(classification.rationale ?? '')}>{String(classification.directional_bias ?? classification.catalyst_class ?? 'reviewed')} · {Math.round(Number(classification.confidence ?? 0) * 100)}%</span> : research?.state === 'research_missing' ? <span className="warn">needs evidence</span> : '—'}</td>
-                            <td><strong>{deterministic?.state ?? 'not evaluated'}</strong><small>{deterministic?.reason_code ?? ''}</small></td>
-                            <td><span className={score !== null && score >= draft.config.minimum_quality_score ? 'score pass' : 'score'}>{score ?? '—'}/10</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
+                      <tbody>{candidateRows.map(({ candidate, deterministic, research, classification, score }) => <tr key={candidate.instrument_id} data-tone={deterministic ? eventTone(deterministic) : 'working'}><td><input type="checkbox" aria-label={`Use ${candidate.instrument_id}`} checked={selectedCandidates.has(candidate.instrument_id)} onChange={(event) => setSelectedCandidates((current) => { const next = new Set(current); if (event.target.checked) next.add(candidate.instrument_id); else next.delete(candidate.instrument_id); return next; })} /></td><td><strong>{candidate.instrument_id.split(':').at(-1) ?? candidate.instrument_id}</strong><small>rank {candidate.discovery_rank ?? '—'}</small></td><td>{percent(candidate.gap_pct)}</td><td>${numberValue(candidate.premarket_price)?.toFixed(2) ?? '—'}</td><td>{numberValue(candidate.tod_rvol)?.toFixed(1) ?? '—'}×</td><td>${compact(candidate.premarket_dollar_volume)}</td><td>{compact(candidate.float_shares)}</td><td>{numberValue(candidate.spread_bps)?.toFixed(0) ?? '—'} bps</td><td>{(candidate.catalyst_evidence_ids?.length ?? 0) > 0 ? <span className="pass">{candidate.catalyst_evidence_ids?.length} evidence</span> : <span className="warn">missing</span>}</td><td>{candidate.dilution_flags?.length ? <span className="fail">{candidate.dilution_flags.join(', ')}</span> : <span className="pass">clean flags</span>}</td><td>{classification ? <span title={String(classification.rationale ?? '')}>{String(classification.directional_bias ?? classification.catalyst_class ?? 'reviewed')} · {Math.round(Number(classification.confidence ?? 0) * 100)}%</span> : research?.state === 'research_missing' ? <span className="warn">needs evidence</span> : '—'}</td><td><strong>{deterministic?.state ?? 'not evaluated'}</strong><small>{deterministic?.reason_code ?? ''}</small></td><td><span className={score !== null && score >= draft.config.minimum_quality_score ? 'score pass' : 'score'}>{score ?? '—'}/10</span></td></tr>)}</tbody>
                     </table>
                   </div>
                 </>
               ) : <div className="workbench-empty">Run the Yahoo scan or attach an immutable universe to start today's research pipeline.</div>}
 
-              <details className="universe-json-editor">
-                <summary>Point-in-time evidence JSON</summary>
-                <p>Attach externally captured catalyst evidence IDs and deterministic supply flags, then freeze a new immutable research snapshot. Existing universe IDs are never mutated.</p>
-                <textarea aria-label="Gapper universe JSON" value={universeJson} onChange={(event) => setUniverseJson(event.target.value)} placeholder={'[{"instrument_id":"equity:NASDAQ:XYZ","gap_pct":"35","premarket_dollar_volume":"15000000","tod_rvol":"8","float_shares":"8000000","catalyst_evidence_ids":["ev-..."],"dilution_flags":[]}]'} />
-              </details>
+              <details className="universe-json-editor"><summary>Point-in-time evidence JSON</summary><p>Yahoo headline evidence is a starting point. Attach SEC/company evidence IDs and deterministic supply flags here when available, then freeze a new immutable research snapshot. Existing universe IDs are never mutated.</p><textarea aria-label="Gapper universe JSON" value={universeJson} onChange={(event) => setUniverseJson(event.target.value)} placeholder={'[{"instrument_id":"equity:NASDAQ:XYZ","gap_pct":"35","premarket_dollar_volume":"15000000","tod_rvol":"8","float_shares":"8000000","catalyst_evidence_ids":["ev-..."],"dilution_flags":[]}]'} /></details>
             </section>
 
             <section className="trading-strategy-monitoring">
-              <section>
-                <header><div><strong>Strategy activity</strong><small>Research, deterministic states, rejections, selection and orders</small></div><span>{events.length}</span></header>
-                <div className="strategy-event-list">
-                  {events.slice(0, 50).map((event) => (
-                    <details key={`${event.event_id}-${event.observed_at}`} className={eventTone(event)}>
-                      <summary><strong>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</strong><span>{event.event_type === 'research_llm' ? 'LLM research' : event.state}</span><small>{event.reason_code ?? '—'}</small><time>{new Date(event.observed_at).toLocaleTimeString()}</time></summary>
-                      <pre>{JSON.stringify(event.payload, null, 2)}</pre>
-                    </details>
-                  ))}
-                  {!events.length ? <p>No strategy events yet.</p> : null}
-                </div>
-              </section>
-              <section>
-                <header><div><strong>Active protections</strong><small>Persisted stop / target state</small></div><span>{protections.length}</span></header>
-                <div className="strategy-protection-list">
-                  {protections.map((protection) => <article key={protection.protection_id}><strong>{protection.instrument_id.split(':').at(-1) ?? protection.instrument_id}</strong><span>{protection.status}</span><small>qty {String(protection.quantity)} · stop {String(protection.stop_price)} · target {String(protection.target_price)}</small></article>)}
-                  {!protections.length ? <p>No active strategy protections.</p> : null}
-                </div>
-              </section>
+              <section><header><div><strong>Strategy activity</strong><small>Research, deterministic states, rejections, selection and orders</small></div><span>{events.length}</span></header><div className="strategy-event-list">{events.slice(0, 50).map((event) => <details key={`${event.event_id}-${event.observed_at}`} className={eventTone(event)}><summary><strong>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</strong><span>{event.event_type === 'research_llm' ? 'LLM research' : event.state}</span><small>{event.reason_code ?? '—'}</small><time>{new Date(event.observed_at).toLocaleTimeString()}</time></summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>)}{!events.length ? <p>No strategy events yet.</p> : null}</div></section>
+              <section><header><div><strong>Active protections</strong><small>Persisted stop / target state</small></div><span>{protections.length}</span></header><div className="strategy-protection-list">{protections.map((protection) => <article key={protection.protection_id}><strong>{protection.instrument_id.split(':').at(-1) ?? protection.instrument_id}</strong><span>{protection.status}</span><small>qty {String(protection.quantity)} · stop {String(protection.stop_price)} · target {String(protection.target_price)}</small></article>)}{!protections.length ? <p>No active strategy protections.</p> : null}</div></section>
             </section>
           </>
         )}
