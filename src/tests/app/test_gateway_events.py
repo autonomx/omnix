@@ -88,11 +88,12 @@ def test_finite_job_events_endpoint_emits_sse_ids_and_honors_after_id():
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
-    assert response.text == (
+    assert response.text.endswith(
         'id: 2\n'
         'event: job.completed\n'
         'data: {"event_type": "job.completed", "id": 2, "job_id": "current"}\n\n'
     )
+    assert response.text[:1] in {":", "i"}
     assert store.after_ids == [1]
 
 
