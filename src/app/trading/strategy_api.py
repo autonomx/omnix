@@ -16,21 +16,13 @@ from .catalyst_discovery import discover_yahoo_catalyst_headlines
 from .catalyst_evidence import CatalystShadowClassification
 from .catalyst_repository import TradingCatalystRepository, default_catalyst_repository
 from .catalyst_shadow import generate_catalyst_shadow_classification
-from .gapper_dataset import (
-    GapperCandidate,
-    GapperUniverseSnapshot,
-    freeze_gapper_universe,
-)
+from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe
 from .gapper_discovery import discover_yahoo_gappers
 from .models import MarketBar
 from .paper import PaperExecutionPolicy
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult, StrategyRiskProfile
-from .strategy_backtest import (
-    GapPullbackBacktestResult,
-    freeze_backtest_session,
-    run_gap_pullback_backtest,
-)
+from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
 from .strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -54,17 +46,13 @@ class StrategyProtectionListResponse(BaseModel):
 
 class StrategyEvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     candidate: dict[str, object]
     bars: list[MarketBar] = Field(default_factory=list, max_length=1000)
     config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
 
 
 class GapperUniverseFreezeRequest(BaseModel):
-    """Raw point-in-time candidate list; fingerprint is computed by the server."""
-
     model_config = ConfigDict(extra="forbid")
-
     universe_id: str = Field(min_length=1, max_length=200)
     session_date: date
     evaluation_time: datetime
@@ -73,10 +61,7 @@ class GapperUniverseFreezeRequest(BaseModel):
 
 
 class YahooGapperDiscoveryRequest(BaseModel):
-    """Current-only Yahoo discovery request; historical reconstruction is forbidden."""
-
     model_config = ConfigDict(extra="forbid")
-
     universe_id: str = Field(min_length=1, max_length=200)
     evaluation_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     count: int = Field(default=30, ge=1, le=100)
@@ -86,10 +71,7 @@ class YahooGapperDiscoveryRequest(BaseModel):
 
 
 class GapPullbackBacktestRequest(BaseModel):
-    """Frozen multi-symbol morning backtest request."""
-
     model_config = ConfigDict(extra="forbid")
-
     session_date: date
     universe: GapperUniverseSnapshot
     bars_by_instrument: dict[str, list[MarketBar]]
@@ -105,16 +87,12 @@ class GapPullbackBacktestRequest(BaseModel):
 
 
 class StrategyResearchReviewRequest(BaseModel):
-    """Run read-only LLM catalyst research for the strategy's frozen universe."""
-
     model_config = ConfigDict(extra="forbid")
-
     model: str | None = Field(default=None, max_length=200)
 
 
 class StrategyResearchReview(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
     instrument_id: str
     status: Literal["reviewed", "missing_evidence", "error"]
     classification: CatalystShadowClassification | None = None
@@ -129,10 +107,7 @@ class StrategyResearchReviewResponse(BaseModel):
 
 
 class StrategyCatalystCaptureRequest(BaseModel):
-    """Current-only Yahoo headline capture for the attached research universe."""
-
     model_config = ConfigDict(extra="forbid")
-
     lookback_hours: int = Field(default=72, ge=1, le=168)
     max_items_per_candidate: int = Field(default=8, ge=1, le=25)
 
@@ -149,18 +124,12 @@ RepositoryFactory = Callable[[], TradingStrategyRepository]
 CatalystRepositoryFactory = Callable[[], TradingCatalystRepository]
 
 
-def _validate_catalyst_provenance(
-    snapshot: GapperUniverseSnapshot,
-    catalyst_repository: TradingCatalystRepository,
-) -> None:
+def _validate_catalyst_provenance(snapshot: GapperUniverseSnapshot, catalyst_repository: TradingCatalystRepository) -> None:
     evaluation = snapshot.evaluation_time.astimezone(timezone.utc)
     for candidate in snapshot.candidates:
         if not candidate.catalyst_evidence_ids:
             continue
-        evidence = catalyst_repository.evidence_by_ids(
-            candidate.instrument_id,
-            candidate.catalyst_evidence_ids,
-        )
+        evidence = catalyst_repository.evidence_by_ids(candidate.instrument_id, candidate.catalyst_evidence_ids)
         for item in evidence:
             if item.published_at > evaluation or item.captured_at > evaluation:
                 raise ValueError(
@@ -179,16 +148,7 @@ def _research_event(
     reason_code: str,
     payload: dict[str, object],
 ) -> StrategyEvent:
-    raw = "|".join(
-        (
-            strategy_id,
-            instrument_id,
-            universe_id,
-            observed_at.astimezone(timezone.utc).isoformat(),
-            state,
-            reason_code,
-        )
-    )
+    raw = "|".join((strategy_id, instrument_id, universe_id, observed_at.astimezone(timezone.utc).isoformat(), state, reason_code))
     idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     return StrategyEvent(
         strategy_id=strategy_id,
@@ -217,10 +177,7 @@ def create_trading_strategy_router(
     @router.get("", response_model=StrategyConfigListResponse)
     async def list_strategies(active_only: bool = Query(default=False)):
         return StrategyConfigListResponse(
-            strategies=await asyncio.to_thread(
-                repository_factory().list_configs,
-                active_only=active_only,
-            )
+            strategies=await asyncio.to_thread(repository_factory().list_configs, active_only=active_only)
         )
 
     @router.post("", response_model=TradingStrategyConfigDocument, status_code=201)
@@ -230,10 +187,7 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post(
-        "/backtest/gap-pullback",
-        response_model=GapPullbackBacktestResult,
-    )
+    @router.post("/backtest/gap-pullback", response_model=GapPullbackBacktestResult)
     async def backtest_gap_pullback(request: GapPullbackBacktestRequest):
         try:
             _validate_catalyst_provenance(request.universe, catalyst_repository_factory())
@@ -257,11 +211,7 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post(
-        "/universes/discover-yahoo",
-        response_model=GapperUniverseSnapshot,
-        status_code=201,
-    )
+    @router.post("/universes/discover-yahoo", response_model=GapperUniverseSnapshot, status_code=201)
     async def discover_yahoo_universe(request: YahooGapperDiscoveryRequest):
         try:
             if request.maximum_price <= request.minimum_price:
@@ -279,11 +229,7 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post(
-        "/universes/freeze",
-        response_model=GapperUniverseSnapshot,
-        status_code=201,
-    )
+    @router.post("/universes/freeze", response_model=GapperUniverseSnapshot, status_code=201)
     async def freeze_universe(request: GapperUniverseFreezeRequest):
         try:
             snapshot = await asyncio.to_thread(
@@ -299,11 +245,7 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post(
-        "/universes",
-        response_model=GapperUniverseSnapshot,
-        status_code=201,
-    )
+    @router.post("/universes", response_model=GapperUniverseSnapshot, status_code=201)
     async def save_universe(snapshot: GapperUniverseSnapshot):
         try:
             validated = await asyncio.to_thread(
@@ -328,21 +270,11 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @router.post(
-        "/evaluate/gap-pullback",
-        response_model=GapPullbackResult,
-        include_in_schema=True,
-    )
+    @router.post("/evaluate/gap-pullback", response_model=GapPullbackResult, include_in_schema=True)
     async def evaluate_strategy(request: StrategyEvaluationRequest):
-        """Pure read-only evaluation; never persists or places an order."""
         try:
             candidate = GapperCandidate.model_validate(request.candidate)
-            return await asyncio.to_thread(
-                evaluate_gap_pullback,
-                candidate,
-                request.bars,
-                request.config,
-            )
+            return await asyncio.to_thread(evaluate_gap_pullback, candidate, request.bars, request.config)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -354,11 +286,7 @@ def create_trading_strategy_router(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.put("/{strategy_id}", response_model=TradingStrategyConfigDocument)
-    async def update_strategy(
-        strategy_id: str,
-        document: TradingStrategyConfigDocument,
-        if_match: int = Header(alias="If-Match", ge=1),
-    ):
+    async def update_strategy(strategy_id: str, document: TradingStrategyConfigDocument, if_match: int = Header(alias="If-Match", ge=1)):
         try:
             return await asyncio.to_thread(
                 repository_factory().update_config,
@@ -371,20 +299,8 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post(
-        "/{strategy_id}/research/capture-yahoo",
-        response_model=StrategyCatalystCaptureResponse,
-    )
-    async def capture_yahoo_research(
-        strategy_id: str,
-        request: StrategyCatalystCaptureRequest,
-    ):
-        """Collect timestamped headline evidence and freeze a new research universe.
-
-        This is a research-phase mutation, not an execution path. AUTO PAPER must
-        be paused while changing the attached universe so the daily selection is
-        explicit and auditable.
-        """
+    @router.post("/{strategy_id}/research/capture-yahoo", response_model=StrategyCatalystCaptureResponse)
+    async def capture_yahoo_research(strategy_id: str, request: StrategyCatalystCaptureRequest):
         try:
             strategy_repository = repository_factory()
             config = await asyncio.to_thread(strategy_repository.get_config, strategy_id)
@@ -392,12 +308,9 @@ def create_trading_strategy_router(
                 raise ValueError("pause_auto_paper_before_research_capture")
             if not config.active_universe_id:
                 raise ValueError("strategy_has_no_active_universe")
-            source = await asyncio.to_thread(
-                strategy_repository.get_universe,
-                config.active_universe_id,
-            )
+            source = await asyncio.to_thread(strategy_repository.get_universe, config.active_universe_id)
             catalyst_repository = catalyst_repository_factory()
-            observed_at = datetime.now(timezone.utc)
+            capture_started_at = datetime.now(timezone.utc)
             evidence_count = 0
             errors: dict[str, str] = {}
             enriched: list[GapperCandidate] = []
@@ -408,7 +321,7 @@ def create_trading_strategy_router(
                         discover_yahoo_catalyst_headlines,
                         instrument_id=candidate.instrument_id,
                         symbol=symbol,
-                        evaluation_time=observed_at,
+                        evaluation_time=capture_started_at,
                         lookback_hours=request.lookback_hours,
                         max_items=request.max_items_per_candidate,
                     )
@@ -433,10 +346,11 @@ def create_trading_strategy_router(
                     )
                 )
 
+            freeze_time = datetime.now(timezone.utc)
             snapshot = freeze_gapper_universe(
-                universe_id=_research_universe_id(source.universe_id, observed_at),
+                universe_id=_research_universe_id(source.universe_id, freeze_time),
                 session_date=source.session_date,
-                evaluation_time=observed_at,
+                evaluation_time=freeze_time,
                 discovery_source="import",
                 candidates=enriched,
             )
@@ -461,24 +375,14 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post(
-        "/{strategy_id}/research/llm-review",
-        response_model=StrategyResearchReviewResponse,
-    )
-    async def run_llm_research(
-        strategy_id: str,
-        request: StrategyResearchReviewRequest,
-    ):
-        """Run LLM catalyst analysis as a visible, shadow-only research phase."""
+    @router.post("/{strategy_id}/research/llm-review", response_model=StrategyResearchReviewResponse)
+    async def run_llm_research(strategy_id: str, request: StrategyResearchReviewRequest):
         try:
             repository = repository_factory()
             config = await asyncio.to_thread(repository.get_config, strategy_id)
             if not config.active_universe_id:
                 raise ValueError("strategy_has_no_active_universe")
-            universe = await asyncio.to_thread(
-                repository.get_universe,
-                config.active_universe_id,
-            )
+            universe = await asyncio.to_thread(repository.get_universe, config.active_universe_id)
             catalyst_repository = catalyst_repository_factory()
             reviews: list[StrategyResearchReview] = []
             for candidate in universe.candidates:
@@ -562,36 +466,19 @@ def create_trading_strategy_router(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/{strategy_id}/events", response_model=StrategyEventListResponse)
-    async def recent_events(
-        strategy_id: str,
-        limit: int = Query(default=200, ge=1, le=1000),
-    ):
+    async def recent_events(strategy_id: str, limit: int = Query(default=200, ge=1, le=1000)):
         try:
             await asyncio.to_thread(repository_factory().get_config, strategy_id)
-            events = await asyncio.to_thread(
-                repository_factory().recent_events,
-                strategy_id,
-                limit,
-            )
+            events = await asyncio.to_thread(repository_factory().recent_events, strategy_id, limit)
             return StrategyEventListResponse(events=events)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @router.get(
-        "/{strategy_id}/protections",
-        response_model=StrategyProtectionListResponse,
-    )
-    async def protections(
-        strategy_id: str,
-        active_only: bool = Query(default=True),
-    ):
+    @router.get("/{strategy_id}/protections", response_model=StrategyProtectionListResponse)
+    async def protections(strategy_id: str, active_only: bool = Query(default=True)):
         try:
             await asyncio.to_thread(repository_factory().get_config, strategy_id)
-            values = await asyncio.to_thread(
-                repository_factory().list_protections,
-                strategy_id,
-                active_only=active_only,
-            )
+            values = await asyncio.to_thread(repository_factory().list_protections, strategy_id, active_only=active_only)
             return StrategyProtectionListResponse(protections=values)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
