@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 from app.trading.execution import (
     ExecutionEligibilityPolicy,
     ExecutionObservation,
     assess_execution_observation,
     execution_observation_from_quote,
+)
+from app.trading.providers.equity_execution import (
+    YAHOO_EXECUTION_ELIGIBLE,
+    yahoo_execution_observation,
 )
 
 
@@ -92,3 +97,47 @@ def test_provider_quote_normalization_preserves_source_time_and_book() -> None:
     assert value.last == Decimal("2.00")
     assert value.session == "extended_pre"
     assert value.age_seconds == Decimal("0.05")
+
+
+class _FixtureResponse:
+    def json(self):
+        return {
+            "quoteResponse": {
+                "result": [
+                    {
+                        "regularMarketPrice": 10,
+                        "regularMarketTime": int(NOW.timestamp()),
+                        "regularMarketVolume": 1_000_000,
+                        "bid": 9.99,
+                        "ask": 10.01,
+                        "marketState": "REGULAR",
+                    }
+                ]
+            }
+        }
+
+
+class _FixtureRuntime:
+    def get(self, *args, **kwargs):
+        return _FixtureResponse()
+
+
+class _FixtureYahooProvider:
+    runtime = _FixtureRuntime()
+
+    def get_binding(self, instrument_id):
+        return SimpleNamespace(
+            provider_symbol="TEST",
+            binding_id=f"yahoo:historical_polling:{instrument_id}",
+        )
+
+
+def test_unofficial_yahoo_equity_quote_is_never_execution_grade() -> None:
+    assert YAHOO_EXECUTION_ELIGIBLE is False
+    value = yahoo_execution_observation(
+        _FixtureYahooProvider(),
+        "equity:NASDAQ:TEST",
+        policy=ExecutionEligibilityPolicy(max_age_seconds=300, max_spread_bps=100),
+    )
+    assert value.execution_eligible is False
+    assert "PROVIDER_NOT_EXECUTION_GRADE" in value.rejection_reasons
