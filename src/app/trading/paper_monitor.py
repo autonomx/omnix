@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from .execution import ExecutionObservation
-from .paper import PaperMarketObservation, PaperOrderRequest
+from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_protection import PaperPositionProtection
 from .paper_protection_repository import (
     TradingPaperProtectionRepository,
@@ -50,6 +50,31 @@ def _protection_key(protection: PaperPositionProtection, trigger: str) -> str:
         f"{protection.revision}|{trigger}|paper-protection-v1"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _paper_observation(execution: ExecutionObservation) -> PaperMarketObservation:
+    return PaperMarketObservation(
+        instrument_id=execution.instrument_id,
+        binding_id=execution.binding_id,
+        provider=execution.provider,
+        price=execution.last,
+        bid=execution.bid,
+        ask=execution.ask,
+        bid_size=execution.bid_size,
+        ask_size=execution.ask_size,
+        high=execution.high,
+        low=execution.low,
+        # Only interval volume is a valid historical-volume fallback. Cumulative
+        # daily volume must never be interpreted as executable liquidity.
+        volume=execution.bar_volume,
+        bar_start_time=execution.bar_start_time,
+        source_time=execution.source_time,
+        evaluated_at=datetime.now(timezone.utc),
+        execution_eligible=execution.execution_eligible,
+        freshness_mode=execution.freshness_mode,
+        rejection_reasons=execution.rejection_reasons,
+        halted=execution.halted is True,
+    )
 
 
 class TradingPaperMonitor:
@@ -197,19 +222,22 @@ class TradingPaperMonitor:
         if conflicting:
             return
 
-        trigger: str | None = None
-        if is_long:
-            if protection.stop_loss is not None and execution.last <= protection.stop_loss:
-                trigger = "stop_loss"
-            elif protection.take_profit is not None and execution.last >= protection.take_profit:
-                trigger = "take_profit"
-        else:
-            if protection.stop_loss is not None and execution.last >= protection.stop_loss:
-                trigger = "stop_loss"
-            elif protection.take_profit is not None and execution.last <= protection.take_profit:
-                trigger = "take_profit"
-        if trigger is None:
+        entry = history.get(protection.entry_order_id or "")
+        activated_at = (
+            entry.updated_at
+            if entry is not None and entry.updated_at is not None
+            else protection.updated_at or protection.created_at
+        )
+        trigger_kind = paper_protection_trigger(
+            is_long=is_long,
+            stop_price=protection.stop_loss,
+            target_price=protection.take_profit,
+            observation=_paper_observation(execution),
+            activated_at=activated_at,
+        )
+        if trigger_kind is None:
             return
+        trigger = "stop_loss" if trigger_kind == "stop" else "take_profit"
 
         key = _protection_key(protection, trigger)
         order_id = f"paper-protection-{key[:32]}"
@@ -286,20 +314,7 @@ class TradingPaperMonitor:
                         "execution_data_rejected: " + ",".join(execution.rejection_reasons)
                     )
                     continue
-                observation = PaperMarketObservation(
-                    instrument_id=instrument_id,
-                    binding_id=execution.binding_id,
-                    provider=execution.provider,
-                    price=execution.last,
-                    bid=execution.bid,
-                    ask=execution.ask,
-                    volume=execution.cumulative_volume,
-                    source_time=execution.source_time,
-                    evaluated_at=datetime.now(timezone.utc),
-                    execution_eligible=True,
-                    freshness_mode=execution.freshness_mode,
-                    rejection_reasons=execution.rejection_reasons,
-                )
+                observation = _paper_observation(execution)
                 for account_id in sorted(account_ids):
                     fills = await asyncio.to_thread(
                         repository.process_observation,
