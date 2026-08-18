@@ -143,10 +143,13 @@ describe('live STT segment telemetry', () => {
     const gate = new LiveSttSegmentTelemetryGate();
     const state = {
       protocol: 'segmented-v1' as const,
+      sessionId: 'stt-session:test',
+      captureEpoch: 'capture:test',
       activeSequence: 2,
       pendingSegments: 1,
       queuedSegments: 0,
       absoluteSample: 16_000,
+      negotiation: null,
     };
 
     expect(gate.shouldReport(state, 1_000)).toBe(true);
