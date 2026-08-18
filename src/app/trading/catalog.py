@@ -75,6 +75,21 @@ YAHOO_POLICY = _policy(
     intervals=("1m", "5m", "15m", "1h", "1d", "1w", "1mo"),
     terms="https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html",
 )
+ALPACA_IEX_POLICY = ProviderPolicy(
+    usage_scope=UsageScope.PERSONAL_LOCAL,
+    redistribution_allowed=False,
+    authentication_required=True,
+    is_official_api=True,
+    realtime_scope="real-time IEX only; partial US market coverage; paper execution quotes",
+    delay_seconds=0,
+    terms_reference="https://docs.alpaca.markets/docs/about-market-data-api",
+    supported_asset_classes=(AssetClass.EQUITY,),
+    supported_intervals=(),
+    history_depth="execution_quote_only",
+    rate_limit_policy=(
+        "Alpaca Basic REST limits with Omnix bounded provider semaphore and retry-after backoff"
+    ),
+)
 STOOQ_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
     official=False,
@@ -111,6 +126,7 @@ HYPERLIQUID_POLICY = _policy(
 POLICIES = {
     "binance": BINANCE_POLICY,
     "yahoo": YAHOO_POLICY,
+    "alpaca_iex": ALPACA_IEX_POLICY,
     "stooq": STOOQ_POLICY,
     "coinbase": COINBASE_POLICY,
     "kraken": KRAKEN_POLICY,
@@ -246,6 +262,13 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
             ),
             _binding(
                 instrument,
+                "alpaca_iex",
+                instrument.display_symbol,
+                FeedType.REST,
+                adjustments=(AdjustmentMode.RAW,),
+            ),
+            _binding(
+                instrument,
                 "stooq",
                 f"{instrument.display_symbol}.US",
                 FeedType.HISTORICAL_DAILY,
@@ -300,6 +323,12 @@ def _restore_dynamic_equity(instrument_id: str) -> CanonicalInstrument | None:
                 "yahoo",
                 symbol,
                 FeedType.HISTORICAL_POLLING,
+            ),
+            _binding(
+                instrument,
+                "alpaca_iex",
+                symbol,
+                FeedType.REST,
             ),
             _binding(
                 instrument,
@@ -368,7 +397,7 @@ def binding_by_id(binding_id: str) -> ProviderBinding | None:
     # discovered in a previous process lifetime.  Recreate the dynamic catalog
     # entry before looking up that binding.
     parts = binding_id.split(":", 2)
-    if len(parts) == 3 and parts[0] in {"yahoo", "stooq"}:
+    if len(parts) == 3 and parts[0] in {"yahoo", "alpaca_iex", "stooq"}:
         _restore_dynamic_equity(parts[2])
     return _dynamic_bindings.get(binding_id)
 
