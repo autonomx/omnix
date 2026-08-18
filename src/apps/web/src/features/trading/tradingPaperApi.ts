@@ -42,6 +42,8 @@ export const tradingPaperApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  /** @deprecated Browser observations are deliberately non-authoritative. */
+  processObservation: async (_accountId: string, _input: unknown) => ({ fills: [] as unknown[] }),
   protections: async (accountId: string) => {
     const payload = await requestJson<{ protections?: PaperPositionProtection[] }>(
       `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections?active_only=true`,
