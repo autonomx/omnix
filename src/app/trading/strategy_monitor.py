@@ -5,7 +5,7 @@ import hashlib
 import os
 from collections.abc import Callable
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -104,7 +104,14 @@ class TradingStrategyMonitor:
         observed_at: datetime,
         payload: dict[str, object] | None = None,
     ) -> bool:
-        idem = _key(config.strategy_id, instrument_id, event_type, state, reason_code, observed_at.isoformat())
+        idem = _key(
+            config.strategy_id,
+            instrument_id,
+            event_type,
+            state,
+            reason_code,
+            observed_at.isoformat(),
+        )
         return await asyncio.to_thread(
             repository.append_event,
             StrategyEvent(
@@ -159,10 +166,10 @@ class TradingStrategyMonitor:
                 if exit_order is not None and exit_order.status == "filled":
                     protection.status = "closed"
                     await asyncio.to_thread(strategy_repository.save_protection, protection)
-                elif exit_order is not None and exit_order.status == "rejected":
+                elif exit_order is not None and exit_order.status in {"rejected", "cancelled"}:
                     protection.status = "active"
                     protection.exit_order_id = None
-                    protection.trigger_reason = "exit_rejected_retry"
+                    protection.trigger_reason = f"exit_{exit_order.status}_retry"
                     await asyncio.to_thread(strategy_repository.save_protection, protection)
                 continue
 
@@ -174,11 +181,25 @@ class TradingStrategyMonitor:
                 protection.trigger_reason = "position_closed"
                 await asyncio.to_thread(strategy_repository.save_protection, protection)
                 continue
+
+            # Manual paper protection and strategy protection can coexist in the
+            # UI. Whichever source already has a close order in flight wins; the
+            # other must not race a duplicate exit for the same position.
+            conflicting_exit = any(
+                order.status == "open"
+                and order.instrument_id == protection.instrument_id
+                and order.side == "sell"
+                for order in snapshot.open_orders
+            )
+            if conflicting_exit:
+                continue
+
+            binding_id = entry_order.binding_id if entry_order is not None else None
             try:
                 execution = await asyncio.to_thread(
                     market_service.execution_observation,
                     protection.instrument_id,
-                    None,
+                    binding_id,
                 )
             except Exception as exc:
                 self.last_error = f"protection_data: {type(exc).__name__}: {exc}"
@@ -204,6 +225,7 @@ class TradingStrategyMonitor:
                     PaperOrderRequest(
                         order_id=order_id,
                         instrument_id=protection.instrument_id,
+                        binding_id=binding_id,
                         side="sell",
                         order_type="market",
                         quantity=quantity,
@@ -234,25 +256,74 @@ class TradingStrategyMonitor:
         )
         if config.mode == "off" or not config.enabled or not config.active_universe_id:
             return
+
+        now_utc = datetime.now(timezone.utc)
+        now_et = now_utc.astimezone(_ET)
+        today_et = now_et.date()
+        day_start_et = datetime(
+            today_et.year,
+            today_et.month,
+            today_et.day,
+            tzinfo=_ET,
+        )
+        day_end_et = day_start_et + timedelta(days=1)
+
         universe = await asyncio.to_thread(
             strategy_repository.get_universe,
             config.active_universe_id,
         )
+        if universe.session_date != today_et:
+            rejection_time = day_start_et.astimezone(timezone.utc)
+            for candidate in universe.candidates:
+                self.rejection_count += 1
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="rejection",
+                    state="rejected",
+                    reason_code="UNIVERSE_SESSION_MISMATCH",
+                    observed_at=rejection_time,
+                    payload={
+                        "universe_id": universe.universe_id,
+                        "universe_session_date": universe.session_date.isoformat(),
+                        "runtime_session_date": today_et.isoformat(),
+                    },
+                )
+            return
+
         snapshot = await asyncio.to_thread(paper_repository.snapshot, config.account_id)
-        recent_events = await asyncio.to_thread(
-            strategy_repository.recent_events,
-            config.strategy_id,
-            500,
-        )
-        today_et = datetime.now(timezone.utc).astimezone(_ET).date()
-        entry_events = [
-            event
-            for event in recent_events
-            if event.event_type == "entry_order_submitted"
-            and event.observed_at.astimezone(_ET).date() == today_et
-        ]
+        if hasattr(strategy_repository, "entry_events_between"):
+            entry_events = await asyncio.to_thread(
+                strategy_repository.entry_events_between,
+                config.strategy_id,
+                start_time=day_start_et,
+                end_time=day_end_et,
+            )
+        else:
+            recent_events = await asyncio.to_thread(
+                strategy_repository.recent_events,
+                config.strategy_id,
+                500,
+            )
+            entry_events = [
+                event
+                for event in recent_events
+                if event.event_type == "entry_order_submitted"
+                and event.observed_at.astimezone(_ET).date() == today_et
+            ]
         trades_today = len(entry_events)
         traded_symbols = {event.instrument_id for event in entry_events}
+
+        daily_realized_pnl: Decimal | None = None
+        if hasattr(strategy_repository, "daily_paper_pnl"):
+            daily_realized_pnl = await asyncio.to_thread(
+                strategy_repository.daily_paper_pnl,
+                config.account_id,
+                start_time=day_start_et,
+                end_time=day_end_et,
+            )
+
         protections = await asyncio.to_thread(
             strategy_repository.list_protections,
             config.strategy_id,
@@ -349,7 +420,10 @@ class TradingStrategyMonitor:
                 spread_bps=execution.spread_bps,
                 trades_today=trades_today,
                 traded_symbols_today=traded_symbols,
+                reserved_instruments=protected_symbols,
+                daily_realized_pnl=daily_realized_pnl,
                 open_strategy_risk=open_risk,
+                observed_at=now_utc,
             )
             if not decision.allowed:
                 self.rejection_count += 1
@@ -365,7 +439,7 @@ class TradingStrategyMonitor:
                 )
                 continue
 
-            day = observed_at.astimezone(_ET).date().isoformat()
+            day = today_et.isoformat()
             order_key = _key(config.strategy_id, day, candidate.instrument_id, "entry")
             order_id = f"strat-{order_key[:32]}"
             try:
