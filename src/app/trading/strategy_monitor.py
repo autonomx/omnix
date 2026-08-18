@@ -28,6 +28,7 @@ from .strategy_repository import (
     default_strategy_repository,
 )
 from .strategy_risk import size_strategy_entry
+from .strategy_timeframes import proposal_priority, resample_final_bars
 
 
 _ET = ZoneInfo("America/New_York")
@@ -86,11 +87,17 @@ class _EntryProposal:
     observed_at: datetime
 
     @property
-    def priority(self) -> tuple[datetime, int, str]:
-        return (
-            self.observed_at.astimezone(timezone.utc),
-            self.candidate.discovery_rank or 10**9,
-            self.candidate.instrument_id,
+    def priority(self) -> tuple[datetime, int, int, str]:
+        quality_score = (
+            self.result.signal.quality_score
+            if self.result.signal is not None
+            else self.result.features.quality_score
+        )
+        return proposal_priority(
+            observed_at=self.observed_at,
+            quality_score=quality_score,
+            discovery_rank=self.candidate.discovery_rank,
+            instrument_id=self.candidate.instrument_id,
         )
 
 
@@ -210,7 +217,7 @@ class TradingStrategyMonitor:
                 elif exit_order is not None and exit_order.status in {"rejected", "cancelled"}:
                     protection.status = "active"
                     protection.exit_order_id = None
-                    protection.trigger_reason = f"exit_{exit_order.status}_retry"
+                    protection.trigger_reason = f"exit_{entry_order.status}_retry" if entry_order is not None else "exit_retry"
                     await asyncio.to_thread(strategy_repository.save_protection, protection)
                 continue
 
@@ -307,14 +314,22 @@ class TradingStrategyMonitor:
                     240,
                     candidate.binding_id,
                 )
-                bars = [bar for bar in response.bars if bar.is_final]
+                base_bars = [bar for bar in response.bars if bar.is_final]
+                execution_bars = resample_final_bars(
+                    base_bars,
+                    config.config.execution_interval,
+                )
+                structure_bars = resample_final_bars(
+                    base_bars,
+                    config.config.structure_interval,
+                )
             except Exception as exc:
                 self.last_error = f"strategy_bars: {type(exc).__name__}: {exc}"
                 continue
-            if not bars:
+            if not execution_bars or not structure_bars:
                 continue
-            result = evaluate_gap_pullback(candidate, bars, config.config)
-            observed_at = bars[-1].end_time
+            result = evaluate_gap_pullback(candidate, structure_bars, config.config)
+            observed_at = structure_bars[-1].end_time
             self.evaluation_count += 1
             await self._event(
                 strategy_repository,
@@ -329,6 +344,10 @@ class TradingStrategyMonitor:
                     "transitions": list(result.transitions),
                     "mode": config.mode,
                     "universe_id": universe.universe_id,
+                    "structure_interval": config.config.structure_interval,
+                    "execution_interval": config.config.execution_interval,
+                    "structure_bar_count": len(structure_bars),
+                    "execution_bar_count": len(execution_bars),
                 },
             )
             if result.state == "entry_ready" and result.signal is not None:
@@ -569,9 +588,13 @@ class TradingStrategyMonitor:
                     "quantity": str(decision.quantity),
                     "stop_price": str(result.signal.stop_price),
                     "target_price": str(result.signal.target_price),
+                    "quality_score": result.signal.quality_score,
+                    "structure_interval": config.config.structure_interval,
+                    "execution_interval": config.config.execution_interval,
                     "priority": [
                         observed_at.astimezone(timezone.utc).isoformat(),
-                        candidate.discovery_rank or 10**9,
+                        -result.signal.quality_score,
+                        candidate.discovery_rank if candidate.discovery_rank is not None else 10**9,
                         candidate.instrument_id,
                     ],
                 },
@@ -607,7 +630,7 @@ class TradingStrategyMonitor:
             "signal_count": self.signal_count,
             "paper_order_count": self.paper_order_count,
             "rejection_count": self.rejection_count,
-            "candidate_arbitration": "observed_at_discovery_rank_instrument",
+            "candidate_arbitration": "observed_at_quality_score_discovery_rank_instrument",
             "live_broker_enabled": False,
             "ai_order_placement_enabled": False,
         }
