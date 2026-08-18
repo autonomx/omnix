@@ -27,6 +27,8 @@ on:
       - "docs/plans/omnix_trading_terminal_roadmap_review.md"
       - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/trading-terminal.yml"
+  push:
+    branches: [agent/trading-auto-strategy-roadmap]
   workflow_dispatch:
 
 permissions:
@@ -34,6 +36,7 @@ permissions:
 
 jobs:
   trading-terminal:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -103,3 +106,45 @@ jobs:
           retention-days: 7
       - name: Verify generated API contract is committed
         run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
+
+  sync-generated-contract:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/agent/trading-auto-strategy-roadmap'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/trading-auto-strategy-roadmap
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install generator dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+      - name: Regenerate committed gateway API contract
+        run: npm --workspace @omnix/web run api:generate
+      - name: Commit generated contract only
+        shell: bash
+        run: |
+          git add src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
+          if git diff --cached --quiet; then
+            echo "Generated contract already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh generated gateway API contract"
+          git push origin HEAD:agent/trading-auto-strategy-roadmap
