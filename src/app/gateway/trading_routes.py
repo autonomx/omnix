@@ -29,6 +29,8 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.replay_api import create_trading_replay_router
     from app.trading.research_api import create_trading_research_router
     from app.trading.scanner_api import create_trading_scanner_router
+    from app.trading.strategy_api import create_trading_strategy_router
+    from app.trading.strategy_monitor import register_trading_strategy_monitor
 
     gateway.include_router(create_trading_router())
     gateway.include_router(create_trading_execution_router())
@@ -37,8 +39,10 @@ def register_trading_routes(gateway: FastAPI) -> None:
     gateway.include_router(create_trading_replay_router())
     gateway.include_router(create_trading_paper_router())
     gateway.include_router(create_trading_research_router())
+    gateway.include_router(create_trading_strategy_router())
     register_trading_alert_monitor(gateway)
     register_trading_paper_monitor(gateway)
+    register_trading_strategy_monitor(gateway)
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
 
