@@ -405,6 +405,7 @@ export function TradingDrawingTools({
                       <button
                         type="button"
                         role="menuitem"
+                        aria-label={item.label}
                         className="trading-drawing-tool-item"
                         disabled={!available}
                         title={available ? item.label : `${item.label} is not available yet`}
