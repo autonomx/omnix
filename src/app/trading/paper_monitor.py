@@ -6,7 +6,6 @@ from collections import defaultdict
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI
@@ -39,6 +38,12 @@ def _interval_seconds() -> float:
 
 
 class TradingPaperMonitor:
+    """Server-authoritative paper execution monitor.
+
+    Market-data errors and ineligible/stale observations fail closed.  The
+    monitor never falls back to an order's caller supplied reference price.
+    """
+
     def __init__(
         self,
         *,
@@ -53,6 +58,7 @@ class TradingPaperMonitor:
         self.last_error: str | None = None
         self.last_run_at: datetime | None = None
         self.quote_count = 0
+        self.rejected_quote_count = 0
         self.fill_count = 0
 
     def start(self) -> None:
@@ -71,17 +77,12 @@ class TradingPaperMonitor:
         repository = self.repository_factory()
         accounts = await asyncio.to_thread(repository.list_accounts, 100)
         targets: dict[tuple[str, str | None], set[str]] = defaultdict(set)
-        market_references: dict[tuple[str, str | None], list[tuple[str, Decimal]]] = defaultdict(list)
         for account in accounts:
             if not account.enabled:
                 continue
             snapshot = await asyncio.to_thread(repository.snapshot, account.account_id)
             for order in snapshot.open_orders:
                 targets[(order.instrument_id, order.binding_id)].add(account.account_id)
-                if order.order_type == "market" and order.reference_price is not None:
-                    market_references[(order.instrument_id, order.binding_id)].append(
-                        (account.account_id, order.reference_price)
-                    )
 
         service = self.market_service_factory()
         filled = 0
@@ -89,24 +90,32 @@ class TradingPaperMonitor:
             targets.items(), key=lambda item: (item[0][0], item[0][1] or "")
         ):
             try:
-                quote = await asyncio.to_thread(
-                    service.quote,
+                execution = await asyncio.to_thread(
+                    service.execution_observation,
                     instrument_id,
                     requested_binding,
                 )
-                source_time = datetime.fromisoformat(
-                    str(quote.get("received_at") or datetime.now(timezone.utc).isoformat())
-                    .replace("Z", "+00:00")
-                )
+                self.quote_count += 1
+                if not execution.execution_eligible:
+                    self.rejected_quote_count += 1
+                    self.last_error = (
+                        "execution_data_rejected: " + ",".join(execution.rejection_reasons)
+                    )
+                    continue
                 observation = PaperMarketObservation(
                     instrument_id=instrument_id,
-                    binding_id=str(quote.get("binding_id") or requested_binding or "") or None,
-                    provider=str(quote.get("provider") or "unknown"),
-                    price=Decimal(str(quote["price"])),
-                    source_time=source_time,
+                    binding_id=execution.binding_id,
+                    provider=execution.provider,
+                    price=execution.last,
+                    bid=execution.bid,
+                    ask=execution.ask,
+                    volume=execution.cumulative_volume,
+                    source_time=execution.source_time,
                     evaluated_at=datetime.now(timezone.utc),
+                    execution_eligible=True,
+                    freshness_mode=execution.freshness_mode,
+                    rejection_reasons=execution.rejection_reasons,
                 )
-                self.quote_count += 1
                 for account_id in sorted(account_ids):
                     fills = await asyncio.to_thread(
                         repository.process_observation,
@@ -116,25 +125,8 @@ class TradingPaperMonitor:
                     filled += len(fills)
             except Exception as exc:
                 self.last_error = f"{type(exc).__name__}: {exc}"
-                for account_id, reference_price in market_references.get(
-                    (instrument_id, requested_binding),
-                    [],
-                ):
-                    now = datetime.now(timezone.utc)
-                    fallback_observation = PaperMarketObservation(
-                        instrument_id=instrument_id,
-                        binding_id=requested_binding,
-                        provider="paper-reference",
-                        price=reference_price,
-                        source_time=now,
-                        evaluated_at=now,
-                    )
-                    fills = await asyncio.to_thread(
-                        repository.process_observation,
-                        account_id,
-                        fallback_observation,
-                    )
-                    filled += len(fills)
+                # Fail closed. No reference-price or synthetic observation path.
+                continue
         self.fill_count += filled
         self.last_run_at = datetime.now(timezone.utc)
         return filled
@@ -147,7 +139,10 @@ class TradingPaperMonitor:
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
             "quote_count": self.quote_count,
+            "rejected_quote_count": self.rejected_quote_count,
             "fill_count": self.fill_count,
+            "fail_closed": True,
+            "reference_price_fallback": False,
         }
 
     async def _run_loop(self) -> None:
