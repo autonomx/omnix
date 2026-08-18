@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 
+from .catalyst_discovery import discover_yahoo_catalyst_headlines
 from .catalyst_evidence import CatalystShadowClassification
 from .catalyst_repository import TradingCatalystRepository, default_catalyst_repository
 from .catalyst_shadow import generate_catalyst_shadow_classification
@@ -127,6 +128,23 @@ class StrategyResearchReviewResponse(BaseModel):
     reviews: list[StrategyResearchReview]
 
 
+class StrategyCatalystCaptureRequest(BaseModel):
+    """Current-only Yahoo headline capture for the attached research universe."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lookback_hours: int = Field(default=72, ge=1, le=168)
+    max_items_per_candidate: int = Field(default=8, ge=1, le=25)
+
+
+class StrategyCatalystCaptureResponse(BaseModel):
+    strategy: TradingStrategyConfigDocument
+    universe: GapperUniverseSnapshot
+    evidence_count: int = Field(ge=0)
+    candidates_with_evidence: int = Field(ge=0)
+    errors: dict[str, str] = Field(default_factory=dict)
+
+
 RepositoryFactory = Callable[[], TradingStrategyRepository]
 CatalystRepositoryFactory = Callable[[], TradingCatalystRepository]
 
@@ -183,6 +201,11 @@ def _research_event(
         idempotency_key=idem,
         payload={"universe_id": universe_id, "shadow_only": True, **payload},
     )
+
+
+def _research_universe_id(source_id: str, observed_at: datetime) -> str:
+    suffix = f"-research-{observed_at.strftime('%H%M%S')}"
+    return source_id[: 200 - len(suffix)] + suffix
 
 
 def create_trading_strategy_router(
@@ -342,6 +365,96 @@ def create_trading_strategy_router(
                 strategy_id,
                 document,
                 expected_revision=if_match,
+            )
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post(
+        "/{strategy_id}/research/capture-yahoo",
+        response_model=StrategyCatalystCaptureResponse,
+    )
+    async def capture_yahoo_research(
+        strategy_id: str,
+        request: StrategyCatalystCaptureRequest,
+    ):
+        """Collect timestamped headline evidence and freeze a new research universe.
+
+        This is a research-phase mutation, not an execution path. AUTO PAPER must
+        be paused while changing the attached universe so the daily selection is
+        explicit and auditable.
+        """
+        try:
+            strategy_repository = repository_factory()
+            config = await asyncio.to_thread(strategy_repository.get_config, strategy_id)
+            if config.mode == "auto_paper":
+                raise ValueError("pause_auto_paper_before_research_capture")
+            if not config.active_universe_id:
+                raise ValueError("strategy_has_no_active_universe")
+            source = await asyncio.to_thread(
+                strategy_repository.get_universe,
+                config.active_universe_id,
+            )
+            catalyst_repository = catalyst_repository_factory()
+            observed_at = datetime.now(timezone.utc)
+            evidence_count = 0
+            errors: dict[str, str] = {}
+            enriched: list[GapperCandidate] = []
+            for candidate in source.candidates:
+                symbol = candidate.instrument_id.split(":")[-1]
+                try:
+                    evidence = await asyncio.to_thread(
+                        discover_yahoo_catalyst_headlines,
+                        instrument_id=candidate.instrument_id,
+                        symbol=symbol,
+                        evaluation_time=observed_at,
+                        lookback_hours=request.lookback_hours,
+                        max_items=request.max_items_per_candidate,
+                    )
+                except Exception as exc:  # provider failure must not erase the candidate
+                    errors[candidate.instrument_id] = f"{type(exc).__name__}: {exc}"
+                    evidence = ()
+                for item in evidence:
+                    await asyncio.to_thread(catalyst_repository.save_evidence, item)
+                evidence_count += len(evidence)
+                ids = tuple(dict.fromkeys((*candidate.catalyst_evidence_ids, *(item.evidence_id for item in evidence))))
+                flags = tuple(sorted(set(candidate.dilution_flags).union(*(set(item.dilution_flags) for item in evidence))))
+                evidence_times = dict(candidate.evidence_observed_at)
+                for item in evidence:
+                    evidence_times[f"catalyst:{item.evidence_id}"] = item.captured_at
+                enriched.append(
+                    candidate.model_copy(
+                        update={
+                            "catalyst_evidence_ids": ids,
+                            "dilution_flags": flags,
+                            "evidence_observed_at": evidence_times,
+                        }
+                    )
+                )
+
+            snapshot = freeze_gapper_universe(
+                universe_id=_research_universe_id(source.universe_id, observed_at),
+                session_date=source.session_date,
+                evaluation_time=observed_at,
+                discovery_source="import",
+                candidates=enriched,
+            )
+            _validate_catalyst_provenance(snapshot, catalyst_repository)
+            snapshot = await asyncio.to_thread(strategy_repository.save_universe, snapshot)
+            updated_document = config.model_copy(update={"active_universe_id": snapshot.universe_id})
+            updated = await asyncio.to_thread(
+                strategy_repository.update_config,
+                strategy_id,
+                updated_document,
+                expected_revision=config.revision,
+            )
+            return StrategyCatalystCaptureResponse(
+                strategy=updated,
+                universe=snapshot,
+                evidence_count=evidence_count,
+                candidates_with_evidence=sum(bool(item.catalyst_evidence_ids) for item in snapshot.candidates),
+                errors=errors,
             )
         except RevisionConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
