@@ -49,6 +49,8 @@ US-equity data uses a split-source architecture:
 - **Yahoo** is discovery/history/chart research only and can never authorize a paper fill.
 - **Alpaca IEX** is the authoritative real-time US-equity paper-execution quote source. It is explicitly partial-market IEX data, not consolidated SIP/NBBO.
 
+Within this paper-only system, **execution-grade** means an observation that satisfies Omnix's explicit execution-data contract; it does not mean IEX is equivalent to consolidated SIP/NBBO or a live brokerage fill.
+
 Configure Alpaca Paper Only / market-data credentials with:
 
 ```text
