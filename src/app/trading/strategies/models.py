@@ -45,56 +45,54 @@ class StrategyRiskProfile(BaseModel):
 
 
 class GapPullbackConfig(BaseModel):
-    """Fully configurable deterministic definition for gap_pullback_v1.
+    """Versioned deterministic definition for gap_pullback_v1.
 
-    LLM/model research may annotate candidates, but these fields remain the
-    complete execution-authorizing contract for AUTO PAPER.
+    Version 1.0 defaults remain permissive for persisted compatibility. The
+    Trading UI creates 1.1.0 strategy instances with the stricter failed-selloff
+    research/quality defaults explicitly populated and fully configurable.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     strategy_id: Literal["gap_pullback_v1"] = "gap_pullback_v1"
-    strategy_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
+    strategy_version: Literal["1.0.0", "1.1.0"] = "1.0.0"
 
-    # Phase 1: discovery / liquidity
+    # Phase 1: discovery / liquidity. Legacy-compatible defaults are retained;
+    # v1.1 UI instances explicitly use $10M / 5x / preferred-float settings.
     minimum_gap_pct: Decimal = Field(default=Decimal("20"), ge=0)
     minimum_price: Decimal = Field(default=Decimal("0.50"), gt=0)
     maximum_price: Decimal = Field(default=Decimal("20"), gt=0)
-    minimum_premarket_dollar_volume: Decimal = Field(default=Decimal("10000000"), ge=0)
-    minimum_tod_rvol: Decimal = Field(default=Decimal("5"), ge=0)
+    minimum_premarket_dollar_volume: Decimal = Field(default=Decimal("1000000"), ge=0)
+    minimum_tod_rvol: Decimal = Field(default=Decimal("2"), ge=0)
     maximum_spread_bps: Decimal = Field(default=Decimal("150"), gt=0)
     preferred_float_min_shares: Decimal = Field(default=Decimal("2000000"), gt=0)
     preferred_float_max_shares: Decimal = Field(default=Decimal("30000000"), gt=0)
-    float_preference_mode: FloatPreferenceMode = "score"
+    float_preference_mode: FloatPreferenceMode = "ignore"
 
-    # Phase 2: research / supply evidence
-    require_catalyst_evidence: bool = True
-    reject_dilution_flags: tuple[str, ...] = (
-        "registered_offering",
-        "atm",
-        "warrants",
-        "convertible",
-        "equity_line",
-    )
+    # Phase 2: research / supply evidence. v1.1 UI instances require catalyst
+    # evidence and provide the active dilution flag list explicitly.
+    require_catalyst_evidence: bool = False
+    reject_dilution_flags: tuple[str, ...] = ()
 
-    # Phase 3: deterministic failed-selloff structure
+    # Phase 3: deterministic failed-selloff structure.
     opening_impulse_min_pct: Decimal = Field(default=Decimal("8"), ge=0)
-    pullback_min_pct: Decimal = Field(default=Decimal("15"), ge=0)
-    pullback_max_pct: Decimal = Field(default=Decimal("55"), gt=0)
-    pullback_volume_max_ratio: Decimal = Field(default=Decimal("0.70"), ge=0, le=5)
+    pullback_min_pct: Decimal = Field(default=Decimal("3"), ge=0)
+    pullback_max_pct: Decimal = Field(default=Decimal("35"), gt=0)
+    pullback_volume_max_ratio: Decimal = Field(default=Decimal("5"), ge=0, le=5)
     higher_low_buffer_bps: Decimal = Field(default=Decimal("20"), ge=0)
     breakout_volume_ratio: Decimal = Field(default=Decimal("1.25"), gt=0)
     pivot_left_bars: int = Field(default=2, ge=1, le=10)
     pivot_right_bars: int = Field(default=2, ge=1, le=10)
     volume_lookback_bars: int = Field(default=10, ge=2, le=100)
 
-    # Phase 4: breakout quality / daily selection
-    require_breakout_hold: bool = True
+    # Phase 4: breakout quality / daily selection. v1.1 UI instances set hold
+    # confirmation on and require a 7/10 quality score.
+    require_breakout_hold: bool = False
     breakout_hold_bars: int = Field(default=1, ge=1, le=5)
     breakout_hold_tolerance_bps: Decimal = Field(default=Decimal("25"), ge=0, le=1000)
-    minimum_quality_score: int = Field(default=7, ge=0, le=10)
+    minimum_quality_score: int = Field(default=0, ge=0, le=10)
 
-    # Phase 5: execution / protection
+    # Phase 5: execution / protection.
     stop_buffer_bps: Decimal = Field(default=Decimal("15"), ge=0)
     reward_multiple: Decimal = Field(default=Decimal("2"), gt=0, le=10)
     entry_start_et: time = time(9, 35)
