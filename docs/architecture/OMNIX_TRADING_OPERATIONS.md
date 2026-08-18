@@ -11,7 +11,10 @@ Gateway lifecycle services:
 - bounded scanner manager
 - replay/backtest routes
 - paper simulation monitor
+- deterministic strategy monitor
 - read-only AI research route
+- catalyst evidence and shadow classification routes
+- shadow-only statistical-model training/scoring routes
 
 ## Environment controls
 
@@ -27,9 +30,20 @@ Gateway lifecycle services:
 - `OMNIX_TRADING_PAPER_INTERVAL_SECONDS` controls the polling interval with a five-second minimum.
 - In `legacy_test` mode, enable only with `OMNIX_TRADING_PAPER_MONITOR_IN_TESTS=1`.
 
+The paper monitor owns market observations and manual paper stop/target protection. Browser observations are not execution authority.
+
+### Strategy monitor
+
+- `OMNIX_TRADING_STRATEGY_MONITOR=0` disables deterministic strategy monitoring.
+- `OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS` controls the polling interval with a five-second minimum.
+- In `legacy_test` mode, enable only with `OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS=1`.
+- Strategy runtime modes are `off`, `shadow`, and `auto_paper`. There is no live-broker mode.
+
 ### Provider configuration
 
 Market-data providers and the optional research model use Omnix provider configuration. Do not place credentials, tokens, or base URLs in Trading workspace records, scanner definitions, research requests, or browser storage.
+
+Execution-grade data is a stricter contract than chart/research data. An execution observation must pass source-time freshness, session, bid/ask, and spread policy before it can drive a paper fill. The Yahoo equity adapter is deliberately research/diagnostic only and returns `PROVIDER_NOT_EXECUTION_GRADE`; therefore US-equity AUTO PAPER remains fail-closed until an approved execution-grade feed is configured. Never remove that rejection merely to make a simulation fill.
 
 ## Provider outage procedure
 
@@ -39,8 +53,10 @@ Market-data providers and the optional research model use Omnix provider configu
 4. Preserve the exact instrument, requested binding, resolved binding, provider, dataset fingerprint, source time, and error.
 5. Do not merge partial data from two providers. A fallback replaces the complete requested dataset.
 6. Restore the provider or select an allowed compatible binding.
-7. Re-enable monitors and verify that retries do not duplicate alert triggers, paper fills, ledger entries, or scanner results.
+7. Re-enable monitors and verify that retries do not duplicate alert triggers, paper fills, ledger entries, scanner results, strategy events, or protections.
 8. Attach the outage/recovery evidence to the release certification record.
+
+Missing, stale, cached, fallback, unknown-session, bookless, or over-wide execution data must produce no paper fill. `reference_price` is reservation evidence only and is never a market observation fallback.
 
 ## Streaming recovery
 
@@ -57,21 +73,22 @@ Before upgrade:
 
 1. Back up the database and BlobStore root.
 2. Record the application commit SHA and latest applied migration.
-3. Confirm sufficient disk space for datasets, scanner results, backtest evidence, paper ledger history, and artifacts.
+3. Confirm sufficient disk space for datasets, scanner results, backtest evidence, paper ledger history, strategy events, evidence records, model artifacts, and artifacts.
 
 After upgrade:
 
 1. Verify Trading tables and constraints.
 2. Restart the gateway.
-3. Reload a representative workspace, alert, scanner, dataset, backtest, and paper account.
+3. Reload a representative workspace, alert, scanner, dataset, backtest, paper account, frozen universe, and strategy configuration.
 4. Verify backtest artifact checksums.
 5. Confirm monitor diagnostics and absence of duplicate state changes.
+6. Confirm strategy/model migrations preserve `shadow_only` and paper-only constraints.
 
 Rollback must preserve Trading records and BlobStore artifacts unless a reviewed data migration explicitly removes them. Do not invent legacy signal/fill indices; pre-index backtests retain NULL sequencing evidence.
 
 ## BlobStore artifacts
 
-Complete backtest result JSON is stored through `LocalBlobStore`. Relational PostgreSQL rows retain queryable summaries, trades, equity points, and logs.
+Complete legacy backtest result JSON is stored through `LocalBlobStore`. Relational PostgreSQL rows retain queryable summaries, trades, equity points, and logs. The gap-pullback portfolio backtester additionally freezes its candidate universe and per-symbol bars in a deterministic session dataset fingerprint.
 
 Artifact metadata includes:
 
@@ -99,7 +116,7 @@ A BlobStore write can succeed before a database transaction fails. The runtime a
 
 - Never delete active PostgreSQL authority records as a cache-clearing shortcut.
 - Cached/fallback market data must remain distinguishable from live/polled data through provenance.
-- Scanner and backtest history are evidence, not disposable browser cache.
+- Scanner, strategy-event, evidence, model-score, and backtest history are evidence, not disposable browser cache.
 - Before deleting local artifacts, verify that no run metadata references their storage key.
 
 ## Scanner operations
@@ -111,20 +128,62 @@ A BlobStore write can succeed before a database transaction fails. The runtime a
 - Maximum run timeout: 300 seconds.
 - Default formulas are versioned as `omnix-indicators-v2`.
 
-Cancel scans that exceed provider policy or operational expectations. Do not broaden the universe dynamically beyond the stored allowlist.
+Cancel scans that exceed provider policy or operational expectations. Do not broaden the legacy scanner universe dynamically beyond the stored allowlist. The gapper-universe import is a separate point-in-time dataset and must not be reconstructed from eventual winners after the session.
 
 ## Paper simulation operations
 
 Paper simulation is not brokerage execution.
 
 - Market, Limit, and Stop only.
-- Long positions only.
+- Long and short accounting use the same relational paper ledger; automated `gap_pullback_v1` entries are long-only.
 - Reset and archive require the current account revision.
-- Reset deletes simulated state and records a new explicit deposit.
-- Archive disables the account and cancels open orders without deleting evidence.
+- Reset deletes simulated state, records a new explicit deposit, cancels protections, and turns related strategy automation off.
+- Archive disables the account, releases reservations, cancels open orders/protections, and turns related strategy automation off without deleting evidence.
 - Fill, cash, position, order, and ledger changes commit together under row locks.
+- `paper-execution-v2` applies deterministic spread-side pricing, slippage, stop gap-through behavior, observation latency, max volume participation, partial fills, stale-data rejection, and halt rejection.
+- Manual take-profit/stop-loss protection is PostgreSQL authority. Browser `localStorage` is not a protection source of truth.
 
 If duplicate fills or ledger entries are suspected, stop the paper monitor and inspect idempotency keys before resuming.
+
+## Gap-pullback automation
+
+The thesis is **buy the first failed sell-off**, not the first sell-off. `gap_pullback_v1` is a deterministic state machine built around confirmed opening structure: opening impulse → confirmed first pullback low (L1) → confirmed bounce high (B1) → confirmed higher second low (L2) → regular-session VWAP reclaim → B1 break → breakout-volume confirmation.
+
+Operational sequence:
+
+1. Before trading, freeze a point-in-time daily gapper universe through **Trading → Strategies → Freeze point-in-time gapper universe** or `POST /api/trading/strategies/universes/freeze`. Preserve every candidate that qualified at that time, including eventual fades/failures.
+2. Candidate evidence should include previous close, premarket price/gap, premarket volume and dollar volume, time-of-day RVOL, spread when available, market cap/float when available, catalyst evidence IDs, dilution flags, and discovery rank.
+3. Start new configurations in `shadow`. Inspect candidate state/reason codes and rejected candidates before enabling `auto_paper`.
+4. Run the frozen multi-symbol strategy backtest with `POST /api/trading/strategies/backtest/gap-pullback`. Entry is next-bar, and the backtester uses the same `paper_fill_decision` engine as the paper monitor.
+5. Validate prefix invariance/causality: a pivot is unknown until its configured right-side bars exist. Future bars must never alter an already evaluated prefix.
+6. `auto_paper` may submit only to the existing paper repository. It additionally requires an execution-eligible observation and server risk approval.
+7. Risk gates include account-risk sizing, daily loss, aggregate open risk, max positions, max trades/day, one trade/symbol/day, max notional, spread, entry window, force-flat time, and kill switch.
+8. Every automated entry receives persisted strategy stop/target protection. At force-flat time the strategy submits a paper exit if execution data is eligible.
+
+If AUTO PAPER is unexpectedly active, set the strategy kill switch and mode to `off`, or set `OMNIX_TRADING_STRATEGY_MONITOR=0` and restart the gateway. Do not use data/research model failures as a reason to bypass execution eligibility.
+
+## Catalyst and AI shadow operations
+
+Catalyst context is an evidence pipeline, not an LLM opinion field.
+
+- Capture timestamped immutable evidence with source type (`sec`, `company`, `news`, `manual`), source locator, publication/capture timestamps, text hash, deterministic facts, and dilution evidence.
+- Dilution flags such as ATM, warrants, convertible securities, shelf/resale registration, and equity lines are extracted from supplied evidence and retained with the immutable fingerprint.
+- `classify-shadow` can ask the configured model to classify only the supplied evidence IDs. It must cite exactly those IDs and returns `shadow_only=true`.
+- Catalyst/AI output is not imported by `strategy_monitor.py` and cannot authorize an order.
+
+Use only sources whose access, retention, and redistribution terms are appropriate for the configured environment. Source acquisition adapters may be added separately; the evidence boundary must remain immutable and timestamped.
+
+## Statistical model operations
+
+The bounce model label is `P(+2R before -1R within 90 minutes)`. Same-bar stop/target ambiguity resolves pessimistically to the stop.
+
+- The transparent baseline score remains shadow-only.
+- `POST /api/trading/models/bounce/train` fits a standardized logistic regression from explicit labeled examples and persists coefficients, intercept, feature means/scales, training metadata, log loss, and a SHA-256 artifact fingerprint.
+- A model version is immutable: reusing a version with a different fingerprint is rejected.
+- `POST /api/trading/models/bounce/score-shadow` persists a shadow score for later out-of-sample evaluation.
+- Model artifacts and scores are deliberately absent from the deterministic strategy monitor. Promotion into any strategy gate requires a separate reviewed change and out-of-sample evidence.
+
+Do not interpret training fit or a paper backtest as proof of future profitability.
 
 ## Research operations
 
@@ -147,7 +206,9 @@ For Trading incidents record:
 - canonical instrument and binding;
 - provider and policy scope;
 - source and evaluation timestamps;
-- dataset fingerprint or artifact checksum;
+- frozen universe/dataset fingerprint or artifact checksum;
+- strategy ID/version/mode and candidate reason code when relevant;
+- model/evidence fingerprints when relevant;
 - relevant revision/idempotency key;
 - diagnostics output;
 - remediation and validation result.
