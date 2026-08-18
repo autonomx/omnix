@@ -24,6 +24,7 @@ class CatalystEvidence(BaseModel):
     published_at: datetime
     captured_at: datetime
     headline: str | None = None
+    content: str = Field(min_length=1, max_length=100_000)
     text_hash: str = Field(min_length=64, max_length=64)
     facts: dict[str, object] = Field(default_factory=dict)
     dilution_flags: tuple[str, ...] = ()
@@ -35,6 +36,14 @@ class CatalystEvidence(BaseModel):
         if value.tzinfo is None:
             raise ValueError("catalyst evidence timestamps must be timezone-aware")
         return value.astimezone(timezone.utc)
+
+    @field_validator("content")
+    @classmethod
+    def content_matches_normalized_form(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("catalyst evidence content cannot be empty")
+        return normalized
 
 
 class CatalystShadowClassification(BaseModel):
@@ -97,6 +106,8 @@ def capture_catalyst_evidence(
 ) -> CatalystEvidence:
     captured = captured_at or datetime.now(timezone.utc)
     normalized = " ".join(raw_text.split())
+    if not normalized:
+        raise ValueError("catalyst evidence content cannot be empty")
     text_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
     flags = dilution_flags(normalized)
     payload = {
@@ -107,17 +118,16 @@ def capture_catalyst_evidence(
         "published_at": published_at.astimezone(timezone.utc).isoformat(),
         "captured_at": captured.astimezone(timezone.utc).isoformat(),
         "headline": headline,
+        "content": normalized,
         "text_hash": text_hash,
         "facts": facts or {},
         "dilution_flags": flags,
     }
+    fingerprint_payload = {**payload, "content": None}
     fingerprint = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     ).hexdigest()
-    return CatalystEvidence(
-        **payload,
-        immutable_fingerprint=fingerprint,
-    )
+    return CatalystEvidence(**payload, immutable_fingerprint=fingerprint)
 
 
 def classify_catalyst_shadow(
