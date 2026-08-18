@@ -107,10 +107,12 @@ def registry_with_fixtures() -> ProviderRegistry:
 
 def test_equity_bindings_preserve_one_canonical_instrument() -> None:
     bindings = bindings_for_instrument(AAPL)
-    assert {item.provider for item in bindings} == {"yahoo", "stooq"}
+    assert {item.provider for item in bindings} == {"yahoo", "alpaca_iex", "stooq"}
     assert {item.instrument_id for item in bindings} == {AAPL}
     assert POLICIES["yahoo"].is_official_api is False
     assert POLICIES["yahoo"].usage_scope.value == "personal_local"
+    assert POLICIES["alpaca_iex"].is_official_api is True
+    assert POLICIES["alpaca_iex"].authentication_required is True
     assert next(item for item in bindings if item.provider == "yahoo").adjustment_capabilities == ("raw",)
 
 
