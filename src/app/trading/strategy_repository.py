@@ -83,6 +83,21 @@ def _config(row) -> TradingStrategyConfigDocument:
     )
 
 
+def _event(row) -> StrategyEvent:
+    return StrategyEvent(
+        strategy_id=row[0],
+        event_id=row[1],
+        run_id=row[2],
+        instrument_id=row[3],
+        event_type=row[4],
+        state=row[5],
+        reason_code=row[6],
+        observed_at=row[7],
+        idempotency_key=row[8],
+        payload=row[9],
+    )
+
+
 def _protection(row) -> StrategyProtection:
     return StrategyProtection(
         strategy_id=str(row[0]),
@@ -105,6 +120,10 @@ def _protection(row) -> StrategyProtection:
 _CONFIG_COLUMNS = """
 strategy_id, account_id, strategy_kind, strategy_version, mode,
 active_universe_id, config, risk, enabled, revision, created_at, updated_at
+"""
+_EVENT_COLUMNS = """
+strategy_id, event_id, run_id, instrument_id, event_type,
+state, reason_code, observed_at, idempotency_key, payload
 """
 _PROTECTION_COLUMNS = """
 strategy_id, protection_id, account_id, instrument_id, entry_order_id,
@@ -304,30 +323,38 @@ class TradingStrategyRepository:
     def recent_events(self, strategy_id: str, limit: int = 200) -> list[StrategyEvent]:
         with self.uow_factory() as uow:
             rows = uow.connection.execute(
-                """
-                SELECT strategy_id, event_id, run_id, instrument_id, event_type,
-                       state, reason_code, observed_at, idempotency_key, payload
+                f"""
+                SELECT {_EVENT_COLUMNS}
                   FROM omnix_trading_strategy_events
                  WHERE workspace_id = %s AND strategy_id = %s
                  ORDER BY observed_at DESC, created_at DESC LIMIT %s
                 """,
                 (self.context.workspace_id, strategy_id, limit),
             ).fetchall()
-        return [
-            StrategyEvent(
-                strategy_id=row[0],
-                event_id=row[1],
-                run_id=row[2],
-                instrument_id=row[3],
-                event_type=row[4],
-                state=row[5],
-                reason_code=row[6],
-                observed_at=row[7],
-                idempotency_key=row[8],
-                payload=row[9],
-            )
-            for row in rows
-        ]
+        return [_event(row) for row in rows]
+
+    def entry_events_between(
+        self,
+        strategy_id: str,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> list[StrategyEvent]:
+        if start_time.tzinfo is None or end_time.tzinfo is None:
+            raise ValueError("entry event boundaries must be timezone-aware")
+        with self.uow_factory() as uow:
+            rows = uow.connection.execute(
+                f"""
+                SELECT {_EVENT_COLUMNS}
+                  FROM omnix_trading_strategy_events
+                 WHERE workspace_id = %s AND strategy_id = %s
+                   AND event_type = 'entry_order_submitted'
+                   AND observed_at >= %s AND observed_at < %s
+                 ORDER BY observed_at, created_at, event_id
+                """,
+                (self.context.workspace_id, strategy_id, start_time, end_time),
+            ).fetchall()
+        return [_event(row) for row in rows]
 
     def daily_paper_pnl(
         self,
