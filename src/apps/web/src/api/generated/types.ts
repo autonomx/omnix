@@ -1888,10 +1888,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Backtest Gap Pullback
-         * @description Run deterministic portfolio backtest using shared paper/risk policies.
-         */
+        /** Backtest Gap Pullback */
         post: operations["backtest_gap_pullback_api_trading_strategies_backtest_gap_pullback_post"];
         delete?: never;
         options?: never;
@@ -1908,10 +1905,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Evaluate Strategy
-         * @description Pure read-only evaluation; never persists or places an order.
-         */
+        /** Evaluate Strategy */
         post: operations["evaluate_strategy_api_trading_strategies_evaluate_gap_pullback_post"];
         delete?: never;
         options?: never;
@@ -1945,10 +1939,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Discover Yahoo Universe
-         * @description Discover current Yahoo gainers and freeze the exact point-in-time universe.
-         */
+        /** Discover Yahoo Universe */
         post: operations["discover_yahoo_universe_api_trading_strategies_universes_discover_yahoo_post"];
         delete?: never;
         options?: never;
@@ -2036,6 +2027,40 @@ export interface paths {
         get: operations["protections_api_trading_strategies__strategy_id__protections_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/research/capture-yahoo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture Yahoo Research */
+        post: operations["capture_yahoo_research_api_trading_strategies__strategy_id__research_capture_yahoo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/research/llm-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Llm Research */
+        post: operations["run_llm_research_api_trading_strategies__strategy_id__research_llm_review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4173,14 +4198,7 @@ export interface components {
              */
             source_as_of: string;
         };
-        /**
-         * GapPullbackBacktestRequest
-         * @description Frozen multi-symbol morning backtest request.
-         *
-         *     Candidate membership is supplied by an immutable point-in-time universe;
-         *     there is no hindsight symbol discovery inside the backtester. Portfolio
-         *     selection uses the same server risk sizing policy as AUTO PAPER.
-         */
+        /** GapPullbackBacktestRequest */
         GapPullbackBacktestRequest: {
             /**
              * Assumed Spread Bps
@@ -4360,8 +4378,25 @@ export interface components {
             /** Trigger Bar Index */
             trigger_bar_index: number;
         };
-        /** GapPullbackConfig */
+        /**
+         * GapPullbackConfig
+         * @description Versioned deterministic definition for gap_pullback_v1.
+         *
+         *     Version 1.0 defaults remain permissive for persisted compatibility. The
+         *     Trading UI creates 1.1.0 strategy instances with the stricter failed-selloff
+         *     research/quality defaults explicitly populated and fully configurable.
+         */
         "GapPullbackConfig-Input": {
+            /**
+             * Breakout Hold Bars
+             * @default 1
+             */
+            breakout_hold_bars: number;
+            /**
+             * Breakout Hold Tolerance Bps
+             * @default 25
+             */
+            breakout_hold_tolerance_bps: number | string;
             /**
              * Breakout Volume Ratio
              * @default 1.25
@@ -4373,6 +4408,12 @@ export interface components {
              * @default 09:35:00
              */
             entry_start_et: string;
+            /**
+             * Float Preference Mode
+             * @default ignore
+             * @enum {string}
+             */
+            float_preference_mode: "ignore" | "score" | "require";
             /**
              * Higher Low Buffer Bps
              * @default 20
@@ -4410,6 +4451,11 @@ export interface components {
              */
             minimum_price: number | string;
             /**
+             * Minimum Quality Score
+             * @default 0
+             */
+            minimum_quality_score: number;
+            /**
              * Minimum Tod Rvol
              * @default 2
              */
@@ -4430,6 +4476,16 @@ export interface components {
              */
             pivot_right_bars: number;
             /**
+             * Preferred Float Max Shares
+             * @default 30000000
+             */
+            preferred_float_max_shares: number | string;
+            /**
+             * Preferred Float Min Shares
+             * @default 2000000
+             */
+            preferred_float_min_shares: number | string;
+            /**
              * Pullback Max Pct
              * @default 35
              */
@@ -4439,6 +4495,26 @@ export interface components {
              * @default 3
              */
             pullback_min_pct: number | string;
+            /**
+             * Pullback Volume Max Ratio
+             * @default 5
+             */
+            pullback_volume_max_ratio: number | string;
+            /**
+             * Reject Dilution Flags
+             * @default []
+             */
+            reject_dilution_flags: string[];
+            /**
+             * Require Breakout Hold
+             * @default false
+             */
+            require_breakout_hold: boolean;
+            /**
+             * Require Catalyst Evidence
+             * @default false
+             */
+            require_catalyst_evidence: boolean;
             /**
              * Reward Multiple
              * @default 2
@@ -4458,17 +4534,34 @@ export interface components {
             /**
              * Strategy Version
              * @default 1.0.0
-             * @constant
+             * @enum {string}
              */
-            strategy_version: "1.0.0";
+            strategy_version: "1.0.0" | "1.1.0";
             /**
              * Volume Lookback Bars
              * @default 10
              */
             volume_lookback_bars: number;
         };
-        /** GapPullbackConfig */
+        /**
+         * GapPullbackConfig
+         * @description Versioned deterministic definition for gap_pullback_v1.
+         *
+         *     Version 1.0 defaults remain permissive for persisted compatibility. The
+         *     Trading UI creates 1.1.0 strategy instances with the stricter failed-selloff
+         *     research/quality defaults explicitly populated and fully configurable.
+         */
         "GapPullbackConfig-Output": {
+            /**
+             * Breakout Hold Bars
+             * @default 1
+             */
+            breakout_hold_bars: number;
+            /**
+             * Breakout Hold Tolerance Bps
+             * @default 25
+             */
+            breakout_hold_tolerance_bps: string;
             /**
              * Breakout Volume Ratio
              * @default 1.25
@@ -4480,6 +4573,12 @@ export interface components {
              * @default 09:35:00
              */
             entry_start_et: string;
+            /**
+             * Float Preference Mode
+             * @default ignore
+             * @enum {string}
+             */
+            float_preference_mode: "ignore" | "score" | "require";
             /**
              * Higher Low Buffer Bps
              * @default 20
@@ -4517,6 +4616,11 @@ export interface components {
              */
             minimum_price: string;
             /**
+             * Minimum Quality Score
+             * @default 0
+             */
+            minimum_quality_score: number;
+            /**
              * Minimum Tod Rvol
              * @default 2
              */
@@ -4537,6 +4641,16 @@ export interface components {
              */
             pivot_right_bars: number;
             /**
+             * Preferred Float Max Shares
+             * @default 30000000
+             */
+            preferred_float_max_shares: string;
+            /**
+             * Preferred Float Min Shares
+             * @default 2000000
+             */
+            preferred_float_min_shares: string;
+            /**
              * Pullback Max Pct
              * @default 35
              */
@@ -4546,6 +4660,26 @@ export interface components {
              * @default 3
              */
             pullback_min_pct: string;
+            /**
+             * Pullback Volume Max Ratio
+             * @default 5
+             */
+            pullback_volume_max_ratio: string;
+            /**
+             * Reject Dilution Flags
+             * @default []
+             */
+            reject_dilution_flags: string[];
+            /**
+             * Require Breakout Hold
+             * @default false
+             */
+            require_breakout_hold: boolean;
+            /**
+             * Require Catalyst Evidence
+             * @default false
+             */
+            require_catalyst_evidence: boolean;
             /**
              * Reward Multiple
              * @default 2
@@ -4565,9 +4699,9 @@ export interface components {
             /**
              * Strategy Version
              * @default 1.0.0
-             * @constant
+             * @enum {string}
              */
-            strategy_version: "1.0.0";
+            strategy_version: "1.0.0" | "1.1.0";
             /**
              * Volume Lookback Bars
              * @default 10
@@ -4578,10 +4712,31 @@ export interface components {
         GapPullbackFeatures: {
             /** B1 */
             b1?: string | null;
+            /** Breakout Hold Bars */
+            breakout_hold_bars?: number | null;
             /** Breakout Volume Ratio */
             breakout_volume_ratio?: string | null;
+            /**
+             * Catalyst Evidence Count
+             * @default 0
+             */
+            catalyst_evidence_count: number;
+            /**
+             * Catalyst Score
+             * @default 0
+             */
+            catalyst_score: number;
+            /**
+             * Dilution Flags
+             * @default []
+             */
+            dilution_flags: string[];
+            /** Float Shares */
+            float_shares?: string | null;
             /** Gap Pct */
             gap_pct: string;
+            /** Impulse Average Volume */
+            impulse_average_volume?: string | null;
             /** L1 */
             l1?: string | null;
             /** L2 */
@@ -4590,12 +4745,41 @@ export interface components {
             minutes_since_open?: number | null;
             /** Opening Impulse Pct */
             opening_impulse_pct?: string | null;
+            /**
+             * Opening Structure Score
+             * @default 0
+             */
+            opening_structure_score: number;
             /** Pullback Depth Pct */
             pullback_depth_pct?: string | null;
+            /**
+             * Pullback Quality Score
+             * @default 0
+             */
+            pullback_quality_score: number;
+            /** Pullback Selling Average Volume */
+            pullback_selling_average_volume?: string | null;
+            /** Pullback Volume Ratio */
+            pullback_volume_ratio?: string | null;
+            /**
+             * Quality Score
+             * @default 0
+             */
+            quality_score: number;
+            /**
+             * Reclaim Break Score
+             * @default 0
+             */
+            reclaim_break_score: number;
             /** Session Vwap */
             session_vwap?: string | null;
             /** Spread Bps */
             spread_bps?: string | null;
+            /**
+             * Supply Score
+             * @default 0
+             */
+            supply_score: number;
             /** Tod Rvol */
             tod_rvol?: string | null;
             /** Vwap Distance Pct */
@@ -4615,9 +4799,9 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "entry_ready" | "rejected" | "expired";
+            state: "discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "breakout_hold" | "entry_ready" | "rejected" | "expired";
             /** Transitions */
-            transitions: ("discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "entry_ready" | "rejected" | "expired")[];
+            transitions: ("discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "breakout_hold" | "entry_ready" | "rejected" | "expired")[];
         };
         /**
          * GapperCandidate
@@ -4765,10 +4949,7 @@ export interface components {
             /** Tod Rvol */
             tod_rvol?: string | null;
         };
-        /**
-         * GapperUniverseFreezeRequest
-         * @description Raw point-in-time candidate list; fingerprint is computed by the server.
-         */
+        /** GapperUniverseFreezeRequest */
         GapperUniverseFreezeRequest: {
             /** Candidates */
             candidates: components["schemas"]["GapperCandidate-Input"][];
@@ -6639,6 +6820,32 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** StrategyCatalystCaptureRequest */
+        StrategyCatalystCaptureRequest: {
+            /**
+             * Lookback Hours
+             * @default 72
+             */
+            lookback_hours: number;
+            /**
+             * Max Items Per Candidate
+             * @default 8
+             */
+            max_items_per_candidate: number;
+        };
+        /** StrategyCatalystCaptureResponse */
+        StrategyCatalystCaptureResponse: {
+            /** Candidates With Evidence */
+            candidates_with_evidence: number;
+            /** Errors */
+            errors?: {
+                [key: string]: string;
+            };
+            /** Evidence Count */
+            evidence_count: number;
+            strategy: components["schemas"]["TradingStrategyConfigDocument-Output"];
+            universe: components["schemas"]["GapperUniverseSnapshot-Output"];
+        };
         /** StrategyConfigListResponse */
         StrategyConfigListResponse: {
             /** Strategies */
@@ -6729,6 +6936,39 @@ export interface components {
         StrategyProtectionListResponse: {
             /** Protections */
             protections: components["schemas"]["StrategyProtection"][];
+        };
+        /** StrategyResearchReview */
+        StrategyResearchReview: {
+            classification?: components["schemas"]["CatalystShadowClassification"] | null;
+            /** Detail */
+            detail?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "reviewed" | "missing_evidence" | "error";
+        };
+        /** StrategyResearchReviewRequest */
+        StrategyResearchReviewRequest: {
+            /** Model */
+            model?: string | null;
+        };
+        /** StrategyResearchReviewResponse */
+        StrategyResearchReviewResponse: {
+            /** Reviews */
+            reviews: components["schemas"]["StrategyResearchReview"][];
+            /**
+             * Shadow Only
+             * @default true
+             * @constant
+             */
+            shadow_only: true;
+            /** Strategy Id */
+            strategy_id: string;
+            /** Universe Id */
+            universe_id: string;
         };
         /** StrategyRiskProfile */
         "StrategyRiskProfile-Input": {
@@ -6868,6 +7108,11 @@ export interface components {
             entry_price: string;
             /** Instrument Id */
             instrument_id: string;
+            /**
+             * Quality Score
+             * @default 0
+             */
+            quality_score: number;
             /** Reason Code */
             reason_code: string;
             /** Risk Per Share */
@@ -6876,7 +7121,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "entry_ready" | "rejected" | "expired";
+            state: "discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "breakout_hold" | "entry_ready" | "rejected" | "expired";
             /** Stop Price */
             stop_price: string;
             /** Target Price */
@@ -7755,10 +8000,7 @@ export interface components {
              */
             small_json_payloads: string;
         };
-        /**
-         * YahooGapperDiscoveryRequest
-         * @description Current-only Yahoo discovery request; historical reconstruction is forbidden.
-         */
+        /** YahooGapperDiscoveryRequest */
         YahooGapperDiscoveryRequest: {
             /**
              * Count
@@ -12233,6 +12475,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StrategyProtectionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_yahoo_research_api_trading_strategies__strategy_id__research_capture_yahoo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StrategyCatalystCaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyCatalystCaptureResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_llm_research_api_trading_strategies__strategy_id__research_llm_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StrategyResearchReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyResearchReviewResponse"];
                 };
             };
             /** @description Validation Error */

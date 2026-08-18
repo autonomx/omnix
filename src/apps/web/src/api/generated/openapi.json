@@ -4763,7 +4763,6 @@
       },
       "GapPullbackBacktestRequest": {
         "additionalProperties": false,
-        "description": "Frozen multi-symbol morning backtest request.\n\nCandidate membership is supplied by an immutable point-in-time universe;\nthere is no hindsight symbol discovery inside the backtester. Portfolio\nselection uses the same server risk sizing policy as AUTO PAPER.",
         "properties": {
           "assumed_spread_bps": {
             "anyOf": [
@@ -5239,7 +5238,30 @@
       },
       "GapPullbackConfig-Input": {
         "additionalProperties": false,
+        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.",
         "properties": {
+          "breakout_hold_bars": {
+            "default": 1,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Breakout Hold Bars",
+            "type": "integer"
+          },
+          "breakout_hold_tolerance_bps": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "25",
+            "title": "Breakout Hold Tolerance Bps"
+          },
           "breakout_volume_ratio": {
             "anyOf": [
               {
@@ -5258,6 +5280,16 @@
             "default": "09:35:00",
             "format": "time",
             "title": "Entry Start Et",
+            "type": "string"
+          },
+          "float_preference_mode": {
+            "default": "ignore",
+            "enum": [
+              "ignore",
+              "score",
+              "require"
+            ],
+            "title": "Float Preference Mode",
             "type": "string"
           },
           "higher_low_buffer_bps": {
@@ -5350,6 +5382,13 @@
             "default": "0.50",
             "title": "Minimum Price"
           },
+          "minimum_quality_score": {
+            "default": 0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Minimum Quality Score",
+            "type": "integer"
+          },
           "minimum_tod_rvol": {
             "anyOf": [
               {
@@ -5392,6 +5431,34 @@
             "title": "Pivot Right Bars",
             "type": "integer"
           },
+          "preferred_float_max_shares": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "30000000",
+            "title": "Preferred Float Max Shares"
+          },
+          "preferred_float_min_shares": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "2000000",
+            "title": "Preferred Float Min Shares"
+          },
           "pullback_max_pct": {
             "anyOf": [
               {
@@ -5419,6 +5486,39 @@
             ],
             "default": "3",
             "title": "Pullback Min Pct"
+          },
+          "pullback_volume_max_ratio": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "5",
+            "title": "Pullback Volume Max Ratio"
+          },
+          "reject_dilution_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reject Dilution Flags",
+            "type": "array"
+          },
+          "require_breakout_hold": {
+            "default": false,
+            "title": "Require Breakout Hold",
+            "type": "boolean"
+          },
+          "require_catalyst_evidence": {
+            "default": false,
+            "title": "Require Catalyst Evidence",
+            "type": "boolean"
           },
           "reward_multiple": {
             "anyOf": [
@@ -5456,8 +5556,11 @@
             "type": "string"
           },
           "strategy_version": {
-            "const": "1.0.0",
             "default": "1.0.0",
+            "enum": [
+              "1.0.0",
+              "1.1.0"
+            ],
             "title": "Strategy Version",
             "type": "string"
           },
@@ -5474,7 +5577,21 @@
       },
       "GapPullbackConfig-Output": {
         "additionalProperties": false,
+        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.",
         "properties": {
+          "breakout_hold_bars": {
+            "default": 1,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Breakout Hold Bars",
+            "type": "integer"
+          },
+          "breakout_hold_tolerance_bps": {
+            "default": "25",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Breakout Hold Tolerance Bps",
+            "type": "string"
+          },
           "breakout_volume_ratio": {
             "default": "1.25",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -5485,6 +5602,16 @@
             "default": "09:35:00",
             "format": "time",
             "title": "Entry Start Et",
+            "type": "string"
+          },
+          "float_preference_mode": {
+            "default": "ignore",
+            "enum": [
+              "ignore",
+              "score",
+              "require"
+            ],
+            "title": "Float Preference Mode",
             "type": "string"
           },
           "higher_low_buffer_bps": {
@@ -5529,6 +5656,13 @@
             "title": "Minimum Price",
             "type": "string"
           },
+          "minimum_quality_score": {
+            "default": 0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Minimum Quality Score",
+            "type": "integer"
+          },
           "minimum_tod_rvol": {
             "default": "2",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -5555,6 +5689,18 @@
             "title": "Pivot Right Bars",
             "type": "integer"
           },
+          "preferred_float_max_shares": {
+            "default": "30000000",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Preferred Float Max Shares",
+            "type": "string"
+          },
+          "preferred_float_min_shares": {
+            "default": "2000000",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Preferred Float Min Shares",
+            "type": "string"
+          },
           "pullback_max_pct": {
             "default": "35",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -5566,6 +5712,30 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Pullback Min Pct",
             "type": "string"
+          },
+          "pullback_volume_max_ratio": {
+            "default": "5",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Pullback Volume Max Ratio",
+            "type": "string"
+          },
+          "reject_dilution_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reject Dilution Flags",
+            "type": "array"
+          },
+          "require_breakout_hold": {
+            "default": false,
+            "title": "Require Breakout Hold",
+            "type": "boolean"
+          },
+          "require_catalyst_evidence": {
+            "default": false,
+            "title": "Require Catalyst Evidence",
+            "type": "boolean"
           },
           "reward_multiple": {
             "default": "2",
@@ -5586,8 +5756,11 @@
             "type": "string"
           },
           "strategy_version": {
-            "const": "1.0.0",
             "default": "1.0.0",
+            "enum": [
+              "1.0.0",
+              "1.1.0"
+            ],
             "title": "Strategy Version",
             "type": "string"
           },
@@ -5617,6 +5790,17 @@
             ],
             "title": "B1"
           },
+          "breakout_hold_bars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakout Hold Bars"
+          },
           "breakout_volume_ratio": {
             "anyOf": [
               {
@@ -5629,10 +5813,54 @@
             ],
             "title": "Breakout Volume Ratio"
           },
+          "catalyst_evidence_count": {
+            "default": 0,
+            "title": "Catalyst Evidence Count",
+            "type": "integer"
+          },
+          "catalyst_score": {
+            "default": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Catalyst Score",
+            "type": "integer"
+          },
+          "dilution_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Dilution Flags",
+            "type": "array"
+          },
+          "float_shares": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Float Shares"
+          },
           "gap_pct": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Gap Pct",
             "type": "string"
+          },
+          "impulse_average_volume": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impulse Average Volume"
           },
           "l1": {
             "anyOf": [
@@ -5681,6 +5909,13 @@
             ],
             "title": "Opening Impulse Pct"
           },
+          "opening_structure_score": {
+            "default": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Opening Structure Score",
+            "type": "integer"
+          },
           "pullback_depth_pct": {
             "anyOf": [
               {
@@ -5692,6 +5927,51 @@
               }
             ],
             "title": "Pullback Depth Pct"
+          },
+          "pullback_quality_score": {
+            "default": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Pullback Quality Score",
+            "type": "integer"
+          },
+          "pullback_selling_average_volume": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pullback Selling Average Volume"
+          },
+          "pullback_volume_ratio": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pullback Volume Ratio"
+          },
+          "quality_score": {
+            "default": 0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Quality Score",
+            "type": "integer"
+          },
+          "reclaim_break_score": {
+            "default": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Reclaim Break Score",
+            "type": "integer"
           },
           "session_vwap": {
             "anyOf": [
@@ -5716,6 +5996,13 @@
               }
             ],
             "title": "Spread Bps"
+          },
+          "supply_score": {
+            "default": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Supply Score",
+            "type": "integer"
           },
           "tod_rvol": {
             "anyOf": [
@@ -5789,6 +6076,7 @@
               "higher_low_confirmed",
               "vwap_reclaim",
               "lower_high_break",
+              "breakout_hold",
               "entry_ready",
               "rejected",
               "expired"
@@ -5809,6 +6097,7 @@
                 "higher_low_confirmed",
                 "vwap_reclaim",
                 "lower_high_break",
+                "breakout_hold",
                 "entry_ready",
                 "rejected",
                 "expired"
@@ -6261,7 +6550,6 @@
       },
       "GapperUniverseFreezeRequest": {
         "additionalProperties": false,
-        "description": "Raw point-in-time candidate list; fingerprint is computed by the server.",
         "properties": {
           "candidates": {
             "items": {
@@ -10717,6 +11005,62 @@
         "title": "StateHashResponse",
         "type": "object"
       },
+      "StrategyCatalystCaptureRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "lookback_hours": {
+            "default": 72,
+            "maximum": 168.0,
+            "minimum": 1.0,
+            "title": "Lookback Hours",
+            "type": "integer"
+          },
+          "max_items_per_candidate": {
+            "default": 8,
+            "maximum": 25.0,
+            "minimum": 1.0,
+            "title": "Max Items Per Candidate",
+            "type": "integer"
+          }
+        },
+        "title": "StrategyCatalystCaptureRequest",
+        "type": "object"
+      },
+      "StrategyCatalystCaptureResponse": {
+        "properties": {
+          "candidates_with_evidence": {
+            "minimum": 0.0,
+            "title": "Candidates With Evidence",
+            "type": "integer"
+          },
+          "errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "object"
+          },
+          "evidence_count": {
+            "minimum": 0.0,
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/TradingStrategyConfigDocument-Output"
+          },
+          "universe": {
+            "$ref": "#/components/schemas/GapperUniverseSnapshot-Output"
+          }
+        },
+        "required": [
+          "strategy",
+          "universe",
+          "evidence_count",
+          "candidates_with_evidence"
+        ],
+        "title": "StrategyCatalystCaptureResponse",
+        "type": "object"
+      },
       "StrategyConfigListResponse": {
         "properties": {
           "strategies": {
@@ -10978,6 +11322,102 @@
         "title": "StrategyProtectionListResponse",
         "type": "object"
       },
+      "StrategyResearchReview": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalystShadowClassification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "reviewed",
+              "missing_evidence",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "status"
+        ],
+        "title": "StrategyResearchReview",
+        "type": "object"
+      },
+      "StrategyResearchReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "title": "StrategyResearchReviewRequest",
+        "type": "object"
+      },
+      "StrategyResearchReviewResponse": {
+        "properties": {
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyResearchReview"
+            },
+            "title": "Reviews",
+            "type": "array"
+          },
+          "shadow_only": {
+            "const": true,
+            "default": true,
+            "title": "Shadow Only",
+            "type": "boolean"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "universe_id": {
+            "title": "Universe Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "universe_id",
+          "reviews"
+        ],
+        "title": "StrategyResearchReviewResponse",
+        "type": "object"
+      },
       "StrategyRiskProfile-Input": {
         "additionalProperties": false,
         "properties": {
@@ -11192,6 +11632,13 @@
             "title": "Instrument Id",
             "type": "string"
           },
+          "quality_score": {
+            "default": 0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Quality Score",
+            "type": "integer"
+          },
           "reason_code": {
             "title": "Reason Code",
             "type": "string"
@@ -11213,6 +11660,7 @@
               "higher_low_confirmed",
               "vwap_reclaim",
               "lower_high_break",
+              "breakout_hold",
               "entry_ready",
               "rejected",
               "expired"
@@ -13328,7 +13776,6 @@
       },
       "YahooGapperDiscoveryRequest": {
         "additionalProperties": false,
-        "description": "Current-only Yahoo discovery request; historical reconstruction is forbidden.",
         "properties": {
           "count": {
             "default": 30,
@@ -18919,7 +19366,6 @@
     },
     "/api/trading/strategies/backtest/gap-pullback": {
       "post": {
-        "description": "Run deterministic portfolio backtest using shared paper/risk policies.",
         "operationId": "backtest_gap_pullback_api_trading_strategies_backtest_gap_pullback_post",
         "requestBody": {
           "content": {
@@ -18961,7 +19407,6 @@
     },
     "/api/trading/strategies/evaluate/gap-pullback": {
       "post": {
-        "description": "Pure read-only evaluation; never persists or places an order.",
         "operationId": "evaluate_strategy_api_trading_strategies_evaluate_gap_pullback_post",
         "requestBody": {
           "content": {
@@ -19044,7 +19489,6 @@
     },
     "/api/trading/strategies/universes/discover-yahoo": {
       "post": {
-        "description": "Discover current Yahoo gainers and freeze the exact point-in-time universe.",
         "operationId": "discover_yahoo_universe_api_trading_strategies_universes_discover_yahoo_post",
         "requestBody": {
           "content": {
@@ -19370,6 +19814,110 @@
           }
         },
         "summary": "Protections",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/research/capture-yahoo": {
+      "post": {
+        "operationId": "capture_yahoo_research_api_trading_strategies__strategy_id__research_capture_yahoo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StrategyCatalystCaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyCatalystCaptureResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capture Yahoo Research",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/research/llm-review": {
+      "post": {
+        "operationId": "run_llm_research_api_trading_strategies__strategy_id__research_llm_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StrategyResearchReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyResearchReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Llm Research",
         "tags": [
           "trading-strategies"
         ]
