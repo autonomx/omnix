@@ -14,6 +14,7 @@ from .errors import ProviderContractError, ProviderDataUnavailableError
 
 
 YAHOO_EXECUTION_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
+YAHOO_EXECUTION_ELIGIBLE = False
 
 
 def _session(market_state: str) -> str:
@@ -36,7 +37,14 @@ def yahoo_execution_observation(
     policy: ExecutionEligibilityPolicy | None = None,
     cancellation=None,
 ) -> ExecutionObservation:
-    """Fetch an uncached Yahoo quote and assess it under the fail-closed execution policy."""
+    """Fetch an uncached Yahoo quote for display/diagnostics, never execution.
+
+    Yahoo remains useful for local research, but it is an unofficial endpoint and
+    does not satisfy the execution-grade market-data contract.  The normalized
+    observation is therefore explicitly rejected even when freshness/book checks
+    pass.  A licensed/official US-equity adapter can replace this gate later
+    without weakening the paper execution policy.
+    """
 
     binding = provider.get_binding(instrument_id)
     response = provider.runtime.get(
@@ -81,4 +89,13 @@ def yahoo_execution_observation(
         provider="yahoo",
         received_at=now,
     )
-    return assess_execution_observation(observation, policy)
+    assessed = assess_execution_observation(observation, policy)
+    if YAHOO_EXECUTION_ELIGIBLE:
+        return assessed
+    reasons = tuple(dict.fromkeys((*assessed.rejection_reasons, "PROVIDER_NOT_EXECUTION_GRADE")))
+    return assessed.model_copy(
+        update={
+            "execution_eligible": False,
+            "rejection_reasons": reasons,
+        }
+    )
