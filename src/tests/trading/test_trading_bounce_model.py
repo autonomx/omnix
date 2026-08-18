@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -10,6 +10,7 @@ from app.trading.bounce_training import (
     fit_bounce_logistic,
     score_fitted_bounce_model,
 )
+from app.trading.bounce_validation import BounceValidationExample, validate_bounce_artifact
 
 
 TRAINED_AT = datetime(2026, 8, 18, 20, 0, tzinfo=timezone.utc)
@@ -100,6 +101,52 @@ def test_fitted_model_scores_separated_fixture_in_expected_order() -> None:
     assert strong.model_version == "fixture-v1"
 
 
+def test_locked_model_reports_dated_oos_calibration_and_evidence_volume() -> None:
+    artifact = fit_bounce_logistic(
+        training_examples(),
+        model_version="fixture-v1",
+        trained_at=TRAINED_AT,
+        iterations=600,
+    )
+    start = date(2026, 6, 1)
+    validation = [
+        BounceValidationExample(
+            session_date=start + timedelta(days=index),
+            features=features(
+                gap=str(21 + index / 100),
+                breakout=str(0.85 + index / 1000),
+            ),
+            label=0,
+        )
+        for index in range(20)
+    ] + [
+        BounceValidationExample(
+            session_date=start + timedelta(days=20 + index),
+            features=features(
+                gap=str(46 + index / 100),
+                breakout=str(2.05 + index / 1000),
+            ),
+            label=1,
+        )
+        for index in range(20)
+    ]
+    metrics = validate_bounce_artifact(
+        artifact,
+        validation,
+        observed_at=TRAINED_AT,
+        minimum_examples=40,
+        minimum_sessions=40,
+    )
+    assert metrics.examples == 40
+    assert metrics.sessions == 40
+    assert metrics.evidence_volume_sufficient is True
+    assert metrics.brier_score >= 0
+    assert metrics.expected_calibration_error >= 0
+    assert metrics.log_loss_improvement > 0
+    assert metrics.calibration_bins
+    assert metrics.shadow_only is True
+
+
 def test_model_artifacts_have_relational_authority_and_no_execution_gate() -> None:
     migration = Path("src/app/persistence/migrations/0040_trading_model_artifacts.sql").read_text()
     model_api = Path("src/app/trading/model_api.py").read_text().lower()
@@ -109,5 +156,6 @@ def test_model_artifacts_have_relational_authority_and_no_execution_gate() -> No
     assert "check (shadow_only = true)" in migration.lower()
     assert "/bounce/train" in model_api
     assert "/bounce/score-shadow" in model_api
+    assert "/bounce/validate-shadow" in model_api
     assert "bounce_model" not in strategy_monitor
     assert "model_score" not in strategy_monitor
