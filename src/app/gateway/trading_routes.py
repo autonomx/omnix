@@ -28,6 +28,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.model_api import create_trading_model_router
     from app.trading.paper_api import create_trading_paper_router
     from app.trading.paper_monitor import register_trading_paper_monitor
+    from app.trading.providers.alpaca_iex_status import register_alpaca_iex_status_monitor
     from app.trading.replay_api import create_trading_replay_router
     from app.trading.research_api import create_trading_research_router
     from app.trading.scanner_api import create_trading_scanner_router
@@ -45,6 +46,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     gateway.include_router(create_trading_catalyst_router())
     gateway.include_router(create_trading_model_router())
     register_trading_alert_monitor(gateway)
+    register_alpaca_iex_status_monitor(gateway)
     register_trading_paper_monitor(gateway)
     register_trading_strategy_monitor(gateway)
     setattr(gateway.state, _ROUTE_SENTINEL, True)
