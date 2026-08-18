@@ -9,7 +9,7 @@ export type CanonicalInstrument = Schemas['CanonicalInstrument'];
 export type ProviderPolicy = Schemas['ProviderPolicy'];
 export type ProviderBinding = Schemas['ProviderBinding'];
 export type ProviderDescriptor = Schemas['ProviderDescriptor'];
-export type MarketBar = RequiredField<Schemas['MarketBar'], 'received_at'>;
+export type MarketBar = RequiredField<Schemas['MarketBar-Output'], 'received_at'>;
 export type DatasetProvenance = Schemas['DatasetProvenance'];
 export type BarsResponse = Schemas['BarsResponse'] & { bars: MarketBar[] };
 
