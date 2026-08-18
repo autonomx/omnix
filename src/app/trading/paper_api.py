@@ -19,6 +19,11 @@ from .paper import (
     PaperOrderRequest,
 )
 from .paper_lifecycle import TradingPaperLifecycle, default_paper_lifecycle
+from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
+from .paper_protection_repository import (
+    TradingPaperProtectionRepository,
+    default_paper_protection_repository,
+)
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
 
@@ -31,6 +36,10 @@ class PaperFillListResponse(BaseModel):
     fills: list[PaperFill]
 
 
+class PaperProtectionListResponse(BaseModel):
+    protections: list[PaperPositionProtection]
+
+
 class PaperResetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     initial_cash: Decimal = Field(default=Decimal("100000"), ge=0)
@@ -38,11 +47,13 @@ class PaperResetRequest(BaseModel):
 
 RepositoryFactory = Callable[[], TradingPaperRepository]
 LifecycleFactory = Callable[[], TradingPaperLifecycle]
+ProtectionRepositoryFactory = Callable[[], TradingPaperProtectionRepository]
 
 
 def create_trading_paper_router(
     repository_factory: RepositoryFactory = default_runtime_paper_repository,
     lifecycle_factory: LifecycleFactory = default_paper_lifecycle,
+    protection_repository_factory: ProtectionRepositoryFactory = default_paper_protection_repository,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/paper", tags=["trading-paper"])
 
@@ -66,6 +77,69 @@ def create_trading_paper_router(
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @router.get(
+        "/accounts/{account_id}/protections",
+        response_model=PaperProtectionListResponse,
+    )
+    async def list_protections(
+        account_id: str,
+        active_only: bool = Query(default=True),
+    ):
+        try:
+            values = await asyncio.to_thread(
+                protection_repository_factory().list,
+                account_id,
+                active_only=active_only,
+            )
+            return PaperProtectionListResponse(protections=values)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @router.get(
+        "/accounts/{account_id}/protections/{instrument_id:path}",
+        response_model=PaperPositionProtection,
+    )
+    async def get_protection(account_id: str, instrument_id: str):
+        try:
+            return await asyncio.to_thread(
+                protection_repository_factory().get,
+                account_id,
+                instrument_id,
+                include_inactive=False,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @router.put(
+        "/accounts/{account_id}/protections",
+        response_model=PaperPositionProtection,
+    )
+    async def upsert_protection(account_id: str, request: PaperProtectionUpsert):
+        try:
+            return await asyncio.to_thread(
+                protection_repository_factory().upsert,
+                account_id,
+                request,
+            )
+        except ValueError as exc:
+            detail = str(exc)
+            status = 404 if "not_found" in detail else 409 if "already_submitted" in detail else 422
+            raise HTTPException(status_code=status, detail=detail) from exc
+
+    @router.delete(
+        "/accounts/{account_id}/protections/{instrument_id:path}",
+        response_model=PaperPositionProtection,
+    )
+    async def clear_protection(account_id: str, instrument_id: str):
+        try:
+            return await asyncio.to_thread(
+                protection_repository_factory().clear,
+                account_id,
+                instrument_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @router.post(
         "/accounts/{account_id}/orders",
         response_model=PaperOrder,
@@ -74,7 +148,7 @@ def create_trading_paper_router(
     async def place_order(account_id: str, request: PaperOrderRequest):
         """Accept an order without manufacturing a fill from caller price data.
 
-        reference_price is reservation-only.  A market order remains open until
+        reference_price is reservation-only. A market order remains open until
         the server-side monitor receives an execution-eligible market observation.
         """
         try:
