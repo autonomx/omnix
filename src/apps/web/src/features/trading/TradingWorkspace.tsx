@@ -6,6 +6,7 @@ import { TradingIndicatorManager } from './TradingIndicatorManager';
 import { TradingReplayPanel } from './TradingReplayPanel';
 import { TradingResearchPanel } from './TradingResearchPanel';
 import { TradingScannerPanel } from './TradingScannerPanel';
+import { TradingStrategiesPanel } from './TradingStrategiesPanel';
 import { TradingSidePanel } from './TradingSidePanel';
 import { TradingSideRail } from './TradingSideRail';
 import type { TradingSideTab } from './TradingSidePanel';
@@ -78,7 +79,7 @@ const chartTypeGlyphs: Record<TradingChartType, string> = {
   baseline: 'baseline',
 };
 
-type ToolPanel = 'scanner' | 'replay' | 'research';
+type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'research';
 
 // TradingSidePanel mounts TradingPaperPanel in the dedicated Trade tab.
 
@@ -468,6 +469,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <div className="trading-tool-shortcuts" role="group" aria-label="Trading tools">
           <button type="button" aria-pressed={toolPanel === 'scanner'} onClick={() => toggleToolPanel('scanner')}>Scanner</button>
           <button type="button" aria-pressed={toolPanel === 'replay'} onClick={() => toggleToolPanel('replay')}>Backtest</button>
+          <button type="button" aria-pressed={toolPanel === 'strategies'} onClick={() => toggleToolPanel('strategies')}>Strategies</button>
           <button type="button" aria-pressed={sidePanelTab === 'paper' && panels.right} onClick={openPaperTrading}>Trade</button>
           <button type="button" aria-pressed={toolPanel === 'research'} onClick={() => toggleToolPanel('research')}>AI Research</button>
         </div>
@@ -552,7 +554,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       {toolPanel ? (
         <section className="trading-tool-drawer" aria-label="Trading analysis tool">
           <header>
-            <strong>{toolPanel === 'scanner' ? 'Market scanner' : toolPanel === 'replay' ? 'Replay & backtest' : 'AI market research'}</strong>
+            <strong>{toolPanel === 'scanner'
+              ? 'Market scanner'
+              : toolPanel === 'replay'
+                ? 'Replay & backtest'
+                : toolPanel === 'strategies'
+                  ? 'Automated strategies'
+                  : 'AI market research'}</strong>
             <button type="button" onClick={() => setToolPanel(null)} aria-label="Close analysis tool">×</button>
           </header>
           <div>
@@ -560,6 +568,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             {toolPanel === 'replay' ? (
               <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
             ) : null}
+            {toolPanel === 'strategies' ? <TradingStrategiesPanel /> : null}
             {toolPanel === 'research' ? (
               <TradingResearchPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
             ) : null}
