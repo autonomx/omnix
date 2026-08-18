@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -74,6 +74,61 @@ class ExecutionObservation(BaseModel):
     def age_seconds(self) -> Decimal:
         delta = self.received_at.astimezone(timezone.utc) - self.source_time.astimezone(timezone.utc)
         return max(Decimal("0"), Decimal(str(delta.total_seconds())))
+
+
+def _time(value: Any, fallback: datetime) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, (int, float)):
+        parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
+    elif isinstance(value, str) and value:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    else:
+        parsed = fallback
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def execution_observation_from_quote(
+    quote: dict[str, object],
+    *,
+    binding_id: str,
+    provider: str,
+    received_at: datetime | None = None,
+) -> ExecutionObservation:
+    received = received_at or datetime.now(timezone.utc)
+    last_value = quote.get("last", quote.get("price"))
+    if last_value is None:
+        raise ValueError("execution quote requires last/price")
+    freshness = str(quote.get("freshness_mode") or "unknown")
+    if freshness not in {"live", "polled", "delayed", "cached", "fallback", "unknown"}:
+        freshness = "unknown"
+    session = str(quote.get("session") or "unknown")
+    if session not in {"extended_pre", "regular", "extended_post", "closed", "unknown"}:
+        session = "unknown"
+    return ExecutionObservation(
+        instrument_id=str(quote["instrument_id"]),
+        binding_id=str(quote.get("binding_id") or binding_id),
+        provider=str(quote.get("provider") or provider),
+        bid=Decimal(str(quote["bid"])) if quote.get("bid") not in {None, ""} else None,
+        ask=Decimal(str(quote["ask"])) if quote.get("ask") not in {None, ""} else None,
+        last=Decimal(str(last_value)),
+        cumulative_volume=(
+            Decimal(str(quote["cumulative_volume"]))
+            if quote.get("cumulative_volume") not in {None, ""}
+            else None
+        ),
+        source_time=_time(quote.get("source_time") or quote.get("received_at"), received),
+        received_at=received,
+        session=session,  # type: ignore[arg-type]
+        freshness_mode=freshness,  # type: ignore[arg-type]
+        provider_sequence=(
+            int(quote["provider_sequence"])
+            if quote.get("provider_sequence") is not None
+            else None
+        ),
+    )
 
 
 def assess_execution_observation(
