@@ -2412,6 +2412,52 @@
         "title": "BounceModelTrainRequest",
         "type": "object"
       },
+      "BounceModelValidateRequest": {
+        "additionalProperties": false,
+        "description": "Out-of-sample validation request; validation remains shadow-only.",
+        "properties": {
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/BounceValidationExample"
+            },
+            "maxItems": 50000,
+            "minItems": 2,
+            "title": "Examples",
+            "type": "array"
+          },
+          "minimum_examples": {
+            "default": 100,
+            "maximum": 50000.0,
+            "minimum": 1.0,
+            "title": "Minimum Examples",
+            "type": "integer"
+          },
+          "minimum_sessions": {
+            "default": 20,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Minimum Sessions",
+            "type": "integer"
+          },
+          "model_version": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model Version",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_version",
+          "examples"
+        ],
+        "title": "BounceModelValidateRequest",
+        "type": "object"
+      },
       "BounceTrainingExample": {
         "additionalProperties": false,
         "properties": {
@@ -2432,6 +2478,181 @@
           "label"
         ],
         "title": "BounceTrainingExample",
+        "type": "object"
+      },
+      "BounceValidationExample": {
+        "additionalProperties": false,
+        "description": "Out-of-sample labeled example tied to an immutable trading session.",
+        "properties": {
+          "features": {
+            "$ref": "#/components/schemas/BounceFeatureVector-Input"
+          },
+          "label": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Label",
+            "type": "integer"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_date",
+          "features",
+          "label"
+        ],
+        "title": "BounceValidationExample",
+        "type": "object"
+      },
+      "BounceValidationMetrics": {
+        "additionalProperties": false,
+        "description": "Transparent OOS metrics; this is research evidence, never an execution gate.",
+        "properties": {
+          "artifact_fingerprint": {
+            "title": "Artifact Fingerprint",
+            "type": "string"
+          },
+          "baseline_log_loss": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Baseline Log Loss",
+            "type": "string"
+          },
+          "brier_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Brier Score",
+            "type": "string"
+          },
+          "calibration_bins": {
+            "items": {
+              "$ref": "#/components/schemas/CalibrationBin"
+            },
+            "title": "Calibration Bins",
+            "type": "array"
+          },
+          "evidence_volume_sufficient": {
+            "title": "Evidence Volume Sufficient",
+            "type": "boolean"
+          },
+          "examples": {
+            "title": "Examples",
+            "type": "integer"
+          },
+          "expected_calibration_error": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expected Calibration Error",
+            "type": "string"
+          },
+          "log_loss": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Log Loss",
+            "type": "string"
+          },
+          "log_loss_improvement": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Log Loss Improvement",
+            "type": "string"
+          },
+          "mean_probability": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mean Probability",
+            "type": "string"
+          },
+          "minimum_examples_required": {
+            "title": "Minimum Examples Required",
+            "type": "integer"
+          },
+          "minimum_sessions_required": {
+            "title": "Minimum Sessions Required",
+            "type": "integer"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "positive_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Positive Rate",
+            "type": "string"
+          },
+          "positives": {
+            "title": "Positives",
+            "type": "integer"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "shadow_only": {
+            "default": true,
+            "title": "Shadow Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model_id",
+          "model_version",
+          "artifact_fingerprint",
+          "examples",
+          "sessions",
+          "positives",
+          "positive_rate",
+          "mean_probability",
+          "log_loss",
+          "baseline_log_loss",
+          "log_loss_improvement",
+          "brier_score",
+          "expected_calibration_error",
+          "calibration_bins",
+          "minimum_examples_required",
+          "minimum_sessions_required",
+          "evidence_volume_sufficient"
+        ],
+        "title": "BounceValidationMetrics",
+        "type": "object"
+      },
+      "CalibrationBin": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "lower": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Lower",
+            "type": "string"
+          },
+          "mean_probability": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mean Probability",
+            "type": "string"
+          },
+          "observed_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Observed Rate",
+            "type": "string"
+          },
+          "upper": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Upper",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lower",
+          "upper",
+          "count",
+          "mean_probability",
+          "observed_rate"
+        ],
+        "title": "CalibrationBin",
         "type": "object"
       },
       "CancelJobRequest": {
@@ -4035,6 +4256,42 @@
             ],
             "title": "Ask"
           },
+          "ask_size": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ask Size"
+          },
+          "bar_start_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bar Start Time"
+          },
+          "bar_volume": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bar Volume"
+          },
           "bid": {
             "anyOf": [
               {
@@ -4046,6 +4303,18 @@
               }
             ],
             "title": "Bid"
+          },
+          "bid_size": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bid Size"
           },
           "binding_id": {
             "title": "Binding Id",
@@ -4081,6 +4350,29 @@
             "title": "Freshness Mode",
             "type": "string"
           },
+          "halted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Halted"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
           "instrument_id": {
             "title": "Instrument Id",
             "type": "string"
@@ -4089,6 +4381,18 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Last",
             "type": "string"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
           },
           "policy_version": {
             "default": "execution-data-v1",
@@ -4459,7 +4763,7 @@
       },
       "GapPullbackBacktestRequest": {
         "additionalProperties": false,
-        "description": "Frozen multi-symbol morning backtest request.\n\nCandidate membership is supplied by an immutable point-in-time universe;\nthere is no hindsight symbol discovery inside the backtester.",
+        "description": "Frozen multi-symbol morning backtest request.\n\nCandidate membership is supplied by an immutable point-in-time universe;\nthere is no hindsight symbol discovery inside the backtester. Portfolio\nselection uses the same server risk sizing policy as AUTO PAPER.",
         "properties": {
           "assumed_spread_bps": {
             "anyOf": [
@@ -4492,6 +4796,20 @@
           "execution_policy": {
             "$ref": "#/components/schemas/PaperExecutionPolicy"
           },
+          "initial_cash": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "100000",
+            "title": "Initial Cash"
+          },
           "max_concurrent_positions": {
             "default": 3,
             "maximum": 50.0,
@@ -4505,6 +4823,9 @@
             "minimum": 1.0,
             "title": "Max Hold Minutes",
             "type": "integer"
+          },
+          "risk_profile": {
+            "$ref": "#/components/schemas/StrategyRiskProfile-Input"
           },
           "session_date": {
             "format": "date",
@@ -4534,6 +4855,14 @@
             "title": "Execution Policy Version",
             "type": "string"
           },
+          "initial_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Initial Cash",
+            "type": "string"
+          },
+          "risk_policy": {
+            "$ref": "#/components/schemas/StrategyRiskProfile-Output"
+          },
           "strategy_id": {
             "default": "gap_pullback_v1",
             "title": "Strategy Id",
@@ -4558,6 +4887,8 @@
         "required": [
           "dataset_fingerprint",
           "execution_policy_version",
+          "risk_policy",
+          "initial_cash",
           "trades",
           "summary"
         ],
@@ -4619,6 +4950,30 @@
             "title": "Expectancy R",
             "type": "string"
           },
+          "expectancy_r_ci95_high": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectancy R Ci95 High"
+          },
+          "expectancy_r_ci95_low": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectancy R Ci95 Low"
+          },
           "invalid_risk_count": {
             "title": "Invalid Risk Count",
             "type": "integer"
@@ -4650,6 +5005,17 @@
               }
             ],
             "title": "Profit Factor"
+          },
+          "risk_rejection_count": {
+            "title": "Risk Rejection Count",
+            "type": "integer"
+          },
+          "risk_rejection_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Risk Rejection Reasons",
+            "type": "object"
           },
           "stop_count": {
             "title": "Stop Count",
@@ -4700,6 +5066,7 @@
           "exit_execution_rejection_count",
           "invalid_risk_count",
           "portfolio_capacity_rejection_count",
+          "risk_rejection_count",
           "partial_entry_count",
           "win_count",
           "loss_count",
@@ -4725,6 +5092,17 @@
       "GapPullbackBacktestTrade": {
         "additionalProperties": false,
         "properties": {
+          "discovery_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovery Rank"
+          },
           "entry_bar_index": {
             "title": "Entry Bar Index",
             "type": "integer"
@@ -4803,6 +5181,21 @@
             "title": "R Multiple",
             "type": "string"
           },
+          "requested_quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Requested Quantity",
+            "type": "string"
+          },
+          "signal_entry_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Signal Entry Price",
+            "type": "string"
+          },
+          "signal_risk_per_share": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Signal Risk Per Share",
+            "type": "string"
+          },
           "stop_price": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Stop Price",
@@ -4822,8 +5215,11 @@
           "instrument_id",
           "entry_time",
           "exit_time",
+          "signal_entry_price",
+          "signal_risk_per_share",
           "entry_price",
           "exit_price",
+          "requested_quantity",
           "entry_fill_quantity",
           "entry_slippage_bps",
           "exit_slippage_bps",
@@ -5436,7 +5832,7 @@
       },
       "GapperCandidate-Input": {
         "additionalProperties": false,
-        "description": "Point-in-time candidate evidence used by research/backtests and paper runs.\n\n`previous_close` is always the split/corporate-action-normalized close in the\nsame share basis as `premarket_price`. When raw evidence is available it is\npreserved separately with the adjustment factor so the gap can be audited.",
+        "description": "Point-in-time candidate evidence used by research/backtests and paper runs.\n\n`previous_close` is always the split/corporate-action-normalized close in the\nsame share basis as `premarket_price`. When raw evidence is available it is\npreserved separately with the adjustment factor so the gap can be audited.\n\n`observed_at` records when the candidate snapshot itself was observable.\n`evidence_observed_at` can additionally timestamp fields sourced from separate\nrequests. Freeze validation rejects any timestamp later than the universe\nevaluation time so historical universes cannot silently absorb future facts.",
         "properties": {
           "binding_id": {
             "anyOf": [
@@ -5485,6 +5881,14 @@
               }
             ],
             "title": "Discovery Rank"
+          },
+          "evidence_observed_at": {
+            "additionalProperties": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Evidence Observed At",
+            "type": "object"
           },
           "float_shares": {
             "anyOf": [
@@ -5535,6 +5939,18 @@
               }
             ],
             "title": "Market Cap"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
           },
           "premarket_dollar_volume": {
             "anyOf": [
@@ -5664,7 +6080,7 @@
       },
       "GapperCandidate-Output": {
         "additionalProperties": false,
-        "description": "Point-in-time candidate evidence used by research/backtests and paper runs.\n\n`previous_close` is always the split/corporate-action-normalized close in the\nsame share basis as `premarket_price`. When raw evidence is available it is\npreserved separately with the adjustment factor so the gap can be audited.",
+        "description": "Point-in-time candidate evidence used by research/backtests and paper runs.\n\n`previous_close` is always the split/corporate-action-normalized close in the\nsame share basis as `premarket_price`. When raw evidence is available it is\npreserved separately with the adjustment factor so the gap can be audited.\n\n`observed_at` records when the candidate snapshot itself was observable.\n`evidence_observed_at` can additionally timestamp fields sourced from separate\nrequests. Freeze validation rejects any timestamp later than the universe\nevaluation time so historical universes cannot silently absorb future facts.",
         "properties": {
           "binding_id": {
             "anyOf": [
@@ -5714,6 +6130,14 @@
             ],
             "title": "Discovery Rank"
           },
+          "evidence_observed_at": {
+            "additionalProperties": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Evidence Observed At",
+            "type": "object"
+          },
           "float_shares": {
             "anyOf": [
               {
@@ -5748,6 +6172,18 @@
               }
             ],
             "title": "Market Cap"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
           },
           "premarket_dollar_volume": {
             "default": "0",
@@ -12889,6 +13325,78 @@
         },
         "title": "WorkerPayloadPolicy",
         "type": "object"
+      },
+      "YahooGapperDiscoveryRequest": {
+        "additionalProperties": false,
+        "description": "Current-only Yahoo discovery request; historical reconstruction is forbidden.",
+        "properties": {
+          "count": {
+            "default": 30,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "evaluation_time": {
+            "format": "date-time",
+            "title": "Evaluation Time",
+            "type": "string"
+          },
+          "maximum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Maximum Price"
+          },
+          "minimum_gap_pct": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Minimum Gap Pct"
+          },
+          "minimum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.50",
+            "title": "Minimum Price"
+          },
+          "universe_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Universe Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "universe_id"
+        ],
+        "title": "YahooGapperDiscoveryRequest",
+        "type": "object"
       }
     }
   },
@@ -17010,6 +17518,48 @@
         ]
       }
     },
+    "/api/trading/models/bounce/validate-shadow": {
+      "post": {
+        "description": "Evaluate locked artifacts on dated OOS examples; never gate paper orders.",
+        "operationId": "validate_bounce_shadow_api_trading_models_bounce_validate_shadow_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BounceModelValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BounceValidationMetrics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Bounce Shadow",
+        "tags": [
+          "trading-models"
+        ]
+      }
+    },
     "/api/trading/models/bounce/{model_version}": {
       "get": {
         "operationId": "get_bounce_model_api_trading_models_bounce__model_version__get",
@@ -18369,7 +18919,7 @@
     },
     "/api/trading/strategies/backtest/gap-pullback": {
       "post": {
-        "description": "Run deterministic portfolio backtest using the paper fill engine.",
+        "description": "Run deterministic portfolio backtest using shared paper/risk policies.",
         "operationId": "backtest_gap_pullback_api_trading_strategies_backtest_gap_pullback_post",
         "requestBody": {
           "content": {
@@ -18487,6 +19037,48 @@
           }
         },
         "summary": "Save Universe",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/universes/discover-yahoo": {
+      "post": {
+        "description": "Discover current Yahoo gainers and freeze the exact point-in-time universe.",
+        "operationId": "discover_yahoo_universe_api_trading_strategies_universes_discover_yahoo_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YahooGapperDiscoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapperUniverseSnapshot-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discover Yahoo Universe",
         "tags": [
           "trading-strategies"
         ]

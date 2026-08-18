@@ -1471,6 +1471,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/models/bounce/validate-shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Bounce Shadow
+         * @description Evaluate locked artifacts on dated OOS examples; never gate paper orders.
+         */
+        post: operations["validate_bounce_shadow_api_trading_models_bounce_validate_shadow_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/models/bounce/{model_version}": {
         parameters: {
             query?: never;
@@ -1870,7 +1890,7 @@ export interface paths {
         put?: never;
         /**
          * Backtest Gap Pullback
-         * @description Run deterministic portfolio backtest using the paper fill engine.
+         * @description Run deterministic portfolio backtest using shared paper/risk policies.
          */
         post: operations["backtest_gap_pullback_api_trading_strategies_backtest_gap_pullback_post"];
         delete?: never;
@@ -1910,6 +1930,26 @@ export interface paths {
         put?: never;
         /** Save Universe */
         post: operations["save_universe_api_trading_strategies_universes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/universes/discover-yahoo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discover Yahoo Universe
+         * @description Discover current Yahoo gainers and freeze the exact point-in-time universe.
+         */
+        post: operations["discover_yahoo_universe_api_trading_strategies_universes_discover_yahoo_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3155,6 +3195,31 @@ export interface components {
             /** Trained At */
             trained_at?: string | null;
         };
+        /**
+         * BounceModelValidateRequest
+         * @description Out-of-sample validation request; validation remains shadow-only.
+         */
+        BounceModelValidateRequest: {
+            /** Examples */
+            examples: components["schemas"]["BounceValidationExample"][];
+            /**
+             * Minimum Examples
+             * @default 100
+             */
+            minimum_examples: number;
+            /**
+             * Minimum Sessions
+             * @default 20
+             */
+            minimum_sessions: number;
+            /** Model Version */
+            model_version: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at?: string;
+        };
         /** BounceTrainingExample */
         BounceTrainingExample: {
             features: components["schemas"]["BounceFeatureVector-Input"];
@@ -3163,6 +3228,78 @@ export interface components {
              * @enum {integer}
              */
             label: 0 | 1;
+        };
+        /**
+         * BounceValidationExample
+         * @description Out-of-sample labeled example tied to an immutable trading session.
+         */
+        BounceValidationExample: {
+            features: components["schemas"]["BounceFeatureVector-Input"];
+            /** Label */
+            label: number;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /**
+         * BounceValidationMetrics
+         * @description Transparent OOS metrics; this is research evidence, never an execution gate.
+         */
+        BounceValidationMetrics: {
+            /** Artifact Fingerprint */
+            artifact_fingerprint: string;
+            /** Baseline Log Loss */
+            baseline_log_loss: string;
+            /** Brier Score */
+            brier_score: string;
+            /** Calibration Bins */
+            calibration_bins: components["schemas"]["CalibrationBin"][];
+            /** Evidence Volume Sufficient */
+            evidence_volume_sufficient: boolean;
+            /** Examples */
+            examples: number;
+            /** Expected Calibration Error */
+            expected_calibration_error: string;
+            /** Log Loss */
+            log_loss: string;
+            /** Log Loss Improvement */
+            log_loss_improvement: string;
+            /** Mean Probability */
+            mean_probability: string;
+            /** Minimum Examples Required */
+            minimum_examples_required: number;
+            /** Minimum Sessions Required */
+            minimum_sessions_required: number;
+            /** Model Id */
+            model_id: string;
+            /** Model Version */
+            model_version: string;
+            /** Positive Rate */
+            positive_rate: string;
+            /** Positives */
+            positives: number;
+            /** Sessions */
+            sessions: number;
+            /**
+             * Shadow Only
+             * @default true
+             */
+            shadow_only: boolean;
+        };
+        /** CalibrationBin */
+        CalibrationBin: {
+            /** Count */
+            count: number;
+            /** Lower */
+            lower: string;
+            /** Mean Probability */
+            mean_probability: string;
+            /** Observed Rate */
+            observed_rate: string;
+            /** Upper */
+            upper: string;
         };
         /** CancelJobRequest */
         CancelJobRequest: {
@@ -3832,8 +3969,16 @@ export interface components {
         ExecutionObservation: {
             /** Ask */
             ask?: string | null;
+            /** Ask Size */
+            ask_size?: string | null;
+            /** Bar Start Time */
+            bar_start_time?: string | null;
+            /** Bar Volume */
+            bar_volume?: string | null;
             /** Bid */
             bid?: string | null;
+            /** Bid Size */
+            bid_size?: string | null;
             /** Binding Id */
             binding_id: string;
             /** Cumulative Volume */
@@ -3849,10 +3994,16 @@ export interface components {
              * @enum {string}
              */
             freshness_mode: "live" | "polled" | "delayed" | "cached" | "fallback" | "unknown";
+            /** Halted */
+            halted?: boolean | null;
+            /** High */
+            high?: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Last */
             last: string;
+            /** Low */
+            low?: string | null;
             /**
              * Policy Version
              * @default execution-data-v1
@@ -4027,7 +4178,8 @@ export interface components {
          * @description Frozen multi-symbol morning backtest request.
          *
          *     Candidate membership is supplied by an immutable point-in-time universe;
-         *     there is no hindsight symbol discovery inside the backtester.
+         *     there is no hindsight symbol discovery inside the backtester. Portfolio
+         *     selection uses the same server risk sizing policy as AUTO PAPER.
          */
         GapPullbackBacktestRequest: {
             /**
@@ -4042,6 +4194,11 @@ export interface components {
             config?: components["schemas"]["GapPullbackConfig-Input"];
             execution_policy?: components["schemas"]["PaperExecutionPolicy"];
             /**
+             * Initial Cash
+             * @default 100000
+             */
+            initial_cash: number | string;
+            /**
              * Max Concurrent Positions
              * @default 3
              */
@@ -4051,6 +4208,7 @@ export interface components {
              * @default 90
              */
             max_hold_minutes: number;
+            risk_profile?: components["schemas"]["StrategyRiskProfile-Input"];
             /**
              * Session Date
              * Format: date
@@ -4064,6 +4222,9 @@ export interface components {
             dataset_fingerprint: string;
             /** Execution Policy Version */
             execution_policy_version: string;
+            /** Initial Cash */
+            initial_cash: string;
+            risk_policy: components["schemas"]["StrategyRiskProfile-Output"];
             /**
              * Strategy Id
              * @default gap_pullback_v1
@@ -4102,6 +4263,10 @@ export interface components {
             exit_execution_rejection_count: number;
             /** Expectancy R */
             expectancy_r: string;
+            /** Expectancy R Ci95 High */
+            expectancy_r_ci95_high?: string | null;
+            /** Expectancy R Ci95 Low */
+            expectancy_r_ci95_low?: string | null;
             /** Invalid Risk Count */
             invalid_risk_count: number;
             /** Loss Count */
@@ -4114,6 +4279,12 @@ export interface components {
             portfolio_capacity_rejection_count: number;
             /** Profit Factor */
             profit_factor: string | null;
+            /** Risk Rejection Count */
+            risk_rejection_count: number;
+            /** Risk Rejection Reasons */
+            risk_rejection_reasons?: {
+                [key: string]: number;
+            };
             /** Stop Count */
             stop_count: number;
             /** Target Count */
@@ -4135,6 +4306,8 @@ export interface components {
         };
         /** GapPullbackBacktestTrade */
         GapPullbackBacktestTrade: {
+            /** Discovery Rank */
+            discovery_rank?: number | null;
             /** Entry Bar Index */
             entry_bar_index: number;
             /** Entry Fill Quantity */
@@ -4174,6 +4347,12 @@ export interface components {
             pnl_per_share: string;
             /** R Multiple */
             r_multiple: string;
+            /** Requested Quantity */
+            requested_quantity: string;
+            /** Signal Entry Price */
+            signal_entry_price: string;
+            /** Signal Risk Per Share */
+            signal_risk_per_share: string;
             /** Stop Price */
             stop_price: string;
             /** Target Price */
@@ -4447,6 +4626,11 @@ export interface components {
          *     `previous_close` is always the split/corporate-action-normalized close in the
          *     same share basis as `premarket_price`. When raw evidence is available it is
          *     preserved separately with the adjustment factor so the gap can be audited.
+         *
+         *     `observed_at` records when the candidate snapshot itself was observable.
+         *     `evidence_observed_at` can additionally timestamp fields sourced from separate
+         *     requests. Freeze validation rejects any timestamp later than the universe
+         *     evaluation time so historical universes cannot silently absorb future facts.
          */
         "GapperCandidate-Input": {
             /** Binding Id */
@@ -4468,6 +4652,10 @@ export interface components {
             dilution_flags: string[];
             /** Discovery Rank */
             discovery_rank?: number | null;
+            /** Evidence Observed At */
+            evidence_observed_at?: {
+                [key: string]: string;
+            };
             /** Float Shares */
             float_shares?: number | string | null;
             /** Gap Pct */
@@ -4476,6 +4664,8 @@ export interface components {
             instrument_id: string;
             /** Market Cap */
             market_cap?: number | string | null;
+            /** Observed At */
+            observed_at?: string | null;
             /**
              * Premarket Dollar Volume
              * @default 0
@@ -4509,6 +4699,11 @@ export interface components {
          *     `previous_close` is always the split/corporate-action-normalized close in the
          *     same share basis as `premarket_price`. When raw evidence is available it is
          *     preserved separately with the adjustment factor so the gap can be audited.
+         *
+         *     `observed_at` records when the candidate snapshot itself was observable.
+         *     `evidence_observed_at` can additionally timestamp fields sourced from separate
+         *     requests. Freeze validation rejects any timestamp later than the universe
+         *     evaluation time so historical universes cannot silently absorb future facts.
          */
         "GapperCandidate-Output": {
             /** Binding Id */
@@ -4530,6 +4725,10 @@ export interface components {
             dilution_flags: string[];
             /** Discovery Rank */
             discovery_rank?: number | null;
+            /** Evidence Observed At */
+            evidence_observed_at?: {
+                [key: string]: string;
+            };
             /** Float Shares */
             float_shares?: string | null;
             /** Gap Pct */
@@ -4538,6 +4737,8 @@ export interface components {
             instrument_id: string;
             /** Market Cap */
             market_cap?: string | null;
+            /** Observed At */
+            observed_at?: string | null;
             /**
              * Premarket Dollar Volume
              * @default 0
@@ -7553,6 +7754,39 @@ export interface components {
              * @default allowed
              */
             small_json_payloads: string;
+        };
+        /**
+         * YahooGapperDiscoveryRequest
+         * @description Current-only Yahoo discovery request; historical reconstruction is forbidden.
+         */
+        YahooGapperDiscoveryRequest: {
+            /**
+             * Count
+             * @default 30
+             */
+            count: number;
+            /**
+             * Evaluation Time
+             * Format: date-time
+             */
+            evaluation_time?: string;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price: number | string;
+            /**
+             * Minimum Gap Pct
+             * @default 20
+             */
+            minimum_gap_pct: number | string;
+            /**
+             * Minimum Price
+             * @default 0.50
+             */
+            minimum_price: number | string;
+            /** Universe Id */
+            universe_id: string;
         };
     };
     responses: never;
@@ -10699,6 +10933,39 @@ export interface operations {
             };
         };
     };
+    validate_bounce_shadow_api_trading_models_bounce_validate_shadow_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BounceModelValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BounceValidationMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_bounce_model_api_trading_models_bounce__model_version__get: {
         parameters: {
             query?: never;
@@ -11725,6 +11992,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GapperUniverseSnapshot-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GapperUniverseSnapshot-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discover_yahoo_universe_api_trading_strategies_universes_discover_yahoo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YahooGapperDiscoveryRequest"];
             };
         };
         responses: {
