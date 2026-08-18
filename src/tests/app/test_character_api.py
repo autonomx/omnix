@@ -136,8 +136,7 @@ def test_character_mode_session_uses_server_profile_greeting_and_memory_off(tmp_
     )
     assembly, rendered = store.build_provider_prompt(loaded, user_message)
     identity_text = "\n".join(assembly.assistant_identity)
-    assert "You are Maya" in identity_text
-    assert "easygoing" in identity_text
+    assert identity_text == "Be warm, easygoing, and lightly humorous."
     assert assembly.approved_memory == []
     assert rendered.messages[-1].content == "How are you?"
 
