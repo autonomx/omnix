@@ -4,9 +4,15 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from app.trading.bounce_model import label_two_r_before_one_r
 from app.trading.catalyst_evidence import capture_catalyst_evidence
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.trading.gapper_dataset import (
+    GapperCandidate,
+    freeze_gapper_universe,
+    time_of_day_relative_volume,
+)
 from app.trading.models import MarketBar
 from app.trading.paper import (
     PaperAccount,
@@ -167,6 +173,36 @@ def test_frozen_gapper_universe_is_order_independent_and_point_in_time() -> None
     assert [item.discovery_rank for item in first.candidates] == [1, 2]
 
 
+def test_split_normalized_gap_evidence_and_time_of_day_rvol_are_auditable() -> None:
+    adjusted = candidate(
+        previous_close=Decimal("5"),
+        raw_previous_close=Decimal("10"),
+        split_adjustment_factor=Decimal("0.5"),
+        corporate_action_evidence_ids=("split-2-for-1",),
+        premarket_price=Decimal("6"),
+        gap_pct=Decimal("20"),
+    )
+    assert adjusted.previous_close == Decimal("5")
+    assert adjusted.raw_previous_close == Decimal("10")
+    assert adjusted.split_adjustment_factor == Decimal("0.5")
+    assert adjusted.corporate_action_evidence_ids == ("split-2-for-1",)
+
+    with pytest.raises(ValueError):
+        candidate(
+            previous_close=Decimal("5"),
+            raw_previous_close=Decimal("10"),
+            split_adjustment_factor=Decimal("0.5"),
+            corporate_action_evidence_ids=(),
+            premarket_price=Decimal("6"),
+            gap_pct=Decimal("20"),
+        )
+
+    assert time_of_day_relative_volume(
+        Decimal("300"),
+        [Decimal("100"), Decimal("150"), Decimal("200")],
+    ) == Decimal("2")
+
+
 def test_replay_gap_detection_ignores_exchange_closures_but_not_missing_minutes() -> None:
     def frozen(start: datetime) -> FrozenBar:
         return FrozenBar(
@@ -227,11 +263,17 @@ def test_strategy_backtest_uses_shared_paper_execution_policy_and_next_bar_entry
     assert result.execution_policy_version == "paper-execution-v2"
     assert result.summary.trigger_count == 1
     assert result.summary.trade_count == 1
+    assert result.summary.entry_execution_rejection_count == 0
+    assert result.summary.exit_execution_rejection_count == 0
+    assert result.summary.portfolio_capacity_rejection_count == 0
+    assert result.summary.trigger_to_trade_rate == Decimal("1")
+    assert result.summary.average_entry_slippage_bps > 0
     trade = result.trades[0]
     assert trade.trigger_bar_index == 9
     assert trade.entry_bar_index == 10
     assert trade.entry_time == bars[10].start_time
     assert trade.entry_price > bars[10].open
+    assert trade.entry_slippage_bps > 0
     assert trade.exit_reason == "target"
     assert trade.r_multiple > Decimal("1.9")
 
@@ -309,6 +351,14 @@ def test_server_strategy_risk_enforces_kill_daily_loss_position_and_time_gates()
         risk_signal(),
         base,
         spread_bps=Decimal("40"),
+        observed_at=observed,
+    ).reason_code == "MAX_POSITIONS"
+    assert size_strategy_entry(
+        risk_snapshot(),
+        risk_signal(),
+        base.model_copy(update={"max_positions": 1}),
+        spread_bps=Decimal("40"),
+        reserved_instruments={"equity:NASDAQ:PENDING"},
         observed_at=observed,
     ).reason_code == "MAX_POSITIONS"
     assert size_strategy_entry(
