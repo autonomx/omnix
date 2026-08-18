@@ -39,8 +39,8 @@ async function hydrate(accountId: string, instrumentId: string): Promise<void> {
   inflight.add(key);
   try {
     const value = await tradingPaperApi.protection(accountId, instrumentId);
-    const next = value
-      ? normalized({ takeProfit: value.take_profit ?? null, stopLoss: value.stop_loss ?? null })
+    const next: PaperPositionProtection = value
+      ? { takeProfit: validPrice(value.take_profit), stopLoss: validPrice(value.stop_loss) }
       : { takeProfit: null, stopLoss: null };
     const previous = cache.get(key) ?? { takeProfit: null, stopLoss: null };
     cache.set(key, next);
