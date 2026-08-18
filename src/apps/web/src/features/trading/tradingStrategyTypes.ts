@@ -160,3 +160,11 @@ export type StrategyResearchReviewResponse = {
   shadow_only: true;
   reviews: StrategyResearchReview[];
 };
+
+export type StrategyCatalystCaptureResponse = {
+  strategy: TradingStrategyConfig;
+  universe: GapperUniverse;
+  evidence_count: number;
+  candidates_with_evidence: number;
+  errors: Record<string, string>;
+};
