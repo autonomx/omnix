@@ -24,7 +24,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Trading paper client', () => {
   it('uses revision headers for reset and archive', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(snapshot), {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(snapshot), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));
@@ -42,7 +42,7 @@ describe('Trading paper client', () => {
   });
 
   it('submits only paper namespace orders', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
       account_id: 'paper-1',
       order_id: 'order-1',
       instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
