@@ -56,6 +56,8 @@ export type TradingStrategyConfig = {
 export type GapperCandidate = {
   instrument_id: string;
   binding_id?: string | null;
+  observed_at?: string | null;
+  evidence_observed_at?: Record<string, string>;
   previous_close: string | number;
   raw_previous_close?: string | number | null;
   split_adjustment_factor?: string | number;
@@ -83,6 +85,15 @@ export type GapperUniverse = {
 };
 
 export type GapperUniverseFreezeInput = Omit<GapperUniverse, 'source_fingerprint'>;
+
+export type YahooGapperDiscoveryInput = {
+  universe_id: string;
+  evaluation_time: string;
+  count: number;
+  minimum_gap_pct: string | number;
+  minimum_price: string | number;
+  maximum_price: string | number;
+};
 
 export type StrategyEvent = {
   strategy_id: string;
