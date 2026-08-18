@@ -21,6 +21,8 @@ const STRICT_DILUTION_FLAGS = ['registered_offering', 'atm', 'warrants', 'conver
 const strictV11Config = (): GapPullbackConfig => ({
   strategy_id: 'gap_pullback_v1',
   strategy_version: '1.1.0',
+  structure_interval: '5m',
+  execution_interval: '1m',
   minimum_gap_pct: '20',
   minimum_price: '0.50',
   maximum_price: '20',
@@ -284,13 +286,17 @@ export function TradingStrategiesPanel() {
   const upgradeToStrictV11 = () => {
     if (!draft) return;
     setDraft({ ...draft, strategy_version: '1.1.0', config: strictV11Config() });
-    setNotice('Loaded the strict v1.1 failed-selloff baseline. Review every value, then save to persist it.');
+    setNotice('Loaded the strict v1.1 failed-selloff baseline with 5-minute structure and 1-minute execution. Review every value, then save to persist it.');
   };
 
   const save = async () => {
     if (!draft) return;
     if (!draft.account_id) {
       setNotice('A paper account is required.');
+      return;
+    }
+    if (draft.config.structure_interval === '1m' && draft.config.execution_interval === '5m') {
+      setNotice('Execution resolution cannot be coarser than the structure timeframe.');
       return;
     }
     if (draft.mode === 'auto_paper' && !draft.active_universe_id) {
@@ -305,7 +311,7 @@ export function TradingStrategiesPanel() {
       setSelectedId(saved.strategy_id);
       setDraft(structuredClone(saved));
       setNotice(saved.mode === 'auto_paper'
-        ? 'AUTO PAPER saved. Deterministic strategy + server risk + eligible execution data are required before any paper order.'
+        ? `AUTO PAPER saved. ${saved.config.structure_interval} structure + ${saved.config.execution_interval} execution, deterministic strategy, server risk and eligible execution data are required before any paper order.`
         : saved.mode === 'shadow'
           ? 'Shadow mode saved. Signals and research are visible, but no strategy order is submitted.'
           : 'Strategy is off.');
@@ -491,9 +497,9 @@ export function TradingStrategiesPanel() {
         ? { tone: 'complete', text: `${evidenceReady}/${universe.candidates.length} evidence-ready` }
         : { tone: 'attention', text: `${evidenceReady}/${universe.candidates.length} have catalyst evidence` };
     if (phaseId === 'llm') return llmReviewed ? { tone: 'complete', text: `${llmReviewed} reviewed` } : { tone: 'pending', text: 'Optional review' };
-    if (phaseId === 'deterministic') return evaluated ? { tone: 'active', text: `${evaluated} evaluated` } : { tone: 'pending', text: 'Waiting for structure' };
+    if (phaseId === 'deterministic') return evaluated ? { tone: 'active', text: `${evaluated} evaluated · ${draft?.config.structure_interval ?? '—'}` } : { tone: 'pending', text: `Waiting for ${draft?.config.structure_interval ?? 'structure'} bars` };
     if (phaseId === 'selection') return entryReady ? { tone: 'complete', text: `${entryReady} entry-ready` } : { tone: 'pending', text: `Score ≥ ${draft?.config.minimum_quality_score ?? 7}` };
-    if (draft?.mode === 'auto_paper') return submitted ? { tone: 'complete', text: `${submitted} submitted` } : { tone: 'active', text: 'AUTO PAPER armed' };
+    if (draft?.mode === 'auto_paper') return submitted ? { tone: 'complete', text: `${submitted} submitted` } : { tone: 'active', text: `AUTO PAPER · ${draft.config.execution_interval}` };
     return draft?.mode === 'shadow' ? { tone: 'attention', text: 'Shadow only' } : { tone: 'pending', text: 'Off' };
   };
 
@@ -522,7 +528,7 @@ export function TradingStrategiesPanel() {
         ) : (
           <>
             <header className="trading-strategy-editor-header">
-              <div><strong>{draft.strategy_id}</strong><small>{definition.label} · config v{draft.config.strategy_version} · revision {draft.revision}</small></div>
+              <div><strong>{draft.strategy_id}</strong><small>{definition.label} · config v{draft.config.strategy_version} · {draft.config.structure_interval} structure / {draft.config.execution_interval} execution · revision {draft.revision}</small></div>
               <div className="trading-strategy-header-actions">
                 {draft.config.strategy_version === '1.0.0' ? <button type="button" onClick={upgradeToStrictV11}>Load v1.1 baseline</button> : null}
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
@@ -533,7 +539,7 @@ export function TradingStrategiesPanel() {
             {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
 
             <section className="trading-strategy-overview">
-              <div><strong>{definition.thesis}</strong><small>Higher low + VWAP reclaim + lower-high break remain mandatory. A high quality score cannot compensate for broken price structure.</small></div>
+              <div><strong>{definition.thesis}</strong><small>Higher low + VWAP reclaim + lower-high break remain mandatory. Structure and execution timeframes are separate, and simultaneous entry-ready names use quality score before scan rank.</small></div>
               <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
                 {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>)}
               </div>
@@ -585,6 +591,8 @@ export function TradingStrategiesPanel() {
                 <div className="trading-config-block">
                   <header><strong>3. Failed sell-off structure</strong><small>Causal price/volume requirements</small></header>
                   <div className="trading-strategy-grid">
+                    <label><span>Structure timeframe<small>L1 / B1 / L2, VWAP, breakout</small></span><select value={draft.config.structure_interval} onChange={(event) => { const structure_interval = event.target.value as GapPullbackConfig['structure_interval']; setDraft({ ...draft, config: { ...draft.config, structure_interval, execution_interval: structure_interval === '1m' ? '1m' : draft.config.execution_interval } }); }}><option value="1m">1 minute</option><option value="5m">5 minutes</option></select></label>
+                    <label><span>Execution resolution<small>backtest entry/stop/target bars</small></span><select value={draft.config.execution_interval} onChange={(event) => setConfig('execution_interval', event.target.value as GapPullbackConfig['execution_interval'])}><option value="1m">1 minute</option><option value="5m" disabled={draft.config.structure_interval === '1m'}>5 minutes</option></select></label>
                     <ConfigNumber label="Opening impulse minimum" suffix="%" step="0.5" value={draft.config.opening_impulse_min_pct} onChange={(value) => setConfigNumber('opening_impulse_min_pct', value)} />
                     <ConfigNumber label="Pullback depth minimum" suffix="%" step="1" value={draft.config.pullback_min_pct} onChange={(value) => setConfigNumber('pullback_min_pct', value)} />
                     <ConfigNumber label="Pullback depth maximum" suffix="%" step="1" value={draft.config.pullback_max_pct} onChange={(value) => setConfigNumber('pullback_max_pct', value)} />
@@ -610,6 +618,7 @@ export function TradingStrategiesPanel() {
                     <label><span>Last entry ET</span><input type="time" step="1" value={draft.config.last_entry_et} onChange={(event) => setConfig('last_entry_et', event.target.value)} /></label>
                   </div>
                   <div className="quality-score-explainer"><span><b>0–2</b> fresh catalyst</span><span><b>0–2</b> supply / float</span><span><b>0–2</b> opening structure</span><span><b>0–2</b> controlled pullback</span><span><b>0–2</b> reclaim + break + hold</span></div>
+                  <div className="quality-score-explainer"><span><b>Portfolio priority</b> earlier signal time → higher quality score → lower scan rank → symbol</span></div>
                 </div>
 
                 <div className="trading-config-block">
@@ -650,7 +659,7 @@ export function TradingStrategiesPanel() {
               {universe ? (
                 <>
                   <div className="candidate-toolbar">
-                    <div><strong>{universe.universe_id}</strong><small>{universe.session_date} · {universe.discovery_source} · {universe.candidates.length} captured · {selectedCandidates.size} selected</small></div>
+                    <div><strong>{universe.universe_id}</strong><small>{universe.session_date} · {universe.discovery_source} · {universe.candidates.length} captured · {selectedCandidates.size} selected · simultaneous entries: score first, then scan rank</small></div>
                     <div><button type="button" onClick={() => setSelectedCandidates(new Set(universe.candidates.map((candidate) => candidate.instrument_id)))}>Select all</button><button type="button" onClick={() => setSelectedCandidates(new Set())}>Select none</button><button type="button" className="primary" onClick={() => void freezeSelected()} disabled={freezing || !selectedCandidates.size}>Freeze selected & attach</button></div>
                   </div>
                   <div className="candidate-table-wrap">
