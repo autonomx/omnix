@@ -6,9 +6,41 @@
 
 The target setup is a volatile overnight gapper that establishes an opening impulse, sells off, then demonstrates that sellers have failed to continue the move lower. The automated strategy is deliberately narrower than “buy a dip”:
 
-`gap / opening impulse → L1 first confirmed pullback low → B1 confirmed bounce high → L2 confirmed higher low → regular-session VWAP reclaim → B1 break → breakout-volume confirmation`
+`gap / opening impulse → L1 first confirmed pullback low → B1 confirmed bounce high → L2 confirmed higher low → contracting sell volume → regular-session VWAP reclaim → B1 break → breakout-volume confirmation → optional break/hold confirmation`
 
 A signal is not valid until L2 is confirmed. Pivot confirmation uses configured right-side bars; the system never labels a pivot at a time when those bars did not yet exist.
+
+## Strategy catalog and versioning
+
+Automated strategies are treated as named, versioned strategy definitions rather than one-off terminal behavior. The current catalog contains `gap_pullback_v1`; the Trading UI consumes a strategy definition/phase catalog so additional strategies can add their own configuration editor, research workflow and phases without redefining the paper engine.
+
+`gap_pullback_v1` supports two persisted configuration versions:
+
+- **1.0.0** preserves the earlier permissive defaults so existing saved configurations and historical tests remain reproducible.
+- **1.1.0** is the strict failed-selloff profile created by the current UI. Every threshold is persisted and editable; the defaults are a starting research hypothesis, not a claim that those values are optimal.
+
+The v1.1 UI baseline is:
+
+- gap `>= 20%`;
+- price `$0.50–$20`;
+- premarket dollar volume `>= $10M`;
+- time-of-day relative volume `>= 5x`;
+- preferred float `2M–30M` shares, scored by default and optionally hard-required;
+- maximum spread `150 bps`;
+- timestamped catalyst evidence required;
+- deterministic rejection of configured serious supply flags (`registered_offering`, `atm`, `warrants`, `convertible`, `equity_line` by default);
+- opening impulse `>= 8%`;
+- pullback depth `15–55%` of the impulse range;
+- average red-bar pullback volume no more than `70%` of opening-impulse average volume;
+- confirmed higher low;
+- regular-session VWAP reclaim;
+- break of the confirmed B1/lower high;
+- breakout volume `>= 1.25x` recent average;
+- one-bar break-and-hold/retest by default, with a `25 bps` B1 tolerance;
+- minimum deterministic quality score `7/10`;
+- stop below L2 with a configurable buffer and default `2R` target.
+
+All of those values, plus pivot widths, volume lookback, time window and server risk controls, are visible and editable in the Strategies workspace.
 
 ## Safety boundary
 
@@ -16,15 +48,50 @@ The implementation has three execution modes only:
 
 - `off`: no strategy evaluation/execution work beyond persisted configuration.
 - `shadow`: evaluate and persist deterministic state/reason evidence, but create no orders.
-- `auto_paper`: submit only to Omnix paper trading after execution-data and server-risk gates pass.
+- `auto_paper`: submit only to Omnix paper trading after deterministic strategy, execution-data and server-risk gates pass.
 
-There is no live-broker mode. AI catalyst classification and statistical model scores are shadow-only and are intentionally absent from `strategy_monitor.py`.
+There is no live-broker mode. AI catalyst classification and statistical model scores are shadow-only and are intentionally absent from `strategy_monitor.py`. The UI can use LLM research to suggest candidate exclusions, but applying those suggestions changes only the operator's selection. A new immutable narrowed universe must be explicitly frozen before that choice affects deterministic evaluation.
+
+## Daily phased workflow
+
+The Strategies UI exposes the complete daily workflow as six visible phases rather than hiding automation behind one on/off switch:
+
+1. **Scan & freeze** — perform current-only Yahoo gapper discovery and freeze the raw point-in-time candidate population, including eventual fades/failures.
+2. **Research & narrow** — collect timestamped catalyst evidence, inspect float/liquidity/spread/supply flags, supplement Yahoo headline evidence with SEC/company evidence when available, and explicitly select candidates to retain.
+3. **LLM research** — optionally classify only the stored evidence. Results are cited, persisted as research events and remain shadow-only.
+4. **Deterministic setup** — monitor the failed-selloff state machine and expose each candidate's current state/reason, including volume contraction, L1/B1/L2, VWAP, breakout and hold confirmation.
+5. **Daily selection** — only candidates that pass all mandatory hard gates and the configured quality threshold can reach `entry_ready`; the operator can freeze a smaller daily universe before arming automation.
+6. **AUTO PAPER** — apply server risk, authoritative Alpaca IEX execution evidence, deterministic paper fills, persisted protection and end-of-day flattening.
+
+The candidate workbench shows gap, price, TOD RVOL, dollar volume, float, spread, catalyst evidence count, deterministic supply flags, LLM research result, latest deterministic state/reason and quality score. The current universe JSON remains inspectable for provenance and external evidence integration.
+
+## Point-in-time catalyst research
+
+`POST /api/trading/strategies/{strategy_id}/research/capture-yahoo` provides a current-only research step for the attached universe. It queries Yahoo search/news for recent candidate headlines, stores each accepted headline as immutable timestamped `CatalystEvidence`, merges deterministic supply flags found in the evidence, freezes a **new** research universe and updates the paused/shadow strategy to that new universe.
+
+This route deliberately refuses to mutate a strategy while it is in `auto_paper`; the operator must pause automation before changing the day's research universe. Yahoo headline evidence is a starting point, not a complete filing review. Existing catalyst APIs remain available for SEC/company/news/manual evidence, and the UI's evidence JSON makes those immutable IDs visible and auditable.
+
+Yahoo catalyst capture is current-only. A later search cannot be used to reconstruct a historical catalyst set, because that would introduce look-ahead/survivorship bias. Historical research must reuse the exact frozen evidence/universe captured at the time.
+
+## Quality score: ranking without weakening hard gates
+
+The deterministic strategy exposes a transparent ten-point score:
+
+| Category | Points |
+| --- | ---: |
+| Fresh timestamped catalyst evidence | 0–2 |
+| Supply/float profile | 0–2 |
+| Opening structure | 0–2 |
+| Controlled low-volume pullback | 0–2 |
+| VWAP reclaim + B1 break + hold | 0–2 |
+
+The default minimum is `7/10`, but the score is **not** a substitute for mandatory structure. A candidate still making lower lows, failing VWAP/B1, showing excessive sell volume, carrying a configured severe dilution flag, or failing another hard gate cannot compensate by scoring well elsewhere.
 
 ## Data-source boundary
 
 US-equity research and execution deliberately use different providers:
 
-- **Yahoo** supplies symbol discovery, historical/chart bars and the current top-gainer research universe. Yahoo can never authorize a paper fill.
+- **Yahoo** supplies symbol discovery, historical/chart bars, current top-gainer research universes and current-only headline research. Yahoo can never authorize a paper fill.
 - **Alpaca IEX** supplies the authoritative real-time bid/ask/trade observation for US-equity paper execution. IEX is explicitly recorded as a **partial-market** feed and is never described as consolidated SIP/NBBO coverage.
 - If Alpaca credentials are missing, a quote is stale/future-dated/bookless/over-wide, the recurring US-equity calendar says the session is closed, or provider trading-status evidence says the symbol is halted, execution fails closed.
 
@@ -99,6 +166,8 @@ Manual/imported candidate JSON remains supported for externally captured dataset
 
 The strategy runs on finalized one-minute regular-session bars. Regular-session VWAP resets at 09:30 America/New_York. Confirmed pivots require both left and right bars. The implementation exposes deterministic state and reason codes rather than an opaque score.
 
+The v1.1 evaluator additionally compares average red-bar volume during the selloff with average opening-impulse volume and can require a causal post-break hold/retest before `entry_ready`.
+
 The causality gate is **prefix invariance**: evaluation results for any historical prefix must be identical regardless of bars appended later. Tests also verify that L1 is not visible until its required right-side confirmation exists.
 
 ### Portfolio backtest and paper parity
@@ -128,14 +197,21 @@ The gateway owns a deterministic strategy monitor with bounded polling and envir
 
 The Strategies workspace provides:
 
+- an extensible strategy catalog and named strategy instances;
+- the six visible daily pipeline phases;
+- complete `gap_pullback_v1` configuration and strict v1.1 baseline loading;
 - strategy mode/account/universe selection;
 - server risk controls and kill switch;
-- point-in-time universe JSON import/freeze;
-- candidate state/rejection visibility;
+- current Yahoo gapper scan/freeze;
+- current Yahoo catalyst headline capture and immutable research-universe rollover;
+- point-in-time universe JSON/evidence inspection;
+- optional LLM evidence review with explicit shadow-only labeling;
+- candidate include/exclude selection and “freeze selected” daily narrowing;
+- candidate state/rejection/quality-score visibility;
 - active server protection visibility;
-- explicit paper-only and shadow-only safety messaging.
+- explicit paper-only and no-live-broker safety messaging.
 
-Current-only Yahoo discovery is available through the strategy API and can be used by the terminal/automation layer to freeze the morning universe without reconstructing it later.
+The compact Trading header keeps the Scanner/Backtest/Strategies/Trade/AI Research tool group visible rather than hiding automated strategy access behind an invisible horizontal-scroll area.
 
 ## P3 — catalyst evidence and AI shadow classification
 
@@ -143,7 +219,7 @@ Catalyst context is stored as timestamped immutable evidence, not an ungrounded 
 
 The shadow classifier receives only selected stored evidence and must cite exactly those evidence IDs in its structured output. Classification includes catalyst class, directional bias, novelty, dilution risk and confidence. `shadow_only=true` is enforced by contract. The deterministic strategy does not consume this output.
 
-Source acquisition is intentionally separated from the evidence boundary so SEC/company/news adapters can respect environment-specific licensing and credentials without weakening immutability or causality.
+Yahoo headline capture supplies a current-only baseline research source. SEC/company/manual evidence remains supported through the catalyst evidence API and should be preferred when a filing/supply question requires primary evidence. Source acquisition remains separated from the evidence boundary so future adapters can respect licensing and credentials without weakening immutability or causality.
 
 ## P4 — statistical bounce model
 
@@ -169,13 +245,14 @@ Default evidence-volume thresholds are 100 labeled OOS examples across at least 
 1. **Execution correctness:** caller/reference prices cannot fill; stale/future-dated/unavailable/ineligible data fails closed; spread/slippage/stop-gap/latency/liquidity/partial-fill behavior is deterministic.
 2. **Feed correctness:** Yahoo cannot authorize fills; Alpaca IEX is recorded as partial-market evidence; displayed book size rather than daily cumulative volume controls live participation; known halts reject execution.
 3. **Session correctness:** recurring US-equity holidays/early closes and extended-session boundaries classify deterministically; provider status handles symbol-specific halts and exceptional status events.
-4. **Strategy causality:** right-side pivot confirmation and prefix invariance pass.
+4. **Strategy causality:** right-side pivot confirmation and prefix invariance pass; v1.1 pullback-volume and hold confirmation operate only on observable prefixes.
 5. **Backtest/paper parity:** both use the shared risk-sizing, fill and protection-trigger policies, with deterministic chronological candidate arbitration.
-6. **Point-in-time research:** provider/scanner universes have observation timestamps; future candidate/catalyst evidence is rejected; historical tests reuse frozen universes.
+6. **Point-in-time research:** provider/scanner universes have observation timestamps; Yahoo scan/headline capture is current-only; future candidate/catalyst evidence is rejected; historical tests reuse frozen universes/evidence.
 7. **Automated paper only:** strategy monitor has no broker order adapter and no AI/model execution dependency.
-8. **AI/model shadow:** catalyst and model results remain evaluative until a separate reviewed change demonstrates incremental out-of-sample value.
+8. **AI/model shadow:** catalyst and model results remain evaluative; LLM exclusions require an explicit immutable universe-selection step before deterministic evaluation.
 9. **Lifecycle safety:** resetting or archiving a paper account disables associated automation and cancels protection state.
 10. **Operational data:** Alpaca IEX credentials must be configured for US-equity AUTO PAPER. IEX remains a partial-market paper-execution source; no result may be presented as SIP/NBBO or live-fill equivalence.
 11. **Evidence before promotion:** parameter changes are locked before OOS evaluation; sequential walk-forward evidence, expectancy uncertainty and adverse spread/slippage/latency stress cases must be reviewed before any future promotion beyond experimental paper use.
+12. **Strategy UI auditability:** every execution-authorizing v1.1 parameter, daily pipeline phase, candidate decision/rejection, quality score and active protection is inspectable in the Trading Strategies workspace.
 
 Paper or historical results are research evidence, not a profitability guarantee.
