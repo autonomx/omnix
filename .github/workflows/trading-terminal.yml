@@ -30,7 +30,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   trading-terminal:
@@ -101,16 +101,5 @@ jobs:
             src/apps/web/src/api/generated/types.ts
           if-no-files-found: error
           retention-days: 7
-      - name: Commit refreshed API contract on roadmap branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        shell: bash
-        run: |
-          if ! git diff --quiet -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
-            git commit -m "chore: refresh generated gateway API"
-            git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
-          fi
       - name: Verify generated API contract is committed
         run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
