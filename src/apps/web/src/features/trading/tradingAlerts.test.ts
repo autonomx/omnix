@@ -32,7 +32,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Trading alert client', () => {
   it('sends revision headers without dropping condition policy', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(alert), {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(alert), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));
@@ -60,7 +60,7 @@ describe('Trading alert client', () => {
   });
 
   it('keeps alert evaluation on the server endpoint', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ triggers: [] }), {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ triggers: [] }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));
