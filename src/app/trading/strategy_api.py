@@ -21,7 +21,7 @@ from .gapper_discovery import discover_yahoo_gappers
 from .models import MarketBar
 from .paper import PaperExecutionPolicy
 from .strategies.gap_pullback import evaluate_gap_pullback
-from .strategies.models import GapPullbackConfig, GapPullbackResult
+from .strategies.models import GapPullbackConfig, GapPullbackResult, StrategyRiskProfile
 from .strategy_backtest import (
     GapPullbackBacktestResult,
     freeze_backtest_session,
@@ -85,7 +85,8 @@ class GapPullbackBacktestRequest(BaseModel):
     """Frozen multi-symbol morning backtest request.
 
     Candidate membership is supplied by an immutable point-in-time universe;
-    there is no hindsight symbol discovery inside the backtester.
+    there is no hindsight symbol discovery inside the backtester. Portfolio
+    selection uses the same server risk sizing policy as AUTO PAPER.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -97,6 +98,8 @@ class GapPullbackBacktestRequest(BaseModel):
     execution_policy: PaperExecutionPolicy = Field(
         default_factory=lambda: PaperExecutionPolicy(max_volume_participation_pct=Decimal("1"))
     )
+    risk_profile: StrategyRiskProfile = Field(default_factory=StrategyRiskProfile)
+    initial_cash: Decimal = Field(default=Decimal("100000"), gt=0)
     assumed_spread_bps: Decimal = Field(default=Decimal("40"), ge=0, le=10_000)
     max_hold_minutes: int = Field(default=90, ge=1, le=390)
     max_concurrent_positions: int = Field(default=3, ge=1, le=50)
@@ -153,7 +156,7 @@ def create_trading_strategy_router(
         response_model=GapPullbackBacktestResult,
     )
     async def backtest_gap_pullback(request: GapPullbackBacktestRequest):
-        """Run deterministic portfolio backtest using the paper fill engine."""
+        """Run deterministic portfolio backtest using shared paper/risk policies."""
         try:
             _validate_catalyst_provenance(request.universe, catalyst_repository_factory())
             dataset = await asyncio.to_thread(
@@ -170,6 +173,8 @@ def create_trading_strategy_router(
                 assumed_spread_bps=request.assumed_spread_bps,
                 max_hold_minutes=request.max_hold_minutes,
                 max_concurrent_positions=request.max_concurrent_positions,
+                risk_profile=request.risk_profile,
+                initial_cash=request.initial_cash,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -224,8 +229,6 @@ def create_trading_strategy_router(
     )
     async def save_universe(snapshot: GapperUniverseSnapshot):
         try:
-            # Recompute point-in-time validation from the supplied immutable data;
-            # do not trust a caller-provided fingerprint alone.
             validated = await asyncio.to_thread(
                 freeze_gapper_universe,
                 universe_id=snapshot.universe_id,
