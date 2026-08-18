@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -14,7 +14,6 @@ from app.trading.paper import (
     PaperBalance,
     PaperExecutionPolicy,
     PaperLedgerEntry,
-    PaperOrder,
     PaperPosition,
 )
 from app.trading.replay import FrozenBar, dataset_gaps
@@ -100,6 +99,7 @@ def causal_config() -> GapPullbackConfig:
         pivot_right_bars=1,
         volume_lookback_bars=5,
         breakout_volume_ratio=Decimal("1.25"),
+        entry_start_et=time(9, 30),
     )
 
 
@@ -174,9 +174,16 @@ def test_replay_gap_detection_ignores_exchange_closures_but_not_missing_minutes(
             interval="1m",
             start_time=start,
             end_time=start + timedelta(minutes=1),
-            open=Decimal("10"), high=Decimal("10"), low=Decimal("10"), close=Decimal("10"),
-            volume=Decimal("1"), is_final=True, adjustment_mode="raw", session="regular",
-            provider="fixture", received_at=start + timedelta(minutes=1),
+            open=Decimal("10"),
+            high=Decimal("10"),
+            low=Decimal("10"),
+            close=Decimal("10"),
+            volume=Decimal("1"),
+            is_final=True,
+            adjustment_mode="raw",
+            session="regular",
+            provider="fixture",
+            received_at=start + timedelta(minutes=1),
         )
 
     friday = frozen(datetime(2026, 8, 14, 19, 59, tzinfo=timezone.utc))
@@ -244,17 +251,26 @@ def risk_snapshot(*, positions: int = 0, daily_loss: str = "0") -> PaperAccountS
         )
     return PaperAccountSnapshot(
         account=PaperAccount(
-            account_id="paper-1", name="Paper", base_currency="USD", commission_bps=Decimal("0")
+            account_id="paper-1",
+            name="Paper",
+            base_currency="USD",
+            commission_bps=Decimal("0"),
         ),
         balances=[PaperBalance(currency="USD", available=Decimal("10000"))],
         positions=[
             PaperPosition(
-                instrument_id=f"equity:NASDAQ:P{index}", quantity=Decimal("1"),
-                average_cost=Decimal("100"), realized_pnl=Decimal("0"), last_price=Decimal("100")
+                instrument_id=f"equity:NASDAQ:P{index}",
+                quantity=Decimal("1"),
+                average_cost=Decimal("100"),
+                realized_pnl=Decimal("0"),
+                last_price=Decimal("100"),
             )
             for index in range(positions)
         ],
-        open_orders=[], order_history=[], recent_fills=[], recent_ledger=ledger,
+        open_orders=[],
+        order_history=[],
+        recent_fills=[],
+        recent_ledger=ledger,
     )
 
 
@@ -275,20 +291,32 @@ def test_server_strategy_risk_enforces_kill_daily_loss_position_and_time_gates()
     base = StrategyRiskProfile()
 
     assert size_strategy_entry(
-        risk_snapshot(), risk_signal(), base.model_copy(update={"kill_switch": True}),
-        spread_bps=Decimal("40"), observed_at=observed,
+        risk_snapshot(),
+        risk_signal(),
+        base.model_copy(update={"kill_switch": True}),
+        spread_bps=Decimal("40"),
+        observed_at=observed,
     ).reason_code == "KILL_SWITCH"
     assert size_strategy_entry(
-        risk_snapshot(daily_loss="-200"), risk_signal(), base,
-        spread_bps=Decimal("40"), observed_at=observed,
+        risk_snapshot(daily_loss="-200"),
+        risk_signal(),
+        base,
+        spread_bps=Decimal("40"),
+        observed_at=observed,
     ).reason_code == "MAX_DAILY_LOSS"
     assert size_strategy_entry(
-        risk_snapshot(positions=3), risk_signal(), base,
-        spread_bps=Decimal("40"), observed_at=observed,
+        risk_snapshot(positions=3),
+        risk_signal(),
+        base,
+        spread_bps=Decimal("40"),
+        observed_at=observed,
     ).reason_code == "MAX_POSITIONS"
     assert size_strategy_entry(
-        risk_snapshot(), risk_signal(), base,
-        spread_bps=Decimal("40"), observed_at=datetime(2026, 8, 18, 13, 31, tzinfo=timezone.utc),
+        risk_snapshot(),
+        risk_signal(),
+        base,
+        spread_bps=Decimal("40"),
+        observed_at=datetime(2026, 8, 18, 13, 31, tzinfo=timezone.utc),
     ).reason_code == "ENTRY_WINDOW_NOT_OPEN"
 
 
@@ -313,11 +341,10 @@ def test_catalyst_evidence_is_immutable_and_dilution_is_evidence_backed() -> Non
 
 
 def test_two_r_label_is_pessimistic_when_stop_and_target_hit_same_bar() -> None:
-    entry_time = OPEN
     ambiguous = bar(1, "10", "12.2", "8.9", "11", "1000")
     label = label_two_r_before_one_r(
         [ambiguous],
-        entry_time=entry_time,
+        entry_time=OPEN,
         entry_price=Decimal("10"),
         risk_per_share=Decimal("1"),
     )
@@ -325,14 +352,13 @@ def test_two_r_label_is_pessimistic_when_stop_and_target_hit_same_bar() -> None:
 
 
 def test_strategy_surface_remains_paper_only_and_ai_shadow_only() -> None:
-    monitor = Path("src/app/trading/strategy_monitor.py").read_text().lower()
+    monitor = Path("src/app/trading/strategy_monitor.py").read_text()
     catalyst = Path("src/app/trading/catalyst_evidence.py").read_text().lower()
     gateway = Path("src/app/gateway/trading_routes.py").read_text()
     strategy_api = Path("src/app/trading/strategy_api.py").read_text()
 
-    assert "live_broker_enabled\": false" not in monitor  # Python source, not serialized JSON.
-    assert '"live_broker_enabled": False' in Path("src/app/trading/strategy_monitor.py").read_text()
-    assert '"ai_order_placement_enabled": False' in Path("src/app/trading/strategy_monitor.py").read_text()
+    assert '"live_broker_enabled": False' in monitor
+    assert '"ai_order_placement_enabled": False' in monitor
     assert "shadow_only" in catalyst
     assert "create_trading_strategy_router" in gateway
     assert '"/backtest/gap-pullback"' in strategy_api
