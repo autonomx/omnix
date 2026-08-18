@@ -105,7 +105,14 @@ function requestSessionListRefresh(): void {
 }
 
 export async function startBlankChat(): Promise<ChatSession> {
-  let request: CreateChatSessionRequest = { title: 'New chat' };
+  let request: CreateChatSessionRequest = {
+    title: 'New chat',
+    interaction_mode: 'system',
+    read_memory: false,
+    write_memory: false,
+    shared_memory_access: 'none',
+    transcript_policy: 'persistent',
+  };
   if (selectedSessionId) {
     const [session, interaction] = await Promise.all([
       omnixApiClient.getChatSession(selectedSessionId),

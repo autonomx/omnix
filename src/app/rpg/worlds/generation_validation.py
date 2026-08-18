@@ -130,6 +130,22 @@ class PublicationValidatedWorldForgeGenerator:
                 exc,
                 stage="topic_audit",
             ) from exc
+
+        # Reject raw provider payloads before any receipt/authorship code can
+        # dereference GeneratedTopic-only fields such as ``provenance``.
+        if not isinstance(generated, GeneratedTopic):
+            try:
+                validate_generated_topic_for_publication(
+                    generated,  # type: ignore[arg-type]
+                    expected_topic_id=node.topic_id,
+                )
+            except Exception as exc:
+                raise WorldForgePublicationBoundaryError(
+                    node,
+                    exc,
+                    stage="canonical_validation",
+                ) from exc
+
         context = _generator_context(self.generator)
         authoritative_receipt: dict[str, Any] = {}
         try:

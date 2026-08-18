@@ -36,7 +36,7 @@ const drawingToolGroups: DrawingToolGroup[] = [
     label: 'Lines',
     glyph: '/',
     items: [
-      { label: 'Trendline', glyph: '/', tool: 'trend-line', shortcut: 'Alt + T' },
+      { label: 'Trend line', glyph: '/', tool: 'trend-line', shortcut: 'Alt + T' },
       { label: 'Ray', glyph: '↗', tool: 'ray' },
       { label: 'Info line', glyph: '↗', available: false },
       { label: 'Extended line', glyph: '↗', available: false },
@@ -405,6 +405,7 @@ export function TradingDrawingTools({
                       <button
                         type="button"
                         role="menuitem"
+                        aria-label={item.label}
                         className="trading-drawing-tool-item"
                         disabled={!available}
                         title={available ? item.label : `${item.label} is not available yet`}

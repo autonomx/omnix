@@ -74,6 +74,7 @@ def test_image_service_prefers_transported_references_over_local_manifest(monkey
 
     monkeypatch.setattr(image_service, "get_active_image_provider_name", lambda: "flux_klein")
     monkeypatch.setattr(image_service, "get_provider_config", lambda _name: {})
+    monkeypatch.setattr(image_service, "is_image_provider_loaded", lambda _name: True)
     monkeypatch.setattr(image_service, "get_or_create_image_provider", lambda _name: FakeProvider())
 
     def fail_manifest_lookup(_ids):

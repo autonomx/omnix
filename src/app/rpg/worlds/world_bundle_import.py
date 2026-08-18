@@ -162,29 +162,6 @@ def _existing_ids(work: Any, context: Any) -> dict[str, set[str]]:
         "SELECT run_id FROM omnix_rpg_world_generation_runs WHERE workspace_id = %s",
         (context.workspace_id,),
     ).fetchall()
-    launch_preparation: dict[str, Any] = {"status": "not_required"}
-    # A portable release is immediately playable as-is.  Authoring-only
-    # bundles need the same launch preparation as a newly forged world, so
-    # start recovery immediately after the import has committed.
-    if not transformed.payload.scenario_revisions:
-        try:
-            from .launch_repair_service import prepare_opening_scenarios_for_launch
-
-            launch_preparation = prepare_opening_scenarios_for_launch(
-                target,
-                database=database,
-            )
-        except ValueError as exc:
-            if str(exc) != "world_opening_scenarios_not_found":
-                launch_preparation = {
-                    "status": "recovery_required",
-                    "error": str(exc),
-                }
-        except Exception as exc:  # Imported world is durable even if recovery is not.
-            launch_preparation = {
-                "status": "recovery_required",
-                "error": str(exc),
-            }
     return {
         "scenario": {str(row[0]) for row in scenario_rows},
         "map": {str(row[0]) for row in map_rows},
@@ -486,6 +463,30 @@ def import_world_bundle(
     except Exception:
         _cleanup_assets(store, installed_assets)
         raise
+
+    launch_preparation: dict[str, Any] = {"status": "not_required"}
+    # A portable release is immediately playable as-is. Authoring-only bundles
+    # need the same launch preparation as a newly forged world, after commit.
+    if not transformed.payload.scenario_revisions:
+        try:
+            from .launch_repair_service import prepare_opening_scenarios_for_launch
+
+            launch_preparation = prepare_opening_scenarios_for_launch(
+                target,
+                database=database,
+            )
+        except ValueError as exc:
+            if str(exc) != "world_opening_scenarios_not_found":
+                launch_preparation = {
+                    "status": "recovery_required",
+                    "error": str(exc),
+                }
+        except Exception as exc:  # Imported world is durable even if recovery is not.
+            launch_preparation = {
+                "status": "recovery_required",
+                "error": str(exc),
+            }
+
     return {
         "ok": True,
         "status": "imported",

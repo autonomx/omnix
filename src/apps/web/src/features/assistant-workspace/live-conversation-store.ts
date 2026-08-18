@@ -246,7 +246,7 @@ export function reduceLiveConversationRuntimeState(
 export type LiveConversationStore = {
   getState: () => LiveConversationRuntimeState;
   dispatch: (action: LiveConversationStoreAction) => void;
-  subscribe: (listener: () => void) => () => void;
+  subscribe: (listener: () => void) => () => undefined;
   reset: () => void;
 };
 
@@ -271,7 +271,10 @@ export function createLiveConversationStore(
     },
     subscribe: (listener) => {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return () => {
+        listeners.delete(listener);
+        return undefined;
+      };
     },
     reset: () => {
       state = INITIAL_LIVE_CONVERSATION_RUNTIME_STATE;
