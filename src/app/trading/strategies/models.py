@@ -25,6 +25,7 @@ GapPullbackState = Literal[
     "expired",
 ]
 FloatPreferenceMode = Literal["ignore", "score", "require"]
+StrategyBarInterval = Literal["1m", "5m"]
 
 
 class StrategyRiskProfile(BaseModel):
@@ -56,6 +57,12 @@ class GapPullbackConfig(BaseModel):
 
     strategy_id: Literal["gap_pullback_v1"] = "gap_pullback_v1"
     strategy_version: Literal["1.0.0", "1.1.0"] = "1.0.0"
+
+    # Timeframe split. Defaults remain 1m/1m so already-persisted 1.0 and 1.1
+    # documents continue to replay identically. New strict v1.1 UI instances
+    # explicitly opt into 5m structure with 1m execution.
+    structure_interval: StrategyBarInterval = "1m"
+    execution_interval: StrategyBarInterval = "1m"
 
     # Phase 1: discovery / liquidity. Legacy-compatible defaults are retained;
     # v1.1 UI instances explicitly use $10M / 5x / preferred-float settings.
@@ -106,6 +113,11 @@ class GapPullbackConfig(BaseModel):
             raise ValueError("pullback_max_pct must exceed pullback_min_pct")
         if self.preferred_float_max_shares <= self.preferred_float_min_shares:
             raise ValueError("preferred_float_max_shares must exceed preferred_float_min_shares")
+        interval_minutes = {"1m": 1, "5m": 5}
+        if interval_minutes[self.execution_interval] > interval_minutes[self.structure_interval]:
+            raise ValueError("execution_interval cannot be coarser than structure_interval")
+        if interval_minutes[self.structure_interval] % interval_minutes[self.execution_interval] != 0:
+            raise ValueError("structure_interval must be an integer multiple of execution_interval")
         return self
 
 
