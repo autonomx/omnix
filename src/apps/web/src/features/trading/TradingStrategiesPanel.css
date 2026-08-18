@@ -15,7 +15,8 @@
 
 .trading-strategies-heading,
 .trading-strategy-editor-header,
-.trading-strategy-monitoring section > header {
+.trading-strategy-monitoring section > header,
+.trading-universe-import > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -23,7 +24,8 @@
 }
 
 .trading-strategies-heading div,
-.trading-strategy-editor-header div {
+.trading-strategy-editor-header div,
+.trading-universe-import > header div {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -78,6 +80,23 @@
 .trading-strategy-grid select {
   min-width: 0;
   width: 100%;
+}
+
+.trading-universe-import {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--border, #2b3440);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+}
+
+.trading-universe-import textarea {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  box-sizing: border-box;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .trading-strategy-safety {
