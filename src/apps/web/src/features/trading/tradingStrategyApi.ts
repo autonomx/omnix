@@ -1,6 +1,7 @@
 import type {
   GapperUniverse,
   GapperUniverseFreezeInput,
+  StrategyCatalystCaptureResponse,
   StrategyEvent,
   StrategyProtection,
   StrategyResearchReviewResponse,
@@ -64,6 +65,17 @@ export const tradingStrategyApi = {
     }),
   universe: (universeId: string) =>
     requestJson<GapperUniverse>(`/api/trading/strategies/universes/${encodeURIComponent(universeId)}`),
+  captureYahooResearch: (strategyId: string, lookbackHours = 72, maxItemsPerCandidate = 8) =>
+    requestJson<StrategyCatalystCaptureResponse>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/research/capture-yahoo`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          lookback_hours: lookbackHours,
+          max_items_per_candidate: maxItemsPerCandidate,
+        }),
+      },
+    ),
   runLlmResearch: (strategyId: string, model?: string) =>
     requestJson<StrategyResearchReviewResponse>(
       `/api/trading/strategies/${encodeURIComponent(strategyId)}/research/llm-review`,
