@@ -21,6 +21,7 @@ from .aggregation import (
     aggregated_dataset_fingerprint,
     aggregation_plan,
 )
+from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .binance import BinanceMarketDataProvider
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
@@ -38,6 +39,7 @@ class ProviderRegistry:
         self._factories = factories or {
             "binance": lambda: BinanceMarketDataProvider(cache=self.cache),
             "yahoo": lambda: YahooEquityProvider(cache=self.cache),
+            "alpaca_iex": lambda: AlpacaIexExecutionProvider(),
             "stooq": lambda: StooqEquityProvider(cache=self.cache),
             "coinbase": lambda: AdditionalCryptoProvider("coinbase", cache=self.cache),
             "kraken": lambda: AdditionalCryptoProvider("kraken", cache=self.cache),
@@ -59,6 +61,36 @@ class ProviderRegistry:
         if binding is None or binding.instrument_id != instrument_id:
             raise ValueError(f"invalid provider binding for {instrument_id}: {binding_id}")
         return binding
+
+    def resolve_execution_binding(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+    ) -> ProviderBinding:
+        """Resolve the authoritative paper-execution feed without changing chart history.
+
+        Equity charts and strategy bars continue to use Yahoo/Stooq bindings. Any
+        equity execution request is overlaid onto the official Alpaca IEX binding.
+        Missing Alpaca credentials then fail closed at quote fetch time rather than
+        silently falling back to Yahoo or a caller supplied price.
+        """
+        requested = self.resolve_binding(instrument_id, binding_id)
+        if instrument_id.startswith("equity:") and requested.provider in {
+            "yahoo",
+            "stooq",
+            "alpaca_iex",
+        }:
+            alpaca = next(
+                (
+                    item
+                    for item in all_bindings()
+                    if item.instrument_id == instrument_id and item.provider == "alpaca_iex"
+                ),
+                None,
+            )
+            if alpaca is not None:
+                return alpaca
+        return requested
 
     @staticmethod
     def _supports_cancellation(function: Callable[..., Any]) -> bool:
@@ -203,8 +235,14 @@ class ProviderRegistry:
         policy: ExecutionEligibilityPolicy | None = None,
         cancellation: threading.Event | None = None,
     ) -> ExecutionObservation:
-        binding = self.resolve_binding(instrument_id, binding_id)
+        binding = self.resolve_execution_binding(instrument_id, binding_id)
         provider = self.provider(binding.provider)
+        if binding.provider == "alpaca_iex":
+            return provider.execution_observation(
+                instrument_id,
+                policy=policy,
+                cancellation=cancellation,
+            )
         if binding.provider == "yahoo":
             return yahoo_execution_observation(
                 provider,
@@ -256,12 +294,17 @@ class ProviderRegistry:
                 if snapshot is not None
                 else {}
             )
+            configured = alpaca_iex_configured() if provider_id == "alpaca_iex" else True
             descriptors.append(
                 {
                     "provider": provider_id,
-                    "display_name": provider_id.title(),
-                    "enabled": True,
-                    "status": snapshot.status if snapshot is not None else "ready",
+                    "display_name": "Alpaca IEX" if provider_id == "alpaca_iex" else provider_id.title(),
+                    "enabled": configured,
+                    "status": (
+                        snapshot.status if configured and snapshot is not None else "unconfigured"
+                        if not configured
+                        else "ready"
+                    ),
                     "policy": policy,
                     "bindings": [
                         binding for binding in all_bindings() if binding.provider == provider_id
