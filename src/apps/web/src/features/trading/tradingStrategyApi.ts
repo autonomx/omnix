@@ -3,6 +3,7 @@ import type {
   GapperUniverseFreezeInput,
   StrategyEvent,
   StrategyProtection,
+  StrategyResearchReviewResponse,
   TradingStrategyConfig,
   YahooGapperDiscoveryInput,
 } from './tradingStrategyTypes';
@@ -40,7 +41,7 @@ export const tradingStrategyApi = {
       headers: { 'If-Match': String(config.revision) },
       body: JSON.stringify(config),
     }),
-  events: async (strategyId: string, limit = 100) => {
+  events: async (strategyId: string, limit = 200) => {
     const payload = await requestJson<{ events?: StrategyEvent[] }>(
       `/api/trading/strategies/${encodeURIComponent(strategyId)}/events?limit=${limit}`,
     );
@@ -63,4 +64,9 @@ export const tradingStrategyApi = {
     }),
   universe: (universeId: string) =>
     requestJson<GapperUniverse>(`/api/trading/strategies/universes/${encodeURIComponent(universeId)}`),
+  runLlmResearch: (strategyId: string, model?: string) =>
+    requestJson<StrategyResearchReviewResponse>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/research/llm-review`,
+      { method: 'POST', body: JSON.stringify({ model: model?.trim() || null }) },
+    ),
 };
