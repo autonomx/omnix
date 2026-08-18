@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 from app.persistence.tenant import TenantContext, local_tenant_context
-from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
+from app.persistence.unit_of_work import unit_of_work
 
 from .gapper_dataset import GapperUniverseSnapshot
 from .strategies.models import GapPullbackConfig, StrategyMode, StrategyRiskProfile
@@ -216,13 +216,25 @@ class TradingStrategyRepository:
 
     def save_universe(self, snapshot: GapperUniverseSnapshot) -> GapperUniverseSnapshot:
         with self.uow_factory() as uow:
+            existing = uow.connection.execute(
+                """
+                SELECT universe_id, source_fingerprint
+                  FROM omnix_trading_gapper_universes
+                 WHERE workspace_id = %s AND universe_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, snapshot.universe_id),
+            ).fetchone()
+            if existing is not None:
+                if str(existing[1]) != snapshot.source_fingerprint:
+                    raise ValueError("gapper_universe_id_payload_mismatch")
+                return snapshot
             uow.connection.execute(
                 """
                 INSERT INTO omnix_trading_gapper_universes (
                     workspace_id, universe_id, session_date, evaluation_time,
                     discovery_source, source_fingerprint, candidates
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
-                ON CONFLICT (workspace_id, source_fingerprint) DO NOTHING
                 """,
                 (
                     self.context.workspace_id,
@@ -303,12 +315,48 @@ class TradingStrategyRepository:
             ).fetchall()
         return [
             StrategyEvent(
-                strategy_id=row[0], event_id=row[1], run_id=row[2], instrument_id=row[3],
-                event_type=row[4], state=row[5], reason_code=row[6], observed_at=row[7],
-                idempotency_key=row[8], payload=row[9],
+                strategy_id=row[0],
+                event_id=row[1],
+                run_id=row[2],
+                instrument_id=row[3],
+                event_type=row[4],
+                state=row[5],
+                reason_code=row[6],
+                observed_at=row[7],
+                idempotency_key=row[8],
+                payload=row[9],
             )
             for row in rows
         ]
+
+    def daily_paper_pnl(
+        self,
+        account_id: str,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> Decimal:
+        if start_time.tzinfo is None or end_time.tzinfo is None:
+            raise ValueError("daily paper pnl boundaries must be timezone-aware")
+        if end_time <= start_time:
+            raise ValueError("daily paper pnl end_time must follow start_time")
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                """
+                SELECT COALESCE(SUM(amount), 0)
+                  FROM omnix_trading_paper_ledger
+                 WHERE workspace_id = %s AND account_id = %s
+                   AND entry_type IN ('realized_pnl', 'commission')
+                   AND created_at >= %s AND created_at < %s
+                """,
+                (
+                    self.context.workspace_id,
+                    account_id,
+                    start_time,
+                    end_time,
+                ),
+            ).fetchone()
+        return Decimal(row[0]) if row is not None else Decimal("0")
 
     def save_protection(self, protection: StrategyProtection) -> StrategyProtection:
         with self.uow_factory() as uow:
@@ -331,10 +379,18 @@ class TradingStrategyRepository:
                 RETURNING {_PROTECTION_COLUMNS}
                 """,
                 (
-                    self.context.workspace_id, protection.strategy_id, protection.protection_id,
-                    protection.account_id, protection.instrument_id, protection.entry_order_id,
-                    protection.exit_order_id, protection.stop_price, protection.target_price,
-                    protection.quantity, protection.status, protection.trigger_reason,
+                    self.context.workspace_id,
+                    protection.strategy_id,
+                    protection.protection_id,
+                    protection.account_id,
+                    protection.instrument_id,
+                    protection.entry_order_id,
+                    protection.exit_order_id,
+                    protection.stop_price,
+                    protection.target_price,
+                    protection.quantity,
+                    protection.status,
+                    protection.trigger_reason,
                 ),
             ).fetchone()
             uow.commit()
