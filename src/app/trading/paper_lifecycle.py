@@ -35,6 +35,39 @@ class TradingPaperLifecycle:
             )
         )
 
+    def _disable_account_automation(self, uow: PostgresUnitOfWork, account_id: str, reason: str) -> None:
+        """Fail safe: lifecycle changes cannot leave autonomous entries armed."""
+        uow.connection.execute(
+            """
+            UPDATE omnix_trading_strategy_configs
+               SET mode = 'off', revision = revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND account_id = %s
+               AND (mode <> 'off' OR enabled = TRUE)
+            """,
+            (self.context.workspace_id, account_id),
+        )
+        uow.connection.execute(
+            """
+            UPDATE omnix_trading_strategy_protections
+               SET status = 'cancelled', trigger_reason = %s,
+                   revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND account_id = %s
+               AND status IN ('pending_entry', 'active', 'exit_submitted')
+            """,
+            (reason, self.context.workspace_id, account_id),
+        )
+        uow.connection.execute(
+            """
+            UPDATE omnix_trading_paper_protections
+               SET status = 'cancelled', trigger_reason = %s,
+                   revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND account_id = %s
+               AND status IN ('pending_entry', 'active', 'exit_submitted')
+            """,
+            (reason, self.context.workspace_id, account_id),
+        )
+
     def reset_account(
         self,
         account_id: str,
@@ -61,6 +94,14 @@ class TradingPaperLifecycle:
                     f"Paper account expected revision {expected_revision}: {account_id}"
                 )
             currency = str(row[0])
+            self._disable_account_automation(uow, account_id, "account_reset")
+            # Manual protections are lifecycle history, not part of the fresh
+            # account simulation. Strategy protections stay as cancelled audit
+            # records because they belong to strategy history.
+            uow.connection.execute(
+                "DELETE FROM omnix_trading_paper_protections WHERE workspace_id = %s AND account_id = %s",
+                (self.context.workspace_id, account_id),
+            )
             for table in (
                 "omnix_trading_paper_ledger",
                 "omnix_trading_paper_fills",
@@ -95,7 +136,12 @@ class TradingPaperLifecycle:
                     currency,
                     initial_cash,
                     ledger_id,
-                    json.dumps({"source": "explicit_account_reset"}),
+                    json.dumps(
+                        {
+                            "source": "explicit_account_reset",
+                            "automation_mode_after_reset": "off",
+                        }
+                    ),
                 ),
             )
             uow.connection.execute(
@@ -117,25 +163,93 @@ class TradingPaperLifecycle:
         expected_revision: int,
     ) -> PaperAccountSnapshot:
         with self.uow_factory() as uow:
-            row = uow.connection.execute(
+            account_row = uow.connection.execute(
+                """
+                SELECT base_currency, revision
+                  FROM omnix_trading_paper_accounts
+                 WHERE workspace_id = %s AND account_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, account_id),
+            ).fetchone()
+            if account_row is None or int(account_row[1]) != expected_revision:
+                raise RevisionConflict(
+                    f"Paper account expected revision {expected_revision}: {account_id}"
+                )
+            currency = str(account_row[0])
+            self._disable_account_automation(uow, account_id, "account_archived")
+
+            # Release reservations before cancelling the open orders so the
+            # archived snapshot remains internally balanced and auditable.
+            buy_reserved = uow.connection.execute(
+                """
+                SELECT COALESCE(SUM(reserved_cash), 0)
+                  FROM omnix_trading_paper_orders
+                 WHERE workspace_id = %s AND account_id = %s
+                   AND status = 'open' AND side = 'buy'
+                """,
+                (self.context.workspace_id, account_id),
+            ).fetchone()
+            reserved_cash = Decimal(buy_reserved[0]) if buy_reserved else Decimal("0")
+            if reserved_cash > 0:
+                uow.connection.execute(
+                    """
+                    UPDATE omnix_trading_paper_balances
+                       SET available = available + %s,
+                           reserved = GREATEST(0, reserved - %s),
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND account_id = %s AND currency = %s
+                    """,
+                    (
+                        reserved_cash,
+                        reserved_cash,
+                        self.context.workspace_id,
+                        account_id,
+                        currency,
+                    ),
+                )
+            uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_positions AS position
+                   SET reserved_quantity = GREATEST(
+                           0,
+                           position.reserved_quantity - COALESCE(open_sell.remaining, 0)
+                       ),
+                       updated_at = CURRENT_TIMESTAMP
+                  FROM (
+                        SELECT instrument_id,
+                               SUM(GREATEST(quantity - filled_quantity, 0)) AS remaining
+                          FROM omnix_trading_paper_orders
+                         WHERE workspace_id = %s AND account_id = %s
+                           AND status = 'open' AND side = 'sell'
+                         GROUP BY instrument_id
+                       ) AS open_sell
+                 WHERE position.workspace_id = %s
+                   AND position.account_id = %s
+                   AND position.instrument_id = open_sell.instrument_id
+                """,
+                (
+                    self.context.workspace_id,
+                    account_id,
+                    self.context.workspace_id,
+                    account_id,
+                ),
+            )
+            uow.connection.execute(
+                """
+                UPDATE omnix_trading_paper_orders
+                   SET status = 'cancelled', reserved_cash = 0,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND account_id = %s AND status = 'open'
+                """,
+                (self.context.workspace_id, account_id),
+            )
+            uow.connection.execute(
                 """
                 UPDATE omnix_trading_paper_accounts
                    SET enabled = FALSE, revision = revision + 1,
                        updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND account_id = %s AND revision = %s
-                RETURNING account_id
-                """,
-                (self.context.workspace_id, account_id, expected_revision),
-            ).fetchone()
-            if row is None:
-                raise RevisionConflict(
-                    f"Paper account expected revision {expected_revision}: {account_id}"
-                )
-            uow.connection.execute(
-                """
-                UPDATE omnix_trading_paper_orders
-                   SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND account_id = %s AND status = 'open'
+                 WHERE workspace_id = %s AND account_id = %s
                 """,
                 (self.context.workspace_id, account_id),
             )
