@@ -15,12 +15,19 @@ class GapperCandidate(BaseModel):
     `previous_close` is always the split/corporate-action-normalized close in the
     same share basis as `premarket_price`. When raw evidence is available it is
     preserved separately with the adjustment factor so the gap can be audited.
+
+    `observed_at` records when the candidate snapshot itself was observable.
+    `evidence_observed_at` can additionally timestamp fields sourced from separate
+    requests. Freeze validation rejects any timestamp later than the universe
+    evaluation time so historical universes cannot silently absorb future facts.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     instrument_id: str = Field(min_length=3, max_length=200)
     binding_id: str | None = Field(default=None, max_length=240)
+    observed_at: datetime | None = None
+    evidence_observed_at: dict[str, datetime] = Field(default_factory=dict)
     previous_close: Decimal = Field(gt=0)
     raw_previous_close: Decimal | None = Field(default=None, gt=0)
     split_adjustment_factor: Decimal = Field(default=Decimal("1"), gt=0)
@@ -36,6 +43,28 @@ class GapperCandidate(BaseModel):
     catalyst_evidence_ids: tuple[str, ...] = ()
     dilution_flags: tuple[str, ...] = ()
     discovery_rank: int | None = Field(default=None, ge=1)
+
+    @field_validator("observed_at")
+    @classmethod
+    def observed_at_aware(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("candidate observed_at must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
+    @field_validator("evidence_observed_at")
+    @classmethod
+    def evidence_times_aware(cls, value: dict[str, datetime]) -> dict[str, datetime]:
+        normalized: dict[str, datetime] = {}
+        for key, observed_at in value.items():
+            clean = str(key).strip()
+            if not clean:
+                raise ValueError("evidence_observed_at keys cannot be empty")
+            if observed_at.tzinfo is None:
+                raise ValueError("candidate evidence timestamps must be timezone-aware")
+            normalized[clean] = observed_at.astimezone(timezone.utc)
+        return normalized
 
     @model_validator(mode="after")
     def validate_gap_and_adjustment(self):
@@ -94,6 +123,26 @@ def time_of_day_relative_volume(
     return current / baseline
 
 
+def _validate_point_in_time_candidate(
+    candidate: GapperCandidate,
+    *,
+    evaluation_time: datetime,
+    discovery_source: str,
+) -> None:
+    evaluation = evaluation_time.astimezone(timezone.utc)
+    if candidate.observed_at is not None and candidate.observed_at > evaluation:
+        raise ValueError(f"candidate observation occurs after universe freeze: {candidate.instrument_id}")
+    if discovery_source in {"scanner", "provider"} and candidate.observed_at is None:
+        raise ValueError(
+            f"provider/scanner candidate requires observed_at: {candidate.instrument_id}"
+        )
+    for field, observed_at in candidate.evidence_observed_at.items():
+        if observed_at > evaluation:
+            raise ValueError(
+                f"candidate evidence occurs after universe freeze: {candidate.instrument_id}:{field}"
+            )
+
+
 def gapper_universe_fingerprint(
     *,
     universe_id: str,
@@ -124,6 +173,14 @@ def freeze_gapper_universe(
 ) -> GapperUniverseSnapshot:
     if not candidates:
         raise ValueError("gapper universe requires at least one candidate")
+    if evaluation_time.tzinfo is None:
+        raise ValueError("evaluation_time must be timezone-aware")
+    for candidate in candidates:
+        _validate_point_in_time_candidate(
+            candidate,
+            evaluation_time=evaluation_time,
+            discovery_source=discovery_source,
+        )
     ordered = tuple(sorted(candidates, key=lambda item: (item.discovery_rank or 10**9, item.instrument_id)))
     fingerprint = gapper_universe_fingerprint(
         universe_id=universe_id,
