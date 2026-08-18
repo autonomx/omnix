@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -144,9 +144,12 @@ def test_us_equity_calendar_rejects_holidays_and_handles_early_close() -> None:
     christmas = datetime(2026, 12, 25, 15, 0, tzinfo=timezone.utc)
     assert us_equity_session(christmas) == "closed"
 
-    # Day after Thanksgiving closes at 13:00 ET; 13:30 ET is extended-post.
+    # Day after Thanksgiving closes at 13:00 ET. Extended trading remains open
+    # at 13:30 ET but is closed after the standard 17:00 ET early-session cutoff.
     after_thanksgiving = datetime(2026, 11, 27, 18, 30, tzinfo=timezone.utc)
     assert us_equity_session(after_thanksgiving) == "extended_post"
+    after_early_extended_close = datetime(2026, 11, 27, 22, 30, tzinfo=timezone.utc)
+    assert us_equity_session(after_early_extended_close) == "closed"
 
 
 def test_provider_universe_requires_point_in_time_candidate_evidence() -> None:
