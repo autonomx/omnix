@@ -189,4 +189,5 @@ def test_backtest_uses_5m_structure_and_next_1m_execution_bar() -> None:
     assert trade.trigger_bar_index == 49
     assert trade.entry_bar_index == 50
     assert trade.entry_time == bars[50].start_time
-    assert trade.quality_score == 5
+    # This synthetic research/backtest fixture deterministically scores 8/10.
+    assert trade.quality_score == 8
