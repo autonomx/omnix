@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from datetime import datetime, time, timezone
 from decimal import Decimal
 from typing import Any
@@ -103,6 +104,7 @@ class AlpacaIexExecutionProvider:
         session: requests.Session | None = None,
         runtime: ProviderHttpRuntime | None = None,
         data_url: str | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.runtime = runtime or ProviderHttpRuntime(
             self.provider_id,
@@ -115,6 +117,7 @@ class AlpacaIexExecutionProvider:
             or os.environ.get("OMNIX_ALPACA_DATA_URL")
             or ALPACA_DATA_URL
         ).rstrip("/")
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def get_binding(self, instrument_id: str) -> ProviderBinding:
         binding = next(
@@ -171,9 +174,6 @@ class AlpacaIexExecutionProvider:
 
         quote_time = _parse_timestamp(latest_quote.get("t"), field="quote")
         trade_time = _parse_timestamp(latest_trade.get("t"), field="trade")
-        # A fresh quote paired with a very old trade is not enough to drive stop
-        # logic safely. Use the older source timestamp so the normal freshness
-        # policy fails closed when either side of the observation is stale.
         source_time = min(quote_time, trade_time)
 
         minute_bar = payload.get("minuteBar")
@@ -195,7 +195,10 @@ class AlpacaIexExecutionProvider:
             if isinstance(daily_bar, dict) and daily_bar.get("v") is not None
             else None
         )
-        now = datetime.now(timezone.utc)
+        now = self.clock()
+        if now.tzinfo is None:
+            raise ProviderContractError("Alpaca IEX provider clock must be timezone-aware")
+        now = now.astimezone(timezone.utc)
         quote: dict[str, object] = {
             "instrument_id": instrument_id,
             "binding_id": binding.binding_id,
@@ -214,9 +217,6 @@ class AlpacaIexExecutionProvider:
             "received_at": now.isoformat(),
             "session": _session(source_time),
             "freshness_mode": "live",
-            # Trading-status messages are supplied by Alpaca's IEX WebSocket
-            # status channel. Unknown means no status evidence has been observed;
-            # a known halt is always rejected by execution-data-v1.
             "halted": default_alpaca_iex_status_cache().halted(binding.provider_symbol),
         }
         try:
