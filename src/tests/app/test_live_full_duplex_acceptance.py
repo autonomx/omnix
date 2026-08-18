@@ -5,7 +5,9 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
-from app.gateway.tts_live_call_startup_frame_policy import TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES
+from app.gateway.tts_live_call_startup_frame_policy import (
+    TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
+)
 
 
 class FakeTtsProvider:
