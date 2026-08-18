@@ -508,14 +508,13 @@ class TradingPaperRepository:
 
                 remaining_before = max(Decimal("0"), order.quantity - order.filled_quantity)
                 if order.side == "buy":
-                    reservation_release = (
-                        order.reserved_cash
-                        if fill_quantity >= remaining_before or remaining_before <= 0
-                        else order.reserved_cash * fill_quantity / remaining_before
+                    reservation_spend = min(order.reserved_cash, total_cost)
+                    cash_reserved -= reservation_spend
+                    cash_available -= total_cost - reservation_spend
+                    next_reserved_cash = max(
+                        Decimal("0"),
+                        order.reserved_cash - reservation_spend,
                     )
-                    next_reserved_cash = max(Decimal("0"), order.reserved_cash - reservation_release)
-                    cash_reserved -= reservation_release
-                    cash_available += reservation_release - total_cost
                     prior_cost = position_quantity * average_cost
                     if position_quantity >= 0:
                         position_quantity += fill_quantity
@@ -557,6 +556,21 @@ class TradingPaperRepository:
                     realized_pnl += realized_delta
                     if position_quantity == 0:
                         average_cost = Decimal("0")
+
+                new_filled_quantity = order.filled_quantity + fill_quantity
+                prior_fill_notional = (
+                    order.average_fill_price * order.filled_quantity
+                    if order.average_fill_price is not None
+                    else Decimal("0")
+                )
+                new_average_fill = (
+                    prior_fill_notional + decision.fill_price * fill_quantity
+                ) / new_filled_quantity
+                new_status = "filled" if new_filled_quantity >= order.quantity else "open"
+                if order.side == "buy" and new_status == "filled" and next_reserved_cash > 0:
+                    cash_reserved -= next_reserved_cash
+                    cash_available += next_reserved_cash
+                    next_reserved_cash = Decimal("0")
 
                 uow.connection.execute(
                     """
@@ -605,17 +619,6 @@ class TradingPaperRepository:
                         unrealized,
                     ),
                 )
-
-                new_filled_quantity = order.filled_quantity + fill_quantity
-                prior_fill_notional = (
-                    order.average_fill_price * order.filled_quantity
-                    if order.average_fill_price is not None
-                    else Decimal("0")
-                )
-                new_average_fill = (
-                    prior_fill_notional + decision.fill_price * fill_quantity
-                ) / new_filled_quantity
-                new_status = "filled" if new_filled_quantity >= order.quantity else "open"
                 uow.connection.execute(
                     """
                     UPDATE omnix_trading_paper_orders
