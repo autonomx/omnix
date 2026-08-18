@@ -53,6 +53,34 @@ export type TradingStrategyConfig = {
   updated_at?: string | null;
 };
 
+export type GapperCandidate = {
+  instrument_id: string;
+  binding_id?: string | null;
+  previous_close: string | number;
+  premarket_price: string | number;
+  gap_pct: string | number;
+  premarket_volume?: string | number;
+  premarket_dollar_volume?: string | number;
+  tod_rvol?: string | number | null;
+  market_cap?: string | number | null;
+  float_shares?: string | number | null;
+  spread_bps?: string | number | null;
+  catalyst_evidence_ids?: string[];
+  dilution_flags?: string[];
+  discovery_rank?: number | null;
+};
+
+export type GapperUniverse = {
+  universe_id: string;
+  session_date: string;
+  evaluation_time: string;
+  discovery_source: 'manual' | 'import' | 'scanner' | 'provider';
+  candidates: GapperCandidate[];
+  source_fingerprint: string;
+};
+
+export type GapperUniverseFreezeInput = Omit<GapperUniverse, 'source_fingerprint'>;
+
 export type StrategyEvent = {
   strategy_id: string;
   event_id: string;
