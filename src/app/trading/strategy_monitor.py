@@ -5,6 +5,7 @@ import hashlib
 import os
 from collections.abc import Callable
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
@@ -12,11 +13,13 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
+from .gapper_dataset import GapperCandidate
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
 from .strategies.gap_pullback import evaluate_gap_pullback
+from .strategies.models import GapPullbackResult
 from .strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -74,6 +77,21 @@ def _paper_observation(execution) -> PaperMarketObservation:
         rejection_reasons=execution.rejection_reasons,
         halted=execution.halted is True,
     )
+
+
+@dataclass(frozen=True)
+class _EntryProposal:
+    candidate: GapperCandidate
+    result: GapPullbackResult
+    observed_at: datetime
+
+    @property
+    def priority(self) -> tuple[datetime, int, str]:
+        return (
+            self.observed_at.astimezone(timezone.utc),
+            self.candidate.discovery_rank or 10**9,
+            self.candidate.instrument_id,
+        )
 
 
 class TradingStrategyMonitor:
@@ -205,9 +223,6 @@ class TradingStrategyMonitor:
                 await asyncio.to_thread(strategy_repository.save_protection, protection)
                 continue
 
-            # Manual paper protection and strategy protection can coexist in the
-            # UI. Whichever source already has a close order in flight wins; the
-            # other must not race a duplicate exit for the same position.
             conflicting_exit = any(
                 order.status == "open"
                 and order.instrument_id == protection.instrument_id
@@ -275,6 +290,59 @@ class TradingStrategyMonitor:
             protection.trigger_reason = trigger
             await asyncio.to_thread(strategy_repository.save_protection, protection)
 
+    async def _evaluate_candidates(
+        self,
+        config: TradingStrategyConfigDocument,
+        strategy_repository: TradingStrategyRepository,
+        market_service: TradingMarketDataService,
+        universe,
+    ) -> list[_EntryProposal]:
+        proposals: list[_EntryProposal] = []
+        for candidate in universe.candidates:
+            try:
+                response = await asyncio.to_thread(
+                    market_service.bars,
+                    candidate.instrument_id,
+                    "1m",
+                    240,
+                    candidate.binding_id,
+                )
+                bars = [bar for bar in response.bars if bar.is_final]
+            except Exception as exc:
+                self.last_error = f"strategy_bars: {type(exc).__name__}: {exc}"
+                continue
+            if not bars:
+                continue
+            result = evaluate_gap_pullback(candidate, bars, config.config)
+            observed_at = bars[-1].end_time
+            self.evaluation_count += 1
+            await self._event(
+                strategy_repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="state",
+                state=result.state,
+                reason_code=result.reason_code,
+                observed_at=observed_at,
+                payload={
+                    "features": result.features.model_dump(mode="json"),
+                    "transitions": list(result.transitions),
+                    "mode": config.mode,
+                    "universe_id": universe.universe_id,
+                },
+            )
+            if result.state == "entry_ready" and result.signal is not None:
+                self.signal_count += 1
+                proposals.append(
+                    _EntryProposal(
+                        candidate=candidate,
+                        result=result,
+                        observed_at=observed_at,
+                    )
+                )
+        proposals.sort(key=lambda proposal: proposal.priority)
+        return proposals
+
     async def _run_config(
         self,
         config: TradingStrategyConfigDocument,
@@ -294,12 +362,7 @@ class TradingStrategyMonitor:
         now_utc = datetime.now(timezone.utc)
         now_et = now_utc.astimezone(_ET)
         today_et = now_et.date()
-        day_start_et = datetime(
-            today_et.year,
-            today_et.month,
-            today_et.day,
-            tzinfo=_ET,
-        )
+        day_start_et = datetime(today_et.year, today_et.month, today_et.day, tzinfo=_ET)
         day_end_et = day_start_et + timedelta(days=1)
 
         universe = await asyncio.to_thread(
@@ -324,6 +387,15 @@ class TradingStrategyMonitor:
                         "runtime_session_date": today_et.isoformat(),
                     },
                 )
+            return
+
+        proposals = await self._evaluate_candidates(
+            config,
+            strategy_repository,
+            market_service,
+            universe,
+        )
+        if config.mode != "auto_paper" or not proposals:
             return
 
         snapshot = await asyncio.to_thread(paper_repository.snapshot, config.account_id)
@@ -375,44 +447,11 @@ class TradingStrategyMonitor:
             Decimal("0"),
         )
 
-        for candidate in universe.candidates:
-            try:
-                response = await asyncio.to_thread(
-                    market_service.bars,
-                    candidate.instrument_id,
-                    "1m",
-                    240,
-                    candidate.binding_id,
-                )
-                bars = [bar for bar in response.bars if bar.is_final]
-            except Exception as exc:
-                self.last_error = f"strategy_bars: {type(exc).__name__}: {exc}"
-                continue
-            if not bars:
-                continue
-            result = evaluate_gap_pullback(candidate, bars, config.config)
-            observed_at = bars[-1].end_time
-            self.evaluation_count += 1
-            await self._event(
-                strategy_repository,
-                config,
-                instrument_id=candidate.instrument_id,
-                event_type="state",
-                state=result.state,
-                reason_code=result.reason_code,
-                observed_at=observed_at,
-                payload={
-                    "features": result.features.model_dump(mode="json"),
-                    "transitions": list(result.transitions),
-                    "mode": config.mode,
-                    "universe_id": universe.universe_id,
-                },
-            )
-            if result.state != "entry_ready" or result.signal is None:
-                continue
-            self.signal_count += 1
-            if config.mode != "auto_paper":
-                continue
+        for proposal in proposals:
+            candidate = proposal.candidate
+            result = proposal.result
+            assert result.signal is not None
+            observed_at = proposal.observed_at
             if candidate.instrument_id in protected_symbols:
                 continue
             try:
@@ -530,6 +569,11 @@ class TradingStrategyMonitor:
                     "quantity": str(decision.quantity),
                     "stop_price": str(result.signal.stop_price),
                     "target_price": str(result.signal.target_price),
+                    "priority": [
+                        observed_at.astimezone(timezone.utc).isoformat(),
+                        candidate.discovery_rank or 10**9,
+                        candidate.instrument_id,
+                    ],
                 },
             )
             self.paper_order_count += 1
@@ -563,6 +607,7 @@ class TradingStrategyMonitor:
             "signal_count": self.signal_count,
             "paper_order_count": self.paper_order_count,
             "rejection_count": self.rejection_count,
+            "candidate_arbitration": "observed_at_discovery_rank_instrument",
             "live_broker_enabled": False,
             "ai_order_placement_enabled": False,
         }
