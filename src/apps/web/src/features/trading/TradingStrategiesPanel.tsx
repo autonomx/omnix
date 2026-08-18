@@ -50,7 +50,7 @@ function universeImport(
   fallbackUniverseId: string | null,
 ): GapperUniverseFreezeInput {
   const parsed: unknown = JSON.parse(raw);
-  const object = Array.isArray(parsed)
+  const object: Record<string, unknown> | null = Array.isArray(parsed)
     ? { candidates: parsed }
     : parsed && typeof parsed === 'object'
       ? parsed as Record<string, unknown>
