@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -12,17 +11,18 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.persistence.errors import RevisionConflict
+from app.trading.execution import ExecutionObservation
 from app.trading.paper import (
     PaperAccount,
     PaperAccountCreate,
     PaperAccountSnapshot,
     PaperBalance,
+    PaperExecutionPolicy,
     PaperFill,
     PaperLedgerEntry,
     PaperMarketObservation,
     PaperOrder,
     PaperOrderRequest,
-    PaperPosition,
     paper_commission,
     paper_fill_decision,
     paper_fill_is_fundable,
@@ -56,15 +56,17 @@ def order(order_type="market", side="buy", **overrides) -> PaperOrder:
     return PaperOrder(**payload)
 
 
-def observation(price: str) -> PaperMarketObservation:
-    return PaperMarketObservation(
-        instrument_id=INSTRUMENT,
-        binding_id=BINDING,
-        provider="binance",
-        price=Decimal(price),
-        source_time=NOW,
-        evaluated_at=NOW,
-    )
+def observation(price: str, **overrides) -> PaperMarketObservation:
+    payload = {
+        "instrument_id": INSTRUMENT,
+        "binding_id": BINDING,
+        "provider": "binance",
+        "price": Decimal(price),
+        "source_time": NOW,
+        "evaluated_at": NOW,
+    }
+    payload.update(overrides)
+    return PaperMarketObservation(**payload)
 
 
 def snapshot(*, revision=1, enabled=True, open_orders=()) -> PaperAccountSnapshot:
@@ -122,6 +124,53 @@ def test_order_contract_and_fill_conditions_are_explicit() -> None:
     assert paper_fill_decision(order("stop", "sell"), observation("99")).should_fill
     mismatch = observation("100").model_copy(update={"binding_id": "other"})
     assert paper_fill_decision(order("market"), mismatch).reason == "binding_mismatch"
+
+
+def test_paper_execution_v2_is_partial_latency_halt_and_gap_aware() -> None:
+    policy = PaperExecutionPolicy(
+        slippage_bps="0",
+        stop_slippage_bps="25",
+        max_volume_participation_pct="0.10",
+        latency_ms=250,
+    )
+    partial = paper_fill_decision(
+        order("market"),
+        observation("100", volume=Decimal("5")),
+        policy.model_copy(update={"latency_ms": 0}),
+    )
+    assert partial.should_fill is True
+    assert partial.fill_quantity == Decimal("0.5")
+
+    delayed = paper_fill_decision(
+        order("market", created_at=NOW),
+        observation("100", source_time=NOW + timedelta(milliseconds=100)),
+        policy,
+    )
+    assert delayed.should_fill is False
+    assert delayed.reason == "execution_latency_not_elapsed"
+
+    halted = paper_fill_decision(
+        order("market"),
+        observation("100", halted=True),
+        policy.model_copy(update={"latency_ms": 0}),
+    )
+    assert halted.should_fill is False
+    assert halted.reason == "market_halted"
+
+    stop = paper_fill_decision(
+        order("stop", "sell"),
+        observation(
+            "95",
+            bid=Decimal("95"),
+            ask=Decimal("95.10"),
+            high=Decimal("96"),
+            low=Decimal("94"),
+        ),
+        policy.model_copy(update={"latency_ms": 0}),
+    )
+    assert stop.should_fill is True
+    assert stop.fill_price == Decimal("94.7625")
+    assert stop.reason == "stop_range_triggered_gap_aware"
 
 
 def test_paper_accounting_math_and_fill_idempotency_are_reproducible() -> None:
@@ -207,6 +256,14 @@ class FakePaperRepository:
         return [fill]
 
 
+class FakeProtectionRepository:
+    def list(self, account_id, *, active_only=True):
+        return []
+
+    def get(self, *args, **kwargs):
+        raise ValueError("paper_protection_not_found")
+
+
 class FakeLifecycle:
     def __init__(self, repository: FakePaperRepository) -> None:
         self.repository = repository
@@ -229,15 +286,22 @@ class FakeMarketService:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str | None]] = []
 
-    def quote(self, instrument_id, binding_id=None):
+    def execution_observation(self, instrument_id, binding_id=None):
         self.calls.append((instrument_id, binding_id))
-        return {
-            "instrument_id": instrument_id,
-            "binding_id": binding_id or BINDING,
-            "provider": "fixture",
-            "price": "101",
-            "received_at": NOW.isoformat(),
-        }
+        return ExecutionObservation(
+            instrument_id=instrument_id,
+            binding_id=binding_id or BINDING,
+            provider="fixture",
+            bid=Decimal("100.99"),
+            ask=Decimal("101.01"),
+            last=Decimal("101"),
+            cumulative_volume=None,
+            source_time=NOW,
+            received_at=NOW,
+            session="regular",
+            freshness_mode="polled",
+            execution_eligible=True,
+        )
 
 
 def test_paper_monitor_groups_quotes_and_runs_without_browser() -> None:
@@ -247,6 +311,7 @@ def test_paper_monitor_groups_quotes_and_runs_without_browser() -> None:
     market = FakeMarketService()
     monitor = TradingPaperMonitor(
         repository_factory=lambda: repository,
+        protection_repository_factory=lambda: FakeProtectionRepository(),
         market_service_factory=lambda: market,
         interval_seconds=5,
     )
@@ -254,6 +319,7 @@ def test_paper_monitor_groups_quotes_and_runs_without_browser() -> None:
     assert market.calls == [(INSTRUMENT, BINDING)]
     assert len(repository.observations) == 1
     assert monitor.diagnostics()["quote_count"] == 1
+    assert monitor.diagnostics()["reference_price_fallback"] is False
 
 
 def test_paper_monitor_is_disabled_in_legacy_tests_by_default(monkeypatch) -> None:
@@ -298,6 +364,20 @@ def test_paper_routes_support_orders_reset_archive_and_revision_conflicts() -> N
     assert cancel.json()["detail"] == "paper_order_cancellation_disabled"
     assert repository.current.open_orders[0].status == "open"
 
+    browser_observation = client.post(
+        "/api/trading/paper/accounts/paper-1/observations",
+        json={
+            "instrument_id": INSTRUMENT,
+            "binding_id": BINDING,
+            "provider": "paper-reference",
+            "price": "999",
+            "source_time": NOW.isoformat(),
+            "evaluated_at": NOW.isoformat(),
+        },
+    )
+    assert browser_observation.status_code == 200
+    assert browser_observation.json() == {"fills": []}
+
     reset = client.post(
         "/api/trading/paper/accounts/paper-1/reset",
         headers={"If-Match": "1"},
@@ -333,6 +413,11 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
         assert f"CREATE TABLE IF NOT EXISTS {table}" in migration
     assert "idempotency_key" in migration
 
+    protection_migration = Path(
+        "src/app/persistence/migrations/0039_trading_paper_protections.sql"
+    ).read_text()
+    assert "CREATE TABLE IF NOT EXISTS omnix_trading_paper_protections" in protection_migration
+
     backend = "\n".join(
         path.read_text()
         for path in Path("src/app/trading").glob("paper*.py")
@@ -344,6 +429,10 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
         "broker_credentials",
     ):
         assert forbidden not in backend
+
+    monitor = Path("src/app/trading/paper_monitor.py").read_text()
+    assert "paper-reference" not in monitor
+    assert "server_authoritative_protection" in monitor
 
     gateway = Path("src/app/gateway/trading_routes.py").read_text()
     assert "create_trading_paper_router" in gateway
