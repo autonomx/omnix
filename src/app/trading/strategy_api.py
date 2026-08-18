@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Callable
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -11,7 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 
+from .catalyst_evidence import CatalystShadowClassification
 from .catalyst_repository import TradingCatalystRepository, default_catalyst_repository
+from .catalyst_shadow import generate_catalyst_shadow_classification
 from .gapper_dataset import (
     GapperCandidate,
     GapperUniverseSnapshot,
@@ -82,12 +85,7 @@ class YahooGapperDiscoveryRequest(BaseModel):
 
 
 class GapPullbackBacktestRequest(BaseModel):
-    """Frozen multi-symbol morning backtest request.
-
-    Candidate membership is supplied by an immutable point-in-time universe;
-    there is no hindsight symbol discovery inside the backtester. Portfolio
-    selection uses the same server risk sizing policy as AUTO PAPER.
-    """
+    """Frozen multi-symbol morning backtest request."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -103,6 +101,30 @@ class GapPullbackBacktestRequest(BaseModel):
     assumed_spread_bps: Decimal = Field(default=Decimal("40"), ge=0, le=10_000)
     max_hold_minutes: int = Field(default=90, ge=1, le=390)
     max_concurrent_positions: int = Field(default=3, ge=1, le=50)
+
+
+class StrategyResearchReviewRequest(BaseModel):
+    """Run read-only LLM catalyst research for the strategy's frozen universe."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str | None = Field(default=None, max_length=200)
+
+
+class StrategyResearchReview(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    instrument_id: str
+    status: Literal["reviewed", "missing_evidence", "error"]
+    classification: CatalystShadowClassification | None = None
+    detail: str | None = None
+
+
+class StrategyResearchReviewResponse(BaseModel):
+    strategy_id: str
+    universe_id: str
+    shadow_only: Literal[True] = True
+    reviews: list[StrategyResearchReview]
 
 
 RepositoryFactory = Callable[[], TradingStrategyRepository]
@@ -127,6 +149,40 @@ def _validate_catalyst_provenance(
                     "catalyst_evidence_after_universe_freeze:"
                     f"{candidate.instrument_id}:{item.evidence_id}"
                 )
+
+
+def _research_event(
+    *,
+    strategy_id: str,
+    instrument_id: str,
+    universe_id: str,
+    observed_at: datetime,
+    state: str,
+    reason_code: str,
+    payload: dict[str, object],
+) -> StrategyEvent:
+    raw = "|".join(
+        (
+            strategy_id,
+            instrument_id,
+            universe_id,
+            observed_at.astimezone(timezone.utc).isoformat(),
+            state,
+            reason_code,
+        )
+    )
+    idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return StrategyEvent(
+        strategy_id=strategy_id,
+        event_id=idem[:32],
+        instrument_id=instrument_id,
+        event_type="research_llm",
+        state=state,
+        reason_code=reason_code,
+        observed_at=observed_at,
+        idempotency_key=idem,
+        payload={"universe_id": universe_id, "shadow_only": True, **payload},
+    )
 
 
 def create_trading_strategy_router(
@@ -156,7 +212,6 @@ def create_trading_strategy_router(
         response_model=GapPullbackBacktestResult,
     )
     async def backtest_gap_pullback(request: GapPullbackBacktestRequest):
-        """Run deterministic portfolio backtest using shared paper/risk policies."""
         try:
             _validate_catalyst_provenance(request.universe, catalyst_repository_factory())
             dataset = await asyncio.to_thread(
@@ -185,7 +240,6 @@ def create_trading_strategy_router(
         status_code=201,
     )
     async def discover_yahoo_universe(request: YahooGapperDiscoveryRequest):
-        """Discover current Yahoo gainers and freeze the exact point-in-time universe."""
         try:
             if request.maximum_price <= request.minimum_price:
                 raise ValueError("maximum_price must exceed minimum_price")
@@ -291,6 +345,106 @@ def create_trading_strategy_router(
             )
         except RevisionConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post(
+        "/{strategy_id}/research/llm-review",
+        response_model=StrategyResearchReviewResponse,
+    )
+    async def run_llm_research(
+        strategy_id: str,
+        request: StrategyResearchReviewRequest,
+    ):
+        """Run LLM catalyst analysis as a visible, shadow-only research phase."""
+        try:
+            repository = repository_factory()
+            config = await asyncio.to_thread(repository.get_config, strategy_id)
+            if not config.active_universe_id:
+                raise ValueError("strategy_has_no_active_universe")
+            universe = await asyncio.to_thread(
+                repository.get_universe,
+                config.active_universe_id,
+            )
+            catalyst_repository = catalyst_repository_factory()
+            reviews: list[StrategyResearchReview] = []
+            for candidate in universe.candidates:
+                observed_at = datetime.now(timezone.utc)
+                if not candidate.catalyst_evidence_ids:
+                    review = StrategyResearchReview(
+                        instrument_id=candidate.instrument_id,
+                        status="missing_evidence",
+                        detail="No timestamped catalyst evidence attached to frozen candidate.",
+                    )
+                    await asyncio.to_thread(
+                        repository.append_event,
+                        _research_event(
+                            strategy_id=strategy_id,
+                            instrument_id=candidate.instrument_id,
+                            universe_id=universe.universe_id,
+                            observed_at=observed_at,
+                            state="research_missing",
+                            reason_code="CATALYST_EVIDENCE_MISSING",
+                            payload={"detail": review.detail or ""},
+                        ),
+                    )
+                    reviews.append(review)
+                    continue
+                try:
+                    evidence = await asyncio.to_thread(
+                        catalyst_repository.evidence_by_ids,
+                        candidate.instrument_id,
+                        candidate.catalyst_evidence_ids,
+                    )
+                    classification = await asyncio.to_thread(
+                        generate_catalyst_shadow_classification,
+                        evidence,
+                        model=request.model,
+                    )
+                    await asyncio.to_thread(
+                        repository.append_event,
+                        _research_event(
+                            strategy_id=strategy_id,
+                            instrument_id=candidate.instrument_id,
+                            universe_id=universe.universe_id,
+                            observed_at=observed_at,
+                            state="research_reviewed",
+                            reason_code="LLM_SHADOW_REVIEW_COMPLETE",
+                            payload={"classification": classification.model_dump(mode="json")},
+                        ),
+                    )
+                    reviews.append(
+                        StrategyResearchReview(
+                            instrument_id=candidate.instrument_id,
+                            status="reviewed",
+                            classification=classification,
+                        )
+                    )
+                except (RuntimeError, ValueError) as exc:
+                    await asyncio.to_thread(
+                        repository.append_event,
+                        _research_event(
+                            strategy_id=strategy_id,
+                            instrument_id=candidate.instrument_id,
+                            universe_id=universe.universe_id,
+                            observed_at=observed_at,
+                            state="research_error",
+                            reason_code="LLM_SHADOW_REVIEW_ERROR",
+                            payload={"detail": str(exc)},
+                        ),
+                    )
+                    reviews.append(
+                        StrategyResearchReview(
+                            instrument_id=candidate.instrument_id,
+                            status="error",
+                            detail=str(exc),
+                        )
+                    )
+            return StrategyResearchReviewResponse(
+                strategy_id=strategy_id,
+                universe_id=universe.universe_id,
+                reviews=reviews,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
