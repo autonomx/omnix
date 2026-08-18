@@ -94,7 +94,11 @@ def test_provider_catalog_discovers_yahoo_equity_search_results() -> None:
     instrument = results[0]
     assert instrument.instrument_id == "equity:NASDAQ:AMD"
     assert instrument.venue == "NASDAQ"
-    assert {item.provider for item in bindings_for_instrument(instrument.instrument_id)} == {"yahoo", "stooq"}
+    assert {item.provider for item in bindings_for_instrument(instrument.instrument_id)} == {
+        "yahoo",
+        "alpaca_iex",
+        "stooq",
+    }
 
 
 def test_short_queries_do_not_hit_provider_catalogs() -> None:
@@ -119,6 +123,7 @@ def test_persisted_dynamic_equity_id_rehydrates_bindings() -> None:
     assert instrument_by_id(instrument_id) is not None
     assert {item.provider for item in bindings_for_instrument(instrument_id)} == {
         "yahoo",
+        "alpaca_iex",
         "stooq",
     }
     assert binding_by_id(binding.binding_id) == binding
