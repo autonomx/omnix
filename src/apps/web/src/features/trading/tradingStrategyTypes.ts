@@ -1,12 +1,19 @@
 export type StrategyMode = 'off' | 'shadow' | 'auto_paper';
 export type FloatPreferenceMode = 'ignore' | 'score' | 'require';
 export type StrategyBarInterval = '1m' | '5m';
+export type HistoricalUniverseMode = 'captured_only' | 'captured_or_reconstructed' | 'reconstructed_only';
+export type HistoricalUniverseOrigin = 'captured' | 'reconstructed';
+export type BacktestResultQuality = 'exact' | 'mixed' | 'approximate' | 'unavailable';
 
 export type GapPullbackConfig = {
   strategy_id: 'gap_pullback_v1';
   strategy_version: '1.0.0' | '1.1.0';
   structure_interval: StrategyBarInterval;
   execution_interval: StrategyBarInterval;
+  universe_scan_time_et: string;
+  auto_archive_daily_universe: boolean;
+  universe_archive_grace_minutes: number;
+  universe_discovery_count: number;
   minimum_gap_pct: string | number;
   minimum_price: string | number;
   maximum_price: string | number;
@@ -227,15 +234,22 @@ export type StrategyRangeBacktestInput = {
   initial_cash: string | number;
   assumed_spread_bps: string | number;
   max_hold_minutes: number;
+  universe_scan_time_et?: string | null;
   universe_cutoff_et?: string | null;
+  universe_mode?: HistoricalUniverseMode;
+  reconstruction_max_age_days?: number;
   max_sessions?: number;
 };
 
 export type StrategyRangeBacktestDay = {
   session_date: string;
-  status: 'backtested' | 'missing_universe' | 'data_unavailable' | 'error';
+  status: 'backtested' | 'no_candidates' | 'missing_universe' | 'data_unavailable' | 'error';
   universe_id?: string | null;
   universe_evaluation_time?: string | null;
+  universe_origin?: HistoricalUniverseOrigin | null;
+  fidelity?: string | null;
+  fidelity_warnings: string[];
+  strategy_fidelity_adjustments: string[];
   candidate_count: number;
   starting_cash: string | number;
   ending_cash: string | number;
@@ -252,13 +266,18 @@ export type StrategyRangeBacktestResult = {
   strategy_version: string;
   start_date: string;
   end_date: string;
+  universe_scan_time_et: string;
   universe_cutoff_et: string;
+  universe_mode: HistoricalUniverseMode;
   initial_cash: string | number;
   ending_cash: string | number;
-  pnl: string | number;
-  return_pct: string | number;
+  pnl: string | number | null;
+  return_pct: string | number | null;
   requested_trading_sessions: number;
   covered_sessions: number;
+  exact_sessions: number;
+  reconstructed_sessions: number;
+  no_candidate_sessions: number;
   missing_universe_sessions: number;
   data_unavailable_sessions: number;
   error_sessions: number;
@@ -267,7 +286,9 @@ export type StrategyRangeBacktestResult = {
   trade_count: number;
   win_count: number;
   loss_count: number;
-  expectancy_r: string | number;
+  expectancy_r: string | number | null;
+  result_quality: BacktestResultQuality;
   days: StrategyRangeBacktestDay[];
   point_in_time_universes_required: true;
+  reconstruction_is_approximate: true;
 };
