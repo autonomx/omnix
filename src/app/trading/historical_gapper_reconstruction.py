@@ -25,6 +25,7 @@ _REGULAR_OPEN = time(9, 30)
 _DEFAULT_TRADING_URL = "https://paper-api.alpaca.markets"
 _ALLOWED_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA"}
 _SYMBOL = re.compile(r"^[A-Z0-9.\-]+$")
+_SCAN_SEED_LOOKBACK_MINUTES = 15
 
 
 @dataclass(frozen=True)
@@ -38,14 +39,7 @@ class HistoricalUniverseReconstruction:
 
 
 def reconstructed_strategy_config(config: GapPullbackConfig) -> tuple[GapPullbackConfig, tuple[str, ...]]:
-    """Return an explicit market-data-only variant for reconstructed sessions.
-
-    Historical minute bars can reconstruct price/volume structure, but the current
-    providers do not offer point-in-time catalyst/dilution/float history. Those
-    unavailable evidence gates are therefore relaxed *only* for reconstructed
-    backtest sessions and the fidelity downgrade is surfaced in every result.
-    Captured universes continue to replay the exact saved strategy configuration.
-    """
+    """Return an explicit market-data-only variant for reconstructed sessions."""
 
     updates: dict[str, object] = {}
     warnings: list[str] = []
@@ -184,42 +178,68 @@ def _alpaca_bars(
     return dict(output)
 
 
-def _daily_seed_symbols(
+def _previous_close_map(
     assets: list[dict[str, Any]],
     daily_bars: dict[str, list[dict[str, Any]]],
     *,
     session_date: date,
-    config: GapPullbackConfig,
-) -> tuple[list[str], dict[str, Decimal]]:
-    ranked: list[tuple[Decimal, str]] = []
-    previous_close: dict[str, Decimal] = {}
-    broad_gap_floor = max(Decimal("5"), config.minimum_gap_pct * Decimal("0.50"))
+) -> dict[str, Decimal]:
+    """Return closes strictly before the target session; never inspect target-day OHLC."""
+
+    output: dict[str, Decimal] = {}
     for asset in assets:
         symbol = str(asset.get("symbol") or "").upper()
-        rows: list[tuple[date, Decimal, Decimal]] = []
+        prior: list[tuple[date, Decimal]] = []
         for bar in daily_bars.get(symbol, []):
             observed = _parse_timestamp(bar.get("t"))
-            open_value = _decimal(bar.get("o"))
             close_value = _decimal(bar.get("c"))
-            if observed is None or open_value is None or close_value is None or open_value <= 0 or close_value <= 0:
+            if observed is None or close_value is None or close_value <= 0:
                 continue
-            rows.append((observed.astimezone(_ET).date(), open_value, close_value))
-        rows.sort(key=lambda item: item[0])
-        today = next((item for item in rows if item[0] == session_date), None)
-        prior = [item for item in rows if item[0] < session_date]
-        if today is None or not prior:
+            bar_date = observed.astimezone(_ET).date()
+            if bar_date < session_date:
+                prior.append((bar_date, close_value))
+        if prior:
+            prior.sort(key=lambda item: item[0])
+            output[symbol] = prior[-1][1]
+    return output
+
+
+def _scan_seed_symbols(
+    scan_bars: dict[str, list[dict[str, Any]]],
+    previous_close: dict[str, Decimal],
+    *,
+    session_date: date,
+    scan_time: time,
+    config: GapPullbackConfig,
+) -> list[str]:
+    """Causally seed likely gappers using only bars at or before the scan time."""
+
+    ranked: list[tuple[Decimal, str]] = []
+    broad_gap_floor = max(Decimal("5"), config.minimum_gap_pct * Decimal("0.75"))
+    for symbol, previous in previous_close.items():
+        latest: tuple[datetime, Decimal] | None = None
+        for bar in scan_bars.get(symbol, []):
+            observed = _parse_timestamp(bar.get("t"))
+            close = _decimal(bar.get("c"))
+            if observed is None or close is None or close <= 0:
+                continue
+            local = observed.astimezone(_ET)
+            if local.date() != session_date or local.timetz().replace(tzinfo=None) > scan_time:
+                continue
+            if latest is None or observed > latest[0]:
+                latest = (observed, close)
+        if latest is None:
             continue
-        previous = prior[-1][2]
-        gap = (today[1] / previous - Decimal("1")) * Decimal("100")
+        price = latest[1]
+        gap = (price / previous - Decimal("1")) * Decimal("100")
         if gap < broad_gap_floor:
             continue
-        if today[1] < config.minimum_price * Decimal("0.5") or today[1] > config.maximum_price * Decimal("1.5"):
+        if price < config.minimum_price * Decimal("0.5") or price > config.maximum_price * Decimal("1.5"):
             continue
-        previous_close[symbol] = previous
         ranked.append((gap, symbol))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     seed_limit = min(300, max(config.universe_discovery_count * 4, 100))
-    return [symbol for _, symbol in ranked[:seed_limit]], previous_close
+    return [symbol for _, symbol in ranked[:seed_limit]]
 
 
 def _minute_candidate(
@@ -292,12 +312,13 @@ def _minute_candidate(
 
 
 class AlpacaHistoricalGapperReconstructor:
-    """Range-scoped reconstructed-universe provider with shared broad-market cache.
+    """Range-scoped, explicitly approximate historical candidate reconstruction.
 
-    Active assets and daily bars for the whole requested range are loaded once.
-    Only the smaller, broad-gap seed set needs minute-bar requests per session.
-    This keeps an 11-day backtest from repeating the full listed-equity scan 11
-    times while retaining explicit approximate-fidelity semantics.
+    Current active assets and prior daily closes are cached for the date range.
+    Each day then uses only a short pre-scan minute window ending at the configured
+    scan time to identify likely gappers. Deeper same-time minute history is fetched
+    only for those seeds to calculate gap, premarket volume and TOD RVOL. No target-
+    day 09:30/open/close value is used to decide the 09:20 candidate seed.
     """
 
     def __init__(
@@ -377,26 +398,53 @@ class AlpacaHistoricalGapperReconstructor:
         self._prepare()
         assert self._headers is not None and self._assets is not None and self._daily is not None
 
-        seed_symbols, previous_close = _daily_seed_symbols(
-            self._assets,
-            self._daily,
+        previous_close = _previous_close_map(self._assets, self._daily, session_date=session_date)
+        if not previous_close:
+            return HistoricalUniverseReconstruction(
+                snapshot=None,
+                fidelity="reconstruction_unavailable",
+                warnings=("no prior-close history was available for the current active listing set",),
+                candidate_seed_count=0,
+                active_asset_count=len(self._assets),
+                detail="Historical reconstruction could not establish previous closes.",
+            )
+
+        scan_at = datetime.combine(session_date, scan_time, tzinfo=_ET).astimezone(timezone.utc)
+        premarket_start = datetime.combine(session_date, _PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
+        seed_start = max(premarket_start, scan_at - timedelta(minutes=_SCAN_SEED_LOOKBACK_MINUTES))
+        scan_window = _alpaca_bars(
+            self.runtime,
+            self._headers,
+            list(previous_close),
+            timeframe="1Min",
+            start=seed_start,
+            end=scan_at + timedelta(minutes=1),
+            chunk_size=200,
+        )
+        seed_symbols = _scan_seed_symbols(
+            scan_window,
+            previous_close,
             session_date=session_date,
+            scan_time=scan_time,
             config=active_config,
+        )
+        base_warnings = (
+            "candidate universe reconstructed from today's active Alpaca listings; survivorship/listing bias is possible",
+            "Alpaca IEX is partial-market historical evidence rather than consolidated SIP/NBBO",
+            f"candidate seed uses the final {_SCAN_SEED_LOOKBACK_MINUTES} minutes before scan time; an IEX-inactive gapper can be omitted",
+            "historical spread is replaced by the backtest assumed spread",
+            "historical catalyst/dilution/float evidence is unavailable and reconstructed sessions use explicit market-data-only fidelity adjustments",
         )
         if not seed_symbols:
             return HistoricalUniverseReconstruction(
                 snapshot=None,
                 fidelity="reconstructed_current_listings_iex",
-                warnings=(
-                    "candidate universe reconstructed from today's active listings; survivorship/listing bias is possible",
-                    "historical catalyst/dilution/float evidence is unavailable in reconstructed mode",
-                ),
+                warnings=base_warnings,
                 candidate_seed_count=0,
                 active_asset_count=len(self._assets),
-                detail="Historical market-data scan found no broad gap candidates for the session.",
+                detail="Historical pre-scan market-data window found no broad gap candidates.",
             )
 
-        scan_at = datetime.combine(session_date, scan_time, tzinfo=_ET).astimezone(timezone.utc)
         minute_start = datetime.combine(session_date - timedelta(days=10), _PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
         minute = _alpaca_bars(
             self.runtime,
@@ -431,17 +479,11 @@ class AlpacaHistoricalGapperReconstructor:
             item.model_copy(update={"discovery_rank": index})
             for index, item in enumerate(candidates[: active_config.universe_discovery_count], start=1)
         ]
-        warnings = (
-            "candidate universe reconstructed from today's active Alpaca listings; survivorship/listing bias is possible",
-            "Alpaca IEX is partial-market historical evidence rather than consolidated SIP/NBBO",
-            "historical spread is replaced by the backtest assumed spread",
-            "historical catalyst/dilution/float evidence is unavailable and reconstructed sessions use explicit market-data-only fidelity adjustments",
-        )
         if not candidates:
             return HistoricalUniverseReconstruction(
                 snapshot=None,
                 fidelity="reconstructed_current_listings_iex",
-                warnings=warnings,
+                warnings=base_warnings,
                 candidate_seed_count=len(seed_symbols),
                 active_asset_count=len(self._assets),
                 detail="Historical scan completed but no candidate met the configured gap/price requirements at scan time.",
@@ -457,7 +499,7 @@ class AlpacaHistoricalGapperReconstructor:
         return HistoricalUniverseReconstruction(
             snapshot=snapshot,
             fidelity="reconstructed_current_listings_iex",
-            warnings=warnings,
+            warnings=base_warnings,
             candidate_seed_count=len(seed_symbols),
             active_asset_count=len(self._assets),
         )
@@ -473,8 +515,6 @@ def reconstruct_recent_alpaca_gapper_universe(
     clock: datetime | None = None,
     runtime: ProviderHttpRuntime | None = None,
 ) -> HistoricalUniverseReconstruction:
-    """Single-session convenience wrapper around the range-scoped reconstructor."""
-
     return AlpacaHistoricalGapperReconstructor(
         start_date=session_date,
         end_date=session_date,
