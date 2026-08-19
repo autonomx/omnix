@@ -7,7 +7,7 @@ import {
 
 export const SETTINGS_CATEGORIES: SettingsCategoryDefinition[] = [
   { id: 'overview', label: 'Overview', description: 'Global defaults and whole-system health.', icon: 'grid', order: 0 },
-  { id: 'appearance-accessibility', label: 'Appearance & Accessibility', description: 'Theme, density, motion, captions, and accessibility preferences.', icon: 'display', order: 10, searchAliases: ['theme', 'dark mode', 'captions'] },
+  { id: 'appearance-accessibility', label: 'Appearance & Accessibility', description: 'Theme, text size, density, motion, captions, and accessibility preferences.', icon: 'display', order: 10, searchAliases: ['theme', 'dark mode', 'text size', 'font size', 'captions'] },
   { id: 'ai-providers', label: 'AI Providers', description: 'Provider defaults, configuration summaries, and connection testing.', icon: 'providers', order: 20, searchAliases: ['llm', 'tts', 'stt', 'image provider'] },
   { id: 'models-runtime', label: 'Models & Runtime', description: 'Model discovery, routing, residency, and runtime policy.', icon: 'chip', order: 30, searchAliases: ['gpu', 'vram', 'routing'] },
   { id: 'assistant-chat', label: 'Assistant & Chat', description: 'Assistant personality, voice, live chat, web research, and session defaults.', icon: 'chat', order: 40, searchAliases: ['quick search', 'deep research', 'web provider', 'citations'] },
@@ -107,6 +107,19 @@ export const INITIAL_SETTINGS_REGISTRY: SettingDefinition[] = [
     writable: true,
     appliesTo: 'immediately',
     searchAliases: ['graphite', 'grey', 'green', 'evergreen', 'aurora'],
+  },
+  {
+    key: 'appearance.textScale',
+    categoryId: 'appearance-accessibility',
+    sectionId: 'display',
+    label: 'Text size',
+    kind: 'number',
+    defaultValue: 100,
+    scope: 'local',
+    persistenceOwner: 'browser-storage',
+    writable: true,
+    appliesTo: 'immediately',
+    searchAliases: ['font size', 'text scale', 'larger text', 'smaller text', 'accessibility'],
   },
   {
     key: 'runtime.gateway.status',
