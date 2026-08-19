@@ -81,6 +81,7 @@ export function AppearanceSettings() {
                 A−
               </button>
               <input
+                id="omnix-text-scale"
                 type="range"
                 min={MIN_OMNIX_TEXT_SCALE}
                 max={MAX_OMNIX_TEXT_SCALE}
