@@ -8,13 +8,14 @@ import { SettingsProfileContext } from './SettingsProfileContext';
 
 function withLocalAppearancePreferences(document: SettingsDocument): SettingsDocument {
   const stored = loadStoredAppearancePreferences();
-  if (!stored.mode && !stored.theme) return document;
+  if (!stored.mode && !stored.theme && stored.textScale === null) return document;
   return {
     ...document,
     appearance: {
       ...document.appearance,
       mode: stored.mode ?? document.appearance.mode,
       theme: stored.theme ?? document.appearance.theme,
+      textScale: stored.textScale ?? document.appearance.textScale,
     },
   };
 }
