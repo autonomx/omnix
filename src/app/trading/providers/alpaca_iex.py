@@ -27,20 +27,33 @@ ALPACA_DATA_URL = "https://data.alpaca.markets"
 ALPACA_IEX_PARTIAL_MARKET = True
 
 
+def _stored_credentials() -> dict[str, str]:
+    try:
+        from app.persistence.provider_secret_store import load_trading_provider_secrets
+
+        return dict(load_trading_provider_secrets().get("alpaca_iex") or {})
+    except Exception:
+        # Provider startup must remain fail-closed if the optional local secret
+        # store cannot be read. Environment credentials still work below.
+        return {}
+
+
 def _api_key() -> str:
-    return (
+    environment_value = (
         os.environ.get("OMNIX_ALPACA_API_KEY_ID")
         or os.environ.get("APCA_API_KEY_ID")
         or ""
     ).strip()
+    return environment_value or _stored_credentials().get("api_key_id", "").strip()
 
 
 def _api_secret() -> str:
-    return (
+    environment_value = (
         os.environ.get("OMNIX_ALPACA_API_SECRET_KEY")
         or os.environ.get("APCA_API_SECRET_KEY")
         or ""
     ).strip()
+    return environment_value or _stored_credentials().get("secret_key", "").strip()
 
 
 def alpaca_iex_configured() -> bool:
@@ -128,8 +141,8 @@ class AlpacaIexExecutionProvider:
         secret = _api_secret()
         if not key or not secret:
             raise ProviderDataUnavailableError(
-                "Alpaca IEX credentials are not configured; set "
-                "OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY"
+                "Alpaca IEX credentials are not configured; set them in the Trading UI "
+                "or configure OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY"
             )
 
         binding = self.get_binding(instrument_id)
