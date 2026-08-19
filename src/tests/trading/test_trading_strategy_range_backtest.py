@@ -49,6 +49,7 @@ def strategy() -> TradingStrategyConfigDocument:
         config=GapPullbackConfig(
             strategy_version="1.1.0",
             universe_scan_time_et=time(9, 20),
+            universe_archive_grace_minutes=10,
             entry_start_et=time(9, 35),
         ),
         risk=StrategyRiskProfile(),
@@ -69,6 +70,23 @@ def test_choose_causal_universe_uses_latest_snapshot_before_scan_time_and_exclud
 
     assert chosen is not None
     assert chosen.universe_id == research.universe_id
+
+
+def test_choose_causal_universe_accepts_archive_inside_configured_grace_window() -> None:
+    archive = universe("auto-archive-2026-08-18-0920-test", datetime(2026, 8, 18, 13, 24, tzinfo=timezone.utc))
+
+    assert choose_causal_universe(
+        [archive],
+        session_date=date(2026, 8, 18),
+        cutoff_time=time(9, 20),
+        grace_minutes=10,
+    ) is archive
+    assert choose_causal_universe(
+        [archive],
+        session_date=date(2026, 8, 18),
+        cutoff_time=time(9, 20),
+        grace_minutes=0,
+    ) is None
 
 
 def test_range_backtest_reports_missing_universes_as_unavailable_not_zero_performance() -> None:
