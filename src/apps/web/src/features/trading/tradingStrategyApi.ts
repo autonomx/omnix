@@ -4,6 +4,8 @@ import type {
   StrategyCatalystCaptureResponse,
   StrategyEvent,
   StrategyProtection,
+  StrategyRangeBacktestInput,
+  StrategyRangeBacktestResult,
   StrategyResearchReviewResponse,
   TradingStrategyConfig,
   YahooGapperDiscoveryInput,
@@ -14,6 +16,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
   });
+  if (response.status === 204) return undefined as T;
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = typeof payload?.detail === 'string'
@@ -42,6 +45,16 @@ export const tradingStrategyApi = {
       headers: { 'If-Match': String(config.revision) },
       body: JSON.stringify(config),
     }),
+  delete: (config: TradingStrategyConfig) =>
+    requestJson<void>(`/api/trading/strategies/${encodeURIComponent(config.strategy_id)}`, {
+      method: 'DELETE',
+      headers: { 'If-Match': String(config.revision) },
+    }),
+  backtestRange: (strategyId: string, input: StrategyRangeBacktestInput) =>
+    requestJson<StrategyRangeBacktestResult>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/backtest/range`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
   events: async (strategyId: string, limit = 200) => {
     const payload = await requestJson<{ events?: StrategyEvent[] }>(
       `/api/trading/strategies/${encodeURIComponent(strategyId)}/events?limit=${limit}`,
