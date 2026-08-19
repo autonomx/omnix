@@ -7,7 +7,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
@@ -23,6 +23,11 @@ from .paper import PaperExecutionPolicy
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult, StrategyRiskProfile
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
+from .strategy_range_backtest import (
+    StrategyRangeBacktestRequest,
+    StrategyRangeBacktestResult,
+    run_strategy_range_backtest,
+)
 from .strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -299,6 +304,50 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @router.delete("/{strategy_id}", status_code=204)
+    async def delete_strategy(
+        strategy_id: str,
+        if_match: int = Header(alias="If-Match", ge=1),
+    ) -> Response:
+        try:
+            await asyncio.to_thread(
+                repository_factory().delete_config,
+                strategy_id,
+                expected_revision=if_match,
+            )
+            return Response(status_code=204)
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            status = 404 if str(exc) == "strategy_config_not_found" else 422
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @router.post("/{strategy_id}/backtest/range", response_model=StrategyRangeBacktestResult)
+    async def backtest_strategy_range(
+        strategy_id: str,
+        request: StrategyRangeBacktestRequest,
+    ) -> StrategyRangeBacktestResult:
+        try:
+            repository = repository_factory()
+            strategy = await asyncio.to_thread(repository.get_config, strategy_id)
+            universes = await asyncio.to_thread(
+                repository.list_universes,
+                start_date=request.start_date,
+                end_date=request.end_date,
+            )
+            catalyst_repository = catalyst_repository_factory()
+            for universe in universes:
+                _validate_catalyst_provenance(universe, catalyst_repository)
+            return await asyncio.to_thread(
+                run_strategy_range_backtest,
+                strategy,
+                universes,
+                request,
+            )
+        except ValueError as exc:
+            status = 404 if str(exc) == "strategy_config_not_found" else 422
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
     @router.post("/{strategy_id}/research/capture-yahoo", response_model=StrategyCatalystCaptureResponse)
     async def capture_yahoo_research(strategy_id: str, request: StrategyCatalystCaptureRequest):
         try:
@@ -325,7 +374,7 @@ def create_trading_strategy_router(
                         lookback_hours=request.lookback_hours,
                         max_items=request.max_items_per_candidate,
                     )
-                except Exception as exc:  # provider failure must not erase the candidate
+                except Exception as exc:
                     errors[candidate.instrument_id] = f"{type(exc).__name__}: {exc}"
                     evidence = ()
                 for item in evidence:
