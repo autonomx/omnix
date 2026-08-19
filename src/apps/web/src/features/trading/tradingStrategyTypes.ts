@@ -10,10 +10,10 @@ export type GapPullbackConfig = {
   strategy_version: '1.0.0' | '1.1.0';
   structure_interval: StrategyBarInterval;
   execution_interval: StrategyBarInterval;
-  universe_scan_time_et: string;
-  auto_archive_daily_universe: boolean;
-  universe_archive_grace_minutes: number;
-  universe_discovery_count: number;
+  universe_scan_time_et?: string;
+  auto_archive_daily_universe?: boolean;
+  universe_archive_grace_minutes?: number;
+  universe_discovery_count?: number;
   minimum_gap_pct: string | number;
   minimum_price: string | number;
   maximum_price: string | number;
