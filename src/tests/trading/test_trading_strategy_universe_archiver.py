@@ -62,7 +62,7 @@ def test_archiver_saves_one_evidence_only_snapshot_and_is_idempotent(monkeypatch
     second = archiver.archive_daily_universe_if_due(strategy(), repository, now=now)
 
     assert first is not None
-    assert second is first
+    assert second is None
     assert len(calls) == 1
     assert len(first.candidates) == 0
     assert first.universe_id.startswith("auto-archive-2026-08-19-0920-")
