@@ -171,3 +171,103 @@ export type StrategyCatalystCaptureResponse = {
   candidates_with_evidence: number;
   errors: Record<string, string>;
 };
+
+export type GapPullbackBacktestTrade = {
+  instrument_id: string;
+  discovery_rank?: number | null;
+  quality_score: number;
+  structure_interval: string;
+  execution_interval: string;
+  entry_time: string;
+  exit_time: string;
+  entry_price: string | number;
+  exit_price: string | number;
+  requested_quantity: string | number;
+  entry_fill_quantity: string | number;
+  stop_price: string | number;
+  target_price: string | number;
+  exit_reason: 'stop' | 'target' | 'time' | 'eod';
+  pnl_per_share: string | number;
+  r_multiple: string | number;
+  mfe_r: string | number;
+  mae_r: string | number;
+  hold_minutes: string | number;
+};
+
+export type GapPullbackBacktestSummary = {
+  candidate_count: number;
+  trigger_count: number;
+  trade_count: number;
+  win_count: number;
+  loss_count: number;
+  win_rate: string | number;
+  expectancy_r: string | number;
+  profit_factor?: string | number | null;
+  average_mfe_r: string | number;
+  average_mae_r: string | number;
+  average_hold_minutes: string | number;
+  stop_count: number;
+  target_count: number;
+  time_exit_count: number;
+  risk_rejection_count: number;
+  risk_rejection_reasons: Record<string, number>;
+};
+
+export type GapPullbackBacktestResult = {
+  strategy_id: string;
+  strategy_version: string;
+  initial_cash: string | number;
+  trades: GapPullbackBacktestTrade[];
+  summary: GapPullbackBacktestSummary;
+};
+
+export type StrategyRangeBacktestInput = {
+  start_date: string;
+  end_date: string;
+  initial_cash: string | number;
+  assumed_spread_bps: string | number;
+  max_hold_minutes: number;
+  universe_cutoff_et?: string | null;
+  max_sessions?: number;
+};
+
+export type StrategyRangeBacktestDay = {
+  session_date: string;
+  status: 'backtested' | 'missing_universe' | 'data_unavailable' | 'error';
+  universe_id?: string | null;
+  universe_evaluation_time?: string | null;
+  candidate_count: number;
+  starting_cash: string | number;
+  ending_cash: string | number;
+  pnl: string | number;
+  trigger_count: number;
+  trade_count: number;
+  detail?: string | null;
+  result?: GapPullbackBacktestResult | null;
+};
+
+export type StrategyRangeBacktestResult = {
+  strategy_id: string;
+  strategy_kind: string;
+  strategy_version: string;
+  start_date: string;
+  end_date: string;
+  universe_cutoff_et: string;
+  initial_cash: string | number;
+  ending_cash: string | number;
+  pnl: string | number;
+  return_pct: string | number;
+  requested_trading_sessions: number;
+  covered_sessions: number;
+  missing_universe_sessions: number;
+  data_unavailable_sessions: number;
+  error_sessions: number;
+  candidate_count: number;
+  trigger_count: number;
+  trade_count: number;
+  win_count: number;
+  loss_count: number;
+  expectancy_r: string | number;
+  days: StrategyRangeBacktestDay[];
+  point_in_time_universes_required: true;
+};
