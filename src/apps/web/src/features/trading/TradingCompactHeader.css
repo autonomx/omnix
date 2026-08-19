@@ -38,9 +38,9 @@
 }
 
 /*
- * Scanner / Backtest / Strategies / Trade / AI Research are primary terminal
- * navigation, not overflow-only controls. Keep the group visible at the right
- * edge even when the compact header itself needs horizontal scrolling.
+ * Scanner / Backtest / Strategies / AI Research are primary terminal
+ * navigation. Paper Trading already has its dedicated lower/right entry point,
+ * so the duplicate fourth shortcut (Trade) stays out of this compact strip.
  */
 .trading-tool-shortcuts {
   position: sticky;
@@ -53,6 +53,10 @@
   border-left: 1px solid rgba(117, 151, 181, .16);
   background: rgba(7, 16, 26, .98);
   box-shadow: -14px 0 20px rgba(5, 12, 21, .92);
+}
+
+.trading-tool-shortcuts > button:nth-child(4) {
+  display: none;
 }
 
 .trading-provider-status {
