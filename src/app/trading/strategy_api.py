@@ -35,6 +35,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
+from .trade_logging import trade_log
 
 
 class StrategyConfigListResponse(BaseModel):
@@ -173,6 +174,28 @@ def _research_universe_id(source_id: str, observed_at: datetime) -> str:
     return source_id[: 200 - len(suffix)] + suffix
 
 
+def _backtest_run_id(prefix: str, *parts: object) -> str:
+    observed_at = datetime.now(timezone.utc)
+    digest = hashlib.sha256(
+        "|".join(str(part) for part in (prefix, observed_at.isoformat(), *parts)).encode("utf-8")
+    ).hexdigest()[:12]
+    return f"{prefix}-{observed_at.strftime('%Y%m%dT%H%M%S.%fZ')}-{digest}"
+
+
+def _bar_coverage(bars_by_instrument: dict[str, list[MarketBar]]) -> dict[str, dict[str, object]]:
+    coverage: dict[str, dict[str, object]] = {}
+    for instrument_id, bars in sorted(bars_by_instrument.items()):
+        ordered = sorted(bars, key=lambda bar: bar.start_time)
+        coverage[instrument_id] = {
+            "bar_count": len(ordered),
+            "first_start_time": ordered[0].start_time if ordered else None,
+            "last_end_time": ordered[-1].end_time if ordered else None,
+            "providers": sorted({bar.provider for bar in ordered}),
+            "intervals": sorted({bar.interval for bar in ordered}),
+        }
+    return coverage
+
+
 def create_trading_strategy_router(
     repository_factory: RepositoryFactory = default_strategy_repository,
     catalyst_repository_factory: CatalystRepositoryFactory = default_catalyst_repository,
@@ -194,6 +217,25 @@ def create_trading_strategy_router(
 
     @router.post("/backtest/gap-pullback", response_model=GapPullbackBacktestResult)
     async def backtest_gap_pullback(request: GapPullbackBacktestRequest):
+        run_id = _backtest_run_id("backtest", request.session_date, request.universe.universe_id)
+        trade_log(
+            "backtest",
+            "backtest_requested",
+            run_id=run_id,
+            session_date=request.session_date,
+            universe_id=request.universe.universe_id,
+            universe_evaluation_time=request.universe.evaluation_time,
+            universe_source_fingerprint=request.universe.source_fingerprint,
+            candidate_count=len(request.universe.candidates),
+            bar_coverage=_bar_coverage(request.bars_by_instrument),
+            strategy_config=request.config,
+            execution_policy=request.execution_policy,
+            risk_profile=request.risk_profile,
+            initial_cash=request.initial_cash,
+            assumed_spread_bps=request.assumed_spread_bps,
+            max_hold_minutes=request.max_hold_minutes,
+            max_concurrent_positions=request.max_concurrent_positions,
+        )
         try:
             _validate_catalyst_provenance(request.universe, catalyst_repository_factory())
             dataset = await asyncio.to_thread(
@@ -202,7 +244,20 @@ def create_trading_strategy_router(
                 universe=request.universe,
                 bars_by_instrument=request.bars_by_instrument,
             )
-            return await asyncio.to_thread(
+            trade_log(
+                "backtest",
+                "backtest_dataset_frozen",
+                run_id=run_id,
+                session_date=request.session_date,
+                universe_id=request.universe.universe_id,
+                dataset_fingerprint=dataset.dataset_fingerprint,
+                candidate_count=len(dataset.universe.candidates),
+                bar_counts={
+                    instrument_id: len(bars)
+                    for instrument_id, bars in sorted(dataset.bars_by_instrument.items())
+                },
+            )
+            result = await asyncio.to_thread(
                 run_gap_pullback_backtest,
                 dataset,
                 request.config,
@@ -213,7 +268,32 @@ def create_trading_strategy_router(
                 risk_profile=request.risk_profile,
                 initial_cash=request.initial_cash,
             )
+            trade_log(
+                "backtest",
+                "backtest_completed",
+                run_id=run_id,
+                session_date=request.session_date,
+                universe_id=request.universe.universe_id,
+                dataset_fingerprint=result.dataset_fingerprint,
+                strategy_id=result.strategy_id,
+                strategy_version=result.strategy_version,
+                execution_policy_version=result.execution_policy_version,
+                initial_cash=result.initial_cash,
+                risk_policy=result.risk_policy,
+                summary=result.summary,
+                trades=list(result.trades),
+            )
+            return result
         except ValueError as exc:
+            trade_log(
+                "backtest",
+                "backtest_failed",
+                run_id=run_id,
+                session_date=request.session_date,
+                universe_id=request.universe.universe_id,
+                error_type=type(exc).__name__,
+                detail=str(exc),
+            )
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post("/universes/discover-yahoo", response_model=GapperUniverseSnapshot, status_code=201)
@@ -327,6 +407,7 @@ def create_trading_strategy_router(
         strategy_id: str,
         request: StrategyRangeBacktestRequest,
     ) -> StrategyRangeBacktestResult:
+        run_id = _backtest_run_id("range", strategy_id, request.start_date, request.end_date)
         try:
             repository = repository_factory()
             strategy = await asyncio.to_thread(repository.get_config, strategy_id)
@@ -338,13 +419,61 @@ def create_trading_strategy_router(
             catalyst_repository = catalyst_repository_factory()
             for universe in universes:
                 _validate_catalyst_provenance(universe, catalyst_repository)
-            return await asyncio.to_thread(
+            trade_log(
+                "backtest",
+                "range_backtest_requested",
+                run_id=run_id,
+                strategy_id=strategy_id,
+                strategy_kind=strategy.strategy_kind,
+                strategy_version=strategy.strategy_version,
+                strategy_config=strategy.config,
+                risk_profile=strategy.risk,
+                request=request,
+                universe_count=len(universes),
+                universes=[
+                    {
+                        "universe_id": universe.universe_id,
+                        "session_date": universe.session_date,
+                        "evaluation_time": universe.evaluation_time,
+                        "source_fingerprint": universe.source_fingerprint,
+                        "candidate_count": len(universe.candidates),
+                    }
+                    for universe in universes
+                ],
+            )
+            result = await asyncio.to_thread(
                 run_strategy_range_backtest,
                 strategy,
                 universes,
                 request,
             )
+            for day in result.days:
+                trade_log(
+                    "backtest",
+                    "range_backtest_day",
+                    run_id=run_id,
+                    strategy_id=strategy_id,
+                    day=day,
+                )
+            trade_log(
+                "backtest",
+                "range_backtest_completed",
+                run_id=run_id,
+                strategy_id=strategy_id,
+                result=result.model_dump(mode="json", exclude={"days"}),
+            )
+            return result
         except ValueError as exc:
+            trade_log(
+                "backtest",
+                "range_backtest_failed",
+                run_id=run_id,
+                strategy_id=strategy_id,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                error_type=type(exc).__name__,
+                detail=str(exc),
+            )
             status = 404 if str(exc) == "strategy_config_not_found" else 422
             raise HTTPException(status_code=status, detail=str(exc)) from exc
 
