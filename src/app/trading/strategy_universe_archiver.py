@@ -29,7 +29,7 @@ def archive_daily_universe_if_due(
     *,
     now: datetime | None = None,
 ) -> GapperUniverseSnapshot | None:
-    """Capture one raw Yahoo morning universe for later exact backtesting.
+    """Create one raw Yahoo morning archive when due, otherwise return ``None``.
 
     Archival is evidence-only: it never changes ``active_universe_id`` and cannot
     authorize a trade. A completed scan with zero qualifying names is stored as an
@@ -56,12 +56,12 @@ def archive_daily_universe_if_due(
 
     universe_id = _archive_universe_id(config, now_et)
     try:
-        existing = repository.get_universe(universe_id)
+        repository.get_universe(universe_id)
     except ValueError as exc:
         if str(exc) != "gapper_universe_not_found":
             raise
     else:
-        return existing
+        return None
 
     try:
         snapshot = discover_yahoo_gappers(
