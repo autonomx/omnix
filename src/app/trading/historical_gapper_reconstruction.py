@@ -276,9 +276,7 @@ def _minute_candidate(
         instrument_id=instrument.instrument_id,
         binding_id=f"alpaca_iex:rest:{instrument.instrument_id}",
         observed_at=observed_at,
-        evidence_observed_at={
-            "reconstructed_alpaca_iex_market_data": observed_at,
-        },
+        evidence_observed_at={"reconstructed_alpaca_iex_market_data": observed_at},
         previous_close=previous_close,
         premarket_price=current_price,
         gap_pct=gap_pct,
@@ -293,6 +291,178 @@ def _minute_candidate(
     )
 
 
+class AlpacaHistoricalGapperReconstructor:
+    """Range-scoped reconstructed-universe provider with shared broad-market cache.
+
+    Active assets and daily bars for the whole requested range are loaded once.
+    Only the smaller, broad-gap seed set needs minute-bar requests per session.
+    This keeps an 11-day backtest from repeating the full listed-equity scan 11
+    times while retaining explicit approximate-fidelity semantics.
+    """
+
+    def __init__(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+        config: GapPullbackConfig,
+        assumed_spread_bps: Decimal,
+        max_age_days: int = 30,
+        clock: datetime | None = None,
+        runtime: ProviderHttpRuntime | None = None,
+    ) -> None:
+        self.start_date = start_date
+        self.end_date = end_date
+        self.config = config
+        self.assumed_spread_bps = assumed_spread_bps
+        self.max_age_days = max_age_days
+        self.clock = clock or datetime.now(timezone.utc)
+        if self.clock.tzinfo is None:
+            raise ValueError("historical reconstruction clock must be timezone-aware")
+        self.runtime = runtime or ProviderHttpRuntime("alpaca_historical_gapper_reconstruction", max_concurrency=4)
+        self._headers: dict[str, str] | None = None
+        self._assets: list[dict[str, Any]] | None = None
+        self._assets_by_symbol: dict[str, dict[str, Any]] = {}
+        self._daily: dict[str, list[dict[str, Any]]] | None = None
+
+    def _age_guard(self, session_date: date, max_age_days: int) -> HistoricalUniverseReconstruction | None:
+        age_days = (self.clock.astimezone(_ET).date() - session_date).days
+        if age_days < 0:
+            raise ValueError("cannot reconstruct a future trading session")
+        if age_days <= max_age_days:
+            return None
+        return HistoricalUniverseReconstruction(
+            snapshot=None,
+            fidelity="reconstruction_unavailable",
+            warnings=("requested session is older than the configured reconstruction age limit",),
+            candidate_seed_count=0,
+            active_asset_count=0,
+            detail=f"Historical reconstruction is limited to {max_age_days} calendar days; capture/archive older universes instead.",
+        )
+
+    def _prepare(self) -> None:
+        if self._assets is not None and self._daily is not None:
+            return
+        self._headers = alpaca_iex_auth_headers()
+        self._assets = _alpaca_assets(self.runtime, self._headers)
+        self._assets_by_symbol = {str(asset["symbol"]).upper(): asset for asset in self._assets}
+        symbols = list(self._assets_by_symbol)
+        daily_start = datetime.combine(self.start_date - timedelta(days=10), time(0, 0), tzinfo=_ET).astimezone(timezone.utc)
+        daily_end = datetime.combine(self.end_date + timedelta(days=1), time(0, 0), tzinfo=_ET).astimezone(timezone.utc)
+        self._daily = _alpaca_bars(
+            self.runtime,
+            self._headers,
+            symbols,
+            timeframe="1Day",
+            start=daily_start,
+            end=daily_end,
+            chunk_size=200,
+        )
+
+    def __call__(
+        self,
+        *,
+        session_date: date,
+        scan_time: time,
+        config: GapPullbackConfig | None = None,
+        assumed_spread_bps: Decimal | None = None,
+        max_age_days: int | None = None,
+    ) -> HistoricalUniverseReconstruction:
+        active_config = config or self.config
+        spread_bps = assumed_spread_bps if assumed_spread_bps is not None else self.assumed_spread_bps
+        age_limit = max_age_days if max_age_days is not None else self.max_age_days
+        unavailable = self._age_guard(session_date, age_limit)
+        if unavailable is not None:
+            return unavailable
+        self._prepare()
+        assert self._headers is not None and self._assets is not None and self._daily is not None
+
+        seed_symbols, previous_close = _daily_seed_symbols(
+            self._assets,
+            self._daily,
+            session_date=session_date,
+            config=active_config,
+        )
+        if not seed_symbols:
+            return HistoricalUniverseReconstruction(
+                snapshot=None,
+                fidelity="reconstructed_current_listings_iex",
+                warnings=(
+                    "candidate universe reconstructed from today's active listings; survivorship/listing bias is possible",
+                    "historical catalyst/dilution/float evidence is unavailable in reconstructed mode",
+                ),
+                candidate_seed_count=0,
+                active_asset_count=len(self._assets),
+                detail="Historical market-data scan found no broad gap candidates for the session.",
+            )
+
+        scan_at = datetime.combine(session_date, scan_time, tzinfo=_ET).astimezone(timezone.utc)
+        minute_start = datetime.combine(session_date - timedelta(days=10), _PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
+        minute = _alpaca_bars(
+            self.runtime,
+            self._headers,
+            seed_symbols,
+            timeframe="1Min",
+            start=minute_start,
+            end=scan_at + timedelta(minutes=1),
+            chunk_size=25,
+        )
+        candidates: list[GapperCandidate] = []
+        for symbol in seed_symbols:
+            prior = previous_close.get(symbol)
+            asset = self._assets_by_symbol.get(symbol)
+            if prior is None or asset is None:
+                continue
+            candidate = _minute_candidate(
+                asset=asset,
+                symbol=symbol,
+                bars=minute.get(symbol, []),
+                session_date=session_date,
+                scan_time=scan_time,
+                previous_close=prior,
+                config=active_config,
+                assumed_spread_bps=spread_bps,
+                observed_at=scan_at,
+            )
+            if candidate is not None:
+                candidates.append(candidate)
+        candidates.sort(key=lambda item: (-item.gap_pct, -item.premarket_dollar_volume, item.instrument_id))
+        candidates = [
+            item.model_copy(update={"discovery_rank": index})
+            for index, item in enumerate(candidates[: active_config.universe_discovery_count], start=1)
+        ]
+        warnings = (
+            "candidate universe reconstructed from today's active Alpaca listings; survivorship/listing bias is possible",
+            "Alpaca IEX is partial-market historical evidence rather than consolidated SIP/NBBO",
+            "historical spread is replaced by the backtest assumed spread",
+            "historical catalyst/dilution/float evidence is unavailable and reconstructed sessions use explicit market-data-only fidelity adjustments",
+        )
+        if not candidates:
+            return HistoricalUniverseReconstruction(
+                snapshot=None,
+                fidelity="reconstructed_current_listings_iex",
+                warnings=warnings,
+                candidate_seed_count=len(seed_symbols),
+                active_asset_count=len(self._assets),
+                detail="Historical scan completed but no candidate met the configured gap/price requirements at scan time.",
+            )
+
+        snapshot = freeze_gapper_universe(
+            universe_id=f"reconstructed-alpaca-{session_date.isoformat()}-{scan_time.strftime('%H%M')}",
+            session_date=session_date,
+            evaluation_time=scan_at,
+            discovery_source="provider",
+            candidates=candidates,
+        )
+        return HistoricalUniverseReconstruction(
+            snapshot=snapshot,
+            fidelity="reconstructed_current_listings_iex",
+            warnings=warnings,
+            candidate_seed_count=len(seed_symbols),
+            active_asset_count=len(self._assets),
+        )
+
+
 def reconstruct_recent_alpaca_gapper_universe(
     *,
     session_date: date,
@@ -303,140 +473,27 @@ def reconstruct_recent_alpaca_gapper_universe(
     clock: datetime | None = None,
     runtime: ProviderHttpRuntime | None = None,
 ) -> HistoricalUniverseReconstruction:
-    """Reconstruct a recent morning candidate set from historical Alpaca IEX bars.
+    """Single-session convenience wrapper around the range-scoped reconstructor."""
 
-    This is intentionally labelled approximate: Alpaca's active-assets endpoint is
-    a *current* listing universe, so a reconstructed historical scan can omit names
-    that delisted after the target date or include names listed later. The mode is
-    useful for recent exploratory backtests but is not equivalent to a universe
-    captured live on the historical morning.
-    """
-
-    now = clock or datetime.now(timezone.utc)
-    if now.tzinfo is None:
-        raise ValueError("historical reconstruction clock must be timezone-aware")
-    age_days = (now.astimezone(_ET).date() - session_date).days
-    if age_days < 0:
-        raise ValueError("cannot reconstruct a future trading session")
-    if age_days > max_age_days:
-        return HistoricalUniverseReconstruction(
-            snapshot=None,
-            fidelity="reconstruction_unavailable",
-            warnings=("requested session is older than the configured reconstruction age limit",),
-            candidate_seed_count=0,
-            active_asset_count=0,
-            detail=f"Historical reconstruction is limited to {max_age_days} calendar days; capture/archive older universes instead.",
-        )
-
-    headers = alpaca_iex_auth_headers()
-    active_runtime = runtime or ProviderHttpRuntime("alpaca_historical_gapper_reconstruction", max_concurrency=4)
-    assets = _alpaca_assets(active_runtime, headers)
-    symbols = [str(asset["symbol"]).upper() for asset in assets]
-    scan_at = datetime.combine(session_date, scan_time, tzinfo=_ET).astimezone(timezone.utc)
-    daily_start = datetime.combine(session_date - timedelta(days=10), time(0, 0), tzinfo=_ET).astimezone(timezone.utc)
-    daily_end = datetime.combine(session_date + timedelta(days=1), time(0, 0), tzinfo=_ET).astimezone(timezone.utc)
-    daily = _alpaca_bars(
-        active_runtime,
-        headers,
-        symbols,
-        timeframe="1Day",
-        start=daily_start,
-        end=daily_end,
-        chunk_size=200,
-    )
-    seed_symbols, previous_close = _daily_seed_symbols(
-        assets,
-        daily,
-        session_date=session_date,
+    return AlpacaHistoricalGapperReconstructor(
+        start_date=session_date,
+        end_date=session_date,
         config=config,
-    )
-    if not seed_symbols:
-        return HistoricalUniverseReconstruction(
-            snapshot=None,
-            fidelity="reconstructed_current_listings_iex",
-            warnings=(
-                "candidate universe reconstructed from today's active listings; survivorship/listing bias is possible",
-                "historical catalyst/dilution/float evidence is unavailable in reconstructed mode",
-            ),
-            candidate_seed_count=0,
-            active_asset_count=len(assets),
-            detail="Historical market-data scan found no broad gap candidates for the session.",
-        )
-
-    minute_start = datetime.combine(session_date - timedelta(days=10), _PREMARKET_OPEN, tzinfo=_ET).astimezone(timezone.utc)
-    minute = _alpaca_bars(
-        active_runtime,
-        headers,
-        seed_symbols,
-        timeframe="1Min",
-        start=minute_start,
-        end=scan_at + timedelta(minutes=1),
-        chunk_size=25,
-    )
-    assets_by_symbol = {str(asset["symbol"]).upper(): asset for asset in assets}
-    candidates: list[GapperCandidate] = []
-    for symbol in seed_symbols:
-        prior = previous_close.get(symbol)
-        asset = assets_by_symbol.get(symbol)
-        if prior is None or asset is None:
-            continue
-        candidate = _minute_candidate(
-            asset=asset,
-            symbol=symbol,
-            bars=minute.get(symbol, []),
-            session_date=session_date,
-            scan_time=scan_time,
-            previous_close=prior,
-            config=config,
-            assumed_spread_bps=assumed_spread_bps,
-            observed_at=scan_at,
-        )
-        if candidate is not None:
-            candidates.append(candidate)
-    candidates.sort(
-        key=lambda item: (
-            -item.gap_pct,
-            -item.premarket_dollar_volume,
-            item.instrument_id,
-        )
-    )
-    candidates = [
-        item.model_copy(update={"discovery_rank": index})
-        for index, item in enumerate(candidates[: config.universe_discovery_count], start=1)
-    ]
-    warnings = (
-        "candidate universe reconstructed from today's active Alpaca listings; survivorship/listing bias is possible",
-        "Alpaca IEX is partial-market historical evidence rather than consolidated SIP/NBBO",
-        "historical spread is replaced by the backtest assumed spread",
-        "historical catalyst/dilution/float evidence is unavailable and reconstructed sessions use explicit market-data-only fidelity adjustments",
-    )
-    if not candidates:
-        return HistoricalUniverseReconstruction(
-            snapshot=None,
-            fidelity="reconstructed_current_listings_iex",
-            warnings=warnings,
-            candidate_seed_count=len(seed_symbols),
-            active_asset_count=len(assets),
-            detail="Historical scan completed but no candidate met the configured gap/price requirements at scan time.",
-        )
-
-    snapshot = freeze_gapper_universe(
-        universe_id=f"reconstructed-alpaca-{session_date.isoformat()}-{scan_time.strftime('%H%M')}",
+        assumed_spread_bps=assumed_spread_bps,
+        max_age_days=max_age_days,
+        clock=clock,
+        runtime=runtime,
+    )(
         session_date=session_date,
-        evaluation_time=scan_at,
-        discovery_source="provider",
-        candidates=candidates,
-    )
-    return HistoricalUniverseReconstruction(
-        snapshot=snapshot,
-        fidelity="reconstructed_current_listings_iex",
-        warnings=warnings,
-        candidate_seed_count=len(seed_symbols),
-        active_asset_count=len(assets),
+        scan_time=scan_time,
+        config=config,
+        assumed_spread_bps=assumed_spread_bps,
+        max_age_days=max_age_days,
     )
 
 
 __all__ = [
+    "AlpacaHistoricalGapperReconstructor",
     "HistoricalUniverseReconstruction",
     "reconstruct_recent_alpaca_gapper_universe",
     "reconstructed_strategy_config",
