@@ -13,9 +13,10 @@ from app.trading.strategy_range_backtest import (
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 
 
-def candidate(symbol: str = "ABC") -> GapperCandidate:
+def candidate(symbol: str = "ABC", observed_at: datetime | None = None) -> GapperCandidate:
     return GapperCandidate(
         instrument_id=f"equity:NASDAQ:{symbol}",
+        observed_at=observed_at,
         previous_close=Decimal("8"),
         premarket_price=Decimal("10.4"),
         gap_pct=Decimal("30"),
@@ -34,7 +35,7 @@ def universe(universe_id: str, observed: datetime):
         session_date=observed.date(),
         evaluation_time=observed,
         discovery_source="provider",
-        candidates=[candidate()],
+        candidates=[candidate(observed_at=observed)],
     )
 
 
