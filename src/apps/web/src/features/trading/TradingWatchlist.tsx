@@ -153,6 +153,11 @@ export function TradingWatchlist({
     () => [...new Set(current.instrumentIds.map(binanceInstrumentIdFor))],
     [current.instrumentIds],
   );
+  const normalizedActiveInstrumentId = activeInstrumentId
+    ? binanceInstrumentIdFor(activeInstrumentId)
+    : '';
+  const activeInstrumentIsListed = normalizedActiveInstrumentId !== ''
+    && normalizedInstrumentIds.includes(normalizedActiveInstrumentId);
   const instrumentIdsKey = normalizedInstrumentIds.join('\u0000');
   const instrumentById = useMemo(
     () => new Map(instruments.map((instrument) => [instrument.instrument_id, instrument])),
@@ -278,8 +283,8 @@ export function TradingWatchlist({
   };
 
   const addActive = () => {
-    if (!activeInstrumentId || normalizedInstrumentIds.includes(activeInstrumentId)) return;
-    void save({ ...current, instrumentIds: [...normalizedInstrumentIds, activeInstrumentId] });
+    if (!selected || !normalizedActiveInstrumentId || activeInstrumentIsListed) return;
+    void save({ ...current, instrumentIds: [...normalizedInstrumentIds, normalizedActiveInstrumentId] });
   };
 
   const rename = () => {
@@ -302,7 +307,15 @@ export function TradingWatchlist({
         <select value={selected?.record_id ?? ''} onChange={(event) => setSelectedId(event.target.value)} aria-label="Watchlist">
           {records.map((record) => <option key={record.record_id} value={record.record_id}>{payload(record).name}</option>)}
         </select>
-        <button type="button" onClick={addActive} disabled={!activeInstrumentId} aria-label="Add active instrument" title="Add active instrument">+</button>
+        <button
+          type="button"
+          onClick={addActive}
+          disabled={!selected || !normalizedActiveInstrumentId || activeInstrumentIsListed || status === 'loading' || status === 'saving'}
+          aria-label={activeInstrumentIsListed ? 'Active instrument already in watchlist' : 'Add active instrument'}
+          title={activeInstrumentIsListed ? 'Active instrument already in watchlist' : 'Add active instrument'}
+        >
+          +
+        </button>
         <div className="trading-watchlist-options">
           <button
             type="button"
@@ -333,7 +346,7 @@ export function TradingWatchlist({
           const symbol = watchlistDisplaySymbol(instrument?.display_symbol, instrumentId);
           const quote = quotes[instrumentId];
           return (
-            <li key={instrumentId} className={instrumentId === activeInstrumentId ? 'active' : undefined}>
+            <li key={instrumentId} className={instrumentId === normalizedActiveInstrumentId ? 'active' : undefined}>
               <button type="button" onClick={() => onSelect(binanceInstrumentIdFor(instrumentId))} aria-label={`Select ${symbol}`}>
                 <TradingWatchlistLogo symbol={symbol} instrumentId={instrumentId} />
                 <strong>{symbol}</strong>
