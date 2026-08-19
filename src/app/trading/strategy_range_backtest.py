@@ -21,6 +21,7 @@ from .paper import PaperExecutionPolicy
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
+from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import TradingStrategyConfigDocument
 from .us_equity_calendar import early_close_time, regular_holidays
 
@@ -126,8 +127,11 @@ def _trading_dates(start_date: date, end_date: date) -> list[date]:
     return output
 
 
-def _cutoff(session_date: date, cutoff_time: time) -> datetime:
-    return datetime.combine(session_date, cutoff_time, tzinfo=_ET).astimezone(timezone.utc)
+def _cutoff(session_date: date, cutoff_time: time, grace_minutes: int = 0) -> datetime:
+    return (
+        datetime.combine(session_date, cutoff_time, tzinfo=_ET)
+        + timedelta(minutes=max(0, grace_minutes))
+    ).astimezone(timezone.utc)
 
 
 def choose_causal_universe(
@@ -135,10 +139,11 @@ def choose_causal_universe(
     *,
     session_date: date,
     cutoff_time: time,
+    grace_minutes: int = 0,
 ) -> GapperUniverseSnapshot | None:
-    """Choose the freshest non-manually-selected snapshot available by scan time."""
+    """Choose the freshest raw/research snapshot captured in the allowed scan window."""
 
-    cutoff = _cutoff(session_date, cutoff_time)
+    cutoff = _cutoff(session_date, cutoff_time, grace_minutes)
     eligible = [
         snapshot
         for snapshot in universes
@@ -166,7 +171,7 @@ def yahoo_historical_session_bars(
     *,
     runtime: ProviderHttpRuntime | None = None,
 ) -> list[MarketBar]:
-    """Fetch regular-session 1m Yahoo bars for an already-selected candidate."""
+    """Fetch regular-session 1m Yahoo bars for an already-captured candidate."""
 
     active_runtime = runtime or ProviderHttpRuntime("yahoo_strategy_backtest", max_concurrency=2)
     symbol = candidate.instrument_id.split(":")[-1]
@@ -269,16 +274,14 @@ def run_strategy_range_backtest(
     current_cash = request.initial_cash
     days: list[StrategyRangeBacktestDay] = []
     yahoo_runtime = ProviderHttpRuntime("yahoo_strategy_range_backtest", max_concurrency=2)
+    alpaca_runtime = ProviderHttpRuntime("alpaca_strategy_range_backtest", max_concurrency=4)
 
     grouped: dict[date, list[GapperUniverseSnapshot]] = defaultdict(list)
     for universe in universes:
         grouped[universe.session_date].append(universe)
 
     active_reconstructor: Reconstructor = reconstructor
-    if (
-        reconstructor is reconstruct_recent_alpaca_gapper_universe
-        and request.universe_mode != "captured_only"
-    ):
+    if reconstructor is reconstruct_recent_alpaca_gapper_universe and request.universe_mode != "captured_only":
         active_reconstructor = AlpacaHistoricalGapperReconstructor(
             start_date=request.start_date,
             end_date=request.end_date,
@@ -295,6 +298,7 @@ def run_strategy_range_backtest(
                 grouped.get(session_date, []),
                 session_date=session_date,
                 cutoff_time=scan_time,
+                grace_minutes=strategy.config.universe_archive_grace_minutes,
             )
 
         universe = captured
@@ -369,19 +373,28 @@ def run_strategy_range_backtest(
                     status="missing_universe",
                     starting_cash=starting_cash,
                     ending_cash=current_cash,
-                    detail="No frozen point-in-time gapper/research universe existed before the configured scan time. Choose reconstructed mode for an explicitly approximate recent-history scan.",
+                    detail="No frozen point-in-time gapper/research universe existed in the configured scan/grace window. Choose reconstructed mode for an explicitly approximate recent-history scan.",
                 )
             )
             continue
 
         bars_by_instrument: dict[str, list[MarketBar]] = {}
         try:
-            for candidate in universe.candidates:
-                bars_by_instrument[candidate.instrument_id] = yahoo_historical_session_bars(
-                    candidate,
+            if not universe.candidates:
+                bars_by_instrument = {}
+            elif origin == "reconstructed":
+                bars_by_instrument = alpaca_historical_session_bars(
+                    universe.candidates,
                     session_date,
-                    runtime=yahoo_runtime,
+                    runtime=alpaca_runtime,
                 )
+            else:
+                for candidate in universe.candidates:
+                    bars_by_instrument[candidate.instrument_id] = yahoo_historical_session_bars(
+                        candidate,
+                        session_date,
+                        runtime=yahoo_runtime,
+                    )
         except (ProviderContractError, ProviderDataUnavailableError, OSError) as exc:
             days.append(
                 StrategyRangeBacktestDay(
