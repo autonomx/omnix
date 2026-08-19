@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -117,6 +117,19 @@ def _protection(row) -> StrategyProtection:
     )
 
 
+def _universe(row) -> GapperUniverseSnapshot:
+    return GapperUniverseSnapshot.model_validate(
+        {
+            "universe_id": row[0],
+            "session_date": row[1],
+            "evaluation_time": row[2],
+            "discovery_source": row[3],
+            "source_fingerprint": row[4],
+            "candidates": row[5],
+        }
+    )
+
+
 _CONFIG_COLUMNS = """
 strategy_id, account_id, strategy_kind, strategy_version, mode,
 active_universe_id, config, risk, enabled, revision, created_at, updated_at
@@ -129,6 +142,10 @@ _PROTECTION_COLUMNS = """
 strategy_id, protection_id, account_id, instrument_id, entry_order_id,
 exit_order_id, stop_price, target_price, quantity, status, trigger_reason,
 revision, created_at, updated_at
+"""
+_UNIVERSE_COLUMNS = """
+universe_id, session_date, evaluation_time, discovery_source,
+source_fingerprint, candidates
 """
 
 
@@ -209,6 +226,54 @@ class TradingStrategyRepository:
             uow.commit()
             return _config(row)
 
+    def delete_config(self, strategy_id: str, *, expected_revision: int) -> None:
+        """Delete a safely stopped strategy and cascade its strategy-owned history.
+
+        Frozen universes and catalyst evidence are intentionally retained because
+        they are immutable research artifacts and may be referenced by other
+        strategy instances/backtests. Active protection state blocks deletion so
+        a strategy cannot orphan a paper position without its exit authority.
+        """
+
+        with self.uow_factory() as uow:
+            row = uow.connection.execute(
+                """
+                SELECT mode, revision
+                  FROM omnix_trading_strategy_configs
+                 WHERE workspace_id = %s AND strategy_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, strategy_id),
+            ).fetchone()
+            if row is None:
+                raise ValueError("strategy_config_not_found")
+            if int(row[1]) != expected_revision:
+                raise RevisionConflict("stale trading strategy configuration")
+            if str(row[0]) == "auto_paper":
+                raise ValueError("disable_auto_paper_before_delete")
+            active = uow.connection.execute(
+                """
+                SELECT COUNT(*)
+                  FROM omnix_trading_strategy_protections
+                 WHERE workspace_id = %s AND strategy_id = %s
+                   AND status IN ('pending_entry', 'active', 'exit_submitted')
+                """,
+                (self.context.workspace_id, strategy_id),
+            ).fetchone()
+            if active is not None and int(active[0]) > 0:
+                raise ValueError("close_strategy_protections_before_delete")
+            deleted = uow.connection.execute(
+                """
+                DELETE FROM omnix_trading_strategy_configs
+                 WHERE workspace_id = %s AND strategy_id = %s AND revision = %s
+                RETURNING strategy_id
+                """,
+                (self.context.workspace_id, strategy_id, expected_revision),
+            ).fetchone()
+            if deleted is None:
+                raise RevisionConflict("stale trading strategy configuration")
+            uow.commit()
+
     def list_configs(self, *, active_only: bool = False) -> list[TradingStrategyConfigDocument]:
         predicate = "AND enabled = TRUE AND mode <> 'off'" if active_only else ""
         with self.uow_factory() as uow:
@@ -271,26 +336,33 @@ class TradingStrategyRepository:
     def get_universe(self, universe_id: str) -> GapperUniverseSnapshot:
         with self.uow_factory() as uow:
             row = uow.connection.execute(
-                """
-                SELECT universe_id, session_date, evaluation_time, discovery_source,
-                       source_fingerprint, candidates
-                  FROM omnix_trading_gapper_universes
-                 WHERE workspace_id = %s AND universe_id = %s
-                """,
+                f"SELECT {_UNIVERSE_COLUMNS} FROM omnix_trading_gapper_universes WHERE workspace_id = %s AND universe_id = %s",
                 (self.context.workspace_id, universe_id),
             ).fetchone()
         if row is None:
             raise ValueError("gapper_universe_not_found")
-        return GapperUniverseSnapshot.model_validate(
-            {
-                "universe_id": row[0],
-                "session_date": row[1],
-                "evaluation_time": row[2],
-                "discovery_source": row[3],
-                "source_fingerprint": row[4],
-                "candidates": row[5],
-            }
-        )
+        return _universe(row)
+
+    def list_universes(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> list[GapperUniverseSnapshot]:
+        if end_date < start_date:
+            raise ValueError("universe_end_date_precedes_start_date")
+        with self.uow_factory() as uow:
+            rows = uow.connection.execute(
+                f"""
+                SELECT {_UNIVERSE_COLUMNS}
+                  FROM omnix_trading_gapper_universes
+                 WHERE workspace_id = %s
+                   AND session_date >= %s AND session_date <= %s
+                 ORDER BY session_date, evaluation_time, universe_id
+                """,
+                (self.context.workspace_id, start_date, end_date),
+            ).fetchall()
+        return [_universe(row) for row in rows]
 
     def append_event(self, event: StrategyEvent) -> bool:
         with self.uow_factory() as uow:
