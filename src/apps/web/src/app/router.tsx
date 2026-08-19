@@ -31,6 +31,17 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
 const defaultModule = moduleById.chatbot;
 const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'podcast', 'voice', 'image-generation'];
 
+// Keep lower-level platform workspaces routable without crowding the primary
+// workstation navigation. These pages remain available by direct route and can
+// be linked contextually from settings/diagnostics when needed.
+const sidebarHiddenModuleIds = new Set<OmnixModuleId>([
+  'voice-cloning',
+  'providers',
+  'models',
+  'jobs',
+]);
+const sidebarModules = omnixModules.filter((module) => !sidebarHiddenModuleIds.has(module.id));
+
 function moduleFromPath(pathname: string): OmnixModuleDefinition {
   return (
     [...omnixModules]
@@ -88,7 +99,7 @@ function OmnixShell() {
         <OmnixSidebar hidden={!isSidebarVisible}>
           <OmnixBrand />
           <nav className="omnix-nav">
-            {omnixModules.map((module) => (
+            {sidebarModules.map((module) => (
               <Link key={module.id} to={module.route as never} title={module.label} activeProps={{ className: 'active' }}>
                 <OmnixNavItem active={module.id === activeModule.id} moduleId={module.id}>
                   {module.label}
