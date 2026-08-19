@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
+from .historical_gapper_reconstruction import (
+    HistoricalUniverseReconstruction,
+    reconstruct_recent_alpaca_gapper_universe,
+    reconstructed_strategy_config,
+)
 from .models import AdjustmentMode, MarketBar
 from .paper import PaperExecutionPolicy
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
@@ -20,6 +26,10 @@ from .us_equity_calendar import early_close_time, regular_holidays
 
 _ET = ZoneInfo("America/New_York")
 _YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+HistoricalUniverseMode = Literal["captured_only", "captured_or_reconstructed", "reconstructed_only"]
+HistoricalUniverseOrigin = Literal["captured", "reconstructed"]
+BacktestResultQuality = Literal["exact", "mixed", "approximate", "unavailable"]
+Reconstructor = Callable[..., HistoricalUniverseReconstruction]
 
 
 class StrategyRangeBacktestRequest(BaseModel):
@@ -30,17 +40,36 @@ class StrategyRangeBacktestRequest(BaseModel):
     initial_cash: Decimal = Field(default=Decimal("100000"), gt=0)
     assumed_spread_bps: Decimal = Field(default=Decimal("40"), ge=0, le=10_000)
     max_hold_minutes: int = Field(default=90, ge=1, le=390)
+    # New name: scanning/research happens before entry authorization. The legacy
+    # cutoff remains accepted for persisted/front-end compatibility.
+    universe_scan_time_et: time | None = None
     universe_cutoff_et: time | None = None
+    universe_mode: HistoricalUniverseMode = "captured_or_reconstructed"
+    reconstruction_max_age_days: int = Field(default=30, ge=1, le=3650)
     max_sessions: int = Field(default=60, ge=1, le=252)
+
+    @model_validator(mode="after")
+    def validate_scan_time_aliases(self):
+        if (
+            self.universe_scan_time_et is not None
+            and self.universe_cutoff_et is not None
+            and self.universe_scan_time_et != self.universe_cutoff_et
+        ):
+            raise ValueError("universe_scan_time_et conflicts with legacy universe_cutoff_et")
+        return self
 
 
 class StrategyRangeBacktestDay(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     session_date: date
-    status: Literal["backtested", "missing_universe", "data_unavailable", "error"]
+    status: Literal["backtested", "no_candidates", "missing_universe", "data_unavailable", "error"]
     universe_id: str | None = None
     universe_evaluation_time: datetime | None = None
+    universe_origin: HistoricalUniverseOrigin | None = None
+    fidelity: str | None = None
+    fidelity_warnings: tuple[str, ...] = ()
+    strategy_fidelity_adjustments: tuple[str, ...] = ()
     candidate_count: int = 0
     starting_cash: Decimal
     ending_cash: Decimal
@@ -59,13 +88,19 @@ class StrategyRangeBacktestResult(BaseModel):
     strategy_version: str
     start_date: date
     end_date: date
+    universe_scan_time_et: time
+    # Compatibility alias retained in the API response for older clients.
     universe_cutoff_et: time
+    universe_mode: HistoricalUniverseMode
     initial_cash: Decimal
     ending_cash: Decimal
-    pnl: Decimal
-    return_pct: Decimal
+    pnl: Decimal | None
+    return_pct: Decimal | None
     requested_trading_sessions: int
     covered_sessions: int
+    exact_sessions: int
+    reconstructed_sessions: int
+    no_candidate_sessions: int
     missing_universe_sessions: int
     data_unavailable_sessions: int
     error_sessions: int
@@ -74,9 +109,11 @@ class StrategyRangeBacktestResult(BaseModel):
     trade_count: int
     win_count: int
     loss_count: int
-    expectancy_r: Decimal
+    expectancy_r: Decimal | None
+    result_quality: BacktestResultQuality
     days: tuple[StrategyRangeBacktestDay, ...]
     point_in_time_universes_required: Literal[True] = True
+    reconstruction_is_approximate: Literal[True] = True
 
 
 def _trading_dates(start_date: date, end_date: date) -> list[date]:
@@ -101,12 +138,12 @@ def choose_causal_universe(
     session_date: date,
     cutoff_time: time,
 ) -> GapperUniverseSnapshot | None:
-    """Choose the freshest non-manually-selected snapshot available by cutoff.
+    """Choose the freshest non-manually-selected snapshot available by scan time.
 
     The range backtester intentionally does not use ``-selected-`` universes:
     strategy candidate selection must be reproduced by the deterministic strategy,
     not inherited from a later human/LLM inclusion decision. Research-enriched
-    immutable snapshots are eligible only when they were frozen before cutoff.
+    immutable snapshots are eligible only when they were frozen before scan time.
     """
 
     cutoff = _cutoff(session_date, cutoff_time)
@@ -116,6 +153,7 @@ def choose_causal_universe(
         if snapshot.session_date == session_date
         and snapshot.evaluation_time.astimezone(timezone.utc) <= cutoff
         and "-selected-" not in snapshot.universe_id
+        and not snapshot.universe_id.startswith("reconstructed-")
     ]
     if not eligible:
         return None
@@ -136,12 +174,11 @@ def yahoo_historical_session_bars(
     *,
     runtime: ProviderHttpRuntime | None = None,
 ) -> list[MarketBar]:
-    """Fetch regular-session 1m Yahoo bars for a known point-in-time candidate.
+    """Fetch regular-session 1m Yahoo bars for an already-selected candidate.
 
-    Yahoo can supply historical chart bars only within provider retention limits;
-    it is *not* used here to reconstruct the historical top-gainer universe.
-    Missing/expired intraday history causes the entire day to fail closed rather
-    than silently removing a candidate and biasing the strategy result.
+    Universe selection is handled separately. Yahoo chart history is used only
+    for the candidate's regular-session strategy replay and remains subject to
+    provider intraday-retention limits.
     """
 
     active_runtime = runtime or ProviderHttpRuntime("yahoo_strategy_backtest", max_concurrency=2)
@@ -218,10 +255,22 @@ def yahoo_historical_session_bars(
     return bars
 
 
+def _result_quality(exact_sessions: int, reconstructed_sessions: int, covered_sessions: int) -> BacktestResultQuality:
+    if covered_sessions == 0:
+        return "unavailable"
+    if exact_sessions and reconstructed_sessions:
+        return "mixed"
+    if reconstructed_sessions:
+        return "approximate"
+    return "exact"
+
+
 def run_strategy_range_backtest(
     strategy: TradingStrategyConfigDocument,
     universes: list[GapperUniverseSnapshot] | tuple[GapperUniverseSnapshot, ...],
     request: StrategyRangeBacktestRequest,
+    *,
+    reconstructor: Reconstructor = reconstruct_recent_alpaca_gapper_universe,
 ) -> StrategyRangeBacktestResult:
     if strategy.strategy_kind != "gap_pullback_v1":
         raise ValueError("strategy_backtest_not_supported")
@@ -229,10 +278,14 @@ def run_strategy_range_backtest(
     if len(sessions) > request.max_sessions:
         raise ValueError(f"backtest_session_limit_exceeded:{len(sessions)}>{request.max_sessions}")
 
-    cutoff_time = request.universe_cutoff_et or strategy.config.entry_start_et
+    scan_time = (
+        request.universe_scan_time_et
+        or request.universe_cutoff_et
+        or strategy.config.universe_scan_time_et
+    )
     current_cash = request.initial_cash
     days: list[StrategyRangeBacktestDay] = []
-    runtime = ProviderHttpRuntime("yahoo_strategy_range_backtest", max_concurrency=2)
+    yahoo_runtime = ProviderHttpRuntime("yahoo_strategy_range_backtest", max_concurrency=2)
 
     grouped: dict[date, list[GapperUniverseSnapshot]] = defaultdict(list)
     for universe in universes:
@@ -240,11 +293,79 @@ def run_strategy_range_backtest(
 
     for session_date in sessions:
         starting_cash = current_cash
-        universe = choose_causal_universe(
-            grouped.get(session_date, []),
-            session_date=session_date,
-            cutoff_time=cutoff_time,
-        )
+        captured = None
+        if request.universe_mode != "reconstructed_only":
+            captured = choose_causal_universe(
+                grouped.get(session_date, []),
+                session_date=session_date,
+                cutoff_time=scan_time,
+            )
+
+        universe = captured
+        origin: HistoricalUniverseOrigin | None = "captured" if captured is not None else None
+        fidelity = "captured_point_in_time" if captured is not None else None
+        fidelity_warnings: tuple[str, ...] = ()
+        fidelity_adjustments: tuple[str, ...] = ()
+        active_config = strategy.config
+
+        if universe is None and request.universe_mode != "captured_only":
+            try:
+                reconstruction = reconstructor(
+                    session_date=session_date,
+                    scan_time=scan_time,
+                    config=strategy.config,
+                    assumed_spread_bps=request.assumed_spread_bps,
+                    max_age_days=request.reconstruction_max_age_days,
+                )
+            except (ProviderContractError, ProviderDataUnavailableError, OSError, ValueError) as exc:
+                days.append(
+                    StrategyRangeBacktestDay(
+                        session_date=session_date,
+                        status="data_unavailable",
+                        starting_cash=starting_cash,
+                        ending_cash=current_cash,
+                        universe_origin="reconstructed",
+                        fidelity="reconstruction_failed",
+                        detail=f"Historical universe reconstruction failed: {exc}",
+                    )
+                )
+                continue
+            universe = reconstruction.snapshot
+            origin = "reconstructed"
+            fidelity = reconstruction.fidelity
+            fidelity_warnings = reconstruction.warnings
+            active_config, fidelity_adjustments = reconstructed_strategy_config(strategy.config)
+            if universe is None:
+                if reconstruction.fidelity == "reconstructed_current_listings_iex":
+                    days.append(
+                        StrategyRangeBacktestDay(
+                            session_date=session_date,
+                            status="no_candidates",
+                            starting_cash=starting_cash,
+                            ending_cash=current_cash,
+                            universe_origin="reconstructed",
+                            fidelity=reconstruction.fidelity,
+                            fidelity_warnings=reconstruction.warnings,
+                            strategy_fidelity_adjustments=fidelity_adjustments,
+                            detail=reconstruction.detail or "Historical scan found no qualifying candidates.",
+                        )
+                    )
+                else:
+                    days.append(
+                        StrategyRangeBacktestDay(
+                            session_date=session_date,
+                            status="data_unavailable",
+                            starting_cash=starting_cash,
+                            ending_cash=current_cash,
+                            universe_origin="reconstructed",
+                            fidelity=reconstruction.fidelity,
+                            fidelity_warnings=reconstruction.warnings,
+                            strategy_fidelity_adjustments=fidelity_adjustments,
+                            detail=reconstruction.detail or "Historical universe reconstruction is unavailable.",
+                        )
+                    )
+                continue
+
         if universe is None:
             days.append(
                 StrategyRangeBacktestDay(
@@ -252,7 +373,7 @@ def run_strategy_range_backtest(
                     status="missing_universe",
                     starting_cash=starting_cash,
                     ending_cash=current_cash,
-                    detail="No frozen point-in-time gapper/research universe existed before the backtest cutoff.",
+                    detail="No frozen point-in-time gapper/research universe existed before the configured scan time. Choose reconstructed mode for an explicitly approximate recent-history scan.",
                 )
             )
             continue
@@ -263,7 +384,7 @@ def run_strategy_range_backtest(
                 bars_by_instrument[candidate.instrument_id] = yahoo_historical_session_bars(
                     candidate,
                     session_date,
-                    runtime=runtime,
+                    runtime=yahoo_runtime,
                 )
         except (ProviderContractError, ProviderDataUnavailableError, OSError) as exc:
             days.append(
@@ -272,6 +393,10 @@ def run_strategy_range_backtest(
                     status="data_unavailable",
                     universe_id=universe.universe_id,
                     universe_evaluation_time=universe.evaluation_time,
+                    universe_origin=origin,
+                    fidelity=fidelity,
+                    fidelity_warnings=fidelity_warnings,
+                    strategy_fidelity_adjustments=fidelity_adjustments,
                     candidate_count=len(universe.candidates),
                     starting_cash=starting_cash,
                     ending_cash=current_cash,
@@ -288,7 +413,7 @@ def run_strategy_range_backtest(
             )
             result = run_gap_pullback_backtest(
                 dataset,
-                strategy.config,
+                active_config,
                 PaperExecutionPolicy(max_volume_participation_pct=Decimal("1")),
                 assumed_spread_bps=request.assumed_spread_bps,
                 max_hold_minutes=request.max_hold_minutes,
@@ -307,6 +432,10 @@ def run_strategy_range_backtest(
                     status="backtested",
                     universe_id=universe.universe_id,
                     universe_evaluation_time=universe.evaluation_time,
+                    universe_origin=origin,
+                    fidelity=fidelity,
+                    fidelity_warnings=fidelity_warnings,
+                    strategy_fidelity_adjustments=fidelity_adjustments,
                     candidate_count=result.summary.candidate_count,
                     starting_cash=starting_cash,
                     ending_cash=current_cash,
@@ -323,6 +452,10 @@ def run_strategy_range_backtest(
                     status="error",
                     universe_id=universe.universe_id,
                     universe_evaluation_time=universe.evaluation_time,
+                    universe_origin=origin,
+                    fidelity=fidelity,
+                    fidelity_warnings=fidelity_warnings,
+                    strategy_fidelity_adjustments=fidelity_adjustments,
                     candidate_count=len(universe.candidates),
                     starting_cash=starting_cash,
                     ending_cash=current_cash,
@@ -331,21 +464,42 @@ def run_strategy_range_backtest(
             )
 
     trades = [trade for day in days if day.result is not None for trade in day.result.trades]
-    total_pnl = current_cash - request.initial_cash
-    divisor = Decimal(len(trades)) if trades else Decimal("1")
+    covered_days = [day for day in days if day.status in {"backtested", "no_candidates"}]
+    exact_sessions = sum(day.status == "backtested" and day.universe_origin == "captured" for day in days)
+    reconstructed_sessions = sum(
+        day.status in {"backtested", "no_candidates"} and day.universe_origin == "reconstructed"
+        for day in days
+    )
+    covered_sessions = len(covered_days)
+    total_pnl = current_cash - request.initial_cash if covered_sessions else None
+    return_pct = (
+        (total_pnl / request.initial_cash) * Decimal("100")
+        if total_pnl is not None
+        else None
+    )
+    expectancy = (
+        sum((trade.r_multiple for trade in trades), Decimal("0")) / Decimal(len(trades))
+        if trades
+        else None
+    )
     return StrategyRangeBacktestResult(
         strategy_id=strategy.strategy_id,
         strategy_kind=strategy.strategy_kind,
         strategy_version=strategy.strategy_version,
         start_date=request.start_date,
         end_date=request.end_date,
-        universe_cutoff_et=cutoff_time,
+        universe_scan_time_et=scan_time,
+        universe_cutoff_et=scan_time,
+        universe_mode=request.universe_mode,
         initial_cash=request.initial_cash,
         ending_cash=current_cash,
         pnl=total_pnl,
-        return_pct=(total_pnl / request.initial_cash) * Decimal("100"),
+        return_pct=return_pct,
         requested_trading_sessions=len(sessions),
-        covered_sessions=sum(day.status == "backtested" for day in days),
+        covered_sessions=covered_sessions,
+        exact_sessions=exact_sessions,
+        reconstructed_sessions=reconstructed_sessions,
+        no_candidate_sessions=sum(day.status == "no_candidates" for day in days),
         missing_universe_sessions=sum(day.status == "missing_universe" for day in days),
         data_unavailable_sessions=sum(day.status == "data_unavailable" for day in days),
         error_sessions=sum(day.status == "error" for day in days),
@@ -354,6 +508,7 @@ def run_strategy_range_backtest(
         trade_count=len(trades),
         win_count=sum(trade.r_multiple > 0 for trade in trades),
         loss_count=sum(trade.r_multiple < 0 for trade in trades),
-        expectancy_r=sum((trade.r_multiple for trade in trades), Decimal("0")) / divisor,
+        expectancy_r=expectancy,
+        result_quality=_result_quality(exact_sessions, reconstructed_sessions, covered_sessions),
         days=tuple(days),
     )
