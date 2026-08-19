@@ -57,7 +57,7 @@ export type SettingsDocument = {
   revision: string;
   global: { providers: ProviderDefaults; models: ModelDefaults; routing: RoutingDefaults };
   providerConfigs: ProviderConfigs;
-  appearance: { mode: 'system' | 'light' | 'dark'; theme: OmnixThemeId; density: 'comfortable' | 'compact'; reduceMotion: boolean; liveCaptions: boolean };
+  appearance: { mode: 'system' | 'light' | 'dark'; theme: OmnixThemeId; density: 'comfortable' | 'compact'; textScale: number; reduceMotion: boolean; liveCaptions: boolean };
   assistant: AssistantSettings;
   voice: { language: string; stability: number; similarity: number; style: number; speed: number; pitch: number; volume: number; effects: string[]; streaming: boolean; cloningLanguage: string; cloningQuality: string };
   storyteller: { providerId: string; modelId: string; tone: string; writingStyle: string; readSpeed: number; pauseParagraphMs: number; pauseChapterMs: number; readChapterTitles: boolean; readStylePreset: string; pronunciation: Record<string, string> };
