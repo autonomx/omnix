@@ -64,8 +64,13 @@ class GapPullbackConfig(BaseModel):
     structure_interval: StrategyBarInterval = "1m"
     execution_interval: StrategyBarInterval = "1m"
 
-    # Phase 1: discovery / liquidity. Legacy-compatible defaults are retained;
-    # v1.1 UI instances explicitly use $10M / 5x / preferred-float settings.
+    # Phase 1: discovery / liquidity. The universe scan is deliberately separate
+    # from the first legal entry time. New strict v1.1 UI strategies explicitly
+    # use 09:20 ET and archive that raw morning universe for later backtests.
+    universe_scan_time_et: time = time(9, 20)
+    auto_archive_daily_universe: bool = False
+    universe_archive_grace_minutes: int = Field(default=10, ge=1, le=60)
+    universe_discovery_count: int = Field(default=50, ge=1, le=100)
     minimum_gap_pct: Decimal = Field(default=Decimal("20"), ge=0)
     minimum_price: Decimal = Field(default=Decimal("0.50"), gt=0)
     maximum_price: Decimal = Field(default=Decimal("20"), gt=0)
