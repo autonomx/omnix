@@ -57,7 +57,10 @@ class TradingStrategyUniverseArchiveMonitor:
 
     async def run_once(self) -> int:
         repository: TradingStrategyRepository = default_strategy_repository()
-        configs = await asyncio.to_thread(repository.list_configs, active_only=True)
+        # Archive research evidence even while a saved strategy is Off. Execution
+        # mode is irrelevant here; the per-strategy archiver still requires the
+        # strategy itself to be enabled and auto-archive configured.
+        configs = await asyncio.to_thread(repository.list_configs, active_only=False)
         archived = 0
         now = datetime.now(timezone.utc)
         for config in configs:
@@ -71,8 +74,6 @@ class TradingStrategyUniverseArchiveMonitor:
                 if snapshot is not None:
                     archived += 1
             except Exception as exc:
-                # Archival is research evidence only and can never interrupt the
-                # deterministic strategy monitor or paper protection lifecycle.
                 self.last_error = f"{config.strategy_id}: {type(exc).__name__}: {exc}"
                 trade_log(
                     "auto_trading",
