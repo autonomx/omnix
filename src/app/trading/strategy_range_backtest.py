@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .historical_gapper_reconstruction import (
+    AlpacaHistoricalGapperReconstructor,
     HistoricalUniverseReconstruction,
     reconstruct_recent_alpaca_gapper_universe,
     reconstructed_strategy_config,
@@ -40,8 +41,6 @@ class StrategyRangeBacktestRequest(BaseModel):
     initial_cash: Decimal = Field(default=Decimal("100000"), gt=0)
     assumed_spread_bps: Decimal = Field(default=Decimal("40"), ge=0, le=10_000)
     max_hold_minutes: int = Field(default=90, ge=1, le=390)
-    # New name: scanning/research happens before entry authorization. The legacy
-    # cutoff remains accepted for persisted/front-end compatibility.
     universe_scan_time_et: time | None = None
     universe_cutoff_et: time | None = None
     universe_mode: HistoricalUniverseMode = "captured_or_reconstructed"
@@ -89,7 +88,6 @@ class StrategyRangeBacktestResult(BaseModel):
     start_date: date
     end_date: date
     universe_scan_time_et: time
-    # Compatibility alias retained in the API response for older clients.
     universe_cutoff_et: time
     universe_mode: HistoricalUniverseMode
     initial_cash: Decimal
@@ -138,13 +136,7 @@ def choose_causal_universe(
     session_date: date,
     cutoff_time: time,
 ) -> GapperUniverseSnapshot | None:
-    """Choose the freshest non-manually-selected snapshot available by scan time.
-
-    The range backtester intentionally does not use ``-selected-`` universes:
-    strategy candidate selection must be reproduced by the deterministic strategy,
-    not inherited from a later human/LLM inclusion decision. Research-enriched
-    immutable snapshots are eligible only when they were frozen before scan time.
-    """
+    """Choose the freshest non-manually-selected snapshot available by scan time."""
 
     cutoff = _cutoff(session_date, cutoff_time)
     eligible = [
@@ -174,12 +166,7 @@ def yahoo_historical_session_bars(
     *,
     runtime: ProviderHttpRuntime | None = None,
 ) -> list[MarketBar]:
-    """Fetch regular-session 1m Yahoo bars for an already-selected candidate.
-
-    Universe selection is handled separately. Yahoo chart history is used only
-    for the candidate's regular-session strategy replay and remains subject to
-    provider intraday-retention limits.
-    """
+    """Fetch regular-session 1m Yahoo bars for an already-selected candidate."""
 
     active_runtime = runtime or ProviderHttpRuntime("yahoo_strategy_backtest", max_concurrency=2)
     symbol = candidate.instrument_id.split(":")[-1]
@@ -278,11 +265,7 @@ def run_strategy_range_backtest(
     if len(sessions) > request.max_sessions:
         raise ValueError(f"backtest_session_limit_exceeded:{len(sessions)}>{request.max_sessions}")
 
-    scan_time = (
-        request.universe_scan_time_et
-        or request.universe_cutoff_et
-        or strategy.config.universe_scan_time_et
-    )
+    scan_time = request.universe_scan_time_et or request.universe_cutoff_et or strategy.config.universe_scan_time_et
     current_cash = request.initial_cash
     days: list[StrategyRangeBacktestDay] = []
     yahoo_runtime = ProviderHttpRuntime("yahoo_strategy_range_backtest", max_concurrency=2)
@@ -290,6 +273,19 @@ def run_strategy_range_backtest(
     grouped: dict[date, list[GapperUniverseSnapshot]] = defaultdict(list)
     for universe in universes:
         grouped[universe.session_date].append(universe)
+
+    active_reconstructor: Reconstructor = reconstructor
+    if (
+        reconstructor is reconstruct_recent_alpaca_gapper_universe
+        and request.universe_mode != "captured_only"
+    ):
+        active_reconstructor = AlpacaHistoricalGapperReconstructor(
+            start_date=request.start_date,
+            end_date=request.end_date,
+            config=strategy.config,
+            assumed_spread_bps=request.assumed_spread_bps,
+            max_age_days=request.reconstruction_max_age_days,
+        )
 
     for session_date in sessions:
         starting_cash = current_cash
@@ -310,7 +306,7 @@ def run_strategy_range_backtest(
 
         if universe is None and request.universe_mode != "captured_only":
             try:
-                reconstruction = reconstructor(
+                reconstruction = active_reconstructor(
                     session_date=session_date,
                     scan_time=scan_time,
                     config=strategy.config,
@@ -472,11 +468,7 @@ def run_strategy_range_backtest(
     )
     covered_sessions = len(covered_days)
     total_pnl = current_cash - request.initial_cash if covered_sessions else None
-    return_pct = (
-        (total_pnl / request.initial_cash) * Decimal("100")
-        if total_pnl is not None
-        else None
-    )
+    return_pct = (total_pnl / request.initial_cash) * Decimal("100") if total_pnl is not None else None
     expectancy = (
         sum((trade.r_multiple for trade in trades), Decimal("0")) / Decimal(len(trades))
         if trades
