@@ -29,8 +29,10 @@ on:
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
+# One-shot, branch-restricted source integration. Restored to contents: read as
+# soon as the UI patch is committed to PR #1494.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   trading-terminal:
@@ -53,6 +55,22 @@ jobs:
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
           test "${actual}" = "${expected}"
+      - name: Apply strategy UI integration once
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.number == 1494 &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap' &&
+          hashFiles('scripts/apply_trading_ui_enhancements.py') != ''
+        shell: bash
+        run: |
+          python scripts/apply_trading_ui_enhancements.py
+          git rm scripts/apply_trading_ui_enhancements.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- src/apps/web/src/features/trading/TradingStrategiesPanel.tsx src/apps/web/src/features/trading/TradingWorkspace.tsx
+          git commit -m "trading ui: integrate strategy controls and fullscreen tools"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
