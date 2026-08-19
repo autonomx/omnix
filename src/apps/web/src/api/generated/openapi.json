@@ -10,6 +10,107 @@
         "title": "AdjustmentMode",
         "type": "string"
       },
+      "AlpacaIexCredentialStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key_editable": {
+            "title": "Api Key Editable",
+            "type": "boolean"
+          },
+          "api_key_id_masked": {
+            "default": "",
+            "title": "Api Key Id Masked",
+            "type": "string"
+          },
+          "api_key_source": {
+            "enum": [
+              "environment",
+              "os_protected_store",
+              "missing"
+            ],
+            "title": "Api Key Source",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "provider": {
+            "const": "alpaca_iex",
+            "default": "alpaca_iex",
+            "title": "Provider",
+            "type": "string"
+          },
+          "secret_key_editable": {
+            "title": "Secret Key Editable",
+            "type": "boolean"
+          },
+          "secret_key_source": {
+            "enum": [
+              "environment",
+              "os_protected_store",
+              "missing"
+            ],
+            "title": "Secret Key Source",
+            "type": "string"
+          },
+          "storage": {
+            "title": "Storage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "api_key_source",
+          "secret_key_source",
+          "api_key_editable",
+          "secret_key_editable",
+          "storage"
+        ],
+        "title": "AlpacaIexCredentialStatus",
+        "type": "object"
+      },
+      "AlpacaIexCredentialUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key_id": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key Id"
+          },
+          "clear_api_key_id": {
+            "default": false,
+            "title": "Clear Api Key Id",
+            "type": "boolean"
+          },
+          "clear_secret_key": {
+            "default": false,
+            "title": "Clear Secret Key",
+            "type": "boolean"
+          },
+          "secret_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret Key"
+          }
+        },
+        "title": "AlpacaIexCredentialUpdate",
+        "type": "object"
+      },
       "AssetClass": {
         "enum": [
           "crypto",
@@ -11375,6 +11476,321 @@
         "title": "StrategyProtectionListResponse",
         "type": "object"
       },
+      "StrategyRangeBacktestDay": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_count": {
+            "default": 0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "ending_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Ending Cash",
+            "type": "string"
+          },
+          "pnl": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Pnl",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GapPullbackBacktestResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "starting_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Starting Cash",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "backtested",
+              "missing_universe",
+              "data_unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trade_count": {
+            "default": 0,
+            "title": "Trade Count",
+            "type": "integer"
+          },
+          "trigger_count": {
+            "default": 0,
+            "title": "Trigger Count",
+            "type": "integer"
+          },
+          "universe_evaluation_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Universe Evaluation Time"
+          },
+          "universe_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Universe Id"
+          }
+        },
+        "required": [
+          "session_date",
+          "status",
+          "starting_cash",
+          "ending_cash"
+        ],
+        "title": "StrategyRangeBacktestDay",
+        "type": "object"
+      },
+      "StrategyRangeBacktestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assumed_spread_bps": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "40",
+            "title": "Assumed Spread Bps"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "initial_cash": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "100000",
+            "title": "Initial Cash"
+          },
+          "max_hold_minutes": {
+            "default": 90,
+            "maximum": 390.0,
+            "minimum": 1.0,
+            "title": "Max Hold Minutes",
+            "type": "integer"
+          },
+          "max_sessions": {
+            "default": 60,
+            "maximum": 252.0,
+            "minimum": 1.0,
+            "title": "Max Sessions",
+            "type": "integer"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "universe_cutoff_et": {
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Universe Cutoff Et"
+          }
+        },
+        "required": [
+          "start_date",
+          "end_date"
+        ],
+        "title": "StrategyRangeBacktestRequest",
+        "type": "object"
+      },
+      "StrategyRangeBacktestResult": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_count": {
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "covered_sessions": {
+            "title": "Covered Sessions",
+            "type": "integer"
+          },
+          "data_unavailable_sessions": {
+            "title": "Data Unavailable Sessions",
+            "type": "integer"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyRangeBacktestDay"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "ending_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Ending Cash",
+            "type": "string"
+          },
+          "error_sessions": {
+            "title": "Error Sessions",
+            "type": "integer"
+          },
+          "expectancy_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expectancy R",
+            "type": "string"
+          },
+          "initial_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Initial Cash",
+            "type": "string"
+          },
+          "loss_count": {
+            "title": "Loss Count",
+            "type": "integer"
+          },
+          "missing_universe_sessions": {
+            "title": "Missing Universe Sessions",
+            "type": "integer"
+          },
+          "pnl": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Pnl",
+            "type": "string"
+          },
+          "point_in_time_universes_required": {
+            "const": true,
+            "default": true,
+            "title": "Point In Time Universes Required",
+            "type": "boolean"
+          },
+          "requested_trading_sessions": {
+            "title": "Requested Trading Sessions",
+            "type": "integer"
+          },
+          "return_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Return Pct",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_kind": {
+            "title": "Strategy Kind",
+            "type": "string"
+          },
+          "strategy_version": {
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "trade_count": {
+            "title": "Trade Count",
+            "type": "integer"
+          },
+          "trigger_count": {
+            "title": "Trigger Count",
+            "type": "integer"
+          },
+          "universe_cutoff_et": {
+            "format": "time",
+            "title": "Universe Cutoff Et",
+            "type": "string"
+          },
+          "win_count": {
+            "title": "Win Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "strategy_kind",
+          "strategy_version",
+          "start_date",
+          "end_date",
+          "universe_cutoff_et",
+          "initial_cash",
+          "ending_cash",
+          "pnl",
+          "return_pct",
+          "requested_trading_sessions",
+          "covered_sessions",
+          "missing_universe_sessions",
+          "data_unavailable_sessions",
+          "error_sessions",
+          "candidate_count",
+          "trigger_count",
+          "trade_count",
+          "win_count",
+          "loss_count",
+          "expectancy_r",
+          "days"
+        ],
+        "title": "StrategyRangeBacktestResult",
+        "type": "object"
+      },
       "StrategyResearchReview": {
         "additionalProperties": false,
         "properties": {
@@ -17609,6 +18025,66 @@
         ]
       }
     },
+    "/api/trading/execution/providers/alpaca-iex/credentials": {
+      "get": {
+        "operationId": "alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlpacaIexCredentialStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Alpaca Iex Credentials",
+        "tags": [
+          "trading-execution"
+        ]
+      },
+      "put": {
+        "operationId": "update_alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlpacaIexCredentialUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlpacaIexCredentialStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Alpaca Iex Credentials",
+        "tags": [
+          "trading-execution"
+        ]
+      }
+    },
     "/api/trading/indicator-presets": {
       "get": {
         "operationId": "list_trading_indicator_presets_api_trading_indicator_presets_get",
@@ -19665,6 +20141,49 @@
       }
     },
     "/api/trading/strategies/{strategy_id}": {
+      "delete": {
+        "operationId": "delete_strategy_api_trading_strategies__strategy_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "If-Match",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Strategy",
+        "tags": [
+          "trading-strategies"
+        ]
+      },
       "get": {
         "operationId": "get_strategy_api_trading_strategies__strategy_id__get",
         "parameters": [
@@ -19761,6 +20280,58 @@
           }
         },
         "summary": "Update Strategy",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/backtest/range": {
+      "post": {
+        "operationId": "backtest_strategy_range_api_trading_strategies__strategy_id__backtest_range_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StrategyRangeBacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyRangeBacktestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Backtest Strategy Range",
         "tags": [
           "trading-strategies"
         ]

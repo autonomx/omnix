@@ -1360,6 +1360,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/execution/providers/alpaca-iex/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Alpaca Iex Credentials */
+        get: operations["alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_get"];
+        /** Update Alpaca Iex Credentials */
+        put: operations["update_alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/indicator-presets": {
         parameters: {
             query?: never;
@@ -1993,6 +2011,24 @@ export interface paths {
         /** Update Strategy */
         put: operations["update_strategy_api_trading_strategies__strategy_id__put"];
         post?: never;
+        /** Delete Strategy */
+        delete: operations["delete_strategy_api_trading_strategies__strategy_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/backtest/range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Backtest Strategy Range */
+        post: operations["backtest_strategy_range_api_trading_strategies__strategy_id__backtest_range_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2201,6 +2237,55 @@ export interface components {
          * @enum {string}
          */
         AdjustmentMode: "raw" | "split_adjusted" | "dividend_adjusted";
+        /** AlpacaIexCredentialStatus */
+        AlpacaIexCredentialStatus: {
+            /** Api Key Editable */
+            api_key_editable: boolean;
+            /**
+             * Api Key Id Masked
+             * @default
+             */
+            api_key_id_masked: string;
+            /**
+             * Api Key Source
+             * @enum {string}
+             */
+            api_key_source: "environment" | "os_protected_store" | "missing";
+            /** Configured */
+            configured: boolean;
+            /**
+             * Provider
+             * @default alpaca_iex
+             * @constant
+             */
+            provider: "alpaca_iex";
+            /** Secret Key Editable */
+            secret_key_editable: boolean;
+            /**
+             * Secret Key Source
+             * @enum {string}
+             */
+            secret_key_source: "environment" | "os_protected_store" | "missing";
+            /** Storage */
+            storage: string;
+        };
+        /** AlpacaIexCredentialUpdate */
+        AlpacaIexCredentialUpdate: {
+            /** Api Key Id */
+            api_key_id?: string | null;
+            /**
+             * Clear Api Key Id
+             * @default false
+             */
+            clear_api_key_id: boolean;
+            /**
+             * Clear Secret Key
+             * @default false
+             */
+            clear_secret_key: boolean;
+            /** Secret Key */
+            secret_key?: string | null;
+        };
         /**
          * AssetClass
          * @enum {string}
@@ -6976,6 +7061,147 @@ export interface components {
             /** Protections */
             protections: components["schemas"]["StrategyProtection"][];
         };
+        /** StrategyRangeBacktestDay */
+        StrategyRangeBacktestDay: {
+            /**
+             * Candidate Count
+             * @default 0
+             */
+            candidate_count: number;
+            /** Detail */
+            detail?: string | null;
+            /** Ending Cash */
+            ending_cash: string;
+            /**
+             * Pnl
+             * @default 0
+             */
+            pnl: string;
+            result?: components["schemas"]["GapPullbackBacktestResult"] | null;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Starting Cash */
+            starting_cash: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "backtested" | "missing_universe" | "data_unavailable" | "error";
+            /**
+             * Trade Count
+             * @default 0
+             */
+            trade_count: number;
+            /**
+             * Trigger Count
+             * @default 0
+             */
+            trigger_count: number;
+            /** Universe Evaluation Time */
+            universe_evaluation_time?: string | null;
+            /** Universe Id */
+            universe_id?: string | null;
+        };
+        /** StrategyRangeBacktestRequest */
+        StrategyRangeBacktestRequest: {
+            /**
+             * Assumed Spread Bps
+             * @default 40
+             */
+            assumed_spread_bps: number | string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Initial Cash
+             * @default 100000
+             */
+            initial_cash: number | string;
+            /**
+             * Max Hold Minutes
+             * @default 90
+             */
+            max_hold_minutes: number;
+            /**
+             * Max Sessions
+             * @default 60
+             */
+            max_sessions: number;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Universe Cutoff Et */
+            universe_cutoff_et?: string | null;
+        };
+        /** StrategyRangeBacktestResult */
+        StrategyRangeBacktestResult: {
+            /** Candidate Count */
+            candidate_count: number;
+            /** Covered Sessions */
+            covered_sessions: number;
+            /** Data Unavailable Sessions */
+            data_unavailable_sessions: number;
+            /** Days */
+            days: components["schemas"]["StrategyRangeBacktestDay"][];
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Ending Cash */
+            ending_cash: string;
+            /** Error Sessions */
+            error_sessions: number;
+            /** Expectancy R */
+            expectancy_r: string;
+            /** Initial Cash */
+            initial_cash: string;
+            /** Loss Count */
+            loss_count: number;
+            /** Missing Universe Sessions */
+            missing_universe_sessions: number;
+            /** Pnl */
+            pnl: string;
+            /**
+             * Point In Time Universes Required
+             * @default true
+             * @constant
+             */
+            point_in_time_universes_required: true;
+            /** Requested Trading Sessions */
+            requested_trading_sessions: number;
+            /** Return Pct */
+            return_pct: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Strategy Id */
+            strategy_id: string;
+            /** Strategy Kind */
+            strategy_kind: string;
+            /** Strategy Version */
+            strategy_version: string;
+            /** Trade Count */
+            trade_count: number;
+            /** Trigger Count */
+            trigger_count: number;
+            /**
+             * Universe Cutoff Et
+             * Format: time
+             */
+            universe_cutoff_et: string;
+            /** Win Count */
+            win_count: number;
+        };
         /** StrategyResearchReview */
         StrategyResearchReview: {
             classification?: components["schemas"]["CatalystShadowClassification"] | null;
@@ -10921,6 +11147,59 @@ export interface operations {
             };
         };
     };
+    alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlpacaIexCredentialStatus"];
+                };
+            };
+        };
+    };
+    update_alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlpacaIexCredentialUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlpacaIexCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_trading_indicator_presets_api_trading_indicator_presets_get: {
         parameters: {
             query?: {
@@ -12448,6 +12727,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingStrategyConfigDocument-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_strategy_api_trading_strategies__strategy_id__delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backtest_strategy_range_api_trading_strategies__strategy_id__backtest_range_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StrategyRangeBacktestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyRangeBacktestResult"];
                 };
             };
             /** @description Validation Error */
