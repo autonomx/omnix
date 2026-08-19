@@ -12,6 +12,7 @@ class AppearanceSettingsProfile(BaseModel):
     mode: str = "system"
     theme: str = "aurora"
     density: str = "comfortable"
+    text_scale: int = Field(100, ge=80, le=140, alias="textScale")
     reduce_motion: bool = Field(False, alias="reduceMotion")
     live_captions: bool = Field(True, alias="liveCaptions")
 
