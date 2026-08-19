@@ -41,7 +41,9 @@ class FakeRuntime:
                 "bars": {
                     "ABC": [
                         {"t": f"{previous.isoformat()}T20:00:00Z", "o": 8, "c": 8},
-                        {"t": f"{self.session_date.isoformat()}T20:00:00Z", "o": 10.4, "c": 11},
+                        # Deliberately contradict the 09:20 gap. A causal 09:20
+                        # reconstruction must ignore this future 09:30 daily open.
+                        {"t": f"{self.session_date.isoformat()}T20:00:00Z", "o": 7, "c": 11},
                     ]
                 },
                 "next_page_token": None,
@@ -56,7 +58,7 @@ class FakeRuntime:
         return FakeResponse({"bars": {"ABC": bars}, "next_page_token": None})
 
 
-def test_recent_alpaca_reconstruction_builds_explicit_approximate_universe(monkeypatch) -> None:
+def test_recent_alpaca_reconstruction_builds_explicit_approximate_universe_without_daily_open_lookahead(monkeypatch) -> None:
     session_date = date(2026, 8, 18)
     monkeypatch.setattr(
         reconstruction,
