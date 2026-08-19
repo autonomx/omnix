@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS_DOCUMENT: SettingsDocument = {
     parakeet: { baseUrl: 'http://127.0.0.1:5201' },
     fluxKlein: { enabled: false, repoId: 'black-forest-labs/FLUX.2-klein-4B', localDir: '', device: 'cuda', torchDtype: 'bfloat16', preferLocalFiles: true, allowRepoFallback: false },
   },
-  appearance: { mode: 'system', theme: 'aurora', density: 'comfortable', reduceMotion: false, liveCaptions: true },
+  appearance: { mode: 'system', theme: 'aurora', density: 'comfortable', textScale: 100, reduceMotion: false, liveCaptions: true },
   assistant: {
     personalityId: 'omnix-default',
     customPersonality: '',
