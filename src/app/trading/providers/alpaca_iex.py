@@ -60,6 +60,28 @@ def alpaca_iex_configured() -> bool:
     return bool(_api_key() and _api_secret())
 
 
+def alpaca_iex_auth_headers() -> dict[str, str]:
+    """Return Alpaca auth headers for server-side Trading provider adapters only.
+
+    The values are intentionally never exposed through an API response or UI
+    model. This helper lets historical research adapters reuse the same encrypted
+    local credential source as the execution provider without duplicating secret
+    resolution logic.
+    """
+
+    key = _api_key()
+    secret = _api_secret()
+    if not key or not secret:
+        raise ProviderDataUnavailableError(
+            "Alpaca IEX credentials are not configured; set them in the Trading UI "
+            "or configure OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY"
+        )
+    return {
+        "APCA-API-KEY-ID": key,
+        "APCA-API-SECRET-KEY": secret,
+    }
+
+
 def _parse_timestamp(value: Any, *, field: str) -> datetime:
     if not isinstance(value, str) or not value.strip():
         raise ProviderContractError(f"Alpaca IEX snapshot is missing {field} timestamp")
@@ -137,22 +159,13 @@ class AlpacaIexExecutionProvider:
         policy: ExecutionEligibilityPolicy | None = None,
         cancellation=None,
     ) -> ExecutionObservation:
-        key = _api_key()
-        secret = _api_secret()
-        if not key or not secret:
-            raise ProviderDataUnavailableError(
-                "Alpaca IEX credentials are not configured; set them in the Trading UI "
-                "or configure OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY"
-            )
+        headers = alpaca_iex_auth_headers()
 
         binding = self.get_binding(instrument_id)
         response = self.runtime.get(
             f"{self.data_url}/v2/stocks/{binding.provider_symbol}/snapshot",
             params={"feed": "iex"},
-            headers={
-                "APCA-API-KEY-ID": key,
-                "APCA-API-SECRET-KEY": secret,
-            },
+            headers=headers,
             timeout=10,
             cancellation=cancellation,
         )
