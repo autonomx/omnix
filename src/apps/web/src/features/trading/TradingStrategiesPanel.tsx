@@ -26,6 +26,10 @@ const strictV11Config = (): GapPullbackConfig => ({
   strategy_version: '1.1.0',
   structure_interval: '5m',
   execution_interval: '1m',
+  universe_scan_time_et: '09:20:00',
+  auto_archive_daily_universe: true,
+  universe_archive_grace_minutes: 10,
+  universe_discovery_count: 50,
   minimum_gap_pct: '20',
   minimum_price: '0.50',
   maximum_price: '20',
@@ -357,7 +361,7 @@ export function TradingStrategiesPanel() {
       const frozen = await tradingStrategyApi.discoverYahooUniverse({
         universe_id: `yahoo-gappers-${timestamp.slice(0, 10)}-${timestamp.slice(11, 16).replace(':', '')}`,
         evaluation_time: timestamp,
-        count: 50,
+        count: draft.config.universe_discovery_count ?? 50,
         minimum_gap_pct: draft.config.minimum_gap_pct,
         minimum_price: draft.config.minimum_price,
         maximum_price: draft.config.maximum_price,
@@ -594,8 +598,12 @@ export function TradingStrategiesPanel() {
                 </div>
 
                 <div className="trading-config-block">
-                  <header><strong>1. Scanner & liquidity</strong><small>Initial candidate gates</small></header>
+                  <header><strong>1. Scanner & liquidity</strong><small>Initial candidate gates and point-in-time archive</small></header>
                   <div className="trading-strategy-grid">
+                    <label><span>Morning scan time ET<small>research/archive checkpoint</small></span><input type="time" step="60" value={draft.config.universe_scan_time_et ?? '09:20:00'} onChange={(event) => setConfig('universe_scan_time_et', event.target.value)} /></label>
+                    <label className="toggle-field"><span>Auto-archive morning universe<small>evidence only; never authorizes orders</small></span><input type="checkbox" checked={draft.config.auto_archive_daily_universe ?? true} onChange={(event) => setConfig('auto_archive_daily_universe', event.target.checked)} /></label>
+                    <label><span>Archive grace<small>minutes after scan time</small></span><input type="number" min="1" max="60" value={draft.config.universe_archive_grace_minutes ?? 10} onChange={(event) => setConfig('universe_archive_grace_minutes', Number(event.target.value))} /></label>
+                    <label><span>Discovery candidates<small>raw top-gainer count</small></span><input type="number" min="1" max="100" value={draft.config.universe_discovery_count ?? 50} onChange={(event) => setConfig('universe_discovery_count', Number(event.target.value))} /></label>
                     <ConfigNumber label="Minimum gap" suffix="%" step="0.5" value={draft.config.minimum_gap_pct} onChange={(value) => setConfigNumber('minimum_gap_pct', value)} />
                     <ConfigNumber label="Minimum price" suffix="$" step="0.01" value={draft.config.minimum_price} onChange={(value) => setConfigNumber('minimum_price', value)} />
                     <ConfigNumber label="Maximum price" suffix="$" step="0.01" value={draft.config.maximum_price} onChange={(value) => setConfigNumber('maximum_price', value)} />
