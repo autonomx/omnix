@@ -47,6 +47,7 @@ import './TradingLightTheme.css';
 import './TradingChartPan.css';
 import './TradingChartChrome.css';
 import './TradingTypography.css';
+import './TradingToolFullscreen.css';
 
 const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
   { id: 'cursor', label: 'Cursor', glyph: '↖' },
@@ -109,6 +110,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
+  const [toolPanelFullscreen, setToolPanelFullscreen] = useState(false);
   const [sidePanelTab, setSidePanelTab] = useState<TradingSideTab>('watchlist');
   const [paperAccountId, setPaperAccountId] = useState<string | null>(null);
   const persistence = useTradingWorkspacePersistence();
@@ -255,14 +257,25 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   };
 
   const toggleToolPanel = (panel: ToolPanel) => {
+    setToolPanelFullscreen(false);
     setToolPanel((current) => current === panel ? null : panel);
   };
 
   const openPaperTrading = () => {
     setSidePanelTab('paper');
     setPanel('right', true);
+    setToolPanelFullscreen(false);
     setToolPanel(null);
   };
+
+  useEffect(() => {
+    if (!toolPanelFullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setToolPanelFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toolPanelFullscreen]);
 
   const createWorkspace = () => {
     const name = window.prompt('Workspace name', `Workspace ${persistence.workspaces.length + 1}`);
@@ -552,7 +565,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </div>
 
       {toolPanel ? (
-        <section className="trading-tool-drawer" aria-label="Trading analysis tool">
+        <section className={`trading-tool-drawer${toolPanelFullscreen ? ' is-fullscreen' : ''}`} aria-label="Trading analysis tool">
           <header>
             <strong>{toolPanel === 'scanner'
               ? 'Market scanner'
@@ -561,7 +574,10 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 : toolPanel === 'strategies'
                   ? 'Automated strategies'
                   : 'AI market research'}</strong>
-            <button type="button" onClick={() => setToolPanel(null)} aria-label="Close analysis tool">×</button>
+            <div className="trading-tool-drawer-actions">
+              <button type="button" onClick={() => setToolPanelFullscreen((value) => !value)} aria-pressed={toolPanelFullscreen} aria-label={toolPanelFullscreen ? 'Restore analysis tool' : 'Fullscreen analysis tool'}>{toolPanelFullscreen ? 'Restore' : 'Fullscreen'}</button>
+              <button type="button" onClick={() => { setToolPanelFullscreen(false); setToolPanel(null); }} aria-label="Close analysis tool">×</button>
+            </div>
           </header>
           <div>
             {toolPanel === 'scanner' ? <TradingScannerPanel instruments={instruments.data ?? []} /> : null}

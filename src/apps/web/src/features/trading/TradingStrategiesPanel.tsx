@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
+import { TradingStrategyBacktest } from './TradingStrategyBacktest';
+import { TradingStrategyExecutionCredentials } from './TradingStrategyExecutionCredentials';
 import { TRADING_STRATEGY_DEFINITIONS } from './tradingStrategyCatalog';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type {
@@ -14,6 +16,7 @@ import type {
   TradingStrategyConfig,
 } from './tradingStrategyTypes';
 import './TradingStrategiesPanel.css';
+import './TradingStrategyEnhancements.css';
 
 const definition = TRADING_STRATEGY_DEFINITIONS.gap_pullback_v1;
 const STRICT_DILUTION_FLAGS = ['registered_offering', 'atm', 'warrants', 'convertible', 'equity_line'];
@@ -323,6 +326,28 @@ export function TradingStrategiesPanel() {
     }
   };
 
+  const deleteStrategy = async () => {
+    if (!draft || !strategies.some((item) => item.strategy_id === draft.strategy_id)) {
+      setNotice('Save the strategy before deleting it.');
+      return;
+    }
+    if (!window.confirm(`Delete strategy ${draft.strategy_id}? Strategy events/runs are removed; immutable research universes remain available for audit/backtesting.`)) return;
+    setStatus('saving');
+    try {
+      await tradingStrategyApi.delete(draft);
+      setSelectedId('');
+      setDraft(null);
+      setEvents([]);
+      setProtections([]);
+      setUniverse(null);
+      setNotice(`Deleted strategy ${draft.strategy_id}.`);
+      await refresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+      setStatus('error');
+    }
+  };
+
   const discoverYahoo = async () => {
     if (!draft) return;
     setDiscovering(true);
@@ -532,11 +557,14 @@ export function TradingStrategiesPanel() {
               <div className="trading-strategy-header-actions">
                 {draft.config.strategy_version === '1.0.0' ? <button type="button" onClick={upgradeToStrictV11}>Load v1.1 baseline</button> : null}
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
+                {strategies.some((item) => item.strategy_id === draft.strategy_id) ? <button type="button" className="danger" onClick={() => void deleteStrategy()} disabled={status === 'saving'}>Delete</button> : null}
                 <button type="button" className="primary" onClick={() => void save()} disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : 'Save strategy'}</button>
               </div>
             </header>
 
             {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
+
+            <TradingStrategyExecutionCredentials />
 
             <section className="trading-strategy-overview">
               <div><strong>{definition.thesis}</strong><small>Higher low + VWAP reclaim + lower-high break remain mandatory. Structure and execution timeframes are separate, and simultaneous entry-ready names use quality score before scan rank.</small></div>
@@ -638,6 +666,12 @@ export function TradingStrategiesPanel() {
                 </div>
               </div>
             </details>
+
+            {selected ? (
+              <TradingStrategyBacktest strategy={selected} />
+            ) : (
+              <section className="strategy-range-backtest"><header><div><strong>Backtest this strategy</strong><small>Save the strategy first so the backtest is pinned to a persisted configuration revision.</small></div></header></section>
+            )}
 
             <section className="trading-research-workbench">
               <header>
