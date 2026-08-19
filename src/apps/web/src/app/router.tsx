@@ -15,6 +15,7 @@ import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar }
 import { DEFAULT_OMNIX_THEME, type OmnixThemeId } from '../design/appearanceThemes';
 import {
   commitAppearanceSettings,
+  DEFAULT_OMNIX_TEXT_SCALE,
   loadStoredAppearancePreferences,
   OMNIX_APPEARANCE_CHANGE_EVENT,
   resolveAppearanceMode,
@@ -58,6 +59,10 @@ function initialThemeId(): OmnixThemeId {
   return loadStoredAppearancePreferences().theme ?? DEFAULT_OMNIX_THEME;
 }
 
+function initialTextScale(): number {
+  return loadStoredAppearancePreferences().textScale ?? DEFAULT_OMNIX_TEXT_SCALE;
+}
+
 function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
@@ -65,6 +70,7 @@ function OmnixShell() {
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [appearanceMode, setAppearanceMode] = useState<OmnixAppearanceMode>(initialAppearanceMode);
   const [themeId, setThemeId] = useState<OmnixThemeId>(initialThemeId);
+  const [textScale, setTextScale] = useState(initialTextScale);
   const activeModule = moduleFromPath(pathname);
   const modeModules = modeModuleIds.map((moduleId) => moduleById[moduleId]);
   const resolvedAppearanceMode = resolveAppearanceMode(appearanceMode);
@@ -75,10 +81,11 @@ function OmnixShell() {
       mode: appearanceMode,
       theme: themeId,
       density: root.dataset.omnixDensity ?? 'comfortable',
+      textScale,
       reduceMotion: root.classList.contains('omnix-reduce-motion'),
     });
     setColorScheme(detail.resolvedMode);
-  }, [appearanceMode, setColorScheme, themeId]);
+  }, [appearanceMode, setColorScheme, textScale, themeId]);
 
   useEffect(() => {
     const syncAppearance = (event: Event) => {
@@ -86,6 +93,7 @@ function OmnixShell() {
       if (!detail) return;
       setAppearanceMode(detail.mode);
       setThemeId(detail.theme);
+      setTextScale(detail.textScale);
       setColorScheme(detail.resolvedMode);
     };
     window.addEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, syncAppearance);
