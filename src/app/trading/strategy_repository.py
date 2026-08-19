@@ -13,6 +13,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from .gapper_dataset import GapperUniverseSnapshot
 from .strategies.models import GapPullbackConfig, StrategyMode, StrategyRiskProfile
+from .trade_logging import trade_log
 
 
 class TradingStrategyConfigDocument(BaseModel):
@@ -390,7 +391,24 @@ class TradingStrategyRepository:
                 ),
             ).fetchone()
             uow.commit()
-        return inserted is not None
+        persisted = inserted is not None
+        if event.event_type != "research_llm":
+            trade_log(
+                "auto_trading",
+                "strategy_event",
+                persisted=persisted,
+                strategy_id=event.strategy_id,
+                run_id=event.run_id,
+                event_id=event.event_id,
+                instrument_id=event.instrument_id,
+                event_type=event.event_type,
+                state=event.state,
+                reason_code=event.reason_code,
+                observed_at=event.observed_at,
+                idempotency_key=event.idempotency_key,
+                payload=event.payload,
+            )
+        return persisted
 
     def recent_events(self, strategy_id: str, limit: int = 200) -> list[StrategyEvent]:
         with self.uow_factory() as uow:
@@ -493,7 +511,26 @@ class TradingStrategyRepository:
                 ),
             ).fetchone()
             uow.commit()
-            return _protection(row)
+        saved = _protection(row)
+        trade_log(
+            "auto_trading",
+            "protection_saved",
+            strategy_id=saved.strategy_id,
+            protection_id=saved.protection_id,
+            account_id=saved.account_id,
+            instrument_id=saved.instrument_id,
+            entry_order_id=saved.entry_order_id,
+            exit_order_id=saved.exit_order_id,
+            stop_price=saved.stop_price,
+            target_price=saved.target_price,
+            quantity=saved.quantity,
+            status=saved.status,
+            trigger_reason=saved.trigger_reason,
+            revision=saved.revision,
+            created_at=saved.created_at,
+            updated_at=saved.updated_at,
+        )
+        return saved
 
     def list_protections(self, strategy_id: str, *, active_only: bool = True) -> list[StrategyProtection]:
         predicate = "AND status IN ('pending_entry', 'active', 'exit_submitted')" if active_only else ""
