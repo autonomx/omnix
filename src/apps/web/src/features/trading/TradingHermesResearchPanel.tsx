@@ -135,6 +135,39 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
     }
   };
 
+  const reviewValidation = async () => {
+    if (!validation || validation.promotion_allowed) return;
+    const approvedRecommendations = Object.fromEntries(
+      validation.feature_results
+        .filter((item) => item.recommendation !== 'observe_only')
+        .map((item) => [item.feature, item.recommendation]),
+    );
+    if (!Object.keys(approvedRecommendations).length) {
+      setNotice('HTR-14 has not recommended any feature for score/gate authority; there is nothing eligible to promote.');
+      return;
+    }
+    const confirmed = window.confirm(
+      'Approve the validator recommendations as an HTR-15 execution-authority artifact?\n\n' +
+      'This does not change gap_pullback_v1 1.0/1.1. Only an explicitly configured 1.2 strategy can consume the reviewed policy. ' +
+      'The review cannot strengthen any HTR-14 recommendation.',
+    );
+    if (!confirmed) return;
+    setStatus('loading');
+    try {
+      const reviewed = await tradingHermesResearchApi.reviewValidation(
+        validation.validation_id,
+        approvedRecommendations,
+        'Operator reviewed the HTR-14 causal outcome evidence in the Trading strategy panel and accepts the validator recommendations without strengthening them.',
+      );
+      setValidation(reviewed);
+      setNotice(`Reviewed HTR-15 policy saved. Promotion is enabled for policy ${reviewed.policy_version}, but strategy 1.0/1.1 remain research-non-authoritative; only 1.2 may consume it.`);
+      setStatus('idle');
+    } catch (error) {
+      setStatus('error');
+      setNotice(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const candidates = universe?.candidates ?? [];
   const report = audit?.latest_report ?? null;
   const facts = audit?.fact_set ?? null;
@@ -142,6 +175,7 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
   const visibleEvidence = audit?.evidence ?? [];
   const supply = facts?.supply ?? [];
   const reportTimeline = audit?.report_timeline ?? [];
+  const promotableValidation = Boolean(validation && !validation.promotion_allowed && validation.feature_results.some((item) => item.recommendation !== 'observe_only'));
 
   const sourceSummary = useMemo(() => {
     const tiers = new Map<number, number>();
@@ -154,9 +188,9 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
       <header>
         <div>
           <strong>Hermes causal research</strong>
-          <small>Primary-source evidence → iterative follow-ups → immutable facts → shadow features. No order authority.</small>
+          <small>Primary-source evidence → iterative follow-ups → immutable facts → shadow features. 1.0/1.1 never grant HTR order authority.</small>
         </div>
-        <span>HTR · research-only</span>
+        <span>HTR · causal research</span>
       </header>
 
       <div className="htr-controls">
@@ -239,7 +273,19 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
         </>
       ) : strategy.active_universe_id && instrumentId ? <div className="htr-empty">No HTR report is visible at this as-of timestamp. Run research or choose a later audit time.</div> : null}
 
-      {validation ? <section className="htr-validation" data-promoted={validation.promotion_allowed ? 'true' : 'false'}><header><strong>HTR-14 validation</strong><span>{validation.sample_size} outcomes · {validation.exact_sample_size} exact</span></header><p>{validation.promotion_allowed ? 'Promotion explicitly permitted by the stored validation artifact.' : 'Research remains non-authoritative. Automatic validation cannot promote execution gates.'}</p>{validation.feature_results.map((item) => <div key={item.feature}><strong>{item.feature.replaceAll('_', ' ')}</strong><span>{item.recommendation}</span><small>in {String(item.in_sample_effect_r ?? 'N/A')}R · out {String(item.out_of_sample_effect_r ?? 'N/A')}R · n={item.sample_size}</small></div>)}{attribution ? <details><summary>Attribution summary</summary><pre>{JSON.stringify(attribution, null, 2)}</pre></details> : null}</section> : null}
+      {validation ? <section className="htr-validation" data-promoted={validation.promotion_allowed ? 'true' : 'false'}>
+        <header><strong>HTR-14 / HTR-15 validation</strong><span>{validation.sample_size} outcomes · {validation.exact_sample_size} exact</span></header>
+        <p>{validation.promotion_allowed
+          ? 'Reviewed promotion artifact is active. It can affect only explicitly configured strategy 1.2; 1.0/1.1 continue to ignore HTR authority.'
+          : 'Automatic HTR-14 analysis is non-authoritative. A reviewer may preserve or reduce eligible recommendations, never strengthen them.'}</p>
+        {validation.feature_results.map((item) => <div key={item.feature}>
+          <strong>{item.feature.replaceAll('_', ' ')}</strong><span>{item.recommendation}</span>
+          <small>in {String(item.in_sample_effect_r ?? 'N/A')}R · out {String(item.out_of_sample_effect_r ?? 'N/A')}R · 2R Δ {String(item.win_probability_delta ?? 'N/A')} · CI [{String(item.confidence_interval_low ?? 'N/A')}, {String(item.confidence_interval_high ?? 'N/A')}] · n={item.sample_size}</small>
+        </div>)}
+        {promotableValidation ? <button type="button" className="primary" onClick={() => void reviewValidation()} disabled={status === 'loading' || status === 'running'}>Review & approve validator recommendations</button> : null}
+        {!validation.promotion_allowed && !promotableValidation ? <small>No feature currently meets HTR-14 promotion thresholds. Continue collecting causal outcomes.</small> : null}
+        {attribution ? <details><summary>Attribution summary</summary><pre>{JSON.stringify(attribution, null, 2)}</pre></details> : null}
+      </section> : null}
     </section>
   );
 }
