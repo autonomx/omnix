@@ -25,6 +25,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.api import create_trading_router
     from app.trading.catalyst_api import create_trading_catalyst_router
     from app.trading.execution_api import create_trading_execution_router
+    from app.trading.hermes_research_api import create_trading_hermes_research_router
     from app.trading.model_api import create_trading_model_router
     from app.trading.paper_api import create_trading_paper_router
     from app.trading.paper_monitor import register_trading_paper_monitor
@@ -34,6 +35,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.scanner_api import create_trading_scanner_router
     from app.trading.strategy_api import create_trading_strategy_router
     from app.trading.strategy_monitor import register_trading_strategy_monitor
+    from app.trading.strategy_research_monitor import register_trading_strategy_research_monitor
     from app.trading.strategy_universe_archive_monitor import register_trading_strategy_universe_archive_monitor
 
     gateway.include_router(create_trading_router())
@@ -43,6 +45,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     gateway.include_router(create_trading_replay_router())
     gateway.include_router(create_trading_paper_router())
     gateway.include_router(create_trading_research_router())
+    gateway.include_router(create_trading_hermes_research_router())
     gateway.include_router(create_trading_strategy_router())
     gateway.include_router(create_trading_catalyst_router())
     gateway.include_router(create_trading_model_router())
@@ -51,6 +54,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     register_trading_paper_monitor(gateway)
     register_trading_strategy_monitor(gateway)
     register_trading_strategy_universe_archive_monitor(gateway)
+    register_trading_strategy_research_monitor(gateway)
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
 
