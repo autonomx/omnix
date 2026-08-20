@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -24,6 +25,7 @@ from .paper import (
     paper_fill_decision,
     paper_protection_trigger,
 )
+from .research.policy import ResearchPolicyDecision
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from .strategy_risk import size_strategy_entry
@@ -109,6 +111,8 @@ class GapPullbackBacktestSummary(BaseModel):
     portfolio_capacity_rejection_count: int
     risk_rejection_count: int
     risk_rejection_reasons: dict[str, int] = Field(default_factory=dict)
+    research_rejection_count: int = 0
+    research_rejection_reasons: dict[str, int] = Field(default_factory=dict)
     partial_entry_count: int
     win_count: int
     loss_count: int
@@ -598,6 +602,7 @@ def run_gap_pullback_backtest(
     max_concurrent_positions: int = 3,
     risk_profile: StrategyRiskProfile | None = None,
     initial_cash: Decimal = Decimal("100000"),
+    research_policy_resolver: Callable[[str, datetime], ResearchPolicyDecision] | None = None,
 ) -> GapPullbackBacktestResult:
     if assumed_spread_bps < 0:
         raise ValueError("assumed_spread_bps cannot be negative")
@@ -643,8 +648,22 @@ def run_gap_pullback_backtest(
 
     selected: list[GapPullbackBacktestTrade] = []
     risk_rejections: dict[str, int] = {}
+    research_rejections: dict[str, int] = {}
     execution_rejections: list[str] = []
     for candidate, proposal in proposed:
+        if active.strategy_version == "1.2.0":
+            if research_policy_resolver is None:
+                research_reason = "RESEARCH_POLICY_RESOLVER_UNAVAILABLE"
+            else:
+                try:
+                    research_decision = research_policy_resolver(proposal.instrument_id, proposal.entry_time)
+                except Exception:
+                    research_reason = "RESEARCH_POLICY_RESOLUTION_ERROR"
+                else:
+                    research_reason = None if research_decision.allowed else research_decision.reason_code
+            if research_reason is not None:
+                research_rejections[research_reason] = research_rejections.get(research_reason, 0) + 1
+                continue
         snapshot, realized, open_risk, active_symbols = _virtual_snapshot(
             selected,
             entry_time=proposal.entry_time,
@@ -733,6 +752,8 @@ def run_gap_pullback_backtest(
         portfolio_capacity_rejection_count=risk_rejections.get("MAX_POSITIONS", 0),
         risk_rejection_count=sum(risk_rejections.values()),
         risk_rejection_reasons=risk_rejections,
+        research_rejection_count=sum(research_rejections.values()),
+        research_rejection_reasons=research_rejections,
         partial_entry_count=sum(
             1 for trade in selected if trade.entry_fill_quantity < trade.requested_quantity
         ),

@@ -27,6 +27,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
+from .strategy_research_policy import resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_timeframes import proposal_priority, resample_final_bars
 from .trade_logging import trade_log
@@ -505,6 +506,57 @@ class TradingStrategyMonitor:
             )
             if result.state == "entry_ready" and result.signal is not None:
                 self.signal_count += 1
+                if config.config.strategy_version == "1.2.0":
+                    try:
+                        research_decision = await asyncio.to_thread(
+                            resolve_strategy_research_policy,
+                            strategy_version=config.config.strategy_version,
+                            instrument_id=candidate.instrument_id,
+                            decision_at=observed_at,
+                        )
+                    except Exception as exc:
+                        research_decision = None
+                        reason_code = "RESEARCH_POLICY_RESOLUTION_ERROR"
+                        detail = f"{type(exc).__name__}: {exc}"
+                    else:
+                        reason_code = research_decision.reason_code
+                        detail = None
+                    allowed = research_decision is not None and research_decision.allowed
+                    payload = {
+                        "strategy_version": config.config.strategy_version,
+                        "policy_version": (
+                            research_decision.policy_version if research_decision is not None else "trading-research-1"
+                        ),
+                        "authoritative": True,
+                        "allowed": allowed,
+                        "score_adjustment": (
+                            research_decision.score_adjustment if research_decision is not None else 0
+                        ),
+                        "detail": detail,
+                        "decision_at": observed_at,
+                    }
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="research_policy",
+                        state="entry_ready" if allowed else "rejected",
+                        reason_code=reason_code,
+                        observed_at=observed_at,
+                        payload=payload,
+                    )
+                    trade_log(
+                        "auto_trading",
+                        "research_policy_decision",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        instrument_id=candidate.instrument_id,
+                        **payload,
+                        reason_code=reason_code,
+                    )
+                    if not allowed:
+                        self.rejection_count += 1
+                        continue
                 proposals.append(
                     _EntryProposal(
                         candidate=candidate,
