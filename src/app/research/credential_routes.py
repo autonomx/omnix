@@ -34,9 +34,9 @@ def _provider_status(provider: str) -> dict[str, object]:
 def research_credentials_status() -> dict[str, object]:
     return {
         "providers": [_provider_status(provider) for provider in _RESEARCH_CREDENTIAL_PROVIDERS],
-        "legacy_environment_key": bool(
-            secret_store.load_research_provider_secrets().get("brave")
-            and secret_store.research_provider_credential_source("brave") == "legacy_environment"
+        "legacy_environment_key": any(
+            secret_store.research_provider_credential_source(provider) == "legacy_environment"
+            for provider in _RESEARCH_CREDENTIAL_PROVIDERS
         ),
     }
 
