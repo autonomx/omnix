@@ -29,9 +29,8 @@ on:
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
-# TEMPORARY branch-restricted API-contract sync for PR #1494. Restore to read immediately after bot push.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   trading-terminal:
@@ -92,24 +91,6 @@ jobs:
           retention-days: 7
       - name: Generate shared gateway API contract
         run: npm --workspace @omnix/web run api:generate
-      - name: Commit generated API contract on PR 1494 branch
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1494 &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        shell: bash
-        run: |
-          paths=(src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts)
-          if git diff --quiet -- "${paths[@]}"; then
-            echo "Generated API contract already committed."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- "${paths[@]}"
-          git commit -m "trading: sync HTR generated API contract"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Upload generated API contract
         if: always()
         uses: actions/upload-artifact@v4
