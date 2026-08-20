@@ -7,6 +7,7 @@ from typing import Callable
 from app.research.evidence import prepare_evidence_context_items
 from app.research.extraction import ReadablePageExtractor
 from app.research.policy import ResearchPolicy, research_policy_from_env
+from app.research.provider_chain import ProviderFallbackSearchClient, normalize_provider_chain
 from app.research.quick_search import QuickSearchService
 
 from .models import AssistantContextBuildResult, AssistantContextChatRequest, AssistantContextItem
@@ -34,11 +35,21 @@ class AssistantContextService:
             if request.internal_research_policy
             else research_policy_from_env()
         )
+        provider_chain = normalize_provider_chain(
+            request.internal_research_provider,
+            request.internal_research_provider_chain,
+        )
 
-        def create_client(timeout_seconds: float) -> WebSearchClient:
+        def create_client(timeout_seconds: float):
+            if len(provider_chain) > 1:
+                return ProviderFallbackSearchClient(
+                    providers=provider_chain,
+                    timeout_seconds=timeout_seconds,
+                    client_factory=self.web_search_factory,
+                )
             try:
                 return self.web_search_factory(
-                    provider=request.internal_research_provider,
+                    provider=provider_chain[0],
                     timeout_seconds=timeout_seconds,
                 )
             except TypeError:
@@ -64,6 +75,7 @@ class AssistantContextService:
         diagnostics: dict[str, object] = {
             "web_research_mode": request.web_research_mode,
             "research_provider": request.internal_research_provider,
+            "research_provider_chain": request.internal_research_provider_chain,
             "research_compatibility_warnings": request.internal_research_warnings,
             "desktop_requested": desktop_requested,
             "desktop_capture_mode": request.desktop_capture_mode,
