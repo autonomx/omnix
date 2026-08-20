@@ -118,7 +118,11 @@ def create_trading_hermes_research_router(
 
     @router.post("/validate",response_model=ResearchValidationReport)
     async def validate(request: ValidationInput):
-        repo=fact_repository_factory(); values=await asyncio.to_thread(repo.outcomes,request.strategy_id,100000)
+        repo=fact_repository_factory()
+        promoted=await asyncio.to_thread(repo.promoted_validation_report,request.policy_version)
+        if promoted is not None:
+            raise HTTPException(status_code=409,detail="research_policy_version_already_promoted_use_new_version")
+        values=await asyncio.to_thread(repo.outcomes,request.strategy_id,100000)
         report=await asyncio.to_thread(build_validation_report,values,policy_version=request.policy_version,
             minimum_sample=request.minimum_sample,minimum_exact_sample=request.minimum_exact_sample)
         await asyncio.to_thread(repo.save_validation_report,report); return report
@@ -126,6 +130,9 @@ def create_trading_hermes_research_router(
     @router.post("/validation/review",response_model=ResearchValidationReport)
     async def review_validation(request: ReviewValidationInput):
         repo=fact_repository_factory()
+        promoted=await asyncio.to_thread(repo.promoted_validation_report,request.policy_version)
+        if promoted is not None:
+            raise HTTPException(status_code=409,detail="research_policy_version_already_promoted_use_new_version")
         source=await asyncio.to_thread(repo.latest_validation_report,request.policy_version)
         if source is None:
             raise HTTPException(status_code=404,detail="research_validation_not_found")
@@ -152,7 +159,10 @@ def create_trading_hermes_research_router(
     async def policy_status(instrument_id: str,strategy_version: str="1.1.0",decision_at: datetime | None=None,policy_version: str="trading-research-1"):
         at=(decision_at or datetime.now(timezone.utc)).astimezone(timezone.utc); repo=fact_repository_factory()
         features=await asyncio.to_thread(repo.research_features_as_of,instrument_id,at)
-        validation=await asyncio.to_thread(repo.latest_validation_report,policy_version)
+        validation=await asyncio.to_thread(
+            repo.promoted_validation_report if strategy_version == "1.2.0" else repo.latest_validation_report,
+            policy_version,
+        )
         decision=evaluate_research_policy(strategy_version=strategy_version,features=features,validation=validation,policy_version=policy_version)
         return ResearchPolicyStatus(strategy_version=strategy_version,decision_at=at,features=features,validation=validation,decision=decision)
 

@@ -527,6 +527,12 @@ class TradingStrategyMonitor:
                         reason_code = quality_gate.reason_code
                         detail = None
                     allowed = quality_gate.allowed if research_decision is not None else False
+                    if allowed and research_decision is not None and result.signal is not None:
+                        adjusted_quality = quality_gate.adjusted_quality_score
+                        result = result.model_copy(update={
+                            "features": result.features.model_copy(update={"quality_score": adjusted_quality}),
+                            "signal": result.signal.model_copy(update={"quality_score": adjusted_quality}),
+                        })
                     payload = {
                         "strategy_version": config.config.strategy_version,
                         "policy_version": (

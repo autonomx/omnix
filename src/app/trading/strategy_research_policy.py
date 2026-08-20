@@ -122,7 +122,7 @@ def resolve_strategy_research_policy(
 
     repository = fact_repository or default_fact_repository()
     features = repository.research_features_as_of(instrument_id, decision)
-    validation = repository.latest_validation_report(policy_version)
+    validation = repository.promoted_validation_report(policy_version)
     return evaluate_research_policy(
         strategy_version=strategy_version,
         features=features,

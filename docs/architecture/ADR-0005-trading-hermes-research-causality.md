@@ -25,7 +25,7 @@ feature_projection      = research-features-1
 
 `1.0.0` and `1.1.0` never read authoritative HTR policy state and remain replay-compatible with their historical `legacy-1` research semantics. A `1.2.0` decision fails closed when the causal research projection is unavailable or when no reviewed promotion artifact exists.
 
-A reviewed artifact may preserve or reduce the authority recommended by HTR-14; it may never strengthen an automatic recommendation. The deterministic recommendation semantics are:
+A reviewed artifact may preserve or reduce the authority recommended by HTR-14; it may never strengthen an automatic recommendation. The **first reviewed promotion artifact is permanently pinned to its `research_policy_version`**. Further outcome analysis may continue, but changing authoritative recommendations requires a new research-policy version (and a new strategy version whenever authorization semantics differ); the existing policy is never silently redefined. The deterministic recommendation semantics are:
 
 - `observe_only` — recorded for analysis, no decision effect;
 - `score_only` — favorable/unfavorable evidence contributes `+1/-1` to the existing 0–10 setup-quality score;

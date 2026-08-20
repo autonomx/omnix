@@ -18,6 +18,8 @@ _FEATURES = (
 _NEGATIVE_FEATURES = {"immediate_supply_risk", "unresolved_supply"}
 _EXACT_MARKET = {"captured", "captured_point_in_time", "exact", "paper-execution-v2"}
 _EXACT_RESEARCH = {"captured_exact", "exact"}
+_MIN_PROMOTION_SAMPLE = 100
+_MIN_PROMOTION_EXACT_SAMPLE = 50
 
 
 def _r(row: dict[str, Any]) -> Decimal | None:
@@ -158,6 +160,8 @@ def build_validation_report(
     minimum_exact_sample: int = 50,
 ) -> ResearchValidationReport:
     """Produce HTR-14 evidence without granting execution authority."""
+    minimum_sample = max(_MIN_PROMOTION_SAMPLE, int(minimum_sample))
+    minimum_exact_sample = max(_MIN_PROMOTION_EXACT_SAMPLE, int(minimum_exact_sample))
     chronological = sorted(
         outcomes,
         key=lambda row: (str(row.get("session_date") or ""), str(row.get("outcome_id") or "")),
@@ -177,8 +181,14 @@ def build_validation_report(
         exact_effect = _effect(exact, key)
         ci_low, ci_high = _confidence_interval(outcomes, key)
         two_r_delta = _two_r_probability_delta(outcomes, key)
-        n = sum(1 for row in outcomes if key in (row.get("features") or {}))
-        exact_n = sum(1 for row in exact if key in (row.get("features") or {}))
+        n = sum(
+            1 for row in outcomes
+            if isinstance((row.get("features") or {}).get(key), bool) and _r(row) is not None
+        )
+        exact_n = sum(
+            1 for row in exact
+            if isinstance((row.get("features") or {}).get(key), bool) and _r(row) is not None
+        )
         positive_symbols, usable_symbols = _symbol_stability(exact, key)
         recommendation = _recommended_level(
             n=n, exact_n=exact_n, ins=ins, outs=outs, exact_effect=exact_effect,
@@ -230,6 +240,8 @@ def build_validation_report(
             "R outcomes use the backtest/paper execution models already applied by the originating run; no raw-price hindsight labels are injected.",
             "Chronological holdout, exact/captured subset, 2R probability, approximate 95% uncertainty, and per-symbol direction are evaluated where data exists.",
             "Recommended authority tiers are statistical candidates only; review may preserve or reduce, never strengthen, those tiers.",
+            "Promotion recommendation floors are at least 100 labeled observations and 50 exact/captured labeled observations per feature; caller inputs may raise but never lower those floors.",
+            "Per-feature sample counts exclude missing/unknown feature values and outcomes without an R label.",
         ),
         immutable_fingerprint=fp,
     )

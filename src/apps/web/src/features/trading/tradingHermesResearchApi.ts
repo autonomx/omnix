@@ -215,6 +215,9 @@ export const tradingHermesResearchApi = {
     method: 'POST',
     body: JSON.stringify({ strategy_id: strategyId, policy_version: 'trading-research-1', minimum_sample: 100, minimum_exact_sample: 50 }),
   }),
+  validation: (policyVersion = 'trading-research-1') => requestJson<HermesResearchValidation | null>(
+    `/api/trading/hermes-research/validation/${encodeURIComponent(policyVersion)}`,
+  ),
   reviewValidation: (
     sourceValidationId: string,
     approvedRecommendations: Record<string, ResearchRecommendation>,

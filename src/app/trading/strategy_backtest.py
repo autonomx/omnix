@@ -638,20 +638,13 @@ def run_gap_pullback_backtest(
         attempts.append(attempt)
         if attempt.trade is not None:
             proposed.append((candidate, attempt.trade))
-    proposed.sort(
-        key=lambda item: proposal_priority(
-            observed_at=item[1].entry_time,
-            quality_score=item[1].quality_score,
-            discovery_rank=item[0].discovery_rank,
-            instrument_id=item[1].instrument_id,
-        )
-    )
-
     selected: list[GapPullbackBacktestTrade] = []
     risk_rejections: dict[str, int] = {}
     research_rejections: dict[str, int] = {}
     execution_rejections: list[str] = []
+    ranked_proposals: list[tuple[object, GapPullbackBacktestTrade, int]] = []
     for candidate, proposal in proposed:
+        adjusted_quality_score = proposal.quality_score
         if active.strategy_version == "1.2.0":
             if research_policy_resolver is None:
                 research_reason = "RESEARCH_POLICY_RESOLVER_UNAVAILABLE"
@@ -667,9 +660,21 @@ def run_gap_pullback_backtest(
                         minimum_quality_score=active.minimum_quality_score,
                     )
                     research_reason = None if quality_gate.allowed else quality_gate.reason_code
+                    adjusted_quality_score = quality_gate.adjusted_quality_score
             if research_reason is not None:
                 research_rejections[research_reason] = research_rejections.get(research_reason, 0) + 1
                 continue
+        ranked_proposals.append((candidate, proposal, adjusted_quality_score))
+    ranked_proposals.sort(
+        key=lambda item: proposal_priority(
+            observed_at=item[1].entry_time,
+            quality_score=item[2],
+            discovery_rank=item[0].discovery_rank,
+            instrument_id=item[1].instrument_id,
+        )
+    )
+
+    for candidate, proposal, adjusted_quality_score in ranked_proposals:
         snapshot, realized, open_risk, active_symbols = _virtual_snapshot(
             selected,
             entry_time=proposal.entry_time,
@@ -685,7 +690,7 @@ def run_gap_pullback_backtest(
             target_price=proposal.signal_entry_price + proposal.signal_risk_per_share * active.reward_multiple,
             risk_per_share=proposal.signal_risk_per_share,
             reason_code="FAILED_SELL_OFF_CONFIRMED",
-            quality_score=proposal.quality_score,
+            quality_score=adjusted_quality_score,
         )
         decision = size_strategy_entry(
             snapshot,
@@ -715,7 +720,7 @@ def run_gap_pullback_backtest(
             if sized.rejection_reason:
                 execution_rejections.append(sized.rejection_reason)
             continue
-        selected.append(sized.trade)
+        selected.append(sized.trade.model_copy(update={"quality_score": adjusted_quality_score}))
 
     trigger_count = sum(1 for attempt in attempts if attempt.triggered)
     no_next_bar_count = sum(

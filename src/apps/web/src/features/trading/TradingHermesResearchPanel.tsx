@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingHermesResearchApi } from './tradingHermesResearchApi';
-import type { HermesResearchAudit, HermesResearchValidation } from './tradingHermesResearchApi';
+import type { HermesResearchAudit, HermesResearchValidation, ResearchRecommendation } from './tradingHermesResearchApi';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type { GapperUniverse, TradingStrategyConfig } from './tradingStrategyTypes';
 import './TradingHermesResearchPanel.css';
+
+const RECOMMENDATION_LEVELS: ResearchRecommendation[] = ['observe_only', 'score_only', 'soft_gate', 'hard_gate'];
 
 const COVERAGE_LABELS: Array<[keyof NonNullable<HermesResearchAudit['latest_report']>['coverage'], string]> = [
   ['sec', 'SEC checked'],
@@ -48,6 +50,8 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
   const [audit, setAudit] = useState<HermesResearchAudit | null>(null);
   const [validation, setValidation] = useState<HermesResearchValidation | null>(null);
   const [attribution, setAttribution] = useState<Record<string, unknown> | null>(null);
+  const [reviewSelections, setReviewSelections] = useState<Record<string, ResearchRecommendation>>({});
+  const [reviewNote, setReviewNote] = useState('');
   const [asOf, setAsOf] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'running' | 'error'>('idle');
   const [notice, setNotice] = useState('Select a candidate to inspect exactly what Omnix knew and when it knew it.');
@@ -124,6 +128,8 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
         tradingHermesResearchApi.attribution(strategy.strategy_id),
       ]);
       setValidation(nextValidation);
+      setReviewSelections(Object.fromEntries(nextValidation.feature_results.map((item) => [item.feature, item.recommendation])));
+      setReviewNote('');
       setAttribution(nextAttribution);
       setNotice(nextValidation.promotion_allowed
         ? 'A reviewed validation artifact permits promotion for this policy.'
@@ -138,18 +144,20 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
   const reviewValidation = async () => {
     if (!validation || validation.promotion_allowed) return;
     const approvedRecommendations = Object.fromEntries(
-      validation.feature_results
-        .filter((item) => item.recommendation !== 'observe_only')
-        .map((item) => [item.feature, item.recommendation]),
-    );
-    if (!Object.keys(approvedRecommendations).length) {
-      setNotice('HTR-14 has not recommended any feature for score/gate authority; there is nothing eligible to promote.');
+      validation.feature_results.map((item) => [item.feature, reviewSelections[item.feature] ?? 'observe_only']),
+    ) as Record<string, ResearchRecommendation>;
+    if (!Object.values(approvedRecommendations).some((value) => value !== 'observe_only')) {
+      setNotice('Select at least one HTR-14 recommendation for score/gate authority. All other features may remain observe-only.');
+      return;
+    }
+    const note = reviewNote.trim();
+    if (note.length < 10) {
+      setNotice('Add a review note of at least 10 characters explaining the promotion decision.');
       return;
     }
     const confirmed = window.confirm(
-      'Approve the validator recommendations as an HTR-15 execution-authority artifact?\n\n' +
-      'This does not change gap_pullback_v1 1.0/1.1. Only an explicitly configured 1.2 strategy can consume the reviewed policy. ' +
-      'The review cannot strengthen any HTR-14 recommendation.',
+      'Create this reviewed HTR-15 execution-authority artifact?\n\n' +
+      'This pins the selected recommendations to trading-research-1. It does not change gap_pullback_v1 1.0/1.1; only an explicitly configured 1.2 strategy can consume it.',
     );
     if (!confirmed) return;
     setStatus('loading');
@@ -157,7 +165,7 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
       const reviewed = await tradingHermesResearchApi.reviewValidation(
         validation.validation_id,
         approvedRecommendations,
-        'Operator reviewed the HTR-14 causal outcome evidence in the Trading strategy panel and accepts the validator recommendations without strengthening them.',
+        note,
       );
       setValidation(reviewed);
       setNotice(`Reviewed HTR-15 policy saved. Promotion is enabled for policy ${reviewed.policy_version}, but strategy 1.0/1.1 remain research-non-authoritative; only 1.2 may consume it.`);
@@ -278,11 +286,22 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
         <p>{validation.promotion_allowed
           ? 'Reviewed promotion artifact is active. It can affect only explicitly configured strategy 1.2; 1.0/1.1 continue to ignore HTR authority.'
           : 'Automatic HTR-14 analysis is non-authoritative. A reviewer may preserve or reduce eligible recommendations, never strengthen them.'}</p>
-        {validation.feature_results.map((item) => <div key={item.feature}>
-          <strong>{item.feature.replaceAll('_', ' ')}</strong><span>{item.recommendation}</span>
-          <small>in {String(item.in_sample_effect_r ?? 'N/A')}R · out {String(item.out_of_sample_effect_r ?? 'N/A')}R · 2R Δ {String(item.win_probability_delta ?? 'N/A')} · CI [{String(item.confidence_interval_low ?? 'N/A')}, {String(item.confidence_interval_high ?? 'N/A')}] · n={item.sample_size}</small>
-        </div>)}
-        {promotableValidation ? <button type="button" className="primary" onClick={() => void reviewValidation()} disabled={status === 'loading' || status === 'running'}>Review & approve validator recommendations</button> : null}
+        {validation.feature_results.map((item) => {
+          const maximum = RECOMMENDATION_LEVELS.indexOf(item.recommendation);
+          return <div key={item.feature}>
+            <strong>{item.feature.replaceAll('_', ' ')}</strong>
+            {validation.promotion_allowed ? <span>{item.recommendation}</span> : <select
+              aria-label={`Reviewed authority for ${item.feature}`}
+              value={reviewSelections[item.feature] ?? 'observe_only'}
+              onChange={(event) => setReviewSelections((current) => ({ ...current, [item.feature]: event.target.value as ResearchRecommendation }))}
+            >{RECOMMENDATION_LEVELS.slice(0, maximum + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select>}
+            <small>validator ≤ {item.recommendation} · in {String(item.in_sample_effect_r ?? 'N/A')}R · out {String(item.out_of_sample_effect_r ?? 'N/A')}R · 2R Δ {String(item.win_probability_delta ?? 'N/A')} · CI [{String(item.confidence_interval_low ?? 'N/A')}, {String(item.confidence_interval_high ?? 'N/A')}] · n={item.sample_size}</small>
+          </div>;
+        })}
+        {promotableValidation ? <>
+          <label className="htr-review-note"><span>Promotion review note</span><textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="Explain why these validated features should become authoritative in strategy 1.2." /></label>
+          <button type="button" className="primary" onClick={() => void reviewValidation()} disabled={status === 'loading' || status === 'running'}>Create reviewed HTR-15 policy</button>
+        </> : null}
         {!validation.promotion_allowed && !promotableValidation ? <small>No feature currently meets HTR-14 promotion thresholds. Continue collecting causal outcomes.</small> : null}
         {attribution ? <details><summary>Attribution summary</summary><pre>{JSON.stringify(attribution, null, 2)}</pre></details> : null}
       </section> : null}

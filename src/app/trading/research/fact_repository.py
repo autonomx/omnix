@@ -130,6 +130,13 @@ class TradingFactRepository:
                   json.dumps([x.model_dump(mode="json") for x in item.feature_results]),item.promotion_allowed,json.dumps(list(item.notes)),item.immutable_fingerprint)).fetchone();uow.commit()
         return row is not None
 
+    def promoted_validation_report(self, policy_version: str) -> ResearchValidationReport | None:
+        with self.uow_factory() as uow:
+            r=uow.connection.execute("SELECT validation_id,policy_version,generated_at,sample_size,exact_sample_size,feature_results,promotion_allowed,notes,immutable_fingerprint FROM omnix_trading_research_validation_reports WHERE workspace_id=%s AND policy_version=%s AND promotion_allowed=TRUE ORDER BY generated_at ASC LIMIT 1",(self.context.workspace_id,policy_version)).fetchone()
+        if r is None:return None
+        return ResearchValidationReport(validation_id=r[0],policy_version=r[1],generated_at=r[2],sample_size=r[3],exact_sample_size=r[4],
+            feature_results=tuple(ValidationFeatureResult.model_validate(x) for x in r[5]),promotion_allowed=r[6],notes=tuple(r[7]),immutable_fingerprint=r[8])
+
     def latest_validation_report(self, policy_version: str) -> ResearchValidationReport | None:
         with self.uow_factory() as uow:
             r=uow.connection.execute("SELECT validation_id,policy_version,generated_at,sample_size,exact_sample_size,feature_results,promotion_allowed,notes,immutable_fingerprint FROM omnix_trading_research_validation_reports WHERE workspace_id=%s AND policy_version=%s ORDER BY generated_at DESC LIMIT 1",(self.context.workspace_id,policy_version)).fetchone()
