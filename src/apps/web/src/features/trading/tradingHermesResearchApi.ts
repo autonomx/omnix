@@ -1,4 +1,5 @@
 export type ResearchCoverageState = 'unchecked' | 'complete' | 'failed' | 'unresolved';
+export type ResearchRecommendation = 'observe_only' | 'score_only' | 'soft_gate' | 'hard_gate';
 
 export interface HermesResearchCoverage {
   sec: ResearchCoverageState;
@@ -158,7 +159,10 @@ export interface HermesResearchValidation {
     exact_sample_size: number;
     in_sample_effect_r: string | number | null;
     out_of_sample_effect_r: string | number | null;
-    recommendation: 'observe_only' | 'score_only' | 'soft_gate' | 'hard_gate';
+    win_probability_delta: string | number | null;
+    confidence_interval_low: string | number | null;
+    confidence_interval_high: string | number | null;
+    recommendation: ResearchRecommendation;
     reason: string;
   }>;
   promotion_allowed: boolean;
@@ -210,5 +214,19 @@ export const tradingHermesResearchApi = {
   validate: (strategyId: string) => requestJson<HermesResearchValidation>('/api/trading/hermes-research/validate', {
     method: 'POST',
     body: JSON.stringify({ strategy_id: strategyId, policy_version: 'trading-research-1', minimum_sample: 100, minimum_exact_sample: 50 }),
+  }),
+  reviewValidation: (
+    sourceValidationId: string,
+    approvedRecommendations: Record<string, ResearchRecommendation>,
+    reviewNote: string,
+  ) => requestJson<HermesResearchValidation>('/api/trading/hermes-research/validation/review', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_validation_id: sourceValidationId,
+      policy_version: 'trading-research-1',
+      approved_recommendations: approvedRecommendations,
+      review_note: reviewNote,
+      confirm_execution_authority: true,
+    }),
   }),
 };
