@@ -11172,6 +11172,56 @@
         "title": "RetryState",
         "type": "object"
       },
+      "ReviewValidationInput": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_recommendations": {
+            "additionalProperties": {
+              "enum": [
+                "observe_only",
+                "score_only",
+                "soft_gate",
+                "hard_gate"
+              ],
+              "type": "string"
+            },
+            "maxProperties": 20,
+            "minProperties": 1,
+            "title": "Approved Recommendations",
+            "type": "object"
+          },
+          "confirm_execution_authority": {
+            "const": true,
+            "title": "Confirm Execution Authority",
+            "type": "boolean"
+          },
+          "policy_version": {
+            "default": "trading-research-1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "review_note": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Review Note",
+            "type": "string"
+          },
+          "source_validation_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Source Validation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_validation_id",
+          "approved_recommendations",
+          "review_note",
+          "confirm_execution_authority"
+        ],
+        "title": "ReviewValidationInput",
+        "type": "object"
+      },
       "RpgFeatureOptions": {
         "properties": {
           "autosave": {
@@ -20598,6 +20648,47 @@
           }
         },
         "summary": "Validate",
+        "tags": [
+          "trading-hermes-research"
+        ]
+      }
+    },
+    "/api/trading/hermes-research/validation/review": {
+      "post": {
+        "operationId": "review_validation_api_trading_hermes_research_validation_review_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewValidationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchValidationReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Validation",
         "tags": [
           "trading-hermes-research"
         ]

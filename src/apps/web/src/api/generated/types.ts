@@ -1480,6 +1480,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/hermes-research/validation/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Validation */
+        post: operations["review_validation_api_trading_hermes_research_validation_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/hermes-research/validation/{policy_version}": {
         parameters: {
             query?: never;
@@ -7139,6 +7156,27 @@ export interface components {
              */
             policy: string;
         };
+        /** ReviewValidationInput */
+        ReviewValidationInput: {
+            /** Approved Recommendations */
+            approved_recommendations: {
+                [key: string]: "observe_only" | "score_only" | "soft_gate" | "hard_gate";
+            };
+            /**
+             * Confirm Execution Authority
+             * @constant
+             */
+            confirm_execution_authority: true;
+            /**
+             * Policy Version
+             * @default trading-research-1
+             */
+            policy_version: string;
+            /** Review Note */
+            review_note: string;
+            /** Source Validation Id */
+            source_validation_id: string;
+        };
         /** RpgFeatureOptions */
         RpgFeatureOptions: {
             /**
@@ -12472,6 +12510,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ValidationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchValidationReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_validation_api_trading_hermes_research_validation_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewValidationInput"];
             };
         };
         responses: {
