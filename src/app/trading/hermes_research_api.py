@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,6 +16,7 @@ from .research.fact_repository import TradingFactRepository, default_fact_reposi
 from .research.outcome_dataset import attribution_summary
 from .research.policy import ResearchPolicyDecision, evaluate_research_policy
 from .research.repository import TradingResearchRepository, default_research_repository
+from .research.review import Recommendation, create_reviewed_validation_report
 from .research.shadow_repository import TradingShadowResearchRepository, default_shadow_repository
 from .research.validation import build_validation_report
 
@@ -53,6 +54,15 @@ class ValidationInput(BaseModel):
     policy_version: str="trading-research-1"
     minimum_sample: int=Field(default=100,ge=20,le=100000)
     minimum_exact_sample: int=Field(default=50,ge=10,le=100000)
+
+
+class ReviewValidationInput(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    source_validation_id: str=Field(min_length=3,max_length=200)
+    policy_version: str="trading-research-1"
+    approved_recommendations: dict[str, Recommendation]=Field(min_length=1,max_length=20)
+    review_note: str=Field(min_length=10,max_length=2000)
+    confirm_execution_authority: Literal[True]
 
 
 class ResearchPolicyStatus(BaseModel):
@@ -112,6 +122,28 @@ def create_trading_hermes_research_router(
         report=await asyncio.to_thread(build_validation_report,values,policy_version=request.policy_version,
             minimum_sample=request.minimum_sample,minimum_exact_sample=request.minimum_exact_sample)
         await asyncio.to_thread(repo.save_validation_report,report); return report
+
+    @router.post("/validation/review",response_model=ResearchValidationReport)
+    async def review_validation(request: ReviewValidationInput):
+        repo=fact_repository_factory()
+        source=await asyncio.to_thread(repo.latest_validation_report,request.policy_version)
+        if source is None:
+            raise HTTPException(status_code=404,detail="research_validation_not_found")
+        if source.validation_id != request.source_validation_id:
+            raise HTTPException(status_code=409,detail="research_validation_not_latest")
+        if source.promotion_allowed:
+            raise HTTPException(status_code=409,detail="research_validation_already_promoted")
+        try:
+            reviewed=await asyncio.to_thread(
+                create_reviewed_validation_report,
+                source,
+                approved_recommendations=request.approved_recommendations,
+                review_note=request.review_note,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422,detail=str(exc)) from exc
+        await asyncio.to_thread(repo.save_validation_report,reviewed)
+        return reviewed
 
     @router.get("/validation/{policy_version}",response_model=ResearchValidationReport | None)
     async def validation(policy_version: str): return await asyncio.to_thread(fact_repository_factory().latest_validation_report,policy_version)
