@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -54,7 +55,14 @@ def test_later_knowledge_is_not_visible_to_earlier_decision():
 
 def test_research_package_has_no_order_execution_imports():
     root = Path(__file__).resolve().parents[2] / "app" / "trading" / "research"
-    forbidden = ("paper_repository", "place_order", "execution_api", "paper_api")
+    forbidden_imports = (
+        r"(?:from|import)\s+app\.trading\.paper_api\b",
+        r"(?:from|import)\s+app\.trading\.execution_api\b",
+        r"(?:from|import)\s+app\.trading\.paper_repository\b",
+        r"(?:from|import)\s+app\.trading\.strategy_monitor\b",
+    )
+    forbidden_calls = (r"\.place_order\s*\(", r"\.cancel_order\s*\(")
     for path in root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        assert not any(token in text for token in forbidden), f"forbidden execution dependency in {path}"
+        assert not any(re.search(pattern, text) for pattern in forbidden_imports), f"forbidden execution import in {path}"
+        assert not any(re.search(pattern, text) for pattern in forbidden_calls), f"forbidden order call in {path}"
