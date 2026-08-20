@@ -114,7 +114,7 @@ describe('CharacterManagementPanel dashboard', () => {
         sessions: [{ id: 'session-1', title: 'Hello Maya', message_count: 4, character_message_count: 2, created_at: character.created_at, updated_at: character.updated_at }],
         generated_at: character.updated_at,
       });
-      if (path === '/api/characters/character%3Amaya/avatar-pack') return Response.json(pack);
+      if (path === '/api/characters/character%3Amaya/avatar-pack/optional') return Response.json(pack);
       if (path === '/api/voice-profiles/voice-profile-maya/governance') return Response.json({
         asset_id: 'voice-profile-maya',
         subject_owner: 'Maya',
