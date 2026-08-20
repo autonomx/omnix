@@ -61,7 +61,19 @@ jobs:
           github.event.pull_request.number == 1494 &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        run: python scripts/apply_htr_final_completion.py
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply_htr_final_completion.py')
+          text = path.read_text(encoding='utf-8')
+          old = '_candidate(rejected, 2).model_copy(update={"gap_pct": Decimal("5")})'
+          new = '_candidate(rejected, 2).model_copy(update={"premarket_price": Decimal("8.4"), "gap_pct": Decimal("5")})'
+          if old not in text:
+              raise SystemExit('fixture anchor not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          python scripts/apply_htr_final_completion.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -106,10 +118,6 @@ jobs:
         shell: bash
         run: |
           git rm scripts/apply_htr_final_completion.py
-          if git diff --quiet && git diff --cached --quiet; then
-            echo "Final HTR patch already applied."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- \
@@ -120,6 +128,10 @@ jobs:
             src/tests/trading/test_trading_research_htr15_completion.py \
             src/apps/web/src/api/generated/openapi.json \
             src/apps/web/src/api/generated/types.ts
+          if git diff --cached --quiet; then
+            echo "Final HTR patch already applied."
+            exit 0
+          fi
           git commit -m "trading: complete HTR morning funnel and outcome dataset"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Upload generated API contract
