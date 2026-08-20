@@ -22,17 +22,17 @@ on:
       - "src/app/persistence/migrations/*_trading_*.sql"
       - "src/tests/trading/**"
       - "docs/architecture/ADR-0004-omnix-trading-terminal.md"
+      - "docs/architecture/ADR-0005-trading-hermes-research-causality.md"
       - "docs/architecture/OMNIX_TRADING_**"
       - "docs/plans/omnix_trading_terminal_roadmap.md"
       - "docs/plans/omnix_trading_terminal_roadmap_review.md"
+      - "docs/plans/omnix_trading_hermes_research_roadmap.md"
       - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
-# TEMPORARY same-repository PR #1494 qualification write. The job only pushes
-# after every Trading gate and API generation passes. Restore to read afterward.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   trading-terminal:
@@ -55,25 +55,6 @@ jobs:
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
           test "${actual}" = "${expected}"
-      - name: Apply staged final HTR patch
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1494 &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('scripts/apply_htr_final_completion.py')
-          text = path.read_text(encoding='utf-8')
-          old = '_candidate(rejected, 2).model_copy(update={"gap_pct": Decimal("5")})'
-          new = '_candidate(rejected, 2).model_copy(update={"premarket_price": Decimal("8.4"), "gap_pct": Decimal("5")})'
-          if old not in text:
-              raise SystemExit('fixture anchor not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-          python scripts/apply_htr_final_completion.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -94,6 +75,9 @@ jobs:
       - name: Trading TypeScript typecheck
         run: npm --workspace @omnix/web run typecheck:trading
       - name: Install Trading browser
+        # The hosted Ubuntu runner already carries Chromium runtime libraries.
+        # Avoid apt-based --with-deps here: it is redundant and can hang on a
+        # transient package-mirror lock, preventing the actual Trading gates.
         run: npx playwright install chromium
       - name: Trading Playwright smoke
         run: npm --workspace @omnix/web run test:e2e:trading
@@ -109,31 +93,6 @@ jobs:
           retention-days: 7
       - name: Generate shared gateway API contract
         run: npm --workspace @omnix/web run api:generate
-      - name: Commit qualified final HTR patch on PR 1494 branch
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1494 &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        shell: bash
-        run: |
-          git rm -f scripts/apply_htr_final_completion.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- \
-            src/app/trading/research/coordinator.py \
-            src/app/trading/research/outcome_dataset.py \
-            src/app/trading/strategy_backtest.py \
-            src/app/trading/strategy_api.py \
-            src/tests/trading/test_trading_research_htr15_completion.py \
-            src/apps/web/src/api/generated/openapi.json \
-            src/apps/web/src/api/generated/types.ts
-          if git diff --cached --quiet; then
-            echo "Final HTR patch already applied."
-            exit 0
-          fi
-          git commit -m "trading: complete HTR morning funnel and outcome dataset"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Upload generated API contract
         if: always()
         uses: actions/upload-artifact@v4
@@ -144,5 +103,5 @@ jobs:
             src/apps/web/src/api/generated/types.ts
           if-no-files-found: error
           retention-days: 7
-      - name: Verify generated API contract is committed in working tree
+      - name: Verify generated API contract is committed
         run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
