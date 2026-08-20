@@ -29,9 +29,8 @@ on:
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
-# TEMPORARY HTR execution parity patch for PR #1494. The connector restores read-only after the source push.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   trading-terminal:
@@ -54,28 +53,6 @@ jobs:
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
           test "${actual}" = "${expected}"
-      # BEGIN TEMP HTR EXECUTION PATCH
-      - name: Apply HTR execution parity on PR 1494 branch
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1494 &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        shell: bash
-        run: |
-          cp .github/workflows/trading-terminal.yml /tmp/trading-terminal.yml
-          python scripts/apply_htr_execution_integration.py
-          cp /tmp/trading-terminal.yml .github/workflows/trading-terminal.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No HTR parity changes required."
-          else
-            git commit -m "trading: integrate validated HTR policy with execution and backtests"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
-      # END TEMP HTR EXECUTION PATCH
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
