@@ -63,7 +63,7 @@ describe('explicit live speech synthesis options', () => {
       clause_pause: 'long',
       onset_policy: {
         desired_perceived_onset_ms: 650,
-        maximum_additional_delay_ms: 350,
+        maximum_additional_delay_ms: 120,
       },
     });
     expect(options.pronunciationLexicon).toEqual([

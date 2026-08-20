@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
+import { tradingHermesResearchApi } from './tradingHermesResearchApi';
 import { TradingStrategyBacktest } from './TradingStrategyBacktest';
 import { TradingStrategyExecutionCredentials } from './TradingStrategyExecutionCredentials';
 import { TRADING_STRATEGY_DEFINITIONS } from './tradingStrategyCatalog';
@@ -197,6 +198,7 @@ export function TradingStrategiesPanel() {
   const [capturingEvidence, setCapturingEvidence] = useState(false);
   const [freezing, setFreezing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [htrPromotionAllowed, setHtrPromotionAllowed] = useState(false);
 
   const selected = useMemo(
     () => strategies.find((item) => item.strategy_id === selectedId) ?? null,
@@ -259,6 +261,14 @@ export function TradingStrategiesPanel() {
   useEffect(() => { void refresh(); }, []);
 
   useEffect(() => {
+    let alive = true;
+    void tradingHermesResearchApi.validation().then((report) => {
+      if (alive) setHtrPromotionAllowed(Boolean(report?.promotion_allowed));
+    }).catch(() => { if (alive) setHtrPromotionAllowed(false); });
+    return () => { alive = false; };
+  }, [selected?.strategy_id, selected?.revision]);
+
+  useEffect(() => {
     if (!selected) return;
     setDraft(structuredClone(selected));
     setResearchReviews([]);
@@ -296,8 +306,19 @@ export function TradingStrategiesPanel() {
     setNotice('Loaded the strict v1.1 failed-selloff baseline with 5-minute structure and 1-minute execution. Review every value, then save to persist it.');
   };
 
+  const loadReviewedV12 = () => {
+    if (!draft || !htrPromotionAllowed) return;
+    const config = { ...strictV11Config(), strategy_version: '1.2.0' as const };
+    setDraft({ ...draft, strategy_version: '1.2.0', config });
+    setNotice('Loaded gap_pullback_v1 1.2.0. Market-structure defaults remain the strict v1.1 baseline; only the reviewed trading-research-1 policy becomes authoritative. Review and save explicitly.');
+  };
+
   const save = async () => {
     if (!draft) return;
+    if (draft.config.strategy_version === '1.2.0' && !htrPromotionAllowed) {
+      setNotice('Strategy 1.2 requires an active reviewed HTR-15 validation artifact. Run HTR-14 validation and explicit promotion review first.');
+      return;
+    }
     if (!draft.account_id) {
       setNotice('A paper account is required.');
       return;
@@ -560,6 +581,7 @@ export function TradingStrategiesPanel() {
               <div><strong>{draft.strategy_id}</strong><small>{definition.label} · config v{draft.config.strategy_version} · {draft.config.structure_interval} structure / {draft.config.execution_interval} execution · revision {draft.revision}</small></div>
               <div className="trading-strategy-header-actions">
                 {draft.config.strategy_version === '1.0.0' ? <button type="button" onClick={upgradeToStrictV11}>Load v1.1 baseline</button> : null}
+                {draft.config.strategy_version === '1.1.0' && htrPromotionAllowed ? <button type="button" onClick={loadReviewedV12}>Load reviewed HTR v1.2</button> : null}
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
                 {strategies.some((item) => item.strategy_id === draft.strategy_id) ? <button type="button" className="danger" onClick={() => void deleteStrategy()} disabled={status === 'saving'}>Delete</button> : null}
                 <button type="button" className="primary" onClick={() => void save()} disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : 'Save strategy'}</button>

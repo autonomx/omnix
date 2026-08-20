@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.persistence.errors import RevisionConflict
 from app.persistence.tenant import TenantContext, local_tenant_context
@@ -31,6 +31,12 @@ class TradingStrategyConfigDocument(BaseModel):
     revision: int = Field(default=1, ge=1)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_strategy_version_alignment(self):
+        if self.strategy_version != self.config.strategy_version:
+            raise ValueError("strategy_version_mismatch_between_document_and_config")
+        return self
 
 
 class StrategyEvent(BaseModel):

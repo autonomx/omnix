@@ -3,13 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
+_WEB_ROOT = _REPO_ROOT / "src" / "apps" / "web"
 
 
 def test_turn_ui_store_never_deduplicates_by_speaker_and_text() -> None:
     source = (
-        _REPO_ROOT
-        / "apps"
-        / "web"
+        _WEB_ROOT
         / "src"
         / "features"
         / "rpg"
@@ -25,9 +24,7 @@ def test_turn_ui_store_never_deduplicates_by_speaker_and_text() -> None:
 
 def test_story_scene_uses_identity_keys_and_records_visible_commit() -> None:
     source = (
-        _REPO_ROOT
-        / "apps"
-        / "web"
+        _WEB_ROOT
         / "src"
         / "features"
         / "rpg"
@@ -43,9 +40,7 @@ def test_story_scene_uses_identity_keys_and_records_visible_commit() -> None:
 
 def test_client_records_request_headers_body_parse_store_commit_and_visible() -> None:
     source = (
-        _REPO_ROOT
-        / "apps"
-        / "web"
+        _WEB_ROOT
         / "src"
         / "features"
         / "rpg"
@@ -68,8 +63,6 @@ def test_client_records_request_headers_body_parse_store_commit_and_visible() ->
 
 
 def test_rpg_turn_ui_fetch_interceptor_is_installed_at_web_startup() -> None:
-    source = (_REPO_ROOT / "apps" / "web" / "src" / "main.tsx").read_text(
-        encoding="utf-8"
-    )
+    source = (_WEB_ROOT / "src" / "main.tsx").read_text(encoding="utf-8")
 
     assert "installRpgTurnUiFetchInterceptor();" in source

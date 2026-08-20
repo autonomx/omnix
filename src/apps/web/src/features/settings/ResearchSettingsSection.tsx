@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
 import { omnixApiClient } from '../../api/client';
+import { ResearchCredentialSettings } from './ResearchCredentialSettings';
 import { SettingsAdvanced, SettingsField, SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
+import type { ResearchProvider } from './settingsDocumentTypes';
+
+type ProviderRuntimeStatus = {
+  provider: string;
+  available: boolean;
+  credential_required: boolean;
+  credential_configured: boolean;
+  coverage: string;
+};
 
 type ResearchRuntimeStatus = {
   default_mode: string;
-  provider: {
-    provider: string;
-    available: boolean;
-    credential_required: boolean;
-    credential_configured: boolean;
-    coverage: string;
-  };
+  provider: ProviderRuntimeStatus;
+  provider_chain: ProviderRuntimeStatus[];
   budgets: {
     quick_max_results: number;
     deep_max_steps: number;
@@ -52,6 +57,15 @@ type ResearchRuntimeStatus = {
   diagnostics_enabled: boolean;
 };
 
+const PROVIDERS: Array<{ value: ResearchProvider; label: string }> = [
+  { value: 'brave', label: 'Brave Search · API-backed general web search' },
+  { value: 'tavily', label: 'Tavily · API-backed general web search' },
+  { value: 'playwright', label: 'Playwright · local browser search' },
+  { value: 'duckduckgo', label: 'DuckDuckGo · keyless limited fallback' },
+];
+
+const providerLabel = (provider: string) => PROVIDERS.find((item) => item.value === provider)?.label.split(' · ')[0] ?? provider;
+
 export function ResearchSettingsSection() {
   const { state, dispatch } = useSettingsProfileContext();
   const value = state.draft.assistant;
@@ -91,23 +105,75 @@ export function ResearchSettingsSection() {
     </SettingsField>
   );
 
+  const setPrimaryProvider = (provider: ResearchProvider) => {
+    dispatch({ type: 'update', path: 'assistant.researchProvider', value: provider });
+    dispatch({
+      type: 'update',
+      path: 'assistant.researchProviderFallbacks',
+      value: value.researchProviderFallbacks.filter((item) => item !== provider),
+    });
+  };
+
+  const setFallbackSlot = (index: number, provider: ResearchProvider | '') => {
+    const slots: Array<ResearchProvider | ''> = [
+      value.researchProviderFallbacks[0] ?? '',
+      value.researchProviderFallbacks[1] ?? '',
+      value.researchProviderFallbacks[2] ?? '',
+    ];
+    if (provider) {
+      for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
+        if (slotIndex !== index && slots[slotIndex] === provider) slots[slotIndex] = '';
+      }
+    }
+    slots[index] = provider;
+    const next = slots.filter(
+      (item): item is ResearchProvider => Boolean(item) && item !== value.researchProvider,
+    );
+    dispatch({ type: 'update', path: 'assistant.researchProviderFallbacks', value: next });
+  };
+
   return (
     <SettingsSection
       title="Web research"
-      description="Defaults apply to new Quick Search turns and new durable Deep Research jobs. API keys and release percentages remain environment-owned."
+      description="Choose the primary web search provider, explicit fallback priority, and API-backed provider credentials used by Quick Search and Deep Research."
       scope="module"
     >
       <div className="settings-form-grid">
-        <SettingsField label="Search provider" help="Brave and Tavily require OMNIX_WEB_SEARCH_API_KEY on the server. Playwright uses a local browser fallback.">
-          <select value={value.researchProvider} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchProvider', value: event.currentTarget.value })}>
-            <option value="duckduckgo">DuckDuckGo Instant Answer · limited fallback</option>
-            <option value="brave">Brave Search · general web search</option>
-            <option value="tavily">Tavily · general web search</option>
-            <option value="playwright">Playwright browser search - keyless fallback</option>
+        <SettingsField label="Primary search provider" help="Brave is the recommended default. If it is unavailable or returns no usable result, Omnix proceeds through the configured fallback order.">
+          <select value={value.researchProvider} onChange={(event) => setPrimaryProvider(event.currentTarget.value as ResearchProvider)}>
+            {PROVIDERS.map((provider) => <option key={provider.value} value={provider.value}>{provider.label}</option>)}
           </select>
         </SettingsField>
         {numberField('Quick results', 'assistant.researchMaxResults', value.researchMaxResults, 1, 8)}
+        {[0, 1, 2].map((index) => {
+          const current = value.researchProviderFallbacks[index] ?? '';
+          const selectedElsewhere = new Set(
+            value.researchProviderFallbacks.filter((_, slotIndex) => slotIndex !== index),
+          );
+          return (
+            <SettingsField
+              key={index}
+              label={`Fallback ${index + 1}`}
+              help={index === 0 ? 'Fallbacks are tried in order. Credentialed providers without a configured key are skipped.' : undefined}
+            >
+              <select
+                value={current}
+                onChange={(event) => setFallbackSlot(index, event.currentTarget.value as ResearchProvider | '')}
+              >
+                <option value="">None</option>
+                {PROVIDERS.filter((provider) => (
+                  provider.value !== value.researchProvider
+                  && (provider.value === current || !selectedElsewhere.has(provider.value))
+                )).map((provider) => (
+                  <option key={provider.value} value={provider.value}>{provider.label}</option>
+                ))}
+              </select>
+            </SettingsField>
+          );
+        })}
       </div>
+
+      <ResearchCredentialSettings />
 
       <div className="settings-toggle-list">
         <label><input type="checkbox" checked={value.researchDeepEnabled} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchDeepEnabled', value: event.currentTarget.checked })} /><span>Enable Deep Research when released for this session</span></label>
@@ -130,14 +196,21 @@ export function ResearchSettingsSection() {
 
       <div className="settings-status-list" aria-label="Research runtime status">
         <SettingsStatusRow
-          label="Provider"
-          value={runtime ? `${runtime.provider.provider} · ${runtime.provider.available ? 'Ready' : 'Credential required'}` : 'Checking'}
+          label="Primary provider"
+          value={runtime ? `${providerLabel(runtime.provider.provider)} · ${runtime.provider.available ? 'Ready' : 'Credential required'}` : 'Checking'}
           tone={runtime?.provider.available ? 'ready' : runtime ? 'warning' : 'idle'}
         />
-        <SettingsStatusRow label="Coverage" value={runtime?.provider.coverage ?? 'Not reported'} tone="neutral" />
         <SettingsStatusRow
-          label="Credentials"
-          value={runtime ? (runtime.provider.credential_required ? (runtime.provider.credential_configured ? 'Configured' : 'Not configured') : 'Not required') : 'Checking'}
+          label="Runtime search order"
+          value={runtime?.provider_chain?.length
+            ? runtime.provider_chain.map((item, index) => `${index + 1}. ${providerLabel(item.provider)}${item.available ? '' : ' (unavailable)'}`).join(' → ')
+            : 'Checking'}
+          tone="neutral"
+        />
+        <SettingsStatusRow label="Primary coverage" value={runtime?.provider.coverage ?? 'Not reported'} tone="neutral" />
+        <SettingsStatusRow
+          label="Primary credentials"
+          value={runtime ? (runtime.provider.credential_required ? (runtime.provider.credential_configured ? 'Configured' : 'Not configured; fallback will be used') : 'Not required') : 'Checking'}
           tone={runtime?.provider.available ? 'ready' : runtime ? 'warning' : 'idle'}
         />
         <SettingsStatusRow

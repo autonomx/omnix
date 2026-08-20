@@ -21,6 +21,13 @@ _ENVIRONMENT_KEYS = {
     "openrouter": "OPENROUTER_API_KEY",
     "cerebras": "CEREBRAS_API_KEY",
 }
+_RESEARCH_PROVIDERS = ("brave", "tavily")
+_RESEARCH_ENVIRONMENT_KEYS: dict[str, tuple[str, ...]] = {
+    "brave": ("OMNIX_BRAVE_SEARCH_API_KEY", "BRAVE_SEARCH_API_KEY"),
+    "tavily": ("OMNIX_TAVILY_SEARCH_API_KEY", "TAVILY_API_KEY"),
+}
+_LEGACY_RESEARCH_ENVIRONMENT_KEY = "OMNIX_WEB_SEARCH_API_KEY"
+_LEGACY_RESEARCH_PROVIDER_ENVIRONMENT_KEY = "OMNIX_WEB_SEARCH_PROVIDER"
 _TRADING_PROVIDERS = ("alpaca_iex",)
 _TRADING_ENVIRONMENT_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
     "alpaca_iex": {
@@ -128,6 +135,13 @@ def _stored_api_keys() -> dict[str, str]:
     return {provider: str(api_keys.get(provider) or "") for provider in _PROVIDERS}
 
 
+def _stored_research_api_keys() -> dict[str, str]:
+    api_keys = _stored_payload().get("research_api_keys")
+    if not isinstance(api_keys, dict):
+        return {}
+    return {provider: str(api_keys.get(provider) or "") for provider in _RESEARCH_PROVIDERS}
+
+
 def _stored_trading_credentials() -> dict[str, dict[str, str]]:
     credentials = _stored_payload().get("trading_credentials")
     if not isinstance(credentials, dict):
@@ -152,6 +166,20 @@ def _first_environment_value(keys: tuple[str, ...]) -> str:
     return ""
 
 
+def _research_environment_value(provider: str) -> str:
+    keys = _RESEARCH_ENVIRONMENT_KEYS.get(provider)
+    return _first_environment_value(keys) if keys else ""
+
+
+def _legacy_research_environment_value() -> str:
+    return os.environ.get(_LEGACY_RESEARCH_ENVIRONMENT_KEY, "").strip()
+
+
+def _legacy_research_provider() -> str:
+    provider = os.environ.get(_LEGACY_RESEARCH_PROVIDER_ENVIRONMENT_KEY, "brave").strip().lower()
+    return provider if provider in _RESEARCH_PROVIDERS else "brave"
+
+
 def load_provider_secrets() -> dict[str, Any]:
     api_keys = _stored_api_keys()
     for provider, environment_key in _ENVIRONMENT_KEYS.items():
@@ -159,6 +187,47 @@ def load_provider_secrets() -> dict[str, Any]:
         if environment_value:
             api_keys[provider] = environment_value
     return {"api_keys": {provider: api_keys.get(provider, "") for provider in _PROVIDERS}}
+
+
+def load_research_provider_secrets() -> dict[str, str]:
+    """Return independent search-provider credentials without exposing them to settings JSON.
+
+    Provider-specific environment variables are authoritative. The legacy shared
+    ``OMNIX_WEB_SEARCH_API_KEY`` remains a compatibility fallback for exactly one
+    provider selected by ``OMNIX_WEB_SEARCH_PROVIDER`` (Brave when unspecified).
+    """
+
+    api_keys = _stored_research_api_keys()
+    legacy_value = _legacy_research_environment_value()
+    legacy_provider = _legacy_research_provider()
+    for provider in _RESEARCH_PROVIDERS:
+        environment_value = _research_environment_value(provider)
+        if environment_value:
+            api_keys[provider] = environment_value
+        elif legacy_value and provider == legacy_provider:
+            api_keys[provider] = legacy_value
+        else:
+            api_keys.setdefault(provider, "")
+    return {provider: api_keys.get(provider, "") for provider in _RESEARCH_PROVIDERS}
+
+
+def research_provider_credential_source(provider: str) -> str:
+    if provider not in _RESEARCH_ENVIRONMENT_KEYS:
+        raise ValueError("unsupported_research_provider")
+    if _research_environment_value(provider):
+        return "environment"
+    if _legacy_research_environment_value() and provider == _legacy_research_provider():
+        return "legacy_environment"
+    if _stored_research_api_keys().get(provider):
+        return "os_protected_store"
+    return "missing"
+
+
+def research_provider_credential_editable(provider: str) -> bool:
+    if provider not in _RESEARCH_ENVIRONMENT_KEYS:
+        raise ValueError("unsupported_research_provider")
+    source = research_provider_credential_source(provider)
+    return sys.platform == "win32" and source not in {"environment", "legacy_environment"}
 
 
 def load_trading_provider_secrets() -> dict[str, dict[str, str]]:
@@ -224,6 +293,39 @@ def save_provider_secrets(payload: dict[str, Any]) -> None:
         else:
             api_keys.pop(provider, None)
     stored_payload["api_keys"] = api_keys
+    _write_payload(stored_payload)
+
+
+def save_research_provider_secret(provider: str, value: str | None) -> None:
+    """Persist one Brave/Tavily key in the user-scoped protected store.
+
+    Environment-owned credentials cannot be overwritten from the UI. On non-Windows
+    runtimes, UI editing fails closed while environment configuration remains supported.
+    """
+
+    if provider not in _RESEARCH_ENVIRONMENT_KEYS:
+        raise ValueError("unsupported_research_provider")
+    requested = str(value or "").strip()
+    legacy_owned = (
+        bool(_legacy_research_environment_value())
+        and provider == _legacy_research_provider()
+    )
+    if _research_environment_value(provider) or legacy_owned:
+        return
+    if sys.platform != "win32":
+        if requested:
+            raise LegacyPersistenceRetired(
+                "research credential editing requires an operating-system credential store"
+            )
+        return
+
+    stored_payload = _stored_payload()
+    api_keys = _stored_research_api_keys()
+    if requested:
+        api_keys[provider] = requested
+    else:
+        api_keys.pop(provider, None)
+    stored_payload["research_api_keys"] = api_keys
     _write_payload(stored_payload)
 
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { TradingHermesResearchPanel } from './TradingHermesResearchPanel';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type {
   HistoricalUniverseMode,
@@ -102,79 +103,82 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
   }, [result]);
 
   return (
-    <section className="strategy-range-backtest" aria-label="Strategy-specific backtest">
-      <header>
-        <div>
-          <strong>Backtest this strategy</strong>
-          <small>Replay the saved {strategy.strategy_kind} config and risk profile day by day, including historical candidate discovery, deterministic selection and portfolio limits.</small>
+    <>
+      <section className="strategy-range-backtest" aria-label="Strategy-specific backtest">
+        <header>
+          <div>
+            <strong>Backtest this strategy</strong>
+            <small>Replay the saved {strategy.strategy_kind} config and risk profile day by day, including historical candidate discovery, deterministic selection and portfolio limits.</small>
+          </div>
+          <span>{strategy.config.structure_interval} structure / {strategy.config.execution_interval} execution</span>
+        </header>
+
+        <div className="strategy-backtest-controls">
+          <label><span>Start date</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+          <label><span>End date</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
+          <label><span>Initial cash</span><input type="number" min="1" step="1000" value={initialCash} onChange={(event) => setInitialCash(event.target.value)} /></label>
+          <label><span>Assumed spread<small>bps; also used when historical spread is unavailable</small></span><input type="number" min="0" step="5" value={spreadBps} onChange={(event) => setSpreadBps(event.target.value)} /></label>
+          <label><span>Max hold<small>minutes</small></span><input type="number" min="1" max="390" value={maxHoldMinutes} onChange={(event) => setMaxHoldMinutes(event.target.value)} /></label>
+          <label><span>Historical scan time ET<small>separate from the 09:35 entry window</small></span><input type="time" value={scanTimeEt} onChange={(event) => setScanTimeEt(event.target.value)} /></label>
+          <label><span>Historical universe<small>{modeLabel(universeMode)}</small></span><select value={universeMode} onChange={(event) => setUniverseMode(event.target.value as HistoricalUniverseMode)}><option value="captured_or_reconstructed">Captured, reconstruct missing</option><option value="captured_only">Captured only (exact)</option><option value="reconstructed_only">Reconstruct only (approximate)</option></select></label>
+          <label><span>Reconstruction age<small>maximum calendar days</small></span><input type="number" min="1" max="3650" value={reconstructionMaxAgeDays} onChange={(event) => setReconstructionMaxAgeDays(event.target.value)} disabled={universeMode === 'captured_only'} /></label>
+          <button type="button" className="primary" disabled={running} onClick={() => void run()}>{running ? 'Running backtest…' : 'Run strategy backtest'}</button>
         </div>
-        <span>{strategy.config.structure_interval} structure / {strategy.config.execution_interval} execution</span>
-      </header>
 
-      <div className="strategy-backtest-controls">
-        <label><span>Start date</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
-        <label><span>End date</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
-        <label><span>Initial cash</span><input type="number" min="1" step="1000" value={initialCash} onChange={(event) => setInitialCash(event.target.value)} /></label>
-        <label><span>Assumed spread<small>bps; also used when historical spread is unavailable</small></span><input type="number" min="0" step="5" value={spreadBps} onChange={(event) => setSpreadBps(event.target.value)} /></label>
-        <label><span>Max hold<small>minutes</small></span><input type="number" min="1" max="390" value={maxHoldMinutes} onChange={(event) => setMaxHoldMinutes(event.target.value)} /></label>
-        <label><span>Historical scan time ET<small>separate from the 09:35 entry window</small></span><input type="time" value={scanTimeEt} onChange={(event) => setScanTimeEt(event.target.value)} /></label>
-        <label><span>Historical universe<small>{modeLabel(universeMode)}</small></span><select value={universeMode} onChange={(event) => setUniverseMode(event.target.value as HistoricalUniverseMode)}><option value="captured_or_reconstructed">Captured, reconstruct missing</option><option value="captured_only">Captured only (exact)</option><option value="reconstructed_only">Reconstruct only (approximate)</option></select></label>
-        <label><span>Reconstruction age<small>maximum calendar days</small></span><input type="number" min="1" max="3650" value={reconstructionMaxAgeDays} onChange={(event) => setReconstructionMaxAgeDays(event.target.value)} disabled={universeMode === 'captured_only'} /></label>
-        <button type="button" className="primary" disabled={running} onClick={() => void run()}>{running ? 'Running backtest…' : 'Run strategy backtest'}</button>
-      </div>
+        <div className="strategy-backtest-causality-note">
+          <strong>Historical evidence modes</strong>
+          <span><b>Captured</b> uses an immutable universe Omnix actually froze by the configured scan time and replays the full saved strategy. <b>Reconstructed</b> is explicitly approximate: for recent missing days it rebuilds the morning gap/price/volume/RVOL candidate set from Alpaca IEX historical data and today&apos;s active listing universe. Because point-in-time catalyst, dilution and float history is unavailable, those hard evidence gates are relaxed only for reconstructed sessions and every downgrade is reported in the result. Reconstructed output must not be interpreted as equivalent to captured point-in-time evidence.</span>
+        </div>
+        <p className="strategy-backtest-notice" role="status">{notice}</p>
 
-      <div className="strategy-backtest-causality-note">
-        <strong>Historical evidence modes</strong>
-        <span><b>Captured</b> uses an immutable universe Omnix actually froze by the configured scan time and replays the full saved strategy. <b>Reconstructed</b> is explicitly approximate: for recent missing days it rebuilds the morning gap/price/volume/RVOL candidate set from Alpaca IEX historical data and today&apos;s active listing universe. Because point-in-time catalyst, dilution and float history is unavailable, those hard evidence gates are relaxed only for reconstructed sessions and every downgrade is reported in the result. Reconstructed output must not be interpreted as equivalent to captured point-in-time evidence.</span>
-      </div>
-      <p className="strategy-backtest-notice" role="status">{notice}</p>
-
-      {result ? (
-        <>
-          <div className="strategy-backtest-summary" data-coverage={coverageTone}>
-            <article><small>Coverage</small><strong>{result.covered_sessions}/{result.requested_trading_sessions}</strong><span>{result.exact_sessions} exact · {result.reconstructed_sessions} reconstructed · {result.no_candidate_sessions} valid no-candidate days</span></article>
-            <article><small>Result quality</small><strong>{result.result_quality}</strong><span>{result.missing_universe_sessions} missing universe · {result.data_unavailable_sessions} unavailable data · {result.error_sessions} errors</span></article>
-            <article><small>Ending equity</small><strong>{result.covered_sessions ? money(result.ending_cash) : 'N/A'}</strong><span>{money(result.pnl)} · {ratio(result.return_pct)}{result.return_pct === null ? '' : '%'}</span></article>
-            <article><small>Trades</small><strong>{result.trade_count}</strong><span>{result.win_count} wins · {result.loss_count} losses · {result.trigger_count} triggers</span></article>
-            <article><small>Expectancy</small><strong>{result.expectancy_r === null ? 'N/A' : `${ratio(result.expectancy_r)}R`}</strong><span>{result.candidate_count} candidates evaluated in covered sessions</span></article>
-          </div>
-
-          <div className="strategy-backtest-days-wrap">
-            <table className="strategy-backtest-days">
-              <thead><tr><th>Date</th><th>Status</th><th>Source / fidelity</th><th>Universe</th><th>Candidates</th><th>Triggers</th><th>Trades</th><th>P&amp;L</th><th>Ending cash</th></tr></thead>
-              <tbody>
-                {result.days.map((day) => (
-                  <tr key={day.session_date} data-status={day.status} title={[day.detail, ...day.fidelity_warnings, ...day.strategy_fidelity_adjustments].filter(Boolean).join('\n') || undefined}>
-                    <td>{day.session_date}</td>
-                    <td><strong>{day.status.replaceAll('_', ' ')}</strong>{day.detail ? <small>{day.detail}</small> : null}</td>
-                    <td><strong>{day.universe_origin ?? '—'}</strong><small>{day.fidelity ?? '—'}{day.strategy_fidelity_adjustments.length ? ` · ${day.strategy_fidelity_adjustments.length} fidelity adjustments` : ''}</small></td>
-                    <td>{day.universe_id ?? '—'}</td>
-                    <td>{day.candidate_count}</td>
-                    <td>{day.trigger_count}</td>
-                    <td>{day.trade_count}</td>
-                    <td>{day.status === 'backtested' || day.status === 'no_candidates' ? money(day.pnl) : 'N/A'}</td>
-                    <td>{day.status === 'backtested' || day.status === 'no_candidates' ? money(day.ending_cash) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <details className="strategy-backtest-trades">
-            <summary>Trade-by-trade detail</summary>
-            <div>
-              {result.days.flatMap((day) => (day.result?.trades ?? []).map((trade, index) => (
-                <article key={`${day.session_date}-${trade.instrument_id}-${trade.entry_time}-${index}`}>
-                  <header><strong>{trade.instrument_id.split(':').at(-1) ?? trade.instrument_id}</strong><span>{day.session_date} · {day.universe_origin ?? 'unknown'} fidelity</span><b>{ratio(trade.r_multiple)}R</b></header>
-                  <small>score {trade.quality_score}/10 · entry {money(trade.entry_price)} · exit {money(trade.exit_price)} · {trade.exit_reason} · qty {ratio(trade.entry_fill_quantity, 0)}</small>
-                </article>
-              )))}
-              {!result.trade_count && result.covered_sessions ? <p>No trades were executed in covered sessions.</p> : null}
-              {!result.covered_sessions ? <p>No sessions were actually backtested. Performance metrics are unavailable rather than zero.</p> : null}
+        {result ? (
+          <>
+            <div className="strategy-backtest-summary" data-coverage={coverageTone}>
+              <article><small>Coverage</small><strong>{result.covered_sessions}/{result.requested_trading_sessions}</strong><span>{result.exact_sessions} exact · {result.reconstructed_sessions} reconstructed · {result.no_candidate_sessions} valid no-candidate days</span></article>
+              <article><small>Result quality</small><strong>{result.result_quality}</strong><span>{result.missing_universe_sessions} missing universe · {result.data_unavailable_sessions} unavailable data · {result.error_sessions} errors</span></article>
+              <article><small>Ending equity</small><strong>{result.covered_sessions ? money(result.ending_cash) : 'N/A'}</strong><span>{money(result.pnl)} · {ratio(result.return_pct)}{result.return_pct === null ? '' : '%'}</span></article>
+              <article><small>Trades</small><strong>{result.trade_count}</strong><span>{result.win_count} wins · {result.loss_count} losses · {result.trigger_count} triggers</span></article>
+              <article><small>Expectancy</small><strong>{result.expectancy_r === null ? 'N/A' : `${ratio(result.expectancy_r)}R`}</strong><span>{result.candidate_count} candidates evaluated in covered sessions</span></article>
             </div>
-          </details>
-        </>
-      ) : null}
-    </section>
+
+            <div className="strategy-backtest-days-wrap">
+              <table className="strategy-backtest-days">
+                <thead><tr><th>Date</th><th>Status</th><th>Source / fidelity</th><th>Universe</th><th>Candidates</th><th>Triggers</th><th>Trades</th><th>P&amp;L</th><th>Ending cash</th></tr></thead>
+                <tbody>
+                  {result.days.map((day) => (
+                    <tr key={day.session_date} data-status={day.status} title={[day.detail, ...day.fidelity_warnings, ...day.strategy_fidelity_adjustments].filter(Boolean).join('\n') || undefined}>
+                      <td>{day.session_date}</td>
+                      <td><strong>{day.status.replaceAll('_', ' ')}</strong>{day.detail ? <small>{day.detail}</small> : null}</td>
+                      <td><strong>{day.universe_origin ?? '—'}</strong><small>{day.fidelity ?? '—'}{day.strategy_fidelity_adjustments.length ? ` · ${day.strategy_fidelity_adjustments.length} fidelity adjustments` : ''}</small></td>
+                      <td>{day.universe_id ?? '—'}</td>
+                      <td>{day.candidate_count}</td>
+                      <td>{day.trigger_count}</td>
+                      <td>{day.trade_count}</td>
+                      <td>{day.status === 'backtested' || day.status === 'no_candidates' ? money(day.pnl) : 'N/A'}</td>
+                      <td>{day.status === 'backtested' || day.status === 'no_candidates' ? money(day.ending_cash) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <details className="strategy-backtest-trades">
+              <summary>Trade-by-trade detail</summary>
+              <div>
+                {result.days.flatMap((day) => (day.result?.trades ?? []).map((trade, index) => (
+                  <article key={`${day.session_date}-${trade.instrument_id}-${trade.entry_time}-${index}`}>
+                    <header><strong>{trade.instrument_id.split(':').at(-1) ?? trade.instrument_id}</strong><span>{day.session_date} · {day.universe_origin ?? 'unknown'} fidelity</span><b>{ratio(trade.r_multiple)}R</b></header>
+                    <small>score {trade.quality_score}/10 · entry {money(trade.entry_price)} · exit {money(trade.exit_price)} · {trade.exit_reason} · qty {ratio(trade.entry_fill_quantity, 0)}</small>
+                  </article>
+                )))}
+                {!result.trade_count && result.covered_sessions ? <p>No trades were executed in covered sessions.</p> : null}
+                {!result.covered_sessions ? <p>No sessions were actually backtested. Performance metrics are unavailable rather than zero.</p> : null}
+              </div>
+            </details>
+          </>
+        ) : null}
+      </section>
+      <TradingHermesResearchPanel strategy={strategy} />
+    </>
   );
 }

@@ -22,9 +22,11 @@ on:
       - "src/app/persistence/migrations/*_trading_*.sql"
       - "src/tests/trading/**"
       - "docs/architecture/ADR-0004-omnix-trading-terminal.md"
+      - "docs/architecture/ADR-0005-trading-hermes-research-causality.md"
       - "docs/architecture/OMNIX_TRADING_**"
       - "docs/plans/omnix_trading_terminal_roadmap.md"
       - "docs/plans/omnix_trading_terminal_roadmap_review.md"
+      - "docs/plans/omnix_trading_hermes_research_roadmap.md"
       - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:

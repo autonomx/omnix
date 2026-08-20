@@ -20,6 +20,7 @@ from .models import AdjustmentMode, MarketBar
 from .paper import PaperExecutionPolicy
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
+from .research.policy import ResearchPolicyDecision
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
 from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import TradingStrategyConfigDocument
@@ -263,6 +264,7 @@ def run_strategy_range_backtest(
     request: StrategyRangeBacktestRequest,
     *,
     reconstructor: Reconstructor = reconstruct_recent_alpaca_gapper_universe,
+    research_policy_resolver: Callable[[str, datetime], ResearchPolicyDecision] | None = None,
 ) -> StrategyRangeBacktestResult:
     if strategy.strategy_kind != "gap_pullback_v1":
         raise ValueError("strategy_backtest_not_supported")
@@ -429,6 +431,7 @@ def run_strategy_range_backtest(
                 max_concurrent_positions=strategy.risk.max_positions,
                 risk_profile=strategy.risk,
                 initial_cash=current_cash,
+                research_policy_resolver=research_policy_resolver,
             )
             pnl = sum(
                 (trade.pnl_per_share * trade.entry_fill_quantity for trade in result.trades),

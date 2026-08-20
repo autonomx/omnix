@@ -27,6 +27,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
+from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_timeframes import proposal_priority, resample_final_bars
 from .trade_logging import trade_log
@@ -505,6 +506,75 @@ class TradingStrategyMonitor:
             )
             if result.state == "entry_ready" and result.signal is not None:
                 self.signal_count += 1
+                if config.config.strategy_version == "1.2.0":
+                    try:
+                        research_decision = await asyncio.to_thread(
+                            resolve_strategy_research_policy,
+                            strategy_version=config.config.strategy_version,
+                            instrument_id=candidate.instrument_id,
+                            decision_at=observed_at,
+                        )
+                    except Exception as exc:
+                        research_decision = None
+                        reason_code = "RESEARCH_POLICY_RESOLUTION_ERROR"
+                        detail = f"{type(exc).__name__}: {exc}"
+                    else:
+                        quality_gate = apply_research_policy_to_quality(
+                            research_decision,
+                            base_quality_score=result.features.quality_score,
+                            minimum_quality_score=config.config.minimum_quality_score,
+                        )
+                        reason_code = quality_gate.reason_code
+                        detail = None
+                    allowed = quality_gate.allowed if research_decision is not None else False
+                    if allowed and research_decision is not None and result.signal is not None:
+                        adjusted_quality = quality_gate.adjusted_quality_score
+                        result = result.model_copy(update={
+                            "features": result.features.model_copy(update={"quality_score": adjusted_quality}),
+                            "signal": result.signal.model_copy(update={"quality_score": adjusted_quality}),
+                        })
+                    payload = {
+                        "strategy_version": config.config.strategy_version,
+                        "policy_version": (
+                            research_decision.policy_version if research_decision is not None else "trading-research-1"
+                        ),
+                        "authoritative": True,
+                        "allowed": allowed,
+                        "score_adjustment": (
+                            quality_gate.score_adjustment if research_decision is not None else 0
+                        ),
+                        "base_quality_score": (
+                            quality_gate.base_quality_score if research_decision is not None else result.features.quality_score
+                        ),
+                        "adjusted_quality_score": (
+                            quality_gate.adjusted_quality_score if research_decision is not None else result.features.quality_score
+                        ),
+                        "minimum_quality_score": config.config.minimum_quality_score,
+                        "detail": detail,
+                        "decision_at": observed_at,
+                    }
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="research_policy",
+                        state="entry_ready" if allowed else "rejected",
+                        reason_code=reason_code,
+                        observed_at=observed_at,
+                        payload=payload,
+                    )
+                    trade_log(
+                        "auto_trading",
+                        "research_policy_decision",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        instrument_id=candidate.instrument_id,
+                        **payload,
+                        reason_code=reason_code,
+                    )
+                    if not allowed:
+                        self.rejection_count += 1
+                        continue
                 proposals.append(
                     _EntryProposal(
                         candidate=candidate,

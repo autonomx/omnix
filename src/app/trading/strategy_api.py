@@ -20,6 +20,8 @@ from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapp
 from .gapper_discovery import discover_yahoo_gappers
 from .models import MarketBar
 from .paper import PaperExecutionPolicy
+from .research.fact_repository import default_fact_repository
+from .research.outcome_dataset import persist_backtest_trade_outcomes
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult, StrategyRiskProfile
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
@@ -28,6 +30,7 @@ from .strategy_range_backtest import (
     StrategyRangeBacktestResult,
     run_strategy_range_backtest,
 )
+from .strategy_research_policy import resolve_strategy_research_policy
 from .strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -257,6 +260,19 @@ def create_trading_strategy_router(
                     for instrument_id, bars in sorted(dataset.bars_by_instrument.items())
                 },
             )
+            fact_repository = None
+
+            def research_policy_resolver(instrument_id: str, decision_at: datetime):
+                nonlocal fact_repository
+                if fact_repository is None:
+                    fact_repository = default_fact_repository()
+                return resolve_strategy_research_policy(
+                    strategy_version=request.config.strategy_version,
+                    instrument_id=instrument_id,
+                    decision_at=decision_at,
+                    fact_repository=fact_repository,
+                )
+
             result = await asyncio.to_thread(
                 run_gap_pullback_backtest,
                 dataset,
@@ -267,7 +283,24 @@ def create_trading_strategy_router(
                 max_concurrent_positions=request.max_concurrent_positions,
                 risk_profile=request.risk_profile,
                 initial_cash=request.initial_cash,
+                research_policy_resolver=research_policy_resolver,
             )
+            try:
+                fact_repository = fact_repository or default_fact_repository()
+                captured = await asyncio.to_thread(
+                    persist_backtest_trade_outcomes,
+                    strategy_id=request.config.strategy_id,
+                    strategy_version=request.config.strategy_version,
+                    session_date=request.session_date,
+                    trades=result.trades,
+                    candidate_decisions=result.candidate_decisions,
+                    market_fidelity="captured_point_in_time",
+                    fact_repository=fact_repository,
+                    reward_multiple=request.config.reward_multiple,
+                )
+                trade_log("backtest", "research_outcomes_captured", run_id=run_id, count=captured)
+            except Exception as exc:
+                trade_log("backtest", "research_outcome_capture_error", run_id=run_id, error_type=type(exc).__name__, detail=str(exc))
             trade_log(
                 "backtest",
                 "backtest_completed",
@@ -441,11 +474,25 @@ def create_trading_strategy_router(
                     for universe in universes
                 ],
             )
+            fact_repository = None
+
+            def range_research_policy_resolver(instrument_id: str, decision_at: datetime):
+                nonlocal fact_repository
+                if fact_repository is None:
+                    fact_repository = default_fact_repository()
+                return resolve_strategy_research_policy(
+                    strategy_version=strategy.config.strategy_version,
+                    instrument_id=instrument_id,
+                    decision_at=decision_at,
+                    fact_repository=fact_repository,
+                )
+
             result = await asyncio.to_thread(
                 run_strategy_range_backtest,
                 strategy,
                 universes,
                 request,
+                research_policy_resolver=range_research_policy_resolver,
             )
             for day in result.days:
                 trade_log(
@@ -455,6 +502,26 @@ def create_trading_strategy_router(
                     strategy_id=strategy_id,
                     day=day,
                 )
+                if day.result is not None and day.result.candidate_decisions:
+                    try:
+                        fact_repository = fact_repository or default_fact_repository()
+                        captured = await asyncio.to_thread(
+                            persist_backtest_trade_outcomes,
+                            strategy_id=strategy_id,
+                            strategy_version=strategy.config.strategy_version,
+                            session_date=day.session_date,
+                            trades=day.result.trades,
+                            candidate_decisions=day.result.candidate_decisions,
+                            market_fidelity=(
+                                "captured_point_in_time" if day.universe_origin == "captured"
+                                else "reconstructed_current_listings_iex"
+                            ),
+                            fact_repository=fact_repository,
+                            reward_multiple=strategy.config.reward_multiple,
+                        )
+                        trade_log("backtest", "range_research_outcomes_captured", run_id=run_id, strategy_id=strategy_id, session_date=day.session_date, count=captured)
+                    except Exception as exc:
+                        trade_log("backtest", "research_outcome_capture_error", run_id=run_id, strategy_id=strategy_id, session_date=day.session_date, error_type=type(exc).__name__, detail=str(exc))
             trade_log(
                 "backtest",
                 "range_backtest_completed",

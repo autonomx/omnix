@@ -134,6 +134,15 @@ class QuickSearchService:
             diagnostics["transport_attempts"] = attempt
             try:
                 items = client.search(clean_query, max_results)
+                provider = str(getattr(client, "provider", provider) or provider).strip().lower()
+                diagnostics["provider"] = provider
+                diagnostics["coverage"] = provider_coverage(provider)
+                attempted_providers = getattr(client, "attempted_providers", None)
+                if attempted_providers is not None:
+                    diagnostics["provider_attempts"] = list(attempted_providers)
+                provider_errors = getattr(client, "provider_errors", None)
+                if provider_errors is not None:
+                    diagnostics["provider_failures"] = dict(provider_errors)
                 if cache is not None:
                     cache.put_search(
                         provider=provider,
@@ -150,6 +159,12 @@ class QuickSearchService:
                 self._append_provider_warnings(provider, items, warnings)
                 return self._record_sources(clean_query, provider, items, diagnostics, warnings)
             except Exception as exc:  # provider boundary
+                attempted_providers = getattr(client, "attempted_providers", None)
+                if attempted_providers is not None:
+                    diagnostics["provider_attempts"] = list(attempted_providers)
+                provider_errors = getattr(client, "provider_errors", None)
+                if provider_errors is not None:
+                    diagnostics["provider_failures"] = dict(provider_errors)
                 last_error = exc
                 if attempt >= self.max_transport_attempts or not is_transient_search_error(exc):
                     break

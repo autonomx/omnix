@@ -7,13 +7,20 @@ from typing import Literal, cast
 from pydantic import BaseModel, Field
 
 from .policy import ResearchPolicy, research_policy_from_env
+from .provider_chain import (
+    DEFAULT_RESEARCH_PROVIDER,
+    DEFAULT_RESEARCH_PROVIDER_FALLBACKS,
+    normalize_provider_chain,
+    provider_credential_configured,
+)
 
 ResearchProvider = Literal["duckduckgo", "brave", "tavily", "playwright"]
 
 
 class ResearchRuntimeSettings(BaseModel):
     default_mode: str = "disabled"
-    provider: ResearchProvider = "duckduckgo"
+    provider: ResearchProvider = DEFAULT_RESEARCH_PROVIDER
+    provider_fallbacks: tuple[ResearchProvider, ...] = DEFAULT_RESEARCH_PROVIDER_FALLBACKS
     max_results: int = Field(default=5, ge=1, le=8)
     max_steps: int = Field(default=6, ge=1, le=12)
     max_queries: int = Field(default=5, ge=1, le=10)
@@ -26,13 +33,14 @@ class ResearchRuntimeSettings(BaseModel):
 
     @property
     def credential_configured(self) -> bool:
-        if self.provider in {"duckduckgo", "playwright"}:
-            return True
-        return bool(os.environ.get("OMNIX_WEB_SEARCH_API_KEY"))
+        return provider_credential_configured(self.effective_provider)
 
     @property
     def provider_available(self) -> bool:
-        return self.provider in {"duckduckgo", "playwright"} or self.credential_configured
+        return any(
+            provider_credential_configured(provider)
+            for provider in self.effective_provider_chain
+        )
 
     @property
     def effective_provider(self) -> ResearchProvider:
@@ -46,6 +54,11 @@ class ResearchRuntimeSettings(BaseModel):
         ):
             return cast(ResearchProvider, env_provider)
         return self.provider
+
+    @property
+    def effective_provider_chain(self) -> tuple[ResearchProvider, ...]:
+        chain = normalize_provider_chain(self.effective_provider, self.provider_fallbacks)
+        return cast(tuple[ResearchProvider, ...], chain)
 
 
 def load_research_runtime_settings() -> ResearchRuntimeSettings:
@@ -72,6 +85,7 @@ def load_research_runtime_settings() -> ResearchRuntimeSettings:
     return ResearchRuntimeSettings(
         default_mode=assistant.research_default_mode,
         provider=assistant.research_provider,
+        provider_fallbacks=tuple(assistant.research_provider_fallbacks),
         max_results=assistant.research_max_results,
         max_steps=assistant.research_max_steps,
         max_queries=assistant.research_max_queries,
