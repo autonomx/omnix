@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from .compatibility import ResearchCompatibilityStatus, research_compatibility_status
 from .policy import privacy_contract
+from .provider_chain import provider_credential_configured, provider_requires_credential
 from .quick_search import provider_coverage
 from .release_policy import (
     ResearchReleaseAvailability,
@@ -52,6 +53,7 @@ class ResearchReleaseStatus(BaseModel):
 class ResearchRuntimeStatus(BaseModel):
     default_mode: str
     provider: ResearchProviderStatus
+    provider_chain: list[ResearchProviderStatus] = Field(default_factory=list)
     budgets: ResearchBudgetStatus
     retention: ResearchRetentionStatus
     release: ResearchReleaseStatus
@@ -60,6 +62,18 @@ class ResearchRuntimeStatus(BaseModel):
     hermes_planner_enabled: bool
     diagnostics_enabled: bool
     privacy: dict[str, object] = Field(default_factory=dict)
+
+
+def _provider_status(provider: str) -> ResearchProviderStatus:
+    credential_required = provider_requires_credential(provider)
+    configured = provider_credential_configured(provider)
+    return ResearchProviderStatus(
+        provider=provider,
+        available=configured,
+        credential_required=credential_required,
+        credential_configured=configured,
+        coverage=provider_coverage(provider),
+    )
 
 
 def research_runtime_status(
@@ -74,13 +88,8 @@ def research_runtime_status(
     provider = resolved.effective_provider
     return ResearchRuntimeStatus(
         default_mode=resolved.default_mode,
-        provider=ResearchProviderStatus(
-            provider=provider,
-            available=provider in {"duckduckgo", "playwright"} or resolved.credential_configured,
-            credential_required=provider not in {"duckduckgo", "playwright"},
-            credential_configured=provider in {"duckduckgo", "playwright"} or resolved.credential_configured,
-            coverage=provider_coverage(provider),
-        ),
+        provider=_provider_status(provider),
+        provider_chain=[_provider_status(item) for item in resolved.effective_provider_chain],
         budgets=ResearchBudgetStatus(
             quick_max_results=resolved.max_results,
             deep_max_steps=resolved.max_steps,
