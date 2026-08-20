@@ -26,6 +26,7 @@ from .paper import (
     paper_protection_trigger,
 )
 from .research.policy import ResearchPolicyDecision
+from .strategy_research_policy import apply_research_policy_to_quality
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from .strategy_risk import size_strategy_entry
@@ -660,7 +661,12 @@ def run_gap_pullback_backtest(
                 except Exception:
                     research_reason = "RESEARCH_POLICY_RESOLUTION_ERROR"
                 else:
-                    research_reason = None if research_decision.allowed else research_decision.reason_code
+                    quality_gate = apply_research_policy_to_quality(
+                        research_decision,
+                        base_quality_score=proposal.quality_score,
+                        minimum_quality_score=active.minimum_quality_score,
+                    )
+                    research_reason = None if quality_gate.allowed else quality_gate.reason_code
             if research_reason is not None:
                 research_rejections[research_reason] = research_rejections.get(research_reason, 0) + 1
                 continue

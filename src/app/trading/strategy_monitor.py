@@ -27,7 +27,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
-from .strategy_research_policy import resolve_strategy_research_policy
+from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_timeframes import proposal_priority, resample_final_bars
 from .trade_logging import trade_log
@@ -519,9 +519,14 @@ class TradingStrategyMonitor:
                         reason_code = "RESEARCH_POLICY_RESOLUTION_ERROR"
                         detail = f"{type(exc).__name__}: {exc}"
                     else:
-                        reason_code = research_decision.reason_code
+                        quality_gate = apply_research_policy_to_quality(
+                            research_decision,
+                            base_quality_score=result.features.quality_score,
+                            minimum_quality_score=config.config.minimum_quality_score,
+                        )
+                        reason_code = quality_gate.reason_code
                         detail = None
-                    allowed = research_decision is not None and research_decision.allowed
+                    allowed = quality_gate.allowed if research_decision is not None else False
                     payload = {
                         "strategy_version": config.config.strategy_version,
                         "policy_version": (
@@ -530,8 +535,15 @@ class TradingStrategyMonitor:
                         "authoritative": True,
                         "allowed": allowed,
                         "score_adjustment": (
-                            research_decision.score_adjustment if research_decision is not None else 0
+                            quality_gate.score_adjustment if research_decision is not None else 0
                         ),
+                        "base_quality_score": (
+                            quality_gate.base_quality_score if research_decision is not None else result.features.quality_score
+                        ),
+                        "adjusted_quality_score": (
+                            quality_gate.adjusted_quality_score if research_decision is not None else result.features.quality_score
+                        ),
+                        "minimum_quality_score": config.config.minimum_quality_score,
                         "detail": detail,
                         "decision_at": observed_at,
                     }
