@@ -1,0 +1,15 @@
+.trading-watchlist-symbol-picker-dialog{grid-template-rows:auto auto auto minmax(0,1fr) auto}
+.trading-watchlist-symbol-picker-heading{display:grid;grid-template-columns:150px minmax(220px,1fr) 170px 44px;gap:12px;padding:8px 24px;border-top:1px solid #e4e7ea;border-bottom:1px solid #e4e7ea;color:#8a929b;font-size:11px;text-transform:uppercase;letter-spacing:.07em}
+.trading-watchlist-symbol-picker-results{margin:0;padding:0;list-style:none}
+.trading-watchlist-symbol-picker-results li{display:grid;grid-template-columns:34px 104px minmax(220px,1fr) 170px 44px;align-items:center;gap:12px;padding:10px 24px;border-bottom:1px solid #e5e8eb;color:#16202a}
+.trading-watchlist-symbol-picker-results li:hover{background:#f3f7fc}
+.trading-watchlist-symbol-picker-symbol,.trading-watchlist-symbol-picker-description,.trading-watchlist-symbol-picker-exchange{display:grid;gap:3px;min-width:0}
+.trading-watchlist-symbol-picker-symbol strong{color:#2164e8;font-size:16px;font-weight:500}
+.trading-watchlist-symbol-picker-symbol small,.trading-watchlist-symbol-picker-description small,.trading-watchlist-symbol-picker-exchange small{overflow:hidden;color:#7f8994;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.trading-watchlist-symbol-picker-description strong{overflow:hidden;font-size:15px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+.trading-watchlist-symbol-picker-exchange{justify-items:end;text-align:right}
+.trading-watchlist-symbol-picker-exchange strong{font-size:14px;font-weight:500}
+.trading-watchlist-symbol-picker-add{display:grid!important;place-items:center;width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;border:0!important;border-radius:6px!important;background:transparent!important;color:#202831!important;font-size:25px!important;font-weight:300!important;line-height:1!important;box-shadow:none!important}
+.trading-watchlist-symbol-picker-add:hover:not(:disabled){background:#e8f1fb!important;color:#1464b3!important}
+.trading-watchlist-symbol-picker-add:disabled{opacity:1!important;color:#6d9b70!important;cursor:default!important}
+@media(max-width:700px){.trading-watchlist-symbol-picker-heading{grid-template-columns:118px minmax(140px,1fr) 86px 36px;padding:8px 16px}.trading-watchlist-symbol-picker-results li{grid-template-columns:30px 76px minmax(140px,1fr) 86px 36px;gap:8px;padding:10px 16px}.trading-watchlist-symbol-picker-add{width:30px!important;height:30px!important;min-width:30px!important}}
