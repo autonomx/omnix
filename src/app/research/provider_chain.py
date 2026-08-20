@@ -4,8 +4,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable, Iterable
-
-from app.assistant_context.web_search import WebSearchClient
+from typing import Any
 
 SUPPORTED_RESEARCH_PROVIDERS = ("brave", "tavily", "playwright", "duckduckgo")
 DEFAULT_RESEARCH_PROVIDER = "brave"
@@ -38,6 +37,14 @@ def provider_credential_configured(provider: str) -> bool:
     return not provider_requires_credential(provider) or bool(os.environ.get("OMNIX_WEB_SEARCH_API_KEY"))
 
 
+def _default_client_factory(**kwargs: Any):
+    # Import lazily: Settings imports this module, while assistant-context routing imports
+    # Settings. Keeping the transport dependency here avoids a package-level import cycle.
+    from app.assistant_context.web_search import WebSearchClient
+
+    return WebSearchClient(**kwargs)
+
+
 class ProviderFallbackSearchClient:
     """Try configured search providers in order until one returns usable results.
 
@@ -52,12 +59,12 @@ class ProviderFallbackSearchClient:
         *,
         providers: Iterable[str],
         timeout_seconds: float,
-        client_factory: Callable[..., WebSearchClient] = WebSearchClient,
+        client_factory: Callable[..., Any] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self.providers = normalize_provider_chain(None, providers)
         self.timeout_seconds = max(0.1, float(timeout_seconds))
-        self.client_factory = client_factory
+        self.client_factory = client_factory or _default_client_factory
         self.monotonic = monotonic
         self.provider = self.providers[0]
         self.attempted_providers: list[str] = []
