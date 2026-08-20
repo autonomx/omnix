@@ -51,12 +51,17 @@ class GapPullbackConfig(BaseModel):
     Version 1.0 defaults remain permissive for persisted compatibility. The
     Trading UI creates 1.1.0 strategy instances with the stricter failed-selloff
     research/quality defaults explicitly populated and fully configurable.
+
+    Version 1.2.0 reserves the same market-structure semantics for a separately
+    validated HTR research-policy gate. It is fail-closed until a reviewed HTR-14
+    validation artifact explicitly permits promotion; 1.0/1.1 semantics do not
+    change when HTR code evolves.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     strategy_id: Literal["gap_pullback_v1"] = "gap_pullback_v1"
-    strategy_version: Literal["1.0.0", "1.1.0"] = "1.0.0"
+    strategy_version: Literal["1.0.0", "1.1.0", "1.2.0"] = "1.0.0"
 
     structure_interval: StrategyBarInterval = "1m"
     execution_interval: StrategyBarInterval = "1m"
