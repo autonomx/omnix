@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { omnixApiClient } from '../../api/client';
+import { ResearchCredentialSettings } from './ResearchCredentialSettings';
 import { SettingsAdvanced, SettingsField, SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 import type { ResearchProvider } from './settingsDocumentTypes';
@@ -134,7 +135,7 @@ export function ResearchSettingsSection() {
   return (
     <SettingsSection
       title="Web research"
-      description="Choose the primary web search provider and explicit fallback priority used by Quick Search and Deep Research. API keys and release percentages remain environment-owned."
+      description="Choose the primary web search provider, explicit fallback priority, and API-backed provider credentials used by Quick Search and Deep Research."
       scope="module"
     >
       <div className="settings-form-grid">
@@ -171,6 +172,8 @@ export function ResearchSettingsSection() {
           );
         })}
       </div>
+
+      <ResearchCredentialSettings />
 
       <div className="settings-toggle-list">
         <label><input type="checkbox" checked={value.researchDeepEnabled} onChange={(event) => dispatch({ type: 'update', path: 'assistant.researchDeepEnabled', value: event.currentTarget.checked })} /><span>Enable Deep Research when released for this session</span></label>
