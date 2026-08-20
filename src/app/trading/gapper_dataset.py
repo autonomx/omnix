@@ -86,7 +86,12 @@ class GapperCandidate(BaseModel):
 
 
 class GapperUniverseSnapshot(BaseModel):
-    """Immutable daily candidate universe, including eventual failures/fades."""
+    """Immutable daily candidate universe, including eventual failures/fades.
+
+    An empty candidate tuple is valid only when produced by a trusted archival
+    path that explicitly records a completed morning scan with zero qualifying
+    names. Interactive/manual freeze endpoints keep requiring at least one name.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -170,8 +175,9 @@ def freeze_gapper_universe(
     evaluation_time: datetime,
     discovery_source: Literal["manual", "import", "scanner", "provider"],
     candidates: list[GapperCandidate] | tuple[GapperCandidate, ...],
+    allow_empty: bool = False,
 ) -> GapperUniverseSnapshot:
-    if not candidates:
+    if not candidates and not allow_empty:
         raise ValueError("gapper universe requires at least one candidate")
     if evaluation_time.tzinfo is None:
         raise ValueError("evaluation_time must be timezone-aware")

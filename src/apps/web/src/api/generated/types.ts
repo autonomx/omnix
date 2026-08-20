@@ -4488,6 +4488,11 @@ export interface components {
          */
         "GapPullbackConfig-Input": {
             /**
+             * Auto Archive Daily Universe
+             * @default true
+             */
+            auto_archive_daily_universe: boolean;
+            /**
              * Breakout Hold Bars
              * @default 1
              */
@@ -4650,6 +4655,22 @@ export interface components {
              */
             structure_interval: "1m" | "5m";
             /**
+             * Universe Archive Grace Minutes
+             * @default 10
+             */
+            universe_archive_grace_minutes: number;
+            /**
+             * Universe Discovery Count
+             * @default 50
+             */
+            universe_discovery_count: number;
+            /**
+             * Universe Scan Time Et
+             * Format: time
+             * @default 09:20:00
+             */
+            universe_scan_time_et: string;
+            /**
              * Volume Lookback Bars
              * @default 10
              */
@@ -4664,6 +4685,11 @@ export interface components {
          *     research/quality defaults explicitly populated and fully configurable.
          */
         "GapPullbackConfig-Output": {
+            /**
+             * Auto Archive Daily Universe
+             * @default true
+             */
+            auto_archive_daily_universe: boolean;
             /**
              * Breakout Hold Bars
              * @default 1
@@ -4826,6 +4852,22 @@ export interface components {
              * @enum {string}
              */
             structure_interval: "1m" | "5m";
+            /**
+             * Universe Archive Grace Minutes
+             * @default 10
+             */
+            universe_archive_grace_minutes: number;
+            /**
+             * Universe Discovery Count
+             * @default 50
+             */
+            universe_discovery_count: number;
+            /**
+             * Universe Scan Time Et
+             * Format: time
+             * @default 09:20:00
+             */
+            universe_scan_time_et: string;
             /**
              * Volume Lookback Bars
              * @default 10
@@ -5099,6 +5141,10 @@ export interface components {
         /**
          * GapperUniverseSnapshot
          * @description Immutable daily candidate universe, including eventual failures/fades.
+         *
+         *     An empty candidate tuple is valid only when produced by a trusted archival
+         *     path that explicitly records a completed morning scan with zero qualifying
+         *     names. Interactive/manual freeze endpoints keep requiring at least one name.
          */
         "GapperUniverseSnapshot-Input": {
             /** Candidates */
@@ -5126,6 +5172,10 @@ export interface components {
         /**
          * GapperUniverseSnapshot
          * @description Immutable daily candidate universe, including eventual failures/fades.
+         *
+         *     An empty candidate tuple is valid only when produced by a trusted archival
+         *     path that explicitly records a completed morning scan with zero qualifying
+         *     names. Interactive/manual freeze endpoints keep requiring at least one name.
          */
         "GapperUniverseSnapshot-Output": {
             /** Candidates */
@@ -7072,6 +7122,13 @@ export interface components {
             detail?: string | null;
             /** Ending Cash */
             ending_cash: string;
+            /** Fidelity */
+            fidelity?: string | null;
+            /**
+             * Fidelity Warnings
+             * @default []
+             */
+            fidelity_warnings: string[];
             /**
              * Pnl
              * @default 0
@@ -7089,7 +7146,12 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "backtested" | "missing_universe" | "data_unavailable" | "error";
+            status: "backtested" | "no_candidates" | "missing_universe" | "data_unavailable" | "error";
+            /**
+             * Strategy Fidelity Adjustments
+             * @default []
+             */
+            strategy_fidelity_adjustments: string[];
             /**
              * Trade Count
              * @default 0
@@ -7104,6 +7166,8 @@ export interface components {
             universe_evaluation_time?: string | null;
             /** Universe Id */
             universe_id?: string | null;
+            /** Universe Origin */
+            universe_origin?: ("captured" | "reconstructed") | null;
         };
         /** StrategyRangeBacktestRequest */
         StrategyRangeBacktestRequest: {
@@ -7133,12 +7197,25 @@ export interface components {
              */
             max_sessions: number;
             /**
+             * Reconstruction Max Age Days
+             * @default 30
+             */
+            reconstruction_max_age_days: number;
+            /**
              * Start Date
              * Format: date
              */
             start_date: string;
             /** Universe Cutoff Et */
             universe_cutoff_et?: string | null;
+            /**
+             * Universe Mode
+             * @default captured_or_reconstructed
+             * @enum {string}
+             */
+            universe_mode: "captured_only" | "captured_or_reconstructed" | "reconstructed_only";
+            /** Universe Scan Time Et */
+            universe_scan_time_et?: string | null;
         };
         /** StrategyRangeBacktestResult */
         StrategyRangeBacktestResult: {
@@ -7159,26 +7236,43 @@ export interface components {
             ending_cash: string;
             /** Error Sessions */
             error_sessions: number;
+            /** Exact Sessions */
+            exact_sessions: number;
             /** Expectancy R */
-            expectancy_r: string;
+            expectancy_r: string | null;
             /** Initial Cash */
             initial_cash: string;
             /** Loss Count */
             loss_count: number;
             /** Missing Universe Sessions */
             missing_universe_sessions: number;
+            /** No Candidate Sessions */
+            no_candidate_sessions: number;
             /** Pnl */
-            pnl: string;
+            pnl: string | null;
             /**
              * Point In Time Universes Required
              * @default true
              * @constant
              */
             point_in_time_universes_required: true;
+            /** Reconstructed Sessions */
+            reconstructed_sessions: number;
+            /**
+             * Reconstruction Is Approximate
+             * @default true
+             * @constant
+             */
+            reconstruction_is_approximate: true;
             /** Requested Trading Sessions */
             requested_trading_sessions: number;
+            /**
+             * Result Quality
+             * @enum {string}
+             */
+            result_quality: "exact" | "mixed" | "approximate" | "unavailable";
             /** Return Pct */
-            return_pct: string;
+            return_pct: string | null;
             /**
              * Start Date
              * Format: date
@@ -7199,6 +7293,16 @@ export interface components {
              * Format: time
              */
             universe_cutoff_et: string;
+            /**
+             * Universe Mode
+             * @enum {string}
+             */
+            universe_mode: "captured_only" | "captured_or_reconstructed" | "reconstructed_only";
+            /**
+             * Universe Scan Time Et
+             * Format: time
+             */
+            universe_scan_time_et: string;
             /** Win Count */
             win_count: number;
         };

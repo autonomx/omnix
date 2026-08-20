@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.trading.historical_gapper_reconstruction import HistoricalUniverseReconstruction
 from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
 from app.trading.strategy_range_backtest import (
     StrategyRangeBacktestRequest,
@@ -32,7 +33,7 @@ def candidate(symbol: str = "ABC", observed_at: datetime | None = None) -> Gappe
 def universe(universe_id: str, observed: datetime):
     return freeze_gapper_universe(
         universe_id=universe_id,
-        session_date=observed.date(),
+        session_date=observed.astimezone(timezone.utc).date(),
         evaluation_time=observed,
         discovery_source="provider",
         candidates=[candidate(observed_at=observed)],
@@ -47,13 +48,15 @@ def strategy() -> TradingStrategyConfigDocument:
         mode="off",
         config=GapPullbackConfig(
             strategy_version="1.1.0",
+            universe_scan_time_et=time(9, 20),
+            universe_archive_grace_minutes=10,
             entry_start_et=time(9, 35),
         ),
         risk=StrategyRiskProfile(),
     )
 
 
-def test_choose_causal_universe_uses_latest_snapshot_before_cutoff_and_excludes_selected() -> None:
+def test_choose_causal_universe_uses_latest_snapshot_before_scan_time_and_excludes_selected() -> None:
     early = universe("gappers-early", datetime(2026, 8, 18, 13, 10, tzinfo=timezone.utc))
     research = universe("gappers-early-research-091900", datetime(2026, 8, 18, 13, 19, tzinfo=timezone.utc))
     selected = universe("gappers-early-selected-092000", datetime(2026, 8, 18, 13, 20, tzinfo=timezone.utc))
@@ -62,18 +65,36 @@ def test_choose_causal_universe_uses_latest_snapshot_before_cutoff_and_excludes_
     chosen = choose_causal_universe(
         [early, research, selected, late],
         session_date=date(2026, 8, 18),
-        cutoff_time=time(9, 35),
+        cutoff_time=time(9, 20),
     )
 
     assert chosen is not None
     assert chosen.universe_id == research.universe_id
 
 
-def test_range_backtest_reports_missing_universes_instead_of_treating_them_as_no_trade() -> None:
+def test_choose_causal_universe_accepts_archive_inside_configured_grace_window() -> None:
+    archive = universe("auto-archive-2026-08-18-0920-test", datetime(2026, 8, 18, 13, 24, tzinfo=timezone.utc))
+
+    assert choose_causal_universe(
+        [archive],
+        session_date=date(2026, 8, 18),
+        cutoff_time=time(9, 20),
+        grace_minutes=10,
+    ) is archive
+    assert choose_causal_universe(
+        [archive],
+        session_date=date(2026, 8, 18),
+        cutoff_time=time(9, 20),
+        grace_minutes=0,
+    ) is None
+
+
+def test_range_backtest_reports_missing_universes_as_unavailable_not_zero_performance() -> None:
     request = StrategyRangeBacktestRequest(
         start_date=date(2026, 8, 17),
         end_date=date(2026, 8, 18),
         initial_cash=Decimal("100000"),
+        universe_mode="captured_only",
     )
 
     result = run_strategy_range_backtest(strategy(), [], request)
@@ -83,5 +104,52 @@ def test_range_backtest_reports_missing_universes_instead_of_treating_them_as_no
     assert result.missing_universe_sessions == 2
     assert result.trade_count == 0
     assert result.ending_cash == Decimal("100000")
+    assert result.pnl is None
+    assert result.return_pct is None
+    assert result.expectancy_r is None
+    assert result.result_quality == "unavailable"
     assert all(day.status == "missing_universe" for day in result.days)
     assert result.point_in_time_universes_required is True
+
+
+def test_reconstructed_no_candidate_day_counts_as_covered_approximate_session() -> None:
+    request = StrategyRangeBacktestRequest(
+        start_date=date(2026, 8, 18),
+        end_date=date(2026, 8, 18),
+        initial_cash=Decimal("100000"),
+        universe_mode="captured_or_reconstructed",
+    )
+
+    def no_candidates(**kwargs):
+        assert kwargs["scan_time"] == time(9, 20)
+        return HistoricalUniverseReconstruction(
+            snapshot=None,
+            fidelity="reconstructed_current_listings_iex",
+            warnings=("approximate",),
+            candidate_seed_count=10,
+            active_asset_count=5000,
+            detail="Historical scan completed but no candidate qualified.",
+        )
+
+    result = run_strategy_range_backtest(strategy(), [], request, reconstructor=no_candidates)
+
+    assert result.covered_sessions == 1
+    assert result.reconstructed_sessions == 1
+    assert result.no_candidate_sessions == 1
+    assert result.result_quality == "approximate"
+    assert result.pnl == Decimal("0")
+    assert result.return_pct == Decimal("0")
+    assert result.expectancy_r is None
+    assert result.days[0].status == "no_candidates"
+    assert result.days[0].universe_origin == "reconstructed"
+
+
+def test_scan_time_is_separate_from_entry_start_and_legacy_cutoff_alias_conflicts() -> None:
+    request = StrategyRangeBacktestRequest(
+        start_date=date(2026, 8, 18),
+        end_date=date(2026, 8, 18),
+        universe_mode="captured_only",
+    )
+    result = run_strategy_range_backtest(strategy(), [], request)
+    assert result.universe_scan_time_et == time(9, 20)
+    assert result.universe_cutoff_et == time(9, 20)
