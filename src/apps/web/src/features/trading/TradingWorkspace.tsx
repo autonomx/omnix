@@ -518,6 +518,33 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               onSelectAlert={navigateToAlert}
             />
           ) : null}
+          {toolPanel ? (
+            <section className={`trading-tool-drawer${toolPanelFullscreen ? ' is-fullscreen' : ''}`} aria-label="Trading analysis tool">
+              <header>
+                <strong>{toolPanel === 'scanner'
+                  ? 'Market scanner'
+                  : toolPanel === 'replay'
+                    ? 'Replay & backtest'
+                    : toolPanel === 'strategies'
+                      ? 'Automated strategies'
+                      : 'AI market research'}</strong>
+                <div className="trading-tool-drawer-actions">
+                  <button type="button" onClick={() => setToolPanelFullscreen((value) => !value)} aria-pressed={toolPanelFullscreen} aria-label={toolPanelFullscreen ? 'Restore analysis tool' : 'Fullscreen analysis tool'}>{toolPanelFullscreen ? 'Restore' : 'Fullscreen'}</button>
+                  <button type="button" onClick={() => { setToolPanelFullscreen(false); setToolPanel(null); }} aria-label="Close analysis tool">×</button>
+                </div>
+              </header>
+              <div>
+                {toolPanel === 'scanner' ? <TradingScannerPanel instruments={instruments.data ?? []} /> : null}
+                {toolPanel === 'replay' ? (
+                  <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
+                ) : null}
+                {toolPanel === 'strategies' ? <TradingStrategiesPanel /> : null}
+                {toolPanel === 'research' ? (
+                  <TradingResearchPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
+                ) : null}
+              </div>
+            </section>
+          ) : null}
         </div>
         {workspaceHydrated ? (
           <div className={`trading-right-dock ${panels.right ? 'is-expanded' : 'is-collapsed'}`}>
@@ -563,34 +590,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
         ) : null}
       </div>
-
-      {toolPanel ? (
-        <section className={`trading-tool-drawer${toolPanelFullscreen ? ' is-fullscreen' : ''}`} aria-label="Trading analysis tool">
-          <header>
-            <strong>{toolPanel === 'scanner'
-              ? 'Market scanner'
-              : toolPanel === 'replay'
-                ? 'Replay & backtest'
-                : toolPanel === 'strategies'
-                  ? 'Automated strategies'
-                  : 'AI market research'}</strong>
-            <div className="trading-tool-drawer-actions">
-              <button type="button" onClick={() => setToolPanelFullscreen((value) => !value)} aria-pressed={toolPanelFullscreen} aria-label={toolPanelFullscreen ? 'Restore analysis tool' : 'Fullscreen analysis tool'}>{toolPanelFullscreen ? 'Restore' : 'Fullscreen'}</button>
-              <button type="button" onClick={() => { setToolPanelFullscreen(false); setToolPanel(null); }} aria-label="Close analysis tool">×</button>
-            </div>
-          </header>
-          <div>
-            {toolPanel === 'scanner' ? <TradingScannerPanel instruments={instruments.data ?? []} /> : null}
-            {toolPanel === 'replay' ? (
-              <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
-            ) : null}
-            {toolPanel === 'strategies' ? <TradingStrategiesPanel /> : null}
-            {toolPanel === 'research' ? (
-              <TradingResearchPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
-            ) : null}
-          </div>
-        </section>
-      ) : null}
 
     </main>
   );
