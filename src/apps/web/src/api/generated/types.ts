@@ -1378,6 +1378,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/hermes-research/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attribution */
+        get: operations["attribution_api_trading_hermes_research_attribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit */
+        get: operations["audit_api_trading_hermes_research_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/policy-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Policy Status */
+        get: operations["policy_status_api_trading_hermes_research_policy_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start */
+        post: operations["start_api_trading_hermes_research_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/traces/{trace_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace */
+        get: operations["trace_api_trading_hermes_research_traces__trace_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate */
+        post: operations["validate_api_trading_hermes_research_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/validation/{policy_version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Validation */
+        get: operations["validation_api_trading_hermes_research_validation__policy_version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/indicator-presets": {
         parameters: {
             query?: never;
@@ -3558,6 +3677,73 @@ export interface components {
             /** Evidence */
             evidence: components["schemas"]["CatalystEvidence"][];
         };
+        /** CatalystFactSet */
+        CatalystFactSet: {
+            /**
+             * Catalyst Type
+             * @default unknown
+             */
+            catalyst_type: string;
+            /**
+             * Company Release Present
+             * @default false
+             */
+            company_release_present: boolean;
+            /**
+             * Extractor Version
+             * @default catalyst-parser-1
+             */
+            extractor_version: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Official Filing Present
+             * @default false
+             */
+            official_filing_present: boolean;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Primary Confirmed
+             * @default false
+             */
+            primary_confirmed: boolean;
+            /**
+             * Same Day
+             * @default false
+             */
+            same_day: boolean;
+            /**
+             * Schema Version
+             * @default catalyst-facts-1
+             */
+            schema_version: string;
+            /**
+             * Source Count Primary
+             * @default 0
+             */
+            source_count_primary: number;
+            /**
+             * Source Count Secondary
+             * @default 0
+             */
+            source_count_secondary: number;
+            /**
+             * Source Evidence Ids
+             * @default []
+             */
+            source_evidence_ids: string[];
+            /** Source Published At */
+            source_published_at?: string | null;
+            /**
+             * Unresolved
+             * @default true
+             */
+            unresolved: boolean;
+        };
         /**
          * CatalystShadowClassification
          * @description Read-only classifier output. It is not an execution authorization.
@@ -4382,6 +4568,15 @@ export interface components {
             portfolio_capacity_rejection_count: number;
             /** Profit Factor */
             profit_factor: string | null;
+            /**
+             * Research Rejection Count
+             * @default 0
+             */
+            research_rejection_count: number;
+            /** Research Rejection Reasons */
+            research_rejection_reasons?: {
+                [key: string]: number;
+            };
             /** Risk Rejection Count */
             risk_rejection_count: number;
             /** Risk Rejection Reasons */
@@ -4485,6 +4680,11 @@ export interface components {
          *     Version 1.0 defaults remain permissive for persisted compatibility. The
          *     Trading UI creates 1.1.0 strategy instances with the stricter failed-selloff
          *     research/quality defaults explicitly populated and fully configurable.
+         *
+         *     Version 1.2.0 reserves the same market-structure semantics for a separately
+         *     validated HTR research-policy gate. It is fail-closed until a reviewed HTR-14
+         *     validation artifact explicitly permits promotion; 1.0/1.1 semantics do not
+         *     change when HTR code evolves.
          */
         "GapPullbackConfig-Input": {
             /**
@@ -4647,7 +4847,7 @@ export interface components {
              * @default 1.0.0
              * @enum {string}
              */
-            strategy_version: "1.0.0" | "1.1.0";
+            strategy_version: "1.0.0" | "1.1.0" | "1.2.0";
             /**
              * Structure Interval
              * @default 1m
@@ -4683,6 +4883,11 @@ export interface components {
          *     Version 1.0 defaults remain permissive for persisted compatibility. The
          *     Trading UI creates 1.1.0 strategy instances with the stricter failed-selloff
          *     research/quality defaults explicitly populated and fully configurable.
+         *
+         *     Version 1.2.0 reserves the same market-structure semantics for a separately
+         *     validated HTR research-policy gate. It is fail-closed until a reviewed HTR-14
+         *     validation artifact explicitly permits promotion; 1.0/1.1 semantics do not
+         *     change when HTR code evolves.
          */
         "GapPullbackConfig-Output": {
             /**
@@ -4845,7 +5050,7 @@ export interface components {
              * @default 1.0.0
              * @enum {string}
              */
-            strategy_version: "1.0.0" | "1.1.0";
+            strategy_version: "1.0.0" | "1.1.0" | "1.2.0";
             /**
              * Structure Interval
              * @default 1m
@@ -5303,6 +5508,39 @@ export interface components {
          * @enum {string}
          */
         InstrumentType: "spot" | "perpetual" | "equity" | "index";
+        /** IssuerIdentity */
+        IssuerIdentity: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Cik */
+            cik?: string | null;
+            /**
+             * Confidence
+             * @default 1
+             */
+            confidence: string;
+            /** Exchange */
+            exchange?: string | null;
+            /** Identity Id */
+            identity_id: string;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Legal Name */
+            legal_name?: string | null;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /** Source */
+            source: string;
+            /** Source Available At */
+            source_available_at?: string | null;
+            /** Symbol */
+            symbol: string;
+        };
         /** JobError */
         JobError: {
             /** Code */
@@ -5772,6 +6010,50 @@ export interface components {
              * @constant
              */
             strategy_id: "sma_cross";
+        };
+        /** NoveltyShadowAnnotation */
+        NoveltyShadowAnnotation: {
+            /** Annotation Id */
+            annotation_id: string;
+            /** Catalyst Class */
+            catalyst_class: string;
+            /** Confidence */
+            confidence: string;
+            /**
+             * Conflict Summary
+             * @default
+             */
+            conflict_summary: string;
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Novelty
+             * @enum {string}
+             */
+            novelty: "new" | "incremental" | "recycled" | "uncertain";
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /**
+             * Relevance
+             * @enum {string}
+             */
+            relevance: "high" | "medium" | "low" | "uncertain";
+            /**
+             * Shadow Only
+             * @default true
+             * @constant
+             */
+            shadow_only: true;
         };
         /** PaperAccount */
         PaperAccount: {
@@ -6528,6 +6810,60 @@ export interface components {
             /** Reports */
             reports?: components["schemas"]["ReportArtifact"][];
         };
+        /** ResearchActionRecord */
+        ResearchActionRecord: {
+            /** Action Id */
+            action_id: string;
+            /** Args */
+            args?: {
+                [key: string]: unknown;
+            };
+            /** Completed At */
+            completed_at?: string | null;
+            /** Error Code */
+            error_code?: string | null;
+            /**
+             * Evidence Ids
+             * @default []
+             */
+            evidence_ids: string[];
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "sec_find_filings" | "sec_extract_filing" | "company_find_releases" | "company_extract_release" | "web_search" | "web_extract" | "evaluate" | "stop";
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Result Summary */
+            result_summary?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "proposed" | "completed" | "failed" | "blocked" | "timed_out";
+            /** Step */
+            step: number;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            /** Trace Id */
+            trace_id: string;
+        };
         /** ResearchBudgetStatus */
         ResearchBudgetStatus: {
             /** Deep Max Extracts */
@@ -6561,6 +6897,86 @@ export interface components {
              * @default 0
              */
             total_legacy_requests: number;
+        };
+        /** ResearchCoverage */
+        ResearchCoverage: {
+            /**
+             * Atm
+             * @default unchecked
+             * @enum {string}
+             */
+            atm: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Company Ir
+             * @default unchecked
+             * @enum {string}
+             */
+            company_ir: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Convertibles
+             * @default unchecked
+             * @enum {string}
+             */
+            convertibles: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Prior News Novelty
+             * @default unchecked
+             * @enum {string}
+             */
+            prior_news_novelty: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Recent News
+             * @default unchecked
+             * @enum {string}
+             */
+            recent_news: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Resale Registration
+             * @default unchecked
+             * @enum {string}
+             */
+            resale_registration: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Sec
+             * @default unchecked
+             * @enum {string}
+             */
+            sec: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Warrants
+             * @default unchecked
+             * @enum {string}
+             */
+            warrants: "unchecked" | "complete" | "failed" | "unresolved";
+        };
+        /** ResearchPolicyDecision */
+        ResearchPolicyDecision: {
+            /** Allowed */
+            allowed: boolean;
+            /** Authoritative */
+            authoritative: boolean;
+            /** Policy Version */
+            policy_version: string;
+            /** Reason Code */
+            reason_code: string;
+            /**
+             * Score Adjustment
+             * @default 0
+             */
+            score_adjustment: number;
+        };
+        /** ResearchPolicyStatus */
+        ResearchPolicyStatus: {
+            decision: components["schemas"]["ResearchPolicyDecision"];
+            /**
+             * Decision At
+             * Format: date-time
+             */
+            decision_at: string;
+            features?: components["schemas"]["StrategyResearchFeatures"] | null;
+            /** Strategy Version */
+            strategy_version: string;
+            validation?: components["schemas"]["ResearchValidationReport"] | null;
         };
         /** ResearchProviderStatus */
         ResearchProviderStatus: {
@@ -6666,6 +7082,39 @@ export interface components {
             requested_binding_id?: string | null;
             /** Resolved Binding Id */
             resolved_binding_id: string;
+        };
+        /** ResearchValidationReport */
+        ResearchValidationReport: {
+            /** Exact Sample Size */
+            exact_sample_size: number;
+            /**
+             * Feature Results
+             * @default []
+             */
+            feature_results: components["schemas"]["ValidationFeatureResult"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /** Policy Version */
+            policy_version: string;
+            /**
+             * Promotion Allowed
+             * @default false
+             */
+            promotion_allowed: boolean;
+            /** Sample Size */
+            sample_size: number;
+            /** Validation Id */
+            validation_id: string;
         };
         /**
          * ResourceClass
@@ -6977,6 +7426,45 @@ export interface components {
              * @default true
              */
             success: boolean;
+        };
+        /** StartTradingResearchInput */
+        StartTradingResearchInput: {
+            /**
+             * Deadline Seconds
+             * @default 45
+             */
+            deadline_seconds: number;
+            /** Decision Context At */
+            decision_context_at?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Max Extracts
+             * @default 8
+             */
+            max_extracts: number;
+            /**
+             * Max Queries
+             * @default 5
+             */
+            max_queries: number;
+            /**
+             * Max Sources
+             * @default 20
+             */
+            max_sources: number;
+            /**
+             * Max Steps
+             * @default 8
+             */
+            max_steps: number;
+            /**
+             * Run Shadow Ai
+             * @default true
+             */
+            run_shadow_ai: boolean;
+            /** Strategy Id */
+            strategy_id?: string | null;
         };
         /** StateHashRequest */
         StateHashRequest: {
@@ -7306,6 +7794,77 @@ export interface components {
             /** Win Count */
             win_count: number;
         };
+        /** StrategyResearchFeatures */
+        StrategyResearchFeatures: {
+            /** Catalyst Age Minutes */
+            catalyst_age_minutes?: number | null;
+            /**
+             * Catalyst Fresh
+             * @default false
+             */
+            catalyst_fresh: boolean;
+            /**
+             * Catalyst Same Day
+             * @default false
+             */
+            catalyst_same_day: boolean;
+            /**
+             * Decision At
+             * Format: date-time
+             */
+            decision_at: string;
+            /** Fact Set Id */
+            fact_set_id: string;
+            /** Feature Id */
+            feature_id: string;
+            /** Immediate Supply Risk */
+            immediate_supply_risk?: boolean | null;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Primary Catalyst Confirmed
+             * @default false
+             */
+            primary_catalyst_confirmed: boolean;
+            /**
+             * Projection Version
+             * @default research-features-1
+             */
+            projection_version: string;
+            /**
+             * Research Policy Version
+             * @default trading-research-1-shadow
+             */
+            research_policy_version: string;
+            /**
+             * Research Status
+             * @default unavailable
+             * @enum {string}
+             */
+            research_status: "complete" | "partial" | "timed_out" | "failed" | "unavailable";
+            /**
+             * Source Authority Sufficient
+             * @default false
+             */
+            source_authority_sufficient: boolean;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            /**
+             * Supply Resolution Status
+             * @default unresolved
+             * @enum {string}
+             */
+            supply_resolution_status: "clear" | "risk_found" | "unresolved";
+            /**
+             * Unresolved Supply
+             * @default true
+             */
+            unresolved_supply: boolean;
+        };
         /** StrategyResearchReview */
         StrategyResearchReview: {
             classification?: components["schemas"]["CatalystShadowClassification"] | null;
@@ -7495,6 +8054,89 @@ export interface components {
             stop_price: string;
             /** Target Price */
             target_price: string;
+        };
+        /** SupplyFact */
+        SupplyFact: {
+            /**
+             * Confidence
+             * @default 0.5
+             */
+            confidence: string;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Exercise Status */
+            exercise_status?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Extractor Version
+             * @default supply-parser-1
+             */
+            extractor_version: string;
+            /** Fact Id */
+            fact_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /** Registration Status */
+            registration_status?: string | null;
+            /** Remaining Capacity Usd */
+            remaining_capacity_usd?: string | null;
+            /**
+             * Resolution Status
+             * @default unresolved
+             * @enum {string}
+             */
+            resolution_status: "resolved" | "partial" | "unresolved";
+            /**
+             * Schema Version
+             * @default supply-facts-1
+             */
+            schema_version: string;
+            /** Shares */
+            shares?: string | null;
+            /** Source Evidence Ids */
+            source_evidence_ids: string[];
+            /**
+             * Status
+             * @default unknown
+             * @enum {string}
+             */
+            status: "active" | "terminated" | "exhausted" | "expired" | "redeemed" | "exercisable" | "locked" | "withdrawn" | "unknown";
+            /** Strike Price */
+            strike_price?: string | null;
+            /**
+             * Supply Type
+             * @enum {string}
+             */
+            supply_type: "atm" | "warrant" | "registered_offering" | "resale_registration" | "convertible" | "shelf_registration" | "equity_line";
+        };
+        /** SupplyMetrics */
+        SupplyMetrics: {
+            /** Immediate Supply Risk */
+            immediate_supply_risk?: boolean | null;
+            /** In The Money Warrant Pct Float */
+            in_the_money_warrant_pct_float?: string | null;
+            /** Potential Dilution Pct Float */
+            potential_dilution_pct_float?: string | null;
+            /** Registered Resale Pct Float */
+            registered_resale_pct_float?: string | null;
+            /** Remaining Atm Pct Market Cap */
+            remaining_atm_pct_market_cap?: string | null;
+            /**
+             * Supply Resolution Status
+             * @default unresolved
+             * @enum {string}
+             */
+            supply_resolution_status: "clear" | "risk_found" | "unresolved";
         };
         /** TradingAlert */
         TradingAlert: {
@@ -7867,6 +8509,308 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /** TradingEvidence */
+        TradingEvidence: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Content */
+            content: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Evidence Id */
+            evidence_id: string;
+            /** Evidence Type */
+            evidence_type: string;
+            /**
+             * Extraction Status
+             * @default snippet
+             * @enum {string}
+             */
+            extraction_status: "metadata" | "snippet" | "completed" | "failed";
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Issuer Identity Id */
+            issuer_identity_id?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Source Authority Tier
+             * @enum {integer}
+             */
+            source_authority_tier: 1 | 2 | 3 | 4;
+            /** Source Available At */
+            source_available_at?: string | null;
+            /** Source Locator */
+            source_locator: string;
+            /** Source Published At */
+            source_published_at?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "sec" | "company_ir" | "news" | "web" | "manual";
+            /** Title */
+            title?: string | null;
+        };
+        /** TradingFactSet */
+        TradingFactSet: {
+            catalyst: components["schemas"]["CatalystFactSet"];
+            completeness?: components["schemas"]["ResearchCoverage"];
+            /**
+             * Evidence Ids
+             * @default []
+             */
+            evidence_ids: string[];
+            /**
+             * Extractor Version
+             * @default trading-extractors-1
+             */
+            extractor_version: string;
+            /** Fact Set Id */
+            fact_set_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /** Report Id */
+            report_id?: string | null;
+            /**
+             * Schema Version
+             * @default trading-facts-1
+             */
+            schema_version: string;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            /**
+             * Supply
+             * @default []
+             */
+            supply: components["schemas"]["SupplyFact"][];
+            supply_metrics?: components["schemas"]["SupplyMetrics"];
+            /**
+             * Unresolved Facts
+             * @default []
+             */
+            unresolved_facts: string[];
+        };
+        /** TradingResearchAuditView */
+        TradingResearchAuditView: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Evidence
+             * @default []
+             */
+            evidence: components["schemas"]["TradingEvidence"][];
+            fact_set?: components["schemas"]["TradingFactSet"] | null;
+            features?: components["schemas"]["StrategyResearchFeatures"] | null;
+            /**
+             * Hermes Actions
+             * @default []
+             */
+            hermes_actions: components["schemas"]["ResearchActionRecord"][];
+            identity?: components["schemas"]["IssuerIdentity"] | null;
+            /** Instrument Id */
+            instrument_id: string;
+            latest_report?: components["schemas"]["TradingResearchReport"] | null;
+            /**
+             * Report Timeline
+             * @default []
+             */
+            report_timeline: components["schemas"]["TradingResearchReport"][];
+            shadow?: components["schemas"]["NoveltyShadowAnnotation"] | null;
+        };
+        /** TradingResearchCoordinatorResult */
+        TradingResearchCoordinatorResult: {
+            fact_set: components["schemas"]["TradingFactSet"];
+            features: components["schemas"]["StrategyResearchFeatures"];
+            /** Planner Backend */
+            planner_backend: string;
+            report: components["schemas"]["TradingResearchReport"];
+            request: components["schemas"]["TradingResearchRequest"];
+            /** Trace Id */
+            trace_id: string;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** TradingResearchReport */
+        TradingResearchReport: {
+            /**
+             * Catalyst Status
+             * @default unresolved
+             * @enum {string}
+             */
+            catalyst_status: "confirmed" | "probable" | "unresolved" | "absent";
+            /**
+             * Contract Version
+             * @default trading-research-1
+             */
+            contract_version: string;
+            coverage?: components["schemas"]["ResearchCoverage"];
+            /**
+             * Evidence Cutoff At
+             * Format: date-time
+             */
+            evidence_cutoff_at: string;
+            /** Hermes Trace Id */
+            hermes_trace_id?: string | null;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Planner Backend
+             * @default local
+             */
+            planner_backend: string;
+            /** Report Id */
+            report_id: string;
+            /** Report Version */
+            report_version: number;
+            /** Research Completed At */
+            research_completed_at?: string | null;
+            /**
+             * Research Started At
+             * Format: date-time
+             */
+            research_started_at: string;
+            /**
+             * Research Status
+             * @default partial
+             * @enum {string}
+             */
+            research_status: "complete" | "partial" | "timed_out" | "failed";
+            /**
+             * Source Evidence Ids
+             * @default []
+             */
+            source_evidence_ids: string[];
+            /** Stop Reason */
+            stop_reason?: string | null;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            /**
+             * Supply Status
+             * @default unresolved
+             * @enum {string}
+             */
+            supply_status: "clear" | "risk_found" | "unresolved";
+            /**
+             * Unresolved Facts
+             * @default []
+             */
+            unresolved_facts: string[];
+        };
+        /** TradingResearchRequest */
+        TradingResearchRequest: {
+            /**
+             * Allowed Operations
+             * @default [
+             *       "sec_find_filings",
+             *       "sec_extract_filing",
+             *       "company_find_releases",
+             *       "company_extract_release",
+             *       "web_search",
+             *       "web_extract",
+             *       "evaluate",
+             *       "stop"
+             *     ]
+             */
+            allowed_operations: ("sec_find_filings" | "sec_extract_filing" | "company_find_releases" | "company_extract_release" | "web_search" | "web_extract" | "evaluate" | "stop")[];
+            /**
+             * Contract Version
+             * @default trading-research-1
+             * @constant
+             */
+            contract_version: "trading-research-1";
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /**
+             * Decision Context At
+             * Format: date-time
+             */
+            decision_context_at: string;
+            /**
+             * Evidence Cutoff At
+             * Format: date-time
+             */
+            evidence_cutoff_at: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Issuer Identity Id */
+            issuer_identity_id?: string | null;
+            /**
+             * Known Filings
+             * @default []
+             */
+            known_filings: string[];
+            /**
+             * Known Headlines
+             * @default []
+             */
+            known_headlines: string[];
+            /**
+             * Max Extracts
+             * @default 8
+             */
+            max_extracts: number;
+            /**
+             * Max Queries
+             * @default 5
+             */
+            max_queries: number;
+            /**
+             * Max Sources
+             * @default 20
+             */
+            max_sources: number;
+            /**
+             * Max Steps
+             * @default 8
+             */
+            max_steps: number;
+            /**
+             * Objectives
+             * @default []
+             */
+            objectives: string[];
+            /** Request Id */
+            request_id: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Strategy Id */
+            strategy_id?: string | null;
+        };
         /** TradingScannerDefinition */
         "TradingScannerDefinition-Input": {
             /** Binding Ids */
@@ -8238,6 +9182,56 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ValidationFeatureResult */
+        ValidationFeatureResult: {
+            /** Confidence Interval High */
+            confidence_interval_high?: string | null;
+            /** Confidence Interval Low */
+            confidence_interval_low?: string | null;
+            /** Exact Sample Size */
+            exact_sample_size: number;
+            /** Feature */
+            feature: string;
+            /** In Sample Effect R */
+            in_sample_effect_r?: string | null;
+            /** Out Of Sample Effect R */
+            out_of_sample_effect_r?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Recommendation
+             * @default observe_only
+             * @enum {string}
+             */
+            recommendation: "observe_only" | "score_only" | "soft_gate" | "hard_gate";
+            /** Sample Size */
+            sample_size: number;
+            /** Win Probability Delta */
+            win_probability_delta?: string | null;
+        };
+        /** ValidationInput */
+        ValidationInput: {
+            /**
+             * Minimum Exact Sample
+             * @default 50
+             */
+            minimum_exact_sample: number;
+            /**
+             * Minimum Sample
+             * @default 100
+             */
+            minimum_sample: number;
+            /**
+             * Policy Version
+             * @default trading-research-1
+             */
+            policy_version: string;
+            /** Strategy Id */
+            strategy_id?: string | null;
         };
         /** WorkerHealth */
         WorkerHealth: {
@@ -11291,6 +12285,234 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlpacaIexCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attribution_api_trading_hermes_research_attribution_get: {
+        parameters: {
+            query?: {
+                strategy_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_api_trading_hermes_research_audit_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+                as_of?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingResearchAuditView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    policy_status_api_trading_hermes_research_policy_status_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+                strategy_version?: string;
+                decision_at?: string | null;
+                policy_version?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchPolicyStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_trading_hermes_research_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartTradingResearchInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingResearchCoordinatorResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_api_trading_hermes_research_traces__trace_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchActionRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_api_trading_hermes_research_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchValidationReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validation_api_trading_hermes_research_validation__policy_version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchValidationReport"] | null;
                 };
             };
             /** @description Validation Error */

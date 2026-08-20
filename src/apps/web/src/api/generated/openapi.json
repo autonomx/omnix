@@ -3137,6 +3137,105 @@
         "title": "CatalystEvidenceListResponse",
         "type": "object"
       },
+      "CatalystFactSet": {
+        "additionalProperties": false,
+        "properties": {
+          "catalyst_type": {
+            "default": "unknown",
+            "title": "Catalyst Type",
+            "type": "string"
+          },
+          "company_release_present": {
+            "default": false,
+            "title": "Company Release Present",
+            "type": "boolean"
+          },
+          "extractor_version": {
+            "default": "catalyst-parser-1",
+            "title": "Extractor Version",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "official_filing_present": {
+            "default": false,
+            "title": "Official Filing Present",
+            "type": "boolean"
+          },
+          "omnix_known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omnix Known At"
+          },
+          "primary_confirmed": {
+            "default": false,
+            "title": "Primary Confirmed",
+            "type": "boolean"
+          },
+          "same_day": {
+            "default": false,
+            "title": "Same Day",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "default": "catalyst-facts-1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_count_primary": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Source Count Primary",
+            "type": "integer"
+          },
+          "source_count_secondary": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Source Count Secondary",
+            "type": "integer"
+          },
+          "source_evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Evidence Ids",
+            "type": "array"
+          },
+          "source_published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Published At"
+          },
+          "unresolved": {
+            "default": true,
+            "title": "Unresolved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "generated_at"
+        ],
+        "title": "CatalystFactSet",
+        "type": "object"
+      },
       "CatalystShadowClassification": {
         "additionalProperties": false,
         "description": "Read-only classifier output. It is not an execution authorization.",
@@ -5106,6 +5205,18 @@
             ],
             "title": "Profit Factor"
           },
+          "research_rejection_count": {
+            "default": 0,
+            "title": "Research Rejection Count",
+            "type": "integer"
+          },
+          "research_rejection_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Research Rejection Reasons",
+            "type": "object"
+          },
           "risk_rejection_count": {
             "title": "Risk Rejection Count",
             "type": "integer"
@@ -5356,7 +5467,7 @@
       },
       "GapPullbackConfig-Input": {
         "additionalProperties": false,
-        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.",
+        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.\n\nVersion 1.2.0 reserves the same market-structure semantics for a separately\nvalidated HTR research-policy gate. It is fail-closed until a reviewed HTR-14\nvalidation artifact explicitly permits promotion; 1.0/1.1 semantics do not\nchange when HTR code evolves.",
         "properties": {
           "auto_archive_daily_universe": {
             "default": true,
@@ -5691,7 +5802,8 @@
             "default": "1.0.0",
             "enum": [
               "1.0.0",
-              "1.1.0"
+              "1.1.0",
+              "1.2.0"
             ],
             "title": "Strategy Version",
             "type": "string"
@@ -5738,7 +5850,7 @@
       },
       "GapPullbackConfig-Output": {
         "additionalProperties": false,
-        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.",
+        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.\n\nVersion 1.2.0 reserves the same market-structure semantics for a separately\nvalidated HTR research-policy gate. It is fail-closed until a reviewed HTR-14\nvalidation artifact explicitly permits promotion; 1.0/1.1 semantics do not\nchange when HTR code evolves.",
         "properties": {
           "auto_archive_daily_universe": {
             "default": true,
@@ -5934,7 +6046,8 @@
             "default": "1.0.0",
             "enum": [
               "1.0.0",
-              "1.1.0"
+              "1.1.0",
+              "1.2.0"
             ],
             "title": "Strategy Version",
             "type": "string"
@@ -7114,6 +7227,109 @@
         "title": "InstrumentType",
         "type": "string"
       },
+      "IssuerIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "cik": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cik"
+          },
+          "confidence": {
+            "default": "1",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "exchange": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange"
+          },
+          "identity_id": {
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "immutable_fingerprint": {
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "legal_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Name"
+          },
+          "omnix_known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omnix Known At"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_available_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Available At"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity_id",
+          "instrument_id",
+          "symbol",
+          "source",
+          "captured_at",
+          "immutable_fingerprint"
+        ],
+        "title": "IssuerIdentity",
+        "type": "object"
+      },
       "JobError": {
         "properties": {
           "code": {
@@ -8254,6 +8470,88 @@
           }
         },
         "title": "MovingAverageCrossStrategy",
+        "type": "object"
+      },
+      "NoveltyShadowAnnotation": {
+        "additionalProperties": false,
+        "properties": {
+          "annotation_id": {
+            "title": "Annotation Id",
+            "type": "string"
+          },
+          "catalyst_class": {
+            "title": "Catalyst Class",
+            "type": "string"
+          },
+          "confidence": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "conflict_summary": {
+            "default": "",
+            "title": "Conflict Summary",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "novelty": {
+            "enum": [
+              "new",
+              "incremental",
+              "recycled",
+              "uncertain"
+            ],
+            "title": "Novelty",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "title": "Rationale",
+            "type": "string"
+          },
+          "relevance": {
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              "uncertain"
+            ],
+            "title": "Relevance",
+            "type": "string"
+          },
+          "shadow_only": {
+            "const": true,
+            "default": true,
+            "title": "Shadow Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "annotation_id",
+          "instrument_id",
+          "observed_at",
+          "novelty",
+          "relevance",
+          "catalyst_class",
+          "confidence",
+          "evidence_ids"
+        ],
+        "title": "NoveltyShadowAnnotation",
         "type": "object"
       },
       "PaperAccount": {
@@ -10136,6 +10434,143 @@
         "title": "ReportListResponse",
         "type": "object"
       },
+      "ResearchActionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "args": {
+            "additionalProperties": true,
+            "title": "Args",
+            "type": "object"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "immutable_fingerprint": {
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "omnix_known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omnix Known At"
+          },
+          "operation": {
+            "enum": [
+              "sec_find_filings",
+              "sec_extract_filing",
+              "company_find_releases",
+              "company_extract_release",
+              "web_search",
+              "web_extract",
+              "evaluate",
+              "stop"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "result_summary": {
+            "additionalProperties": true,
+            "title": "Result Summary",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "completed",
+              "failed",
+              "blocked",
+              "timed_out"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "step": {
+            "minimum": 0.0,
+            "title": "Step",
+            "type": "integer"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_id",
+          "trace_id",
+          "instrument_id",
+          "step",
+          "operation",
+          "status",
+          "requested_at",
+          "immutable_fingerprint"
+        ],
+        "title": "ResearchActionRecord",
+        "type": "object"
+      },
       "ResearchBudgetStatus": {
         "properties": {
           "deep_max_extracts": {
@@ -10208,6 +10643,179 @@
           "aliases_enabled"
         ],
         "title": "ResearchCompatibilityStatus",
+        "type": "object"
+      },
+      "ResearchCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "atm": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "complete",
+              "failed",
+              "unresolved"
+            ],
+            "title": "Atm",
+            "type": "string"
+          },
+          "company_ir": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "complete",
+              "failed",
+              "unresolved"
+            ],
+            "title": "Company Ir",
+            "type": "string"
+          },
+          "convertibles": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "complete",
+              "failed",
+              "unresolved"
+            ],
+            "title": "Convertibles",
+            "type": "string"
+          },
+          "prior_news_novelty": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "complete",
+              "failed",
+              "unresolved"
+            ],
+            "title": "Prior News Novelty",
+            "type": "string"
+          },
+          "recent_news": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "complete",
+              "failed",
+              "unresolved"
+            ],
+            "title": "Recent News",
+            "type": "string"
+          },
+          "resale_registration": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "complete",
+              "failed",
+              "unresolved"
+            ],
+            "title": "Resale Registration",
+            "type": "string"
+          },
+          "sec": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "complete",
+              "failed",
+              "unresolved"
+            ],
+            "title": "Sec",
+            "type": "string"
+          },
+          "warrants": {
+            "default": "unchecked",
+            "enum": [
+              "unchecked",
+              "complete",
+              "failed",
+              "unresolved"
+            ],
+            "title": "Warrants",
+            "type": "string"
+          }
+        },
+        "title": "ResearchCoverage",
+        "type": "object"
+      },
+      "ResearchPolicyDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "authoritative": {
+            "title": "Authoritative",
+            "type": "boolean"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "score_adjustment": {
+            "default": 0,
+            "title": "Score Adjustment",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "allowed",
+          "authoritative",
+          "reason_code",
+          "policy_version"
+        ],
+        "title": "ResearchPolicyDecision",
+        "type": "object"
+      },
+      "ResearchPolicyStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ResearchPolicyDecision"
+          },
+          "decision_at": {
+            "format": "date-time",
+            "title": "Decision At",
+            "type": "string"
+          },
+          "features": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StrategyResearchFeatures"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strategy_version": {
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "validation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchValidationReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "strategy_version",
+          "decision_at",
+          "decision"
+        ],
+        "title": "ResearchPolicyStatus",
         "type": "object"
       },
       "ResearchProviderStatus": {
@@ -10465,6 +11073,69 @@
           "bar_count"
         ],
         "title": "ResearchSource",
+        "type": "object"
+      },
+      "ResearchValidationReport": {
+        "additionalProperties": false,
+        "properties": {
+          "exact_sample_size": {
+            "minimum": 0.0,
+            "title": "Exact Sample Size",
+            "type": "integer"
+          },
+          "feature_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ValidationFeatureResult"
+            },
+            "title": "Feature Results",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "immutable_fingerprint": {
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "notes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "promotion_allowed": {
+            "default": false,
+            "title": "Promotion Allowed",
+            "type": "boolean"
+          },
+          "sample_size": {
+            "minimum": 0.0,
+            "title": "Sample Size",
+            "type": "integer"
+          },
+          "validation_id": {
+            "title": "Validation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "validation_id",
+          "policy_version",
+          "generated_at",
+          "sample_size",
+          "exact_sample_size",
+          "immutable_fingerprint"
+        ],
+        "title": "ResearchValidationReport",
         "type": "object"
       },
       "ResourceClass": {
@@ -11170,6 +11841,85 @@
           }
         },
         "title": "SettingsSaveResponse",
+        "type": "object"
+      },
+      "StartTradingResearchInput": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline_seconds": {
+            "default": 45,
+            "maximum": 180.0,
+            "minimum": 5.0,
+            "title": "Deadline Seconds",
+            "type": "integer"
+          },
+          "decision_context_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Context At"
+          },
+          "instrument_id": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "max_extracts": {
+            "default": 8,
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Max Extracts",
+            "type": "integer"
+          },
+          "max_queries": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Max Queries",
+            "type": "integer"
+          },
+          "max_sources": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Sources",
+            "type": "integer"
+          },
+          "max_steps": {
+            "default": 8,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "run_shadow_ai": {
+            "default": true,
+            "title": "Run Shadow Ai",
+            "type": "boolean"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          }
+        },
+        "required": [
+          "instrument_id"
+        ],
+        "title": "StartTradingResearchInput",
         "type": "object"
       },
       "StateHashRequest": {
@@ -11982,6 +12732,143 @@
         "title": "StrategyRangeBacktestResult",
         "type": "object"
       },
+      "StrategyResearchFeatures": {
+        "additionalProperties": false,
+        "properties": {
+          "catalyst_age_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalyst Age Minutes"
+          },
+          "catalyst_fresh": {
+            "default": false,
+            "title": "Catalyst Fresh",
+            "type": "boolean"
+          },
+          "catalyst_same_day": {
+            "default": false,
+            "title": "Catalyst Same Day",
+            "type": "boolean"
+          },
+          "decision_at": {
+            "format": "date-time",
+            "title": "Decision At",
+            "type": "string"
+          },
+          "fact_set_id": {
+            "title": "Fact Set Id",
+            "type": "string"
+          },
+          "feature_id": {
+            "title": "Feature Id",
+            "type": "string"
+          },
+          "immediate_supply_risk": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Immediate Supply Risk"
+          },
+          "immutable_fingerprint": {
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "omnix_known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omnix Known At"
+          },
+          "primary_catalyst_confirmed": {
+            "default": false,
+            "title": "Primary Catalyst Confirmed",
+            "type": "boolean"
+          },
+          "projection_version": {
+            "default": "research-features-1",
+            "title": "Projection Version",
+            "type": "string"
+          },
+          "research_policy_version": {
+            "default": "trading-research-1-shadow",
+            "title": "Research Policy Version",
+            "type": "string"
+          },
+          "research_status": {
+            "default": "unavailable",
+            "enum": [
+              "complete",
+              "partial",
+              "timed_out",
+              "failed",
+              "unavailable"
+            ],
+            "title": "Research Status",
+            "type": "string"
+          },
+          "source_authority_sufficient": {
+            "default": false,
+            "title": "Source Authority Sufficient",
+            "type": "boolean"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          },
+          "supply_resolution_status": {
+            "default": "unresolved",
+            "enum": [
+              "clear",
+              "risk_found",
+              "unresolved"
+            ],
+            "title": "Supply Resolution Status",
+            "type": "string"
+          },
+          "unresolved_supply": {
+            "default": true,
+            "title": "Unresolved Supply",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "feature_id",
+          "instrument_id",
+          "fact_set_id",
+          "decision_at",
+          "immutable_fingerprint"
+        ],
+        "title": "StrategyResearchFeatures",
+        "type": "object"
+      },
       "StrategyResearchReview": {
         "additionalProperties": false,
         "properties": {
@@ -12349,6 +13236,270 @@
           "reason_code"
         ],
         "title": "StrategySignal",
+        "type": "object"
+      },
+      "SupplyFact": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "default": "0.5",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "exercise_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exercise Status"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "extractor_version": {
+            "default": "supply-parser-1",
+            "title": "Extractor Version",
+            "type": "string"
+          },
+          "fact_id": {
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "immutable_fingerprint": {
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "omnix_known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omnix Known At"
+          },
+          "registration_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Status"
+          },
+          "remaining_capacity_usd": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Capacity Usd"
+          },
+          "resolution_status": {
+            "default": "unresolved",
+            "enum": [
+              "resolved",
+              "partial",
+              "unresolved"
+            ],
+            "title": "Resolution Status",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": "supply-facts-1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "shares": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shares"
+          },
+          "source_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Evidence Ids",
+            "type": "array"
+          },
+          "status": {
+            "default": "unknown",
+            "enum": [
+              "active",
+              "terminated",
+              "exhausted",
+              "expired",
+              "redeemed",
+              "exercisable",
+              "locked",
+              "withdrawn",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "strike_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strike Price"
+          },
+          "supply_type": {
+            "enum": [
+              "atm",
+              "warrant",
+              "registered_offering",
+              "resale_registration",
+              "convertible",
+              "shelf_registration",
+              "equity_line"
+            ],
+            "title": "Supply Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "instrument_id",
+          "supply_type",
+          "source_evidence_ids",
+          "generated_at",
+          "immutable_fingerprint"
+        ],
+        "title": "SupplyFact",
+        "type": "object"
+      },
+      "SupplyMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "immediate_supply_risk": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Immediate Supply Risk"
+          },
+          "in_the_money_warrant_pct_float": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In The Money Warrant Pct Float"
+          },
+          "potential_dilution_pct_float": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Potential Dilution Pct Float"
+          },
+          "registered_resale_pct_float": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered Resale Pct Float"
+          },
+          "remaining_atm_pct_market_cap": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Atm Pct Market Cap"
+          },
+          "supply_resolution_status": {
+            "default": "unresolved",
+            "enum": [
+              "clear",
+              "risk_found",
+              "unresolved"
+            ],
+            "title": "Supply Resolution Status",
+            "type": "string"
+          }
+        },
+        "title": "SupplyMetrics",
         "type": "object"
       },
       "TradingAlert": {
@@ -13378,6 +14529,712 @@
         "title": "TradingDocumentResponse",
         "type": "object"
       },
+      "TradingEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 250000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "content_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "extraction_status": {
+            "default": "snippet",
+            "enum": [
+              "metadata",
+              "snippet",
+              "completed",
+              "failed"
+            ],
+            "title": "Extraction Status",
+            "type": "string"
+          },
+          "immutable_fingerprint": {
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "issuer_identity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issuer Identity Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "omnix_known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omnix Known At"
+          },
+          "source_authority_tier": {
+            "enum": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "title": "Source Authority Tier",
+            "type": "integer"
+          },
+          "source_available_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Available At"
+          },
+          "source_locator": {
+            "title": "Source Locator",
+            "type": "string"
+          },
+          "source_published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Published At"
+          },
+          "source_type": {
+            "enum": [
+              "sec",
+              "company_ir",
+              "news",
+              "web",
+              "manual"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "instrument_id",
+          "evidence_type",
+          "source_type",
+          "source_locator",
+          "source_authority_tier",
+          "captured_at",
+          "content",
+          "content_hash",
+          "immutable_fingerprint"
+        ],
+        "title": "TradingEvidence",
+        "type": "object"
+      },
+      "TradingFactSet": {
+        "additionalProperties": false,
+        "properties": {
+          "catalyst": {
+            "$ref": "#/components/schemas/CatalystFactSet"
+          },
+          "completeness": {
+            "$ref": "#/components/schemas/ResearchCoverage"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "extractor_version": {
+            "default": "trading-extractors-1",
+            "title": "Extractor Version",
+            "type": "string"
+          },
+          "fact_set_id": {
+            "title": "Fact Set Id",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "immutable_fingerprint": {
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "omnix_known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omnix Known At"
+          },
+          "report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Id"
+          },
+          "schema_version": {
+            "default": "trading-facts-1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          },
+          "supply": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SupplyFact"
+            },
+            "title": "Supply",
+            "type": "array"
+          },
+          "supply_metrics": {
+            "$ref": "#/components/schemas/SupplyMetrics"
+          },
+          "unresolved_facts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved Facts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fact_set_id",
+          "instrument_id",
+          "generated_at",
+          "catalyst",
+          "immutable_fingerprint"
+        ],
+        "title": "TradingFactSet",
+        "type": "object"
+      },
+      "TradingResearchAuditView": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TradingEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "fact_set": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TradingFactSet"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "features": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StrategyResearchFeatures"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hermes_actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResearchActionRecord"
+            },
+            "title": "Hermes Actions",
+            "type": "array"
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssuerIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "latest_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TradingResearchReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "report_timeline": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TradingResearchReport"
+            },
+            "title": "Report Timeline",
+            "type": "array"
+          },
+          "shadow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoveltyShadowAnnotation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "instrument_id",
+          "as_of"
+        ],
+        "title": "TradingResearchAuditView",
+        "type": "object"
+      },
+      "TradingResearchCoordinatorResult": {
+        "additionalProperties": false,
+        "properties": {
+          "fact_set": {
+            "$ref": "#/components/schemas/TradingFactSet"
+          },
+          "features": {
+            "$ref": "#/components/schemas/StrategyResearchFeatures"
+          },
+          "planner_backend": {
+            "title": "Planner Backend",
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/components/schemas/TradingResearchReport"
+          },
+          "request": {
+            "$ref": "#/components/schemas/TradingResearchRequest"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request",
+          "report",
+          "fact_set",
+          "features",
+          "trace_id",
+          "planner_backend"
+        ],
+        "title": "TradingResearchCoordinatorResult",
+        "type": "object"
+      },
+      "TradingResearchReport": {
+        "additionalProperties": false,
+        "properties": {
+          "catalyst_status": {
+            "default": "unresolved",
+            "enum": [
+              "confirmed",
+              "probable",
+              "unresolved",
+              "absent"
+            ],
+            "title": "Catalyst Status",
+            "type": "string"
+          },
+          "contract_version": {
+            "default": "trading-research-1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ResearchCoverage"
+          },
+          "evidence_cutoff_at": {
+            "format": "date-time",
+            "title": "Evidence Cutoff At",
+            "type": "string"
+          },
+          "hermes_trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hermes Trace Id"
+          },
+          "immutable_fingerprint": {
+            "title": "Immutable Fingerprint",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "omnix_known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omnix Known At"
+          },
+          "planner_backend": {
+            "default": "local",
+            "title": "Planner Backend",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "report_version": {
+            "minimum": 1.0,
+            "title": "Report Version",
+            "type": "integer"
+          },
+          "research_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Completed At"
+          },
+          "research_started_at": {
+            "format": "date-time",
+            "title": "Research Started At",
+            "type": "string"
+          },
+          "research_status": {
+            "default": "partial",
+            "enum": [
+              "complete",
+              "partial",
+              "timed_out",
+              "failed"
+            ],
+            "title": "Research Status",
+            "type": "string"
+          },
+          "source_evidence_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Evidence Ids",
+            "type": "array"
+          },
+          "stop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Reason"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          },
+          "supply_status": {
+            "default": "unresolved",
+            "enum": [
+              "clear",
+              "risk_found",
+              "unresolved"
+            ],
+            "title": "Supply Status",
+            "type": "string"
+          },
+          "unresolved_facts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved Facts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "report_id",
+          "report_version",
+          "instrument_id",
+          "research_started_at",
+          "evidence_cutoff_at",
+          "immutable_fingerprint"
+        ],
+        "title": "TradingResearchReport",
+        "type": "object"
+      },
+      "TradingResearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_operations": {
+            "default": [
+              "sec_find_filings",
+              "sec_extract_filing",
+              "company_find_releases",
+              "company_extract_release",
+              "web_search",
+              "web_extract",
+              "evaluate",
+              "stop"
+            ],
+            "items": {
+              "enum": [
+                "sec_find_filings",
+                "sec_extract_filing",
+                "company_find_releases",
+                "company_extract_release",
+                "web_search",
+                "web_extract",
+                "evaluate",
+                "stop"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Operations",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "trading-research-1",
+            "default": "trading-research-1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "decision_context_at": {
+            "format": "date-time",
+            "title": "Decision Context At",
+            "type": "string"
+          },
+          "evidence_cutoff_at": {
+            "format": "date-time",
+            "title": "Evidence Cutoff At",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "issuer_identity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issuer Identity Id"
+          },
+          "known_filings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Known Filings",
+            "type": "array"
+          },
+          "known_headlines": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Known Headlines",
+            "type": "array"
+          },
+          "max_extracts": {
+            "default": 8,
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Max Extracts",
+            "type": "integer"
+          },
+          "max_queries": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Max Queries",
+            "type": "integer"
+          },
+          "max_sources": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Sources",
+            "type": "integer"
+          },
+          "max_steps": {
+            "default": 8,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "objectives": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Objectives",
+            "type": "array"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          }
+        },
+        "required": [
+          "request_id",
+          "instrument_id",
+          "requested_at",
+          "decision_context_at",
+          "evidence_cutoff_at",
+          "deadline_at"
+        ],
+        "title": "TradingResearchRequest",
+        "type": "object"
+      },
       "TradingScannerDefinition-Input": {
         "additionalProperties": false,
         "properties": {
@@ -14248,6 +16105,145 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValidationFeatureResult": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_interval_high": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Interval High"
+          },
+          "confidence_interval_low": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Interval Low"
+          },
+          "exact_sample_size": {
+            "minimum": 0.0,
+            "title": "Exact Sample Size",
+            "type": "integer"
+          },
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "in_sample_effect_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Sample Effect R"
+          },
+          "out_of_sample_effect_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Out Of Sample Effect R"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "recommendation": {
+            "default": "observe_only",
+            "enum": [
+              "observe_only",
+              "score_only",
+              "soft_gate",
+              "hard_gate"
+            ],
+            "title": "Recommendation",
+            "type": "string"
+          },
+          "sample_size": {
+            "minimum": 0.0,
+            "title": "Sample Size",
+            "type": "integer"
+          },
+          "win_probability_delta": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Probability Delta"
+          }
+        },
+        "required": [
+          "feature",
+          "sample_size",
+          "exact_sample_size"
+        ],
+        "title": "ValidationFeatureResult",
+        "type": "object"
+      },
+      "ValidationInput": {
+        "additionalProperties": false,
+        "properties": {
+          "minimum_exact_sample": {
+            "default": 50,
+            "maximum": 100000.0,
+            "minimum": 10.0,
+            "title": "Minimum Exact Sample",
+            "type": "integer"
+          },
+          "minimum_sample": {
+            "default": 100,
+            "maximum": 100000.0,
+            "minimum": 20.0,
+            "title": "Minimum Sample",
+            "type": "integer"
+          },
+          "policy_version": {
+            "default": "trading-research-1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          }
+        },
+        "title": "ValidationInput",
         "type": "object"
       },
       "WorkerHealth": {
@@ -18273,6 +20269,387 @@
         "summary": "Update Alpaca Iex Credentials",
         "tags": [
           "trading-execution"
+        ]
+      }
+    },
+    "/api/trading/hermes-research/attribution": {
+      "get": {
+        "operationId": "attribution_api_trading_hermes_research_attribution_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "strategy_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strategy Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10000,
+              "maximum": 100000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Attribution Api Trading Hermes Research Attribution Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attribution",
+        "tags": [
+          "trading-hermes-research"
+        ]
+      }
+    },
+    "/api/trading/hermes-research/audit": {
+      "get": {
+        "operationId": "audit_api_trading_hermes_research_audit_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 3,
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "as_of",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingResearchAuditView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Audit",
+        "tags": [
+          "trading-hermes-research"
+        ]
+      }
+    },
+    "/api/trading/hermes-research/policy-status": {
+      "get": {
+        "operationId": "policy_status_api_trading_hermes_research_policy_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "strategy_version",
+            "required": false,
+            "schema": {
+              "default": "1.1.0",
+              "title": "Strategy Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Decision At"
+            }
+          },
+          {
+            "in": "query",
+            "name": "policy_version",
+            "required": false,
+            "schema": {
+              "default": "trading-research-1",
+              "title": "Policy Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchPolicyStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Policy Status",
+        "tags": [
+          "trading-hermes-research"
+        ]
+      }
+    },
+    "/api/trading/hermes-research/start": {
+      "post": {
+        "operationId": "start_api_trading_hermes_research_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTradingResearchInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingResearchCoordinatorResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start",
+        "tags": [
+          "trading-hermes-research"
+        ]
+      }
+    },
+    "/api/trading/hermes-research/traces/{trace_id}": {
+      "get": {
+        "operationId": "trace_api_trading_hermes_research_traces__trace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchActionRecord"
+                  },
+                  "title": "Response Trace Api Trading Hermes Research Traces  Trace Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace",
+        "tags": [
+          "trading-hermes-research"
+        ]
+      }
+    },
+    "/api/trading/hermes-research/validate": {
+      "post": {
+        "operationId": "validate_api_trading_hermes_research_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchValidationReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate",
+        "tags": [
+          "trading-hermes-research"
+        ]
+      }
+    },
+    "/api/trading/hermes-research/validation/{policy_version}": {
+      "get": {
+        "operationId": "validation_api_trading_hermes_research_validation__policy_version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_version",
+            "required": true,
+            "schema": {
+              "title": "Policy Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResearchValidationReport"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Validation Api Trading Hermes Research Validation  Policy Version  Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validation",
+        "tags": [
+          "trading-hermes-research"
         ]
       }
     },
