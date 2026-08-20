@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from .paper import PaperOrder
 from .paper_runtime_repository import default_runtime_paper_repository
 from .research.fact_repository import TradingFactRepository, default_fact_repository
-from .research.outcome_dataset import build_research_outcome
+from .research.outcome_dataset import build_research_outcome, research_context_as_of
 from .strategy_repository import (
     StrategyProtection,
     TradingStrategyConfigDocument,
@@ -86,6 +86,11 @@ def capture_closed_paper_outcome(
 
     r_result = (exit_price - entry_price) / risk_per_share
     features = fact_repository.research_features_as_of(protection.instrument_id, entry_time)
+    context = research_context_as_of(
+        instrument_id=protection.instrument_id,
+        decision_at=entry_time,
+        fact_repository=fact_repository,
+    )
     research_fidelity = "captured_exact" if features is not None else "unavailable"
     hold_minutes = Decimal(str((exit_time - entry_time).total_seconds() / 60))
     target_exit = protection.trigger_reason == "profit_target"
@@ -118,6 +123,7 @@ def capture_closed_paper_outcome(
         time_to_mfe_minutes=hold_minutes if target_exit else None,
         time_to_stop_minutes=hold_minutes if stop_exit else None,
         data_quality_flags=tuple(flags),
+        research_context=context,
     )
     persisted = fact_repository.save_outcome(outcome)
     trade_log(
@@ -139,6 +145,7 @@ def capture_closed_paper_outcome(
         trigger_reason=protection.trigger_reason,
         research_fidelity=research_fidelity,
         feature_id=features.feature_id if features is not None else None,
+        research_context_present=bool(context),
         persisted=persisted,
         execution_authority=False,
     )
