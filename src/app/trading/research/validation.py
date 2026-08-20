@@ -57,10 +57,8 @@ def _confidence_interval(rows: list[dict[str, Any]], key: str) -> tuple[Decimal 
         return None, None
     yes_var = _variance(yes)
     no_var = _variance(no)
-    if yes_var is None or no_var is None:
-        return None, None
     effect = _effect(rows, key)
-    if effect is None:
+    if yes_var is None or no_var is None or effect is None:
         return None, None
     se = math.sqrt(yes_var / len(yes) + no_var / len(no))
     margin = Decimal(str(1.96 * se))
@@ -103,6 +101,55 @@ def _symbol_stability(rows: list[dict[str, Any]], key: str) -> tuple[int, int]:
     return positive, usable
 
 
+def _recommended_level(
+    *,
+    n: int,
+    exact_n: int,
+    ins: Decimal | None,
+    outs: Decimal | None,
+    exact_effect: Decimal | None,
+    ci_low: Decimal | None,
+    two_r_delta: Decimal | None,
+    positive_symbols: int,
+    usable_symbols: int,
+    minimum_sample: int,
+    minimum_exact_sample: int,
+) -> str:
+    stable = usable_symbols < 3 or positive_symbols / usable_symbols >= 0.6
+    base = (
+        n >= minimum_sample
+        and exact_n >= minimum_exact_sample
+        and ins is not None and outs is not None
+        and ins > Decimal("0.10") and outs > Decimal("0.10")
+        and exact_effect is not None and exact_effect > Decimal("0")
+        and ci_low is not None and ci_low > Decimal("0")
+        and two_r_delta is not None and two_r_delta > Decimal("0")
+        and stable
+    )
+    if not base:
+        return "observe_only"
+    recommendation = "score_only"
+    if (
+        n >= max(250, minimum_sample * 2)
+        and exact_n >= max(150, minimum_exact_sample * 2)
+        and ins > Decimal("0.20") and outs > Decimal("0.20")
+        and exact_effect > Decimal("0.10") and ci_low > Decimal("0.05")
+        and two_r_delta > Decimal("0.05")
+        and (usable_symbols < 5 or positive_symbols / usable_symbols >= 0.65)
+    ):
+        recommendation = "soft_gate"
+    if (
+        n >= max(500, minimum_sample * 4)
+        and exact_n >= max(300, minimum_exact_sample * 4)
+        and ins > Decimal("0.30") and outs > Decimal("0.30")
+        and exact_effect > Decimal("0.20") and ci_low > Decimal("0.10")
+        and two_r_delta > Decimal("0.10")
+        and usable_symbols >= 5 and positive_symbols / usable_symbols >= 0.70
+    ):
+        recommendation = "hard_gate"
+    return recommendation
+
+
 def build_validation_report(
     outcomes: list[dict[str, Any]],
     *,
@@ -110,14 +157,7 @@ def build_validation_report(
     minimum_sample: int = 100,
     minimum_exact_sample: int = 50,
 ) -> ResearchValidationReport:
-    """Produce HTR-14 evidence without granting execution authority.
-
-    The newest ~30% of the chronological dataset is held out. Effect direction is
-    normalized so positive values always mean the feature/policy relationship is
-    favorable (e.g. *absence* of immediate supply risk). Confidence intervals are
-    approximate 95% independent-sample intervals and are reported as uncertainty,
-    not as proof of causality.
-    """
+    """Produce HTR-14 evidence without granting execution authority."""
     chronological = sorted(
         outcomes,
         key=lambda row: (str(row.get("session_date") or ""), str(row.get("outcome_id") or "")),
@@ -140,86 +180,56 @@ def build_validation_report(
         n = sum(1 for row in outcomes if key in (row.get("features") or {}))
         exact_n = sum(1 for row in exact if key in (row.get("features") or {}))
         positive_symbols, usable_symbols = _symbol_stability(exact, key)
-
-        recommendation = "observe_only"
+        recommendation = _recommended_level(
+            n=n, exact_n=exact_n, ins=ins, outs=outs, exact_effect=exact_effect,
+            ci_low=ci_low, two_r_delta=two_r_delta, positive_symbols=positive_symbols,
+            usable_symbols=usable_symbols, minimum_sample=minimum_sample,
+            minimum_exact_sample=minimum_exact_sample,
+        )
         reasons: list[str] = []
-        if n < minimum_sample:
-            reasons.append(f"sample {n} < required {minimum_sample}")
-        if exact_n < minimum_exact_sample:
-            reasons.append(f"exact sample {exact_n} < required {minimum_exact_sample}")
-        if ins is None or outs is None:
-            reasons.append("insufficient true/false observations in chronological train/holdout")
-        elif ins <= Decimal("0.10") or outs <= Decimal("0.10"):
-            reasons.append("expectancy effect is not >0.10R in both train and holdout")
-        if exact_effect is None or exact_effect <= Decimal("0"):
-            reasons.append("effect is not positive in the exact/captured subset")
-        if ci_low is None:
-            reasons.append("95% uncertainty interval unavailable")
-        elif ci_low <= Decimal("0"):
-            reasons.append("95% uncertainty interval crosses zero")
-        if two_r_delta is None:
-            reasons.append("2R-before--1R probability delta unavailable")
-        elif two_r_delta <= Decimal("0"):
-            reasons.append("2R-before--1R probability does not improve")
+        if n < minimum_sample: reasons.append(f"sample {n} < required {minimum_sample}")
+        if exact_n < minimum_exact_sample: reasons.append(f"exact sample {exact_n} < required {minimum_exact_sample}")
+        if ins is None or outs is None: reasons.append("insufficient true/false observations in chronological train/holdout")
+        elif ins <= Decimal("0.10") or outs <= Decimal("0.10"): reasons.append("expectancy effect is not >0.10R in both train and holdout")
+        if exact_effect is None or exact_effect <= Decimal("0"): reasons.append("effect is not positive in the exact/captured subset")
+        if ci_low is None: reasons.append("95% uncertainty interval unavailable")
+        elif ci_low <= Decimal("0"): reasons.append("95% uncertainty interval crosses zero")
+        if two_r_delta is None: reasons.append("2R-before--1R probability delta unavailable")
+        elif two_r_delta <= Decimal("0"): reasons.append("2R-before--1R probability does not improve")
         if usable_symbols >= 3 and positive_symbols / usable_symbols < 0.6:
             reasons.append(f"symbol stability weak: {positive_symbols}/{usable_symbols} positive")
-
-        if (
-            n >= minimum_sample
-            and exact_n >= minimum_exact_sample
-            and ins is not None and outs is not None
-            and ins > Decimal("0.10") and outs > Decimal("0.10")
-            and exact_effect is not None and exact_effect > Decimal("0")
-            and ci_low is not None and ci_low > Decimal("0")
-            and two_r_delta is not None and two_r_delta > Decimal("0")
-            and (usable_symbols < 3 or positive_symbols / usable_symbols >= 0.6)
-        ):
-            recommendation = "score_only"
+        if recommendation != "observe_only":
             reasons = [
-                "positive chronological in/out-of-sample expectancy",
-                "positive exact/captured subset effect",
-                "95% uncertainty interval above zero",
-                "positive 2R-before--1R probability delta",
+                f"recommended {recommendation} after chronological holdout and exact-subset checks",
                 f"symbol stability {positive_symbols}/{usable_symbols}" if usable_symbols else "symbol stability not yet estimable",
+                "recommendation remains non-authoritative until explicit review",
             ]
-
         results.append(ValidationFeatureResult(
-            feature=key,
-            sample_size=n,
-            exact_sample_size=exact_n,
-            in_sample_effect_r=ins,
-            out_of_sample_effect_r=outs,
+            feature=key, sample_size=n, exact_sample_size=exact_n,
+            in_sample_effect_r=ins, out_of_sample_effect_r=outs,
             win_probability_delta=two_r_delta,
-            confidence_interval_low=ci_low,
-            confidence_interval_high=ci_high,
+            confidence_interval_low=ci_low, confidence_interval_high=ci_high,
             recommendation=recommendation,
             reason="; ".join(reasons) or "observe only",
         ))
 
-    # HTR-14 is analysis-only. It can recommend score_only but can never create a
-    # promotion artifact with execution authority. That requires explicit review.
     promotion = False
     generated = datetime.now(timezone.utc)
     payload = {
-        "policy": policy_version,
-        "sample": len(outcomes),
-        "exact": len(exact),
-        "results": [item.model_dump(mode="json") for item in results],
-        "promotion": promotion,
+        "policy": policy_version, "sample": len(outcomes), "exact": len(exact),
+        "results": [item.model_dump(mode="json") for item in results], "promotion": promotion,
     }
     fp = fingerprint(payload)
     return ResearchValidationReport(
         validation_id=f"rval-{hashlib.sha256(fp.encode()).hexdigest()[:24]}",
-        policy_version=policy_version,
-        generated_at=generated,
-        sample_size=len(outcomes),
-        exact_sample_size=len(exact),
-        feature_results=tuple(results),
-        promotion_allowed=promotion,
+        policy_version=policy_version, generated_at=generated,
+        sample_size=len(outcomes), exact_sample_size=len(exact),
+        feature_results=tuple(results), promotion_allowed=False,
         notes=(
             "Automatic HTR-14 analysis cannot grant execution authority; explicit reviewed promotion is required.",
             "R outcomes use the backtest/paper execution models already applied by the originating run; no raw-price hindsight labels are injected.",
             "Chronological holdout, exact/captured subset, 2R probability, approximate 95% uncertainty, and per-symbol direction are evaluated where data exists.",
+            "Recommended authority tiers are statistical candidates only; review may preserve or reduce, never strengthen, those tiers.",
         ),
         immutable_fingerprint=fp,
     )
