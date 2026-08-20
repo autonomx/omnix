@@ -85,7 +85,6 @@ class TradingFactRepository:
         return StrategyResearchFeatures.model_validate(payload)
 
     def save_outcome(self, item: ResearchOutcome) -> bool:
-        p=item.model_dump(mode="json")
         with self.uow_factory() as uow:
             row=uow.connection.execute("""
                 INSERT INTO omnix_trading_research_outcomes
@@ -107,8 +106,18 @@ class TradingFactRepository:
         if strategy_id: where += " AND strategy_id=%s"; params.append(strategy_id)
         params.append(limit)
         with self.uow_factory() as uow:
-            rows=uow.connection.execute(f"SELECT outcome_id,features,r_result,two_r_before_minus_one_r,market_fidelity,research_fidelity FROM omnix_trading_research_outcomes WHERE {where} ORDER BY session_date DESC LIMIT %s",tuple(params)).fetchall()
-        return [{"outcome_id":r[0],"features":r[1],"r_result":r[2],"two_r_before_minus_one_r":r[3],"market_fidelity":r[4],"research_fidelity":r[5]} for r in rows]
+            rows=uow.connection.execute(f"""
+                SELECT outcome_id,session_date,instrument_id,features,research_status,r_result,two_r_before_minus_one_r,
+                       market_fidelity,research_fidelity,mfe_r,mae_r,data_quality_flags
+                  FROM omnix_trading_research_outcomes
+                 WHERE {where}
+                 ORDER BY session_date DESC,created_at DESC LIMIT %s
+            """,tuple(params)).fetchall()
+        return [{
+            "outcome_id":r[0],"session_date":r[1],"instrument_id":r[2],"features":r[3],"research_status":r[4],
+            "r_result":r[5],"two_r_before_minus_one_r":r[6],"market_fidelity":r[7],"research_fidelity":r[8],
+            "mfe_r":r[9],"mae_r":r[10],"data_quality_flags":tuple(r[11]),
+        } for r in rows]
 
     def save_validation_report(self, item: ResearchValidationReport) -> bool:
         with self.uow_factory() as uow:
