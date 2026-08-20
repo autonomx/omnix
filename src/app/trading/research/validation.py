@@ -20,6 +20,7 @@ _EXACT_MARKET = {"captured", "captured_point_in_time", "exact", "paper-execution
 _EXACT_RESEARCH = {"captured_exact", "exact"}
 _MIN_PROMOTION_SAMPLE = 100
 _MIN_PROMOTION_EXACT_SAMPLE = 50
+_MIN_PROMOTION_SYMBOLS = 3
 
 
 def _r(row: dict[str, Any]) -> Decimal | None:
@@ -87,15 +88,19 @@ def _two_r_probability_delta(rows: list[dict[str, Any]], key: str) -> Decimal | 
 
 
 def _symbol_stability(rows: list[dict[str, Any]], key: str) -> tuple[int, int]:
-    by_symbol: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        symbol = str(row.get("instrument_id") or "")
-        if symbol:
-            by_symbol.setdefault(symbol, []).append(row)
+    """Leave one symbol out and require the feature effect to remain positive.
+
+    Per-symbol within-ticker comparisons are usually not estimable for sparse
+    gappers because a symbol may appear only once. Leave-one-symbol-out instead
+    tests that the measured edge is not carried by any single ticker while still
+    requiring both feature states in each robustness subset.
+    """
+    symbols = sorted({str(row.get("instrument_id") or "") for row in rows if row.get("instrument_id")})
     usable = 0
     positive = 0
-    for values in by_symbol.values():
-        effect = _effect(values, key)
+    for symbol in symbols:
+        subset = [row for row in rows if str(row.get("instrument_id") or "") != symbol]
+        effect = _effect(subset, key)
         if effect is None:
             continue
         usable += 1
@@ -117,7 +122,7 @@ def _recommended_level(
     minimum_sample: int,
     minimum_exact_sample: int,
 ) -> str:
-    stable = usable_symbols < 3 or positive_symbols / usable_symbols >= 0.6
+    stable = usable_symbols >= _MIN_PROMOTION_SYMBOLS and positive_symbols / usable_symbols >= 0.6
     base = (
         n >= minimum_sample
         and exact_n >= minimum_exact_sample
@@ -137,7 +142,8 @@ def _recommended_level(
         and ins > Decimal("0.20") and outs > Decimal("0.20")
         and exact_effect > Decimal("0.10") and ci_low > Decimal("0.05")
         and two_r_delta > Decimal("0.05")
-        and (usable_symbols < 5 or positive_symbols / usable_symbols >= 0.65)
+        and usable_symbols >= _MIN_PROMOTION_SYMBOLS
+        and positive_symbols / usable_symbols >= 0.65
     ):
         recommendation = "soft_gate"
     if (
@@ -206,12 +212,15 @@ def build_validation_report(
         elif ci_low <= Decimal("0"): reasons.append("95% uncertainty interval crosses zero")
         if two_r_delta is None: reasons.append("2R-before--1R probability delta unavailable")
         elif two_r_delta <= Decimal("0"): reasons.append("2R-before--1R probability does not improve")
-        if usable_symbols >= 3 and positive_symbols / usable_symbols < 0.6:
-            reasons.append(f"symbol stability weak: {positive_symbols}/{usable_symbols} positive")
+        if usable_symbols < _MIN_PROMOTION_SYMBOLS:
+            reasons.append(f"cross-symbol robustness unavailable: {usable_symbols} leave-one-symbol-out subsets < required {_MIN_PROMOTION_SYMBOLS}")
+        elif positive_symbols / usable_symbols < 0.6:
+            reasons.append(f"cross-symbol robustness weak: {positive_symbols}/{usable_symbols} leave-one-symbol-out effects positive")
         if recommendation != "observe_only":
             reasons = [
                 f"recommended {recommendation} after chronological holdout and exact-subset checks",
-                f"symbol stability {positive_symbols}/{usable_symbols}" if usable_symbols else "symbol stability not yet estimable",
+                f"cross-symbol robustness {positive_symbols}/{usable_symbols} leave-one-symbol-out effects positive",
+                "R outcomes are evaluated after the originating execution model's spread/slippage/latency assumptions rather than from raw hindsight prices",
                 "recommendation remains non-authoritative until explicit review",
             ]
         results.append(ValidationFeatureResult(
@@ -238,9 +247,9 @@ def build_validation_report(
         notes=(
             "Automatic HTR-14 analysis cannot grant execution authority; explicit reviewed promotion is required.",
             "R outcomes use the backtest/paper execution models already applied by the originating run; no raw-price hindsight labels are injected.",
-            "Chronological holdout, exact/captured subset, 2R probability, approximate 95% uncertainty, and per-symbol direction are evaluated where data exists.",
+            "Chronological holdout, exact/captured subset, 2R probability, approximate 95% uncertainty, and leave-one-symbol-out robustness are evaluated where data exists.",
             "Recommended authority tiers are statistical candidates only; review may preserve or reduce, never strengthen, those tiers.",
-            "Promotion recommendation floors are at least 100 labeled observations and 50 exact/captured labeled observations per feature; caller inputs may raise but never lower those floors.",
+            "Promotion recommendation floors are at least 100 labeled observations, 50 exact/captured labeled observations per feature, and three usable leave-one-symbol-out robustness subsets; caller inputs may raise but never lower sample floors.",
             "Per-feature sample counts exclude missing/unknown feature values and outcomes without an R label.",
         ),
         immutable_fingerprint=fp,
