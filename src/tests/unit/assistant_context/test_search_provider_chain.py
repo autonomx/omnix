@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from app.assistant_context.models import AssistantContextItem
+from app.research.policy import ResearchPolicy
 from app.research.provider_chain import (
     ProviderFallbackSearchClient,
     normalize_provider_chain,
 )
 from app.research.quick_search import QuickSearchService
+from app.research.settings import ResearchRuntimeSettings
 
 
 class FakeProviderClient:
@@ -39,6 +41,24 @@ def test_normalize_provider_chain_preserves_order_and_removes_duplicates() -> No
         "duckduckgo",
         "playwright",
     )
+
+
+def test_release_availability_uses_any_usable_provider_in_chain(monkeypatch) -> None:
+    monkeypatch.delenv("OMNIX_WEB_SEARCH_API_KEY", raising=False)
+    with_fallbacks = ResearchRuntimeSettings(
+        provider="brave",
+        provider_fallbacks=("playwright", "duckduckgo"),
+        policy=ResearchPolicy(),
+    )
+    brave_only = ResearchRuntimeSettings(
+        provider="brave",
+        provider_fallbacks=(),
+        policy=ResearchPolicy(),
+    )
+
+    assert with_fallbacks.credential_configured is False
+    assert with_fallbacks.provider_available is True
+    assert brave_only.provider_available is False
 
 
 def test_missing_brave_credential_skips_to_playwright(monkeypatch) -> None:
