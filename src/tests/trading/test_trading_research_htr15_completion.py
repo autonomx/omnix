@@ -59,7 +59,7 @@ def test_htr14_promotion_floors_cannot_be_lowered_by_request() -> None:
     assert catalyst.sample_size == 40
     assert catalyst.exact_sample_size == 40
     assert catalyst.recommendation == "observe_only"
-    assert "sample<100" in catalyst.reason
+    assert "sample 40 < required 100" in catalyst.reason
     assert any("at least 100" in note for note in report.notes)
 
 
