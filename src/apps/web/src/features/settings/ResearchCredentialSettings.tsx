@@ -110,7 +110,10 @@ export function ResearchCredentialSettings() {
                   value={input}
                   disabled={!editable || busy}
                   placeholder={configured && suffix ? `Configured · ••••${suffix}` : 'Enter API key'}
-                  onChange={(event) => setInputs((current) => ({ ...current, [provider]: event.currentTarget.value }))}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    setInputs((current) => ({ ...current, [provider]: value }));
+                  }}
                 />
                 <button
                   type="button"
