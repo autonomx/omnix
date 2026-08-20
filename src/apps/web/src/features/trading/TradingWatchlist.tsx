@@ -9,6 +9,7 @@ import {
   watchlistDisplaySymbol,
   watchlistLogoIdentity,
 } from './tradingWatchlistPresentation';
+import { TradingWatchlistSymbolPicker } from './TradingWatchlistSymbolPicker';
 import './TradingWatchlist.css';
 
 type WatchlistPayload = { name: string; instrumentIds: string[] };
@@ -131,6 +132,13 @@ function defaultWatchlistInstrumentIds(instruments: CanonicalInstrument[]): stri
   return [...equities, ...crypto];
 }
 
+function mergeInstruments(
+  current: readonly CanonicalInstrument[],
+  next: CanonicalInstrument,
+): CanonicalInstrument[] {
+  return [...new Map([...current, next].map((instrument) => [instrument.instrument_id, instrument])).values()];
+}
+
 export function TradingWatchlist({
   instruments,
   activeInstrumentId,
@@ -147,6 +155,8 @@ export function TradingWatchlist({
   const [status, setStatus] = useState<'loading' | 'saved' | 'saving' | 'conflict' | 'error'>('loading');
   const [quotes, setQuotes] = useState<Record<string, QuoteSnapshot>>({});
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
+  const [discoveredInstruments, setDiscoveredInstruments] = useState<CanonicalInstrument[]>([]);
   const selected = records.find((record) => record.record_id === selectedId) ?? records[0] ?? null;
   const current = payload(selected);
   const normalizedInstrumentIds = useMemo(
@@ -156,12 +166,14 @@ export function TradingWatchlist({
   const normalizedActiveInstrumentId = activeInstrumentId
     ? binanceInstrumentIdFor(activeInstrumentId)
     : '';
-  const activeInstrumentIsListed = normalizedActiveInstrumentId !== ''
-    && normalizedInstrumentIds.includes(normalizedActiveInstrumentId);
   const instrumentIdsKey = normalizedInstrumentIds.join('\u0000');
+  const catalogInstruments = useMemo(
+    () => [...new Map([...instruments, ...discoveredInstruments].map((instrument) => [instrument.instrument_id, instrument])).values()],
+    [discoveredInstruments, instruments],
+  );
   const instrumentById = useMemo(
-    () => new Map(instruments.map((instrument) => [instrument.instrument_id, instrument])),
-    [instruments],
+    () => new Map(catalogInstruments.map((instrument) => [instrument.instrument_id, instrument])),
+    [catalogInstruments],
   );
 
   useEffect(() => {
@@ -282,9 +294,11 @@ export function TradingWatchlist({
     }
   };
 
-  const addActive = () => {
-    if (!selected || !normalizedActiveInstrumentId || activeInstrumentIsListed) return;
-    void save({ ...current, instrumentIds: [...normalizedInstrumentIds, normalizedActiveInstrumentId] });
+  const addInstrument = async (instrument: CanonicalInstrument) => {
+    const instrumentId = binanceInstrumentIdFor(instrument.instrument_id);
+    setDiscoveredInstruments((items) => mergeInstruments(items, instrument));
+    if (!selected || normalizedInstrumentIds.includes(instrumentId) || status === 'saving') return;
+    await save({ ...current, instrumentIds: [...normalizedInstrumentIds, instrumentId] });
   };
 
   const rename = () => {
@@ -309,10 +323,10 @@ export function TradingWatchlist({
         </select>
         <button
           type="button"
-          onClick={addActive}
-          disabled={!selected || !normalizedActiveInstrumentId || activeInstrumentIsListed || status === 'loading' || status === 'saving'}
-          aria-label={activeInstrumentIsListed ? 'Active instrument already in watchlist' : 'Add active instrument'}
-          title={activeInstrumentIsListed ? 'Active instrument already in watchlist' : 'Add active instrument'}
+          onClick={() => setSymbolPickerOpen(true)}
+          disabled={!selected || status === 'loading' || status === 'saving'}
+          aria-label="Add symbol to watchlist"
+          title="Add symbol to watchlist"
         >
           +
         </button>
@@ -365,6 +379,14 @@ export function TradingWatchlist({
         })}
       </ul>
       <span className="trading-watchlist-status" aria-live="polite">{status}</span>
+      <TradingWatchlistSymbolPicker
+        open={symbolPickerOpen}
+        instruments={catalogInstruments}
+        selectedInstrumentIds={normalizedInstrumentIds}
+        busy={status === 'saving'}
+        onAdd={addInstrument}
+        onClose={() => setSymbolPickerOpen(false)}
+      />
     </section>
   );
 }
