@@ -119,13 +119,15 @@ export function ResearchSettingsSection() {
       value.researchProviderFallbacks[1] ?? '',
       value.researchProviderFallbacks[2] ?? '',
     ];
+    if (provider) {
+      for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
+        if (slotIndex !== index && slots[slotIndex] === provider) slots[slotIndex] = '';
+      }
+    }
     slots[index] = provider;
-    const seen = new Set<ResearchProvider>([value.researchProvider]);
-    const next = slots.filter((item): item is ResearchProvider => {
-      if (!item || seen.has(item)) return false;
-      seen.add(item);
-      return true;
-    });
+    const next = slots.filter(
+      (item): item is ResearchProvider => Boolean(item) && item !== value.researchProvider,
+    );
     dispatch({ type: 'update', path: 'assistant.researchProviderFallbacks', value: next });
   };
 
@@ -142,23 +144,32 @@ export function ResearchSettingsSection() {
           </select>
         </SettingsField>
         {numberField('Quick results', 'assistant.researchMaxResults', value.researchMaxResults, 1, 8)}
-        {[0, 1, 2].map((index) => (
-          <SettingsField
-            key={index}
-            label={`Fallback ${index + 1}`}
-            help={index === 0 ? 'Fallbacks are tried in order. Credentialed providers without a configured key are skipped.' : undefined}
-          >
-            <select
-              value={value.researchProviderFallbacks[index] ?? ''}
-              onChange={(event) => setFallbackSlot(index, event.currentTarget.value as ResearchProvider | '')}
+        {[0, 1, 2].map((index) => {
+          const current = value.researchProviderFallbacks[index] ?? '';
+          const selectedElsewhere = new Set(
+            value.researchProviderFallbacks.filter((_, slotIndex) => slotIndex !== index),
+          );
+          return (
+            <SettingsField
+              key={index}
+              label={`Fallback ${index + 1}`}
+              help={index === 0 ? 'Fallbacks are tried in order. Credentialed providers without a configured key are skipped.' : undefined}
             >
-              <option value="">None</option>
-              {PROVIDERS.filter((provider) => provider.value !== value.researchProvider).map((provider) => (
-                <option key={provider.value} value={provider.value}>{provider.label}</option>
-              ))}
-            </select>
-          </SettingsField>
-        ))}
+              <select
+                value={current}
+                onChange={(event) => setFallbackSlot(index, event.currentTarget.value as ResearchProvider | '')}
+              >
+                <option value="">None</option>
+                {PROVIDERS.filter((provider) => (
+                  provider.value !== value.researchProvider
+                  && (provider.value === current || !selectedElsewhere.has(provider.value))
+                )).map((provider) => (
+                  <option key={provider.value} value={provider.value}>{provider.label}</option>
+                ))}
+              </select>
+            </SettingsField>
+          );
+        })}
       </div>
 
       <div className="settings-toggle-list">
