@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,7 +17,7 @@ from .contracts import (
 from .fact_repository import TradingFactRepository, default_fact_repository
 from .facts.extraction import build_fact_set
 from .feature_projection import project_research_features
-from .hermes_loop import ResearchLoopResult, run_iterative_research
+from .hermes_loop import run_iterative_research
 from .issuer_identity import SecIssuerIdentityResolver
 from .novelty_shadow import generate_novelty_shadow
 from .repository import TradingResearchRepository, default_research_repository
@@ -103,12 +102,10 @@ def run_trading_research(request: TradingResearchRequest, *, repository: Trading
         except Exception as exc: warnings.append(f"novelty_shadow_unavailable:{type(exc).__name__}")
     actions=repository.action_trace(trace_id)+repository.action_trace(loop.trace_id)
     coverage=_coverage(actions,preliminary,novelty_checked)
-    fact_set=build_fact_set(instrument_id=request.instrument_id,evidence=evidence,decision_at=finished,strategy_id=request.strategy_id,coverage=coverage)
-    saved_supply=tuple(fact_repository.save_supply_fact(item) for item in fact_set.supply)
-    fact_set=fact_set.model_copy(update={"supply":saved_supply})
-    immediate=fact_set.supply_metrics.immediate_supply_risk
-    catalyst_status="confirmed" if fact_set.catalyst.primary_confirmed else "probable" if fact_set.catalyst.source_evidence_ids else "unresolved"
-    supply_status="risk_found" if immediate else "clear" if fact_set.supply_metrics.supply_resolution_status=="clear" else "unresolved"
+    fact_preview=build_fact_set(instrument_id=request.instrument_id,evidence=evidence,decision_at=finished,strategy_id=request.strategy_id,coverage=coverage)
+    immediate=fact_preview.supply_metrics.immediate_supply_risk
+    catalyst_status="confirmed" if fact_preview.catalyst.primary_confirmed else "probable" if fact_preview.catalyst.source_evidence_ids else "unresolved"
+    supply_status="risk_found" if immediate else "clear" if fact_preview.supply_metrics.supply_resolution_status=="clear" else "unresolved"
     states=coverage.model_dump(); complete=all(value=="complete" for value in states.values())
     research_status="complete" if complete else "partial"
     version=repository.next_report_version(request.instrument_id)
@@ -117,9 +114,15 @@ def run_trading_research(request: TradingResearchRequest, *, repository: Trading
     report=repository.save_report(TradingResearchReport(report_id=f"trr-{hashlib.sha256((request.instrument_id+'|'+str(version)+'|'+fingerprint(report_payload)).encode()).hexdigest()[:24]}",
         report_version=version,strategy_id=request.strategy_id,instrument_id=request.instrument_id,research_started_at=request.requested_at,
         research_completed_at=finished,evidence_cutoff_at=finished,catalyst_status=catalyst_status,supply_status=supply_status,research_status=research_status,
-        coverage=coverage,unresolved_facts=fact_set.unresolved_facts,source_evidence_ids=tuple(x.evidence_id for x in evidence),hermes_trace_id=loop.trace_id,
+        coverage=coverage,unresolved_facts=fact_preview.unresolved_facts,source_evidence_ids=tuple(x.evidence_id for x in evidence),hermes_trace_id=loop.trace_id,
         planner_backend=loop.planner_backend,stop_reason=loop.stop_reason,immutable_fingerprint=fingerprint(report_payload)))
-    fact_set=fact_set.model_copy(update={"report_id":report.report_id})
+    # Rebuild after the immutable report exists so report_id participates in the
+    # fact-set fingerprint. Report v1/v2/v3 can therefore never alias the same
+    # durable fact-set identity just because their extracted values are equal.
+    fact_set=build_fact_set(instrument_id=request.instrument_id,evidence=evidence,decision_at=finished,strategy_id=request.strategy_id,
+                            report_id=report.report_id,coverage=coverage)
+    saved_supply=tuple(fact_repository.save_supply_fact(item) for item in fact_set.supply)
+    fact_set=fact_set.model_copy(update={"supply":saved_supply})
     fact_set=fact_repository.save_fact_set(fact_set)
     decision_at=max(finished,fact_set.omnix_known_at or finished)
     features=fact_repository.save_features(project_research_features(fact_set,decision_at=decision_at,report=report))
