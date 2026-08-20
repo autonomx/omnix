@@ -31,12 +31,8 @@ on:
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
-# TEMPORARY same-repository PR #1494 generated-contract qualification write.
-# The guarded step may commit only generated API files after all Trading gates
-# and generation pass. This workflow is restored to contents: read immediately
-# after that generated-only push.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   trading-terminal:
@@ -79,6 +75,9 @@ jobs:
       - name: Trading TypeScript typecheck
         run: npm --workspace @omnix/web run typecheck:trading
       - name: Install Trading browser
+        # The hosted Ubuntu runner already carries Chromium runtime libraries.
+        # Avoid apt-based --with-deps here: it is redundant and can hang on a
+        # transient package-mirror lock, preventing the actual Trading gates.
         run: npx playwright install chromium
       - name: Trading Playwright smoke
         run: npm --workspace @omnix/web run test:e2e:trading
@@ -104,24 +103,5 @@ jobs:
             src/apps/web/src/api/generated/types.ts
           if-no-files-found: error
           retention-days: 7
-      - name: Commit qualified generated API contract
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1494 &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
-          if git diff --cached --quiet; then
-            echo "Generated API contract is already current."
-            exit 0
-          fi
-          unexpected="$(git diff --cached --name-only | grep -Ev '^(src/apps/web/src/api/generated/openapi\.json|src/apps/web/src/api/generated/types\.ts)$' || true)"
-          test -z "${unexpected}"
-          git commit -m "api: regenerate research provider status contract"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Verify generated API contract is committed
         run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
