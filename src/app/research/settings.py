@@ -37,7 +37,10 @@ class ResearchRuntimeSettings(BaseModel):
 
     @property
     def provider_available(self) -> bool:
-        return provider_credential_configured(self.effective_provider)
+        return any(
+            provider_credential_configured(provider)
+            for provider in self.effective_provider_chain
+        )
 
     @property
     def effective_provider(self) -> ResearchProvider:
