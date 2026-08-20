@@ -27,6 +27,7 @@ export type AssistantSettings = {
   streamingAudio: boolean;
   researchDefaultMode: ResearchMode;
   researchProvider: ResearchProvider;
+  researchProviderFallbacks: ResearchProvider[];
   researchMaxResults: number;
   researchMaxSteps: number;
   researchMaxQueries: number;
