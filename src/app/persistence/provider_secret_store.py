@@ -27,6 +27,7 @@ _RESEARCH_ENVIRONMENT_KEYS: dict[str, tuple[str, ...]] = {
     "tavily": ("OMNIX_TAVILY_SEARCH_API_KEY", "TAVILY_API_KEY"),
 }
 _LEGACY_RESEARCH_ENVIRONMENT_KEY = "OMNIX_WEB_SEARCH_API_KEY"
+_LEGACY_RESEARCH_PROVIDER_ENVIRONMENT_KEY = "OMNIX_WEB_SEARCH_PROVIDER"
 _TRADING_PROVIDERS = ("alpaca_iex",)
 _TRADING_ENVIRONMENT_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
     "alpaca_iex": {
@@ -174,6 +175,11 @@ def _legacy_research_environment_value() -> str:
     return os.environ.get(_LEGACY_RESEARCH_ENVIRONMENT_KEY, "").strip()
 
 
+def _legacy_research_provider() -> str:
+    provider = os.environ.get(_LEGACY_RESEARCH_PROVIDER_ENVIRONMENT_KEY, "brave").strip().lower()
+    return provider if provider in _RESEARCH_PROVIDERS else "brave"
+
+
 def load_provider_secrets() -> dict[str, Any]:
     api_keys = _stored_api_keys()
     for provider, environment_key in _ENVIRONMENT_KEYS.items():
@@ -187,17 +193,18 @@ def load_research_provider_secrets() -> dict[str, str]:
     """Return independent search-provider credentials without exposing them to settings JSON.
 
     Provider-specific environment variables are authoritative. The legacy shared
-    ``OMNIX_WEB_SEARCH_API_KEY`` remains a compatibility fallback until deployments
-    migrate to per-provider variables or the OS-protected store.
+    ``OMNIX_WEB_SEARCH_API_KEY`` remains a compatibility fallback for exactly one
+    provider selected by ``OMNIX_WEB_SEARCH_PROVIDER`` (Brave when unspecified).
     """
 
     api_keys = _stored_research_api_keys()
     legacy_value = _legacy_research_environment_value()
+    legacy_provider = _legacy_research_provider()
     for provider in _RESEARCH_PROVIDERS:
         environment_value = _research_environment_value(provider)
         if environment_value:
             api_keys[provider] = environment_value
-        elif legacy_value:
+        elif legacy_value and provider == legacy_provider:
             api_keys[provider] = legacy_value
         else:
             api_keys.setdefault(provider, "")
@@ -209,7 +216,7 @@ def research_provider_credential_source(provider: str) -> str:
         raise ValueError("unsupported_research_provider")
     if _research_environment_value(provider):
         return "environment"
-    if _legacy_research_environment_value():
+    if _legacy_research_environment_value() and provider == _legacy_research_provider():
         return "legacy_environment"
     if _stored_research_api_keys().get(provider):
         return "os_protected_store"
@@ -299,7 +306,11 @@ def save_research_provider_secret(provider: str, value: str | None) -> None:
     if provider not in _RESEARCH_ENVIRONMENT_KEYS:
         raise ValueError("unsupported_research_provider")
     requested = str(value or "").strip()
-    if _research_environment_value(provider) or _legacy_research_environment_value():
+    legacy_owned = (
+        bool(_legacy_research_environment_value())
+        and provider == _legacy_research_provider()
+    )
+    if _research_environment_value(provider) or legacy_owned:
         return
     if sys.platform != "win32":
         if requested:
