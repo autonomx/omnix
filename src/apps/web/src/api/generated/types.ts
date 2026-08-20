@@ -7105,6 +7105,8 @@ export interface components {
                 [key: string]: unknown;
             };
             provider: components["schemas"]["ResearchProviderStatus"];
+            /** Provider Chain */
+            provider_chain?: components["schemas"]["ResearchProviderStatus"][];
             release: components["schemas"]["ResearchReleaseStatus"];
             retention: components["schemas"]["ResearchRetentionStatus"];
         };

@@ -11088,6 +11088,13 @@
           "provider": {
             "$ref": "#/components/schemas/ResearchProviderStatus"
           },
+          "provider_chain": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchProviderStatus"
+            },
+            "title": "Provider Chain",
+            "type": "array"
+          },
           "release": {
             "$ref": "#/components/schemas/ResearchReleaseStatus"
           },
