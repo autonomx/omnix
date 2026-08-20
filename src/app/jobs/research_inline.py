@@ -119,6 +119,7 @@ def execute_research_job(
         session_id=request.session_id,
         user_message_id=request.user_message_id,
         provider=request.research_provider,
+        provider_chain=request.research_provider_chain,
         max_steps=request.max_steps,
         max_queries=request.max_queries,
         max_sources=request.max_sources,
@@ -386,6 +387,7 @@ def _default_workflow(
     from app.research.extraction import ReadablePageExtractor
     from app.research.planner import ResearchPlanner
     from app.research.policy import research_policy_from_env
+    from app.research.provider_chain import ProviderFallbackSearchClient, normalize_provider_chain
     from app.research.quick_search import QuickSearchService
 
     policy = replace(
@@ -393,17 +395,22 @@ def _default_workflow(
         search_cache_ttl_seconds=request.search_cache_ttl_seconds,
         extraction_cache_ttl_seconds=request.extraction_cache_ttl_seconds,
     )
+    provider_chain = normalize_provider_chain(
+        request.research_provider,
+        request.research_provider_chain,
+    )
 
     def quick_search_factory(remaining_sources: int, remaining_extracts: int) -> Any:
         service = QuickSearchService(
-            client_factory=lambda timeout: WebSearchClient(
-                provider=request.research_provider,
+            client_factory=lambda timeout: ProviderFallbackSearchClient(
+                providers=provider_chain,
                 timeout_seconds=timeout,
+                client_factory=WebSearchClient,
             ),
             research_policy=policy,
             extractor_factory=lambda: ReadablePageExtractor(research_policy=policy),
             max_extracts=min(4, remaining_extracts),
-            max_extract_workers=4 if request.research_provider == "playwright" else 1,
+            max_extract_workers=4 if "playwright" in provider_chain else 1,
         )
         return _IdentityBoundQuickSearch(service, request.session_id)
 
@@ -443,6 +450,7 @@ def _default_workflow(
         source_manifest_id=execution.source_manifest_id,
         metadata={
             "research_provider": request.research_provider,
+            "research_provider_chain": list(provider_chain),
             "research_budget": {
                 "max_steps": request.max_steps,
                 "max_queries": request.max_queries,
@@ -463,6 +471,7 @@ def _default_workflow(
         output={
             "objective": execution.objective,
             "research_provider": request.research_provider,
+            "research_provider_chain": list(provider_chain),
             "research_budget": {
                 "max_steps": request.max_steps,
                 "max_queries": request.max_queries,
