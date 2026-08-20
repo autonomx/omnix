@@ -32,6 +32,12 @@
   box-shadow: 0 4px 14px rgba(50, 70, 92, 0.06) !important;
 }
 
+:root[data-omnix-appearance='light'] .trading-tool-shortcuts {
+  border-left-color: var(--trading-light-line-soft) !important;
+  background: var(--trading-light-surface) !important;
+  box-shadow: -14px 0 20px rgba(50, 70, 92, 0.08) !important;
+}
+
 :root[data-omnix-appearance='light'] .trading-terminal-brand strong,
 :root[data-omnix-appearance='light'] .trading-chart-title-row strong,
 :root[data-omnix-appearance='light'] .trading-order-ticket-row strong,

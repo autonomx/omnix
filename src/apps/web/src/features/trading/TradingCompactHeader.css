@@ -43,16 +43,15 @@
  * so the duplicate fourth shortcut (Trade) stays out of this compact strip.
  */
 .trading-tool-shortcuts {
-  position: sticky;
-  z-index: 8;
-  right: 0;
+  position: static;
+  z-index: 1;
   order: 3 !important;
   flex: 0 0 auto;
   margin-left: auto;
   padding: 2px 3px;
   border-left: 1px solid rgba(117, 151, 181, .16);
   background: rgba(7, 16, 26, .98);
-  box-shadow: -14px 0 20px rgba(5, 12, 21, .92);
+  box-shadow: none;
 }
 
 .trading-tool-shortcuts > button:nth-child(4) {
