@@ -7,7 +7,7 @@ export type BacktestResultQuality = 'exact' | 'mixed' | 'approximate' | 'unavail
 
 export type GapPullbackConfig = {
   strategy_id: 'gap_pullback_v1';
-  strategy_version: '1.0.0' | '1.1.0';
+  strategy_version: '1.0.0' | '1.1.0' | '1.2.0';
   structure_interval: StrategyBarInterval;
   execution_interval: StrategyBarInterval;
   universe_scan_time_et?: string;
