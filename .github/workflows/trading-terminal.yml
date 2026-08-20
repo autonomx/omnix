@@ -31,16 +31,13 @@ on:
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
-# TEMPORARY same-repository PR #1494 qualification write. The guarded job applies
-# the staged web-unit expectation alignment, runs full web + Trading gates, and
-# pushes only after every qualification step passes. Restore to read afterward.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   trading-terminal:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     env:
       PYTHONPATH: src
       OMNIX_PERSISTENCE_MODE: legacy_test
@@ -58,13 +55,6 @@ jobs:
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
           test "${actual}" = "${expected}"
-      - name: Apply staged PR 1494 web CI completion patch
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1494 &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        run: python scripts/apply_pr1494_web_ci_completion.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -78,10 +68,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
           npm install
-      - name: Full web unit tests qualification
-        run: npm --workspace @omnix/web test
-      - name: Full web TypeScript qualification
-        run: npm --workspace @omnix/web run typecheck
       - name: Trading architecture and backend tests
         run: python -m pytest src/tests/trading -q --tb=short
       - name: Trading frontend tests
@@ -107,31 +93,6 @@ jobs:
           retention-days: 7
       - name: Generate shared gateway API contract
         run: npm --workspace @omnix/web run api:generate
-      - name: Commit qualified PR 1494 web CI completion
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1494 &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
-        shell: bash
-        run: |
-          git rm -f scripts/apply_pr1494_web_ci_completion.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- \
-            src/apps/web/src/app/modules.test.ts \
-            src/apps/web/src/features/image-generation/latestImageResult.spec.ts \
-            src/apps/web/src/features/image-generation/ImageLatestResult.spec.tsx \
-            src/apps/web/src/features/assistant-workspace/live-speech-synthesis-options.test.ts \
-            src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.test.ts \
-            src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-ordering-regression.test.ts \
-            src/apps/web/src/features/chatbot/CharacterManagementPanel.test.tsx
-          if git diff --cached --quiet; then
-            echo "Web CI completion patch already applied."
-            exit 0
-          fi
-          git commit -m "test: align web regressions with current behavior"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Upload generated API contract
         if: always()
         uses: actions/upload-artifact@v4
