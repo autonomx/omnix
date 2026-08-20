@@ -33,6 +33,59 @@ def build_research_outcome(*, session_date: date, instrument_id: str, strategy_v
         immutable_fingerprint=fp)
 
 
+def persist_backtest_trade_outcomes(
+    *,
+    strategy_id: str | None,
+    strategy_version: str,
+    session_date: date,
+    trades: list[Any] | tuple[Any, ...],
+    market_fidelity: str,
+    fact_repository: Any,
+    reward_multiple: Decimal = Decimal("2"),
+) -> int:
+    """Append causally attributed HTR outcomes for completed simulated trades.
+
+    Research is never reconstructed here. Features are queried strictly ``as_of``
+    each trade's entry timestamp. A missing historical feature snapshot is saved
+    as unavailable rather than backfilled from present-day SEC/web state.
+    """
+
+    saved = 0
+    for trade in trades:
+        features = fact_repository.research_features_as_of(trade.instrument_id, trade.entry_time)
+        research_fidelity = "captured_exact" if features is not None else "unavailable"
+        two_r_label = None
+        time_to_mfe = None
+        if reward_multiple == Decimal("2"):
+            # The backtest protection engine is pessimistic stop-before-target on
+            # ambiguous bars, so a target exit establishes +2R before -1R.
+            two_r_label = trade.exit_reason == "target"
+            if trade.exit_reason == "target":
+                time_to_mfe = trade.hold_minutes
+        time_to_stop = trade.hold_minutes if trade.exit_reason == "stop" else None
+        outcome = build_research_outcome(
+            session_date=session_date,
+            strategy_id=strategy_id,
+            instrument_id=trade.instrument_id,
+            strategy_version=strategy_version,
+            features=features,
+            market_fidelity=market_fidelity,
+            research_fidelity=research_fidelity,
+            strategy_state="traded",
+            entry_time=trade.entry_time,
+            exit_time=trade.exit_time,
+            mfe_r=trade.mfe_r,
+            mae_r=trade.mae_r,
+            r_result=trade.r_multiple,
+            two_r_before_minus_one_r=two_r_label,
+            time_to_mfe_minutes=time_to_mfe,
+            time_to_stop_minutes=time_to_stop,
+            data_quality_flags=(() if features is not None else ("research_features_unavailable_as_of_entry",)),
+        )
+        saved += int(bool(fact_repository.save_outcome(outcome)))
+    return saved
+
+
 def attribution_summary(outcomes: list[dict[str,Any]]) -> dict[str,Any]:
     def dec(v): return Decimal(str(v)) if v is not None else None
     valid=[o for o in outcomes if dec(o.get("r_result")) is not None]
