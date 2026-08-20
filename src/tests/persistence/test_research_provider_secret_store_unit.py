@@ -9,6 +9,7 @@ _RESEARCH_ENV_KEYS = (
     "OMNIX_TAVILY_SEARCH_API_KEY",
     "TAVILY_API_KEY",
     "OMNIX_WEB_SEARCH_API_KEY",
+    "OMNIX_WEB_SEARCH_PROVIDER",
 )
 
 
@@ -62,17 +63,31 @@ def test_research_provider_specific_environment_keys_are_authoritative(tmp_path,
     assert store.research_provider_credential_editable("tavily") is False
 
 
-def test_legacy_shared_search_key_remains_compatible_but_is_identified(tmp_path, monkeypatch) -> None:
+def test_legacy_shared_search_key_defaults_to_brave_only(tmp_path, monkeypatch) -> None:
     _prepare_windows_store(tmp_path, monkeypatch)
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "legacy-shared-key")
 
     assert store.load_research_provider_secrets() == {
         "brave": "legacy-shared-key",
-        "tavily": "legacy-shared-key",
+        "tavily": "",
     }
     assert store.research_provider_credential_source("brave") == "legacy_environment"
-    assert store.research_provider_credential_source("tavily") == "legacy_environment"
+    assert store.research_provider_credential_source("tavily") == "missing"
     assert store.research_provider_credential_editable("brave") is False
+    assert store.research_provider_credential_editable("tavily") is True
+
+
+def test_legacy_shared_search_key_honors_explicit_tavily_provider(tmp_path, monkeypatch) -> None:
+    _prepare_windows_store(tmp_path, monkeypatch)
+    monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "legacy-tavily-key")
+    monkeypatch.setenv("OMNIX_WEB_SEARCH_PROVIDER", "tavily")
+
+    assert store.load_research_provider_secrets() == {
+        "brave": "",
+        "tavily": "legacy-tavily-key",
+    }
+    assert store.research_provider_credential_source("brave") == "missing"
+    assert store.research_provider_credential_source("tavily") == "legacy_environment"
 
 
 def test_empty_research_provider_key_clears_only_that_provider(tmp_path, monkeypatch) -> None:
