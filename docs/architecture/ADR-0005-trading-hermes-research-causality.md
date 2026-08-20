@@ -10,7 +10,29 @@ A research record is visible to a strategy decision only when `omnix_known_at <=
 
 `gap_pullback_v1` 1.0.0 and 1.1.0 retain legacy catalyst/dilution semantics. New research semantics are independently pinned by `research_policy_version`, `fact_schema_version`, `extractor_version`, and `feature_projection_version`. A strategy consumes only `StrategyResearchFeatures`, never Hermes prose, raw filings, snippets, or LLM rationale.
 
-Research facts and AI annotations remain non-authoritative until an HTR-14 validation report explicitly approves promotion. If authorization semantics change, the execution strategy version must advance rather than silently changing 1.1.0.
+Research facts and AI annotations remain non-authoritative until HTR-13/14 outcome evidence has been analyzed and an explicit operator review creates a promotion-enabled validation artifact. Automatic HTR-14 analysis is incapable of granting execution authority by itself.
+
+## HTR-15 version choice
+
+Research-authoritative execution is a new strategy version, not a silent reinterpretation of 1.1:
+
+```text
+strategy_kind           = gap_pullback_v1
+strategy_version        = 1.2.0
+research_policy_version = trading-research-1
+feature_projection      = research-features-1
+```
+
+`1.0.0` and `1.1.0` never read authoritative HTR policy state and remain replay-compatible with their historical `legacy-1` research semantics. A `1.2.0` decision fails closed when the causal research projection is unavailable or when no reviewed promotion artifact exists.
+
+A reviewed artifact may preserve or reduce the authority recommended by HTR-14; it may never strengthen an automatic recommendation. The deterministic recommendation semantics are:
+
+- `observe_only` — recorded for analysis, no decision effect;
+- `score_only` — favorable/unfavorable evidence contributes `+1/-1` to the existing 0–10 setup-quality score;
+- `soft_gate` — unfavorable or missing evidence contributes a stronger `-2` quality penalty, while favorable evidence adds no bonus;
+- `hard_gate` — the required favorable state must be present or authorization fails immediately.
+
+The adjusted quality score is clamped to the existing 0–10 range and compared with the strategy's existing minimum-quality threshold. AUTO PAPER and historical backtests call the same pure research-policy/quality evaluator. Hard gates fail closed on missing evidence. The LLM/Hermes planner never receives order, sizing, risk-state, or strategy-configuration authority.
 
 ## Forbidden dependencies
 
@@ -18,4 +40,4 @@ Research facts and AI annotations remain non-authoritative until an HTR-14 valid
 
 ## Consequences
 
-Research may continue after the entry window opens. Later evidence can influence later decisions but cannot rewrite earlier state. Logs and durable records retain the exact policy/schema/projection versions used for every projected feature and decision context.
+Research may continue after the entry window opens. Later evidence can influence later decisions but cannot rewrite earlier state. Logs and durable records retain the exact strategy, research-policy, fact/extractor, projection, and validation versions used for every projected feature and decision context.
