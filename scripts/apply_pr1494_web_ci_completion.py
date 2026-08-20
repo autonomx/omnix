@@ -148,8 +148,8 @@ replace_exact(
 )
 replace_exact(
     ordering,
-    "    mocks.reporter.record.mockReset();",
-    "    mocks.recordSpy.mockReset();\n    mocks.reporter.record = mocks.recordSpy;",
+    "  mocks.reporter.record.mockReset();",
+    "  mocks.recordSpy.mockReset();\n  mocks.reporter.record = mocks.recordSpy;",
 )
 replace_exact(
     ordering,
