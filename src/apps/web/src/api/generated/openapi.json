@@ -4961,6 +4961,100 @@
         "title": "FrozenDatasetSnapshot",
         "type": "object"
       },
+      "GapPullbackBacktestCandidateDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_at": {
+            "format": "date-time",
+            "title": "Decision At",
+            "type": "string"
+          },
+          "discovery_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovery Rank"
+          },
+          "entry_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Time"
+          },
+          "exit_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Time"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Score"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "selected_trade": {
+            "default": false,
+            "title": "Selected Trade",
+            "type": "boolean"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "triggered": {
+            "default": false,
+            "title": "Triggered",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "decision_at",
+          "state"
+        ],
+        "title": "GapPullbackBacktestCandidateDecision",
+        "type": "object"
+      },
       "GapPullbackBacktestRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5046,6 +5140,14 @@
       "GapPullbackBacktestResult": {
         "additionalProperties": false,
         "properties": {
+          "candidate_decisions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GapPullbackBacktestCandidateDecision"
+            },
+            "title": "Candidate Decisions",
+            "type": "array"
+          },
           "dataset_fingerprint": {
             "title": "Dataset Fingerprint",
             "type": "string"

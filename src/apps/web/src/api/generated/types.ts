@@ -4486,6 +4486,38 @@ export interface components {
              */
             source_as_of: string;
         };
+        /** GapPullbackBacktestCandidateDecision */
+        GapPullbackBacktestCandidateDecision: {
+            /**
+             * Decision At
+             * Format: date-time
+             */
+            decision_at: string;
+            /** Discovery Rank */
+            discovery_rank?: number | null;
+            /** Entry Time */
+            entry_time?: string | null;
+            /** Exit Time */
+            exit_time?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Quality Score */
+            quality_score?: number | null;
+            /** Rejection Reason */
+            rejection_reason?: string | null;
+            /**
+             * Selected Trade
+             * @default false
+             */
+            selected_trade: boolean;
+            /** State */
+            state: string;
+            /**
+             * Triggered
+             * @default false
+             */
+            triggered: boolean;
+        };
         /** GapPullbackBacktestRequest */
         GapPullbackBacktestRequest: {
             /**
@@ -4524,6 +4556,11 @@ export interface components {
         };
         /** GapPullbackBacktestResult */
         GapPullbackBacktestResult: {
+            /**
+             * Candidate Decisions
+             * @default []
+             */
+            candidate_decisions: components["schemas"]["GapPullbackBacktestCandidateDecision"][];
             /** Dataset Fingerprint */
             dataset_fingerprint: string;
             /** Execution Policy Version */

@@ -17,7 +17,7 @@ from .contracts import (
 from .fact_repository import TradingFactRepository, default_fact_repository
 from .facts.extraction import build_fact_set
 from .feature_projection import project_research_features
-from .hermes_loop import run_iterative_research
+from .hermes_loop import ResearchLoopResult, run_iterative_research
 from .issuer_identity import SecIssuerIdentityResolver
 from .novelty_shadow import generate_novelty_shadow
 from .repository import TradingResearchRepository, default_research_repository
@@ -116,6 +116,19 @@ def _coverage(actions: list[ResearchActionRecord], fact_set: TradingFactSet, nov
     )
 
 
+def _deterministic_harvest_resolved(coverage: ResearchCoverage, fact_set: TradingFactSet) -> bool:
+    source_coverage_complete = all(
+        state == "complete"
+        for state in (coverage.sec, coverage.company_ir, coverage.recent_news)
+    )
+    return bool(
+        source_coverage_complete
+        and fact_set.catalyst.primary_confirmed
+        and fact_set.supply_metrics.supply_resolution_status == "clear"
+        and not fact_set.unresolved_facts
+    )
+
+
 def _research_status(*, coverage: ResearchCoverage, actions: list[ResearchActionRecord], evidence_count: int,
                      stop_reason: str) -> str:
     states = coverage.model_dump()
@@ -151,7 +164,26 @@ def run_trading_research(
                     query=None, limit=min(6, request.max_sources))
     _harvest_action(repository, request, identity, trace_id=trace_id, step=2, operation="web_search", adapter=web,
                     query=f"{identity.symbol} {identity.legal_name or ''} latest catalyst financing warrants", limit=min(6, request.max_sources))
-    loop = run_iterative_research(request, identity, repository, planner=planner, sec=sec, company=company, web=web)
+    harvest_finished = datetime.now(timezone.utc)
+    harvest_evidence = repository.list_evidence_as_of(request.instrument_id, harvest_finished, request.max_sources)
+    harvest_fact_set = build_fact_set(
+        instrument_id=request.instrument_id,
+        evidence=harvest_evidence,
+        decision_at=harvest_finished,
+        strategy_id=request.strategy_id,
+    )
+    harvest_actions = repository.action_trace(trace_id)
+    harvest_coverage = _coverage(harvest_actions, harvest_fact_set, novelty_checked=False)
+    if _deterministic_harvest_resolved(harvest_coverage, harvest_fact_set):
+        loop = ResearchLoopResult(
+            trace_id=f"{trace_id}-resolved",
+            planner_backend="not_required",
+            stop_reason="deterministic_evidence_complete",
+            action_count=0,
+            evidence_ids=tuple(item.evidence_id for item in harvest_evidence),
+        )
+    else:
+        loop = run_iterative_research(request, identity, repository, planner=planner, sec=sec, company=company, web=web)
 
     finished = datetime.now(timezone.utc)
     evidence = repository.list_evidence_as_of(request.instrument_id, finished, request.max_sources)

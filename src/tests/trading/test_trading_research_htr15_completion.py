@@ -267,3 +267,60 @@ def test_v12_backtest_arbitrates_with_research_adjusted_quality() -> None:
     assert result.trades
     assert result.trades[0].instrument_id == second
     assert result.trades[0].quality_score == base_quality + 1
+
+
+def test_backtest_returns_decision_row_for_every_candidate() -> None:
+    triggered = "equity:NASDAQ:AAA"
+    rejected = "equity:NASDAQ:ZZZ"
+    candidates = [_candidate(triggered, 1), _candidate(rejected, 2).model_copy(update={"premarket_price": Decimal("8.4"), "gap_pct": Decimal("5")})]
+    universe = freeze_gapper_universe(
+        universe_id="htr-candidate-outcomes-2026-08-18",
+        session_date=date(2026, 8, 18),
+        evaluation_time=datetime(2026, 8, 18, 13, 20, tzinfo=timezone.utc),
+        discovery_source="import",
+        candidates=candidates,
+    )
+    dataset = freeze_backtest_session(
+        session_date=date(2026, 8, 18),
+        universe=universe,
+        bars_by_instrument={triggered: _bars(triggered), rejected: _bars(rejected)},
+    )
+    result = run_gap_pullback_backtest(
+        dataset,
+        GapPullbackConfig(pivot_left_bars=1, pivot_right_bars=1, volume_lookback_bars=5, entry_start_et=time(9, 30)),
+        PaperExecutionPolicy(slippage_bps=Decimal("10"), max_volume_participation_pct=Decimal("1"), latency_ms=0),
+    )
+    assert len(result.candidate_decisions) == 2
+    by_symbol = {item.instrument_id: item for item in result.candidate_decisions}
+    assert by_symbol[triggered].triggered is True
+    assert by_symbol[rejected].state == "rejected"
+    assert by_symbol[rejected].selected_trade is False
+
+
+def test_deterministic_harvest_resolution_rule_skips_only_fully_resolved_primary_case() -> None:
+    from app.trading.research.contracts import ResearchCoverage
+    from app.trading.research.coordinator import _deterministic_harvest_resolved
+    from app.trading.research.facts.extraction import build_fact_set
+    from app.trading.research.contracts import TradingEvidence, fingerprint
+
+    captured = datetime(2026, 8, 20, 13, 30, tzinfo=timezone.utc)
+    catalyst = TradingEvidence(
+        evidence_id="ir-catalyst", instrument_id="equity:NASDAQ:XYZ", evidence_type="company_release",
+        source_type="company_ir", source_locator="https://example.test/ir", source_authority_tier=1,
+        source_published_at=captured, source_available_at=captured, captured_at=captured, omnix_known_at=captured,
+        title="Company announces contract award", content="The company announced a material contract award today.",
+        content_hash="c" * 64, extraction_status="completed", metadata={},
+        immutable_fingerprint=fingerprint({"id": "ir-catalyst"}),
+    )
+    supply = TradingEvidence(
+        evidence_id="sec-supply", instrument_id="equity:NASDAQ:XYZ", evidence_type="sec_filing_content",
+        source_type="sec", source_locator="https://sec.gov/Archives/example", source_authority_tier=1,
+        source_published_at=captured, source_available_at=captured, captured_at=captured, omnix_known_at=captured,
+        title="ATM termination", content="The previous at-the-market offering was terminated and is no longer available.",
+        content_hash="d" * 64, extraction_status="completed", metadata={"form": "8-K"},
+        immutable_fingerprint=fingerprint({"id": "sec-supply"}),
+    )
+    facts = build_fact_set(instrument_id="equity:NASDAQ:XYZ", evidence=(catalyst, supply), decision_at=captured)
+    complete = ResearchCoverage(sec="complete", company_ir="complete", recent_news="complete")
+    assert _deterministic_harvest_resolved(complete, facts) is True
+    assert _deterministic_harvest_resolved(complete.model_copy(update={"sec": "failed"}), facts) is False

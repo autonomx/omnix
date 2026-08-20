@@ -293,6 +293,7 @@ def create_trading_strategy_router(
                     strategy_version=request.config.strategy_version,
                     session_date=request.session_date,
                     trades=result.trades,
+                    candidate_decisions=result.candidate_decisions,
                     market_fidelity="captured_point_in_time",
                     fact_repository=fact_repository,
                     reward_multiple=request.config.reward_multiple,
@@ -501,7 +502,7 @@ def create_trading_strategy_router(
                     strategy_id=strategy_id,
                     day=day,
                 )
-                if day.result is not None and day.result.trades:
+                if day.result is not None and day.result.candidate_decisions:
                     try:
                         fact_repository = fact_repository or default_fact_repository()
                         captured = await asyncio.to_thread(
@@ -510,6 +511,7 @@ def create_trading_strategy_router(
                             strategy_version=strategy.config.strategy_version,
                             session_date=day.session_date,
                             trades=day.result.trades,
+                            candidate_decisions=day.result.candidate_decisions,
                             market_fidelity=(
                                 "captured_point_in_time" if day.universe_origin == "captured"
                                 else "reconstructed_current_listings_iex"

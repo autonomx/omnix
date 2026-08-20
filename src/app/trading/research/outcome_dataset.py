@@ -115,6 +115,7 @@ def build_research_outcome(
         "strategy_version": strategy_version,
         "features": feature_payload,
         "strategy_state": strategy_state,
+        "rejection_reason": rejection_reason,
         "entry_time": entry_time,
         "exit_time": exit_time,
         "mfe_r": mfe_r,
@@ -157,13 +158,16 @@ def persist_backtest_trade_outcomes(
     strategy_version: str,
     session_date: date,
     trades: list[Any] | tuple[Any, ...],
+    candidate_decisions: list[Any] | tuple[Any, ...] = (),
     market_fidelity: str,
     fact_repository: Any,
     reward_multiple: Decimal = Decimal("2"),
 ) -> int:
     """Append causally attributed HTR outcomes for completed simulated trades."""
     saved = 0
+    traded_instruments: set[str] = set()
     for trade in trades:
+        traded_instruments.add(trade.instrument_id)
         features = fact_repository.research_features_as_of(trade.instrument_id, trade.entry_time)
         context = research_context_as_of(
             instrument_id=trade.instrument_id,
@@ -198,6 +202,37 @@ def persist_backtest_trade_outcomes(
             time_to_mfe_minutes=time_to_mfe,
             time_to_stop_minutes=time_to_stop,
             data_quality_flags=(() if features is not None else ("research_features_unavailable_as_of_entry",)),
+            research_context=context,
+        )
+        saved += int(bool(fact_repository.save_outcome(outcome)))
+
+    for decision in candidate_decisions:
+        if decision.instrument_id in traded_instruments or getattr(decision, "selected_trade", False):
+            continue
+        decision_at = decision.decision_at
+        features = fact_repository.research_features_as_of(decision.instrument_id, decision_at)
+        context = research_context_as_of(
+            instrument_id=decision.instrument_id,
+            decision_at=decision_at,
+            fact_repository=fact_repository,
+        )
+        research_fidelity = "captured_exact" if features is not None else "unavailable"
+        flags = ["unlabeled_non_trade_observation"]
+        if features is None:
+            flags.append("research_features_unavailable_as_of_decision")
+        outcome = build_research_outcome(
+            session_date=session_date,
+            strategy_id=strategy_id,
+            instrument_id=decision.instrument_id,
+            strategy_version=strategy_version,
+            features=features,
+            market_fidelity=market_fidelity,
+            research_fidelity=research_fidelity,
+            strategy_state=decision.state,
+            rejection_reason=decision.rejection_reason,
+            entry_time=decision.entry_time,
+            exit_time=decision.exit_time,
+            data_quality_flags=tuple(flags),
             research_context=context,
         )
         saved += int(bool(fact_repository.save_outcome(outcome)))
@@ -285,10 +320,37 @@ def attribution_summary(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
         if row.get("market_fidelity") in {"captured", "captured_point_in_time", "exact", "paper-execution-v2"}
         and row.get("research_fidelity") in {"captured_exact", "exact"}
     ]
+    structure_only = [row for row in outcomes if str(row.get("strategy_version") or "") in {"1.0.0", "1.1.0"}]
+    same_day_primary = [
+        row for row in outcomes
+        if (row.get("features") or {}).get("primary_catalyst_confirmed") is True
+        and (row.get("features") or {}).get("catalyst_same_day") is True
+    ]
+    secondary_only = [
+        row for row in outcomes
+        if (row.get("features") or {}).get("primary_catalyst_confirmed") is False
+        and int(((((row.get("features") or {}).get("_research_context") or {}).get("catalyst") or {}).get("source_count_secondary") or 0)) > 0
+    ]
+    resolved_supply = [row for row in outcomes if (row.get("features") or {}).get("supply_resolution_status") == "clear"]
+    unresolved_supply_rows = [row for row in outcomes if (row.get("features") or {}).get("supply_resolution_status") == "unresolved"]
+    strategy_states = {
+        state: _group_stats([row for row in outcomes if str(row.get("strategy_state") or "unavailable") == state])
+        for state in sorted({str(row.get("strategy_state") or "unavailable") for row in outcomes})
+    }
     return {
         "sample_size": len(outcomes),
         "baseline": _group_stats(outcomes),
+        "structure_only_baseline": _group_stats(structure_only),
         "exact_causal_subset": _group_stats(exact),
+        "same_day_primary_vs_secondary_only": {
+            "same_day_primary": _group_stats(same_day_primary),
+            "secondary_only": _group_stats(secondary_only),
+        },
+        "supply_resolution": {
+            "clear": _group_stats(resolved_supply),
+            "unresolved": _group_stats(unresolved_supply_rows),
+        },
+        "strategy_states": strategy_states,
         "feature_comparisons": comparisons,
         "research_status": research_status,
         "market_fidelity": market_fidelity,
