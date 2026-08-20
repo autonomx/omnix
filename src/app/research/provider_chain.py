@@ -1,7 +1,6 @@
 """Ordered provider fallback for web research search clients."""
 from __future__ import annotations
 
-import os
 import time
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -33,8 +32,16 @@ def provider_requires_credential(provider: str) -> bool:
     return provider in {"brave", "tavily"}
 
 
+def _provider_api_key(provider: str) -> str:
+    if not provider_requires_credential(provider):
+        return ""
+    from app.persistence.provider_secret_store import load_research_provider_secrets
+
+    return str(load_research_provider_secrets().get(provider) or "").strip()
+
+
 def provider_credential_configured(provider: str) -> bool:
-    return not provider_requires_credential(provider) or bool(os.environ.get("OMNIX_WEB_SEARCH_API_KEY"))
+    return not provider_requires_credential(provider) or bool(_provider_api_key(provider))
 
 
 def _default_client_factory(**kwargs: Any):
@@ -42,6 +49,9 @@ def _default_client_factory(**kwargs: Any):
     # Settings. Keeping the transport dependency here avoids a package-level import cycle.
     from app.assistant_context.web_search import WebSearchClient
 
+    provider = str(kwargs.get("provider") or "").strip().lower()
+    if provider_requires_credential(provider) and "api_key" not in kwargs:
+        kwargs["api_key"] = _provider_api_key(provider)
     return WebSearchClient(**kwargs)
 
 
