@@ -21,6 +21,7 @@ from .paper import PaperExecutionPolicy
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
 from .research.policy import ResearchPolicyDecision
+from .research.runtime_policy import forbid_external_web_search
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
 from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import TradingStrategyConfigDocument
@@ -258,6 +259,7 @@ def _result_quality(exact_sessions: int, reconstructed_sessions: int, covered_se
     return "exact"
 
 
+@forbid_external_web_search("trading_backtest")
 def run_strategy_range_backtest(
     strategy: TradingStrategyConfigDocument,
     universes: list[GapperUniverseSnapshot] | tuple[GapperUniverseSnapshot, ...],

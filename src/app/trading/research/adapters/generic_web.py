@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime, timezone
 
 from ..contracts import IssuerIdentity, TradingEvidence, fingerprint
+from ..runtime_policy import assert_external_web_search_allowed
 from ..source_authority import source_authority_tier
 from .base import AdapterExecutionResult
 
@@ -22,6 +23,10 @@ class GenericWebAdapter:
         self.extractor_factory = extractor_factory
 
     def find(self, identity: IssuerIdentity, *, query: str | None = None, limit: int = 8) -> AdapterExecutionResult:
+        # Generic/company-IR discovery ultimately consumes the configured web-search
+        # provider (for example Brave). Backtests install a context-local hard guard
+        # so a future Hermes integration cannot silently spend live search quota.
+        assert_external_web_search_allowed()
         q = query or f"{identity.symbol} {identity.legal_name or ''} latest news filing financing".strip()
         execution = self.search_service.search(q, limit)
         captured = datetime.now(timezone.utc)
