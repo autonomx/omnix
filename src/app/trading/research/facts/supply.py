@@ -24,8 +24,10 @@ _WITHDRAWN = re.compile(r"\bwithdrawn\b", re.I)
 _EXERCISABLE = re.compile(r"\b(?:exercisable|may be exercised|currently outstanding)\b", re.I)
 _ACTIVE = re.compile(r"\b(?:active|remains? available|outstanding|effective|may sell|may issue|may offer)\b", re.I)
 _EFFECTIVE = re.compile(r"\b(?:became|is|was|declared) effective\b", re.I)
-_SHARE = re.compile(r"(?P<n>\d[\d,.]*)\s*(?P<u>thousand|million|billion|k|m|b)?\s+shares?", re.I)
-_MONEY = re.compile(r"\$\s*(?P<n>\d[\d,.]*)\s*(?P<u>thousand|million|billion|k|m|b)?", re.I)
+_COUNT = r"(?P<n>\d[\d,.]*)\s*(?P<u>thousand|million|billion|k|m|b)?"
+_SHARE = re.compile(_COUNT + r"\s+shares?", re.I)
+_WARRANT_COUNT = re.compile(_COUNT + r"\s+warrants?", re.I)
+_MONEY = re.compile(r"\$\s*" + _COUNT, re.I)
 _STRIKE = re.compile(r"(?:exercise|strike) price(?: of| at)?\s*\$\s*(?P<n>\d+(?:\.\d+)?)", re.I)
 
 
@@ -39,6 +41,8 @@ def _number(match: re.Match[str] | None) -> Decimal | None:
 
 
 def _status(statement: str, supply_type: str) -> tuple[str, str, Decimal]:
+    # Negative/status-resolving language intentionally precedes generic words
+    # such as "outstanding" so historical/terminated facilities are not vetoed.
     if _TERMINATED.search(statement): return "terminated", "resolved", Decimal("0.95")
     if _EXHAUSTED.search(statement): return "exhausted", "resolved", Decimal("0.95")
     if _WITHDRAWN.search(statement): return "withdrawn", "resolved", Decimal("0.95")
@@ -60,6 +64,8 @@ def extract_supply_facts(evidence: list[TradingEvidence] | tuple[TradingEvidence
                     continue
                 status, resolution, confidence = _status(statement, supply_type)
                 shares = _number(_SHARE.search(statement))
+                if shares is None and supply_type == "warrant":
+                    shares = _number(_WARRANT_COUNT.search(statement))
                 money_matches = list(_MONEY.finditer(statement))
                 remaining_capacity = None
                 if supply_type == "atm" and money_matches and re.search(r"remaining|available|capacity|up to", statement, re.I):
@@ -95,6 +101,5 @@ def extract_supply_facts(evidence: list[TradingEvidence] | tuple[TradingEvidence
                     generated_at=generated,
                     immutable_fingerprint=fp,
                 ))
-    # Preserve independent statements but remove exact duplicate fingerprints.
     unique = {fact.immutable_fingerprint: fact for fact in facts}
     return tuple(unique.values())

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from ..contracts import CatalystFactSet, TradingEvidence
 
 _ET = ZoneInfo("America/New_York")
+_SUPPLY_ONLY_FORMS = {"S-1", "S-1/A", "S-3", "S-3/A", "424B3", "424B5", "RW", "EFFECT"}
 
 
 def _classify(text: str) -> str:
@@ -21,13 +22,24 @@ def _classify(text: str) -> str:
     return next((name for name, pattern in patterns if re.search(pattern, lowered)), "other")
 
 
+def _catalyst_candidate(item: TradingEvidence) -> bool:
+    if item.source_type == "company_ir":
+        return True
+    if item.source_type == "sec":
+        form = str(item.metadata.get("form") or "").upper()
+        return form not in _SUPPLY_ONLY_FORMS
+    # Tier-2 current news can support a probable catalyst but does not count as
+    # primary confirmation.
+    return item.source_type in {"news", "web"}
+
+
 def extract_catalyst_facts(
     evidence: list[TradingEvidence] | tuple[TradingEvidence, ...],
     *,
     decision_at: datetime,
 ) -> CatalystFactSet:
     generated = datetime.now(timezone.utc)
-    eligible = [item for item in evidence if item.omnix_known_at is None or item.omnix_known_at <= decision_at]
+    eligible = [item for item in evidence if (item.omnix_known_at is None or item.omnix_known_at <= decision_at) and _catalyst_candidate(item)]
     primary = [item for item in eligible if item.source_authority_tier == 1]
     secondary = [item for item in eligible if item.source_authority_tier == 2]
     published = [item.source_published_at for item in eligible if item.source_published_at is not None]
