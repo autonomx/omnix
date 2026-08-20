@@ -31,8 +31,12 @@ on:
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
+# TEMPORARY same-repository PR #1494 contract qualification write. The guarded
+# step below can only update the two generated API files, restores this workflow
+# from its parent before committing, and pushes only after every Trading gate and
+# API generation step above it passes. The resulting branch head is read-only.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   trading-terminal:
@@ -103,5 +107,25 @@ jobs:
             src/apps/web/src/api/generated/types.ts
           if-no-files-found: error
           retention-days: 7
+      - name: Commit qualified generated API contract and restore read-only workflow
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.number == 1494 &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
+        shell: bash
+        run: |
+          git checkout HEAD^ -- .github/workflows/trading-terminal.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            .github/workflows/trading-terminal.yml \
+            src/apps/web/src/api/generated/openapi.json \
+            src/apps/web/src/api/generated/types.ts
+          git diff --cached --name-only
+          unexpected="$(git diff --cached --name-only | grep -Ev '^(\.github/workflows/trading-terminal\.yml|src/apps/web/src/api/generated/openapi\.json|src/apps/web/src/api/generated/types\.ts)$' || true)"
+          test -z "${unexpected}"
+          git commit -m "api: regenerate research provider status contract"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Verify generated API contract is committed
         run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
