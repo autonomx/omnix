@@ -266,6 +266,7 @@
   position: absolute;
   z-index: 2;
   right: 4px;
+  top: 50%;
   display: flex;
   gap: 2px;
   padding: 2px;
@@ -274,7 +275,7 @@
   background: rgba(7, 16, 27, 0.96);
   opacity: 0;
   pointer-events: none;
-  transform: translateY(1px);
+  transform: translateY(-50%);
   transition: opacity 0.12s ease;
 }
 
@@ -285,10 +286,19 @@
 }
 
 .trading-watchlist-row-actions button {
-  min-width: 22px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-width: 28px;
   height: 22px;
-  padding: 0;
-  font-size: 12px;
+  padding: 0 !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+.trading-watchlist-row-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .trading-watchlist-status {
@@ -298,6 +308,21 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+.trading-side-panel > [role='tabpanel'].trading-side-panel-watchlist {
+  overflow: hidden;
+}
+
+.trading-side-panel-watchlist > .trading-watchlist {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.trading-side-panel-watchlist .trading-watchlist ul {
+  min-height: 0;
+  max-height: none;
 }
 
 @media (max-width: 600px) {

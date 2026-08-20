@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
 import { tradingApi } from './tradingApi';
 import type { CanonicalInstrument } from './tradingTypes';
+import { watchlistLogoIdentity } from './tradingWatchlistPresentation';
 import './TradingSymbolSearch.css';
 import './TradingWatchlistSymbolPicker.css';
 
@@ -69,6 +70,7 @@ function locallyMatches(instrument: CanonicalInstrument, query: string): boolean
     instrument.instrument_id,
     instrument.base_currency,
     instrument.quote_currency,
+    instrumentName(instrument),
   ].some((value) => value?.toUpperCase().includes(normalized));
 }
 
@@ -94,6 +96,10 @@ function assetGlyph(instrument: CanonicalInstrument): string {
   if (instrument.asset_class === 'crypto') return '₿';
   if (instrument.instrument_type === 'index') return '⌁';
   return instrument.display_symbol.slice(0, 1);
+}
+
+function venueGlyph(venue: string): string {
+  return venue.slice(0, 1).toUpperCase() || '•';
 }
 
 function uniqueInstruments(instruments: readonly CanonicalInstrument[]): CanonicalInstrument[] {
@@ -189,6 +195,11 @@ export function TradingWatchlistSymbolPicker({
 
   const firstAddable = results.find((instrument) => !selectedIds.has(binanceInstrumentIdFor(instrument.instrument_id)));
 
+  const addSymbol = async (instrument: CanonicalInstrument, closeAfterAdd = false) => {
+    await onAdd(instrument);
+    if (closeAfterAdd) onClose();
+  };
+
   return (
     <div
       className="trading-symbol-search-overlay"
@@ -213,12 +224,12 @@ export function TradingWatchlistSymbolPicker({
           <input
             ref={inputRef}
             aria-label="Search symbols to add"
-            placeholder="Search symbol or company"
+            placeholder="Symbol, ISIN, or CUSIP"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Escape') onClose();
-              if (event.key === 'Enter' && firstAddable && !busy) void onAdd(firstAddable);
+              if (event.key === 'Enter' && firstAddable && !busy) void addSymbol(firstAddable, event.shiftKey);
             }}
           />
           {query ? (
@@ -242,7 +253,7 @@ export function TradingWatchlistSymbolPicker({
 
         <div className="trading-symbol-search-results-wrap">
           <div className="trading-watchlist-symbol-picker-heading" aria-hidden="true">
-            <span>Symbol</span>
+            <span className="symbol-heading">Symbol</span>
             <span>Description</span>
             <span>Exchange</span>
             <span />
@@ -254,7 +265,7 @@ export function TradingWatchlistSymbolPicker({
                 const alreadyAdded = selectedIds.has(normalizedId);
                 return (
                   <li key={instrument.instrument_id}>
-                    <span className={`trading-symbol-search-avatar ${instrument.asset_class}`} aria-hidden="true">{assetGlyph(instrument)}</span>
+                    <span className={`trading-watchlist-symbol-picker-avatar ${watchlistLogoIdentity(instrument.display_symbol, instrument.instrument_id).kind}`} aria-hidden="true">{assetGlyph(instrument)}</span>
                     <span className="trading-watchlist-symbol-picker-symbol">
                       <strong>{instrument.display_symbol}</strong>
                       <small>{instrument.venue_symbol}</small>
@@ -265,7 +276,10 @@ export function TradingWatchlistSymbolPicker({
                     </span>
                     <span className="trading-watchlist-symbol-picker-exchange">
                       <small>{instrumentTypeLabel(instrument)}</small>
-                      <strong>{instrument.venue}</strong>
+                      <span className="trading-watchlist-symbol-picker-venue">
+                        <strong>{instrument.venue}</strong>
+                        <span aria-hidden="true">{venueGlyph(instrument.venue)}</span>
+                      </span>
                     </span>
                     <button
                       type="button"
@@ -275,7 +289,7 @@ export function TradingWatchlistSymbolPicker({
                         : `Add ${instrument.display_symbol} to watchlist`}
                       title={alreadyAdded ? 'Already in watchlist' : 'Add to watchlist'}
                       disabled={alreadyAdded || busy}
-                      onClick={() => void onAdd(instrument)}
+                      onClick={(event) => void addSymbol(instrument, event.shiftKey)}
                     >
                       {alreadyAdded ? '✓' : '+'}
                     </button>
@@ -294,7 +308,7 @@ export function TradingWatchlistSymbolPicker({
 
         <footer className="trading-symbol-search-footer">
           <span>{loading ? 'Searching instrument catalog…' : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}</span>
-          <span>Enter adds the first available symbol · Esc closes</span>
+          <span>Shift + Click or Shift + Enter to add symbol and close dialog</span>
         </footer>
       </section>
     </div>

@@ -129,6 +129,16 @@ def test_persisted_dynamic_equity_id_rehydrates_bindings() -> None:
     assert binding_by_id(binding.binding_id) == binding
 
 
+def test_otc_equity_binding_exposes_only_daily_yahoo_intervals() -> None:
+    binding = next(
+        item
+        for item in bindings_for_instrument("equity:PNK:GMETF")
+        if item.provider == "yahoo"
+    )
+
+    assert binding.supported_intervals == ("1d", "1w", "1mo")
+
+
 def test_persisted_dynamic_equity_binding_id_rehydrates_catalog() -> None:
     binding_id = "stooq:historical_daily:equity:BTS:SPYI"
 
@@ -137,3 +147,16 @@ def test_persisted_dynamic_equity_binding_id_rehydrates_catalog() -> None:
     assert binding is not None
     assert binding.binding_id == binding_id
     assert binding.instrument_id == "equity:BTS:SPYI"
+
+
+def test_persisted_dynamic_binance_crypto_id_rehydrates_bindings() -> None:
+    instrument_id = "crypto:BINANCE:spot:GMEB-USDT"
+
+    instrument = instrument_by_id(instrument_id)
+    binding = default_binding(instrument_id)
+
+    assert instrument is not None
+    assert binding is not None
+    assert binding.provider == "binance"
+    assert binding.provider_symbol == "GMEBUSDT"
+    assert binding_by_id(binding.binding_id) == binding

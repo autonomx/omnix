@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingApi } from './tradingApi';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
-import type { CanonicalInstrument, TradingDocument } from './tradingTypes';
-import { tradingIntervalMinutes } from './tradingIntervals';
+import type { CanonicalInstrument, ProviderBinding, TradingDocument } from './tradingTypes';
+import { isIntervalAvailable, tradingIntervalMinutes } from './tradingIntervals';
 import { percentChangeFromBars, percentChangeFromLookback } from './tradingWatchlistChange';
 import {
   formatWatchlistPrice,
@@ -37,9 +37,13 @@ async function intervalChange(
   interval: string,
   quotePrice: string | null | undefined,
   directBars: Awaited<ReturnType<typeof tradingApi.bars>> | null,
+  supportedIntervals?: readonly string[],
 ): Promise<{ price: string | null; changePercent: number | null }> {
   const directHistory = directBars?.bars ?? [];
   const directPrice = quotePrice ?? directHistory.at(-1)?.close?.toString() ?? null;
+  if (supportedIntervals && !isIntervalAvailable(interval, supportedIntervals)) {
+    return { price: directPrice, changePercent: null };
+  }
   const directIntervalIsNative = directBars?.binding.supported_intervals.includes(interval) ?? false;
   const directChange = directIntervalIsNative
     ? percentChangeFromBars(quotePrice, directHistory)
@@ -143,11 +147,13 @@ export function TradingWatchlist({
   instruments,
   activeInstrumentId,
   interval,
+  providerBindings = [],
   onSelect,
 }: {
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
   interval: string;
+  providerBindings?: readonly ProviderBinding[];
   onSelect: (instrumentId: string) => void;
 }) {
   const [records, setRecords] = useState<TradingDocument[]>([]);
@@ -175,6 +181,14 @@ export function TradingWatchlist({
     () => new Map(catalogInstruments.map((instrument) => [instrument.instrument_id, instrument])),
     [catalogInstruments],
   );
+  const bindingIntervalsByInstrument = useMemo(() => {
+    const bindingsByInstrument = new Map<string, readonly string[]>();
+    for (const binding of providerBindings) {
+      if (!binding.supported_intervals.length || bindingsByInstrument.has(binding.instrument_id)) continue;
+      bindingsByInstrument.set(binding.instrument_id, binding.supported_intervals);
+    }
+    return bindingsByInstrument;
+  }, [providerBindings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,23 +205,22 @@ export function TradingWatchlist({
         const defaultRecord = next.find((record) => record.record_id === 'default');
         if (defaultRecord) {
           const defaultPayload = payload(defaultRecord);
-          const orderedInstrumentIds = defaultWatchlistInstrumentIds(instruments);
-          const availableIds = new Set(orderedInstrumentIds);
+          // Built-in symbols are only seed data for a newly created watchlist.
+          // Re-adding them here would resurrect symbols the user deliberately
+          // removed after a reload or server restart.
           const migratedIds = [...new Set(defaultPayload.instrumentIds.map(binanceInstrumentIdFor))];
-          const retainedIds = migratedIds.filter((instrumentId) => !availableIds.has(instrumentId));
-          const mergedIds = [...orderedInstrumentIds, ...retainedIds];
-          const hasChanged = mergedIds.length !== defaultPayload.instrumentIds.length
-            || mergedIds.some((instrumentId, index) => instrumentId !== defaultPayload.instrumentIds[index]);
+          const hasChanged = migratedIds.length !== defaultPayload.instrumentIds.length
+            || migratedIds.some((instrumentId, index) => instrumentId !== defaultPayload.instrumentIds[index]);
           if (hasChanged) {
             try {
               const updated = await tradingApi.updateDocument('watchlists', defaultRecord, {
                 ...defaultPayload,
-                instrumentIds: mergedIds,
+                instrumentIds: migratedIds,
               });
               next = next.map((record) => record.record_id === updated.record_id ? updated : record);
             } catch {
               next = next.map((record) => record.record_id === defaultRecord.record_id
-                ? { ...record, payload: { ...record.payload, instrumentIds: mergedIds } }
+                ? { ...record, payload: { ...record.payload, instrumentIds: migratedIds } }
                 : record);
             }
           }
@@ -232,12 +245,17 @@ export function TradingWatchlist({
     void (async () => {
       const next: Record<string, QuoteSnapshot> = {};
       await Promise.all(instrumentIds.map(async (instrumentId) => {
+        const supportedIntervals = bindingIntervalsByInstrument.get(instrumentId);
         try {
+          const quotePromise = tradingApi.quote(instrumentId).catch(() => null);
+          const barsPromise = supportedIntervals && !isIntervalAvailable(interval, supportedIntervals)
+            ? Promise.resolve(null)
+            : tradingApi.bars(instrumentId, interval, 2).catch(() => null);
           const [quote, bars] = await Promise.all([
-            tradingApi.quote(instrumentId).catch(() => null),
-            tradingApi.bars(instrumentId, interval, 2).catch(() => null),
+            quotePromise,
+            barsPromise,
           ]);
-          next[instrumentId] = await intervalChange(instrumentId, interval, quote?.price, bars);
+          next[instrumentId] = await intervalChange(instrumentId, interval, quote?.price, bars, supportedIntervals);
         } catch {
           next[instrumentId] = { price: null, changePercent: null };
         }
@@ -252,15 +270,36 @@ export function TradingWatchlist({
     setRecords((items) => items.map((item) => item.record_id === record.record_id ? record : item));
   };
 
-  const save = async (nextPayload: WatchlistPayload) => {
-    if (!selected) return;
+  const save = async (
+  nextPayload: WatchlistPayload,
+  rollbackRecord?: TradingDocument,
+  recordOverride?: TradingDocument,
+  conflictRetryCount = 0,
+) => {
+    const record = recordOverride ?? selected;
+    if (!record) return;
     setStatus('saving');
     try {
-      const next = await tradingApi.updateDocument('watchlists', selected, nextPayload as unknown as Record<string, unknown>);
+      const next = await tradingApi.updateDocument('watchlists', record, nextPayload as unknown as Record<string, unknown>);
       replace(next);
       setStatus('saved');
     } catch (error) {
-      setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
+      const isConflict = error instanceof Error && error.message.includes('(409)');
+      if (conflictRetryCount < 3 && isConflict) {
+        try {
+          const latest = (await tradingApi.documents('watchlists'))
+            .find((item) => item.record_id === record.record_id);
+          if (latest) {
+            replace(latest);
+            await save(nextPayload, rollbackRecord, latest, conflictRetryCount + 1);
+            return;
+          }
+        } catch {
+          // Fall through to the normal conflict state when the latest record cannot be loaded.
+        }
+      }
+      if (rollbackRecord) replace(rollbackRecord);
+      setStatus(isConflict ? 'conflict' : 'error');
     }
   };
 
@@ -310,9 +349,15 @@ export function TradingWatchlist({
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= normalizedInstrumentIds.length) return;
+    if (!selected) return;
     const next = [...normalizedInstrumentIds];
     [next[index], next[target]] = [next[target], next[index]];
-    void save({ ...current, instrumentIds: next });
+    const rollbackRecord = selected;
+    replace({
+      ...selected,
+      payload: { ...selected.payload, ...current, instrumentIds: next },
+    });
+    void save({ ...current, instrumentIds: next }, rollbackRecord);
   };
 
   return (
@@ -370,8 +415,8 @@ export function TradingWatchlist({
                 {formatChange(quote?.changePercent)}
               </span>
               <span className="trading-watchlist-row-actions">
-                <button type="button" onClick={() => move(index, -1)} aria-label={`Move ${symbol} up`}>↑</button>
-                <button type="button" onClick={() => move(index, 1)} aria-label={`Move ${symbol} down`}>↓</button>
+                <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`Move ${symbol} up`} title="Move up">↑</button>
+                <button type="button" onClick={() => move(index, 1)} disabled={index === normalizedInstrumentIds.length - 1} aria-label={`Move ${symbol} down`} title="Move down">↓</button>
                 <button type="button" onClick={() => void save({ ...current, instrumentIds: normalizedInstrumentIds.filter((id) => id !== instrumentId) })} aria-label={`Remove ${symbol}`}>×</button>
               </span>
             </li>

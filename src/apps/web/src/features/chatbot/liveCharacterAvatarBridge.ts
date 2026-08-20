@@ -1,4 +1,5 @@
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
+import { isActiveView } from '../../app/viewApiScope';
 import './liveCharacterAvatarBridge.css';
 
 export type AvatarMouthFrame = 'closed' | 'small' | 'medium' | 'wide';
@@ -231,6 +232,7 @@ function installTtsFetchMonitor(): void {
   const originalFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const response = await originalFetch(input, init);
+    if (!isActiveView('chatbot')) return response;
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     if (!url.includes(TTS_STREAM_PATH) || !response.body || typeof response.body.tee !== 'function') return response;
 
@@ -505,6 +507,10 @@ function normalizeLiveVoiceLayout(): {
 }
 
 function renderAvatarHost(): void {
+  if (!isActiveView('chatbot')) {
+    document.querySelectorAll<HTMLElement>(`.${AVATAR_HOST_CLASS}`).forEach((host) => host.remove());
+    return;
+  }
   const layout = normalizeLiveVoiceLayout();
   const fullscreenHost = typeof document === 'undefined'
     ? null

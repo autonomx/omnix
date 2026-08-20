@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CanonicalInstrument } from './tradingTypes';
 import { TradingWatchlistSymbolPicker } from './TradingWatchlistSymbolPicker';
@@ -71,5 +71,35 @@ describe('TradingWatchlistSymbolPicker', () => {
 
     fireEvent.keyDown(search, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('supports Shift+Enter and Shift+Click to add and close', async () => {
+    const onAdd = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <TradingWatchlistSymbolPicker
+        open
+        instruments={[apple, nvidia]}
+        selectedInstrumentIds={[apple.instrument_id]}
+        onAdd={onAdd}
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Search symbols to add' }), { key: 'Enter', shiftKey: true });
+    expect(onAdd).toHaveBeenCalledWith(nvidia);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <TradingWatchlistSymbolPicker
+        open
+        instruments={[apple, nvidia]}
+        selectedInstrumentIds={[apple.instrument_id]}
+        onAdd={onAdd}
+        onClose={onClose}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add NVDA to watchlist' }), { shiftKey: true });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
   });
 });

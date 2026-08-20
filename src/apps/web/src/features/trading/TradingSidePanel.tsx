@@ -8,7 +8,7 @@ import { TradingWatchlist } from './TradingWatchlist';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
 import type { CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
-import type { CanonicalInstrument, TradingAlert } from './tradingTypes';
+import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
 
 export type TradingSideTab = 'watchlist' | 'paper' | 'indicators' | 'alerts' | 'news' | 'layout';
 
@@ -25,6 +25,7 @@ export function TradingSidePanel({
   instruments,
   activeInstrumentId,
   bindingId,
+  providerBindings,
   interval,
   selectedTab,
   onTabChange,
@@ -51,6 +52,7 @@ export function TradingSidePanel({
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
   bindingId: string | null;
+  providerBindings?: readonly ProviderBinding[];
   interval: string;
   selectedTab?: TradingSideTab;
   onTabChange?: (tab: TradingSideTab) => void;
@@ -102,6 +104,7 @@ export function TradingSidePanel({
         role="tabpanel"
         id={`trading-panel-${activeTab}`}
         aria-labelledby={`trading-tab-${activeTab}`}
+        className={activeTab === 'watchlist' ? 'trading-side-panel-watchlist' : undefined}
         tabIndex={0}
       >
         {activeTab === 'watchlist' ? (
@@ -109,6 +112,7 @@ export function TradingSidePanel({
             instruments={instruments}
             activeInstrumentId={activeInstrumentId}
             interval={interval}
+            providerBindings={providerBindings}
             onSelect={onSelectInstrument}
           />
         ) : null}

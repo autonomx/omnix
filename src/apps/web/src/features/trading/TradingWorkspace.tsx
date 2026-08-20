@@ -141,10 +141,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const setPanel = useTradingStore((state) => state.setPanel);
   const toggleFavoriteInstrument = useTradingStore((state) => state.toggleFavoriteInstrument);
   const activeChart = charts.find((chart) => chart.chartId === activeChartId) ?? charts[0];
+  const providerBindings = useMemo(
+    () => (providers.data ?? []).flatMap((provider) => provider.bindings ?? []),
+    [providers.data],
+  );
   const availableBindings = useMemo(
-    () => (providers.data ?? []).flatMap((provider) => provider.bindings ?? [])
-      .filter((binding) => binding.instrument_id === activeChart.instrumentId),
-    [activeChart.instrumentId, providers.data],
+    () => providerBindings.filter((binding) => binding.instrument_id === activeChart.instrumentId),
+    [activeChart.instrumentId, providerBindings],
   );
   const selectedBinding = availableBindings.find((binding) => binding.binding_id === activeChart.bindingId)
     ?? availableBindings[0];
@@ -553,6 +556,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 instruments={visibleInstruments}
                 activeInstrumentId={activeChart.instrumentId}
                 bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+                providerBindings={providerBindings}
                 interval={activeChart.interval}
                 selectedTab={sidePanelTab}
                 onTabChange={setSidePanelTab}

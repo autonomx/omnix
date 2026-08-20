@@ -51,19 +51,10 @@ export const tradingPaperApi = {
     return Array.isArray(payload.protections) ? payload.protections : [];
   },
   protection: async (accountId: string, instrumentId: string) => {
-    const response = await fetch(
-      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections/${encodeURIComponent(instrumentId)}`,
-      { headers: { 'content-type': 'application/json' } },
+    const payload = await requestJson<{ protections?: PaperPositionProtection[] }>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections?active_only=true`,
     );
-    if (response.status === 404) return null;
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const detail = typeof payload?.detail === 'string'
-        ? payload.detail
-        : JSON.stringify(payload?.detail ?? payload);
-      throw new Error(`Paper Trading request failed (${response.status}): ${detail}`);
-    }
-    return payload as PaperPositionProtection;
+    return payload.protections?.find((item) => item.instrument_id === instrumentId) ?? null;
   },
   setProtection: (accountId: string, input: PaperProtectionInput) =>
     requestJson<PaperPositionProtection>(

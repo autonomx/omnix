@@ -71,4 +71,15 @@ describe('Trading paper client', () => {
     expect(String(fetchMock.mock.calls[0][0])).not.toContain('broker');
     expect(String(fetchMock.mock.calls[0][0])).not.toContain('live');
   });
+
+  it('hydrates an absent protection from the account list without a per-symbol 404', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ protections: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(tradingPaperApi.protection('paper-1', 'equity:NYSE:GME')).resolves.toBeNull();
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/trading/paper/accounts/paper-1/protections?active_only=true');
+  });
 });

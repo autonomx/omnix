@@ -24,6 +24,7 @@ import {
 } from '../features/settings/appearanceEffects';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
+import { setActiveViewModule } from './viewApiScope';
 
 const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, module])) as Record<
   OmnixModuleId,
@@ -74,6 +75,10 @@ function OmnixShell() {
   const activeModule = moduleFromPath(pathname);
   const modeModules = modeModuleIds.map((moduleId) => moduleById[moduleId]);
   const resolvedAppearanceMode = resolveAppearanceMode(appearanceMode);
+
+  useEffect(() => {
+    setActiveViewModule(activeModule.id);
+  }, [activeModule.id]);
 
   useEffect(() => {
     const root = document.documentElement;
