@@ -18,7 +18,9 @@ def normalize_provider_chain(
 ) -> tuple[str, ...]:
     """Return a stable, deduplicated provider chain with only supported providers."""
 
-    ordered = [str(primary or DEFAULT_RESEARCH_PROVIDER).strip().lower()]
+    ordered: list[str] = []
+    if primary:
+        ordered.append(str(primary).strip().lower())
     ordered.extend(str(value or "").strip().lower() for value in (fallbacks or ()))
     result: list[str] = []
     for provider in ordered:
