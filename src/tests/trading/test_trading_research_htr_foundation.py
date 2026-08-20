@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from app.trading.research.contracts import TradingEvidence, fingerprint
 from app.trading.research.facts.metrics import derive_supply_metrics
 from app.trading.research.facts.supply import extract_supply_facts
@@ -37,6 +39,30 @@ def test_supply_parser_distinguishes_exercised_and_exercisable_warrants():
     assert exercisable[0].status == "exercisable"
     assert exercisable[0].shares == Decimal("10000000")
     assert exercisable[0].strike_price == Decimal("1.50")
+
+
+@pytest.mark.parametrize(
+    ("text", "supply_type", "status", "registration_status"),
+    [
+        ("The at-the-market offering is active and remains available.", "atm", "active", None),
+        ("The at-the-market offering was terminated on August 10.", "atm", "terminated", None),
+        ("The at-the-market facility is exhausted and no longer available.", "atm", "exhausted", None),
+        ("All outstanding warrants were exercised.", "warrant", "exhausted", None),
+        ("The warrants remain outstanding and may be exercised.", "warrant", "exercisable", None),
+        # Future expiry language is deliberately not treated as already expired.
+        ("The warrants expire above the current market price next year.", "warrant", "unknown", None),
+        ("The resale registration became effective today.", "resale_registration", "active", "effective"),
+        ("The shelf registration was withdrawn.", "shelf_registration", "withdrawn", "withdrawn"),
+        ("The convertible notes were repaid in full.", "convertible", "exhausted", None),
+        ("The convertible notes remain outstanding.", "convertible", "active", None),
+    ],
+)
+def test_required_adversarial_supply_status_corpus(text, supply_type, status, registration_status):
+    facts = extract_supply_facts((_evidence(text, f"fixture-{supply_type}-{status}"),))
+    matching = [fact for fact in facts if fact.supply_type == supply_type]
+    assert matching, text
+    assert matching[0].status == status
+    assert matching[0].registration_status == registration_status
 
 
 def test_supply_metrics_are_continuous_not_keyword_vetoes():
