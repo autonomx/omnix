@@ -41,13 +41,15 @@ def _number(match: re.Match[str] | None) -> Decimal | None:
 
 
 def _status(statement: str, supply_type: str) -> tuple[str, str, Decimal]:
-    # Negative/status-resolving language intentionally precedes generic words
-    # such as "outstanding" so historical/terminated facilities are not vetoed.
-    if _TERMINATED.search(statement): return "terminated", "resolved", Decimal("0.95")
+    # Explicit terminal states outrank generic consequence wording. For example,
+    # "facility is exhausted and no longer available" is exhausted, not merely
+    # terminated. Generic negative/status-resolving language still precedes words
+    # such as "outstanding" so historical facilities are not treated as active.
     if _EXHAUSTED.search(statement): return "exhausted", "resolved", Decimal("0.95")
     if _WITHDRAWN.search(statement): return "withdrawn", "resolved", Decimal("0.95")
     if _REDEEMED.search(statement): return "redeemed", "resolved", Decimal("0.95")
     if _EXPIRED.search(statement): return "expired", "resolved", Decimal("0.95")
+    if _TERMINATED.search(statement): return "terminated", "resolved", Decimal("0.95")
     if supply_type == "warrant" and _EXERCISABLE.search(statement): return "exercisable", "resolved", Decimal("0.9")
     if _ACTIVE.search(statement): return "active", "resolved", Decimal("0.8")
     return "unknown", "unresolved", Decimal("0.4")
