@@ -20,6 +20,11 @@ _STATE_KEY="_omnix_trading_strategy_research_monitor"
 
 def _flag(name: str,default: str="1") -> bool: return os.environ.get(name,default).strip().lower() in {"1","true","yes","on"}
 
+def _int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    try: value=int(os.environ.get(name,str(default)))
+    except ValueError: value=default
+    return max(minimum,min(maximum,value))
+
 def strategy_research_monitor_enabled() -> bool:
     if os.environ.get("OMNIX_PERSISTENCE_MODE","").strip()=="legacy_test": return _flag("OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS","0")
     return _flag("OMNIX_TRADING_RESEARCH_MONITOR","1")
@@ -42,8 +47,19 @@ def _plausible(config,candidate) -> bool:
 
 class TradingStrategyResearchMonitor:
     """Evidence-only research funnel; has no order/config/universe mutation path."""
-    def __init__(self,*,interval_seconds:float|None=None,max_candidates_per_strategy:int=5) -> None:
-        self.interval_seconds=interval_seconds or _interval_seconds();self.max_candidates_per_strategy=max(1,min(10,max_candidates_per_strategy));self._task=None
+    def __init__(
+        self,
+        *,
+        interval_seconds:float|None=None,
+        max_candidates_per_strategy:int=10,
+        max_reports_per_candidate_day:int|None=None,
+        unresolved_retry_seconds:int|None=None,
+    ) -> None:
+        self.interval_seconds=interval_seconds or _interval_seconds()
+        self.max_candidates_per_strategy=max(1,min(15,max_candidates_per_strategy))
+        self.max_reports_per_candidate_day=max_reports_per_candidate_day or _int_env("OMNIX_TRADING_RESEARCH_MAX_REPORTS_PER_CANDIDATE_DAY",3,1,10)
+        self.unresolved_retry_seconds=unresolved_retry_seconds or _int_env("OMNIX_TRADING_RESEARCH_UNRESOLVED_RETRY_SECONDS",300,60,3600)
+        self._task=None
         self.last_run_at:datetime|None=None;self.last_error:str|None=None;self.research_count=0
 
     def start(self)->None:
@@ -69,9 +85,14 @@ class TradingStrategyResearchMonitor:
             candidates=sorted((c for c in universe.candidates if _plausible(config,c)),key=lambda c:(c.discovery_rank if c.discovery_rank is not None else 10**9,-float(c.gap_pct)))[:self.max_candidates_per_strategy]
             for candidate in candidates:
                 try:
-                    timeline=await asyncio.to_thread(research_repo.report_timeline,candidate.instrument_id,20)
-                    already=any(r.omnix_known_at and r.omnix_known_at.astimezone(_ET).date()==now_et.date() and r.strategy_id==config.strategy_id for r in timeline)
-                    if already:continue
+                    timeline=await asyncio.to_thread(research_repo.report_timeline,candidate.instrument_id,50)
+                    today=[r for r in timeline if r.strategy_id==config.strategy_id and r.omnix_known_at and r.omnix_known_at.astimezone(_ET).date()==now_et.date()]
+                    if today:
+                        latest=max(today,key=lambda r:r.omnix_known_at or r.research_completed_at or r.research_started_at)
+                        if latest.research_status=="complete" and not latest.unresolved_facts:continue
+                        if len(today)>=self.max_reports_per_candidate_day:continue
+                        last_known=latest.omnix_known_at or latest.research_completed_at or latest.research_started_at
+                        if (now-last_known).total_seconds()<self.unresolved_retry_seconds:continue
                     request=create_trading_research_request(instrument_id=candidate.instrument_id,strategy_id=config.strategy_id,decision_context_at=now,
                         deadline_seconds=45,max_steps=8,max_queries=5,max_sources=20,max_extracts=8)
                     result=await asyncio.to_thread(run_trading_research,request)
