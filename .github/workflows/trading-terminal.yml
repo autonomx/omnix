@@ -29,7 +29,7 @@ on:
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
 
-# TEMPORARY HTR execution parity patch for PR #1494. The patch script restores read-only.
+# TEMPORARY HTR execution parity patch for PR #1494. The connector restores read-only after the source push.
 permissions:
   contents: write
 
@@ -63,7 +63,9 @@ jobs:
           github.event.pull_request.head.ref == 'agent/trading-auto-strategy-roadmap'
         shell: bash
         run: |
+          cp .github/workflows/trading-terminal.yml /tmp/trading-terminal.yml
           python scripts/apply_htr_execution_integration.py
+          cp /tmp/trading-terminal.yml .github/workflows/trading-terminal.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
