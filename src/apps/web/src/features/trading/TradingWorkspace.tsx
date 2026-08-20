@@ -509,7 +509,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />
         <div className="trading-chart-column">
           <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid paperAccountId={paperAccountId} /></section>
-          {workspaceHydrated && panels.bottom ? (
+          {workspaceHydrated && panels.bottom && !toolPanel ? (
             <TradingTerminalDock
               instrumentId={activeChart.instrumentId}
               bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
