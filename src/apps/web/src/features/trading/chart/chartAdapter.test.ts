@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, heikinAshiBars, lineData, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
 import type { MarketBar } from '../tradingTypes';
 
 const bar: MarketBar = {
@@ -88,5 +88,11 @@ describe('Trading chart adapter normalization', () => {
   it('caps zoom width without pulling a panned chart back over the data', () => {
     expect(constrainZoomOutRange({ from: 130, to: 330 }, { from: 0, to: 100 }, 230)).toEqual({ from: 180, to: 280 });
     expect(constrainZoomOutRange({ from: -330, to: -130 }, { from: 0, to: 100 }, -230)).toEqual({ from: -280, to: -180 });
+  });
+
+  it('extrapolates drawing timestamps beyond the loaded bar range', () => {
+    const bars = [bar, secondBar];
+    expect(drawingTimeForLogicalIndex(2, bars)).toBe('2026-08-05T12:02:00.000Z');
+    expect(drawingLogicalIndexForTime('2026-08-05T12:03:00.000Z', bars)).toBe(3);
   });
 });

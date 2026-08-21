@@ -19,6 +19,7 @@ import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 import { TradingIndicatorSettings } from './TradingIndicatorSettings';
 import { TradingIndicatorBackgroundOverlay } from './TradingIndicatorBackgroundOverlay';
+import { TradingVolumeProfileOverlay } from './TradingVolumeProfileOverlay';
 import { TradingYAxisControls } from './TradingYAxisControls';
 import './TradingChartOverlayLayout.css';
 import './TradingChartRangeTooltip.css';
@@ -1128,6 +1129,7 @@ export function TradingChartPanel({
       >
         <div ref={hostRef} className={`trading-chart-canvas${drawingTool === 'cursor' && !replayMode ? ' is-pan-ready' : ''}${chartPanning ? ' is-grabbing' : ''}`} data-panning-indicator={panningIndicatorPane ?? undefined} aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
         {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
+        {adapter ? <TradingVolumeProfileOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
         {!fullscreenIndicator && !fullscreenMainPane ? paneIndicators.flatMap((indicator) => {
           const geometry = indicatorPaneGeometry.find((item) => item.id === indicator.id);
           if (!geometry || geometry.height <= 40) return [];

@@ -15,6 +15,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type LineData,
+  type Logical,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
@@ -95,6 +96,38 @@ function timestamp(value: string): UTCTimestamp {
   const milliseconds = Date.parse(value);
   if (!Number.isFinite(milliseconds)) throw new Error(`Invalid Trading timestamp: ${value}`);
   return Math.floor(milliseconds / 1_000) as UTCTimestamp;
+}
+
+function barCadenceMilliseconds(bars: readonly MarketBar[]): number | null {
+  const intervals = bars
+    .slice(1)
+    .map((bar, index) => Date.parse(bar.start_time) - Date.parse(bars[index].start_time))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((left, right) => left - right);
+  if (intervals.length === 0) return null;
+  return intervals[Math.floor(intervals.length / 2)] ?? null;
+}
+
+export function drawingTimeForLogicalIndex(logical: number, bars: readonly MarketBar[]): string | null {
+  if (!Number.isFinite(logical) || bars.length === 0) return null;
+  const nearestIndex = Math.round(logical);
+  if (nearestIndex >= 0 && nearestIndex < bars.length) return bars[nearestIndex]?.start_time ?? null;
+  const firstTime = Date.parse(bars[0].start_time);
+  const cadence = barCadenceMilliseconds(bars);
+  if (!Number.isFinite(firstTime) || cadence === null) return null;
+  return new Date(firstTime + nearestIndex * cadence).toISOString();
+}
+
+export function drawingLogicalIndexForTime(value: string, bars: readonly MarketBar[]): number | null {
+  if (bars.length === 0) return null;
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds)) return null;
+  const exactIndex = bars.findIndex((bar) => Date.parse(bar.start_time) === milliseconds);
+  if (exactIndex >= 0) return exactIndex;
+  const firstTime = Date.parse(bars[0].start_time);
+  const cadence = barCadenceMilliseconds(bars);
+  if (!Number.isFinite(firstTime) || cadence === null) return null;
+  return (milliseconds - firstTime) / cadence;
 }
 
 export function candlestickData(bar: MarketBar, multiplier = 1): CandlestickData<UTCTimestamp> {
@@ -736,7 +769,13 @@ export class TradingChartAdapter {
 
   projectDrawingPoint(point: DrawingPoint): DrawingCoordinate | null {
     this.assertActive();
-    const x = this.chart.timeScale().timeToCoordinate(timestamp(point.time));
+    const timeScale = this.chart.timeScale();
+    const time = timestamp(point.time);
+    const x = timeScale.timeToCoordinate(time)
+      ?? (() => {
+        const logical = drawingLogicalIndexForTime(point.time, this.bars);
+        return logical === null ? null : timeScale.logicalToCoordinate(logical as Logical);
+      })();
     const y = this.priceSeries.priceToCoordinate(point.price * this.priceScaleMultiplier);
     return x === null || y === null ? null : { x, y };
   }
@@ -773,10 +812,15 @@ export class TradingChartAdapter {
 
   drawingPointFromCoordinate(x: number, y: number): DrawingPoint | null {
     this.assertActive();
-    const time = this.chart.timeScale().coordinateToTime(x);
+    const timeScale = this.chart.timeScale();
+    const logical = timeScale.coordinateToLogical(x);
+    const time = logical === null
+      ? timeScale.coordinateToTime(x)
+      : drawingTimeForLogicalIndex(logical, this.bars);
     const price = this.priceSeries.coordinateToPrice(y);
-    if (typeof time !== 'number' || price === null) return null;
-    return { time: new Date(time * 1_000).toISOString(), price: price / this.priceScaleMultiplier };
+    const seconds = typeof time === 'number' ? time : typeof time === 'string' ? timestamp(time) : null;
+    if (seconds === null || price === null) return null;
+    return { time: new Date(seconds * 1_000).toISOString(), price: price / this.priceScaleMultiplier };
   }
 
   zoomAtCoordinate(x: number, deltaY: number): void {
@@ -1051,7 +1095,11 @@ export class TradingChartAdapter {
   }
   timeToCoordinate(value: string): number | null {
     this.assertActive();
-    return this.chart.timeScale().timeToCoordinate(timestamp(value));
+    const timeScale = this.chart.timeScale();
+    const direct = timeScale.timeToCoordinate(timestamp(value));
+    if (direct !== null) return direct;
+    const logical = drawingLogicalIndexForTime(value, this.bars);
+    return logical === null ? null : timeScale.logicalToCoordinate(logical as Logical);
   }
   barIndexAtCoordinate(x: number, barCount: number): number | null {
     this.assertActive();

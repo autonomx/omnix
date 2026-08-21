@@ -5,12 +5,13 @@ import { TradingLayoutPanel } from './TradingLayoutPanel';
 import { TradingNewsPanel } from './TradingNewsPanel';
 import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingWatchlist } from './TradingWatchlist';
+import { TradingObjectPanel } from './TradingObjectPanel';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
 import type { CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
 
-export type TradingSideTab = 'watchlist' | 'paper' | 'indicators' | 'alerts' | 'news' | 'layout';
+export type TradingSideTab = 'watchlist' | 'paper' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects';
 
 const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
@@ -82,6 +83,20 @@ export function TradingSidePanel({
     setInternalTab(tab);
     onTabChange?.(tab);
   };
+  if (activeTab === 'objects') {
+    return (
+      <aside className="trading-side-panel trading-object-side-panel" aria-label="Trading object tree and data window">
+        <TradingObjectPanel
+          instruments={instruments}
+          activeInstrumentId={activeInstrumentId}
+          bindingId={bindingId}
+          interval={interval}
+          indicators={indicators}
+          onSetIndicators={onSetIndicators}
+        />
+      </aside>
+    );
+  }
   return (
     <aside className="trading-side-panel" aria-label="Trading side panel">
       <nav role="tablist" aria-label="Trading side panel sections">

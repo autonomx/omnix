@@ -10,6 +10,19 @@ export type IndicatorPaneScale = {
   band?: { from: number; to: number; color: string };
   levels: readonly { value: number; lineStyle: IndicatorLineStyle }[];
 };
+export type VolumeProfileBin = {
+  low: number;
+  high: number;
+  volume: number;
+};
+export type VolumeProfileData = {
+  bins: readonly VolumeProfileBin[];
+  poc: number;
+  pocIndex: number;
+  valueAreaHigh: number;
+  valueAreaLow: number;
+  maxVolume: number;
+};
 export type CoreIndicatorStyle = {
   plots?: Record<string, boolean>;
   colors?: Record<string, string>;
@@ -38,6 +51,7 @@ export type IndicatorOutput = {
   labelsOnPriceScale?: boolean;
   valuesInStatusLine?: boolean;
   inputsInStatusLine?: boolean;
+  volumeProfile?: VolumeProfileData;
 };
 export type CoreIndicatorId =
   | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap'
@@ -346,7 +360,7 @@ function fairValueGapPoints(bars: readonly MarketBar[]): { upper: IndicatorPoint
   return { upper, lower };
 }
 
-function volumeProfileLevels(bars: readonly MarketBar[], period: number): { poc: number; valueAreaHigh: number; valueAreaLow: number } | null {
+function volumeProfileData(bars: readonly MarketBar[], period: number): VolumeProfileData | null {
   validatePeriod(period);
   const window = bars.slice(Math.max(0, bars.length - period));
   if (!window.length) return null;
@@ -362,6 +376,7 @@ function volumeProfileLevels(bars: readonly MarketBar[], period: number): { poc:
     volumes[index] += Math.max(0, Number(bar.volume));
   });
   const pocIndex = volumes.indexOf(Math.max(...volumes));
+  const maxVolume = volumes[pocIndex] ?? 0;
   const totalVolume = volumes.reduce((sum, value) => sum + value, 0);
   let included = volumes[pocIndex] ?? 0;
   let left = pocIndex;
@@ -378,9 +393,16 @@ function volumeProfileLevels(bars: readonly MarketBar[], period: number): { poc:
     } else break;
   }
   return {
+    bins: volumes.map((volume, index) => ({
+      low: low + index * width,
+      high: low + (index + 1) * width,
+      volume,
+    })),
     poc: low + (pocIndex + 0.5) * width,
+    pocIndex,
     valueAreaHigh: low + (right + 1) * width,
     valueAreaLow: low + left * width,
+    maxVolume,
   };
 }
 
@@ -566,13 +588,13 @@ function calculateIndicatorOutputs(
     ];
   }
   if (instance.id === 'volume-profile') {
-    const profile = volumeProfileLevels(bars, instance.period || 100);
+    const profile = volumeProfileData(bars, instance.period || 100);
     if (!profile) return [];
     const times = bars.map((bar) => bar.start_time);
     return [
-      { key: 'volume-profile:poc', title: 'POC', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.poc })) },
-      { key: 'volume-profile:value-area-high', title: 'VAH', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.valueAreaHigh })) },
-      { key: 'volume-profile:value-area-low', title: 'VAL', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.valueAreaLow })) },
+      { key: 'volume-profile:poc', title: 'POC', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.poc })), volumeProfile: profile },
+      { key: 'volume-profile:value-area-high', title: 'VAH', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.valueAreaHigh })), volumeProfile: profile },
+      { key: 'volume-profile:value-area-low', title: 'VAL', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.valueAreaLow })), volumeProfile: profile },
     ];
   }
   const anchorIndex = instance.anchorTime

@@ -520,3 +520,36 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
   await page.getByRole('button', { name: 'Close RSI 14 panel' }).click();
   await expect(page.locator('.trading-indicator-pane-controls[data-indicator-id="rsi"]')).toHaveCount(0);
 });
+
+test('Volume Profile renders volume-at-price bars along the price scale', async ({ page }) => {
+  await installTradingMocks(page);
+  await page.goto('/trading');
+
+  await page.locator('.trading-indicator-manager').getByRole('button', { name: 'Indicators' }).click();
+  await page.getByRole('button', { name: 'Volume Profile', exact: true }).click();
+
+  const profileOverlay = page.locator('.trading-volume-profile-overlay');
+  await expect(profileOverlay).toBeVisible();
+  await expect(profileOverlay.locator('[data-volume-profile-bin]')).not.toHaveCount(0);
+  await expect(profileOverlay.locator('[data-volume-profile-bin].is-poc')).toHaveCount(1);
+});
+
+test('right panel exposes TradingView-style Object tree and Data window views', async ({ page }) => {
+  await installTradingMocks(page);
+  await page.goto('/trading');
+
+  await page.getByRole('button', { name: 'Object tree' }).click();
+  const objectPanel = page.getByRole('complementary', { name: 'Trading object tree and data window' });
+  await expect(objectPanel).toBeVisible();
+  await expect(objectPanel.getByRole('tab', { name: 'Object tree' })).toHaveAttribute('aria-selected', 'true');
+  await expect(objectPanel).toContainText('BTCUSDT');
+  await expect(objectPanel).toContainText('Indicators');
+  await expect(objectPanel).toContainText('Simple Moving Average 20');
+
+  await objectPanel.getByRole('tab', { name: 'Data window' }).click();
+  await expect(objectPanel.getByRole('tab', { name: 'Data window' })).toHaveAttribute('aria-selected', 'true');
+  await expect(objectPanel.locator('.trading-data-window-date strong')).not.toHaveText('—');
+  await expect(objectPanel).toContainText('Open');
+  await expect(objectPanel).toContainText('Close');
+  await expect(objectPanel).toContainText('Relative Strength Index (14)');
+});
