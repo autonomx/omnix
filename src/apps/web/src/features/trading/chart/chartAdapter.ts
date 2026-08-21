@@ -6,6 +6,7 @@ import {
   CrosshairMode,
   HistogramSeries,
   LineSeries,
+  LineType,
   LineStyle,
   PriceScaleMode,
   createChart,
@@ -21,7 +22,39 @@ import type { DrawingPoint } from '../drawings/drawingCommands';
 import { indicatorOutputs, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 
-export type TradingChartType = 'candlestick' | 'bar' | 'line' | 'area' | 'baseline';
+export type TradingChartTypeGroup = 'candles' | 'lines' | 'areas' | 'columns' | 'profiles' | 'specialty';
+export const TRADING_CHART_TYPE_GROUPS: readonly { id: TradingChartTypeGroup; label: string }[] = [
+  { id: 'candles', label: 'Candles' },
+  { id: 'lines', label: 'Lines' },
+  { id: 'areas', label: 'Areas' },
+  { id: 'columns', label: 'Columns' },
+  { id: 'profiles', label: 'Volume and profile' },
+  { id: 'specialty', label: 'Specialty charts' },
+] as const;
+export const TRADING_CHART_TYPE_OPTIONS = [
+  { value: 'bar', label: 'Bars', group: 'candles', icon: 'bars' },
+  { value: 'candlestick', label: 'Candles', group: 'candles', icon: 'candles' },
+  { value: 'hollow-candles', label: 'Hollow candles', group: 'candles', icon: 'hollow-candles' },
+  { value: 'volume-candles', label: 'Volume candles', group: 'candles', icon: 'volume-candles' },
+  { value: 'line', label: 'Line', group: 'lines', icon: 'line' },
+  { value: 'line-with-markers', label: 'Line with markers', group: 'lines', icon: 'line-with-markers' },
+  { value: 'step-line', label: 'Step line', group: 'lines', icon: 'step-line' },
+  { value: 'area', label: 'Area', group: 'areas', icon: 'area' },
+  { value: 'hlc-area', label: 'HLC area', group: 'areas', icon: 'hlc-area' },
+  { value: 'baseline', label: 'Baseline', group: 'areas', icon: 'baseline' },
+  { value: 'columns', label: 'Columns', group: 'columns', icon: 'columns' },
+  { value: 'high-low', label: 'High-low', group: 'columns', icon: 'high-low' },
+  { value: 'volume-footprint', label: 'Volume footprint', group: 'profiles', icon: 'volume-footprint' },
+  { value: 'time-price-opportunity', label: 'Time price opportunity', group: 'profiles', icon: 'time-price-opportunity' },
+  { value: 'session-volume-profile', label: 'Session volume profile', group: 'profiles', icon: 'session-volume-profile' },
+  { value: 'heikin-ashi', label: 'Heikin Ashi', group: 'specialty', icon: 'heikin-ashi' },
+  { value: 'renko', label: 'Renko', group: 'specialty', icon: 'renko' },
+  { value: 'line-break', label: 'Line break', group: 'specialty', icon: 'line-break' },
+  { value: 'kagi', label: 'Kagi', group: 'specialty', icon: 'kagi' },
+  { value: 'point-figure', label: 'Point & figure', group: 'specialty', icon: 'point-figure' },
+  { value: 'range', label: 'Range', group: 'specialty', icon: 'range' },
+] as const;
+export type TradingChartType = typeof TRADING_CHART_TYPE_OPTIONS[number]['value'];
 export type TradingChartAppearance = 'light' | 'dark';
 export type TradingCrosshairPoint = { time: Time; price: number };
 export type TradingVisibleRange = { from: Time; to: Time };
@@ -39,7 +72,8 @@ type PriceSeries =
   | ISeriesApi<'Bar'>
   | ISeriesApi<'Line'>
   | ISeriesApi<'Area'>
-  | ISeriesApi<'Baseline'>;
+  | ISeriesApi<'Baseline'>
+  | ISeriesApi<'Histogram'>;
 type IndicatorSeries = ISeriesApi<'Line'> | ISeriesApi<'Histogram'>;
 type LogicalRange = { from: number; to: number };
 
@@ -67,8 +101,188 @@ export function candlestickData(bar: MarketBar, multiplier = 1): CandlestickData
   return { time: timestamp(bar.start_time), open: Number(bar.open) * multiplier, high: Number(bar.high) * multiplier, low: Number(bar.low) * multiplier, close: Number(bar.close) * multiplier };
 }
 export function lineData(bar: MarketBar, multiplier = 1): LineData<UTCTimestamp> { return { time: timestamp(bar.start_time), value: Number(bar.close) * multiplier }; }
+function columnData(bar: MarketBar, multiplier = 1): HistogramData<UTCTimestamp> {
+  return {
+    time: timestamp(bar.start_time),
+    value: Number(bar.close) * multiplier,
+    color: Number(bar.close) >= Number(bar.open) ? 'rgba(32,201,151,.72)' : 'rgba(255,107,107,.72)',
+  };
+}
+function volumeCandleData(bar: MarketBar, bars: readonly MarketBar[], multiplier = 1): CandlestickData<UTCTimestamp> {
+  const volume = Number(bar.volume);
+  const maximum = Math.max(...bars.map((item) => Number(item.volume)), volume, 1);
+  const intensity = Math.min(1, Math.max(0, volume / maximum));
+  const alpha = (0.35 + intensity * 0.6).toFixed(2);
+  const color = Number(bar.close) >= Number(bar.open)
+    ? `rgba(32,201,151,${alpha})`
+    : `rgba(255,107,107,${alpha})`;
+  return { ...candlestickData(bar, multiplier), color };
+}
 export function volumeData(bar: MarketBar): HistogramData<UTCTimestamp> {
   return { time: timestamp(bar.start_time), value: Number(bar.volume), color: Number(bar.close) >= Number(bar.open) ? 'rgba(32,201,151,.45)' : 'rgba(255,107,107,.42)' };
+}
+
+function isCandlestickType(type: TradingChartType): boolean {
+  return type === 'candlestick'
+    || type === 'hollow-candles'
+    || type === 'volume-candles'
+    || type === 'heikin-ashi'
+    || type === 'renko'
+    || type === 'line-break'
+    || type === 'range';
+}
+
+function isBarType(type: TradingChartType): boolean {
+  return type === 'bar' || type === 'high-low';
+}
+
+function isLineType(type: TradingChartType): boolean {
+  return type === 'line' || type === 'line-with-markers' || type === 'step-line' || type === 'kagi' || type === 'point-figure';
+}
+
+function isAreaType(type: TradingChartType): boolean {
+  return type === 'area' || type === 'hlc-area';
+}
+
+function isColumnType(type: TradingChartType): boolean {
+  return type === 'columns'
+    || type === 'volume-footprint'
+    || type === 'time-price-opportunity'
+    || type === 'session-volume-profile';
+}
+
+function isVolumeColumnType(type: TradingChartType): boolean {
+  return type === 'volume-footprint' || type === 'session-volume-profile';
+}
+
+function syntheticBar(source: MarketBar, open: number, high: number, low: number, close: number, startTime: string): MarketBar {
+  const duration = Math.max(1_000, Date.parse(source.end_time) - Date.parse(source.start_time));
+  return {
+    ...source,
+    start_time: startTime,
+    end_time: new Date(Date.parse(startTime) + duration).toISOString(),
+    open: String(open),
+    high: String(high),
+    low: String(low),
+    close: String(close),
+  };
+}
+
+export function heikinAshiBars(bars: readonly MarketBar[]): MarketBar[] {
+  let previousOpen: number | null = null;
+  let previousClose: number | null = null;
+  return bars.map((bar) => {
+    const open = Number(bar.open);
+    const high = Number(bar.high);
+    const low = Number(bar.low);
+    const close = Number(bar.close);
+    const nextClose = (open + high + low + close) / 4;
+    const nextOpen = previousOpen === null || previousClose === null
+      ? (open + close) / 2
+      : (previousOpen + previousClose) / 2;
+    const nextHigh = Math.max(high, nextOpen, nextClose);
+    const nextLow = Math.min(low, nextOpen, nextClose);
+    previousOpen = nextOpen;
+    previousClose = nextClose;
+    return {
+      ...bar,
+      open: String(nextOpen),
+      high: String(nextHigh),
+      low: String(nextLow),
+      close: String(nextClose),
+    };
+  });
+}
+
+function typicalRange(bars: readonly MarketBar[]): number {
+  const ranges = bars.map((bar) => Math.abs(Number(bar.high) - Number(bar.low))).filter((range) => Number.isFinite(range) && range > 0).sort((left, right) => left - right);
+  const median = ranges[Math.floor(ranges.length / 2)] ?? Math.abs(Number(bars[0]?.close ?? 1)) * 0.01;
+  return Math.max(median, Math.abs(Number(bars[0]?.close ?? 1)) * 0.0001, Number.EPSILON);
+}
+
+export function renkoBars(bars: readonly MarketBar[]): MarketBar[] {
+  if (bars.length === 0) return [];
+  const brickSize = typicalRange(bars);
+  let anchor = Number(bars[0].close);
+  let lastTimestamp = Number.NEGATIVE_INFINITY;
+  const output: MarketBar[] = [];
+  for (const source of bars) {
+    const close = Number(source.close);
+    while (close - anchor >= brickSize || anchor - close >= brickSize) {
+      const direction = close > anchor ? 1 : -1;
+      const next = anchor + direction * brickSize;
+      const start = Math.max(Date.parse(source.start_time), Number.isFinite(lastTimestamp) ? lastTimestamp + 1_000 : Date.parse(source.start_time));
+      const open = anchor;
+      output.push(syntheticBar(source, open, Math.max(open, next), Math.min(open, next), next, new Date(start).toISOString()));
+      anchor = next;
+      lastTimestamp = start;
+    }
+  }
+  return output.length > 0 ? output : [syntheticBar(bars[0], anchor, anchor, anchor, anchor, bars[0].start_time)];
+}
+
+export function rangeBars(bars: readonly MarketBar[]): MarketBar[] {
+  if (bars.length === 0) return [];
+  const rangeSize = typicalRange(bars);
+  let anchor = Number(bars[0].close);
+  let lastTimestamp = Number.NEGATIVE_INFINITY;
+  const output: MarketBar[] = [];
+  for (const source of bars) {
+    const high = Number(source.high);
+    const low = Number(source.low);
+    const extremes = high - anchor >= rangeSize ? 1 : anchor - low >= rangeSize ? -1 : 0;
+    if (extremes === 0) continue;
+    const next = anchor + extremes * rangeSize;
+    const start = Math.max(Date.parse(source.start_time), Number.isFinite(lastTimestamp) ? lastTimestamp + 1_000 : Date.parse(source.start_time));
+    output.push(syntheticBar(source, anchor, Math.max(anchor, next), Math.min(anchor, next), next, new Date(start).toISOString()));
+    anchor = next;
+    lastTimestamp = start;
+  }
+  return output.length > 0 ? output : [syntheticBar(bars[0], anchor, anchor, anchor, anchor, bars[0].start_time)];
+}
+
+export function lineBreakBars(bars: readonly MarketBar[]): MarketBar[] {
+  if (bars.length === 0) return [];
+  const output: MarketBar[] = [];
+  const closes: number[] = [];
+  for (const source of bars) {
+    const close = Number(source.close);
+    const previous = closes.slice(-3);
+    const accepted = previous.length < 3 || close > Math.max(...previous) || close < Math.min(...previous);
+    if (!accepted) continue;
+    const open = closes.at(-1) ?? close;
+    output.push(syntheticBar(source, open, Math.max(open, close), Math.min(open, close), close, source.start_time));
+    closes.push(close);
+  }
+  return output.length > 0 ? output : [syntheticBar(bars[0], Number(bars[0].close), Number(bars[0].close), Number(bars[0].close), Number(bars[0].close), bars[0].start_time)];
+}
+
+export function reversalBars(bars: readonly MarketBar[]): MarketBar[] {
+  if (bars.length === 0) return [];
+  const reversal = typicalRange(bars);
+  let anchor = Number(bars[0].close);
+  let direction = 0;
+  const output: MarketBar[] = [];
+  for (const source of bars) {
+    const close = Number(source.close);
+    const delta = close - anchor;
+    if (Math.abs(delta) < reversal) continue;
+    const nextDirection = delta > 0 ? 1 : -1;
+    if (direction !== 0 && nextDirection !== direction && Math.abs(delta) < reversal * 2) continue;
+    output.push(syntheticBar(source, anchor, Math.max(anchor, close), Math.min(anchor, close), close, source.start_time));
+    anchor = close;
+    direction = nextDirection;
+  }
+  return output.length > 0 ? output : [syntheticBar(bars[0], anchor, anchor, anchor, anchor, bars[0].start_time)];
+}
+
+function displayBars(bars: readonly MarketBar[], type: TradingChartType): readonly MarketBar[] {
+  if (type === 'heikin-ashi') return heikinAshiBars(bars);
+  if (type === 'renko') return renkoBars(bars);
+  if (type === 'range') return rangeBars(bars);
+  if (type === 'line-break') return lineBreakBars(bars);
+  if (type === 'kagi' || type === 'point-figure') return reversalBars(bars);
+  return bars;
 }
 
 function indicatorColor(output: IndicatorOutput): string {
@@ -166,25 +380,60 @@ export class TradingChartAdapter {
   }
 
   private createPriceSeries(type: TradingChartType): PriceSeries {
-    if (type === 'line') return this.chart.addSeries(LineSeries, { color: '#4dabf7', lineWidth: 2 });
-    if (type === 'area') return this.chart.addSeries(AreaSeries, { lineColor: '#4dabf7', topColor: 'rgba(77,171,247,.35)', bottomColor: 'rgba(77,171,247,.02)', lineWidth: 2 });
+    if (isLineType(type)) {
+      return this.chart.addSeries(LineSeries, {
+        color: '#4dabf7',
+        lineWidth: 2,
+        lineType: type === 'step-line' ? LineType.WithSteps : LineType.Simple,
+        pointMarkersVisible: type === 'line-with-markers',
+      });
+    }
+    if (isAreaType(type)) return this.chart.addSeries(AreaSeries, { lineColor: '#4dabf7', topColor: 'rgba(77,171,247,.35)', bottomColor: 'rgba(77,171,247,.02)', lineWidth: 2 });
     if (type === 'baseline') return this.chart.addSeries(BaselineSeries, { baseValue: { type: 'price', price: 0 }, topLineColor: '#20c997', bottomLineColor: '#ff6b6b', lineWidth: 2 });
-    if (type === 'bar') return this.chart.addSeries(BarSeries, { upColor: '#20c997', downColor: '#ff6b6b', openVisible: true, thinBars: false });
+    if (isColumnType(type)) return this.chart.addSeries(HistogramSeries, {
+      priceScaleId: isVolumeColumnType(type) ? 'volume' : 'right',
+      priceFormat: isVolumeColumnType(type) ? { type: 'volume' } : { type: 'price', precision: 2, minMove: 0.01 },
+      base: 0,
+    });
+    if (isBarType(type)) return this.chart.addSeries(BarSeries, {
+      upColor: '#20c997',
+      downColor: '#ff6b6b',
+      openVisible: type !== 'high-low',
+      thinBars: type === 'high-low',
+    });
+    if (type === 'hollow-candles') {
+      return this.chart.addSeries(CandlestickSeries, {
+        upColor: 'transparent',
+        downColor: '#ff6b6b',
+        borderVisible: true,
+        borderUpColor: '#20c997',
+        borderDownColor: '#ff6b6b',
+        wickUpColor: '#20c997',
+        wickDownColor: '#ff6b6b',
+      });
+    }
     return this.chart.addSeries(CandlestickSeries, { upColor: '#20c997', downColor: '#ff6b6b', borderVisible: false, wickUpColor: '#20c997', wickDownColor: '#ff6b6b' });
   }
 
   private setPriceData(bars: readonly MarketBar[]): void {
-    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).setData(bars.map((bar) => candlestickData(bar, this.priceScaleMultiplier)));
-    else if (this.chartType === 'bar') (this.priceSeries as ISeriesApi<'Bar'>).setData(bars.map((bar) => candlestickData(bar, this.priceScaleMultiplier)));
-    else if (this.chartType === 'area') (this.priceSeries as ISeriesApi<'Area'>).setData(bars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
-    else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).setData(bars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
-    else (this.priceSeries as ISeriesApi<'Line'>).setData(bars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
+    const visibleBars = displayBars(bars, this.chartType);
+    if (isCandlestickType(this.chartType)) (this.priceSeries as ISeriesApi<'Candlestick'>).setData(visibleBars.map((bar) => this.chartType === 'volume-candles' ? volumeCandleData(bar, visibleBars, this.priceScaleMultiplier) : candlestickData(bar, this.priceScaleMultiplier)));
+    else if (isBarType(this.chartType)) (this.priceSeries as ISeriesApi<'Bar'>).setData(visibleBars.map((bar) => candlestickData(bar, this.priceScaleMultiplier)));
+    else if (isColumnType(this.chartType)) (this.priceSeries as ISeriesApi<'Histogram'>).setData(visibleBars.map((bar) => isVolumeColumnType(this.chartType) ? volumeData(bar) : columnData(bar, this.priceScaleMultiplier)));
+    else if (isAreaType(this.chartType)) (this.priceSeries as ISeriesApi<'Area'>).setData(visibleBars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
+    else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).setData(visibleBars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
+    else (this.priceSeries as ISeriesApi<'Line'>).setData(visibleBars.map((bar) => lineData(bar, this.priceScaleMultiplier)));
   }
 
   private updatePriceData(bar: MarketBar): void {
-    if (this.chartType === 'candlestick') (this.priceSeries as ISeriesApi<'Candlestick'>).update(candlestickData(bar, this.priceScaleMultiplier));
-    else if (this.chartType === 'bar') (this.priceSeries as ISeriesApi<'Bar'>).update(candlestickData(bar, this.priceScaleMultiplier));
-    else if (this.chartType === 'area') (this.priceSeries as ISeriesApi<'Area'>).update(lineData(bar, this.priceScaleMultiplier));
+    if (this.chartType === 'heikin-ashi' || this.chartType === 'renko' || this.chartType === 'range' || this.chartType === 'line-break' || this.chartType === 'kagi' || this.chartType === 'point-figure') {
+      this.setPriceData(this.bars);
+      return;
+    }
+    if (isCandlestickType(this.chartType)) (this.priceSeries as ISeriesApi<'Candlestick'>).update(this.chartType === 'volume-candles' ? volumeCandleData(bar, this.bars, this.priceScaleMultiplier) : candlestickData(bar, this.priceScaleMultiplier));
+    else if (isBarType(this.chartType)) (this.priceSeries as ISeriesApi<'Bar'>).update(candlestickData(bar, this.priceScaleMultiplier));
+    else if (isColumnType(this.chartType)) (this.priceSeries as ISeriesApi<'Histogram'>).update(isVolumeColumnType(this.chartType) ? volumeData(bar) : columnData(bar, this.priceScaleMultiplier));
+    else if (isAreaType(this.chartType)) (this.priceSeries as ISeriesApi<'Area'>).update(lineData(bar, this.priceScaleMultiplier));
     else if (this.chartType === 'baseline') (this.priceSeries as ISeriesApi<'Baseline'>).update(lineData(bar, this.priceScaleMultiplier));
     else (this.priceSeries as ISeriesApi<'Line'>).update(lineData(bar, this.priceScaleMultiplier));
   }

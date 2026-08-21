@@ -1,4 +1,5 @@
 import type { CoreIndicatorInstance, CoreIndicatorStyle } from '../indicators/coreIndicators';
+import { TRADING_CHART_TYPE_OPTIONS } from '../chart/chartAdapter';
 import { binanceInstrumentIdFor } from '../cryptoInstrumentDefaults';
 import {
   MAX_TRADING_CHARTS,
@@ -92,7 +93,7 @@ function indicator(value: unknown): value is CoreIndicatorInstance {
 
 function parseCharts(value: unknown): TradingChartState[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_TRADING_CHARTS) return null;
-  const chartTypes = ['candlestick', 'bar', 'line', 'area', 'baseline'];
+  const chartTypes = TRADING_CHART_TYPE_OPTIONS.map((option) => option.value);
   const charts: TradingChartState[] = [];
   for (const raw of value) {
     if (!raw || typeof raw !== 'object') return null;

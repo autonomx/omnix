@@ -15,8 +15,8 @@ import { TradingSymbolSearch } from './TradingSymbolSearch';
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { tradingApi } from './tradingApi';
-import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
+import { TradingChartTypeMenu } from './TradingChartTypeMenu';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
 import { preferredCryptoInstrument } from './cryptoInstrumentDefaults';
@@ -71,14 +71,6 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
 ];
 
 const quickIntervalPriority = ['1h', '2h', '4h'];
-
-const chartTypeGlyphs: Record<TradingChartType, string> = {
-  candlestick: 'candles',
-  bar: 'bars',
-  line: 'line',
-  area: 'area',
-  baseline: 'baseline',
-};
 
 type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'research';
 
@@ -457,12 +449,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </details>
           </div>
 
-          <label className="trading-chart-type-control" title={`Chart type: ${activeChart.chartType}`}>
-            <span className={`trading-chart-type-glyph ${chartTypeGlyphs[activeChart.chartType]}`} aria-hidden="true"><i /><i /><i /></span>
-            <select aria-label="Trading chart type" value={activeChart.chartType} onChange={(event) => updateChart(activeChartId, { chartType: event.target.value as TradingChartType })}>
-              {(['candlestick', 'bar', 'line', 'area', 'baseline'] as TradingChartType[]).map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
+          <TradingChartTypeMenu value={activeChart.chartType} onChange={(chartType) => updateChart(activeChartId, { chartType })} />
 
           <TradingIndicatorManager indicators={activeChart.indicators} onToggle={(id) => toggleIndicator(activeChartId, id)} />
           <button

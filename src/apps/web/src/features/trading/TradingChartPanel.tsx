@@ -6,7 +6,7 @@ import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
-import { DEFAULT_TRADING_RIGHT_OFFSET, TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
+import { DEFAULT_TRADING_RIGHT_OFFSET, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
@@ -1121,7 +1121,7 @@ export function TradingChartPanel({
         {settingsVisible ? (
           <aside className="trading-chart-settings" role="dialog" aria-label="Chart settings" onPointerDown={(event) => event.stopPropagation()}>
             <header><strong>Chart settings</strong><button type="button" onClick={() => setSettingsVisible(false)} aria-label="Close chart settings">×</button></header>
-            <label>Chart type<select value={chartType} onChange={(event) => onChangeChartType(event.target.value as TradingChartType)}>{(['candlestick', 'bar', 'line', 'area', 'baseline'] as TradingChartType[]).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label>Chart type<select value={chartType} onChange={(event) => onChangeChartType(event.target.value as TradingChartType)}>{TRADING_CHART_TYPE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
             <label>Right margin<select aria-label="Chart right margin" value={rightOffset} onChange={(event) => changeRightOffset(event.target.value)}>{rightOffsetOptions.map((offset) => <option key={offset} value={offset}>{offset === 0 ? 'None' : `${offset} bars`}</option>)}</select></label>
             <label>Snap mode<select value={drawingSnapMode} disabled><option>{drawingSnapMode}</option></select></label>
           </aside>
