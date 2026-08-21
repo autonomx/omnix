@@ -100,6 +100,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  const [symbolSearchChartId, setSymbolSearchChartId] = useState<string | null>(null);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
   const [toolPanelFullscreen, setToolPanelFullscreen] = useState(false);
@@ -207,10 +208,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   const applySymbolMatch = (match: CanonicalInstrument, candidates: readonly CanonicalInstrument[]) => {
     const next = preferredInstrument(match, [...(instruments.data ?? []), ...candidates]);
-    updateChart(activeChartId, { instrumentId: next.instrument_id, bindingId: null });
+    const targetChartId = symbolSearchChartId ?? activeChartId;
+    updateChart(targetChartId, { instrumentId: next.instrument_id, bindingId: null });
+    setActiveChart(targetChartId);
     setSymbolQuery(next.display_symbol);
     setSymbolSearchResults([]);
     setSymbolSearchOpen(false);
+    setSymbolSearchChartId(null);
     void instruments.refetch();
     void providers.refetch();
   };
@@ -287,11 +291,25 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (window.confirm(`Delete ${persistence.activeWorkspaceName}?`)) void persistence.deleteWorkspace();
   };
 
-  const openSymbolSearch = () => {
-    setSymbolQuery(activeInstrument?.display_symbol ?? '');
+  const openSymbolSearch = (chartId = activeChartId) => {
+    const targetChart = charts.find((chart) => chart.chartId === chartId) ?? activeChart;
+    const targetInstrument = (instruments.data ?? []).find((instrument) => instrument.instrument_id === targetChart.instrumentId);
+    setActiveChart(targetChart.chartId);
+    setSymbolSearchChartId(targetChart.chartId);
+    setSymbolQuery(targetInstrument?.display_symbol ?? targetChart.instrumentId.split(':').at(-1)?.replace('-', '/') ?? '');
     setSymbolSearchResults([]);
     setSymbolSearchOpen(true);
   };
+
+  const closeSymbolSearch = () => {
+    setSymbolSearchOpen(false);
+    setSymbolSearchChartId(null);
+  };
+
+  const symbolSearchTarget = charts.find((chart) => chart.chartId === symbolSearchChartId) ?? activeChart;
+  const symbolSearchTargetInstrument = (instruments.data ?? []).find(
+    (instrument) => instrument.instrument_id === symbolSearchTarget.instrumentId,
+  );
 
   const activeSymbolLabel = activeInstrument?.display_symbol
     ?? activeChart.instrumentId.split(':').at(-1)?.replace('-', '/')
@@ -350,7 +368,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       <section className="trading-command-bar" aria-label="Trading command bar">
         <div className="trading-chart-controls" role="group" aria-label="Chart controls">
         <div className="trading-chart-symbol-options" aria-label="Chart symbol options">
-        <button type="button" className="trading-symbol-trigger" aria-label="Open symbol search" onClick={openSymbolSearch}>
+        <button type="button" className="trading-symbol-trigger" aria-label="Open symbol search" onClick={() => openSymbolSearch()}>
           <span className="trading-symbol-trigger-icon" aria-hidden="true" />
           <span className="trading-symbol-trigger-copy">
             <strong>{activeSymbolLabel}</strong>
@@ -487,18 +505,20 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         open={symbolSearchOpen}
         query={symbolQuery}
         instruments={[...(instruments.data ?? []), ...symbolSearchResults]}
-        activeInstrumentId={activeChart.instrumentId}
+        activeInstrumentId={symbolSearchTargetInstrument?.instrument_id ?? symbolSearchTarget.instrumentId}
         loading={symbolSearchLoading}
         onQueryChange={setSymbolQuery}
         onSelect={(match) => applySymbolMatch(match, [match])}
-        onClose={() => setSymbolSearchOpen(false)}
+        onClose={closeSymbolSearch}
       />
       <TradingAlertToastLayer />
 
       <div className="trading-body">
         <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />
         <div className="trading-chart-column">
-          <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid paperAccountId={paperAccountId} /></section>
+          <section className="trading-chart-shell" aria-label="Trading chart workspace">
+            <TradingChartGrid paperAccountId={paperAccountId} onOpenSymbolSearch={openSymbolSearch} />
+          </section>
           {workspaceHydrated && panels.bottom && !toolPanel ? (
             <TradingTerminalDock
               instrumentId={activeChart.instrumentId}

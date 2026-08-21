@@ -809,7 +809,13 @@ export class TradingChartAdapter {
       this.chart.timeScale().unsubscribeSizeChange(sizeHandler);
     };
   }
-  setVisibleRange(range: TradingVisibleRange): void { this.assertActive(); this.chart.timeScale().setVisibleRange(range); }
+  setVisibleRange(range: TradingVisibleRange): void {
+    this.assertActive();
+    if (this.bars.length === 0 || range.from == null || range.to == null) return;
+    const timeScale = this.chart.timeScale();
+    if (timeScale.timeToIndex(range.from, true) === null || timeScale.timeToIndex(range.to, true) === null) return;
+    timeScale.setVisibleRange(range);
+  }
   timeToCoordinate(value: string): number | null {
     this.assertActive();
     return this.chart.timeScale().timeToCoordinate(timestamp(value));

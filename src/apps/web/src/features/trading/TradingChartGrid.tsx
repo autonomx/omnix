@@ -14,7 +14,13 @@ export function tradingGridColumns(layout: TradingLayout, chartCount: number): n
   return Math.max(1, Math.min(4, Math.ceil(Math.sqrt(Math.max(1, chartCount)))));
 }
 
-export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string | null }) {
+export function TradingChartGrid({
+  paperAccountId,
+  onOpenSymbolSearch,
+}: {
+  paperAccountId?: string | null;
+  onOpenSymbolSearch: (chartId: string) => void;
+}) {
   const layout = useTradingStore((state) => state.layout);
   const charts = useTradingStore((state) => state.charts);
   const activeChartId = useTradingStore((state) => state.activeChartId);
@@ -42,10 +48,11 @@ export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string |
       style={style}
       aria-label={`${charts.length}-chart Trading layout with ${columns} column${columns === 1 ? '' : 's'}`}
     >
-      {charts.map((chart) => (
+      {charts.map((chart, index) => (
         <div key={chart.chartId} className="trading-chart-grid-cell">
           <TradingChartPanel
             chartId={chart.chartId}
+            chartNumber={index + 1}
             instrumentId={chart.instrumentId}
             bindingId={chart.bindingId}
             interval={chart.interval}
@@ -53,6 +60,7 @@ export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string |
             indicators={chart.indicators}
             active={chart.chartId === activeChartId}
             onActivate={() => setActiveChart(chart.chartId)}
+            onOpenSymbolSearch={() => onOpenSymbolSearch(chart.chartId)}
             onChangeInterval={(interval) => updateChart(chart.chartId, { interval })}
             onChangeChartType={(chartType) => updateChart(chart.chartId, { chartType })}
             onToggleIndicator={(id) => toggleIndicator(chart.chartId, id)}

@@ -150,6 +150,7 @@ function chartHistoryLimit(
 
 export function TradingChartPanel({
   chartId,
+  chartNumber,
   instrumentId,
   bindingId,
   interval,
@@ -157,6 +158,7 @@ export function TradingChartPanel({
   indicators,
   active,
   onActivate,
+  onOpenSymbolSearch,
   onChangeInterval,
   onChangeChartType,
   onToggleIndicator,
@@ -168,6 +170,7 @@ export function TradingChartPanel({
   paperAccountId,
 }: {
   chartId: string;
+  chartNumber: number;
   instrumentId: string;
   bindingId: string | null;
   interval: string;
@@ -175,6 +178,7 @@ export function TradingChartPanel({
   indicators: CoreIndicatorInstance[];
   active: boolean;
   onActivate: () => void;
+  onOpenSymbolSearch: () => void;
   onChangeInterval: (interval: string) => void;
   onChangeChartType: (chartType: TradingChartType) => void;
   onToggleIndicator: (id: CoreIndicatorId) => void;
@@ -866,7 +870,17 @@ export function TradingChartPanel({
       <header className="trading-chart-header">
         <div className="trading-chart-heading">
           <div className="trading-chart-title-row">
-            <strong>{chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong>
+            <button
+              type="button"
+              className="trading-chart-symbol-trigger"
+              aria-label={`Change symbol for Chart ${chartNumber}`}
+              title={`Change symbol for Chart ${chartNumber}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={onOpenSymbolSearch}
+            >
+              <strong>{chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong>
+              <span aria-hidden="true">⌄</span>
+            </button>
             <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
             <i className={`trading-stream-dot ${streamStatus}`} aria-label={`Feed ${streamStatus}`} />
           </div>

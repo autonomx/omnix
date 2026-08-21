@@ -10,7 +10,7 @@ import {
 } from '../tradingStore';
 
 export type TradingWorkspacePayload = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   name: string;
   layout: TradingLayout;
   activeChartId: string;
@@ -40,7 +40,7 @@ export function serializeTradingWorkspace(input: {
   favoriteInstrumentIds?: string[];
 }): TradingWorkspacePayload {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     name: input.name?.trim() || 'Main Workspace',
     layout: input.layout,
     activeChartId: input.activeChartId,
@@ -191,27 +191,28 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
       ? requestedActive
       : migratedCharts[0].chartId;
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: typeof payload.name === 'string' ? payload.name : 'Main Workspace',
       layout: migrateLegacyLayout(legacyLayout),
       activeChartId,
       charts: migratedCharts,
-      links,
+      links: { ...links, visibleRange: false },
       panels: parsePanels(payload.panels),
       favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
     };
   }
 
-  if (payload.schemaVersion !== 2 || typeof payload.layout !== 'string' || !layouts.includes(payload.layout as TradingLayout)) return null;
+  if ((payload.schemaVersion !== 2 && payload.schemaVersion !== 3) || typeof payload.layout !== 'string' || !layouts.includes(payload.layout as TradingLayout)) return null;
   const requestedActive = typeof payload.activeChartId === 'string' ? payload.activeChartId : charts[0].chartId;
   const migratedCharts = migrateCryptoChartsToBinance(charts);
+  const migratedLinks = payload.schemaVersion === 2 ? { ...links, visibleRange: false } : links;
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : 'Main Workspace',
     layout: payload.layout as TradingLayout,
     activeChartId: migratedCharts.some((chart) => chart.chartId === requestedActive) ? requestedActive : migratedCharts[0].chartId,
     charts: migratedCharts,
-    links,
+    links: migratedLinks,
     panels: parsePanels(payload.panels),
     favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
   };

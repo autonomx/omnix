@@ -16,6 +16,14 @@ const instrument = {
   status: 'active',
 } as const;
 
+const alternateInstrument = {
+  ...instrument,
+  instrument_id: 'crypto:BINANCE:spot:ETH-USDT',
+  venue_symbol: 'ETH-USDT',
+  display_symbol: 'ETHUSDT',
+  base_currency: 'ETH',
+} as const;
+
 const binding = {
   binding_id: 'binance:historical_polling:crypto:BINANCE:spot:BTC-USDT',
   instrument_id: instrument.instrument_id,
@@ -30,8 +38,15 @@ const binding = {
   is_official_api: true,
 } as const;
 
+const alternateBinding = {
+  ...binding,
+  binding_id: 'binance:historical_polling:crypto:BINANCE:spot:ETH-USDT',
+  instrument_id: alternateInstrument.instrument_id,
+  provider_symbol: alternateInstrument.display_symbol,
+} as const;
+
 const workspacePayload = (name = 'Main Workspace') => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   name,
   layout: 'auto',
   activeChartId: 'chart-1',
@@ -47,18 +62,18 @@ const workspacePayload = (name = 'Main Workspace') => ({
       { id: 'macd', period: 9, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, enabled: false },
     ],
   }],
-  links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
+  links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
   panels: { right: false, bottom: false },
   favoriteInstrumentIds: [],
 });
 
-function bars() {
+function bars(marketInstrument: typeof instrument | typeof alternateInstrument = instrument) {
   return Array.from({ length: 120 }, (_, index) => {
     const start = new Date(Date.UTC(2026, 0, 1, index, 0));
     const end = new Date(start.getTime() + 3_600_000);
     const base = 70_000 + index * 10;
     return {
-      instrument_id: instrument.instrument_id,
+      instrument_id: marketInstrument.instrument_id,
       interval: '1h',
       start_time: start.toISOString(),
       end_time: end.toISOString(),
@@ -132,7 +147,7 @@ async function installTradingMocks(page: Page): Promise<MockState> {
             history_depth: 'fixture',
             rate_limit_policy: 'fixture',
           },
-          bindings: [binding],
+          bindings: [binding, alternateBinding],
           runtime: {
             request_count: 1,
             success_count: 1,
@@ -147,19 +162,23 @@ async function installTradingMocks(page: Page): Promise<MockState> {
       return;
     }
     if (path === '/api/trading/instruments/search') {
-      await fulfill(route, { instruments: [instrument] });
+      await fulfill(route, { instruments: [instrument, alternateInstrument] });
       return;
     }
     if (path === '/api/trading/bars') {
       state.barLimits.push(Number(url.searchParams.get('limit') ?? '0'));
-      const dataset = bars();
+      const marketInstrument = url.searchParams.get('instrument_id') === alternateInstrument.instrument_id
+        ? alternateInstrument
+        : instrument;
+      const marketBinding = marketInstrument.instrument_id === alternateInstrument.instrument_id ? alternateBinding : binding;
+      const dataset = bars(marketInstrument);
       await fulfill(route, {
-        instrument,
-        binding,
+        instrument: marketInstrument,
+        binding: marketBinding,
         provenance: {
-          instrument_id: instrument.instrument_id,
-          requested_binding: binding.binding_id,
-          resolved_binding: binding.binding_id,
+          instrument_id: marketInstrument.instrument_id,
+          requested_binding: marketBinding.binding_id,
+          resolved_binding: marketBinding.binding_id,
           fallback_reason: null,
           dataset_fingerprint: 'playwright-bars-v1',
           freshness_mode: 'polled',
@@ -323,10 +342,11 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   const rangeNav = page.getByRole('navigation', { name: 'chart-1 visible range' });
   const timeframe = page.getByRole('combobox', { name: 'All supported Trading intervals' });
   for (const [range, interval] of [['1D', '1m'], ['5D', '5m'], ['1M', '30m'], ['3M', '1h'], ['6M', '2h'], ['YTD', '1d'], ['1Y', '1d'], ['5Y', '1w'], ['All', '1mo']] as const) {
-    await rangeNav.getByRole('button', { name: range, exact: true }).click();
+    const rangeButton = rangeNav.getByRole('button', { name: new RegExp(`^${range}:`) });
+    await rangeButton.click();
     const expectedLabel = interval.endsWith('mo') ? interval.replace('mo', 'M') : interval.endsWith('m') ? interval : interval.toUpperCase();
     await expect(timeframe).toContainText(expectedLabel);
-    await expect(rangeNav.getByRole('button', { name: range, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(rangeButton).toHaveAttribute('aria-pressed', 'true');
   }
   await timeframe.click();
   const intervalMenu = page.getByRole('listbox', { name: 'TradingView intervals' });
@@ -340,6 +360,13 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
 
   await page.getByLabel('Number of charts').selectOption('3');
   await expect(page.locator('.trading-chart-panel')).toHaveCount(3);
+  const secondChart = page.locator('.trading-chart-panel').nth(1);
+  await secondChart.getByRole('button', { name: 'Change symbol for Chart 2' }).click();
+  const secondChartSymbolSearch = page.getByRole('dialog', { name: 'Symbol search' });
+  await secondChartSymbolSearch.getByRole('textbox', { name: 'Search symbols' }).fill('ETH');
+  await secondChartSymbolSearch.getByRole('button', { name: /ETHUSDT/ }).click();
+  await expect(secondChart).toContainText('ETHUSDT');
+  await expect(page.locator('.trading-chart-panel').first()).toContainText('BTCUSDT');
   await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(3);
   await page.getByLabel('Grid columns').selectOption('columns-3');
 

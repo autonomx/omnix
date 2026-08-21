@@ -130,7 +130,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   drawingTool: 'cursor',
   drawingSnapMode: 'ohlc',
   charts: [initialChart()],
-  links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
+  links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
   panels: { right: true, bottom: true },
   favoriteInstrumentIds: [],
   setLayout: (layout) => set({ layout }),

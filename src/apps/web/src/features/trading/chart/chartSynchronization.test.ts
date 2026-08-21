@@ -60,4 +60,16 @@ describe('Trading chart synchronization', () => {
     expect(second.crosshairUpdates).toEqual([]);
     expect(second.rangeUpdates).toEqual([range]);
   });
+
+  it('keeps visible ranges independent by default', () => {
+    const controller = new TradingChartSynchronization();
+    const first = new FakeChart();
+    const second = new FakeChart();
+    controller.register('one', first);
+    controller.register('two', second);
+
+    first.emitRange({ from: 1 as never, to: 10 as never });
+
+    expect(second.rangeUpdates).toEqual([]);
+  });
 });
