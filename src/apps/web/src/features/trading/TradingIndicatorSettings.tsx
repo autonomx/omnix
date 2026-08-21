@@ -282,7 +282,7 @@ export function TradingIndicatorSettings({
               <label className="trading-indicator-settings-check"><input type="checkbox" checked={style?.inputsInStatusLine !== false} onChange={(event) => setStyle({ inputsInStatusLine: event.target.checked })} /><span>Inputs in status line</span></label>
               <label className="trading-indicator-settings-field">
                 <span>Line width</span>
-                <select value={String(style?.lineWidth ?? 2)} onChange={(event) => setStyle({ lineWidth: Number(event.target.value) as 1 | 2 | 3 | 4 })}>
+                <select value={String(style?.lineWidth ?? 1)} onChange={(event) => setStyle({ lineWidth: Number(event.target.value) as 1 | 2 | 3 | 4 })}>
                   <option value="1">1 px</option><option value="2">2 px</option><option value="3">3 px</option><option value="4">4 px</option>
                 </select>
               </label>

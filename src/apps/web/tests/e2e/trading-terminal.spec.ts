@@ -458,6 +458,24 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
     await page.mouse.up();
   }
   await expect.poll(async () => Number(await rsiTopResize.getAttribute('aria-valuenow'))).not.toBe(initialRsiHeight);
+  const rsiBottomResize = page.locator('.trading-indicator-pane-resize-handle[data-indicator-id="rsi"][data-edge="bottom"]');
+  const chartCanvas = page.locator('.trading-chart-canvas');
+  const topBorderBox = await rsiTopResize.boundingBox();
+  const bottomBorderBox = await rsiBottomResize.boundingBox();
+  const canvasBox = await chartCanvas.boundingBox();
+  expect(topBorderBox).not.toBeNull();
+  expect(bottomBorderBox).not.toBeNull();
+  expect(canvasBox).not.toBeNull();
+  if (topBorderBox && bottomBorderBox && canvasBox) {
+    const x = canvasBox.x + canvasBox.width * 0.4;
+    const y = (topBorderBox.y + bottomBorderBox.y) / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await expect(chartCanvas).toHaveAttribute('data-panning-indicator', 'rsi');
+    await expect(chartCanvas).toHaveClass(/is-grabbing/);
+    await page.mouse.move(x, y - 20, { steps: 8 });
+    await page.mouse.up();
+  }
   const indicatorLegend = page.getByRole('group', { name: 'Indicator legend' });
   await expect(indicatorLegend.getByRole('button', { name: 'Open RSI 14 settings' })).toBeVisible();
   await expect(indicatorLegend.getByRole('button', { name: 'Hide RSI 14 indicator' })).toBeVisible();
@@ -477,8 +495,17 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
   await enterRsiFullscreen.click();
   const exitRsiFullscreen = page.getByRole('button', { name: 'Exit fullscreen RSI 14 panel' });
   await expect(exitRsiFullscreen).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.trading-chart-panel.is-immersive-fullscreen')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel.is-immersive-fullscreen .trading-indicator-pane-controls')).toHaveCount(1);
   await exitRsiFullscreen.click();
   await expect(page.getByRole('button', { name: 'Enter fullscreen RSI 14 panel' })).toHaveAttribute('aria-pressed', 'false');
+
+  const enterChartFullscreen = page.getByRole('button', { name: 'Enter fullscreen chart' });
+  await enterChartFullscreen.click();
+  await expect(page.locator('.trading-chart-panel.is-immersive-fullscreen')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel.is-immersive-fullscreen .trading-indicator-pane-controls')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Exit fullscreen chart' }).click();
+  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveAttribute('aria-pressed', 'false');
 
   await page.getByRole('button', { name: 'Minimize RSI 14 panel' }).click();
   await expect(page.getByRole('button', { name: 'Restore RSI 14 panel' })).toHaveAttribute('aria-expanded', 'false');

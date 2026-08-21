@@ -333,9 +333,8 @@ export class TradingChartAdapter {
   private readonly indicatorPaneHeights = new Map<string, number>();
   private readonly restoredPaneHeights = new Map<string, number>();
   private fullscreenIndicatorId: string | null = null;
-  private readonly fullscreenPaneHeights = new Map<number, number>();
-  private fullscreenPaneTotalHeight = 0;
-  private fullscreenChartHeight = 0;
+  private fullscreenMainPane = false;
+  private readonly fullscreenPaneStretchFactors = new Map<number, number>();
   private maxZoomOutRange: LogicalRange | null = null;
   private rightOffset = DEFAULT_TRADING_RIGHT_OFFSET;
   private priceScaleSide: TradingPriceScaleSide = 'right';
@@ -390,13 +389,13 @@ export class TradingChartAdapter {
     if (isLineType(type)) {
       return this.chart.addSeries(LineSeries, {
         color: '#4dabf7',
-        lineWidth: 2,
+        lineWidth: 1,
         lineType: type === 'step-line' ? LineType.WithSteps : LineType.Simple,
         pointMarkersVisible: type === 'line-with-markers',
       });
     }
-    if (isAreaType(type)) return this.chart.addSeries(AreaSeries, { lineColor: '#4dabf7', topColor: 'rgba(77,171,247,.35)', bottomColor: 'rgba(77,171,247,.02)', lineWidth: 2 });
-    if (type === 'baseline') return this.chart.addSeries(BaselineSeries, { baseValue: { type: 'price', price: 0 }, topLineColor: '#20c997', bottomLineColor: '#ff6b6b', lineWidth: 2 });
+    if (isAreaType(type)) return this.chart.addSeries(AreaSeries, { lineColor: '#4dabf7', topColor: 'rgba(77,171,247,.35)', bottomColor: 'rgba(77,171,247,.02)', lineWidth: 1 });
+    if (type === 'baseline') return this.chart.addSeries(BaselineSeries, { baseValue: { type: 'price', price: 0 }, topLineColor: '#20c997', bottomLineColor: '#ff6b6b', lineWidth: 1 });
     if (isColumnType(type)) return this.chart.addSeries(HistogramSeries, {
       priceScaleId: isVolumeColumnType(type) ? 'volume' : 'right',
       priceFormat: isVolumeColumnType(type) ? { type: 'volume' } : { type: 'price', precision: 2, minMove: 0.01 },
@@ -524,7 +523,7 @@ export class TradingChartAdapter {
         };
         series = output.kind === 'histogram'
           ? this.chart.addSeries(HistogramSeries, { ...commonOptions, priceScaleId }, paneIndex)
-          : this.chart.addSeries(LineSeries, { ...commonOptions, ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 2, priceScaleId }, paneIndex);
+          : this.chart.addSeries(LineSeries, { ...commonOptions, ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 1, priceScaleId }, paneIndex);
         this.indicatorSeries.set(output.key, series);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       } else if (this.indicatorSeriesPanes.get(output.key) !== paneIndex) {
@@ -545,7 +544,7 @@ export class TradingChartAdapter {
           color: output.color ?? indicatorColor(output),
           title: output.valuesInStatusLine === false ? '' : output.title,
           lastValueVisible: output.labelsOnPriceScale === true,
-          lineWidth: output.lineWidth ?? 2,
+          lineWidth: output.lineWidth ?? 1,
           priceScaleId,
           ...(lineStyle === undefined ? {} : { lineStyle }),
           ...indicatorPriceFormat(output.precision),
@@ -645,54 +644,80 @@ export class TradingChartAdapter {
     const paneIndex = indicatorIndex + 1;
     const panes = this.chart.panes();
     if (!panes[paneIndex]) return;
-    if (this.fullscreenIndicatorId !== id) {
+    if (this.fullscreenIndicatorId !== id || this.fullscreenMainPane) {
       this.restoreFullscreenPaneHeights();
       this.fullscreenIndicatorId = id;
-      this.fullscreenPaneHeights.clear();
-      this.fullscreenPaneTotalHeight = 0;
-      for (const [index, pane] of panes.entries()) {
-        const paneId = index > 0 ? this.indicatorPaneIds[index - 1] : null;
-        const height = paneId ? this.restoredPaneHeights.get(paneId) ?? pane.getHeight() : pane.getHeight();
-        this.fullscreenPaneHeights.set(index, height);
-        this.fullscreenPaneTotalHeight += height;
-      }
-      this.fullscreenChartHeight = this.chart.chartElement().getBoundingClientRect().height;
+      this.fullscreenMainPane = false;
+      this.captureFullscreenPaneState(panes);
+    }
+    this.applyFullscreenPaneHeights();
+  }
+
+  setMainPaneFullscreen(enabled: boolean): void {
+    this.assertActive();
+    if (!enabled) {
+      this.restoreFullscreenPaneHeights();
+      return;
+    }
+    if (!this.fullscreenMainPane || this.fullscreenIndicatorId !== null) {
+      this.restoreFullscreenPaneHeights();
+      this.fullscreenIndicatorId = null;
+      this.fullscreenMainPane = true;
+      this.captureFullscreenPaneState(this.chart.panes());
     }
     this.applyFullscreenPaneHeights();
   }
 
   refreshIndicatorPaneFullscreen(): void {
     this.assertActive();
-    if (this.fullscreenIndicatorId !== null) this.applyFullscreenPaneHeights();
+    if (this.fullscreenIndicatorId !== null || this.fullscreenMainPane) this.applyFullscreenPaneHeights();
+  }
+
+  private captureFullscreenPaneState(panes: ReturnType<IChartApi['panes']>): void {
+    this.fullscreenPaneStretchFactors.clear();
+    for (const [index, pane] of panes.entries()) {
+      this.fullscreenPaneStretchFactors.set(index, pane.getStretchFactor());
+    }
   }
 
   private applyFullscreenPaneHeights(): void {
-    if (this.fullscreenIndicatorId === null) return;
-    const indicatorIndex = this.indicatorPaneIds.indexOf(this.fullscreenIndicatorId);
-    if (indicatorIndex < 0) {
+    if (this.fullscreenIndicatorId === null && !this.fullscreenMainPane) return;
+    const indicatorIndex = this.fullscreenIndicatorId === null ? -1 : this.indicatorPaneIds.indexOf(this.fullscreenIndicatorId);
+    if (!this.fullscreenMainPane && indicatorIndex < 0) {
       this.restoreFullscreenPaneHeights();
       return;
     }
     const panes = this.chart.panes();
-    const focusedPaneIndex = indicatorIndex + 1;
-    const compactHeight = 34;
-    const chartHeight = this.chart.chartElement().getBoundingClientRect().height;
-    const heightDelta = chartHeight - this.fullscreenChartHeight;
-    const paneAreaHeight = Math.max(
-      panes.length * compactHeight,
-      this.fullscreenPaneTotalHeight + heightDelta,
-    );
-    const focusedHeight = Math.max(100, paneAreaHeight - compactHeight * (panes.length - 1));
-    for (const [index, pane] of panes.entries()) pane.setHeight(index === focusedPaneIndex ? focusedHeight : compactHeight);
+    const focusedPaneIndex = this.fullscreenMainPane ? 0 : indicatorIndex + 1;
+    if (!panes[focusedPaneIndex]) {
+      this.restoreFullscreenPaneHeights();
+      return;
+    }
+    for (const [index, pane] of panes.entries()) {
+      const focused = index === focusedPaneIndex;
+      pane.setStretchFactor(focused ? 1 : 0);
+      const element = pane.getHTMLElement();
+      if (element) {
+        element.style.visibility = focused ? 'visible' : 'hidden';
+        element.style.pointerEvents = focused ? 'auto' : 'none';
+      }
+    }
   }
 
   private restoreFullscreenPaneHeights(): void {
-    if (this.fullscreenIndicatorId === null) return;
-    for (const [index, height] of this.fullscreenPaneHeights) this.chart.panes()[index]?.setHeight(height);
+    if (this.fullscreenIndicatorId === null && !this.fullscreenMainPane) return;
+    const panes = this.chart.panes();
+    for (const [index, stretchFactor] of this.fullscreenPaneStretchFactors) panes[index]?.setStretchFactor(stretchFactor);
+    for (const pane of panes) {
+      const element = pane.getHTMLElement();
+      if (element) {
+        element.style.removeProperty('visibility');
+        element.style.removeProperty('pointer-events');
+      }
+    }
     this.fullscreenIndicatorId = null;
-    this.fullscreenPaneHeights.clear();
-    this.fullscreenPaneTotalHeight = 0;
-    this.fullscreenChartHeight = 0;
+    this.fullscreenMainPane = false;
+    this.fullscreenPaneStretchFactors.clear();
   }
 
   updateBar(bar: MarketBar): boolean {
@@ -788,14 +813,33 @@ export class TradingChartAdapter {
 
   panPriceScaleByPixels(deltaY: number): void {
     this.assertActive();
+    this.panPanePriceScaleByPixels(0, deltaY);
+  }
+
+  panPriceScaleByPixelsAtCoordinate(y: number, deltaY: number): void {
+    this.assertActive();
+    if (!Number.isFinite(y)) return;
+    this.panPanePriceScaleByPixels(this.paneIndexAtCoordinate(y), deltaY);
+  }
+
+  indicatorPaneIdAtCoordinate(y: number): string | null {
+    this.assertActive();
+    const paneIndex = this.paneIndexAtCoordinate(y);
+    return paneIndex > 0 ? this.indicatorPaneIds[paneIndex - 1] ?? null : null;
+  }
+
+  private panPanePriceScaleByPixels(paneIndex: number, deltaY: number): void {
     if (!Number.isFinite(deltaY) || deltaY === 0) return;
-    const priceScale = this.chart.priceScale(this.priceScaleSide);
-    const range = priceScale.getVisibleRange();
-    const paneHeight = this.chart.panes()[0]?.getHeight() ?? this.chart.chartElement().getBoundingClientRect().height;
-    if (!range || !Number.isFinite(paneHeight) || paneHeight <= 0) return;
+    const priceScale = this.panePriceScale(paneIndex);
+    const range = priceScale?.getVisibleRange();
+    const paneHeight = this.chart.panes()[paneIndex]?.getHeight() ?? this.chart.chartElement().getBoundingClientRect().height;
+    if (!priceScale || !range || !Number.isFinite(paneHeight) || paneHeight <= 0) return;
     const priceDelta = deltaY / paneHeight * (range.to - range.from);
     priceScale.setAutoScale(false);
-    priceScale.setVisibleRange({ from: range.from - priceDelta, to: range.to - priceDelta });
+    const nextRange = { from: range.from - priceDelta, to: range.to - priceDelta };
+    priceScale.setVisibleRange(nextRange);
+    const paneId = paneIndex > 0 ? this.indicatorPaneIds[paneIndex - 1] : undefined;
+    if (paneId) this.indicatorScaleRanges.set(paneId, nextRange);
     this.notifyViewportChange();
   }
 

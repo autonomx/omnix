@@ -43,6 +43,7 @@ const ranges = [
 
 const rightOffsetStorageKey = 'omnix.trading.chart.right-offset';
 const rightOffsetOptions = [0, 5, DEFAULT_TRADING_RIGHT_OFFSET, 20, 50] as const;
+const Y_AXIS_DRAG_ZOOM_SENSITIVITY = 2;
 
 function readTradingRightOffset(): number {
   if (typeof window === 'undefined') return DEFAULT_TRADING_RIGHT_OFFSET;
@@ -228,6 +229,7 @@ export function TradingChartPanel({
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [cursorLocked, setCursorLocked] = useState(false);
   const [chartPanning, setChartPanning] = useState(false);
+  const [panningIndicatorPane, setPanningIndicatorPane] = useState<string | null>(null);
   const [indicatorPaneGeometry, setIndicatorPaneGeometry] = useState<TradingIndicatorPaneGeometry[]>([]);
   const [indicatorOutputs, setIndicatorOutputs] = useState<IndicatorOutput[]>([]);
   const [indicatorLegendCollapsed, setIndicatorLegendCollapsed] = useState(false);
@@ -246,6 +248,8 @@ export function TradingChartPanel({
   const minimizedIndicatorsRef = useRef<Set<CoreIndicatorId>>(new Set());
   const [fullscreenIndicator, setFullscreenIndicator] = useState<CoreIndicatorId | null>(null);
   const fullscreenIndicatorRef = useRef<CoreIndicatorId | null>(null);
+  const [fullscreenMainPane, setFullscreenMainPane] = useState(false);
+  const fullscreenMainPaneRef = useRef(false);
   const indicatorResizeRef = useRef<{ id: CoreIndicatorId; edge: 'top' | 'bottom'; pointerId: number; lastY: number; target: HTMLDivElement } | null>(null);
 
   const clearAlertPlacement = useCallback(() => setAlertPlacement(null), []);
@@ -274,6 +278,8 @@ export function TradingChartPanel({
             setIndicatorOutputs(outputs);
             if (fullscreenIndicatorRef.current) {
               targetAdapter.setIndicatorPaneFullscreen(fullscreenIndicatorRef.current);
+            } else if (fullscreenMainPaneRef.current) {
+              targetAdapter.setMainPaneFullscreen(true);
             } else {
               for (const indicator of indicatorsRef.current) {
                 if (indicatorUsesSeparatePane(indicator.id)) {
@@ -286,6 +292,8 @@ export function TradingChartPanel({
               if (adapterRef.current !== targetAdapter) return;
               if (fullscreenIndicatorRef.current) {
                 targetAdapter.setIndicatorPaneFullscreen(fullscreenIndicatorRef.current);
+              } else if (fullscreenMainPaneRef.current) {
+                targetAdapter.setMainPaneFullscreen(true);
               } else {
                 for (const indicator of indicatorsRef.current) {
                   if (indicatorUsesSeparatePane(indicator.id)) {
@@ -353,6 +361,8 @@ export function TradingChartPanel({
     setPriceScaleSettings(defaultTradingPriceScaleMenuState);
     fullscreenIndicatorRef.current = null;
     setFullscreenIndicator(null);
+    fullscreenMainPaneRef.current = false;
+    setFullscreenMainPane(false);
     setAdapter(next);
     setIndicatorOutputs([]);
     setIndicatorPaneGeometry([]);
@@ -373,7 +383,7 @@ export function TradingChartPanel({
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !adapter || (replayMode && active)) return;
-    let pan: { pointerId: number; lastX: number; lastY: number; mode: 'chart-pan' | 'price-scale' | 'price-pan' } | null = null;
+    let pan: { pointerId: number; lastX: number; lastY: number; paneY: number; paneId: string | null; mode: 'chart-pan' | 'price-scale' | 'price-pan' } | null = null;
     const insideHost = (event: PointerEvent) => event.target instanceof Node && host.contains(event.target);
     const pointerDown = (event: PointerEvent) => {
       if (!insideHost(event)) return;
@@ -382,14 +392,18 @@ export function TradingChartPanel({
       if ((!isPrimaryPan && !isMiddlePan) || event.pointerType === 'touch') return;
       const bounds = host.getBoundingClientRect();
       const x = event.clientX - bounds.left;
+      const paneY = event.clientY - bounds.top;
       const onPriceScale = adapter.isPriceScaleCoordinate(x);
       pan = {
         pointerId: event.pointerId,
         lastX: event.clientX,
         lastY: event.clientY,
+        paneY,
+        paneId: onPriceScale ? null : adapter.indicatorPaneIdAtCoordinate(paneY),
         mode: onPriceScale ? 'price-scale' : event.shiftKey ? 'price-pan' : 'chart-pan',
       };
       setChartPanning(!onPriceScale);
+      setPanningIndicatorPane(pan.paneId);
       host.setPointerCapture(event.pointerId);
       event.preventDefault();
       event.stopPropagation();
@@ -400,15 +414,15 @@ export function TradingChartPanel({
       const deltaX = event.clientX - pan.lastX;
       const deltaY = event.clientY - pan.lastY;
       const bounds = host.getBoundingClientRect();
-      if (pan.mode === 'price-scale') adapter.zoomPriceScaleAtCoordinate(event.clientY - bounds.top, deltaY);
-      else if (pan.mode === 'price-pan') adapter.panPriceScaleByPixels(-deltaY);
+      if (pan.mode === 'price-scale') adapter.zoomPriceScaleAtCoordinate(event.clientY - bounds.top, deltaY * Y_AXIS_DRAG_ZOOM_SENSITIVITY);
+      else if (pan.mode === 'price-pan') adapter.panPriceScaleByPixelsAtCoordinate(pan.paneY, -deltaY);
       else {
         // TradingView-style chart dragging: horizontal motion pans time and
         // vertical motion translates the visible price range at the same time.
         adapter.panTimeByPixels(deltaX);
         // Invert the screen delta so dragging upward moves the visible chart
         // downward, matching the requested TradingView-style y-axis feel.
-        adapter.panPriceScaleByPixels(-deltaY);
+        adapter.panPriceScaleByPixelsAtCoordinate(pan.paneY, -deltaY);
       }
       pan.lastX = event.clientX;
       pan.lastY = event.clientY;
@@ -420,6 +434,7 @@ export function TradingChartPanel({
       if (!pan || pan.pointerId !== event.pointerId) return;
       pan = null;
       setChartPanning(false);
+      setPanningIndicatorPane(null);
       if (host.hasPointerCapture(event.pointerId)) host.releasePointerCapture(event.pointerId);
       event.preventDefault();
       event.stopPropagation();
@@ -428,6 +443,7 @@ export function TradingChartPanel({
     const lostPointerCapture = () => {
       pan = null;
       setChartPanning(false);
+      setPanningIndicatorPane(null);
     };
     window.addEventListener('pointerdown', pointerDown, true);
     window.addEventListener('pointermove', pointerMove, true);
@@ -442,6 +458,7 @@ export function TradingChartPanel({
       host.removeEventListener('lostpointercapture', lostPointerCapture, true);
       pan = null;
       setChartPanning(false);
+      setPanningIndicatorPane(null);
     };
   }, [active, adapter, drawingTool, replayMode]);
 
@@ -572,6 +589,8 @@ export function TradingChartPanel({
     if (!targetAdapter) return;
     if (fullscreenIndicator) {
       targetAdapter.setIndicatorPaneFullscreen(fullscreenIndicator);
+    } else if (fullscreenMainPane) {
+      targetAdapter.setMainPaneFullscreen(true);
     } else {
       for (const indicator of indicators) {
         if (indicatorUsesSeparatePane(indicator.id)) {
@@ -582,7 +601,7 @@ export function TradingChartPanel({
     refreshIndicatorPanes(targetAdapter);
     const frame = window.requestAnimationFrame(() => refreshIndicatorPanes(targetAdapter));
     return () => window.cancelAnimationFrame(frame);
-  }, [adapter, fullscreenIndicator, indicators, minimizedIndicators, refreshIndicatorPanes]);
+  }, [adapter, fullscreenIndicator, fullscreenMainPane, indicators, minimizedIndicators, refreshIndicatorPanes]);
 
   useEffect(() => {
     if (!adapter) return;
@@ -669,15 +688,32 @@ export function TradingChartPanel({
   const direction = change < 0 ? 'negative' : 'positive';
   const paneIndicators = indicators.filter((indicator) => indicator.enabled && indicatorUsesSeparatePane(indicator.id));
   const indicatorControls = indicators.filter((indicator) => indicator.enabled);
+  const legendIndicators = fullscreenMainPane
+    ? indicatorControls.filter((indicator) => !indicatorUsesSeparatePane(indicator.id))
+    : fullscreenIndicator
+      ? indicatorControls.filter((indicator) => indicator.id === fullscreenIndicator)
+      : indicatorControls;
+  const visibleIndicatorOutputs = fullscreenMainPane
+    ? indicatorOutputs.filter((output) => output.pane === 0)
+    : fullscreenIndicator
+      ? indicatorOutputs.filter((output) => output.key.split(':', 1)[0] === fullscreenIndicator)
+      : indicatorOutputs;
 
   useEffect(() => {
     const syncFullscreenState = () => {
       const panelFullscreen = document.fullscreenElement === panelRef.current;
       setIsFullscreen(panelFullscreen);
-      if (!panelFullscreen && fullscreenIndicatorRef.current !== null) {
-        fullscreenIndicatorRef.current = null;
-        setFullscreenIndicator(null);
-        adapterRef.current?.setIndicatorPaneFullscreen(null);
+      if (!panelFullscreen) {
+        if (fullscreenIndicatorRef.current !== null) {
+          fullscreenIndicatorRef.current = null;
+          setFullscreenIndicator(null);
+          adapterRef.current?.setIndicatorPaneFullscreen(null);
+        }
+        if (fullscreenMainPaneRef.current) {
+          fullscreenMainPaneRef.current = false;
+          setFullscreenMainPane(false);
+          adapterRef.current?.setMainPaneFullscreen(false);
+        }
       }
     };
     document.addEventListener('fullscreenchange', syncFullscreenState);
@@ -692,10 +728,23 @@ export function TradingChartPanel({
   }, [fullscreenIndicator, paneIndicators]);
 
   const toggleFullscreen = async () => {
+    const isBrowserFullscreen = document.fullscreenElement === panelRef.current;
     try {
-      if (document.fullscreenElement === panelRef.current) {
+      if (isBrowserFullscreen) {
+        fullscreenIndicatorRef.current = null;
+        setFullscreenIndicator(null);
+        fullscreenMainPaneRef.current = false;
+        setFullscreenMainPane(false);
+        adapterRef.current?.setIndicatorPaneFullscreen(null);
+        adapterRef.current?.setMainPaneFullscreen(false);
         await document.exitFullscreen();
       } else {
+        fullscreenIndicatorRef.current = null;
+        setFullscreenIndicator(null);
+        adapterRef.current?.setIndicatorPaneFullscreen(null);
+        fullscreenMainPaneRef.current = true;
+        setFullscreenMainPane(true);
+        adapterRef.current?.setMainPaneFullscreen(true);
         await panelRef.current?.requestFullscreen();
       }
     } catch {
@@ -719,6 +768,9 @@ export function TradingChartPanel({
     fullscreenIndicatorRef.current = next;
     setFullscreenIndicator(next);
     if (next) {
+      fullscreenMainPaneRef.current = false;
+      setFullscreenMainPane(false);
+      adapterRef.current?.setMainPaneFullscreen(false);
       setMinimizedIndicators((current) => {
         const updated = new Set(current);
         updated.delete(id);
@@ -735,6 +787,8 @@ export function TradingChartPanel({
       }
       return;
     }
+    fullscreenMainPaneRef.current = false;
+    setFullscreenMainPane(false);
     adapterRef.current?.setIndicatorPaneFullscreen(null);
     if (document.fullscreenElement === panelRef.current) {
       try {
@@ -988,7 +1042,7 @@ export function TradingChartPanel({
   return (
     <article
       ref={panelRef}
-      className={`trading-chart-panel${active ? ' active' : ''}`}
+      className={`trading-chart-panel${active ? ' active' : ''}${isFullscreen || fullscreenMainPane || fullscreenIndicator ? ' is-immersive-fullscreen' : ''}`}
       data-chart-id={chartId}
       data-stream-status={streamStatus}
       onPointerDown={onActivate}
@@ -1072,9 +1126,9 @@ export function TradingChartPanel({
         onPointerMove={handleStagePointerMove}
         onPointerLeave={handleStagePointerLeave}
       >
-        <div ref={hostRef} className={`trading-chart-canvas${chartPanning ? ' is-grabbing' : ''}`} aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
-        {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={indicatorOutputs} /> : null}
-        {!fullscreenIndicator ? paneIndicators.flatMap((indicator) => {
+        <div ref={hostRef} className={`trading-chart-canvas${drawingTool === 'cursor' && !replayMode ? ' is-pan-ready' : ''}${chartPanning ? ' is-grabbing' : ''}`} data-panning-indicator={panningIndicatorPane ?? undefined} aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
+        {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
+        {!fullscreenIndicator && !fullscreenMainPane ? paneIndicators.flatMap((indicator) => {
           const geometry = indicatorPaneGeometry.find((item) => item.id === indicator.id);
           if (!geometry || geometry.height <= 40) return [];
           return (['top', 'bottom'] as const).map((edge) => (
@@ -1148,14 +1202,14 @@ export function TradingChartPanel({
             ) : null}
           </>
         ) : null}
-        {indicatorControls.length > 0 ? (
+        {legendIndicators.length > 0 ? (
           <div
             className={`trading-overlay-indicator-controls trading-indicator-legend${indicatorLegendCollapsed ? ' is-collapsed' : ''}`}
             role="group"
             aria-label="Indicator legend"
             onPointerDown={(event) => event.stopPropagation()}
           >
-            {!indicatorLegendCollapsed ? indicatorControls.map((indicator) => {
+            {!indicatorLegendCollapsed ? legendIndicators.map((indicator) => {
               const label = `${indicator.id.toUpperCase()} ${indicator.period}`;
               const visible = indicator.visible !== false;
               const docked = indicatorUsesSeparatePane(indicator.id);
@@ -1201,11 +1255,11 @@ export function TradingChartPanel({
               onClick={() => setIndicatorLegendCollapsed((collapsed) => !collapsed)}
             >
               <span aria-hidden="true">{indicatorLegendCollapsed ? '⌄' : '⌃'}</span>
-              {indicatorLegendCollapsed ? <span className="trading-indicator-legend-count">{indicatorControls.length}</span> : null}
+              {indicatorLegendCollapsed ? <span className="trading-indicator-legend-count">{legendIndicators.length}</span> : null}
             </button>
           </div>
         ) : null}
-        {paneIndicators.map((indicator, index) => {
+        {paneIndicators.filter((indicator) => !fullscreenMainPane && (!fullscreenIndicator || indicator.id === fullscreenIndicator)).map((indicator, index) => {
           const geometry = indicatorPaneGeometry.find((item) => item.id === indicator.id);
           if (!geometry) return null;
           return (
