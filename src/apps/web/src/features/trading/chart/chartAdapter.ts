@@ -3,6 +3,7 @@ import {
   BarSeries,
   BaselineSeries,
   CandlestickSeries,
+  CrosshairMode,
   HistogramSeries,
   LineSeries,
   LineStyle,
@@ -132,6 +133,7 @@ export class TradingChartAdapter {
     this.chart = createChart(container, {
       autoSize: true,
       layout: { background: { color: 'transparent' }, textColor: '#9eacbd' },
+      crosshair: { mode: CrosshairMode.Normal },
       grid: { vertLines: { color: 'rgba(120,145,170,.08)' }, horzLines: { color: 'rgba(120,145,170,.08)' } },
       rightPriceScale: { borderColor: 'rgba(140,160,180,.18)' },
       timeScale: {
@@ -528,8 +530,13 @@ export class TradingChartAdapter {
 
   onCrosshair(listener: (point: TradingCrosshairPoint | null) => void): () => void {
     this.assertActive();
-    const handler = (parameter: { time?: Time; seriesData: Map<unknown, unknown> }) => {
-      if (parameter.time === undefined) { listener(null); return; }
+    const handler = (parameter: { time?: Time; point?: { x: number; y: number }; seriesData: Map<unknown, unknown> }) => {
+      if (parameter.time === undefined || parameter.point === undefined) { listener(null); return; }
+      const pointerPrice = this.priceSeries.coordinateToPrice(parameter.point.y);
+      if (typeof pointerPrice === 'number' && Number.isFinite(pointerPrice)) {
+        listener({ time: parameter.time, price: pointerPrice / this.priceScaleMultiplier });
+        return;
+      }
       const datum = parameter.seriesData.get(this.priceSeries) as { close?: number; value?: number } | undefined;
       const price = datum?.close ?? datum?.value;
       listener(typeof price === 'number' ? { time: parameter.time, price: price / this.priceScaleMultiplier } : null);

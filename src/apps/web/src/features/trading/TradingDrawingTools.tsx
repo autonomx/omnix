@@ -340,8 +340,11 @@ export function TradingDrawingTools({
       </button>
       {drawingToolGroups.filter((group) => group.id !== 'measurers').map((group) => {
         const isCursorGroup = group.id === 'cursor';
-        const active = isCursorGroup ? selectedTool === 'cursor' : group.items.some((item) => item.tool === selectedTool);
+        const selectedItem = group.items.find((item) => item.tool === selectedTool && itemIsAvailable(item));
+        const active = selectedTool === 'cursor' && isCursorGroup ? true : selectedItem !== undefined;
         const expanded = openGroup === group.id;
+        const activeLabel = selectedItem?.label ?? group.label;
+        const activeGlyph = selectedItem?.glyph ?? group.glyph;
         return (
           <div key={group.id} className="trading-drawing-tool-group">
             {isCursorGroup ? (
@@ -349,15 +352,21 @@ export function TradingDrawingTools({
                 <button
                   type="button"
                   className={active ? 'active' : undefined}
-                  aria-label="Cursor"
-                  aria-pressed={active}
-                  title="Cursor: grab, select, and pan"
-                  onClick={() => {
-                    onSelect('cursor');
-                    setOpenGroup(null);
+                  aria-label={activeLabel}
+                  aria-expanded={expanded}
+                  aria-haspopup="menu"
+                  title={`${group.label}: ${activeLabel}`}
+                  onClick={(event) => {
+                    if (openGroup === group.id) {
+                      setOpenGroup(null);
+                      return;
+                    }
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    setMenuPosition({ top: bounds.top, left: bounds.right + 7 });
+                    setOpenGroup(group.id);
                   }}
                 >
-                  <span aria-hidden="true">{group.glyph}</span>
+                  <span aria-hidden="true">{activeGlyph}</span>
                 </button>
                 <button
                   type="button"
@@ -383,10 +392,10 @@ export function TradingDrawingTools({
               <button
                 type="button"
                 className={active ? 'active' : undefined}
-                aria-label={group.label}
+                aria-label={activeLabel}
                 aria-expanded={expanded}
                 aria-haspopup="menu"
-                title={group.label}
+                title={`${group.label}: ${activeLabel}`}
                 onClick={(event) => {
                   if (openGroup === group.id) {
                     setOpenGroup(null);
@@ -397,7 +406,7 @@ export function TradingDrawingTools({
                   setOpenGroup(group.id);
                 }}
               >
-                <span aria-hidden="true">{group.glyph}</span>
+                <span aria-hidden="true">{activeGlyph}</span>
               </button>
             )}
             {expanded ? (
