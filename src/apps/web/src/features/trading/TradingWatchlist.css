@@ -118,6 +118,26 @@
   text-align: right;
 }
 
+.trading-watchlist-columns .trading-watchlist-change-sort {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 3px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.trading-watchlist-columns .trading-watchlist-change-sort:hover,
+.trading-watchlist-columns .trading-watchlist-change-sort[aria-pressed='true'] {
+  color: #70baff;
+}
+
 .trading-watchlist ul {
   display: grid;
   max-height: calc(100vh - 205px);
@@ -299,6 +319,10 @@
 .trading-watchlist-row-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.35;
+}
+
+.trading-watchlist-row-actions.is-sorted button[aria-label^='Move '] {
+  display: none;
 }
 
 .trading-watchlist-status {

@@ -14,6 +14,7 @@ import './TradingWatchlist.css';
 
 type WatchlistPayload = { name: string; instrumentIds: string[] };
 type QuoteSnapshot = { price: string | null; changePercent: number | null };
+type ChangeSort = 'manual' | 'desc' | 'asc';
 
 const fallbackIntervals = ['1mo', '1w', '1d', '12h', '8h', '6h', '4h', '2h', '1h', '30m', '15m', '5m', '3m', '1m'];
 
@@ -160,6 +161,7 @@ export function TradingWatchlist({
   const [selectedId, setSelectedId] = useState('');
   const [status, setStatus] = useState<'loading' | 'saved' | 'saving' | 'conflict' | 'error'>('loading');
   const [quotes, setQuotes] = useState<Record<string, QuoteSnapshot>>({});
+  const [changeSort, setChangeSort] = useState<ChangeSort>('manual');
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
   const [discoveredInstruments, setDiscoveredInstruments] = useState<CanonicalInstrument[]>([]);
@@ -265,6 +267,26 @@ export function TradingWatchlist({
 
     return () => { cancelled = true; };
   }, [instrumentIdsKey, interval]);
+
+  const displayedInstrumentIds = useMemo(() => {
+    if (changeSort === 'manual') return normalizedInstrumentIds;
+    return normalizedInstrumentIds
+      .map((instrumentId, index) => ({
+        instrumentId,
+        index,
+        changePercent: quotes[instrumentId]?.changePercent,
+      }))
+      .sort((left, right) => {
+        const leftChange = left.changePercent;
+        const rightChange = right.changePercent;
+        if (leftChange == null && rightChange == null) return left.index - right.index;
+        if (leftChange == null) return 1;
+        if (rightChange == null) return -1;
+        if (leftChange === rightChange) return left.index - right.index;
+        return changeSort === 'desc' ? rightChange - leftChange : leftChange - rightChange;
+      })
+      .map(({ instrumentId }) => instrumentId);
+  }, [changeSort, normalizedInstrumentIds, quotes]);
 
   const replace = (record: TradingDocument) => {
     setRecords((items) => items.map((item) => item.record_id === record.record_id ? record : item));
@@ -394,13 +416,23 @@ export function TradingWatchlist({
           ) : null}
         </div>
       </div>
-      <div className="trading-watchlist-columns" aria-hidden="true">
+      <div className="trading-watchlist-columns">
         <span>Symbol</span>
         <span>Last</span>
-        <span title={`Change over ${interval}`}>Chg%</span>
+        <button
+          type="button"
+          className="trading-watchlist-change-sort"
+          aria-label={changeSort === 'manual' ? 'Sort watchlist by change percentage descending' : changeSort === 'desc' ? 'Sort watchlist by change percentage ascending' : 'Clear watchlist change percentage sort'}
+          aria-pressed={changeSort !== 'manual'}
+          title={`Change over ${interval}. Click to sort.`}
+          onClick={() => setChangeSort((current) => current === 'manual' ? 'desc' : current === 'desc' ? 'asc' : 'manual')}
+        >
+          <span>Chg%</span>
+          <span aria-hidden="true">{changeSort === 'desc' ? '↓' : changeSort === 'asc' ? '↑' : '↕'}</span>
+        </button>
       </div>
       <ul>
-        {normalizedInstrumentIds.map((instrumentId, index) => {
+        {displayedInstrumentIds.map((instrumentId, index) => {
           const instrument = instrumentById.get(instrumentId);
           const symbol = watchlistDisplaySymbol(instrument?.display_symbol, instrumentId);
           const quote = quotes[instrumentId];
@@ -414,7 +446,7 @@ export function TradingWatchlist({
               <span className={`trading-watchlist-change${quote?.changePercent != null ? (quote.changePercent >= 0 ? ' positive' : ' negative') : ''}`}>
                 {formatChange(quote?.changePercent)}
               </span>
-              <span className="trading-watchlist-row-actions">
+              <span className={`trading-watchlist-row-actions${changeSort === 'manual' ? '' : ' is-sorted'}`}>
                 <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`Move ${symbol} up`} title="Move up">↑</button>
                 <button type="button" onClick={() => move(index, 1)} disabled={index === normalizedInstrumentIds.length - 1} aria-label={`Move ${symbol} down`} title="Move down">↓</button>
                 <button type="button" onClick={() => void save({ ...current, instrumentIds: normalizedInstrumentIds.filter((id) => id !== instrumentId) })} aria-label={`Remove ${symbol}`}>×</button>

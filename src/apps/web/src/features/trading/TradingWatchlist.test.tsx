@@ -180,6 +180,45 @@ describe('TradingWatchlist add symbol', () => {
     await waitFor(() => expect(selectedSymbols()).toEqual(['AAPL', 'GME']));
   });
 
+  it('sorts symbols by percentage change without changing the saved order', async () => {
+    const sortableRecord = {
+      ...record,
+      payload: {
+        name: 'Default Watchlist',
+        instrumentIds: [gameStop.instrument_id, apple.instrument_id],
+      },
+    } as TradingDocument;
+    vi.spyOn(tradingApi, 'documents').mockResolvedValue([sortableRecord]);
+    vi.spyOn(tradingApi, 'quote').mockImplementation(async (instrumentId) => ({
+      price: instrumentId === gameStop.instrument_id ? '90' : '110',
+    }));
+    vi.spyOn(tradingApi, 'bars').mockResolvedValue({
+      bars: [{ open: '100', close: '100', start_time: '2026-01-01T00:00:00Z' }],
+      binding: { supported_intervals: ['1m'] },
+    } as unknown as BarsResponse);
+
+    render(
+      <TradingWatchlist
+        instruments={[apple, gameStop]}
+        activeInstrumentId={apple.instrument_id}
+        interval="1m"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    await screen.findByRole('button', { name: 'Select GME' });
+    const selectedSymbols = () => screen.getAllByRole('button', { name: /^Select / }).map((button) => button.querySelector('strong')?.textContent);
+    const sortByChange = () => screen.getByRole('button', { name: /watchlist.*change percentage/ });
+
+    await waitFor(() => expect(selectedSymbols()).toEqual(['GME', 'AAPL']));
+    fireEvent.click(sortByChange());
+    await waitFor(() => expect(selectedSymbols()).toEqual(['AAPL', 'GME']));
+    fireEvent.click(sortByChange());
+    await waitFor(() => expect(selectedSymbols()).toEqual(['GME', 'AAPL']));
+    fireEvent.click(sortByChange());
+    await waitFor(() => expect(selectedSymbols()).toEqual(['GME', 'AAPL']));
+  });
+
   it('retries symbol removal after a stale watchlist revision conflict', async () => {
     const twoSymbolRecord = {
       ...record,
