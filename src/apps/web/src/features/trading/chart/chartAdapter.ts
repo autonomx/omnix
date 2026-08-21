@@ -339,6 +339,7 @@ export class TradingChartAdapter {
   private latestValueLabelVisible = true;
   private chartType: TradingChartType;
   private readonly revisions = new Map<number, number>();
+  private readonly viewportListeners = new Set<() => void>();
   private bars: MarketBar[] = [];
   private indicatorOutputs: IndicatorOutput[] = [];
   private priceScaleMultiplier = 1;
@@ -664,6 +665,7 @@ export class TradingChartAdapter {
     const priceDelta = deltaY / paneHeight * (range.to - range.from);
     priceScale.setAutoScale(false);
     priceScale.setVisibleRange({ from: range.from - priceDelta, to: range.to - priceDelta });
+    this.notifyViewportChange();
   }
 
   zoomPriceScaleAtCoordinate(y: number, deltaY: number): void {
@@ -680,6 +682,7 @@ export class TradingChartAdapter {
     };
     priceScale.setAutoScale(false);
     priceScale.setVisibleRange(nextRange);
+    this.notifyViewportChange();
   }
 
   isPriceScaleCoordinate(x: number): boolean {
@@ -693,6 +696,7 @@ export class TradingChartAdapter {
   setPriceScaleAutoScale(autoScale: boolean): void {
     this.assertActive();
     this.chart.priceScale(this.priceScaleSide).setAutoScale(autoScale);
+    this.notifyViewportChange();
   }
 
   setPriceScaleMultiplier(multiplier: number): void {
@@ -705,16 +709,19 @@ export class TradingChartAdapter {
     this.setIndicatorOutputs(this.indicatorOutputs);
     this.chart.priceScale(this.priceScaleSide).setAutoScale(true);
     if (visibleRange) this.chart.timeScale().setVisibleLogicalRange(visibleRange);
+    this.notifyViewportChange();
   }
 
   setPriceScaleMode(mode: PriceScaleMode): void {
     this.assertActive();
     this.chart.priceScale(this.priceScaleSide).applyOptions({ mode });
+    this.notifyViewportChange();
   }
 
   setPriceScaleInvert(invertScale: boolean): void {
     this.assertActive();
     this.chart.priceScale(this.priceScaleSide).applyOptions({ invertScale });
+    this.notifyViewportChange();
   }
 
   setPriceScaleSide(side: TradingPriceScaleSide): void {
@@ -804,9 +811,11 @@ export class TradingChartAdapter {
     const sizeHandler = () => listener();
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRangeHandler);
     this.chart.timeScale().subscribeSizeChange(sizeHandler);
+    this.viewportListeners.add(listener);
     return () => {
       this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(logicalRangeHandler);
       this.chart.timeScale().unsubscribeSizeChange(sizeHandler);
+      this.viewportListeners.delete(listener);
     };
   }
   setVisibleRange(range: TradingVisibleRange): void {
@@ -851,6 +860,7 @@ export class TradingChartAdapter {
   }
   scrollToLatest(): void { this.assertActive(); this.chart.timeScale().scrollToRealTime(); }
   api(): IChartApi { this.assertActive(); return this.chart; }
-  destroy(): void { if (this.destroyed) return; this.destroyed = true; this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.indicatorSeries.clear(); this.chart.remove(); }
+  destroy(): void { if (this.destroyed) return; this.destroyed = true; this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.indicatorSeries.clear(); this.viewportListeners.clear(); this.chart.remove(); }
+  private notifyViewportChange(): void { for (const listener of this.viewportListeners) listener(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }
 }
