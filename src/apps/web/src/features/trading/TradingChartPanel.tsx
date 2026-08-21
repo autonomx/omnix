@@ -6,7 +6,7 @@ import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
-import { TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
+import { DEFAULT_TRADING_RIGHT_OFFSET, TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
@@ -21,6 +21,7 @@ import { TradingIndicatorSettings } from './TradingIndicatorSettings';
 import { TradingIndicatorBackgroundOverlay } from './TradingIndicatorBackgroundOverlay';
 import { TradingYAxisControls } from './TradingYAxisControls';
 import './TradingChartOverlayLayout.css';
+import './TradingChartRangeTooltip.css';
 import { OMNIX_APPEARANCE_CHANGE_EVENT } from '../settings/appearanceEffects';
 import {
   intervalCompactLabel,
@@ -29,16 +30,33 @@ import {
 } from './tradingIntervals';
 
 const ranges = [
-  { label: '1D', days: 1, interval: '1m' },
-  { label: '5D', days: 5, interval: '5m' },
-  { label: '1M', days: 30, interval: '30m' },
-  { label: '3M', days: 90, interval: '1h' },
-  { label: '6M', days: 180, interval: '2h' },
-  { label: 'YTD', days: 250, interval: '1d' },
-  { label: '1Y', days: 365, interval: '1d' },
-  { label: '5Y', days: 1_825, interval: '1w' },
-  { label: 'All', days: null, interval: '1mo' },
+  { label: '1D', days: 1, interval: '1m', tooltip: '1 day in 1 minute intervals' },
+  { label: '5D', days: 5, interval: '5m', tooltip: '5 days in 5 minute intervals' },
+  { label: '1M', days: 30, interval: '30m', tooltip: '1 month in 30 minute intervals' },
+  { label: '3M', days: 90, interval: '1h', tooltip: '3 months in 1 hour intervals' },
+  { label: '6M', days: 180, interval: '2h', tooltip: '6 months in 2 hour intervals' },
+  { label: 'YTD', days: 250, interval: '1d', tooltip: 'Year to date in 1 day intervals' },
+  { label: '1Y', days: 365, interval: '1d', tooltip: '1 year in 1 day intervals' },
+  { label: '5Y', days: 1_825, interval: '1w', tooltip: '5 years in 1 week intervals' },
+  { label: 'All', days: null, interval: '1mo', tooltip: 'All available data in 1 month intervals' },
 ] as const;
+
+const rightOffsetStorageKey = 'omnix.trading.chart.right-offset';
+const rightOffsetOptions = [0, 5, DEFAULT_TRADING_RIGHT_OFFSET, 20, 50] as const;
+
+function readTradingRightOffset(): number {
+  if (typeof window === 'undefined') return DEFAULT_TRADING_RIGHT_OFFSET;
+  try {
+    const stored = window.localStorage.getItem(rightOffsetStorageKey);
+    if (stored === null) return DEFAULT_TRADING_RIGHT_OFFSET;
+    const value = Number(stored);
+    return rightOffsetOptions.includes(value as typeof rightOffsetOptions[number])
+      ? value
+      : DEFAULT_TRADING_RIGHT_OFFSET;
+  } catch {
+    return DEFAULT_TRADING_RIGHT_OFFSET;
+  }
+}
 
 function normalizeStreamBar(
   message: Extract<TradingStreamMessage, { type: 'bar' }>,
@@ -101,17 +119,21 @@ function closestSupportedInterval(target: string, supported: readonly string[]):
   ))[0] ?? target;
 }
 
-function applyVisibleRange(chart: IChartApi, days: number | null, total: number, interval: string): void {
+function applyVisibleRange(chart: IChartApi, days: number | null, total: number, interval: string, rightOffset = DEFAULT_TRADING_RIGHT_OFFSET): void {
+  if (total === 0) return;
+  const safeRightOffset = Math.max(0, Math.min(100, Math.round(rightOffset)));
   if (days === null) {
-    chart.timeScale().fitContent();
+    chart.timeScale().setVisibleLogicalRange({
+      from: -0.5,
+      to: total - 0.5 + safeRightOffset,
+    });
     return;
   }
-  if (total === 0) return;
   const requested = Math.max(1, Math.ceil(days * 1_440 / intervalMinutes(interval)));
   const count = Math.min(total, requested);
   chart.timeScale().setVisibleLogicalRange({
     from: Math.max(-0.5, total - count - 0.5),
-    to: total - 0.5,
+    to: total - 0.5 + safeRightOffset,
   });
 }
 
@@ -172,6 +194,8 @@ export function TradingChartPanel({
   const fittedBarsKeyRef = useRef<string | null>(null);
   const streamDataKeyRef = useRef<string | null>(null);
   const streamRevisionRef = useRef(1);
+  const previousIntervalRef = useRef(interval);
+  const pendingIntervalScrollRef = useRef(false);
   const [, forceLiveRender] = useState(0);
   const selectedRangeRef = useRef<number | null | undefined>(undefined);
   const pendingRangeIntervalRef = useRef<string | null>(null);
@@ -204,6 +228,7 @@ export function TradingChartPanel({
   const [indicatorOutputs, setIndicatorOutputs] = useState<IndicatorOutput[]>([]);
   const [settingsIndicator, setSettingsIndicator] = useState<CoreIndicatorInstance | null>(null);
   const [selectedRangeLabel, setSelectedRangeLabel] = useState('All');
+  const [rightOffset, setRightOffset] = useState(readTradingRightOffset);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [replayStartIndex, setReplayStartIndex] = useState<number | null>(null);
   const [replayCursorIndex, setReplayCursorIndex] = useState<number | null>(null);
@@ -286,6 +311,11 @@ export function TradingChartPanel({
     if (!adapter) return;
     adapter.setPriceScaleMultiplier(priceScaleMultiplier);
   }, [adapter, priceScaleMultiplier]);
+
+  useEffect(() => {
+    if (!adapter) return;
+    adapter.setRightOffset(rightOffset);
+  }, [adapter, rightOffset]);
 
   const replayVisible = replayMode && active && replayCursorIndex !== null;
 
@@ -406,6 +436,12 @@ export function TradingChartPanel({
   }, [adapter]);
 
   useEffect(() => {
+    if (previousIntervalRef.current === interval) return;
+    previousIntervalRef.current = interval;
+    pendingIntervalScrollRef.current = true;
+  }, [interval]);
+
+  useEffect(() => {
     const bars = (chartQuery.data?.bars ?? []) as MarketBar[];
     allBarsRef.current = bars;
     const dataKey = chartQuery.data
@@ -434,12 +470,16 @@ export function TradingChartPanel({
     barsRef.current = visibleBars;
     adapterRef.current?.setBars(visibleBars, shouldFit);
     if (keepSelectedRange && selectedRangeRef.current !== undefined && visibleBars.length > 0 && adapterRef.current) {
-      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, visibleBars.length, interval);
+      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, visibleBars.length, interval, rightOffset);
+    }
+    if (pendingIntervalScrollRef.current && dataChanged && visibleBars.length > 0 && adapterRef.current) {
+      adapterRef.current.scrollToLatest();
+      pendingIntervalScrollRef.current = false;
     }
     if (keepSelectedRange) pendingRangeIntervalRef.current = null;
     if (dataKey !== null && bars.length > 0) fittedBarsKeyRef.current = dataKey;
     scheduleIndicators();
-  }, [chartQuery.data, interval, replayCursorIndex, replayVisible, scheduleIndicators]);
+  }, [chartQuery.data, interval, replayCursorIndex, replayVisible, rightOffset, scheduleIndicators]);
 
   useEffect(() => {
     setReplayStartIndex(null);
@@ -476,9 +516,9 @@ export function TradingChartPanel({
   useEffect(() => {
     adapterRef.current?.setChartType(chartType, barsRef.current);
     if (selectedRangeRef.current !== undefined && barsRef.current.length > 0 && adapterRef.current) {
-      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, barsRef.current.length, interval);
+      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, barsRef.current.length, interval, rightOffset);
     }
-  }, [chartType, interval]);
+  }, [chartType, interval, rightOffset]);
 
   useEffect(() => {
     indicatorsRef.current = indicators;
@@ -640,6 +680,23 @@ export function TradingChartPanel({
     onToggleIndicator(id);
   };
 
+  const changeRightOffset = (value: string | number) => {
+    const parsed = Number(value);
+    const next = rightOffsetOptions.includes(parsed as typeof rightOffsetOptions[number])
+      ? parsed
+      : DEFAULT_TRADING_RIGHT_OFFSET;
+    setRightOffset(next);
+    selectedRangeRef.current = null;
+    setSelectedRangeLabel('All');
+    adapterRef.current?.setRightOffset(next);
+    adapterRef.current?.fitContent();
+    try {
+      window.localStorage.setItem(rightOffsetStorageKey, String(next));
+    } catch {
+      // The setting remains active for the current session when storage is unavailable.
+    }
+  };
+
   const showRange = (label: string, days: number | null, requestedInterval: string) => {
     selectedRangeRef.current = days;
     setSelectedRangeLabel(label);
@@ -651,7 +708,7 @@ export function TradingChartPanel({
     onChangeInterval(nextInterval);
     const chart = adapterRef.current?.api();
     if (!chart) return;
-    if (interval === nextInterval) applyVisibleRange(chart, days, barsRef.current.length, interval);
+    if (interval === nextInterval) applyVisibleRange(chart, days, barsRef.current.length, interval, rightOffset);
   };
 
   const openContextMenu = (point: ChartAlertPlacement) => {
@@ -924,6 +981,9 @@ export function TradingChartPanel({
                 onChange={(patch) => setPriceScaleSettings((current) => ({ ...current, ...patch }))}
                 onClose={() => setPriceScaleMenuOpen(false)}
                 onSettings={() => setSettingsVisible(true)}
+                rightOffset={rightOffset}
+                rightOffsetOptions={rightOffsetOptions}
+                onRightOffsetChange={changeRightOffset}
               />
             ) : null}
           </>
@@ -1062,6 +1122,7 @@ export function TradingChartPanel({
           <aside className="trading-chart-settings" role="dialog" aria-label="Chart settings" onPointerDown={(event) => event.stopPropagation()}>
             <header><strong>Chart settings</strong><button type="button" onClick={() => setSettingsVisible(false)} aria-label="Close chart settings">×</button></header>
             <label>Chart type<select value={chartType} onChange={(event) => onChangeChartType(event.target.value as TradingChartType)}>{(['candlestick', 'bar', 'line', 'area', 'baseline'] as TradingChartType[]).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label>Right margin<select aria-label="Chart right margin" value={rightOffset} onChange={(event) => changeRightOffset(event.target.value)}>{rightOffsetOptions.map((offset) => <option key={offset} value={offset}>{offset === 0 ? 'None' : `${offset} bars`}</option>)}</select></label>
             <label>Snap mode<select value={drawingSnapMode} disabled><option>{drawingSnapMode}</option></select></label>
           </aside>
         ) : null}
@@ -1099,6 +1160,8 @@ export function TradingChartPanel({
               key={range.label}
               type="button"
               aria-pressed={selectedRangeLabel === range.label}
+              aria-label={`${range.label}: ${range.tooltip}`}
+              data-tooltip={range.tooltip}
               onClick={() => showRange(range.label, range.days, range.interval)}
             >
               {range.label}

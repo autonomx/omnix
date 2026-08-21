@@ -33,6 +33,7 @@ export type TradingIndicatorPaneGeometry = {
   height: number;
 };
 export type TradingPriceScaleSide = 'left' | 'right';
+export const DEFAULT_TRADING_RIGHT_OFFSET = 10;
 type PriceSeries =
   | ISeriesApi<'Candlestick'>
   | ISeriesApi<'Bar'>
@@ -116,6 +117,7 @@ export class TradingChartAdapter {
   private indicatorPaneIds: string[] = [];
   private readonly restoredPaneHeights = new Map<string, number>();
   private maxZoomOutRange: LogicalRange | null = null;
+  private rightOffset = DEFAULT_TRADING_RIGHT_OFFSET;
   private priceScaleSide: TradingPriceScaleSide = 'right';
   private priceScaleLabelsVisible = true;
   private priceScaleLinesVisible = true;
@@ -142,6 +144,7 @@ export class TradingChartAdapter {
         secondsVisible: false,
         fixLeftEdge: false,
         fixRightEdge: false,
+        rightOffset: DEFAULT_TRADING_RIGHT_OFFSET,
       },
       handleScale: {
         mouseWheel: true,
@@ -574,9 +577,24 @@ export class TradingChartAdapter {
     const timeScale = this.chart.timeScale();
     timeScale.fitContent();
     this.chart.priceScale(this.priceScaleSide).setAutoScale(true);
+    if (this.bars.length > 0) {
+      const range = {
+        from: -0.5,
+        to: this.bars.length - 0.5 + this.rightOffset,
+      };
+      timeScale.setVisibleLogicalRange(range);
+      this.maxZoomOutRange = range;
+      return;
+    }
     const range = timeScale.getVisibleLogicalRange();
     if (range) this.maxZoomOutRange = { from: range.from, to: range.to };
   }
+  setRightOffset(offset: number): void {
+    this.assertActive();
+    this.rightOffset = Math.max(0, Math.min(100, Math.round(offset)));
+    this.chart.timeScale().applyOptions({ rightOffset: this.rightOffset });
+  }
+  scrollToLatest(): void { this.assertActive(); this.chart.timeScale().scrollToRealTime(); }
   api(): IChartApi { this.assertActive(); return this.chart; }
   destroy(): void { if (this.destroyed) return; this.destroyed = true; this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.indicatorSeries.clear(); this.chart.remove(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }
