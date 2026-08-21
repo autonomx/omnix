@@ -124,11 +124,11 @@ export const tradingApi = {
       headers: { 'If-Match': String(record.revision) },
     }),
   alerts: async () => {
-    const payload = await requestJson<unknown>('/api/trading/alerts');
+    const payload = await requestJson<unknown>('/api/trading/alerts', { cache: 'no-store' });
     return arrayField<TradingAlert>(payload, 'alerts');
   },
   alertTriggers: async () => {
-    const payload = await requestJson<unknown>('/api/trading/alerts/triggers');
+    const payload = await requestJson<unknown>('/api/trading/alerts/triggers', { cache: 'no-store' });
     return arrayField<TradingAlertTrigger>(payload, 'triggers');
   },
   createAlert: (input: TradingAlertCreateInput) =>

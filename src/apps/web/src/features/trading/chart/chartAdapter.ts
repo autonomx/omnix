@@ -19,7 +19,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { DrawingPoint } from '../drawings/drawingCommands';
-import { indicatorOutputs, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
+import { indicatorOutputs, indicatorPaneScale, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 
 export type TradingChartTypeGroup = 'candles' | 'lines' | 'areas' | 'columns' | 'profiles' | 'specialty';
@@ -328,8 +328,14 @@ export class TradingChartAdapter {
   private readonly volumeSeries: ISeriesApi<'Histogram'>;
   private readonly indicatorSeries = new Map<string, IndicatorSeries>();
   private readonly indicatorSeriesPanes = new Map<string, number>();
+  private readonly indicatorScaleRanges = new Map<string, { from: number; to: number }>();
   private indicatorPaneIds: string[] = [];
+  private readonly indicatorPaneHeights = new Map<string, number>();
   private readonly restoredPaneHeights = new Map<string, number>();
+  private fullscreenIndicatorId: string | null = null;
+  private readonly fullscreenPaneHeights = new Map<number, number>();
+  private fullscreenPaneTotalHeight = 0;
+  private fullscreenChartHeight = 0;
   private maxZoomOutRange: LogicalRange | null = null;
   private rightOffset = DEFAULT_TRADING_RIGHT_OFFSET;
   private priceScaleSide: TradingPriceScaleSide = 'right';
@@ -502,6 +508,10 @@ export class TradingChartAdapter {
       if (output.visible === false) continue;
       const paneId = indicatorPaneId(output);
       const paneIndex = paneId === null ? 0 : paneIds.indexOf(paneId) + 1;
+      // A custom price-scale ID creates an overlay scale in Lightweight Charts.
+      // Pane indicators must use the pane's native right scale for its labels
+      // and tick marks to render inside that pane.
+      const priceScaleId = paneId === null ? this.priceScaleSide : 'right';
       let series = this.indicatorSeries.get(output.key);
       if (!series) {
         const color = output.color ?? indicatorColor(output);
@@ -513,8 +523,8 @@ export class TradingChartAdapter {
           ...indicatorPriceFormat(output.precision),
         };
         series = output.kind === 'histogram'
-          ? this.chart.addSeries(HistogramSeries, { ...commonOptions, priceScaleId: `indicator:${output.key}` }, paneIndex)
-          : this.chart.addSeries(LineSeries, { ...commonOptions, ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 2, priceScaleId: paneIndex > 0 ? `indicator:${output.key}` : this.priceScaleSide }, paneIndex);
+          ? this.chart.addSeries(HistogramSeries, { ...commonOptions, priceScaleId }, paneIndex)
+          : this.chart.addSeries(LineSeries, { ...commonOptions, ...(lineStyle === undefined ? {} : { lineStyle }), lineWidth: output.lineWidth ?? 2, priceScaleId }, paneIndex);
         this.indicatorSeries.set(output.key, series);
         this.indicatorSeriesPanes.set(output.key, paneIndex);
       } else if (this.indicatorSeriesPanes.get(output.key) !== paneIndex) {
@@ -526,6 +536,7 @@ export class TradingChartAdapter {
           color: output.color ?? indicatorColor(output),
           title: output.valuesInStatusLine === false ? '' : output.title,
           lastValueVisible: output.labelsOnPriceScale === true,
+          priceScaleId,
           ...indicatorPriceFormat(output.precision),
         });
       } else {
@@ -535,6 +546,7 @@ export class TradingChartAdapter {
           title: output.valuesInStatusLine === false ? '' : output.title,
           lastValueVisible: output.labelsOnPriceScale === true,
           lineWidth: output.lineWidth ?? 2,
+          priceScaleId,
           ...(lineStyle === undefined ? {} : { lineStyle }),
           ...indicatorPriceFormat(output.precision),
         });
@@ -547,8 +559,29 @@ export class TradingChartAdapter {
       else (series as ISeriesApi<'Line'>).setData(data);
     }
     this.indicatorPaneIds = paneIds;
+    for (const [index, paneId] of paneIds.entries()) {
+      const pane = this.chart.panes()[index + 1];
+      if (!pane) continue;
+      const scale = pane.priceScale('right');
+      scale.applyOptions({
+        visible: true,
+        borderVisible: true,
+        ticksVisible: true,
+        minimumWidth: 58,
+      });
+      const range = indicatorPaneScale(paneId as CoreIndicatorInstance['id']);
+      const visibleRange = this.indicatorScaleRanges.get(paneId);
+      if (visibleRange) scale.setVisibleRange(visibleRange);
+      else if (range) scale.setVisibleRange({ from: range.min, to: range.max });
+    }
     for (const id of this.restoredPaneHeights.keys()) {
       if (!paneIds.includes(id)) this.restoredPaneHeights.delete(id);
+    }
+    for (const id of this.indicatorScaleRanges.keys()) {
+      if (!paneIds.includes(id)) this.indicatorScaleRanges.delete(id);
+    }
+    for (const id of this.indicatorPaneHeights.keys()) {
+      if (!paneIds.includes(id)) this.indicatorPaneHeights.delete(id);
     }
     for (let index = this.chart.panes().length - 1; index > paneIds.length; index -= 1) {
       const pane = this.chart.panes()[index];
@@ -572,6 +605,7 @@ export class TradingChartAdapter {
 
   setIndicatorPaneMinimized(id: string, minimized: boolean): void {
     this.assertActive();
+    if (this.fullscreenIndicatorId !== null) return;
     const index = this.indicatorPaneIds.indexOf(id);
     if (index < 0) return;
     const pane = this.chart.panes()[index + 1];
@@ -581,8 +615,84 @@ export class TradingChartAdapter {
       pane.setHeight(34);
       return;
     }
-    pane.setHeight(this.restoredPaneHeights.get(id) ?? 140);
+    pane.setHeight(this.restoredPaneHeights.get(id) ?? this.indicatorPaneHeights.get(id) ?? 140);
     this.restoredPaneHeights.delete(id);
+  }
+
+  resizeIndicatorPaneByPixels(id: string, edge: 'top' | 'bottom', deltaY: number): void {
+    this.assertActive();
+    if (this.fullscreenIndicatorId !== null || !Number.isFinite(deltaY) || deltaY === 0) return;
+    const index = this.indicatorPaneIds.indexOf(id);
+    if (index < 0) return;
+    const pane = this.chart.panes()[index + 1];
+    if (!pane || pane.getHeight() <= 34) return;
+    const heightDelta = edge === 'top' ? -deltaY : deltaY;
+    const nextHeight = Math.max(80, pane.getHeight() + heightDelta);
+    if (Math.abs(nextHeight - pane.getHeight()) < 0.5) return;
+    pane.setHeight(nextHeight);
+    this.indicatorPaneHeights.set(id, nextHeight);
+    this.notifyViewportChange();
+  }
+
+  setIndicatorPaneFullscreen(id: string | null): void {
+    this.assertActive();
+    if (id === null) {
+      this.restoreFullscreenPaneHeights();
+      return;
+    }
+    const indicatorIndex = this.indicatorPaneIds.indexOf(id);
+    if (indicatorIndex < 0) return;
+    const paneIndex = indicatorIndex + 1;
+    const panes = this.chart.panes();
+    if (!panes[paneIndex]) return;
+    if (this.fullscreenIndicatorId !== id) {
+      this.restoreFullscreenPaneHeights();
+      this.fullscreenIndicatorId = id;
+      this.fullscreenPaneHeights.clear();
+      this.fullscreenPaneTotalHeight = 0;
+      for (const [index, pane] of panes.entries()) {
+        const paneId = index > 0 ? this.indicatorPaneIds[index - 1] : null;
+        const height = paneId ? this.restoredPaneHeights.get(paneId) ?? pane.getHeight() : pane.getHeight();
+        this.fullscreenPaneHeights.set(index, height);
+        this.fullscreenPaneTotalHeight += height;
+      }
+      this.fullscreenChartHeight = this.chart.chartElement().getBoundingClientRect().height;
+    }
+    this.applyFullscreenPaneHeights();
+  }
+
+  refreshIndicatorPaneFullscreen(): void {
+    this.assertActive();
+    if (this.fullscreenIndicatorId !== null) this.applyFullscreenPaneHeights();
+  }
+
+  private applyFullscreenPaneHeights(): void {
+    if (this.fullscreenIndicatorId === null) return;
+    const indicatorIndex = this.indicatorPaneIds.indexOf(this.fullscreenIndicatorId);
+    if (indicatorIndex < 0) {
+      this.restoreFullscreenPaneHeights();
+      return;
+    }
+    const panes = this.chart.panes();
+    const focusedPaneIndex = indicatorIndex + 1;
+    const compactHeight = 34;
+    const chartHeight = this.chart.chartElement().getBoundingClientRect().height;
+    const heightDelta = chartHeight - this.fullscreenChartHeight;
+    const paneAreaHeight = Math.max(
+      panes.length * compactHeight,
+      this.fullscreenPaneTotalHeight + heightDelta,
+    );
+    const focusedHeight = Math.max(100, paneAreaHeight - compactHeight * (panes.length - 1));
+    for (const [index, pane] of panes.entries()) pane.setHeight(index === focusedPaneIndex ? focusedHeight : compactHeight);
+  }
+
+  private restoreFullscreenPaneHeights(): void {
+    if (this.fullscreenIndicatorId === null) return;
+    for (const [index, height] of this.fullscreenPaneHeights) this.chart.panes()[index]?.setHeight(height);
+    this.fullscreenIndicatorId = null;
+    this.fullscreenPaneHeights.clear();
+    this.fullscreenPaneTotalHeight = 0;
+    this.fullscreenChartHeight = 0;
   }
 
   updateBar(bar: MarketBar): boolean {
@@ -611,8 +721,29 @@ export class TradingChartAdapter {
     const series = this.indicatorSeries.get(key);
     if (!series) return null;
     const x = this.chart.timeScale().timeToCoordinate(timestamp(point.time));
-    const y = series.priceToCoordinate(this.indicatorSeriesPanes.get(key) === 0 ? point.value * this.priceScaleMultiplier : point.value);
+    const y = this.indicatorValueToCoordinate(key, point.value);
     return x === null || y === null ? null : { x, y };
+  }
+
+  indicatorValueToCoordinate(key: string, value: number): number | null {
+    this.assertActive();
+    const series = this.indicatorSeries.get(key);
+    if (!series) return null;
+    const paneIndex = this.indicatorSeriesPanes.get(key) ?? 0;
+    const pane = this.chart.panes()[paneIndex];
+    const paneElement = pane?.getHTMLElement();
+    const chartElement = this.chart.chartElement();
+    if (!paneElement || !chartElement) return null;
+    const localY = series.priceToCoordinate(paneIndex === 0 ? value * this.priceScaleMultiplier : value);
+    if (localY === null) return null;
+    const paneRect = paneElement.getBoundingClientRect();
+    const chartRect = chartElement.getBoundingClientRect();
+    return localY + paneRect.top - chartRect.top;
+  }
+
+  indicatorPlotWidth(): number {
+    this.assertActive();
+    return this.chart.timeScale().width();
   }
 
   drawingPointFromCoordinate(x: number, y: number): DrawingPoint | null {
@@ -668,11 +799,45 @@ export class TradingChartAdapter {
     this.notifyViewportChange();
   }
 
+  private paneIndexAtCoordinate(y: number): number {
+    if (!Number.isFinite(y)) return 0;
+    const chartRect = this.chart.chartElement().getBoundingClientRect();
+    for (const [paneIndex, pane] of this.chart.panes().entries()) {
+      const paneElement = pane.getHTMLElement();
+      if (!paneElement) continue;
+      const paneRect = paneElement.getBoundingClientRect();
+      const top = paneRect.top - chartRect.top;
+      if (y >= top && y <= top + paneRect.height) return paneIndex;
+    }
+    return 0;
+  }
+
+  private panePriceScale(paneIndex: number) {
+    if (paneIndex === 0) return this.chart.priceScale(this.priceScaleSide);
+    return this.chart.panes()[paneIndex]?.priceScale('right') ?? null;
+  }
+
+  private paneValueAtCoordinate(paneIndex: number, y: number): number | null {
+    if (paneIndex === 0) return this.priceSeries.coordinateToPrice(y);
+    const pane = this.chart.panes()[paneIndex];
+    const paneElement = pane?.getHTMLElement();
+    if (!paneElement) return null;
+    const chartRect = this.chart.chartElement().getBoundingClientRect();
+    const paneRect = paneElement.getBoundingClientRect();
+    const localY = y - (paneRect.top - chartRect.top);
+    for (const [key, series] of this.indicatorSeries) {
+      if (this.indicatorSeriesPanes.get(key) === paneIndex) return series.coordinateToPrice(localY);
+    }
+    return null;
+  }
+
   zoomPriceScaleAtCoordinate(y: number, deltaY: number): void {
     this.assertActive();
-    const priceScale = this.chart.priceScale(this.priceScaleSide);
+    const paneIndex = this.paneIndexAtCoordinate(y);
+    const priceScale = this.panePriceScale(paneIndex);
+    if (!priceScale) return;
     const range = priceScale.getVisibleRange();
-    const anchor = this.priceSeries.coordinateToPrice(y);
+    const anchor = this.paneValueAtCoordinate(paneIndex, y);
     if (!range || anchor === null || !Number.isFinite(deltaY)) return;
     const normalizedDelta = Math.max(-0.35, Math.min(0.35, deltaY / 500));
     const factor = Math.exp(normalizedDelta);
@@ -682,14 +847,29 @@ export class TradingChartAdapter {
     };
     priceScale.setAutoScale(false);
     priceScale.setVisibleRange(nextRange);
+    const paneId = paneIndex > 0 ? this.indicatorPaneIds[paneIndex - 1] : undefined;
+    if (paneId) this.indicatorScaleRanges.set(paneId, nextRange);
     this.notifyViewportChange();
   }
 
   isPriceScaleCoordinate(x: number): boolean {
     this.assertActive();
     const width = this.chart.chartElement().getBoundingClientRect().width;
+    const mainPriceScaleWidth = this.chart.priceScale(this.priceScaleSide).width();
+    const indicatorPriceScaleWidth = [...new Set(this.indicatorSeriesPanes.values())]
+      .filter((paneIndex) => paneIndex > 0)
+      .reduce((maxWidth, paneIndex) => Math.max(maxWidth, this.panePriceScale(paneIndex)?.width() ?? 0), 0);
+    if (!Number.isFinite(x) || width <= 0) return false;
+    if (this.priceScaleSide === 'right' && x >= width - mainPriceScaleWidth) return true;
+    if (this.priceScaleSide === 'left' && x <= mainPriceScaleWidth) return true;
+    return indicatorPriceScaleWidth > 0 && x >= width - indicatorPriceScaleWidth;
+  }
+
+  isMainPriceScaleCoordinate(x: number): boolean {
+    this.assertActive();
+    const width = this.chart.chartElement().getBoundingClientRect().width;
     const priceScaleWidth = this.chart.priceScale(this.priceScaleSide).width();
-    if (!Number.isFinite(x) || priceScaleWidth <= 0) return false;
+    if (!Number.isFinite(x) || width <= 0 || priceScaleWidth <= 0) return false;
     return this.priceScaleSide === 'right' ? x >= width - priceScaleWidth : x <= priceScaleWidth;
   }
 
@@ -860,7 +1040,7 @@ export class TradingChartAdapter {
   }
   scrollToLatest(): void { this.assertActive(); this.chart.timeScale().scrollToRealTime(); }
   api(): IChartApi { this.assertActive(); return this.chart; }
-  destroy(): void { if (this.destroyed) return; this.destroyed = true; this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.indicatorSeries.clear(); this.viewportListeners.clear(); this.chart.remove(); }
+  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.indicatorSeries.clear(); this.viewportListeners.clear(); this.chart.remove(); }
   private notifyViewportChange(): void { for (const listener of this.viewportListeners) listener(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }
 }

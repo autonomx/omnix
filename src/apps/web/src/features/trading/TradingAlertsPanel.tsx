@@ -206,10 +206,14 @@ export function TradingAlertsPanel({
     return () => window.removeEventListener('omnix:trading-alerts-changed', changed);
   }, []);
 
-  const runMutation = async (mutation: () => Promise<unknown>) => {
+  const runMutation = async (mutation: () => Promise<unknown>, removedAlertId?: string) => {
     setStatus('saving');
     try {
       await mutation();
+      if (removedAlertId) {
+        setAlerts((current) => current.filter((alert) => alert.alert_id !== removedAlertId));
+        setTooltip((current) => current?.alert.alert_id === removedAlertId ? null : current);
+      }
       notifyTradingAlertsChanged();
       await refresh();
       setEditor(null);
@@ -391,7 +395,7 @@ export function TradingAlertsPanel({
                         <div className="trading-alert-options-menu" role="menu">
                           <button type="button" role="menuitem" onClick={() => openEdit(alert)}>Edit alert</button>
                           <button type="button" role="menuitem" onClick={() => void runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { enabled: !alert.enabled })))}>{alert.enabled ? 'Disable alert' : 'Enable alert'}</button>
-                          <button type="button" role="menuitem" onClick={() => void runMutation(() => tradingApi.archiveAlert(alert))}>Delete alert</button>
+                          <button type="button" role="menuitem" onClick={() => void runMutation(() => tradingApi.archiveAlert(alert), alert.alert_id)}>Delete alert</button>
                         </div>
                       ) : null}
                     </div>
@@ -473,7 +477,7 @@ export function TradingAlertsPanel({
             onSubmit={() => void (editor.mode === 'create' ? createAlert() : saveEditor())}
             onClose={() => setEditor(null)}
             onToggle={editor.mode === 'edit' && dialogAlert ? () => void runMutation(() => tradingApi.updateAlert(dialogAlert, chartAlertUpdateInput(dialogAlert, { enabled: !dialogAlert.enabled }))) : undefined}
-            onArchive={editor.mode === 'edit' && dialogAlert ? () => void runMutation(() => tradingApi.archiveAlert(dialogAlert)) : undefined}
+            onArchive={editor.mode === 'edit' && dialogAlert ? () => void runMutation(() => tradingApi.archiveAlert(dialogAlert), dialogAlert.alert_id) : undefined}
           />
         </div>
       ) : null}

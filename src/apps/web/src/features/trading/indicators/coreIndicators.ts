@@ -4,6 +4,12 @@ export const CORE_INDICATOR_FORMULA_VERSION = 'omnix-indicators-v2';
 
 export type IndicatorPoint = { time: string; value: number };
 export type IndicatorLineStyle = 'solid' | 'dotted' | 'dashed' | 'large-dashed' | 'sparse-dotted';
+export type IndicatorPaneScale = {
+  min: number;
+  max: number;
+  band?: { from: number; to: number; color: string };
+  levels: readonly { value: number; lineStyle: IndicatorLineStyle }[];
+};
 export type CoreIndicatorStyle = {
   plots?: Record<string, boolean>;
   colors?: Record<string, string>;
@@ -65,6 +71,34 @@ export function indicatorUsesSeparatePane(id: CoreIndicatorId): boolean {
     || id === 'macd-dema'
     || id === 'rsi-divergence'
     || id === 'stochastic-rsi';
+}
+
+export function indicatorPaneScale(id: CoreIndicatorId): IndicatorPaneScale | null {
+  if (id === 'rsi') {
+    return {
+      min: 0,
+      max: 100,
+      band: { from: 30, to: 70, color: '#74c0fc' },
+      levels: [
+        { value: 30, lineStyle: 'dashed' },
+        { value: 50, lineStyle: 'dotted' },
+        { value: 70, lineStyle: 'dashed' },
+      ],
+    };
+  }
+  if (id === 'stochastic-rsi') {
+    return {
+      min: 0,
+      max: 100,
+      band: { from: 20, to: 80, color: '#74c0fc' },
+      levels: [
+        { value: 20, lineStyle: 'dashed' },
+        { value: 50, lineStyle: 'dotted' },
+        { value: 80, lineStyle: 'dashed' },
+      ],
+    };
+  }
+  return null;
 }
 
 function closes(bars: readonly MarketBar[]): number[] {
@@ -513,14 +547,15 @@ function calculateIndicatorOutputs(
       const window = rsi.slice(index, index + period);
       const minimum = Math.min(...window);
       const maximum = Math.max(...window);
-      return maximum === minimum ? 0.5 : (value - minimum) / (maximum - minimum);
+      return maximum === minimum ? 50 : Math.max(0, Math.min(100, (value - minimum) / (maximum - minimum) * 100));
     });
     const k = simpleMovingAverage(raw, smoothing);
     const d = simpleMovingAverage(k, signal);
     const start = period + period - 1 + smoothing - 1 + signal - 1;
+    const bounded = (value: number) => Math.max(0, Math.min(100, value));
     return [
-      { key: 'stochastic-rsi:k', title: 'Stoch RSI %K', pane: 1, kind: 'line', points: points(bars, start, d.length ? k.slice(signal - 1) : []) },
-      { key: 'stochastic-rsi:d', title: 'Stoch RSI %D', pane: 1, kind: 'line', points: points(bars, start, d) },
+      { key: 'stochastic-rsi:k', title: 'Stoch RSI %K', pane: 1, kind: 'line', points: points(bars, start, d.length ? k.slice(signal - 1).map(bounded) : []) },
+      { key: 'stochastic-rsi:d', title: 'Stoch RSI %D', pane: 1, kind: 'line', points: points(bars, start, d.map(bounded)) },
     ];
   }
   if (instance.id === 'swing-liquidity') {

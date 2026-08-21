@@ -164,11 +164,12 @@ export function TradingChartAlertOverlay({
   const staticAlerts = visibleAlerts.filter((alert) => alert.condition_type.startsWith('price_'));
   const trendlineAlerts = visibleAlerts.filter((alert) => alert.condition_type.startsWith('trendline_'));
 
-  const runMutation = async (mutation: () => Promise<TradingAlert>) => {
+  const runMutation = async (mutation: () => Promise<TradingAlert>, removedAlertId?: string) => {
     setStatus('saving');
     try {
       const updated = await mutation();
-      alertMutations.replace(updated);
+      if (removedAlertId) alertMutations.remove(removedAlertId);
+      else alertMutations.replace(updated);
       notifyTradingAlertsChanged();
       await alertMutations.refresh();
       setEditor(null);
@@ -361,7 +362,7 @@ export function TradingChartAlertOverlay({
             } : undefined}
             onArchive={editor.mode === 'edit' ? () => {
               const alert = alerts.find((item) => item.alert_id === editor.alertId);
-              if (alert) void runMutation(() => tradingApi.archiveAlert(alert));
+              if (alert) void runMutation(() => tradingApi.archiveAlert(alert), alert.alert_id);
             } : undefined}
           />
         </div>

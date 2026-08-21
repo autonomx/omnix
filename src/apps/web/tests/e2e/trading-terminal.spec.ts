@@ -276,6 +276,13 @@ async function installTradingMocks(page: Page): Promise<MockState> {
       await fulfill(route, updated);
       return;
     }
+    if (path.startsWith('/api/trading/alerts/') && method === 'DELETE') {
+      const id = decodeURIComponent(path.split('/').at(-1) ?? '');
+      const index = state.alerts.findIndex((alert) => alert.alert_id === id);
+      const [removed] = index >= 0 ? state.alerts.splice(index, 1) : [];
+      await fulfill(route, { ...(removed ?? {}), alert_id: id, enabled: false, revision: Number(removed?.revision ?? 1) + 1 });
+      return;
+    }
     await fulfill(route, { records: [], alerts: [], triggers: [] });
   });
 
@@ -326,7 +333,7 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await symbolSearch.getByRole('button', { name: /BTCUSDT/ }).click();
   await expect(symbolSearch).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(1);
-  await expect(page.getByRole('group', { name: 'Overlay indicators' })).toHaveCount(1);
+  await expect(page.getByRole('group', { name: 'Indicator legend' })).toHaveCount(1);
   await page.getByRole('button', { name: 'Hide SMA 20 overlay' }).click();
   await expect(page.getByRole('button', { name: 'Show SMA 20 overlay' })).toBeVisible();
   await page.getByRole('button', { name: 'Show SMA 20 overlay' }).click();
@@ -401,6 +408,13 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   expect((state.alerts[0].parameters as Record<string, unknown>).message).toBe('BTC alert');
   await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);
   await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);
+  const alertRow = sidePanel.locator('.trading-alert-list li').first();
+  await expect(alertRow).toBeVisible();
+  await alertRow.getByRole('button', { name: /Options for/ }).click();
+  await sidePanel.getByRole('menuitem', { name: 'Delete alert' }).click();
+  await expect.poll(() => state.alerts.length).toBe(0);
+  await expect(sidePanel.locator('.trading-alert-list li')).toHaveCount(0);
+  await expect(page.locator('.trading-alert-price-label')).toHaveCount(0);
 
   const chartStage = page.locator('.trading-chart-panel.active .trading-chart-stage');
   const chartStageBox = await chartStage.boundingBox();
@@ -430,8 +444,41 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
 
   const rsiControls = page.locator('.trading-indicator-pane-controls[data-indicator-id="rsi"]');
   await expect(rsiControls).toBeVisible();
+  await expect(rsiControls).toHaveCSS('opacity', '0');
+  const rsiTopResize = page.locator('.trading-indicator-pane-resize-handle[data-indicator-id="rsi"][data-edge="top"]');
+  await expect(rsiTopResize).toBeVisible();
+  const initialRsiHeight = Number(await rsiTopResize.getAttribute('aria-valuenow'));
+  const resizeBox = await rsiTopResize.boundingBox();
+  expect(resizeBox).not.toBeNull();
+  if (resizeBox) {
+    await page.mouse.move(resizeBox.x + resizeBox.width / 2, resizeBox.y + resizeBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(resizeBox.x + resizeBox.width / 2, resizeBox.y - 24, { steps: 10 });
+    await expect(rsiTopResize).toHaveClass(/is-resizing/);
+    await page.mouse.up();
+  }
+  await expect.poll(async () => Number(await rsiTopResize.getAttribute('aria-valuenow'))).not.toBe(initialRsiHeight);
+  const indicatorLegend = page.getByRole('group', { name: 'Indicator legend' });
+  await expect(indicatorLegend.getByRole('button', { name: 'Open RSI 14 settings' })).toBeVisible();
+  await expect(indicatorLegend.getByRole('button', { name: 'Hide RSI 14 indicator' })).toBeVisible();
+  await indicatorLegend.getByRole('button', { name: 'Collapse indicator legend' }).click();
+  const expandLegend = indicatorLegend.getByRole('button', { name: 'Expand indicator legend' });
+  await expect(expandLegend).toHaveText(/2/);
+  await expect(expandLegend).toHaveCSS('flex-direction', 'row');
+  await expect(indicatorLegend.getByRole('button', { name: 'Open RSI 14 settings' })).toHaveCount(0);
+  await expandLegend.click();
+  await expect(indicatorLegend.getByRole('button', { name: 'Open RSI 14 settings' })).toBeVisible();
+  await rsiControls.hover();
+  await expect(rsiControls).toHaveCSS('opacity', '1');
   await expect(page.getByRole('button', { name: 'Move RSI 14 panel up' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move RSI 14 panel down' })).toBeDisabled();
+  const enterRsiFullscreen = page.getByRole('button', { name: 'Enter fullscreen RSI 14 panel' });
+  await expect(enterRsiFullscreen).toBeVisible();
+  await enterRsiFullscreen.click();
+  const exitRsiFullscreen = page.getByRole('button', { name: 'Exit fullscreen RSI 14 panel' });
+  await expect(exitRsiFullscreen).toHaveAttribute('aria-pressed', 'true');
+  await exitRsiFullscreen.click();
+  await expect(page.getByRole('button', { name: 'Enter fullscreen RSI 14 panel' })).toHaveAttribute('aria-pressed', 'false');
 
   await page.getByRole('button', { name: 'Minimize RSI 14 panel' }).click();
   await expect(page.getByRole('button', { name: 'Restore RSI 14 panel' })).toHaveAttribute('aria-expanded', 'false');

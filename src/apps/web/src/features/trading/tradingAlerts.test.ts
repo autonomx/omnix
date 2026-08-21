@@ -70,4 +70,16 @@ describe('Trading alert client', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/trading/alerts/evaluate');
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' });
   });
+
+  it('does not cache alert reads after a mutation', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ alerts: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await tradingApi.alerts();
+
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
+  });
 });

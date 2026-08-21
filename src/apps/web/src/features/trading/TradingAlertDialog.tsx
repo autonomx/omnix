@@ -5,6 +5,7 @@ import type {
   TradingAlertNotificationChannel,
   TradingAlertTriggerPolicy,
 } from './tradingTypes';
+import './TradingChartAlertOpaque.css';
 
 export type TradingAlertEditorState = {
   mode: 'create' | 'edit';
