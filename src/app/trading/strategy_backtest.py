@@ -30,6 +30,7 @@ from .strategy_research_policy import apply_research_policy_to_quality
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from .strategy_risk import size_strategy_entry
+from .strategy_v2_management import v2_active_stop_for_prior_high, v2_management_levels
 from .strategy_timeframes import proposal_priority, resample_final_bars
 
 
@@ -383,8 +384,18 @@ def _find_trade(
             trigger_bar_index=trigger_index,
             rejection_reason="invalid_risk_distance",
         )
-    target = entry + risk * config.reward_multiple
-    horizon = entry_bar.start_time + timedelta(minutes=max_hold_minutes)
+    management = None
+    if config.strategy_version == "2.0.0":
+        management = v2_management_levels(
+            config,
+            entry_price=entry,
+            initial_stop=stop,
+        )
+        target = management.target_price
+        horizon = entry_bar.start_time + timedelta(minutes=management.max_hold_minutes)
+    else:
+        target = entry + risk * config.reward_multiple
+        horizon = entry_bar.start_time + timedelta(minutes=max_hold_minutes)
     max_high = entry
     min_low = entry
 
@@ -396,6 +407,16 @@ def _find_trade(
 
     for index in range(entry_index, len(execution_bars)):
         bar = execution_bars[index]
+        # V11 management is causal: a bar may arm the protected stop only after
+        # it is finalized, so the stop selected here uses prior bars' max high.
+        active_stop = stop
+        if management is not None:
+            active_stop = v2_active_stop_for_prior_high(
+                config,
+                entry_price=entry,
+                initial_stop=stop,
+                prior_finalized_high=max_high,
+            )
         max_high = max(max_high, bar.high)
         min_low = min(min_low, bar.low)
         observation = _bar_observation(
@@ -407,7 +428,7 @@ def _find_trade(
         )
         trigger = paper_protection_trigger(
             is_long=True,
-            stop_price=stop,
+            stop_price=active_stop,
             target_price=target,
             observation=observation,
             activated_at=entry_bar.start_time,
@@ -421,7 +442,7 @@ def _find_trade(
                 side="sell",
                 order_type="stop",
                 quantity=entry_quantity,
-                stop_price=stop,
+                stop_price=active_stop,
                 idempotency_key=f"stop:{candidate.instrument_id}:{index}",
             )
             decision = paper_fill_decision(stop_order, observation, policy)
@@ -433,7 +454,7 @@ def _find_trade(
             ):
                 exit_price = decision.fill_price
                 exit_time = bar.end_time
-                exit_reference = stop
+                exit_reference = active_stop
                 exit_reason = "stop"
                 break
             last_exit_rejection = f"exit_execution:{decision.reason}"

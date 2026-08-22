@@ -61,6 +61,56 @@ const strictV11Config = (): GapPullbackConfig => ({
   last_entry_et: '11:30:00',
 });
 
+const frozenV2Config = (): GapPullbackConfig => ({
+  strategy_id: 'gap_pullback_v1',
+  strategy_version: '2.0.0',
+  structure_interval: '1m',
+  execution_interval: '1m',
+  universe_scan_time_et: '09:20:00',
+  auto_archive_daily_universe: true,
+  universe_archive_grace_minutes: 10,
+  universe_discovery_count: 50,
+  minimum_gap_pct: '20',
+  minimum_price: '0.50',
+  maximum_price: '20',
+  minimum_premarket_dollar_volume: '100000',
+  minimum_tod_rvol: '3',
+  maximum_spread_bps: '150',
+  preferred_float_min_shares: '2000000',
+  preferred_float_max_shares: '30000000',
+  float_preference_mode: 'ignore',
+  // The V11 reconstructed evidence did not contain point-in-time catalyst or
+  // dilution data. Keep those visible for research, but do not pretend the
+  // historical edge validated them as deterministic execution gates.
+  require_catalyst_evidence: false,
+  reject_dilution_flags: [],
+  opening_impulse_min_pct: '0',
+  pullback_min_pct: '8',
+  pullback_max_pct: '25',
+  pullback_volume_max_ratio: '5',
+  higher_low_buffer_bps: '50',
+  breakout_volume_ratio: '1.25',
+  pivot_left_bars: 1,
+  pivot_right_bars: 1,
+  volume_lookback_bars: 5,
+  require_breakout_hold: false,
+  breakout_hold_bars: 1,
+  breakout_hold_tolerance_bps: '25',
+  minimum_quality_score: 0,
+  v2_recovery_min_pct: '5',
+  v2_second_pullback_min_pct: '2',
+  v2_minimum_l1_to_b1_minutes: 4,
+  v2_maximum_l2_to_signal_minutes: 8,
+  v2_minimum_breakout_volume_ratio: '0',
+  v2_profit_protection_trigger_r: '0.75',
+  v2_protected_stop_r: '0.25',
+  v2_max_hold_minutes: 60,
+  stop_buffer_bps: '15',
+  reward_multiple: '1.5',
+  entry_start_et: '09:35:00',
+  last_entry_et: '11:30:00',
+});
+
 const defaultStrategy = (accountId: string): TradingStrategyConfig => ({
   strategy_id: `gap-pullback-${Date.now()}`,
   account_id: accountId,
@@ -311,6 +361,19 @@ export function TradingStrategiesPanel() {
     const config = { ...strictV11Config(), strategy_version: '1.2.0' as const };
     setDraft({ ...draft, strategy_version: '1.2.0', config });
     setNotice('Loaded gap_pullback_v1 1.2.0. Market-structure defaults remain the strict v1.1 baseline; only the reviewed trading-research-1 policy becomes authoritative. Review and save explicitly.');
+  };
+
+  const loadFrozenV2 = () => {
+    if (!draft) return;
+    const config = frozenV2Config();
+    setDraft({
+      ...draft,
+      strategy_version: '2.0.0',
+      mode: 'shadow',
+      config,
+      risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
+    });
+    setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode: 1m L1→B1→higher-L2 structure, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Historical evidence is reconstructed and the external block had only two signals, so prospective shadow evidence remains required.');
   };
 
   const save = async () => {
@@ -582,6 +645,7 @@ export function TradingStrategiesPanel() {
               <div className="trading-strategy-header-actions">
                 {draft.config.strategy_version === '1.0.0' ? <button type="button" onClick={upgradeToStrictV11}>Load v1.1 baseline</button> : null}
                 {draft.config.strategy_version === '1.1.0' && htrPromotionAllowed ? <button type="button" onClick={loadReviewedV12}>Load reviewed HTR v1.2</button> : null}
+                <button type="button" onClick={loadFrozenV2}>{draft.config.strategy_version === '2.0.0' ? 'Reload frozen V11 v2' : 'Load frozen V11 v2 shadow'}</button>
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
                 {strategies.some((item) => item.strategy_id === draft.strategy_id) ? <button type="button" className="danger" onClick={() => void deleteStrategy()} disabled={status === 'saving'}>Delete</button> : null}
                 <button type="button" className="primary" onClick={() => void save()} disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : 'Save strategy'}</button>
@@ -593,7 +657,7 @@ export function TradingStrategiesPanel() {
             <TradingStrategyExecutionCredentials />
 
             <section className="trading-strategy-overview">
-              <div><strong>{definition.thesis}</strong><small>Higher low + VWAP reclaim + lower-high break remain mandatory. Structure and execution timeframes are separate, and simultaneous entry-ready names use quality score before scan rank.</small></div>
+              <div><strong>{draft.config.strategy_version === '2.0.0' ? 'Frozen V11 gap-as-impulse / failed-selloff profile' : definition.thesis}</strong><small>{draft.config.strategy_version === '2.0.0' ? 'Prospective profile: confirmed L1 → B1 → higher L2, base ≥4 minutes, L2→breakout ≤8 minutes, direct B1/VWAP break, fill-anchored 1.5R target and causal +0.75R→+0.25R protection. Reconstructed history is not a profitability guarantee.' : 'Higher low + VWAP reclaim + lower-high break remain mandatory. Structure and execution timeframes are separate, and simultaneous entry-ready names use quality score before scan rank.'}</small></div>
               <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
                 {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>)}
               </div>
@@ -662,6 +726,23 @@ export function TradingStrategiesPanel() {
                     <label><span>Volume lookback bars</span><input type="number" min="2" max="100" value={draft.config.volume_lookback_bars} onChange={(event) => setConfig('volume_lookback_bars', Number(event.target.value))} /></label>
                   </div>
                 </div>
+
+                {draft.config.strategy_version === '2.0.0' ? (
+                  <div className="trading-config-block">
+                    <header><strong>V2. Frozen timing & management</strong><small>V11 causal profile; edit only when deliberately creating a new strategy version/experiment</small></header>
+                    <div className="trading-strategy-grid">
+                      <ConfigNumber label="L1→B1 recovery minimum" suffix="%" step="0.5" value={draft.config.v2_recovery_min_pct ?? '5'} onChange={(value) => setConfigNumber('v2_recovery_min_pct', value)} />
+                      <ConfigNumber label="Second pullback minimum" suffix="%" step="0.5" value={draft.config.v2_second_pullback_min_pct ?? '2'} onChange={(value) => setConfigNumber('v2_second_pullback_min_pct', value)} />
+                      <label><span>L1→B1 minimum<small>finalized 1m bars</small></span><input type="number" min="0" max="120" value={draft.config.v2_minimum_l1_to_b1_minutes ?? 4} onChange={(event) => setConfig('v2_minimum_l1_to_b1_minutes', Number(event.target.value))} /></label>
+                      <label><span>L2→signal maximum<small>finalized 1m bars</small></span><input type="number" min="1" max="390" value={draft.config.v2_maximum_l2_to_signal_minutes ?? 8} onChange={(event) => setConfig('v2_maximum_l2_to_signal_minutes', Number(event.target.value))} /></label>
+                      <ConfigNumber label="V2 breakout volume minimum" suffix="× prior 5" step="0.1" value={draft.config.v2_minimum_breakout_volume_ratio ?? '0'} onChange={(value) => setConfigNumber('v2_minimum_breakout_volume_ratio', value)} />
+                      <ConfigNumber label="Profit-protection trigger" suffix="R" step="0.05" value={draft.config.v2_profit_protection_trigger_r ?? '0.75'} onChange={(value) => setConfigNumber('v2_profit_protection_trigger_r', value)} />
+                      <ConfigNumber label="Protected stop" suffix="R" step="0.05" value={draft.config.v2_protected_stop_r ?? '0.25'} onChange={(value) => setConfigNumber('v2_protected_stop_r', value)} />
+                      <label><span>Maximum hold<small>minutes after fill</small></span><input type="number" min="1" max="390" value={draft.config.v2_max_hold_minutes ?? 60} onChange={(event) => setConfig('v2_max_hold_minutes', Number(event.target.value))} /></label>
+                    </div>
+                    <small>Profit protection is armed only by a prior finalized execution bar; a bar cannot tighten its own stop.</small>
+                  </div>
+                ) : null}
 
                 <div className="trading-config-block">
                   <header><strong>4. Breakout confirmation & quality</strong><small>0–10 ranking/gating model</small></header>
