@@ -3,6 +3,7 @@ import { TradingHermesResearchPanel } from './TradingHermesResearchPanel';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type {
   HistoricalUniverseMode,
+  StrategyRangeBacktestProgress,
   StrategyRangeBacktestResult,
   TradingStrategyConfig,
 } from './tradingStrategyTypes';
@@ -37,6 +38,20 @@ function modeLabel(mode: HistoricalUniverseMode): string {
   return 'Captured, reconstruct missing';
 }
 
+async function waitForBacktest(
+  strategyId: string,
+  runId: string,
+  onProgress: (progress: StrategyRangeBacktestProgress) => void,
+): Promise<StrategyRangeBacktestResult> {
+  while (true) {
+    const progress = await tradingStrategyApi.backtestRangeProgress(strategyId, runId);
+    onProgress(progress);
+    if (progress.status === 'completed' && progress.result) return progress.result;
+    if (progress.status === 'failed') throw new Error(progress.error || 'Backtest failed.');
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+  }
+}
+
 export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrategyConfig }) {
   const [startDate, setStartDate] = useState(() => isoDate(-14));
   const [endDate, setEndDate] = useState(() => isoDate(0));
@@ -47,12 +62,27 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
   const [universeMode, setUniverseMode] = useState<HistoricalUniverseMode>('captured_or_reconstructed');
   const [reconstructionMaxAgeDays, setReconstructionMaxAgeDays] = useState('30');
   const [running, setRunning] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [progress, setProgress] = useState<StrategyRangeBacktestProgress | null>(null);
   const [notice, setNotice] = useState('Backtest the saved strategy configuration across a date range.');
   const [result, setResult] = useState<StrategyRangeBacktestResult | null>(null);
 
   useEffect(() => {
+    if (!running) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  useEffect(() => {
     setScanTimeEt((strategy.config.universe_scan_time_et ?? '09:20:00').slice(0, 5));
     setResult(null);
+    setProgress(null);
     setNotice('Backtest the saved strategy configuration across a date range.');
   }, [strategy.strategy_id, strategy.revision]);
 
@@ -67,9 +97,10 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
     }
     setRunning(true);
     setResult(null);
+    setProgress(null);
     setNotice('Running strategy-specific daily universe backtest…');
     try {
-      const next = await tradingStrategyApi.backtestRange(strategy.strategy_id, {
+      const accepted = await tradingStrategyApi.backtestRange(strategy.strategy_id, {
         start_date: startDate,
         end_date: endDate,
         initial_cash: initialCash,
@@ -80,6 +111,18 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
         reconstruction_max_age_days: Number(reconstructionMaxAgeDays),
         max_sessions: 60,
       });
+      setProgress({
+        run_id: accepted.run_id,
+        strategy_id: strategy.strategy_id,
+        status: accepted.status,
+        completed_sessions: 0,
+        total_sessions: accepted.total_sessions,
+        percent: 0,
+        current_session: null,
+        error: null,
+        result: null,
+      });
+      const next = await waitForBacktest(strategy.strategy_id, accepted.run_id, setProgress);
       setResult(next);
       const incomplete = next.missing_universe_sessions + next.data_unavailable_sessions + next.error_sessions;
       if (next.covered_sessions === 0) {
@@ -130,6 +173,27 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
           <span><b>Captured</b> uses an immutable universe Omnix actually froze by the configured scan time and replays the full saved strategy. <b>Reconstructed</b> is explicitly approximate: for recent missing days it rebuilds the morning gap/price/volume/RVOL candidate set from Alpaca IEX historical data and today&apos;s active listing universe. Because point-in-time catalyst, dilution and float history is unavailable, those hard evidence gates are relaxed only for reconstructed sessions and every downgrade is reported in the result. Reconstructed output must not be interpreted as equivalent to captured point-in-time evidence.</span>
         </div>
         <p className="strategy-backtest-notice" role="status">{notice}</p>
+        {running ? (
+          <div className="strategy-backtest-progress" role="status" aria-live="polite">
+            <div className="strategy-backtest-progress-header">
+              <strong>Backtest in progress · {progress?.percent ?? 0}% complete</strong>
+              <span>{elapsedSeconds}s elapsed</span>
+            </div>
+            <div
+              className="strategy-backtest-progress-track"
+              data-indeterminate={progress?.status === 'queued' ? 'true' : undefined}
+              role="progressbar"
+              aria-label="Backtest progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress?.percent ?? 0}
+              aria-valuetext={`${progress?.percent ?? 0}% complete`}
+            >
+              <span style={{ width: `${progress?.percent ?? 0}%` }} />
+            </div>
+            <small>{progress?.completed_sessions ?? 0}/{progress?.total_sessions ?? '—'} trading sessions completed. Processing historical sessions and applying the saved strategy and risk rules.</small>
+          </div>
+        ) : null}
 
         {result ? (
           <>

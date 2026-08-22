@@ -2171,6 +2171,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategies/{strategy_id}/backtest/range/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Backtest Range Progress */
+        get: operations["get_backtest_range_progress_api_trading_strategies__strategy_id__backtest_range__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/strategies/{strategy_id}/events": {
         parameters: {
             query?: never;
@@ -2943,7 +2960,12 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        AssistantToolsConfigPayload: {
+        "AssistantToolsConfigPayload-Input": {
+            /** Tools */
+            tools: components["schemas"]["AssistantToolConfigRecord"][];
+        };
+        /** AssistantToolsConfigPayload */
+        "AssistantToolsConfigPayload-Output": {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
@@ -7676,6 +7698,19 @@ export interface components {
             /** Protections */
             protections: components["schemas"]["StrategyProtection"][];
         };
+        /** StrategyRangeBacktestAcceptedResponse */
+        StrategyRangeBacktestAcceptedResponse: {
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @default queued
+             * @constant
+             */
+            status: "queued";
+            /** Total Sessions */
+            total_sessions: number;
+        };
         /** StrategyRangeBacktestDay */
         StrategyRangeBacktestDay: {
             /**
@@ -7733,6 +7768,29 @@ export interface components {
             universe_id?: string | null;
             /** Universe Origin */
             universe_origin?: ("captured" | "reconstructed") | null;
+        };
+        /** StrategyRangeBacktestProgressResponse */
+        StrategyRangeBacktestProgressResponse: {
+            /** Completed Sessions */
+            completed_sessions: number;
+            /** Current Session */
+            current_session?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Percent */
+            percent: number;
+            result?: components["schemas"]["StrategyRangeBacktestResult"] | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed";
+            /** Strategy Id */
+            strategy_id: string;
+            /** Total Sessions */
+            total_sessions: number;
         };
         /** StrategyRangeBacktestRequest */
         StrategyRangeBacktestRequest: {
@@ -14223,12 +14281,44 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyRangeBacktestAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_backtest_range_progress_api_trading_strategies__strategy_id__backtest_range__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StrategyRangeBacktestResult"];
+                    "application/json": components["schemas"]["StrategyRangeBacktestProgressResponse"];
                 };
             };
             /** @description Validation Error */

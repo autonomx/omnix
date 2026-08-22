@@ -34,6 +34,7 @@ HistoricalUniverseMode = Literal["captured_only", "captured_or_reconstructed", "
 HistoricalUniverseOrigin = Literal["captured", "reconstructed"]
 BacktestResultQuality = Literal["exact", "mixed", "approximate", "unavailable"]
 Reconstructor = Callable[..., HistoricalUniverseReconstruction]
+ProgressCallback = Callable[[int, int, date], None]
 
 
 class StrategyRangeBacktestRequest(BaseModel):
@@ -267,6 +268,7 @@ def run_strategy_range_backtest(
     *,
     reconstructor: Reconstructor = reconstruct_recent_alpaca_gapper_universe,
     research_policy_resolver: Callable[[str, datetime], ResearchPolicyDecision] | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> StrategyRangeBacktestResult:
     if strategy.strategy_kind != "gap_pullback_v1":
         raise ValueError("strategy_backtest_not_supported")
@@ -293,6 +295,14 @@ def run_strategy_range_backtest(
             assumed_spread_bps=request.assumed_spread_bps,
             max_age_days=request.reconstruction_max_age_days,
         )
+
+    completed_sessions = 0
+
+    def report_progress(session_date: date) -> None:
+        nonlocal completed_sessions
+        completed_sessions += 1
+        if progress_callback:
+            progress_callback(completed_sessions, len(sessions), session_date)
 
     for session_date in sessions:
         starting_cash = current_cash
@@ -333,6 +343,7 @@ def run_strategy_range_backtest(
                         detail=f"Historical universe reconstruction failed: {exc}",
                     )
                 )
+                report_progress(session_date)
                 continue
             universe = reconstruction.snapshot
             origin = "reconstructed"
@@ -368,6 +379,7 @@ def run_strategy_range_backtest(
                             detail=reconstruction.detail or "Historical universe reconstruction is unavailable.",
                         )
                     )
+                report_progress(session_date)
                 continue
 
         if universe is None:
@@ -380,6 +392,7 @@ def run_strategy_range_backtest(
                     detail="No frozen point-in-time gapper/research universe existed in the configured scan/grace window. Choose reconstructed mode for an explicitly approximate recent-history scan.",
                 )
             )
+            report_progress(session_date)
             continue
 
         bars_by_instrument: dict[str, list[MarketBar]] = {}
@@ -416,6 +429,7 @@ def run_strategy_range_backtest(
                     detail=str(exc),
                 )
             )
+            report_progress(session_date)
             continue
 
         try:
@@ -459,6 +473,7 @@ def run_strategy_range_backtest(
                     result=result,
                 )
             )
+
         except ValueError as exc:
             days.append(
                 StrategyRangeBacktestDay(
@@ -476,6 +491,8 @@ def run_strategy_range_backtest(
                     detail=str(exc),
                 )
             )
+
+        report_progress(session_date)
 
     trades = [trade for day in days if day.result is not None for trade in day.result.trades]
     covered_days = [day for day in days if day.status in {"backtested", "no_candidates"}]

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
@@ -26,8 +28,10 @@ from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult, StrategyRiskProfile
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
 from .strategy_range_backtest import (
+    ProgressCallback,
     StrategyRangeBacktestRequest,
     StrategyRangeBacktestResult,
+    _trading_dates,
     run_strategy_range_backtest,
 )
 from .strategy_research_policy import resolve_strategy_research_policy
@@ -51,6 +55,24 @@ class StrategyEventListResponse(BaseModel):
 
 class StrategyProtectionListResponse(BaseModel):
     protections: list[StrategyProtection]
+
+
+class StrategyRangeBacktestAcceptedResponse(BaseModel):
+    run_id: str
+    status: Literal["queued"] = "queued"
+    total_sessions: int
+
+
+class StrategyRangeBacktestProgressResponse(BaseModel):
+    run_id: str
+    strategy_id: str
+    status: Literal["queued", "running", "completed", "failed"]
+    completed_sessions: int
+    total_sessions: int
+    percent: int
+    current_session: date | None = None
+    error: str | None = None
+    result: StrategyRangeBacktestResult | None = None
 
 
 class StrategyEvaluationRequest(BaseModel):
@@ -133,6 +155,93 @@ RepositoryFactory = Callable[[], TradingStrategyRepository]
 CatalystRepositoryFactory = Callable[[], TradingCatalystRepository]
 
 
+@dataclass
+class _RangeBacktestProgressState:
+    run_id: str
+    strategy_id: str
+    status: Literal["queued", "running", "completed", "failed"]
+    completed_sessions: int
+    total_sessions: int
+    current_session: date | None = None
+    error: str | None = None
+    result: StrategyRangeBacktestResult | None = None
+
+
+_RANGE_BACKTEST_PROGRESS: dict[str, _RangeBacktestProgressState] = {}
+_RANGE_BACKTEST_PROGRESS_LOCK = threading.Lock()
+
+
+def _register_range_backtest(run_id: str, strategy_id: str, total_sessions: int) -> None:
+    with _RANGE_BACKTEST_PROGRESS_LOCK:
+        _RANGE_BACKTEST_PROGRESS[run_id] = _RangeBacktestProgressState(
+            run_id=run_id,
+            strategy_id=strategy_id,
+            status="queued",
+            completed_sessions=0,
+            total_sessions=total_sessions,
+        )
+
+
+def _update_range_backtest_progress(run_id: str, completed_sessions: int, total_sessions: int, session_date: date) -> None:
+    with _RANGE_BACKTEST_PROGRESS_LOCK:
+        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
+        if state is None:
+            return
+        state.status = "running"
+        state.completed_sessions = completed_sessions
+        state.total_sessions = total_sessions
+        state.current_session = session_date
+
+
+def _mark_range_backtest_running(run_id: str) -> None:
+    with _RANGE_BACKTEST_PROGRESS_LOCK:
+        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
+        if state is not None:
+            state.status = "running"
+
+
+def _mark_range_backtest_completed(run_id: str, result: StrategyRangeBacktestResult) -> None:
+    with _RANGE_BACKTEST_PROGRESS_LOCK:
+        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
+        if state is not None:
+            state.status = "completed"
+            state.completed_sessions = state.total_sessions
+            state.current_session = None
+            state.result = result
+
+
+def _mark_range_backtest_failed(run_id: str, error: str) -> None:
+    with _RANGE_BACKTEST_PROGRESS_LOCK:
+        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
+        if state is not None:
+            state.status = "failed"
+            state.current_session = None
+            state.error = error
+
+
+def _range_backtest_progress_response(run_id: str) -> StrategyRangeBacktestProgressResponse | None:
+    with _RANGE_BACKTEST_PROGRESS_LOCK:
+        state = _RANGE_BACKTEST_PROGRESS.get(run_id)
+        if state is None:
+            return None
+        percent = 100 if state.status == "completed" else (
+            min(99, int(state.completed_sessions * 100 / state.total_sessions))
+            if state.total_sessions
+            else 0
+        )
+        return StrategyRangeBacktestProgressResponse(
+            run_id=state.run_id,
+            strategy_id=state.strategy_id,
+            status=state.status,
+            completed_sessions=state.completed_sessions,
+            total_sessions=state.total_sessions,
+            percent=percent,
+            current_session=state.current_session,
+            error=state.error,
+            result=state.result,
+        )
+
+
 def _validate_catalyst_provenance(snapshot: GapperUniverseSnapshot, catalyst_repository: TradingCatalystRepository) -> None:
     evaluation = snapshot.evaluation_time.astimezone(timezone.utc)
     for candidate in snapshot.candidates:
@@ -197,6 +306,120 @@ def _bar_coverage(bars_by_instrument: dict[str, list[MarketBar]]) -> dict[str, d
             "intervals": sorted({bar.interval for bar in ordered}),
         }
     return coverage
+
+
+async def _execute_range_backtest(
+    strategy_id: str,
+    request: StrategyRangeBacktestRequest,
+    run_id: str,
+    repository_factory: RepositoryFactory,
+    catalyst_repository_factory: CatalystRepositoryFactory,
+    progress_callback: ProgressCallback,
+) -> StrategyRangeBacktestResult:
+    repository = repository_factory()
+    strategy = await asyncio.to_thread(repository.get_config, strategy_id)
+    universes = await asyncio.to_thread(
+        repository.list_universes,
+        start_date=request.start_date,
+        end_date=request.end_date,
+    )
+    catalyst_repository = catalyst_repository_factory()
+    for universe in universes:
+        _validate_catalyst_provenance(universe, catalyst_repository)
+    trade_log(
+        "backtest",
+        "range_backtest_requested",
+        run_id=run_id,
+        strategy_id=strategy_id,
+        strategy_kind=strategy.strategy_kind,
+        strategy_version=strategy.strategy_version,
+        strategy_config=strategy.config,
+        risk_profile=strategy.risk,
+        request=request,
+        universe_count=len(universes),
+        universes=[
+            {
+                "universe_id": universe.universe_id,
+                "session_date": universe.session_date,
+                "evaluation_time": universe.evaluation_time,
+                "source_fingerprint": universe.source_fingerprint,
+                "candidate_count": len(universe.candidates),
+            }
+            for universe in universes
+        ],
+    )
+    fact_repository = None
+
+    def range_research_policy_resolver(instrument_id: str, decision_at: datetime):
+        nonlocal fact_repository
+        if fact_repository is None:
+            fact_repository = default_fact_repository()
+        return resolve_strategy_research_policy(
+            strategy_version=strategy.config.strategy_version,
+            instrument_id=instrument_id,
+            decision_at=decision_at,
+            fact_repository=fact_repository,
+        )
+
+    result = await asyncio.to_thread(
+        run_strategy_range_backtest,
+        strategy,
+        universes,
+        request,
+        research_policy_resolver=range_research_policy_resolver,
+        progress_callback=progress_callback,
+    )
+    for day in result.days:
+        trade_log(
+            "backtest",
+            "range_backtest_day",
+            run_id=run_id,
+            strategy_id=strategy_id,
+            day=day,
+        )
+        if day.result is not None and day.result.candidate_decisions:
+            try:
+                fact_repository = fact_repository or default_fact_repository()
+                captured = await asyncio.to_thread(
+                    persist_backtest_trade_outcomes,
+                    strategy_id=strategy_id,
+                    strategy_version=strategy.config.strategy_version,
+                    session_date=day.session_date,
+                    trades=day.result.trades,
+                    candidate_decisions=day.result.candidate_decisions,
+                    market_fidelity=(
+                        "captured_point_in_time" if day.universe_origin == "captured"
+                        else "reconstructed_current_listings_iex"
+                    ),
+                    fact_repository=fact_repository,
+                    reward_multiple=strategy.config.reward_multiple,
+                )
+                trade_log(
+                    "backtest",
+                    "range_research_outcomes_captured",
+                    run_id=run_id,
+                    strategy_id=strategy_id,
+                    session_date=day.session_date,
+                    count=captured,
+                )
+            except Exception as exc:
+                trade_log(
+                    "backtest",
+                    "research_outcome_capture_error",
+                    run_id=run_id,
+                    strategy_id=strategy_id,
+                    session_date=day.session_date,
+                    error_type=type(exc).__name__,
+                    detail=str(exc),
+                )
+    trade_log(
+        "backtest",
+        "range_backtest_completed",
+        run_id=run_id,
+        strategy_id=strategy_id,
+        result=result.model_dump(mode="json", exclude={"days"}),
+    )
+    return result
 
 
 def create_trading_strategy_router(
@@ -435,114 +658,77 @@ def create_trading_strategy_router(
             status = 404 if str(exc) == "strategy_config_not_found" else 422
             raise HTTPException(status_code=status, detail=str(exc)) from exc
 
-    @router.post("/{strategy_id}/backtest/range", response_model=StrategyRangeBacktestResult)
+    @router.post(
+        "/{strategy_id}/backtest/range",
+        response_model=StrategyRangeBacktestAcceptedResponse,
+        status_code=202,
+    )
     async def backtest_strategy_range(
         strategy_id: str,
         request: StrategyRangeBacktestRequest,
-    ) -> StrategyRangeBacktestResult:
+    ) -> StrategyRangeBacktestAcceptedResponse:
         run_id = _backtest_run_id("range", strategy_id, request.start_date, request.end_date)
         try:
-            repository = repository_factory()
-            strategy = await asyncio.to_thread(repository.get_config, strategy_id)
-            universes = await asyncio.to_thread(
-                repository.list_universes,
-                start_date=request.start_date,
-                end_date=request.end_date,
+            total_sessions = len(_trading_dates(request.start_date, request.end_date))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if total_sessions > request.max_sessions:
+            raise HTTPException(
+                status_code=422,
+                detail=f"backtest_session_limit_exceeded:{total_sessions}>{request.max_sessions}",
             )
-            catalyst_repository = catalyst_repository_factory()
-            for universe in universes:
-                _validate_catalyst_provenance(universe, catalyst_repository)
-            trade_log(
-                "backtest",
-                "range_backtest_requested",
-                run_id=run_id,
-                strategy_id=strategy_id,
-                strategy_kind=strategy.strategy_kind,
-                strategy_version=strategy.strategy_version,
-                strategy_config=strategy.config,
-                risk_profile=strategy.risk,
-                request=request,
-                universe_count=len(universes),
-                universes=[
-                    {
-                        "universe_id": universe.universe_id,
-                        "session_date": universe.session_date,
-                        "evaluation_time": universe.evaluation_time,
-                        "source_fingerprint": universe.source_fingerprint,
-                        "candidate_count": len(universe.candidates),
-                    }
-                    for universe in universes
-                ],
-            )
-            fact_repository = None
 
-            def range_research_policy_resolver(instrument_id: str, decision_at: datetime):
-                nonlocal fact_repository
-                if fact_repository is None:
-                    fact_repository = default_fact_repository()
-                return resolve_strategy_research_policy(
-                    strategy_version=strategy.config.strategy_version,
-                    instrument_id=instrument_id,
-                    decision_at=decision_at,
-                    fact_repository=fact_repository,
+        _register_range_backtest(run_id, strategy_id, total_sessions)
+
+        async def execute() -> None:
+            _mark_range_backtest_running(run_id)
+            try:
+                result = await _execute_range_backtest(
+                    strategy_id,
+                    request,
+                    run_id,
+                    repository_factory,
+                    catalyst_repository_factory,
+                    lambda completed, total, session_date: _update_range_backtest_progress(
+                        run_id,
+                        completed,
+                        total,
+                        session_date,
+                    ),
                 )
-
-            result = await asyncio.to_thread(
-                run_strategy_range_backtest,
-                strategy,
-                universes,
-                request,
-                research_policy_resolver=range_research_policy_resolver,
-            )
-            for day in result.days:
+            except Exception as exc:
                 trade_log(
                     "backtest",
-                    "range_backtest_day",
+                    "range_backtest_failed",
                     run_id=run_id,
                     strategy_id=strategy_id,
-                    day=day,
+                    start_date=request.start_date,
+                    end_date=request.end_date,
+                    error_type=type(exc).__name__,
+                    detail=str(exc),
                 )
-                if day.result is not None and day.result.candidate_decisions:
-                    try:
-                        fact_repository = fact_repository or default_fact_repository()
-                        captured = await asyncio.to_thread(
-                            persist_backtest_trade_outcomes,
-                            strategy_id=strategy_id,
-                            strategy_version=strategy.config.strategy_version,
-                            session_date=day.session_date,
-                            trades=day.result.trades,
-                            candidate_decisions=day.result.candidate_decisions,
-                            market_fidelity=(
-                                "captured_point_in_time" if day.universe_origin == "captured"
-                                else "reconstructed_current_listings_iex"
-                            ),
-                            fact_repository=fact_repository,
-                            reward_multiple=strategy.config.reward_multiple,
-                        )
-                        trade_log("backtest", "range_research_outcomes_captured", run_id=run_id, strategy_id=strategy_id, session_date=day.session_date, count=captured)
-                    except Exception as exc:
-                        trade_log("backtest", "research_outcome_capture_error", run_id=run_id, strategy_id=strategy_id, session_date=day.session_date, error_type=type(exc).__name__, detail=str(exc))
-            trade_log(
-                "backtest",
-                "range_backtest_completed",
-                run_id=run_id,
-                strategy_id=strategy_id,
-                result=result.model_dump(mode="json", exclude={"days"}),
-            )
-            return result
-        except ValueError as exc:
-            trade_log(
-                "backtest",
-                "range_backtest_failed",
-                run_id=run_id,
-                strategy_id=strategy_id,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                error_type=type(exc).__name__,
-                detail=str(exc),
-            )
-            status = 404 if str(exc) == "strategy_config_not_found" else 422
-            raise HTTPException(status_code=status, detail=str(exc)) from exc
+                _mark_range_backtest_failed(run_id, str(exc))
+                return
+            _mark_range_backtest_completed(run_id, result)
+
+        asyncio.create_task(execute())
+        return StrategyRangeBacktestAcceptedResponse(
+            run_id=run_id,
+            total_sessions=total_sessions,
+        )
+
+    @router.get(
+        "/{strategy_id}/backtest/range/{run_id}",
+        response_model=StrategyRangeBacktestProgressResponse,
+    )
+    async def get_backtest_range_progress(
+        strategy_id: str,
+        run_id: str,
+    ) -> StrategyRangeBacktestProgressResponse:
+        progress = _range_backtest_progress_response(run_id)
+        if progress is None or progress.strategy_id != strategy_id:
+            raise HTTPException(status_code=404, detail="backtest_run_not_found")
+        return progress
 
     @router.post("/{strategy_id}/research/capture-yahoo", response_model=StrategyCatalystCaptureResponse)
     async def capture_yahoo_research(strategy_id: str, request: StrategyCatalystCaptureRequest):

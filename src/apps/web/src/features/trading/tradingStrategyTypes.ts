@@ -292,3 +292,21 @@ export type StrategyRangeBacktestResult = {
   point_in_time_universes_required: true;
   reconstruction_is_approximate: true;
 };
+
+export type StrategyRangeBacktestAccepted = {
+  run_id: string;
+  status: 'queued';
+  total_sessions: number;
+};
+
+export type StrategyRangeBacktestProgress = {
+  run_id: string;
+  strategy_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  completed_sessions: number;
+  total_sessions: number;
+  percent: number;
+  current_session: string | null;
+  error: string | null;
+  result: StrategyRangeBacktestResult | null;
+};

@@ -97,7 +97,15 @@ def test_range_backtest_reports_missing_universes_as_unavailable_not_zero_perfor
         universe_mode="captured_only",
     )
 
-    result = run_strategy_range_backtest(strategy(), [], request)
+    progress: list[tuple[int, int, date]] = []
+    result = run_strategy_range_backtest(
+        strategy(),
+        [],
+        request,
+        progress_callback=lambda completed, total, session_date: progress.append(
+            (completed, total, session_date)
+        ),
+    )
 
     assert result.requested_trading_sessions == 2
     assert result.covered_sessions == 0
@@ -110,6 +118,7 @@ def test_range_backtest_reports_missing_universes_as_unavailable_not_zero_perfor
     assert result.result_quality == "unavailable"
     assert all(day.status == "missing_universe" for day in result.days)
     assert result.point_in_time_universes_required is True
+    assert [(completed, total) for completed, total, _ in progress] == [(1, 2), (2, 2)]
 
 
 def test_reconstructed_no_candidate_day_counts_as_covered_approximate_session() -> None:

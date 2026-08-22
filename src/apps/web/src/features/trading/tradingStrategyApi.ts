@@ -5,6 +5,8 @@ import type {
   StrategyEvent,
   StrategyProtection,
   StrategyRangeBacktestInput,
+  StrategyRangeBacktestAccepted,
+  StrategyRangeBacktestProgress,
   StrategyRangeBacktestResult,
   StrategyResearchReviewResponse,
   TradingStrategyConfig,
@@ -51,9 +53,13 @@ export const tradingStrategyApi = {
       headers: { 'If-Match': String(config.revision) },
     }),
   backtestRange: (strategyId: string, input: StrategyRangeBacktestInput) =>
-    requestJson<StrategyRangeBacktestResult>(
+    requestJson<StrategyRangeBacktestAccepted>(
       `/api/trading/strategies/${encodeURIComponent(strategyId)}/backtest/range`,
       { method: 'POST', body: JSON.stringify(input) },
+    ),
+  backtestRangeProgress: (strategyId: string, runId: string) =>
+    requestJson<StrategyRangeBacktestProgress>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/backtest/range/${encodeURIComponent(runId)}`,
     ),
   events: async (strategyId: string, limit = 200) => {
     const payload = await requestJson<{ events?: StrategyEvent[] }>(

@@ -1190,7 +1190,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {
@@ -12435,6 +12451,30 @@
         "title": "StrategyProtectionListResponse",
         "type": "object"
       },
+      "StrategyRangeBacktestAcceptedResponse": {
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "queued",
+            "default": "queued",
+            "title": "Status",
+            "type": "string"
+          },
+          "total_sessions": {
+            "title": "Total Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "total_sessions"
+        ],
+        "title": "StrategyRangeBacktestAcceptedResponse",
+        "type": "object"
+      },
       "StrategyRangeBacktestDay": {
         "additionalProperties": false,
         "properties": {
@@ -12579,6 +12619,83 @@
           "ending_cash"
         ],
         "title": "StrategyRangeBacktestDay",
+        "type": "object"
+      },
+      "StrategyRangeBacktestProgressResponse": {
+        "properties": {
+          "completed_sessions": {
+            "title": "Completed Sessions",
+            "type": "integer"
+          },
+          "current_session": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Session"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StrategyRangeBacktestResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "total_sessions": {
+            "title": "Total Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "strategy_id",
+          "status",
+          "completed_sessions",
+          "total_sessions",
+          "percent"
+        ],
+        "title": "StrategyRangeBacktestProgressResponse",
         "type": "object"
       },
       "StrategyRangeBacktestRequest": {
@@ -23078,11 +23195,11 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StrategyRangeBacktestResult"
+                  "$ref": "#/components/schemas/StrategyRangeBacktestAcceptedResponse"
                 }
               }
             },
@@ -23100,6 +23217,57 @@
           }
         },
         "summary": "Backtest Strategy Range",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/backtest/range/{run_id}": {
+      "get": {
+        "operationId": "get_backtest_range_progress_api_trading_strategies__strategy_id__backtest_range__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyRangeBacktestProgressResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Backtest Range Progress",
         "tags": [
           "trading-strategies"
         ]
