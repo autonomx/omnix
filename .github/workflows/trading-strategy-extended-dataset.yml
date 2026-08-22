@@ -2,16 +2,9 @@ name: Trading strategy extended dataset
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - agent/trading-auto-strategy-roadmap
-    paths:
-      - ".github/workflows/trading-strategy-extended-dataset.yml"
 
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 concurrency:
   group: trading-historical-alpaca-${{ github.repository }}
@@ -27,7 +20,6 @@ jobs:
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
       OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
       OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out exact workflow head
         uses: actions/checkout@v4
@@ -86,7 +78,6 @@ jobs:
           python scripts/validate_trading_strategy_failed_selloff_v11_older_stress.py \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
             --output-dir artifacts/failed-selloff-v11-older-stress \
-            --coverage-json artifacts/v11-older-stress-capture/coverage.json \
             --initial-cash 100000 \
             --assumed-spread-bps 40
 
@@ -107,24 +98,6 @@ jobs:
           if [[ -f artifacts/failed-selloff-v11-older-stress/summary.md ]]; then
             cat artifacts/failed-selloff-v11-older-stress/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
-
-      - name: Report stress result on PR 1494
-        if: always()
-        shell: bash
-        run: |
-          {
-            echo "<!-- omnix-v11-older-stress-validator:${GITHUB_SHA} -->"
-            echo "## Frozen V11 older stress validator"
-            echo
-            echo "Actions run: ${GITHUB_RUN_ID} · commit: ${GITHUB_SHA}"
-            echo
-            if [[ -f artifacts/failed-selloff-v11-older-stress/summary.md ]]; then
-              cat artifacts/failed-selloff-v11-older-stress/summary.md
-            else
-              echo "Frozen strategy summary unavailable; inspect run."
-            fi
-          } > /tmp/v11-validator-comment.md
-          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body-file /tmp/v11-validator-comment.md
 
       - name: Upload extension evidence
         if: always()
