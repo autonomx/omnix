@@ -79,3 +79,19 @@ def test_shadow_execution_module_has_no_order_or_paper_repository_dependency() -
     assert "paper_repository" not in source
     assert "place_order" not in source
     assert "PaperOrder" not in source
+
+
+def test_strategy_monitor_shadow_observation_precedes_auto_paper_order_boundary() -> None:
+    source = Path("src/app/trading/strategy_monitor.py").read_text(encoding="utf-8")
+    shadow_start = source.index('if config.mode == "shadow" and proposals:')
+    auto_paper_start = source.index(
+        "snapshot = await asyncio.to_thread(paper_repository.snapshot, config.account_id)",
+        shadow_start,
+    )
+    shadow_block = source[shadow_start:auto_paper_start]
+
+    assert "observe_shadow_execution" in shadow_block
+    assert 'event_type="shadow_execution"' in shadow_block
+    assert '"execution_authority": False' in shadow_block
+    assert "place_order" not in shadow_block
+    assert "save_protection" not in shadow_block

@@ -29,6 +29,7 @@ from .strategy_repository import (
 )
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
+from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_v2_management import (
     v2_active_stop_for_prior_high,
     v2_hold_expired,
@@ -850,6 +851,89 @@ class TradingStrategyMonitor:
             market_service,
             universe,
         )
+        if config.mode == "shadow" and proposals:
+            for proposal in proposals:
+                candidate = proposal.candidate
+                result = proposal.result
+                assert result.signal is not None
+                try:
+                    evidence = await asyncio.to_thread(
+                        observe_shadow_execution,
+                        market_service,
+                        instrument_id=candidate.instrument_id,
+                        binding_id=candidate.binding_id,
+                    )
+                except Exception as exc:
+                    payload = {
+                        "strategy_version": config.config.strategy_version,
+                        "mode": "shadow",
+                        "universe_id": universe.universe_id,
+                        "signal": result.signal.model_dump(mode="json"),
+                        "features": result.features.model_dump(mode="json"),
+                        "error_type": type(exc).__name__,
+                        "detail": str(exc),
+                        "execution_authority": False,
+                    }
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="shadow_execution",
+                        state=result.state,
+                        reason_code="SHADOW_EXECUTION_UNAVAILABLE",
+                        observed_at=proposal.observed_at,
+                        payload=payload,
+                    )
+                    trade_log(
+                        "auto_trading",
+                        "shadow_execution_unavailable",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        instrument_id=candidate.instrument_id,
+                        **payload,
+                    )
+                    continue
+
+                payload = {
+                    "strategy_version": config.config.strategy_version,
+                    "mode": "shadow",
+                    "universe_id": universe.universe_id,
+                    "signal": result.signal.model_dump(mode="json"),
+                    "features": result.features.model_dump(mode="json"),
+                    "execution": evidence.execution,
+                    "execution_authority": False,
+                }
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="shadow_execution",
+                    state=result.state,
+                    reason_code=evidence.reason_code,
+                    observed_at=proposal.observed_at,
+                    payload=payload,
+                )
+                trade_log(
+                    "auto_trading",
+                    "shadow_execution_observation",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    instrument_id=candidate.instrument_id,
+                    reason_code=evidence.reason_code,
+                    **payload,
+                )
+
+            trade_log(
+                "auto_trading",
+                "strategy_cycle_no_entry_work",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                mode=config.mode,
+                proposal_count=len(proposals),
+                shadow_execution_observed=True,
+            )
+            return
+
         if config.mode != "auto_paper" or not proposals:
             trade_log(
                 "auto_trading",
