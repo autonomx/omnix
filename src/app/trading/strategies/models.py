@@ -58,9 +58,9 @@ class GapPullbackConfig(BaseModel):
     change when HTR code evolves.
 
     Version 2.0.0 is a separately versioned gap-as-impulse failed-selloff
-    definition.  It waits for a causal L1 -> B1 -> higher-L2 sequence and a
-    direct B1/VWAP break.  The v2-only timing/recovery fields below are ignored
-    by all 1.x evaluators so persisted 1.x behavior remains unchanged.
+    definition. It waits for a causal L1 -> B1 -> higher-L2 sequence and a
+    direct B1/VWAP break. The v2-only fields below are ignored by all 1.x
+    evaluators so persisted 1.x behavior remains unchanged.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -105,8 +105,8 @@ class GapPullbackConfig(BaseModel):
     breakout_hold_tolerance_bps: Decimal = Field(default=Decimal("25"), ge=0, le=1000)
     minimum_quality_score: int = Field(default=0, ge=0, le=10)
 
-    # 2.0.0-only causal failed-selloff geometry.  These defaults are the frozen
-    # V11 prospective candidate selected before external validation.
+    # 2.0.0-only causal failed-selloff geometry/management. These defaults are
+    # the V11 prospective profile selected before the external April/May check.
     v2_recovery_min_pct: Decimal = Field(default=Decimal("5"), ge=0, le=1000)
     v2_second_pullback_min_pct: Decimal = Field(default=Decimal("2"), ge=0, le=100)
     v2_minimum_l1_to_b1_minutes: int = Field(default=4, ge=0, le=120)
@@ -114,6 +114,7 @@ class GapPullbackConfig(BaseModel):
     v2_minimum_breakout_volume_ratio: Decimal = Field(default=Decimal("0"), ge=0, le=1000)
     v2_profit_protection_trigger_r: Decimal | None = Field(default=Decimal("0.75"), gt=0, le=20)
     v2_protected_stop_r: Decimal = Field(default=Decimal("0.25"), ge=0, le=20)
+    v2_max_hold_minutes: int = Field(default=60, ge=1, le=390)
 
     stop_buffer_bps: Decimal = Field(default=Decimal("15"), ge=0)
     reward_multiple: Decimal = Field(default=Decimal("2"), gt=0, le=10)
@@ -137,6 +138,12 @@ class GapPullbackConfig(BaseModel):
             self.structure_interval != "1m" or self.execution_interval != "1m"
         ):
             raise ValueError("gap_pullback_v1 2.0.0 requires 1m structure and execution intervals")
+        if (
+            self.strategy_version == "2.0.0"
+            and self.v2_profit_protection_trigger_r is not None
+            and self.v2_protected_stop_r >= self.v2_profit_protection_trigger_r
+        ):
+            raise ValueError("v2 protected stop R must be below the profit-protection trigger R")
         return self
 
 
