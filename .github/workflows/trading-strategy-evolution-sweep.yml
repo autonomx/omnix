@@ -2,12 +2,6 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/trading-strategy-evolution-sweep.yml"
-      - "scripts/run_trading_strategy_evolution_round2.py"
 
 permissions:
   contents: read
@@ -21,10 +15,10 @@ jobs:
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact PR head
+      - name: Check out exact workflow head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-python@v5
         with:
