@@ -899,6 +899,24 @@ export class TradingChartAdapter {
     return paneIndex > 0 ? this.indicatorPaneIds[paneIndex - 1] ?? null : null;
   }
 
+  indicatorValueFromCoordinate(id: CoreIndicatorId, y: number): number | null {
+    this.assertActive();
+    const paneIndex = this.indicatorPaneIds.indexOf(id) + 1;
+    if (paneIndex <= 0 || !Number.isFinite(y)) return null;
+    const pane = this.chart.panes()[paneIndex];
+    const paneElement = pane?.getHTMLElement();
+    if (!paneElement) return null;
+    const chartRect = this.chart.chartElement().getBoundingClientRect();
+    const paneRect = paneElement.getBoundingClientRect();
+    const localY = y - (paneRect.top - chartRect.top);
+    for (const [key, series] of this.indicatorSeries) {
+      if (key.split(':', 1)[0] !== id || this.indicatorSeriesPanes.get(key) !== paneIndex) continue;
+      const value = series.coordinateToPrice(localY);
+      return typeof value === 'number' && Number.isFinite(value) ? value : null;
+    }
+    return null;
+  }
+
   private panPanePriceScaleByPixels(paneIndex: number, deltaY: number): void {
     if (!Number.isFinite(deltaY) || deltaY === 0) return;
     const priceScale = this.panePriceScale(paneIndex);

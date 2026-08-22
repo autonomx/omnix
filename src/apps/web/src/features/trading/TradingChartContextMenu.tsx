@@ -50,14 +50,18 @@ export function TradingChartContextMenu({
   const [templateOpen, setTemplateOpen] = useState(false);
 
   useEffect(() => {
-    const close = () => onClose();
+    const close = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.trading-chart-context-menu')) return;
+      onClose();
+    };
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
-    window.addEventListener('pointerdown', close, { once: true });
+    document.addEventListener('pointerdown', close, true);
     window.addEventListener('keydown', keydown);
     return () => {
-      window.removeEventListener('pointerdown', close);
+      document.removeEventListener('pointerdown', close, true);
       window.removeEventListener('keydown', keydown);
     };
   }, [onClose]);

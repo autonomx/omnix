@@ -31,6 +31,50 @@ import {
   tradingIntervalMinutes,
 } from './tradingIntervals';
 
+type TradingContextMenuState = ChartAlertPlacement & {
+  indicatorId?: CoreIndicatorId;
+};
+
+const indicatorContextNames: Partial<Record<CoreIndicatorId, string>> = {
+  atr: 'ATR',
+  bollinger: 'Bollinger Bands',
+  'bull-market-band': 'Bull Market Support Band',
+  'death-cross': 'Death Cross',
+  ema: 'EMA',
+  'ema-stack': 'EMA Stack',
+  'fair-value-gap': 'Fair Value Gap',
+  'golden-cross': 'Golden Cross',
+  'ideal-bb': 'IDEAL BB',
+  'log-macd': 'Log MACD',
+  'macd-dema': 'MACD DEMA',
+  macd: 'MACD',
+  rsi: 'RSI',
+  'rsi-divergence': 'RSI Divergence',
+  sma: 'SMA',
+  'stochastic-rsi': 'Stoch RSI',
+  'swing-liquidity': 'Swing Levels and Liquidity',
+  'volume-profile': 'Volume Profile',
+  vwap: 'VWAP',
+};
+
+function indicatorContextLabel(indicator: CoreIndicatorInstance): string {
+  const name = indicatorContextNames[indicator.id] ?? indicator.id.toUpperCase();
+  if (indicator.id === 'stochastic-rsi') {
+    return `${name} (${indicator.fastPeriod ?? 3}, ${indicator.signalPeriod ?? 3}, ${indicator.period}, ${indicator.period}, close)`;
+  }
+  if (indicator.id === 'macd' || indicator.id === 'log-macd' || indicator.id === 'macd-dema') {
+    return `${name} (${indicator.fastPeriod ?? 12}, ${indicator.slowPeriod ?? 26}, ${indicator.signalPeriod ?? 9}, close)`;
+  }
+  if (indicator.id === 'bollinger') return `${name} (${indicator.period}, ${indicator.standardDeviations ?? 2}, close)`;
+  if (indicator.id === 'death-cross' || indicator.id === 'golden-cross') {
+    return `${name} (${indicator.fastPeriod ?? 50}, ${indicator.slowPeriod ?? 200}, close)`;
+  }
+  if (indicator.id === 'bull-market-band') {
+    return `${name} (${indicator.fastPeriod ?? 20}W SMA, ${indicator.slowPeriod ?? 21}W EMA)`;
+  }
+  return `${name} (${indicator.period}, close)`;
+}
+
 const ranges = [
   { label: '1D', days: 1, interval: '1m', tooltip: '1 day in 1 minute intervals' },
   { label: '5D', days: 5, interval: '5m', tooltip: '5 days in 5 minute intervals' },
@@ -228,7 +272,7 @@ export function TradingChartPanel({
   const [streamError, setStreamError] = useState<string | null>(null);
   const [indicatorError, setIndicatorError] = useState<string | null>(null);
   const [alertPlacement, setAlertPlacement] = useState<ChartAlertPlacement | null>(null);
-  const [contextMenu, setContextMenu] = useState<ChartAlertPlacement | null>(null);
+  const [contextMenu, setContextMenu] = useState<TradingContextMenuState | null>(null);
   const [priceScaleMenuOpen, setPriceScaleMenuOpen] = useState(false);
   const [priceScaleSettings, setPriceScaleSettings] = useState<TradingPriceScaleMenuState>(defaultTradingPriceScaleMenuState);
   const [priceScaleCurrency, setPriceScaleCurrency] = useState('USD');
@@ -431,6 +475,8 @@ export function TradingChartPanel({
     let pan: { pointerId: number; lastX: number; lastY: number; paneY: number; paneId: string | null; mode: 'chart-pan' | 'price-scale' | 'price-pan' } | null = null;
     const insideHost = (event: PointerEvent) => event.target instanceof Node && host.contains(event.target);
     const pointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest('.trading-chart-context-menu')) setContextMenu(null);
       if (!insideHost(event)) return;
       const isPrimaryPan = event.button === 0 && drawingTool === 'cursor';
       const isMiddlePan = event.button === 1;
@@ -746,6 +792,9 @@ export function TradingChartPanel({
   const selectedIndicatorConfig = selectedIndicator
     ? indicators.find((indicator) => indicator.id === selectedIndicator.id && indicator.enabled) ?? null
     : null;
+  const contextIndicator = contextMenu?.indicatorId
+    ? indicators.find((indicator) => indicator.id === contextMenu.indicatorId && indicator.enabled) ?? null
+    : null;
 
   useEffect(() => {
     if (!fullscreenIndicator || paneIndicators.some((indicator) => indicator.id === fullscreenIndicator)) return;
@@ -908,13 +957,15 @@ export function TradingChartPanel({
     if (interval === nextInterval) applyVisibleRange(chart, days, barsRef.current.length, interval, rightOffset);
   };
 
-  const openContextMenu = (point: ChartAlertPlacement) => {
+  const openContextMenu = (point: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => {
     if (!active) onActivate();
+    setSelectedIndicator(null);
     const stage = hostRef.current?.parentElement;
     const width = stage?.clientWidth ?? 0;
     const height = stage?.clientHeight ?? 0;
     setContextMenu({
       ...point,
+      indicatorId,
       x: Math.max(6, Math.min(point.x, Math.max(6, width - 286))),
       y: Math.max(6, Math.min(point.y, Math.max(6, height - 420))),
     });
@@ -923,11 +974,23 @@ export function TradingChartPanel({
   const handleStageContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     const target = event.target as Element;
-    if (target.closest('.trading-chart-context-menu, .trading-price-scale-menu, .trading-price-scale-trigger, .trading-chart-alert-editor, .trading-chart-table-view, .trading-chart-object-tree, .trading-chart-settings')) return;
+    if (target.closest('.trading-chart-context-menu, .trading-price-scale-menu, .trading-price-scale-trigger, .trading-chart-alert-editor, .trading-chart-table-view, .trading-chart-object-tree, .trading-chart-settings, .trading-indicator-pane-controls, .trading-indicator-object-toolbar')) return;
     const stage = event.currentTarget;
     const bounds = stage.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
+    const chartBounds = hostRef.current?.getBoundingClientRect();
+    const chartY = event.clientY - (chartBounds?.top ?? bounds.top);
+    const indicatorId = adapterRef.current?.indicatorPaneIdAtCoordinate(chartY);
+    const indicator = indicatorId === null || indicatorId === undefined
+      ? undefined
+      : paneIndicators.find((item) => item.id === indicatorId);
+    if (indicator) {
+      const point = adapterRef.current?.drawingPointFromCoordinate(x, y);
+      const indicatorValue = adapterRef.current?.indicatorValueFromCoordinate(indicator.id, chartY);
+      if (point) openContextMenu({ ...point, price: indicatorValue ?? point.price, x, y, source: 'context-menu' }, indicator.id);
+      return;
+    }
     const point = adapterRef.current?.drawingPointFromCoordinate(x, y);
     if (point) openContextMenu({ ...point, x, y, source: 'context-menu' });
   };
@@ -1409,26 +1472,50 @@ export function TradingChartPanel({
           </aside>
         ) : null}
         {contextMenu ? (
-          <TradingChartContextMenu
-            point={contextMenu}
-            symbol={contextMenu?.drawingTool === 'trend-line' ? 'trendline' : (chartQuery.data?.instrument.display_symbol ?? instrumentId)}
-            drawingCount={drawings.state.drawings.length}
-            indicatorCount={indicators.filter((indicator) => indicator.enabled).length}
-            cursorLocked={cursorLocked}
-            tableVisible={tableVisible}
-            onClose={() => setContextMenu(null)}
-            onReset={() => { selectedRangeRef.current = null; adapterRef.current?.fitContent(); setPriceScaleSettings((current) => ({ ...current, autoScale: true })); setSelectedRangeLabel('All'); }}
-            onCopyPrice={copyContextPrice}
-            onPastePrice={pasteContextPrice}
-            onAddAlert={contextMenuAlert}
-            onToggleCursor={() => setCursorLocked((value) => !value)}
-            onToggleTable={() => setTableVisible((value) => !value)}
-            onObjectTree={() => setObjectTreeVisible(true)}
-            onApplyTemplate={applyChartTemplate}
-            onRemoveDrawings={() => drawings.removeAll()}
-            onRemoveIndicators={onClearIndicators}
-            onSettings={() => setSettingsVisible(true)}
-          />
+          <>
+            <div
+              className="trading-chart-context-menu-dismiss-layer"
+              aria-hidden="true"
+              onPointerDown={() => setContextMenu(null)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            />
+            <TradingChartContextMenu
+              point={contextMenu}
+              symbol={contextIndicator
+                ? indicatorContextLabel(contextIndicator)
+                : contextMenu?.drawingTool === 'trend-line'
+                  ? 'trendline'
+                  : (chartQuery.data?.instrument.display_symbol ?? instrumentId)}
+              drawingCount={drawings.state.drawings.length}
+              indicatorCount={indicators.filter((indicator) => indicator.enabled).length}
+              cursorLocked={cursorLocked}
+              tableVisible={tableVisible}
+              onClose={() => setContextMenu(null)}
+              onReset={() => {
+                if (contextIndicator) {
+                  resetIndicatorPaneView(contextIndicator.id);
+                  return;
+                }
+                selectedRangeRef.current = null;
+                adapterRef.current?.fitContent();
+                setPriceScaleSettings((current) => ({ ...current, autoScale: true }));
+                setSelectedRangeLabel('All');
+              }}
+              onCopyPrice={copyContextPrice}
+              onPastePrice={pasteContextPrice}
+              onAddAlert={contextMenuAlert}
+              onToggleCursor={() => setCursorLocked((value) => !value)}
+              onToggleTable={() => setTableVisible((value) => !value)}
+              onObjectTree={() => setObjectTreeVisible(true)}
+              onApplyTemplate={applyChartTemplate}
+              onRemoveDrawings={() => drawings.removeAll()}
+              onRemoveIndicators={onClearIndicators}
+              onSettings={() => contextIndicator ? setSettingsIndicator(contextIndicator) : setSettingsVisible(true)}
+            />
+          </>
         ) : null}
       </div>
       {chartQuery.isLoading ? <div className="trading-chart-state">Loading historical bars…</div> : null}
