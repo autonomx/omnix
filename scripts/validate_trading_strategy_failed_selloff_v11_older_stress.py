@@ -7,6 +7,10 @@ frozen before this 2026-03-31..2026-04-28 block was reconstructed. The older
 block has stronger current-active-listing survivorship bias than the primary
 May-August development/validation evidence, so this result is a robustness
 stress signal only.
+
+Historical provider holes are explicit missing evidence. When a capture coverage
+manifest is supplied, only sessions marked ``captured`` are evaluated; sessions
+marked ``data_unavailable`` are excluded rather than imputed as zero-trade days.
 """
 
 import argparse
@@ -28,15 +32,61 @@ FROZEN_GATES = _v11.TimingGates(
     minimum_l1_to_b1_minutes=4,
     maximum_l2_to_signal_minutes=8,
 )
+STRESS_START = date(2026, 3, 31)
+STRESS_END = date(2026, 4, 28)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Stress frozen V11 on older reconstructed sessions.")
     parser.add_argument("--dataset-cache-dir", default=".cache/trading-liquidity-datasets")
     parser.add_argument("--output-dir", default="artifacts/failed-selloff-v11-older-stress")
+    parser.add_argument(
+        "--coverage-json",
+        default="artifacts/v11-older-stress-capture/coverage.json",
+        help="Capture manifest whose data_unavailable sessions must be excluded, never imputed.",
+    )
     parser.add_argument("--initial-cash", default="100000")
     parser.add_argument("--assumed-spread-bps", default="40")
     return parser.parse_args()
+
+
+def _load_stress_datasets(cache: Path, coverage_path: Path):
+    if not coverage_path.exists():
+        raise FileNotFoundError(f"missing older-stress coverage manifest: {coverage_path}")
+    coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+    sessions = coverage.get("sessions")
+    if not isinstance(sessions, list) or not sessions:
+        raise ValueError("older-stress coverage manifest contains no session rows")
+
+    datasets = []
+    unavailable_dates: list[str] = []
+    unexpected_statuses: list[str] = []
+    for row in sessions:
+        if not isinstance(row, dict):
+            raise ValueError("older-stress coverage session row must be an object")
+        day_text = str(row.get("session_date") or "")
+        status = str(row.get("status") or "")
+        session_date = date.fromisoformat(day_text)
+        if session_date < STRESS_START or session_date > STRESS_END:
+            continue
+        if status == "data_unavailable":
+            unavailable_dates.append(day_text)
+            continue
+        if status != "captured":
+            unexpected_statuses.append(f"{day_text}:{status}")
+            continue
+        path = _v11._dataset_cache_path(cache, session_date)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"coverage marks {day_text} captured but frozen dataset is missing: {path}"
+            )
+        datasets.append(_v11._load_cached_dataset(path, session_date))
+
+    if unexpected_statuses:
+        raise ValueError(f"unexpected older-stress coverage statuses: {unexpected_statuses}")
+    if not datasets:
+        raise ValueError("older stress block contains no captured cached sessions")
+    return datasets, unavailable_dates, coverage
 
 
 def main() -> int:
@@ -48,9 +98,10 @@ def main() -> int:
     )
     cache = Path(args.dataset_cache_dir) / namespace
 
-    datasets = _v11._load_block(cache, date(2026, 3, 31), date(2026, 4, 28))
-    if not datasets:
-        raise ValueError("older stress block contains no cached sessions")
+    datasets, unavailable_dates, coverage = _load_stress_datasets(
+        cache,
+        Path(args.coverage_json),
+    )
 
     base = _v11._base_variant()
     _v7._result = _v8._normalized_result
@@ -71,7 +122,11 @@ def main() -> int:
         "candidate_id": _v11._variant_id(FROZEN_GATES),
         "candidate_frozen_before_block_reconstruction": True,
         "stress_window": "2026-03-31..2026-04-28",
-        "session_count": len(datasets),
+        "requested_session_count": int(coverage.get("requested_sessions") or 0),
+        "evaluated_session_count": len(datasets),
+        "data_unavailable_session_count": len(unavailable_dates),
+        "data_unavailable_dates": unavailable_dates,
+        "missing_sessions_imputed_as_zero_trade": False,
         "fidelity": "older_reconstructed_iex_stress_only",
         "warning": "Stronger current-active-listing survivorship bias; do not retune V11 from this result.",
         "parameters": {
@@ -100,7 +155,11 @@ def main() -> int:
         "No parameter search or fallback is performed. This block is lower fidelity and must not be used to retune V11.",
         "",
         f"- Candidate: `{payload['candidate_id']}`",
-        f"- Sessions: {len(datasets)}",
+        f"- Requested sessions: {payload['requested_session_count']}",
+        f"- Evaluated captured sessions: {len(datasets)}",
+        f"- Data-unavailable sessions excluded: {len(unavailable_dates)}"
+        + (f" ({', '.join(unavailable_dates)})" if unavailable_dates else ""),
+        "- Missing/unavailable sessions imputed as zero-trade days: no",
         f"- Trades: {row['trade_count']}",
         f"- Wins / losses: {row['win_count']} / {row['loss_count']}",
         f"- Expectancy: {row['expectancy_r']}R",
