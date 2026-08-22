@@ -8460,7 +8460,7 @@ export interface components {
              */
             fast_period: number;
             /** Indicator Id */
-            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap") | null;
+            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap" | "stochastic-rsi") | null;
             /**
              * Lookback Bars
              * @default 1
@@ -8518,7 +8518,7 @@ export interface components {
              */
             fast_period: number;
             /** Indicator Id */
-            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap") | null;
+            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap" | "stochastic-rsi") | null;
             /**
              * Lookback Bars
              * @default 1

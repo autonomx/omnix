@@ -19,6 +19,10 @@ import './TradingChartAlertOverlay.css';
 type DragState = { alert: TradingAlert; threshold: number };
 type TrendlineMode = NonNullable<TradingAlert['parameters']['trendline_mode']>;
 
+function indicatorIdForAlert(alert: TradingAlert): TradingAlert['parameters']['indicator_id'] {
+  return alert.condition_type.startsWith('indicator_') ? alert.parameters.indicator_id ?? null : null;
+}
+
 function trendlineModeForCondition(condition: string): TrendlineMode | null {
   if (condition === 'trendline_above') return 'greater_than';
   if (condition === 'trendline_below') return 'less_than';
@@ -52,22 +56,27 @@ function formattedPrice(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
-function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): TradingAlertEditorState {
+export function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): TradingAlertEditorState {
   const isTrendline = placement.drawingTool === 'trend-line' && placement.trendlinePoints?.length === 2;
+  const isIndicator = placement.indicatorId !== undefined;
   return {
     mode: 'create',
     alertId: null,
     x: placement.x,
     y: placement.y,
     threshold: isTrendline ? '0' : String(placement.price),
-    condition: isTrendline ? 'trendline_crossing' : (placement.price >= latestPrice ? 'price_above' : 'price_below'),
+    condition: isTrendline
+      ? 'trendline_crossing'
+      : isIndicator
+        ? 'indicator_above'
+        : (placement.price >= latestPrice ? 'price_above' : 'price_below'),
     expiresAt: '',
     expiration: 'never',
     triggerPolicy: 'every_time',
     message: '',
     notifications: ['app', 'toast'],
-    indicator: 'rsi',
-    period: '14',
+    indicator: placement.indicatorId ?? 'rsi',
+    period: String(placement.indicatorPeriod ?? 14),
     lookback: '1',
     trendlinePoints: isTrendline ? placement.trendlinePoints?.map((point) => ({ ...point })) : undefined,
   };
@@ -119,6 +128,7 @@ export function TradingChartAlertOverlay({
     };
     const visibleRange = adapter.onVisibleRange(invalidate);
     const crosshair = adapter.onCrosshair(invalidate);
+    const viewport = adapter.onViewportChange(invalidate);
     const stage = rootRef.current?.parentElement;
     const insideStage = (target: EventTarget | null) => target instanceof Node && Boolean(stage?.contains(target));
     const pointerDown = (event: PointerEvent) => {
@@ -142,6 +152,7 @@ export function TradingChartAlertOverlay({
     return () => {
       visibleRange();
       crosshair();
+      viewport();
       window.removeEventListener('pointerdown', pointerDown);
       window.removeEventListener('pointermove', pointerMove);
       window.removeEventListener('pointerup', pointerUp);
@@ -159,10 +170,15 @@ export function TradingChartAlertOverlay({
   const visibleAlerts = useMemo(() => alerts.filter((alert) => (
     alert.instrument_id === instrumentId
     && (!alert.binding_id || !bindingId || alert.binding_id === bindingId)
-    && (alert.condition_type.startsWith('price_') || alert.condition_type.startsWith('trendline_'))
+    && (
+      alert.condition_type.startsWith('price_')
+      || alert.condition_type.startsWith('trendline_')
+      || indicatorIdForAlert(alert) !== null
+    )
   )), [alerts, bindingId, instrumentId]);
   const staticAlerts = visibleAlerts.filter((alert) => alert.condition_type.startsWith('price_'));
   const trendlineAlerts = visibleAlerts.filter((alert) => alert.condition_type.startsWith('trendline_'));
+  const indicatorAlerts = visibleAlerts.filter((alert) => indicatorIdForAlert(alert) !== null);
 
   const runMutation = async (mutation: () => Promise<TradingAlert>, removedAlertId?: string) => {
     setStatus('saving');
@@ -193,6 +209,9 @@ export function TradingChartAlertOverlay({
     const input = chartAlertUpdateInput(alert, {
       threshold: String(threshold),
       condition_type: editor.condition,
+      indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
+      period: Number(editor.period) || 14,
+      lookback_bars: Number(editor.lookback) || 1,
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy,
       message: editor.message,
@@ -268,21 +287,32 @@ export function TradingChartAlertOverlay({
     event.stopPropagation();
     if (!alert.enabled || alertVisualState(alert) === 'expired' || !adapter || !rootRef.current) return;
     const bounds = rootRef.current.getBoundingClientRect();
+    const indicatorId = indicatorIdForAlert(alert);
+    const valueFromCoordinate = (y: number) => indicatorId
+      ? adapter.indicatorValueFromCoordinate(indicatorId, y)
+      : adapter.priceFromCoordinate(y);
     setDragging({ alert, threshold: Number(alert.threshold) });
     const move = (pointer: PointerEvent) => {
-      const threshold = adapter.priceFromCoordinate(pointer.clientY - bounds.top);
+      const threshold = valueFromCoordinate(pointer.clientY - bounds.top);
       if (threshold !== null) setDragging({ alert, threshold });
     };
     const up = async (pointer: PointerEvent) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
-      const threshold = adapter.priceFromCoordinate(pointer.clientY - bounds.top);
+      const threshold = valueFromCoordinate(pointer.clientY - bounds.top);
       setDragging(null);
       if (threshold === null || threshold === Number(alert.threshold)) return;
       await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { threshold: String(threshold) })));
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+  };
+
+  const alertCoordinate = (alert: TradingAlert, threshold: number): number | null | undefined => {
+    const indicatorId = indicatorIdForAlert(alert);
+    return indicatorId
+      ? adapter?.indicatorValueToCoordinateForId(indicatorId, threshold)
+      : adapter?.priceToCoordinate(threshold);
   };
 
   const editorStyle = editor && rootRef.current ? {
@@ -323,6 +353,13 @@ export function TradingChartAlertOverlay({
             />
           );
         })}
+        {indicatorAlerts.map((alert) => {
+          const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+          const y = alertCoordinate(alert, threshold);
+          if (y === null || y === undefined) return null;
+          const state = alertVisualState(alert);
+          return <line key={alert.alert_id} className={`trading-alert-line state-${state}`} x1="0" x2="100%" y1={y} y2={y} stroke={alertColor(state)} onPointerDown={beginDrag(alert)} />;
+        })}
       </svg>
 
       {staticAlerts.map((alert) => {
@@ -338,6 +375,27 @@ export function TradingChartAlertOverlay({
             className={`trading-alert-price-label state-${state}`}
             style={{ top: y }}
             title={`${state} alert · ${alert.condition_type.replace('price_', 'crosses ')} · requested feed ${alert.binding_id ?? 'default'}${lastTriggered ? ` · last triggered ${lastTriggered}` : ''} · revision ${alert.revision}`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => openEditor(alert, y)}
+          >
+            <span aria-hidden="true">⏰</span>{formattedPrice(threshold)}<small>{state}</small>
+          </button>
+        );
+      })}
+
+      {indicatorAlerts.map((alert) => {
+        const threshold = dragging?.alert.alert_id === alert.alert_id ? dragging.threshold : Number(alert.threshold);
+        const y = alertCoordinate(alert, threshold);
+        if (y === null || y === undefined) return null;
+        const state = alertVisualState(alert);
+        const lastTriggered = alertLastTriggeredLabel(alert);
+        return (
+          <button
+            key={`${alert.alert_id}:indicator-label`}
+            type="button"
+            className={`trading-alert-price-label state-${state}`}
+            style={{ top: y }}
+            title={`${state} indicator alert · ${alert.condition_type.replace('indicator_', 'crosses ')} · ${alert.parameters.indicator_id ?? 'indicator'} · revision ${alert.revision}${lastTriggered ? ` · last triggered ${lastTriggered}` : ''}`}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => openEditor(alert, y)}
           >

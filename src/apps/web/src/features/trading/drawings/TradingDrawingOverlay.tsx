@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
+import type { CoreIndicatorId } from '../indicators/coreIndicators';
 import { tradingIntervalMinutes } from '../tradingIntervals';
 import {
   DEFAULT_DRAWING_STYLE,
@@ -9,6 +10,7 @@ import {
   type DrawingTool,
   type TradingDrawing,
 } from './drawingCommands';
+import type { TradingAlertIndicatorId } from '../tradingTypes';
 import './TradingDrawingMeasurement.css';
 
 const twoPointTools = new Set<DrawingTool>([
@@ -27,6 +29,8 @@ export type ChartAlertPlacement = DrawingPoint & {
   x: number;
   y: number;
   source: 'tool' | 'context-menu';
+  indicatorId?: TradingAlertIndicatorId;
+  indicatorPeriod?: number;
   drawingId?: string;
   drawingTool?: DrawingTool;
   trendlinePoints?: DrawingPoint[];
@@ -124,8 +128,8 @@ export function TradingDrawingOverlay({
   onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
   onRemove: (id: string) => void;
   onToolComplete?: () => void;
-  onAlertAtPoint?: (placement: ChartAlertPlacement) => void;
-  onContextMenu?: (placement: ChartAlertPlacement) => void;
+  onAlertAtPoint?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
+  onContextMenu?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draftStart, setDraftStart] = useState<DrawingPoint | null>(null);
@@ -378,7 +382,15 @@ export function TradingDrawingOverlay({
     const point = pointFromEvent(event);
     if (!point) return;
     if (tool === 'alert') {
-      onAlertAtPoint?.({ ...point, source: 'tool' });
+      const indicatorId = adapter?.indicatorPaneIdAtClientY(event.clientY) ?? undefined;
+      const indicatorValue = indicatorId === undefined
+        ? null
+        : adapter?.indicatorValueFromClientY(indicatorId, event.clientY);
+      onAlertAtPoint?.({
+        ...point,
+        ...(indicatorValue !== null && indicatorValue !== undefined ? { price: indicatorValue } : {}),
+        source: 'tool',
+      }, indicatorId);
       onToolComplete?.();
       return;
     }
@@ -413,13 +425,18 @@ export function TradingDrawingOverlay({
       : null;
     const drawingId = target?.dataset.drawingId;
     const drawing = drawingId ? drawings.find((item) => item.drawingId === drawingId) : undefined;
+    const indicatorId = adapter?.indicatorPaneIdAtClientY(event.clientY) ?? undefined;
+    const indicatorValue = indicatorId === undefined
+      ? null
+      : adapter?.indicatorValueFromClientY(indicatorId, event.clientY);
     onChartContextMenu?.({
       ...point,
+      ...(indicatorValue !== null && indicatorValue !== undefined ? { price: indicatorValue } : {}),
       source: 'context-menu',
       drawingId: drawing?.drawingId,
       drawingTool: drawing?.toolType,
       trendlinePoints: drawing?.toolType === 'trend-line' ? drawing.points.slice(0, 2) : undefined,
-    });
+    }, indicatorId);
   };
 
   const onWheel = (event: React.WheelEvent<SVGSVGElement>) => {

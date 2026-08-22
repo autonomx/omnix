@@ -832,6 +832,12 @@ export class TradingChartAdapter {
     return localY + paneRect.top - chartRect.top;
   }
 
+  indicatorValueToCoordinateForId(id: CoreIndicatorId, value: number): number | null {
+    this.assertActive();
+    const key = [...this.indicatorSeries.keys()].find((candidate) => candidate.split(':', 1)[0] === id);
+    return key === undefined ? null : this.indicatorValueToCoordinate(key, value);
+  }
+
   indicatorPlotWidth(): number {
     this.assertActive();
     return this.chart.timeScale().width();
@@ -899,6 +905,12 @@ export class TradingChartAdapter {
     return paneIndex > 0 ? this.indicatorPaneIds[paneIndex - 1] ?? null : null;
   }
 
+  indicatorPaneIdAtClientY(clientY: number): CoreIndicatorId | null {
+    this.assertActive();
+    const chartRect = this.chart.chartElement().getBoundingClientRect();
+    return this.indicatorPaneIdAtCoordinate(clientY - chartRect.top) as CoreIndicatorId | null;
+  }
+
   indicatorValueFromCoordinate(id: CoreIndicatorId, y: number): number | null {
     this.assertActive();
     const paneIndex = this.indicatorPaneIds.indexOf(id) + 1;
@@ -915,6 +927,12 @@ export class TradingChartAdapter {
       return typeof value === 'number' && Number.isFinite(value) ? value : null;
     }
     return null;
+  }
+
+  indicatorValueFromClientY(id: CoreIndicatorId, clientY: number): number | null {
+    this.assertActive();
+    const chartRect = this.chart.chartElement().getBoundingClientRect();
+    return this.indicatorValueFromCoordinate(id, clientY - chartRect.top);
   }
 
   private panPanePriceScaleByPixels(paneIndex: number, deltaY: number): void {

@@ -3,6 +3,7 @@ import type {
   TradingAlertCondition,
   TradingAlertCreateInput,
   TradingAlertNotificationChannel,
+  TradingAlertParameters,
   TradingAlertTriggerPolicy,
   TradingAlertUpdateInput,
 } from './tradingTypes';
@@ -120,6 +121,9 @@ export function chartAlertCreateInput(input: {
 export function chartAlertUpdateInput(
   alert: TradingAlert,
   patch: Partial<Pick<TradingAlertUpdateInput, 'threshold' | 'condition_type' | 'enabled' | 'expires_at'>> & {
+    indicator_id?: TradingAlertParameters['indicator_id'];
+    period?: number;
+    lookback_bars?: number;
     trigger_policy?: TradingAlertTriggerPolicy;
     message?: string;
     notification_channels?: TradingAlertNotificationChannel[];
@@ -133,6 +137,9 @@ export function chartAlertUpdateInput(
     threshold: patch.threshold ?? alert.threshold,
     parameters: {
       ...alert.parameters,
+      ...(patch.indicator_id !== undefined ? { indicator_id: patch.indicator_id } : {}),
+      ...(patch.period !== undefined ? { period: patch.period } : {}),
+      ...(patch.lookback_bars !== undefined ? { lookback_bars: patch.lookback_bars } : {}),
       ...(patch.message !== undefined || alert.parameters.message !== undefined
         ? { message: patch.message ?? alert.parameters.message ?? '' }
         : {}),

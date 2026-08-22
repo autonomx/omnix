@@ -93,4 +93,17 @@ describe('chart-native Trading alerts', () => {
     expect(input.parameters).toEqual(baseAlert.parameters);
     expect(input.enabled).toBe(true);
   });
+
+  it('persists the indicator identity when an alert is changed to RSI', () => {
+    const input = chartAlertUpdateInput(baseAlert, {
+      condition_type: 'indicator_cross_below',
+      indicator_id: 'rsi',
+      period: 14,
+      threshold: '73',
+    });
+
+    expect(input.condition_type).toBe('indicator_cross_below');
+    expect(input.parameters.indicator_id).toBe('rsi');
+    expect(input.parameters.period).toBe(14);
+  });
 });

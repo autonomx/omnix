@@ -34,7 +34,16 @@ AlertCondition = Literal[
     "trendline_above",
     "trendline_below",
 ]
-IndicatorId = Literal["sma", "ema", "rsi", "macd", "bollinger", "atr", "vwap"]
+IndicatorId = Literal[
+    "sma",
+    "ema",
+    "rsi",
+    "macd",
+    "bollinger",
+    "atr",
+    "vwap",
+    "stochastic-rsi",
+]
 TrendlineMode = Literal[
     "crossing",
     "crossing_up",

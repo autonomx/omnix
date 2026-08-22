@@ -39,6 +39,7 @@ const indicatorLabels: Record<string, string> = {
   macd: 'MACD',
   rsi: 'RSI',
   sma: 'SMA',
+  'stochastic-rsi': 'Stoch RSI',
   vwap: 'VWAP',
 };
 
@@ -286,6 +287,9 @@ export function TradingAlertsPanel({
     await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, {
       threshold: String(threshold),
       condition_type: editor.condition,
+      indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
+      period: Number(editor.period) || 14,
+      lookback_bars: Number(editor.lookback) || 1,
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy,
       message: editor.message,

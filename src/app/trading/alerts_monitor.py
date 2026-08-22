@@ -25,6 +25,7 @@ from .indicators.engine import (
     moving_average_convergence_divergence,
     relative_strength_index,
     simple_moving_average,
+    stochastic_rsi,
 )
 from .models import MarketBar
 from .service import TradingMarketDataService, default_market_data_service
@@ -64,6 +65,14 @@ def _history_limit(alerts: Sequence[TradingAlert]) -> int:
                 )
             elif parameters.indicator_id == "vwap":
                 required = max(required, parameters.anchor_bars_ago + 2)
+            elif parameters.indicator_id == "stochastic-rsi":
+                required = max(
+                    required,
+                    parameters.period * 2
+                    + parameters.fast_period
+                    + parameters.signal_period
+                    + 2,
+                )
             else:
                 required = max(required, parameters.period + 2)
     return min(500, required)
@@ -98,6 +107,14 @@ def _indicator_value(alert: TradingAlert, bars: Sequence[MarketBar]) -> Decimal 
     if indicator_id == "rsi":
         values = relative_strength_index(closes, parameters.period)
         return values[-1] if values else None
+    if indicator_id == "stochastic-rsi":
+        stochastic_values = stochastic_rsi(
+            closes,
+            parameters.period,
+            parameters.fast_period,
+            parameters.signal_period,
+        )
+        return stochastic_values[-1][0] if stochastic_values else None
     if indicator_id == "atr":
         values = average_true_range(highs, lows, closes, parameters.period)
         return values[-1] if values else None

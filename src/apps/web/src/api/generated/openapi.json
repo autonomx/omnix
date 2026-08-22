@@ -14283,7 +14283,8 @@
                   "macd",
                   "bollinger",
                   "atr",
-                  "vwap"
+                  "vwap",
+                  "stochastic-rsi"
                 ],
                 "type": "string"
               },
@@ -14429,7 +14430,8 @@
                   "macd",
                   "bollinger",
                   "atr",
-                  "vwap"
+                  "vwap",
+                  "stochastic-rsi"
                 ],
                 "type": "string"
               },

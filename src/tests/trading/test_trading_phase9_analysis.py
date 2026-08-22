@@ -10,6 +10,7 @@ from app.trading.indicators.engine import (
     average_true_range,
     bollinger_bands,
     moving_average_convergence_divergence,
+    stochastic_rsi,
 )
 
 
@@ -57,4 +58,14 @@ def test_atr_macd_and_vwap_match_the_shared_fixture() -> None:
             FIXTURE["highs"], FIXTURE["lows"], FIXTURE["closes"], FIXTURE["volumes"]
         ),
         FIXTURE["vwap"],
+    )
+
+
+def test_stochastic_rsi_is_bounded_and_flat_series_is_neutral() -> None:
+    values = stochastic_rsi(range(40), period=5, smoothing=3, signal=3)
+    assert values
+    assert all(Decimal("0") <= value <= Decimal("100") for pair in values for value in pair)
+    assert stochastic_rsi([100] * 40, period=14, smoothing=3, signal=3)[-1] == (
+        Decimal("50"),
+        Decimal("50"),
     )

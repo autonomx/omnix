@@ -15,7 +15,7 @@ import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInst
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
-import type { MarketBar, TradingStreamMessage } from './tradingTypes';
+import type { MarketBar, TradingAlertIndicatorId, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 import { TradingIndicatorObjectToolbar } from './TradingIndicatorObjectToolbar';
 import { TradingIndicatorSettings } from './TradingIndicatorSettings';
@@ -32,8 +32,19 @@ import {
 } from './tradingIntervals';
 
 type TradingContextMenuState = ChartAlertPlacement & {
-  indicatorId?: CoreIndicatorId;
+  contextIndicatorId?: CoreIndicatorId;
 };
+
+function isAlertIndicatorId(id: CoreIndicatorId): id is TradingAlertIndicatorId {
+  return id === 'sma'
+    || id === 'ema'
+    || id === 'rsi'
+    || id === 'macd'
+    || id === 'bollinger'
+    || id === 'atr'
+    || id === 'vwap'
+    || id === 'stochastic-rsi';
+}
 
 const indicatorContextNames: Partial<Record<CoreIndicatorId, string>> = {
   atr: 'ATR',
@@ -795,8 +806,8 @@ export function TradingChartPanel({
   const selectedIndicatorConfig = selectedIndicator
     ? indicators.find((indicator) => indicator.id === selectedIndicator.id && indicator.enabled) ?? null
     : null;
-  const contextIndicator = contextMenu?.indicatorId
-    ? indicators.find((indicator) => indicator.id === contextMenu.indicatorId && indicator.enabled) ?? null
+  const contextIndicator = contextMenu?.contextIndicatorId
+    ? indicators.find((indicator) => indicator.id === contextMenu.contextIndicatorId && indicator.enabled) ?? null
     : null;
 
   useEffect(() => {
@@ -963,12 +974,21 @@ export function TradingChartPanel({
   const openContextMenu = (point: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => {
     if (!active) onActivate();
     setSelectedIndicator(null);
+    const resolvedIndicatorId = indicatorId;
+    const resolvedIndicator = resolvedIndicatorId
+      ? indicators.find((indicator) => indicator.id === resolvedIndicatorId && indicator.enabled)
+      : undefined;
+    const alertIndicatorId = resolvedIndicatorId && isAlertIndicatorId(resolvedIndicatorId)
+      ? resolvedIndicatorId
+      : undefined;
     const stage = hostRef.current?.parentElement;
     const width = stage?.clientWidth ?? 0;
     const height = stage?.clientHeight ?? 0;
     setContextMenu({
       ...point,
-      indicatorId,
+      contextIndicatorId: resolvedIndicatorId,
+      indicatorId: alertIndicatorId,
+      indicatorPeriod: resolvedIndicator?.period,
       x: Math.max(6, Math.min(point.x, Math.max(6, width - 286))),
       y: Math.max(6, Math.min(point.y, Math.max(6, height - 420))),
     });
@@ -982,15 +1002,13 @@ export function TradingChartPanel({
     const bounds = stage.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
-    const chartBounds = hostRef.current?.getBoundingClientRect();
-    const chartY = event.clientY - (chartBounds?.top ?? bounds.top);
-    const indicatorId = adapterRef.current?.indicatorPaneIdAtCoordinate(chartY);
+    const indicatorId = adapterRef.current?.indicatorPaneIdAtClientY(event.clientY);
     const indicator = indicatorId === null || indicatorId === undefined
       ? undefined
       : paneIndicators.find((item) => item.id === indicatorId);
     if (indicator) {
       const point = adapterRef.current?.drawingPointFromCoordinate(x, y);
-      const indicatorValue = adapterRef.current?.indicatorValueFromCoordinate(indicator.id, chartY);
+      const indicatorValue = adapterRef.current?.indicatorValueFromClientY(indicator.id, event.clientY);
       if (point) openContextMenu({ ...point, price: indicatorValue ?? point.price, x, y, source: 'context-menu' }, indicator.id);
       return;
     }
@@ -1055,7 +1073,7 @@ export function TradingChartPanel({
   };
 
   const contextMenuAlert = () => {
-    if (contextMenu) setAlertPlacement(contextMenu);
+    if (contextMenu?.indicatorId || !contextMenu?.contextIndicatorId) setAlertPlacement(contextMenu);
   };
 
   const handleChartWheel = (event: React.WheelEvent<HTMLDivElement>) => {
@@ -1419,7 +1437,19 @@ export function TradingChartPanel({
           onTranslateDrawing={drawings.translate}
           onRemove={drawings.remove}
           onToolComplete={() => setDrawingTool('cursor')}
-          onAlertAtPoint={active ? setAlertPlacement : undefined}
+          onAlertAtPoint={active ? (placement, indicatorId) => {
+            const indicator = indicatorId
+              ? indicators.find((item) => item.id === indicatorId && item.enabled)
+              : undefined;
+            const supportedIndicatorId = indicatorId && isAlertIndicatorId(indicatorId)
+              ? indicatorId
+              : undefined;
+            setAlertPlacement({
+              ...placement,
+              ...(supportedIndicatorId ? { indicatorId: supportedIndicatorId } : {}),
+              ...(indicator?.period !== undefined ? { indicatorPeriod: indicator.period } : {}),
+            });
+          } : undefined}
           onContextMenu={active ? openContextMenu : undefined}
         />
         <TradingChartAlertOverlay
@@ -1492,6 +1522,7 @@ export function TradingChartPanel({
                 : contextMenu?.drawingTool === 'trend-line'
                   ? 'trendline'
                   : (chartQuery.data?.instrument.display_symbol ?? instrumentId)}
+              indicatorContext={Boolean(contextIndicator)}
               drawingCount={drawings.state.drawings.length}
               indicatorCount={indicators.filter((indicator) => indicator.enabled).length}
               cursorLocked={cursorLocked}
@@ -1509,7 +1540,7 @@ export function TradingChartPanel({
               }}
               onCopyPrice={copyContextPrice}
               onPastePrice={pasteContextPrice}
-              onAddAlert={contextMenuAlert}
+              onAddAlert={contextMenu?.indicatorId || !contextMenu?.contextIndicatorId ? contextMenuAlert : null}
               onToggleCursor={() => setCursorLocked((value) => !value)}
               onToggleTable={() => setTableVisible((value) => !value)}
               onObjectTree={() => setObjectTreeVisible(true)}
