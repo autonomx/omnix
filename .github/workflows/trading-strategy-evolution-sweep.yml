@@ -2,6 +2,10 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/run_trading_strategy_failed_selloff_v10_raw_structure.py"
 
 permissions:
   contents: read
@@ -9,16 +13,16 @@ permissions:
 jobs:
   strategy-evolution:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -34,7 +38,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/trading-liquidity-datasets
-          key: trading-liquidity-datasets-v1-${{ runner.os }}-v9-regime3-funnel-${{ github.run_id }}
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-v10-raw-structure-${{ github.run_id }}
           restore-keys: |
             trading-liquidity-datasets-v1-${{ runner.os }}-extended-
             trading-liquidity-datasets-v1-${{ runner.os }}-
@@ -49,28 +53,28 @@ jobs:
             exit 2
           fi
 
-      - name: Diagnose V9 July/August causal funnel
+      - name: Run V10 raw higher-low structure research
         shell: bash
         run: |
-          python scripts/diagnose_trading_strategy_v9_regime3_funnel.py \
+          python scripts/run_trading_strategy_failed_selloff_v10_raw_structure.py \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/v9-regime3-funnel \
+            --output-dir artifacts/failed-selloff-v10-raw-structure \
             --initial-cash 100000 \
             --assumed-spread-bps 40
 
-      - name: Publish V9 funnel summary
+      - name: Publish V10 summary
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/v9-regime3-funnel/summary.md ]]; then
-            cat artifacts/v9-regime3-funnel/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v10-raw-structure/summary.md ]]; then
+            cat artifacts/failed-selloff-v10-raw-structure/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Upload V9 funnel evidence
+      - name: Upload V10 evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-v9-regime3-funnel
-          path: artifacts/v9-regime3-funnel
+          name: trading-strategy-failed-selloff-v10-raw-structure
+          path: artifacts/failed-selloff-v10-raw-structure
           if-no-files-found: warn
           retention-days: 30
