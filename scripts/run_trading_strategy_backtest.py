@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from collections import Counter
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -17,13 +18,17 @@ from app.trading.strategy_repository import TradingStrategyConfigDocument
 
 
 _ET = ZoneInfo("America/New_York")
+_STRICT_PREMARKET_DOLLAR_VOLUME = Decimal("10000000")
 
 
 def _decimal(value: str) -> Decimal:
     return Decimal(value)
 
 
-def strict_v11_strategy() -> TradingStrategyConfigDocument:
+def strict_v11_strategy(
+    *,
+    minimum_premarket_dollar_volume: Decimal = _STRICT_PREMARKET_DOLLAR_VOLUME,
+) -> TradingStrategyConfigDocument:
     config = GapPullbackConfig(
         strategy_id="gap_pullback_v1",
         strategy_version="1.1.0",
@@ -36,7 +41,7 @@ def strict_v11_strategy() -> TradingStrategyConfigDocument:
         minimum_gap_pct=Decimal("20"),
         minimum_price=Decimal("0.50"),
         maximum_price=Decimal("20"),
-        minimum_premarket_dollar_volume=Decimal("10000000"),
+        minimum_premarket_dollar_volume=minimum_premarket_dollar_volume,
         minimum_tod_rvol=Decimal("5"),
         maximum_spread_bps=Decimal("150"),
         preferred_float_min_shares=Decimal("2000000"),
@@ -134,6 +139,17 @@ def _trade_rows(result) -> list[dict[str, object]]:
     return rows
 
 
+def _rejection_counts(result) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for day in result.days:
+        if day.result is None:
+            continue
+        for decision in day.result.candidate_decisions:
+            reason = decision.rejection_reason or ("TRIGGERED" if decision.triggered else decision.state.upper())
+            counts[str(reason)] += 1
+    return counts
+
+
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
     fieldnames = [
         "session_date",
@@ -165,11 +181,13 @@ def _write_markdown(path: Path, result, strategy: TradingStrategyConfigDocument)
     pnl = "N/A" if result.pnl is None else str(result.pnl)
     return_pct = "N/A" if result.return_pct is None else f"{result.return_pct}%"
     expectancy = "N/A" if result.expectancy_r is None else f"{result.expectancy_r}R"
+    rejection_counts = _rejection_counts(result)
     lines = [
         "# Omnix gap-pullback backtest",
         "",
         f"- Strategy: `{result.strategy_kind}` `{result.strategy_version}`",
         f"- Profile: strict v1.1 ({strategy.config.structure_interval} structure / {strategy.config.execution_interval} execution)",
+        f"- Premarket dollar-volume gate: ${strategy.config.minimum_premarket_dollar_volume}",
         f"- Period: {result.start_date} through {result.end_date}",
         f"- Universe mode: `{result.universe_mode}`",
         f"- Result quality: **{result.result_quality}**",
@@ -181,14 +199,28 @@ def _write_markdown(path: Path, result, strategy: TradingStrategyConfigDocument)
         f"- Return: {return_pct}",
         f"- Expectancy: {expectancy}",
         "",
-        "## Fidelity",
+        "## Candidate outcomes",
         "",
-        "Reconstructed sessions use current active listings and Alpaca IEX partial-market historical evidence. Historical catalyst, dilution/supply, float, and true historical spread evidence are not available through reconstruction; the engine reports the resulting fidelity adjustments per day.",
-        "",
-        "## Strict v1.1 entry gates",
-        "",
-        "Gap >=20%; price $0.50-$20; premarket dollar volume >=$10M; TOD RVOL >=5x; preferred float 2M-30M; spread <=150 bps; catalyst evidence required; configured dilution vetoes; opening impulse >=8%; 15-55% pullback; sell-volume ratio <=0.70; higher low; VWAP reclaim; B1 break; breakout volume >=1.25x; one-bar breakout hold; quality >=7; entries 09:35-11:30 ET.",
     ]
+    if rejection_counts:
+        lines.extend(
+            f"- `{reason}`: {count}"
+            for reason, count in sorted(rejection_counts.items(), key=lambda item: (-item[1], item[0]))
+        )
+    else:
+        lines.append("- No candidate decisions were recorded.")
+    lines.extend(
+        [
+            "",
+            "## Fidelity",
+            "",
+            "Reconstructed sessions use current active listings and Alpaca IEX partial-market historical evidence. Historical catalyst, dilution/supply, float, and true historical spread evidence are not available through reconstruction; the engine reports the resulting fidelity adjustments per day.",
+            "",
+            "## Strict v1.1 entry gates",
+            "",
+            f"Gap >=20%; price $0.50-$20; premarket dollar volume >=${strategy.config.minimum_premarket_dollar_volume}; TOD RVOL >=5x; preferred float 2M-30M; spread <=150 bps; catalyst evidence required; configured dilution vetoes; opening impulse >=8%; 15-55% pullback; sell-volume ratio <=0.70; higher low; VWAP reclaim; B1 break; breakout volume >=1.25x; one-bar breakout hold; quality >=7; entries 09:35-11:30 ET.",
+        ]
+    )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -203,6 +235,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reconstruction-max-age-days", type=int, default=30)
     parser.add_argument("--max-sessions", type=int, default=60)
     parser.add_argument(
+        "--minimum-premarket-dollar-volume",
+        default=str(_STRICT_PREMARKET_DOLLAR_VOLUME),
+        help="Backtest-only override for the strict v1.1 premarket dollar-volume gate.",
+    )
+    parser.add_argument(
         "--universe-mode",
         choices=("reconstructed_only", "captured_only", "captured_or_reconstructed"),
         default="reconstructed_only",
@@ -215,7 +252,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     start, end = _dates(args.start_date or None, args.end_date or None, args.lookback_days)
-    strategy = strict_v11_strategy()
+    minimum_premarket_dollar_volume = _decimal(args.minimum_premarket_dollar_volume)
+    if minimum_premarket_dollar_volume < 0:
+        raise ValueError("minimum premarket dollar volume cannot be negative")
+    strategy = strict_v11_strategy(
+        minimum_premarket_dollar_volume=minimum_premarket_dollar_volume,
+    )
     request = StrategyRangeBacktestRequest(
         start_date=start,
         end_date=end,
@@ -241,6 +283,10 @@ def main() -> int:
     _write_markdown(output_dir / "summary.md", result, strategy)
     (output_dir / "strategy-config.json").write_text(
         strategy.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    (output_dir / "candidate-outcomes.json").write_text(
+        json.dumps(dict(_rejection_counts(result)), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
