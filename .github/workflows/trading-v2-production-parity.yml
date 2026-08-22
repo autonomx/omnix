@@ -12,6 +12,10 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: trading-v2-production-parity-${{ github.repository }}
+  cancel-in-progress: true
+
 jobs:
   apply-parity-patch:
     runs-on: ubuntu-latest
@@ -45,6 +49,7 @@ jobs:
         run: |
           python -m pytest \
             src/tests/trading/test_trading_gap_pullback_v2.py \
+            src/tests/trading/test_trading_gap_pullback_v2_management.py \
             src/tests/trading/test_trading_gap_pullback_automation.py \
             -q
 
@@ -70,3 +75,9 @@ jobs:
         run: |
           sha="$(git rev-parse HEAD)"
           gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 production parity patch applied and targeted backend regressions passed at commit \`${sha}\`. Standard PR Trading gates are now the authoritative follow-up check."
+
+      - name: Report parity failure on PR 1494
+        if: failure()
+        shell: bash
+        run: |
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 production parity workflow ${GITHUB_RUN_ID} failed on source head ${GITHUB_SHA}. No parity commit from this run should be trusted; inspect the workflow job before continuing."
