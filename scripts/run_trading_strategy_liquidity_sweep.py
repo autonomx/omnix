@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import time as time_module
 from collections import Counter
@@ -17,13 +18,18 @@ from app.trading.historical_gapper_reconstruction import (
 from app.trading.paper import PaperExecutionPolicy
 from app.trading.providers.errors import ProviderRateLimitedError
 from app.trading.providers.http_runtime import ProviderHttpRuntime
-from app.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
+from app.trading.strategy_backtest import (
+    BacktestSessionDataset,
+    freeze_backtest_session,
+    run_gap_pullback_backtest,
+)
 from app.trading.strategy_historical_bars import alpaca_historical_session_bars
 from app.trading.us_equity_calendar import regular_holidays
 from scripts.run_trading_strategy_backtest import strict_v11_strategy
 
 
 _ET = ZoneInfo("America/New_York")
+_DATASET_CACHE_VERSION = "liquidity-sweep-dataset-v1"
 _DEFAULT_THRESHOLDS = (
     Decimal("250000"),
     Decimal("500000"),
@@ -72,7 +78,7 @@ def _label(threshold: Decimal) -> str:
 
 
 def _with_rate_limit_retry(label: str, function):
-    delays = (15, 30, 60)
+    delays = (20, 40, 80, 120)
     for attempt in range(len(delays) + 1):
         try:
             return function()
@@ -97,9 +103,69 @@ def _trade_dump(trade) -> dict[str, object]:
     return trade.model_dump(mode="json")
 
 
+def _cache_namespace(strategy, assumed_spread_bps: Decimal) -> tuple[str, dict[str, object]]:
+    config = strategy.config
+    basis = {
+        "cache_version": _DATASET_CACHE_VERSION,
+        "scan_time_et": config.universe_scan_time_et.isoformat(),
+        "minimum_gap_pct": str(config.minimum_gap_pct),
+        "minimum_price": str(config.minimum_price),
+        "maximum_price": str(config.maximum_price),
+        "universe_discovery_count": config.universe_discovery_count,
+        "assumed_spread_bps": str(assumed_spread_bps),
+        "feed": "alpaca_iex",
+        "bar_interval": "1m",
+    }
+    digest = hashlib.sha256(
+        json.dumps(basis, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:20]
+    return digest, basis
+
+
+def _dataset_cache_path(cache_dir: Path, session_date: date) -> Path:
+    return cache_dir / f"session-{session_date.isoformat()}.json"
+
+
+def _no_candidate_cache_path(cache_dir: Path, session_date: date) -> Path:
+    return cache_dir / f"session-{session_date.isoformat()}.no-candidates.json"
+
+
+def _load_cached_dataset(path: Path, session_date: date) -> BacktestSessionDataset:
+    loaded = BacktestSessionDataset.model_validate_json(path.read_text(encoding="utf-8"))
+    if loaded.session_date != session_date:
+        raise ValueError(f"cached dataset session mismatch: expected {session_date}, got {loaded.session_date}")
+    # Re-freeze the parsed payload so the stored fingerprint is verified from the
+    # actual immutable universe + bars rather than trusted as opaque cache metadata.
+    verified = freeze_backtest_session(
+        session_date=loaded.session_date,
+        universe=loaded.universe,
+        bars_by_instrument=loaded.bars_by_instrument,
+    )
+    if verified.dataset_fingerprint != loaded.dataset_fingerprint:
+        raise ValueError(f"cached dataset fingerprint mismatch for {session_date}")
+    return verified
+
+
+def _write_cached_dataset(path: Path, dataset: BacktestSessionDataset) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dataset.model_dump_json(indent=2), encoding="utf-8")
+
+
+def _load_no_candidate_marker(path: Path, session_date: date) -> dict[str, object]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("session_date") != session_date.isoformat():
+        raise ValueError(f"cached no-candidate session mismatch for {session_date}")
+    if payload.get("cache_version") != _DATASET_CACHE_VERSION:
+        raise ValueError(f"cached no-candidate format mismatch for {session_date}")
+    return payload
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sweep the strict v1.1 premarket dollar-volume gate while reusing identical frozen historical datasets."
+        description=(
+            "Sweep the strict v1.1 premarket dollar-volume gate while reusing identical "
+            "frozen historical datasets and optionally persisting them between runs."
+        )
     )
     parser.add_argument("--start-date", default="")
     parser.add_argument("--end-date", default="")
@@ -114,6 +180,7 @@ def parse_args() -> argparse.Namespace:
         default=",".join(str(value) for value in _DEFAULT_THRESHOLDS),
         help="Comma-separated premarket dollar-volume thresholds.",
     )
+    parser.add_argument("--dataset-cache-dir", default="")
     parser.add_argument("--output-dir", default="artifacts/liquidity-sweep")
     parser.add_argument("--require-covered-session", action="store_true")
     return parser.parse_args()
@@ -132,20 +199,24 @@ def main() -> int:
     if initial_cash <= 0:
         raise ValueError("initial cash must be positive")
 
-    # Reconstruction does not filter on premarket dollar volume. Use the lowest
-    # threshold solely so every variant receives the same reconstructed candidate
-    # universe, then freeze regular-session bars once and replay all variants.
+    # Reconstruction does not filter on premarket dollar volume. The lowest sweep
+    # threshold is used only to construct a config object; every threshold later
+    # replays the exact same frozen session dataset.
     reconstruction_strategy = strict_v11_strategy(
         minimum_premarket_dollar_volume=min(thresholds),
     )
-    reconstructor = AlpacaHistoricalGapperReconstructor(
-        start_date=start,
-        end_date=end,
-        config=reconstruction_strategy.config,
-        assumed_spread_bps=assumed_spread_bps,
-        max_age_days=args.reconstruction_max_age_days,
-    )
-    regular_runtime = ProviderHttpRuntime("alpaca_strategy_liquidity_sweep", max_concurrency=2)
+    cache_namespace, cache_basis = _cache_namespace(reconstruction_strategy, assumed_spread_bps)
+    cache_root = Path(args.dataset_cache_dir) if args.dataset_cache_dir else None
+    session_cache_dir = cache_root / cache_namespace if cache_root is not None else None
+    if session_cache_dir is not None:
+        session_cache_dir.mkdir(parents=True, exist_ok=True)
+        (session_cache_dir / "cache-basis.json").write_text(
+            json.dumps(cache_basis, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    reconstructor: AlpacaHistoricalGapperReconstructor | None = None
+    regular_runtime: ProviderHttpRuntime | None = None
     execution_policy = PaperExecutionPolicy(max_volume_participation_pct=Decimal("1"))
 
     state: dict[Decimal, dict[str, object]] = {}
@@ -161,64 +232,129 @@ def main() -> int:
 
     covered_sessions = 0
     no_candidate_sessions = 0
+    cache_hits = 0
+    cache_misses = 0
     unavailable_sessions: list[dict[str, object]] = []
     dataset_fingerprints: dict[str, str] = {}
 
-    for session_date in sessions:
-        print(f"Reconstructing {session_date} once for {len(thresholds)} variants")
-        reconstruction = _with_rate_limit_retry(
-            f"reconstruct {session_date}",
-            lambda session_date=session_date: reconstructor(
-                session_date=session_date,
-                scan_time=time(9, 20),
+    def ensure_provider_clients() -> tuple[AlpacaHistoricalGapperReconstructor, ProviderHttpRuntime]:
+        nonlocal reconstructor, regular_runtime
+        if reconstructor is None:
+            reconstructor = AlpacaHistoricalGapperReconstructor(
+                start_date=start,
+                end_date=end,
                 config=reconstruction_strategy.config,
                 assumed_spread_bps=assumed_spread_bps,
                 max_age_days=args.reconstruction_max_age_days,
-            ),
+            )
+        if regular_runtime is None:
+            regular_runtime = ProviderHttpRuntime("alpaca_strategy_liquidity_sweep", max_concurrency=1)
+        return reconstructor, regular_runtime
+
+    for session_date in sessions:
+        dataset: BacktestSessionDataset | None = None
+        no_candidate_detail: str | None = None
+        dataset_path = (
+            _dataset_cache_path(session_cache_dir, session_date)
+            if session_cache_dir is not None
+            else None
         )
-        universe = reconstruction.snapshot
-        if universe is None:
-            if reconstruction.fidelity == "reconstructed_current_listings_iex":
-                covered_sessions += 1
-                no_candidate_sessions += 1
-                for threshold in thresholds:
-                    state[threshold]["days"].append(
+        no_candidate_path = (
+            _no_candidate_cache_path(session_cache_dir, session_date)
+            if session_cache_dir is not None
+            else None
+        )
+
+        if dataset_path is not None and dataset_path.exists():
+            dataset = _load_cached_dataset(dataset_path, session_date)
+            cache_hits += 1
+            print(f"Using cached frozen dataset for {session_date}: {dataset.dataset_fingerprint}")
+        elif no_candidate_path is not None and no_candidate_path.exists():
+            marker = _load_no_candidate_marker(no_candidate_path, session_date)
+            no_candidate_detail = str(marker.get("detail") or "cached no-candidate session")
+            cache_hits += 1
+            print(f"Using cached no-candidate marker for {session_date}")
+        else:
+            cache_misses += 1
+            active_reconstructor, active_regular_runtime = ensure_provider_clients()
+            print(f"Cache miss for {session_date}; reconstructing once for {len(thresholds)} variants")
+            reconstruction = _with_rate_limit_retry(
+                f"reconstruct {session_date}",
+                lambda session_date=session_date: active_reconstructor(
+                    session_date=session_date,
+                    scan_time=time(9, 20),
+                    config=reconstruction_strategy.config,
+                    assumed_spread_bps=assumed_spread_bps,
+                    max_age_days=args.reconstruction_max_age_days,
+                ),
+            )
+            universe = reconstruction.snapshot
+            if universe is None:
+                if reconstruction.fidelity == "reconstructed_current_listings_iex":
+                    no_candidate_detail = reconstruction.detail or "Historical scan found no candidates."
+                    if no_candidate_path is not None:
+                        no_candidate_path.write_text(
+                            json.dumps(
+                                {
+                                    "cache_version": _DATASET_CACHE_VERSION,
+                                    "session_date": session_date.isoformat(),
+                                    "fidelity": reconstruction.fidelity,
+                                    "detail": no_candidate_detail,
+                                    "warnings": list(reconstruction.warnings),
+                                },
+                                indent=2,
+                                sort_keys=True,
+                            )
+                            + "\n",
+                            encoding="utf-8",
+                        )
+                else:
+                    unavailable_sessions.append(
                         {
                             "session_date": session_date.isoformat(),
-                            "status": "no_candidates",
+                            "fidelity": reconstruction.fidelity,
                             "detail": reconstruction.detail,
                         }
                     )
+                    continue
             else:
-                unavailable_sessions.append(
+                bars_by_instrument = _with_rate_limit_retry(
+                    f"regular bars {session_date}",
+                    lambda universe=universe, session_date=session_date: alpaca_historical_session_bars(
+                        universe.candidates,
+                        session_date,
+                        runtime=active_regular_runtime,
+                    ),
+                )
+                dataset = freeze_backtest_session(
+                    session_date=session_date,
+                    universe=universe,
+                    bars_by_instrument=bars_by_instrument,
+                )
+                if dataset_path is not None:
+                    _write_cached_dataset(dataset_path, dataset)
+                    print(f"Cached frozen dataset for {session_date}: {dataset.dataset_fingerprint}")
+
+        if dataset is None:
+            covered_sessions += 1
+            no_candidate_sessions += 1
+            for threshold in thresholds:
+                state[threshold]["days"].append(
                     {
                         "session_date": session_date.isoformat(),
-                        "fidelity": reconstruction.fidelity,
-                        "detail": reconstruction.detail,
+                        "status": "no_candidates",
+                        "detail": no_candidate_detail,
                     }
                 )
             continue
 
-        bars_by_instrument = _with_rate_limit_retry(
-            f"regular bars {session_date}",
-            lambda universe=universe, session_date=session_date: alpaca_historical_session_bars(
-                universe.candidates,
-                session_date,
-                runtime=regular_runtime,
-            ),
-        )
-        dataset = freeze_backtest_session(
-            session_date=session_date,
-            universe=universe,
-            bars_by_instrument=bars_by_instrument,
-        )
         covered_sessions += 1
         dataset_fingerprints[session_date.isoformat()] = dataset.dataset_fingerprint
 
         for threshold in thresholds:
             strategy = strict_v11_strategy(minimum_premarket_dollar_volume=threshold)
             active_config, fidelity_adjustments = reconstructed_strategy_config(strategy.config)
-            current_cash = state[threshold]["cash"]
+            current_cash: Decimal = state[threshold]["cash"]
             result = run_gap_pullback_backtest(
                 dataset,
                 active_config,
@@ -237,7 +373,8 @@ def main() -> int:
             state[threshold]["candidate_count"] += result.summary.candidate_count
             state[threshold]["trigger_count"] += result.summary.trigger_count
             state[threshold]["trades"].extend(result.trades)
-            state[threshold]["outcomes"].update(_outcome_counts(result))
+            outcome_counts = _outcome_counts(result)
+            state[threshold]["outcomes"].update(outcome_counts)
             state[threshold]["days"].append(
                 {
                     "session_date": session_date.isoformat(),
@@ -248,7 +385,7 @@ def main() -> int:
                     "trade_count": result.summary.trade_count,
                     "pnl": str(pnl),
                     "fidelity_adjustments": list(fidelity_adjustments),
-                    "candidate_outcomes": dict(_outcome_counts(result)),
+                    "candidate_outcomes": dict(outcome_counts),
                     "trades": [_trade_dump(trade) for trade in result.trades],
                 }
             )
@@ -297,6 +434,7 @@ def main() -> int:
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
             "result_quality": "approximate" if covered_sessions else "unavailable",
+            "cache_namespace": cache_namespace,
             "days": threshold_state["days"],
             "trades": [_trade_dump(trade) for trade in trades],
         }
@@ -340,6 +478,22 @@ def main() -> int:
         json.dumps(unavailable_sessions, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    (output_dir / "dataset-cache.json").write_text(
+        json.dumps(
+            {
+                "cache_version": _DATASET_CACHE_VERSION,
+                "cache_namespace": cache_namespace,
+                "cache_basis": cache_basis,
+                "cache_enabled": session_cache_dir is not None,
+                "cache_hits": cache_hits,
+                "cache_misses": cache_misses,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     lines = [
         "# Premarket liquidity sensitivity sweep",
@@ -348,6 +502,7 @@ def main() -> int:
         f"- Coverage: {covered_sessions}/{len(sessions)} trading sessions",
         f"- Valid no-candidate sessions: {no_candidate_sessions}",
         "- Fidelity: **approximate reconstructed Alpaca IEX**",
+        f"- Dataset cache: {cache_hits} hit(s), {cache_misses} miss(es); namespace `{cache_namespace}`",
         "- All variants reuse the same frozen reconstructed universe and regular-session bars for each date.",
         "- Only `minimum_premarket_dollar_volume` changes; all other strict v1.1 structure and risk rules remain fixed.",
         "",
@@ -370,6 +525,7 @@ def main() -> int:
             "",
             "- Reconstruction uses today's active listing set and Alpaca IEX partial-market history, so survivorship/listing bias remains possible.",
             "- Historical catalyst, dilution/supply, float, and true historical spread evidence are unavailable and are explicitly downgraded for reconstructed sessions.",
+            "- Cached datasets are immutable replay inputs. Change the reconstruction basis or bump the cache version when the historical-data contract changes.",
             "- This sweep diagnoses the liquidity gate; it is not sufficient evidence by itself to promote a production threshold.",
         ]
     )
