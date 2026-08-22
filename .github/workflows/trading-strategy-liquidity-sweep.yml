@@ -33,13 +33,18 @@ on:
         required: false
         default: "90"
         type: string
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-liquidity-sweep.yml"
 
 permissions:
   contents: read
 
 concurrency:
   group: trading-historical-alpaca-${{ github.repository }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   liquidity-sweep:
@@ -61,7 +66,7 @@ jobs:
       - name: Check out exact workflow head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Report Alpaca credential availability
         shell: bash
