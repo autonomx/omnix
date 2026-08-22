@@ -1,4 +1,4 @@
-name: Trading V2 production parity patch
+name: Trading V2 force-flat compatibility fix
 
 on:
   push:
@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  apply-parity-patch:
+  apply-compatibility-fix:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -37,47 +37,56 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Apply assertion-guarded source patch
-        run: python scripts/patch_trading_v2_production_parity.py
+      - name: Restore legacy force-flat precedence
+        run: python scripts/fix_trading_v2_force_flat_precedence.py
 
       - name: Install targeted test dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4" pytest playwright
 
-      - name: Run V2 and automation backend regressions before push
+      - name: Run V1/V2 automation regressions before push
         run: |
           python -m pytest \
+            src/tests/trading/test_trading_gap_pullback_v11.py \
             src/tests/trading/test_trading_gap_pullback_v2.py \
             src/tests/trading/test_trading_gap_pullback_v2_management.py \
             src/tests/trading/test_trading_gap_pullback_automation.py \
             -q
 
-      - name: Commit parity implementation
+      - name: Verify version-specific trigger ordering in source
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('src/app/trading/strategy_monitor.py').read_text(encoding='utf-8')
+          assert 'if config.config.strategy_version != "2.0.0" and force_flat:' in text
+          assert 'trigger = "max_hold"' in text
+          print('Legacy force-flat and V2 max-hold branches are both present.')
+          PY
+
+      - name: Commit compatibility fix
         shell: bash
         run: |
           git config user.name "omnix-actions"
           git config user.email "actions@users.noreply.github.com"
-          git add \
-            src/app/trading/strategy_backtest.py \
-            src/app/trading/strategy_monitor.py \
-            src/apps/web/src/features/trading/TradingStrategiesPanel.tsx
+          git add src/app/trading/strategy_monitor.py
           if git diff --cached --quiet; then
-            echo "::error::Guarded parity patch produced no changes."
+            echo "::error::Compatibility transform produced no strategy monitor change."
             exit 2
           fi
-          git commit -m "trading: align V2 backtest and paper management"
+          git commit -m "trading: preserve V1 force-flat precedence"
           git push origin HEAD:agent/trading-auto-strategy-roadmap
 
-      - name: Report patch commit on PR 1494
+      - name: Report fix on PR 1494
         if: success()
         shell: bash
         run: |
           sha="$(git rev-parse HEAD)"
-          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 production parity patch applied and targeted backend regressions passed at commit \`${sha}\`. Standard PR Trading gates are now the authoritative follow-up check."
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 parity audit compatibility fix passed V1/V2 targeted regressions and pushed \`${sha}\`: 1.x force-flat precedence is restored; 2.0 keeps stop/target → max-hold → EOD ordering."
 
-      - name: Report parity failure on PR 1494
+      - name: Report failure on PR 1494
         if: failure()
         shell: bash
         run: |
-          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 production parity workflow ${GITHUB_RUN_ID} failed on source head ${GITHUB_SHA}. No parity commit from this run should be trusted; inspect the workflow job before continuing."
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 force-flat compatibility workflow ${GITHUB_RUN_ID} failed on source head ${GITHUB_SHA}; do not treat production parity as qualified yet."
