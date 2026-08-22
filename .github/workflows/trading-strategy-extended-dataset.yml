@@ -2,12 +2,14 @@ name: Trading strategy extended dataset
 
 on:
   workflow_dispatch:
-  pull_request:
+  push:
+    branches:
+      - agent/trading-auto-strategy-roadmap
     paths:
       - ".github/workflows/trading-strategy-extended-dataset.yml"
 
-# One-shot PR trigger for the frozen V11 older stress capture. Restore this
-# workflow to manual-only immediately after GitHub registers the exact run.
+# One-shot branch-scoped trigger for the frozen V11 older stress capture.
+# Restore this workflow to manual-only immediately after the run is registered.
 permissions:
   contents: read
 
