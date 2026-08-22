@@ -48,6 +48,12 @@ export function priceConditionForThreshold(threshold: number, latestPrice: numbe
   return threshold >= latestPrice ? 'price_above' : 'price_below';
 }
 
+export function formatAlertThreshold(value: number | string): string {
+  if (typeof value === 'string' && value.trim() === '') return '';
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toFixed(2) : String(value);
+}
+
 export function cooldownForTriggerPolicy(
   policy: TradingAlertTriggerPolicy,
   interval: string,

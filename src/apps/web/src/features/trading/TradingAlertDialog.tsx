@@ -5,6 +5,7 @@ import type {
   TradingAlertNotificationChannel,
   TradingAlertTriggerPolicy,
 } from './tradingTypes';
+import { formatAlertThreshold } from './tradingChartAlerts';
 import './TradingChartAlertOpaque.css';
 
 export type TradingAlertEditorState = {
@@ -161,6 +162,7 @@ export function TradingAlertDialog({
                 value={editor.threshold}
                 placeholder={Number.isFinite(latestPrice) ? String(latestPrice) : 'Value'}
                 onChange={(event) => onChange({ threshold: event.target.value })}
+                onBlur={(event) => onChange({ threshold: formatAlertThreshold(event.target.value) })}
               />
             </div>
           )}

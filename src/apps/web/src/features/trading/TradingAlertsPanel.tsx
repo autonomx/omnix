@@ -5,6 +5,7 @@ import {
   chartAlertCreateInput,
   chartAlertUpdateInput,
   expirationTimestamp,
+  formatAlertThreshold,
   notifyTradingAlertsChanged,
 } from './tradingChartAlerts';
 import { tradingApi } from './tradingApi';
@@ -78,12 +79,12 @@ function alertTitle(alert: TradingAlert): string {
   if (indicatorId) {
     const indicator = indicatorLabels[indicatorId] ?? indicatorId.toUpperCase();
     const period = alert.parameters.period ?? 14;
-    return `${indicator} (${period}) ${directionLabel(alert.condition_type)} ${alert.threshold}`;
+    return `${indicator} (${period}) ${directionLabel(alert.condition_type)} ${formatAlertThreshold(alert.threshold)}`;
   }
   if (alert.condition_type.startsWith('price_')) {
-    return `${symbol} ${directionLabel(alert.condition_type)} ${alert.threshold}`;
+    return `${symbol} ${directionLabel(alert.condition_type)} ${formatAlertThreshold(alert.threshold)}`;
   }
-  return `${symbol} ${conditionLabel(alert.condition_type)} ${alert.threshold}`;
+  return `${symbol} ${conditionLabel(alert.condition_type)} ${formatAlertThreshold(alert.threshold)}`;
 }
 
 function alertStatus(alert: TradingAlert): { label: string; className: string } {
@@ -150,7 +151,7 @@ function editorForAlert(alert: TradingAlert): TradingAlertEditorState {
     x: 0,
     y: 0,
     condition: alert.condition_type,
-    threshold: alert.threshold,
+    threshold: formatAlertThreshold(alert.threshold),
     expiresAt: localDateTime(alert.expires_at),
     expiration: alert.expires_at ? '1d' : 'never',
     triggerPolicy: alert.parameters.trigger_policy
@@ -285,7 +286,7 @@ export function TradingAlertsPanel({
       return;
     }
     await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, {
-      threshold: String(threshold),
+      threshold: formatAlertThreshold(threshold),
       condition_type: editor.condition,
       indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
       period: Number(editor.period) || 14,
@@ -318,6 +319,7 @@ export function TradingAlertsPanel({
       notificationChannels: editor.notifications,
     });
     input.condition_type = editor.condition;
+    input.threshold = formatAlertThreshold(threshold);
     input.parameters = {
       ...input.parameters,
       indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
@@ -456,7 +458,7 @@ export function TradingAlertsPanel({
                 {group.items.map((trigger) => {
                   const alert = alertById.get(trigger.alert_id);
                   const symbol = symbolForInstrumentId(trigger.instrument_id);
-                  const title = alert ? alertTitle(alert) : `${symbol} ${conditionLabel(trigger.condition_type)} ${trigger.threshold}`;
+                  const title = alert ? alertTitle(alert) : `${symbol} ${conditionLabel(trigger.condition_type)} ${formatAlertThreshold(trigger.threshold)}`;
                   return (
                     <li key={trigger.trigger_id}>
                       <span className="trading-alert-symbol-badge" aria-hidden="true">{symbol.slice(0, 1)}</span>

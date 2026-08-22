@@ -17,7 +17,7 @@ describe('Trading chart alert placement defaults', () => {
       condition: 'indicator_above',
       indicator: 'rsi',
       period: '14',
-      threshold: '73',
+      threshold: '73.00',
     });
   });
 

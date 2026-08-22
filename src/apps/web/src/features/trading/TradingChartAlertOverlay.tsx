@@ -8,6 +8,7 @@ import {
   chartAlertCreateInput,
   chartAlertUpdateInput,
   expirationTimestamp,
+  formatAlertThreshold,
   notifyTradingAlertsChanged,
   type TradingChartAlertState,
 } from './tradingChartAlerts';
@@ -52,8 +53,7 @@ function alertColor(state: TradingChartAlertState): string {
 
 function formattedPrice(value: number): string {
   if (!Number.isFinite(value)) return '—';
-  const digits = Math.abs(value) >= 1_000 ? 2 : Math.abs(value) >= 1 ? 4 : 6;
-  return value.toLocaleString(undefined, { maximumFractionDigits: digits });
+  return formatAlertThreshold(value);
 }
 
 export function editorDefaults(placement: ChartAlertPlacement, latestPrice: number): TradingAlertEditorState {
@@ -64,7 +64,7 @@ export function editorDefaults(placement: ChartAlertPlacement, latestPrice: numb
     alertId: null,
     x: placement.x,
     y: placement.y,
-    threshold: isTrendline ? '0' : String(placement.price),
+    threshold: isTrendline ? '0' : formatAlertThreshold(placement.price),
     condition: isTrendline
       ? 'trendline_crossing'
       : isIndicator
@@ -207,7 +207,7 @@ export function TradingChartAlertOverlay({
     const alert = alerts.find((item) => item.alert_id === editor.alertId);
     if (!alert) return;
     const input = chartAlertUpdateInput(alert, {
-      threshold: String(threshold),
+      threshold: isTrendline ? '0' : formatAlertThreshold(threshold),
       condition_type: editor.condition,
       indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
       period: Number(editor.period) || 14,
@@ -249,6 +249,7 @@ export function TradingChartAlertOverlay({
       notificationChannels: editor.notifications,
     });
     input.condition_type = editor.condition;
+    input.threshold = isTrendline ? '0' : formatAlertThreshold(threshold);
     input.parameters = {
       ...input.parameters,
       indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
@@ -267,7 +268,7 @@ export function TradingChartAlertOverlay({
       alertId: alert.alert_id,
       x: Math.max(8, (rootRef.current?.clientWidth ?? 320) - 260),
       y,
-      threshold: alert.threshold,
+      threshold: formatAlertThreshold(alert.threshold),
       condition: alert.condition_type,
       expiresAt: localDateTime(alert.expires_at),
       expiration: alert.expires_at ? '1d' : 'never',
@@ -302,7 +303,7 @@ export function TradingChartAlertOverlay({
       const threshold = valueFromCoordinate(pointer.clientY - bounds.top);
       setDragging(null);
       if (threshold === null || threshold === Number(alert.threshold)) return;
-      await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { threshold: String(threshold) })));
+      await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { threshold: formatAlertThreshold(threshold) })));
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
