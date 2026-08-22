@@ -168,6 +168,7 @@ export function TradingChartPanel({
   onToggleIndicatorVisibility,
   onUpdateIndicator,
   onMoveIndicator,
+  onOpenPineScript,
   synchronization,
   paperAccountId,
 }: {
@@ -188,6 +189,7 @@ export function TradingChartPanel({
   onToggleIndicatorVisibility: (id: CoreIndicatorId) => void;
   onUpdateIndicator: (id: CoreIndicatorId, patch: Partial<CoreIndicatorInstance>) => void;
   onMoveIndicator: (id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
+  onOpenPineScript: (id: CoreIndicatorId) => void;
   synchronization: TradingChartSynchronization;
   paperAccountId?: string | null;
 }) {
@@ -764,6 +766,14 @@ export function TradingChartPanel({
     });
   };
 
+  const resetIndicatorPaneView = (id: CoreIndicatorId) => {
+    // Resetting a price scale causes Lightweight Charts to reflow the pane.
+    // Clear the hover latch at the same time so the controls remain hover-only
+    // after that reflow.
+    setHoveredIndicatorPane(null);
+    adapterRef.current?.resetIndicatorPaneView(id);
+  };
+
   const toggleFullscreenIndicator = async (id: CoreIndicatorId) => {
     const next = fullscreenIndicatorRef.current === id ? null : id;
     fullscreenIndicatorRef.current = next;
@@ -1218,7 +1228,7 @@ export function TradingChartPanel({
               const kind = docked ? 'indicator' : 'overlay';
               return (
                 <div key={indicator.id} className={`trading-overlay-indicator${visible ? ' active' : ' hidden'}`}>
-                  <span>{label}</span>
+                  <span className="trading-overlay-indicator-label">{label}</span>
                   <button
                     type="button"
                     aria-label={`${visible ? 'Hide' : 'Show'} ${label} ${kind}`}
@@ -1235,10 +1245,18 @@ export function TradingChartPanel({
                     onClick={() => setSettingsIndicator(indicator)}
                   >
                     ⚙
-                  </button>
-                  <button
-                    type="button"
-                    className="trading-overlay-indicator-delete"
+                   </button>
+                   <button
+                     type="button"
+                     aria-label={`Open ${label} source code`}
+                     title={`Open ${label} source code`}
+                     onClick={() => onOpenPineScript(indicator.id)}
+                   >
+                     {'{}'}
+                   </button>
+                   <button
+                     type="button"
+                     className="trading-overlay-indicator-delete"
                     aria-label={`Delete ${label} ${kind}`}
                     title={`Delete ${label}`}
                     onClick={() => onToggleIndicator(indicator.id)}
@@ -1276,7 +1294,9 @@ export function TradingChartPanel({
               canMoveDown={index < paneIndicators.length - 1}
               onToggleMinimized={() => toggleMinimizedIndicator(indicator.id)}
               onToggleFullscreen={() => void toggleFullscreenIndicator(indicator.id)}
+              onResetView={() => resetIndicatorPaneView(indicator.id)}
               onSettings={() => setSettingsIndicator(indicator)}
+              onSourceCode={() => onOpenPineScript(indicator.id)}
               onMove={(direction) => onMoveIndicator(indicator.id, direction)}
               onClose={() => closeIndicator(indicator.id)}
             />

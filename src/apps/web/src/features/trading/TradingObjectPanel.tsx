@@ -137,12 +137,14 @@ function TradingObjectTree({
   interval,
   indicators,
   onSetIndicators,
+  onOpenPineScript,
 }: {
   instrument?: CanonicalInstrument;
   instrumentId: string;
   interval: string;
   indicators: CoreIndicatorInstance[];
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
+  onOpenPineScript: (id: CoreIndicatorId) => void;
 }) {
   const drawings = useTradingDrawings(instrumentId);
   const [chartExpanded, setChartExpanded] = useState(true);
@@ -215,6 +217,7 @@ function TradingObjectTree({
                     </button>
                     <div className="trading-object-row-actions">
                       <button type="button" aria-label={`${hidden ? 'Show' : 'Hide'} ${name}`} title={`${hidden ? 'Show' : 'Hide'} ${name}`} onClick={() => toggleIndicatorVisibility(indicator.id)}><EyeIcon hidden={hidden} /></button>
+                      <button type="button" aria-label={`Open ${name} source code`} title={`Open ${name} source code`} onClick={() => onOpenPineScript(indicator.id)}>{'{}'}</button>
                       <button type="button" aria-label={`Delete ${name}`} title={`Delete ${name}`} onClick={() => removeIndicator(indicator.id)}><TrashIcon /></button>
                     </div>
                   </li>
@@ -314,6 +317,7 @@ export function TradingObjectPanel({
   interval,
   indicators,
   onSetIndicators,
+  onOpenPineScript,
 }: {
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
@@ -321,6 +325,7 @@ export function TradingObjectPanel({
   interval: string;
   indicators: CoreIndicatorInstance[];
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
+  onOpenPineScript: (id: CoreIndicatorId) => void;
 }) {
   const [view, setView] = useState<ObjectPanelView>('object-tree');
   const instrument = instruments.find((item) => item.instrument_id === activeInstrumentId);
@@ -330,7 +335,7 @@ export function TradingObjectPanel({
         <button type="button" role="tab" aria-selected={view === 'object-tree'} onClick={() => setView('object-tree')}>Object tree</button>
         <button type="button" role="tab" aria-selected={view === 'data-window'} onClick={() => setView('data-window')}>Data window</button>
       </nav>
-      {view === 'object-tree' ? <TradingObjectTree instrument={instrument} instrumentId={activeInstrumentId} interval={interval} indicators={indicators} onSetIndicators={onSetIndicators} /> : null}
+      {view === 'object-tree' ? <TradingObjectTree instrument={instrument} instrumentId={activeInstrumentId} interval={interval} indicators={indicators} onSetIndicators={onSetIndicators} onOpenPineScript={onOpenPineScript} /> : null}
       {view === 'data-window' ? <TradingDataWindow instrument={instrument} instrumentId={activeInstrumentId} bindingId={bindingId} interval={interval} indicators={indicators} /> : null}
     </div>
   );

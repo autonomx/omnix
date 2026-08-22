@@ -2,6 +2,7 @@ import { useEffect, useMemo, type CSSProperties } from 'react';
 import { TradingChartPanel } from './TradingChartPanel';
 import { TradingChartSynchronization } from './chart/chartSynchronization';
 import { useTradingStore, type TradingLayout } from './tradingStore';
+import type { CoreIndicatorId } from './indicators/coreIndicators';
 
 export function tradingGridColumns(layout: TradingLayout, chartCount: number): number {
   const forced = {
@@ -17,9 +18,11 @@ export function tradingGridColumns(layout: TradingLayout, chartCount: number): n
 export function TradingChartGrid({
   paperAccountId,
   onOpenSymbolSearch,
+  onOpenPineScript,
 }: {
   paperAccountId?: string | null;
   onOpenSymbolSearch: (chartId: string) => void;
+  onOpenPineScript: (id: CoreIndicatorId) => void;
 }) {
   const layout = useTradingStore((state) => state.layout);
   const charts = useTradingStore((state) => state.charts);
@@ -68,6 +71,7 @@ export function TradingChartGrid({
             onToggleIndicatorVisibility={(id) => toggleIndicatorVisibility(chart.chartId, id)}
             onUpdateIndicator={(id, patch) => updateIndicator(chart.chartId, id, patch)}
             onMoveIndicator={(id, direction) => moveIndicator(chart.chartId, id, direction)}
+            onOpenPineScript={(id) => { setActiveChart(chart.chartId); onOpenPineScript(id); }}
             synchronization={synchronization}
             paperAccountId={paperAccountId}
           />

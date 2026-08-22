@@ -6,12 +6,13 @@ import { TradingNewsPanel } from './TradingNewsPanel';
 import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingWatchlist } from './TradingWatchlist';
 import { TradingObjectPanel } from './TradingObjectPanel';
+import { TradingPinePanel } from './TradingPinePanel';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
-import type { CoreIndicatorInstance } from './indicators/coreIndicators';
+import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
 
-export type TradingSideTab = 'watchlist' | 'paper' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects';
+export type TradingSideTab = 'watchlist' | 'paper' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects' | 'pine';
 
 const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
@@ -42,6 +43,9 @@ export function TradingSidePanel({
   onSelectInstrument,
   onSelectAlert,
   onSetIndicators,
+  pineIndicatorId,
+  onPineIndicatorChange,
+  onOpenPineScript,
   onSetLayout,
   onSetChartCount,
   onAddChart,
@@ -69,6 +73,9 @@ export function TradingSidePanel({
   onSelectInstrument: (instrumentId: string) => void;
   onSelectAlert: (alert: TradingAlert) => void;
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
+  pineIndicatorId: CoreIndicatorId | null;
+  onPineIndicatorChange: (id: CoreIndicatorId) => void;
+  onOpenPineScript: (id: CoreIndicatorId) => void;
   onSetLayout: (layout: TradingLayout) => void;
   onSetChartCount: (count: number) => void;
   onAddChart: () => void;
@@ -93,6 +100,18 @@ export function TradingSidePanel({
           interval={interval}
           indicators={indicators}
           onSetIndicators={onSetIndicators}
+          onOpenPineScript={onOpenPineScript}
+        />
+      </aside>
+    );
+  }
+  if (activeTab === 'pine') {
+    return (
+      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Pine Editor">
+        <TradingPinePanel
+          indicators={indicators}
+          activeIndicatorId={pineIndicatorId}
+          onActiveIndicatorChange={onPineIndicatorChange}
         />
       </aside>
     );

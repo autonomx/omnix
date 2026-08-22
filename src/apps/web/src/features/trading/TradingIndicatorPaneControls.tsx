@@ -12,7 +12,9 @@ export function TradingIndicatorPaneControls({
   canMoveDown,
   onToggleMinimized,
   onToggleFullscreen,
+  onResetView,
   onSettings,
+  onSourceCode,
   onMove,
   onClose,
 }: {
@@ -25,7 +27,9 @@ export function TradingIndicatorPaneControls({
   canMoveDown: boolean;
   onToggleMinimized: () => void;
   onToggleFullscreen: () => void;
+  onResetView: () => void;
   onSettings: () => void;
+  onSourceCode: () => void;
   onMove: (direction: TradingIndicatorMove) => void;
   onClose: () => void;
 }) {
@@ -65,6 +69,7 @@ export function TradingIndicatorPaneControls({
       </button>
       <button type="button" title={`Move ${label} panel up`} aria-label={`Move ${label} panel up`} disabled={!canMoveUp} onClick={() => onMove('up')}>↑</button>
       <button type="button" title={`Move ${label} panel down`} aria-label={`Move ${label} panel down`} disabled={!canMoveDown} onClick={() => onMove('down')}>↓</button>
+      <button type="button" title={`Reset ${label} scale and center`} aria-label={`Reset ${label} scale and center`} onClick={onResetView}>↺</button>
       <button
         type="button"
         title={minimized ? `Restore ${label} panel` : `Minimize ${label} panel`}
@@ -76,6 +81,7 @@ export function TradingIndicatorPaneControls({
       </button>
       <button type="button" title={`Open ${label} settings`} aria-label={`Open ${label} settings`} onClick={onSettings}>⚙</button>
       <button type="button" title={`Close ${label} panel`} aria-label={`Close ${label} panel`} onClick={onClose}>×</button>
+      <button type="button" title={`Open ${label} source code`} aria-label={`Open ${label} source code`} onClick={onSourceCode}>{'{}'}</button>
     </div>
   );
 }

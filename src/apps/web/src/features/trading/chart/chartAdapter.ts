@@ -651,6 +651,27 @@ export class TradingChartAdapter {
     this.restoredPaneHeights.delete(id);
   }
 
+  resetIndicatorPaneView(id: string): void {
+    this.assertActive();
+    const index = this.indicatorPaneIds.indexOf(id);
+    if (index < 0) return;
+    const pane = this.chart.panes()[index + 1];
+    const scale = pane?.priceScale('right');
+    if (!scale) return;
+
+    // Remove the manual range so future indicator updates keep the restored
+    // default instead of immediately applying the user's previous drag.
+    this.indicatorScaleRanges.delete(id);
+    const range = indicatorPaneScale(id as CoreIndicatorInstance['id']);
+    if (range) {
+      scale.setAutoScale(false);
+      scale.setVisibleRange({ from: range.min, to: range.max });
+    } else {
+      scale.setAutoScale(true);
+    }
+    this.notifyViewportChange();
+  }
+
   resizeIndicatorPaneByPixels(id: string, edge: 'top' | 'bottom', deltaY: number): void {
     this.assertActive();
     if (this.fullscreenIndicatorId !== null || !Number.isFinite(deltaY) || deltaY === 0) return;

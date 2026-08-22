@@ -10,6 +10,7 @@ import { TradingStrategiesPanel } from './TradingStrategiesPanel';
 import { TradingSidePanel } from './TradingSidePanel';
 import { TradingSideRail } from './TradingSideRail';
 import type { TradingSideTab } from './TradingSidePanel';
+import type { CoreIndicatorId } from './indicators/coreIndicators';
 import { TradingTerminalDock } from './TradingTerminalDock';
 import { TradingSymbolSearch } from './TradingSymbolSearch';
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
@@ -105,6 +106,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
   const [toolPanelFullscreen, setToolPanelFullscreen] = useState(false);
   const [sidePanelTab, setSidePanelTab] = useState<TradingSideTab>('watchlist');
+  const [pineIndicatorId, setPineIndicatorId] = useState<CoreIndicatorId | null>(null);
   const [paperAccountId, setPaperAccountId] = useState<string | null>(null);
   const persistence = useTradingWorkspacePersistence();
   const workspaceHydrated = persistence.status !== 'loading';
@@ -299,6 +301,14 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setSymbolQuery(targetInstrument?.display_symbol ?? targetChart.instrumentId.split(':').at(-1)?.replace('-', '/') ?? '');
     setSymbolSearchResults([]);
     setSymbolSearchOpen(true);
+  };
+
+  const openPineEditor = (id: CoreIndicatorId) => {
+    setPineIndicatorId(id);
+    setSidePanelTab('pine');
+    setPanel('right', true);
+    setToolPanelFullscreen(false);
+    setToolPanel(null);
   };
 
   const closeSymbolSearch = () => {
@@ -517,7 +527,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />
         <div className="trading-chart-column">
           <section className="trading-chart-shell" aria-label="Trading chart workspace">
-            <TradingChartGrid paperAccountId={paperAccountId} onOpenSymbolSearch={openSymbolSearch} />
+            <TradingChartGrid paperAccountId={paperAccountId} onOpenSymbolSearch={openSymbolSearch} onOpenPineScript={openPineEditor} />
           </section>
           {workspaceHydrated && panels.bottom && !toolPanel ? (
             <TradingTerminalDock
@@ -570,6 +580,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 paperAccountId={paperAccountId}
                 onPaperAccountChange={setPaperAccountId}
                 indicators={activeChart.indicators}
+                pineIndicatorId={pineIndicatorId}
+                onPineIndicatorChange={setPineIndicatorId}
                 layout={layout}
                 chartCount={charts.length}
                 minimumChartCount={MIN_TRADING_CHARTS}
@@ -583,6 +595,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 }}
                 onSelectAlert={navigateToAlert}
                 onSetIndicators={(next) => setIndicators(activeChartId, next)}
+                onOpenPineScript={openPineEditor}
                 onSetLayout={setLayout}
                 onSetChartCount={setChartCount}
                 onAddChart={addChart}
