@@ -33,16 +33,6 @@ on:
         required: false
         default: "90"
         type: string
-  push:
-    branches:
-      - agent/trading-auto-strategy-roadmap
-    paths:
-      - ".github/workflows/trading-strategy-liquidity-sweep.yml"
-  pull_request:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/trading-strategy-liquidity-sweep.yml"
 
 permissions:
   contents: read
@@ -71,7 +61,7 @@ jobs:
       - name: Check out exact workflow head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Report Alpaca credential availability
         shell: bash
