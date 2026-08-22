@@ -2,6 +2,9 @@ name: Trading strategy extended dataset
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/trading-strategy-extended-dataset.yml"
 
 permissions:
   contents: read
@@ -66,21 +69,21 @@ jobs:
           empty="$(find .cache/trading-liquidity-datasets -type f -name '*.no-candidates.json' 2>/dev/null | wc -l | tr -d ' ')"
           echo "Starting with ${datasets} frozen datasets and ${empty} no-candidate markers."
 
-      - name: Extend cache across April May untouched validation dates
+      - name: Extend cache across older frozen stress dates
         shell: bash
         run: |
           mkdir -p .cache/trading-liquidity-datasets
           python scripts/run_trading_strategy_liquidity_sweep_resilient.py \
-            --start-date 2026-04-29 \
-            --end-date 2026-05-22 \
+            --start-date 2026-03-31 \
+            --end-date 2026-04-28 \
             --initial-cash 100000 \
             --assumed-spread-bps 40 \
             --max-hold-minutes 90 \
-            --reconstruction-max-age-days 150 \
+            --reconstruction-max-age-days 180 \
             --max-sessions 30 \
             --thresholds "100000" \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/april-may-validation-dataset \
+            --output-dir artifacts/v11-older-stress-dataset \
             --require-covered-session
 
       - name: Save extended frozen datasets
@@ -96,15 +99,17 @@ jobs:
         run: |
           datasets="$(find .cache/trading-liquidity-datasets -type f -name 'session-*.json' 2>/dev/null | wc -l | tr -d ' ')"
           empty="$(find .cache/trading-liquidity-datasets -type f -name '*.no-candidates.json' 2>/dev/null | wc -l | tr -d ' ')"
-          echo "# April/May untouched trading validation dataset" >> "${GITHUB_STEP_SUMMARY}"
+          echo "# V11 older frozen stress dataset" >> "${GITHUB_STEP_SUMMARY}"
           echo "Frozen datasets: ${datasets}" >> "${GITHUB_STEP_SUMMARY}"
           echo "No-candidate markers: ${empty}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Stress window: 2026-03-31 through 2026-04-28" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Warning: this older reconstruction has stronger current-listing survivorship bias than the primary validation blocks." >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload extension evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-april-may-validation-dataset-evidence
-          path: artifacts/april-may-validation-dataset
+          name: trading-v11-older-stress-dataset-evidence
+          path: artifacts/v11-older-stress-dataset
           if-no-files-found: warn
           retention-days: 30
