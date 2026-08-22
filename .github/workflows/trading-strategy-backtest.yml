@@ -38,27 +38,6 @@ on:
         required: false
         default: "30"
         type: string
-  pull_request:
-    branches: [main]
-    paths:
-      - ".github/workflows/trading-strategy-backtest.yml"
-      - "scripts/run_trading_strategy_backtest.py"
-      - "src/app/trading/strategy_backtest.py"
-      - "src/app/trading/strategy_range_backtest.py"
-      - "src/app/trading/strategy_historical_bars.py"
-      - "src/app/trading/historical_gapper_reconstruction.py"
-      - "src/app/trading/strategies/**"
-  push:
-    branches:
-      - agent/trading-auto-strategy-roadmap
-    paths:
-      - ".github/workflows/trading-strategy-backtest.yml"
-      - "scripts/run_trading_strategy_backtest.py"
-      - "src/app/trading/strategy_backtest.py"
-      - "src/app/trading/strategy_range_backtest.py"
-      - "src/app/trading/strategy_historical_bars.py"
-      - "src/app/trading/historical_gapper_reconstruction.py"
-      - "src/app/trading/strategies/**"
 
 permissions:
   contents: read
@@ -84,12 +63,12 @@ jobs:
       - name: Check out exact workflow head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Verify exact checked-out head
         shell: bash
         run: |
-          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          expected="${{ github.sha }}"
           actual="$(git rev-parse HEAD)"
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
