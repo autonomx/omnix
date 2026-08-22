@@ -2,6 +2,12 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/run_trading_strategy_failed_selloff_v4_management.py"
 
 permissions:
   contents: read
@@ -15,10 +21,10 @@ jobs:
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -34,7 +40,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/trading-liquidity-datasets
-          key: trading-liquidity-datasets-v1-${{ runner.os }}-v3-quality-${{ github.run_id }}
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-v4-management-${{ github.run_id }}
           restore-keys: |
             trading-liquidity-datasets-v1-${{ runner.os }}-extended-
             trading-liquidity-datasets-v1-${{ runner.os }}-
@@ -49,33 +55,33 @@ jobs:
             exit 2
           fi
 
-      - name: Run V3 entry-quality and risk-geometry sweep
+      - name: Run V4 causal profit-protection sweep
         shell: bash
         run: |
-          python scripts/run_trading_strategy_failed_selloff_v3_quality.py \
+          python scripts/run_trading_strategy_failed_selloff_v4_management.py \
             --start-date 2026-07-24 \
             --end-date 2026-08-21 \
             --train-sessions 14 \
-            --top-k 24 \
+            --top-k 30 \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/failed-selloff-v3-quality \
+            --output-dir artifacts/failed-selloff-v4-management \
             --initial-cash 100000 \
             --assumed-spread-bps 40 \
             --max-hold-minutes 90
 
-      - name: Publish V3 summary
+      - name: Publish V4 summary
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/failed-selloff-v3-quality/summary.md ]]; then
-            cat artifacts/failed-selloff-v3-quality/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v4-management/summary.md ]]; then
+            cat artifacts/failed-selloff-v4-management/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Upload V3 evidence
+      - name: Upload V4 evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-failed-selloff-v3-quality
-          path: artifacts/failed-selloff-v3-quality
+          name: trading-strategy-failed-selloff-v4-management
+          path: artifacts/failed-selloff-v4-management
           if-no-files-found: warn
           retention-days: 30
