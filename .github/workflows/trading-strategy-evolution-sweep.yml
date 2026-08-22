@@ -2,6 +2,12 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/run_trading_strategy_evolution_round2_5m.py"
 
 permissions:
   contents: read
@@ -15,10 +21,10 @@ jobs:
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -48,16 +54,16 @@ jobs:
             exit 2
           fi
 
-      - name: Run round-two walk-forward evolution sweep
+      - name: Run focused 5m walk-forward evolution sweep
         shell: bash
         run: |
-          python scripts/run_trading_strategy_evolution_round2.py \
+          python scripts/run_trading_strategy_evolution_round2_5m.py \
             --start-date 2026-08-10 \
             --end-date 2026-08-21 \
             --train-sessions 6 \
             --top-k 30 \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/strategy-evolution-round2 \
+            --output-dir artifacts/strategy-evolution-round2-5m \
             --initial-cash 100000 \
             --assumed-spread-bps 40 \
             --max-hold-minutes 90
@@ -66,15 +72,15 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/strategy-evolution-round2/summary.md ]]; then
-            cat artifacts/strategy-evolution-round2/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/strategy-evolution-round2-5m/summary.md ]]; then
+            cat artifacts/strategy-evolution-round2-5m/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
       - name: Upload evolution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-evolution-round2
-          path: artifacts/strategy-evolution-round2
+          name: trading-strategy-evolution-round2-5m
+          path: artifacts/strategy-evolution-round2-5m
           if-no-files-found: warn
           retention-days: 30
