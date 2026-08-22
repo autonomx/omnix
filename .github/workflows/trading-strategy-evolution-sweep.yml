@@ -2,6 +2,12 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/run_trading_strategy_failed_selloff_v9_1130_fast.py"
 
 permissions:
   contents: read
@@ -9,16 +15,16 @@ permissions:
 jobs:
   strategy-evolution:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -34,7 +40,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/trading-liquidity-datasets
-          key: trading-liquidity-datasets-v1-${{ runner.os }}-v9-entry-window-${{ github.run_id }}
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-v9-1130-fast-${{ github.run_id }}
           restore-keys: |
             trading-liquidity-datasets-v1-${{ runner.os }}-extended-
             trading-liquidity-datasets-v1-${{ runner.os }}-
@@ -49,28 +55,28 @@ jobs:
             exit 2
           fi
 
-      - name: Run V9 entry-window restoration research
+      - name: Run fast V9 11:30 cross-check
         shell: bash
         run: |
-          python scripts/run_trading_strategy_failed_selloff_v9_entry_window.py \
+          python scripts/run_trading_strategy_failed_selloff_v9_1130_fast.py \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/failed-selloff-v9-entry-window \
+            --output-dir artifacts/failed-selloff-v9-1130-fast \
             --initial-cash 100000 \
             --assumed-spread-bps 40
 
-      - name: Publish V9 summary
+      - name: Publish V9 11:30 summary
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/failed-selloff-v9-entry-window/summary.md ]]; then
-            cat artifacts/failed-selloff-v9-entry-window/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v9-1130-fast/summary.md ]]; then
+            cat artifacts/failed-selloff-v9-1130-fast/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Upload V9 evidence
+      - name: Upload V9 11:30 evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-failed-selloff-v9-entry-window
-          path: artifacts/failed-selloff-v9-entry-window
+          name: trading-strategy-failed-selloff-v9-1130-fast
+          path: artifacts/failed-selloff-v9-1130-fast
           if-no-files-found: warn
           retention-days: 30
