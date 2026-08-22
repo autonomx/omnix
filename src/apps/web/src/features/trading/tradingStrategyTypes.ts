@@ -38,13 +38,15 @@ export type GapPullbackConfig = {
   breakout_hold_bars: number;
   breakout_hold_tolerance_bps: string | number;
   minimum_quality_score: number;
-  v2_recovery_min_pct: string | number;
-  v2_second_pullback_min_pct: string | number;
-  v2_minimum_l1_to_b1_minutes: number;
-  v2_maximum_l2_to_signal_minutes: number;
-  v2_minimum_breakout_volume_ratio: string | number;
-  v2_profit_protection_trigger_r: string | number | null;
-  v2_protected_stop_r: string | number;
+  // Version 2.0.0-only fields. Backend defaults populate these on persisted
+  // documents, but they stay optional here so literal 1.x presets remain valid.
+  v2_recovery_min_pct?: string | number;
+  v2_second_pullback_min_pct?: string | number;
+  v2_minimum_l1_to_b1_minutes?: number;
+  v2_maximum_l2_to_signal_minutes?: number;
+  v2_minimum_breakout_volume_ratio?: string | number;
+  v2_profit_protection_trigger_r?: string | number | null;
+  v2_protected_stop_r?: string | number;
   stop_buffer_bps: string | number;
   reward_multiple: string | number;
   entry_start_et: string;
