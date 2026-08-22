@@ -2,6 +2,12 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/diagnose_trading_strategy_failed_selloff_v7_signals.py"
 
 permissions:
   contents: read
@@ -9,16 +15,16 @@ permissions:
 jobs:
   strategy-evolution:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -34,7 +40,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/trading-liquidity-datasets
-          key: trading-liquidity-datasets-v1-${{ runner.os }}-v7-higher-low-fixed-${{ github.run_id }}
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-v7-diagnostic-${{ github.run_id }}
           restore-keys: |
             trading-liquidity-datasets-v1-${{ runner.os }}-extended-
             trading-liquidity-datasets-v1-${{ runner.os }}-
@@ -49,28 +55,28 @@ jobs:
             exit 2
           fi
 
-      - name: Run V7 higher-low failed-selloff research
+      - name: Diagnose V7 causal winner loser features
         shell: bash
         run: |
-          python scripts/run_trading_strategy_failed_selloff_v7_higher_low_fixed.py \
+          python scripts/diagnose_trading_strategy_failed_selloff_v7_signals.py \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/failed-selloff-v7-higher-low \
+            --output-dir artifacts/failed-selloff-v7-diagnostic \
             --initial-cash 100000 \
             --assumed-spread-bps 40
 
-      - name: Publish V7 summary
+      - name: Publish V7 diagnostic summary
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/failed-selloff-v7-higher-low/summary.md ]]; then
-            cat artifacts/failed-selloff-v7-higher-low/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v7-diagnostic/summary.md ]]; then
+            cat artifacts/failed-selloff-v7-diagnostic/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Upload V7 evidence
+      - name: Upload V7 diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-failed-selloff-v7-higher-low
-          path: artifacts/failed-selloff-v7-higher-low
+          name: trading-strategy-failed-selloff-v7-diagnostic
+          path: artifacts/failed-selloff-v7-diagnostic
           if-no-files-found: warn
           retention-days: 30
