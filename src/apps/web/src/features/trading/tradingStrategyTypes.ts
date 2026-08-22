@@ -47,6 +47,7 @@ export type GapPullbackConfig = {
   v2_minimum_breakout_volume_ratio?: string | number;
   v2_profit_protection_trigger_r?: string | number | null;
   v2_protected_stop_r?: string | number;
+  v2_max_hold_minutes?: number;
   stop_buffer_bps: string | number;
   reward_multiple: string | number;
   entry_start_et: string;
