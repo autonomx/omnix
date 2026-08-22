@@ -476,7 +476,10 @@ export function TradingChartPanel({
     const insideHost = (event: PointerEvent) => event.target instanceof Node && host.contains(event.target);
     const pointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Element) || !target.closest('.trading-chart-context-menu')) setContextMenu(null);
+      const element = target instanceof Element ? target : null;
+      if (!element?.closest('.trading-chart-context-menu')) setContextMenu(null);
+      if (!element?.closest('.trading-indicator-object-toolbar')) setSelectedIndicator(null);
+      if (!element?.closest('[data-drawing-id], .trading-drawing-manager, .trading-chart-context-menu')) drawings.select(null);
       if (!insideHost(event)) return;
       const isPrimaryPan = event.button === 0 && drawingTool === 'cursor';
       const isMiddlePan = event.button === 1;
