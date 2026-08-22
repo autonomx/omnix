@@ -1,0 +1,72 @@
+name: Trading V2 production parity patch
+
+on:
+  push:
+    branches:
+      - agent/trading-auto-strategy-roadmap
+    paths:
+      - ".github/workflows/trading-v2-production-parity.yml"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  apply-parity-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: agent/trading-auto-strategy-roadmap
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Apply assertion-guarded source patch
+        run: python scripts/patch_trading_v2_production_parity.py
+
+      - name: Install targeted test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4" pytest
+
+      - name: Run V2 and automation backend regressions before push
+        run: |
+          python -m pytest \
+            src/tests/trading/test_trading_gap_pullback_v2.py \
+            src/tests/trading/test_trading_gap_pullback_automation.py \
+            -q
+
+      - name: Commit parity implementation
+        shell: bash
+        run: |
+          git config user.name "omnix-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            src/app/trading/strategy_backtest.py \
+            src/app/trading/strategy_monitor.py \
+            src/apps/web/src/features/trading/TradingStrategiesPanel.tsx
+          if git diff --cached --quiet; then
+            echo "::error::Guarded parity patch produced no changes."
+            exit 2
+          fi
+          git commit -m "trading: align V2 backtest and paper management"
+          git push origin HEAD:agent/trading-auto-strategy-roadmap
+
+      - name: Report patch commit on PR 1494
+        if: success()
+        shell: bash
+        run: |
+          sha="$(git rev-parse HEAD)"
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 production parity patch applied and targeted backend regressions passed at commit \`${sha}\`. Standard PR Trading gates are now the authoritative follow-up check."
