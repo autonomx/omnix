@@ -2,9 +2,16 @@ name: Trading strategy extended dataset
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - agent/trading-auto-strategy-roadmap
+    paths:
+      - ".github/workflows/trading-strategy-extended-dataset.yml"
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: trading-historical-alpaca-${{ github.repository }}
@@ -20,6 +27,7 @@ jobs:
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
       OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
       OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out exact workflow head
         uses: actions/checkout@v4
@@ -59,29 +67,18 @@ jobs:
             trading-liquidity-datasets-v1-${{ runner.os }}-extended-
             trading-liquidity-datasets-v1-${{ runner.os }}-
 
-      - name: Report starting cache
+      - name: Capture older stress sessions independently
         shell: bash
         run: |
           mkdir -p .cache/trading-liquidity-datasets
-          datasets="$(find .cache/trading-liquidity-datasets -type f -name 'session-*.json' | wc -l | tr -d ' ')"
-          empty="$(find .cache/trading-liquidity-datasets -type f -name '*.no-candidates.json' | wc -l | tr -d ' ')"
-          echo "Starting with ${datasets} frozen datasets and ${empty} no-candidate markers."
-
-      - name: Extend cache across older frozen stress dates
-        shell: bash
-        run: |
-          python scripts/run_trading_strategy_liquidity_sweep_resilient.py \
+          python scripts/run_trading_strategy_v11_older_stress_capture.py \
             --start-date 2026-03-31 \
             --end-date 2026-04-28 \
-            --initial-cash 100000 \
-            --assumed-spread-bps 40 \
-            --max-hold-minutes 90 \
-            --reconstruction-max-age-days 180 \
-            --max-sessions 30 \
-            --thresholds "100000" \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/v11-older-stress-dataset \
-            --require-covered-session
+            --output-dir artifacts/v11-older-stress-capture \
+            --reconstruction-max-age-days 180 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 40
 
       - name: Run frozen V11 older stress validator
         shell: bash
@@ -103,20 +100,44 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "# V11 older frozen stress dataset" >> "${GITHUB_STEP_SUMMARY}"
-          echo "Stress window: 2026-03-31 through 2026-04-28" >> "${GITHUB_STEP_SUMMARY}"
-          echo "Warning: this older reconstruction has stronger current-listing survivorship bias than the primary validation blocks." >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/v11-older-stress-capture/coverage.md ]]; then
+            cat artifacts/v11-older-stress-capture/coverage.md >> "${GITHUB_STEP_SUMMARY}"
+          fi
           if [[ -f artifacts/failed-selloff-v11-older-stress/summary.md ]]; then
             cat artifacts/failed-selloff-v11-older-stress/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
+
+      - name: Report frozen stress result on PR 1494
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "<!-- omnix-v11-older-stress-isolated:${GITHUB_SHA} -->"
+            echo "## Frozen V11 older stress — isolated capture"
+            echo
+            echo "Actions run: ${GITHUB_RUN_ID} · commit: ${GITHUB_SHA}"
+            echo
+            if [[ -f artifacts/v11-older-stress-capture/coverage.md ]]; then
+              cat artifacts/v11-older-stress-capture/coverage.md
+            else
+              echo "Capture coverage report unavailable."
+            fi
+            echo
+            if [[ -f artifacts/failed-selloff-v11-older-stress/summary.md ]]; then
+              cat artifacts/failed-selloff-v11-older-stress/summary.md
+            else
+              echo "Frozen strategy summary unavailable."
+            fi
+          } > /tmp/v11-stress-comment.md
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body-file /tmp/v11-stress-comment.md
 
       - name: Upload extension evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-v11-older-stress-evidence
+          name: trading-v11-older-stress-isolated-evidence
           path: |
-            artifacts/v11-older-stress-dataset
+            artifacts/v11-older-stress-capture
             artifacts/failed-selloff-v11-older-stress
           if-no-files-found: warn
           retention-days: 30
