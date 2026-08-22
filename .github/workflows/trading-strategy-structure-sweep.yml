@@ -24,6 +24,7 @@ on:
     paths:
       - ".github/workflows/trading-strategy-structure-sweep.yml"
       - "scripts/run_trading_strategy_structure_sweep.py"
+      - "scripts/run_trading_strategy_structure_sweep_resilient.py"
 
 permissions:
   contents: read
@@ -85,7 +86,7 @@ jobs:
           if [[ -n "${END_DATE}" ]]; then
             args+=(--end-date "${END_DATE}")
           fi
-          python scripts/run_trading_strategy_structure_sweep.py "${args[@]}"
+          python scripts/run_trading_strategy_structure_sweep_resilient.py "${args[@]}"
 
       - name: Publish diagnostic summary
         if: always()
