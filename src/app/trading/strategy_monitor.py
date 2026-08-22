@@ -481,29 +481,34 @@ class TradingStrategyMonitor:
                         detail=str(exc),
                     )
 
-            trigger_kind = paper_protection_trigger(
-                is_long=True,
-                stop_price=protection.stop_price,
-                target_price=protection.target_price,
-                observation=_paper_observation(execution),
-                activated_at=activated_at,
-            )
-            if trigger_kind == "stop":
-                trigger = "protective_stop"
-            elif trigger_kind == "target":
-                trigger = "profit_target"
-            elif (
-                config.config.strategy_version == "2.0.0"
-                and activated_at is not None
-                and v2_hold_expired(
-                    config.config,
-                    activated_at=activated_at,
-                    observed_at=execution.source_time,
-                )
-            ):
-                trigger = "max_hold"
-            elif force_flat:
+            if config.config.strategy_version != "2.0.0" and force_flat:
+                # Preserve the original 1.x contract exactly: once force-flat
+                # time is reached, EOD liquidation wins over stop/target checks.
                 trigger = "force_flat"
+            else:
+                trigger_kind = paper_protection_trigger(
+                    is_long=True,
+                    stop_price=protection.stop_price,
+                    target_price=protection.target_price,
+                    observation=_paper_observation(execution),
+                    activated_at=activated_at,
+                )
+                if trigger_kind == "stop":
+                    trigger = "protective_stop"
+                elif trigger_kind == "target":
+                    trigger = "profit_target"
+                elif (
+                    config.config.strategy_version == "2.0.0"
+                    and activated_at is not None
+                    and v2_hold_expired(
+                        config.config,
+                        activated_at=activated_at,
+                        observed_at=execution.source_time,
+                    )
+                ):
+                    trigger = "max_hold"
+                elif force_flat:
+                    trigger = "force_flat"
             if trigger is None:
                 continue
             quantity = min(protection.quantity, position.quantity)
