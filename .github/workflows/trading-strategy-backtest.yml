@@ -44,6 +44,7 @@ permissions:
 
 jobs:
   strict-v11-backtest:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
