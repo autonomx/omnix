@@ -2,6 +2,12 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/validate_trading_strategy_failed_selloff_v2_unseen.py"
 
 permissions:
   contents: read
@@ -9,16 +15,16 @@ permissions:
 jobs:
   strategy-evolution:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -30,51 +36,50 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
 
-      - name: Restore immutable trading datasets
+      - name: Restore extended immutable trading datasets
         uses: actions/cache/restore@v4
         with:
           path: .cache/trading-liquidity-datasets
-          key: trading-liquidity-datasets-v1-${{ runner.os }}-strategy-evolution-${{ github.run_id }}
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-v2-unseen-${{ github.run_id }}
           restore-keys: |
+            trading-liquidity-datasets-v1-${{ runner.os }}-extended-
             trading-liquidity-datasets-v1-${{ runner.os }}-
 
-      - name: Verify complete cached dataset
+      - name: Verify extended cache
         shell: bash
         run: |
           count="$(find .cache/trading-liquidity-datasets -type f -name 'session-*.json' 2>/dev/null | wc -l | tr -d ' ')"
           echo "Frozen session datasets: ${count}"
-          if [[ "${count}" -lt 10 ]]; then
-            echo "::error::Expected the frozen trading datasets; this workflow is cache-only and will not call Alpaca."
+          if [[ "${count}" -lt 21 ]]; then
+            echo "::error::Expected 21 frozen sessions for unseen validation; refusing to call Alpaca."
             exit 2
           fi
 
-      - name: Run focused failed-selloff v2 exact sweep
+      - name: Validate frozen V2 on unseen dates
         shell: bash
         run: |
-          python scripts/run_trading_strategy_failed_selloff_v2_focused.py \
-            --start-date 2026-08-10 \
-            --end-date 2026-08-21 \
-            --train-sessions 6 \
-            --top-k 30 \
+          python scripts/validate_trading_strategy_failed_selloff_v2_unseen.py \
+            --start-date 2026-07-24 \
+            --end-date 2026-08-07 \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/failed-selloff-v2-focused \
+            --output-dir artifacts/failed-selloff-v2-unseen \
             --initial-cash 100000 \
             --assumed-spread-bps 40 \
             --max-hold-minutes 90
 
-      - name: Publish evolution summary
+      - name: Publish unseen validation summary
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/failed-selloff-v2-focused/summary.md ]]; then
-            cat artifacts/failed-selloff-v2-focused/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v2-unseen/summary.md ]]; then
+            cat artifacts/failed-selloff-v2-unseen/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Upload evolution evidence
+      - name: Upload unseen validation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-failed-selloff-v2-focused
-          path: artifacts/failed-selloff-v2-focused
+          name: trading-strategy-failed-selloff-v2-unseen
+          path: artifacts/failed-selloff-v2-unseen
           if-no-files-found: warn
           retention-days: 30
