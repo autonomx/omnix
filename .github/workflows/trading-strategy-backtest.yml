@@ -38,6 +38,16 @@ on:
         required: false
         default: "30"
         type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/trading-strategy-backtest.yml"
+      - "scripts/run_trading_strategy_backtest.py"
+      - "src/app/trading/strategy_backtest.py"
+      - "src/app/trading/strategy_range_backtest.py"
+      - "src/app/trading/strategy_historical_bars.py"
+      - "src/app/trading/historical_gapper_reconstruction.py"
+      - "src/app/trading/strategies/**"
   push:
     branches:
       - agent/trading-auto-strategy-roadmap
@@ -71,18 +81,19 @@ jobs:
       MAX_HOLD_MINUTES: ${{ github.event.inputs.max_hold_minutes || '90' }}
       RECONSTRUCTION_MAX_AGE_DAYS: ${{ github.event.inputs.reconstruction_max_age_days || '30' }}
     steps:
-      - name: Check out exact branch head
+      - name: Check out exact workflow head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify exact checked-out head
         shell: bash
         run: |
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
           actual="$(git rev-parse HEAD)"
-          echo "Workflow SHA: ${{ github.sha }}"
-          echo "Checked out:  ${actual}"
-          test "${actual}" = "${{ github.sha }}"
+          echo "Expected head: ${expected}"
+          echo "Checked out:   ${actual}"
+          test "${actual}" = "${expected}"
 
       - uses: actions/setup-python@v5
         with:
