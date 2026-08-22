@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { TradingChartPanel } from './TradingChartPanel';
 import { TradingChartSynchronization } from './chart/chartSynchronization';
 import { useTradingStore, type TradingLayout } from './tradingStore';
@@ -35,9 +35,12 @@ export function TradingChartGrid({
   const toggleIndicatorVisibility = useTradingStore((state) => state.toggleIndicatorVisibility);
   const updateIndicator = useTradingStore((state) => state.updateIndicator);
   const moveIndicator = useTradingStore((state) => state.moveIndicator);
+  const [focusedChartId, setFocusedChartId] = useState<string | null>(null);
   const synchronization = useMemo(() => new TradingChartSynchronization(), []);
   const columns = tradingGridColumns(layout, charts.length);
   const style = { '--trading-grid-columns': columns } as CSSProperties;
+  const focusedChart = focusedChartId === null ? null : charts.find((chart) => chart.chartId === focusedChartId) ?? null;
+  const visibleCharts = focusedChart ? [focusedChart] : charts;
 
   useEffect(() => {
     synchronization.setLinks({ crosshair: links.crosshair, visibleRange: links.visibleRange });
@@ -45,23 +48,37 @@ export function TradingChartGrid({
 
   useEffect(() => () => synchronization.dispose(), [synchronization]);
 
+  useEffect(() => {
+    if (focusedChartId !== null && !charts.some((chart) => chart.chartId === focusedChartId)) setFocusedChartId(null);
+  }, [charts, focusedChartId]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && focusedChartId !== null) setFocusedChartId(null);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [focusedChartId]);
+
   return (
     <section
-      className={`trading-chart-grid layout-${layout}`}
+      className={`trading-chart-grid layout-${layout}${focusedChart ? ' is-chart-focus-mode' : ''}`}
       style={style}
       aria-label={`${charts.length}-chart Trading layout with ${columns} column${columns === 1 ? '' : 's'}`}
     >
-      {charts.map((chart, index) => (
+      {visibleCharts.map((chart) => (
         <div key={chart.chartId} className="trading-chart-grid-cell">
           <TradingChartPanel
             chartId={chart.chartId}
-            chartNumber={index + 1}
+            chartNumber={charts.findIndex((item) => item.chartId === chart.chartId) + 1}
             instrumentId={chart.instrumentId}
             bindingId={chart.bindingId}
             interval={chart.interval}
             chartType={chart.chartType}
             indicators={chart.indicators}
             active={chart.chartId === activeChartId}
+            chartFocusMode={focusedChart?.chartId === chart.chartId}
+            onChartFocusChange={(focused) => setFocusedChartId(focused ? chart.chartId : null)}
             onActivate={() => setActiveChart(chart.chartId)}
             onOpenSymbolSearch={() => onOpenSymbolSearch(chart.chartId)}
             onChangeInterval={(interval) => updateChart(chart.chartId, { interval })}

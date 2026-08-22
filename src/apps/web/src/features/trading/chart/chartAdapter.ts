@@ -16,11 +16,12 @@ import {
   type ISeriesApi,
   type LineData,
   type Logical,
+  type MouseEventParams,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { DrawingPoint } from '../drawings/drawingCommands';
-import { indicatorOutputs, indicatorPaneScale, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
+import { indicatorOutputs, indicatorPaneScale, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 
 export type TradingChartTypeGroup = 'candles' | 'lines' | 'areas' | 'columns' | 'profiles' | 'specialty';
@@ -65,6 +66,11 @@ export type TradingIndicatorPaneGeometry = {
   paneIndex: number;
   top: number;
   height: number;
+};
+export type TradingIndicatorSelection = {
+  id: CoreIndicatorId;
+  x: number;
+  y: number;
 };
 export type TradingPriceScaleSide = 'left' | 'right';
 export const DEFAULT_TRADING_RIGHT_OFFSET = 10;
@@ -1074,6 +1080,25 @@ export class TradingChartAdapter {
   snapshotDataUrl(): string {
     this.assertActive();
     return this.chart.takeScreenshot().toDataURL('image/png');
+  }
+
+  onIndicatorClick(listener: (selection: TradingIndicatorSelection) => void): () => void {
+    this.assertActive();
+    const handler = (parameter: MouseEventParams) => {
+      const hoveredSeries = parameter.hoveredInfo?.series ?? parameter.hoveredSeries;
+      if (!hoveredSeries || !parameter.point) return;
+      const selected = [...this.indicatorSeries.entries()].find(([, series]) => series === hoveredSeries);
+      if (!selected) return;
+      const output = this.indicatorOutputs.find((item) => item.key === selected[0]);
+      if (!output) return;
+      listener({
+        id: selected[0].split(':', 1)[0] as CoreIndicatorId,
+        x: parameter.point.x,
+        y: parameter.point.y,
+      });
+    };
+    this.chart.subscribeClick(handler);
+    return () => this.chart.unsubscribeClick(handler);
   }
 
   onCrosshair(listener: (point: TradingCrosshairPoint | null) => void): () => void {

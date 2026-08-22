@@ -6,7 +6,7 @@ import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
-import { DEFAULT_TRADING_RIGHT_OFFSET, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry } from './chart/chartAdapter';
+import { DEFAULT_TRADING_RIGHT_OFFSET, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
@@ -17,6 +17,7 @@ import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingS
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
 import type { MarketBar, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
+import { TradingIndicatorObjectToolbar } from './TradingIndicatorObjectToolbar';
 import { TradingIndicatorSettings } from './TradingIndicatorSettings';
 import { TradingIndicatorBackgroundOverlay } from './TradingIndicatorBackgroundOverlay';
 import { TradingVolumeProfileOverlay } from './TradingVolumeProfileOverlay';
@@ -159,7 +160,9 @@ export function TradingChartPanel({
   chartType,
   indicators,
   active,
+  chartFocusMode,
   onActivate,
+  onChartFocusChange,
   onOpenSymbolSearch,
   onChangeInterval,
   onChangeChartType,
@@ -180,7 +183,9 @@ export function TradingChartPanel({
   chartType: TradingChartType;
   indicators: CoreIndicatorInstance[];
   active: boolean;
+  chartFocusMode: boolean;
   onActivate: () => void;
+  onChartFocusChange: (focused: boolean) => void;
   onOpenSymbolSearch: () => void;
   onChangeInterval: (interval: string) => void;
   onChangeChartType: (chartType: TradingChartType) => void;
@@ -196,6 +201,7 @@ export function TradingChartPanel({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const adapterRef = useRef<TradingChartAdapter | null>(null);
+  const onActivateRef = useRef(onActivate);
   const barsRef = useRef<MarketBar[]>([]);
   const allBarsRef = useRef<MarketBar[]>([]);
   const replayWasVisibleRef = useRef(false);
@@ -239,9 +245,9 @@ export function TradingChartPanel({
   const [hoveredIndicatorPane, setHoveredIndicatorPane] = useState<CoreIndicatorId | null>(null);
   const [resizingIndicatorPane, setResizingIndicatorPane] = useState<CoreIndicatorId | null>(null);
   const [settingsIndicator, setSettingsIndicator] = useState<CoreIndicatorInstance | null>(null);
+  const [selectedIndicator, setSelectedIndicator] = useState<TradingIndicatorSelection | null>(null);
   const [selectedRangeLabel, setSelectedRangeLabel] = useState('All');
   const [rightOffset, setRightOffset] = useState(readTradingRightOffset);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [replayStartIndex, setReplayStartIndex] = useState<number | null>(null);
   const [replayCursorIndex, setReplayCursorIndex] = useState<number | null>(null);
   const [replayPlaying, setReplayPlaying] = useState(false);
@@ -254,6 +260,10 @@ export function TradingChartPanel({
   const [fullscreenMainPane, setFullscreenMainPane] = useState(false);
   const fullscreenMainPaneRef = useRef(false);
   const indicatorResizeRef = useRef<{ id: CoreIndicatorId; edge: 'top' | 'bottom'; pointerId: number; lastY: number; target: HTMLDivElement } | null>(null);
+
+  useEffect(() => {
+    onActivateRef.current = onActivate;
+  }, [onActivate]);
 
   const clearAlertPlacement = useCallback(() => setAlertPlacement(null), []);
   const refreshIndicatorPanes = useCallback((targetAdapter?: TradingChartAdapter | null) => {
@@ -345,6 +355,38 @@ export function TradingChartPanel({
     if (!adapter) return;
     adapter.setRightOffset(rightOffset);
   }, [adapter, rightOffset]);
+
+  useEffect(() => {
+    if (!adapter) {
+      setSelectedIndicator(null);
+      return;
+    }
+    const unregister = adapter.onIndicatorClick((selection) => {
+      onActivateRef.current();
+      setSelectedIndicator(selection);
+    });
+    return () => {
+      unregister();
+      setSelectedIndicator(null);
+    };
+  }, [adapter]);
+
+  useEffect(() => {
+    if (selectedIndicator && !indicators.some((indicator) => indicator.id === selectedIndicator.id && indicator.enabled)) {
+      setSelectedIndicator(null);
+    }
+  }, [indicators, selectedIndicator]);
+
+  useEffect(() => {
+    if (!selectedIndicator) return;
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.trading-indicator-object-toolbar')) return;
+      setSelectedIndicator(null);
+    };
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
+  }, [selectedIndicator]);
 
   const replayVisible = replayMode && active && replayCursorIndex !== null;
 
@@ -701,27 +743,9 @@ export function TradingChartPanel({
     : fullscreenIndicator
       ? indicatorOutputs.filter((output) => output.key.split(':', 1)[0] === fullscreenIndicator)
       : indicatorOutputs;
-
-  useEffect(() => {
-    const syncFullscreenState = () => {
-      const panelFullscreen = document.fullscreenElement === panelRef.current;
-      setIsFullscreen(panelFullscreen);
-      if (!panelFullscreen) {
-        if (fullscreenIndicatorRef.current !== null) {
-          fullscreenIndicatorRef.current = null;
-          setFullscreenIndicator(null);
-          adapterRef.current?.setIndicatorPaneFullscreen(null);
-        }
-        if (fullscreenMainPaneRef.current) {
-          fullscreenMainPaneRef.current = false;
-          setFullscreenMainPane(false);
-          adapterRef.current?.setMainPaneFullscreen(false);
-        }
-      }
-    };
-    document.addEventListener('fullscreenchange', syncFullscreenState);
-    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
-  }, []);
+  const selectedIndicatorConfig = selectedIndicator
+    ? indicators.find((indicator) => indicator.id === selectedIndicator.id && indicator.enabled) ?? null
+    : null;
 
   useEffect(() => {
     if (!fullscreenIndicator || paneIndicators.some((indicator) => indicator.id === fullscreenIndicator)) return;
@@ -730,29 +754,30 @@ export function TradingChartPanel({
     adapterRef.current?.setIndicatorPaneFullscreen(null);
   }, [fullscreenIndicator, paneIndicators]);
 
-  const toggleFullscreen = async () => {
-    const isBrowserFullscreen = document.fullscreenElement === panelRef.current;
-    try {
-      if (isBrowserFullscreen) {
-        fullscreenIndicatorRef.current = null;
-        setFullscreenIndicator(null);
-        fullscreenMainPaneRef.current = false;
-        setFullscreenMainPane(false);
-        adapterRef.current?.setIndicatorPaneFullscreen(null);
-        adapterRef.current?.setMainPaneFullscreen(false);
-        await document.exitFullscreen();
-      } else {
-        fullscreenIndicatorRef.current = null;
-        setFullscreenIndicator(null);
-        adapterRef.current?.setIndicatorPaneFullscreen(null);
-        fullscreenMainPaneRef.current = true;
-        setFullscreenMainPane(true);
-        adapterRef.current?.setMainPaneFullscreen(true);
-        await panelRef.current?.requestFullscreen();
-      }
-    } catch {
-      setIsFullscreen(false);
+  useEffect(() => {
+    if (chartFocusMode) return;
+    if (fullscreenIndicatorRef.current !== null) {
+      fullscreenIndicatorRef.current = null;
+      setFullscreenIndicator(null);
+      adapterRef.current?.setIndicatorPaneFullscreen(null);
     }
+    if (fullscreenMainPaneRef.current) {
+      fullscreenMainPaneRef.current = false;
+      setFullscreenMainPane(false);
+      adapterRef.current?.setMainPaneFullscreen(false);
+    }
+  }, [chartFocusMode]);
+
+  const toggleFullscreen = () => {
+    const nextFocused = !chartFocusMode;
+    fullscreenIndicatorRef.current = null;
+    setFullscreenIndicator(null);
+    adapterRef.current?.setIndicatorPaneFullscreen(null);
+    fullscreenMainPaneRef.current = nextFocused;
+    setFullscreenMainPane(nextFocused);
+    if (nextFocused) adapterRef.current?.setMainPaneFullscreen(true);
+    else adapterRef.current?.setMainPaneFullscreen(false);
+    onChartFocusChange(nextFocused);
   };
 
   const toggleMinimizedIndicator = (id: CoreIndicatorId) => {
@@ -774,7 +799,7 @@ export function TradingChartPanel({
     adapterRef.current?.resetIndicatorPaneView(id);
   };
 
-  const toggleFullscreenIndicator = async (id: CoreIndicatorId) => {
+  const toggleFullscreenIndicator = (id: CoreIndicatorId) => {
     const next = fullscreenIndicatorRef.current === id ? null : id;
     fullscreenIndicatorRef.current = next;
     setFullscreenIndicator(next);
@@ -789,25 +814,13 @@ export function TradingChartPanel({
         return updated;
       });
       adapterRef.current?.setIndicatorPaneFullscreen(next);
-      if (document.fullscreenElement !== panelRef.current) {
-        try {
-          await panelRef.current?.requestFullscreen();
-        } catch {
-          // Pane fullscreen remains available when the browser denies fullscreen mode.
-        }
-      }
+      onChartFocusChange(true);
       return;
     }
     fullscreenMainPaneRef.current = false;
     setFullscreenMainPane(false);
     adapterRef.current?.setIndicatorPaneFullscreen(null);
-    if (document.fullscreenElement === panelRef.current) {
-      try {
-        await document.exitFullscreen();
-      } catch {
-        // The fullscreenchange listener keeps the pane state synchronized.
-      }
-    }
+    onChartFocusChange(false);
   };
 
   const closeIndicator = (id: CoreIndicatorId) => {
@@ -815,7 +828,7 @@ export function TradingChartPanel({
       fullscreenIndicatorRef.current = null;
       setFullscreenIndicator(null);
       adapterRef.current?.setIndicatorPaneFullscreen(null);
-      if (document.fullscreenElement === panelRef.current) void document.exitFullscreen();
+      onChartFocusChange(false);
     }
     setSettingsIndicator((current) => current?.id === id ? null : current);
     setMinimizedIndicators((current) => {
@@ -1053,7 +1066,7 @@ export function TradingChartPanel({
   return (
     <article
       ref={panelRef}
-      className={`trading-chart-panel${active ? ' active' : ''}${isFullscreen || fullscreenMainPane || fullscreenIndicator ? ' is-immersive-fullscreen' : ''}`}
+      className={`trading-chart-panel${active ? ' active' : ''}${chartFocusMode ? ' is-chart-focus-mode' : ''}`}
       data-chart-id={chartId}
       data-stream-status={streamStatus}
       onPointerDown={onActivate}
@@ -1096,13 +1109,13 @@ export function TradingChartPanel({
           <button
             type="button"
             className="trading-chart-fullscreen"
-            aria-label={isFullscreen ? 'Exit fullscreen chart' : 'Enter fullscreen chart'}
-            aria-pressed={isFullscreen}
-            title={isFullscreen ? 'Exit fullscreen chart' : 'Enter fullscreen chart'}
+            aria-label={chartFocusMode ? 'Exit chart focus mode' : 'Focus this chart'}
+            aria-pressed={chartFocusMode}
+            title={chartFocusMode ? 'Show all charts' : 'Focus this chart'}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => void toggleFullscreen()}
           >
-            {isFullscreen ? '↙' : '⛶'}
+            {chartFocusMode ? '↙' : '⛶'}
           </button>
         </div>
 
@@ -1302,6 +1315,23 @@ export function TradingChartPanel({
             />
           );
         })}
+        {selectedIndicator && selectedIndicatorConfig ? (
+          <TradingIndicatorObjectToolbar
+            indicator={selectedIndicatorConfig}
+            x={selectedIndicator.x}
+            y={selectedIndicator.y}
+            docked={indicatorUsesSeparatePane(selectedIndicatorConfig.id)}
+            onToggleVisibility={() => onToggleIndicatorVisibility(selectedIndicatorConfig.id)}
+            onSettings={() => setSettingsIndicator(selectedIndicatorConfig)}
+            onSourceCode={() => onOpenPineScript(selectedIndicatorConfig.id)}
+            onResetView={() => resetIndicatorPaneView(selectedIndicatorConfig.id)}
+            onRemove={() => {
+              setSelectedIndicator(null);
+              onToggleIndicator(selectedIndicatorConfig.id);
+            }}
+            onDismiss={() => setSelectedIndicator(null)}
+          />
+        ) : null}
         {settingsIndicator ? (
           <TradingIndicatorSettings
             indicator={settingsIndicator}
