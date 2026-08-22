@@ -2,6 +2,10 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/run_trading_strategy_failed_selloff_v11_fast.py"
 
 permissions:
   contents: read
@@ -15,10 +19,10 @@ jobs:
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: 1
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -34,7 +38,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/trading-liquidity-datasets
-          key: trading-liquidity-datasets-v1-${{ runner.os }}-v11-timing-geometry-${{ github.run_id }}
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-v11-fast-${{ github.run_id }}
           restore-keys: |
             trading-liquidity-datasets-v1-${{ runner.os }}-extended-
             trading-liquidity-datasets-v1-${{ runner.os }}-
@@ -49,28 +53,28 @@ jobs:
             exit 2
           fi
 
-      - name: Run V11 timing-geometry research
+      - name: Run fast V11 cross-check
         shell: bash
         run: |
-          python scripts/run_trading_strategy_failed_selloff_v11_timing_geometry.py \
+          python scripts/run_trading_strategy_failed_selloff_v11_fast.py \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/failed-selloff-v11-timing-geometry \
+            --output-dir artifacts/failed-selloff-v11-fast \
             --initial-cash 100000 \
             --assumed-spread-bps 40
 
-      - name: Publish V11 summary
+      - name: Publish V11 fast summary
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/failed-selloff-v11-timing-geometry/summary.md ]]; then
-            cat artifacts/failed-selloff-v11-timing-geometry/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v11-fast/summary.md ]]; then
+            cat artifacts/failed-selloff-v11-fast/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Upload V11 evidence
+      - name: Upload V11 fast evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-failed-selloff-v11-timing-geometry
-          path: artifacts/failed-selloff-v11-timing-geometry
+          name: trading-strategy-failed-selloff-v11-fast
+          path: artifacts/failed-selloff-v11-fast
           if-no-files-found: warn
           retention-days: 30
