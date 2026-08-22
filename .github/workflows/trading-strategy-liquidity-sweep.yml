@@ -33,6 +33,18 @@ on:
         required: false
         default: "90"
         type: string
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-liquidity-sweep.yml"
+      - "scripts/run_trading_strategy_backtest.py"
+      - "scripts/run_trading_strategy_liquidity_sweep.py"
+      - "src/app/trading/strategy_backtest.py"
+      - "src/app/trading/strategy_range_backtest.py"
+      - "src/app/trading/strategy_historical_bars.py"
+      - "src/app/trading/historical_gapper_reconstruction.py"
+      - "src/app/trading/strategies/**"
 
 permissions:
   contents: read
@@ -40,7 +52,7 @@ permissions:
 jobs:
   liquidity-sweep:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
@@ -57,14 +69,15 @@ jobs:
       - name: Check out exact workflow head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Verify Alpaca historical-data credentials
+      - name: Report Alpaca credential availability
         shell: bash
         run: |
-          if [[ -z "${OMNIX_ALPACA_API_KEY_ID}" || -z "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
-            echo "::error::Repository Actions secrets OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY are required."
-            exit 2
+          if [[ -n "${OMNIX_ALPACA_API_KEY_ID}" && -n "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
+            echo "Alpaca credentials are available for cache misses."
+          else
+            echo "::warning::Alpaca credentials are unavailable. Fully cached replays can still run, but any missing historical session will fail closed."
           fi
 
       - uses: actions/setup-python@v5
@@ -77,9 +90,25 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
 
+      - name: Build dataset cache key
+        id: dataset-cache-key
+        shell: bash
+        run: |
+          et_date="$(TZ=America/New_York date +%F)"
+          echo "key=trading-liquidity-datasets-v1-${RUNNER_OS}-${et_date}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore frozen historical datasets
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: ${{ steps.dataset-cache-key.outputs.key }}
+          restore-keys: |
+            trading-liquidity-datasets-v1-${{ runner.os }}-
+
       - name: Run strict v1.1 liquidity sweep
         shell: bash
         run: |
+          mkdir -p .cache/trading-liquidity-datasets
           args=(
             --lookback-days "${LOOKBACK_DAYS}"
             --initial-cash "${INITIAL_CASH}"
@@ -88,6 +117,7 @@ jobs:
             --reconstruction-max-age-days 30
             --max-sessions 60
             --thresholds "250000,500000,1000000,2000000,5000000,10000000"
+            --dataset-cache-dir .cache/trading-liquidity-datasets
             --output-dir artifacts/liquidity-sweep
             --require-covered-session
           )
@@ -98,6 +128,13 @@ jobs:
             args+=(--end-date "${END_DATE}")
           fi
           python scripts/run_trading_strategy_liquidity_sweep.py "${args[@]}"
+
+      - name: Save frozen historical datasets
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: ${{ steps.dataset-cache-key.outputs.key }}
 
       - name: Publish sweep summary
         if: always()
