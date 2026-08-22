@@ -33,6 +33,11 @@ on:
         required: false
         default: "90"
         type: string
+  push:
+    branches:
+      - agent/trading-auto-strategy-roadmap
+    paths:
+      - ".github/workflows/trading-strategy-liquidity-sweep.yml"
 
 permissions:
   contents: read
@@ -97,10 +102,19 @@ jobs:
           restore-keys: |
             trading-liquidity-datasets-v1-${{ runner.os }}-
 
-      - name: Run strict v1.1 liquidity sweep
+      - name: Populate audited frozen datasets
         shell: bash
         run: |
           mkdir -p .cache/trading-liquidity-datasets
+          python scripts/populate_trading_strategy_dataset_cache_from_manifest.py \
+            --manifest scripts/data/trading-liquidity-sweep-candidate-manifest-2026-08-08_2026-08-21.json \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --assumed-spread-bps "${ASSUMED_SPREAD_BPS}" \
+            --minimum-premarket-dollar-volume 250000
+
+      - name: Run strict v1.1 liquidity sweep
+        shell: bash
+        run: |
           args=(
             --lookback-days "${LOOKBACK_DAYS}"
             --initial-cash "${INITIAL_CASH}"
