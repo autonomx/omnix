@@ -2,6 +2,12 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/run_trading_strategy_failed_selloff_v8_continuity.py"
 
 permissions:
   contents: read
@@ -15,10 +21,10 @@ jobs:
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -34,7 +40,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/trading-liquidity-datasets
-          key: trading-liquidity-datasets-v1-${{ runner.os }}-v8-orderly-${{ github.run_id }}
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-v8-continuity-${{ github.run_id }}
           restore-keys: |
             trading-liquidity-datasets-v1-${{ runner.os }}-extended-
             trading-liquidity-datasets-v1-${{ runner.os }}-
@@ -49,28 +55,28 @@ jobs:
             exit 2
           fi
 
-      - name: Run V8 orderly-base research
+      - name: Continue exact V8 survivors across regimes
         shell: bash
         run: |
-          python scripts/run_trading_strategy_failed_selloff_v8_orderly_base.py \
+          python scripts/run_trading_strategy_failed_selloff_v8_continuity.py \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/failed-selloff-v8-orderly-base \
+            --output-dir artifacts/failed-selloff-v8-continuity \
             --initial-cash 100000 \
             --assumed-spread-bps 40
 
-      - name: Publish V8 summary
+      - name: Publish V8 continuity summary
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/failed-selloff-v8-orderly-base/summary.md ]]; then
-            cat artifacts/failed-selloff-v8-orderly-base/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v8-continuity/summary.md ]]; then
+            cat artifacts/failed-selloff-v8-continuity/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Upload V8 evidence
+      - name: Upload V8 continuity evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-failed-selloff-v8-orderly-base
-          path: artifacts/failed-selloff-v8-orderly-base
+          name: trading-strategy-failed-selloff-v8-continuity
+          path: artifacts/failed-selloff-v8-continuity
           if-no-files-found: warn
           retention-days: 30
