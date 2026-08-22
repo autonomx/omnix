@@ -2,11 +2,6 @@ name: Trading strategy extended dataset
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/trading-strategy-extended-dataset.yml"
 
 permissions:
   contents: read
@@ -26,10 +21,10 @@ jobs:
       OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
       OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
     steps:
-      - name: Check out exact PR head
+      - name: Check out exact workflow head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Verify Alpaca historical-data credentials
         shell: bash
