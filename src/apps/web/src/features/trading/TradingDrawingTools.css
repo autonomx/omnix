@@ -1,5 +1,4 @@
 .trading-drawing-tools{position:relative;z-index:20;gap:2px;overflow:visible}
-.trading-drawing-tools>button[aria-label="Place price alert"]{display:none}
 .trading-drawing-tool-group{position:relative;flex:0 0 auto}
 .trading-drawing-tool-group>button{display:grid;place-items:center;width:34px;height:34px;border-color:transparent;background:transparent;padding:0;color:#8496aa;font-size:17px;line-height:1}
 .trading-drawing-tool-group>button:hover,.trading-drawing-tool-group>button[aria-expanded=true]{border-color:rgba(22,136,255,.55);background:rgba(22,136,255,.14);color:#dceeff}
