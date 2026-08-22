@@ -5127,7 +5127,8 @@
             "type": "integer"
           },
           "max_hold_minutes": {
-            "default": 90,
+            "default": 390,
+            "description": "Legacy compatibility field; indicator-based exits do not use elapsed time.",
             "maximum": 390.0,
             "minimum": 1.0,
             "title": "Max Hold Minutes",
@@ -5291,6 +5292,10 @@
             ],
             "title": "Expectancy R Ci95 Low"
           },
+          "indicator_exit_count": {
+            "title": "Indicator Exit Count",
+            "type": "integer"
+          },
           "invalid_risk_count": {
             "title": "Invalid Risk Count",
             "type": "integer"
@@ -5354,10 +5359,6 @@
             "title": "Target Count",
             "type": "integer"
           },
-          "time_exit_count": {
-            "title": "Time Exit Count",
-            "type": "integer"
-          },
           "trade_count": {
             "title": "Trade Count",
             "type": "integer"
@@ -5413,7 +5414,7 @@
           "trades_per_day",
           "stop_count",
           "target_count",
-          "time_exit_count"
+          "indicator_exit_count"
         ],
         "title": "GapPullbackBacktestSummary",
         "type": "object"
@@ -5470,7 +5471,7 @@
             "enum": [
               "stop",
               "target",
-              "time",
+              "rsi",
               "eod"
             ],
             "title": "Exit Reason",
@@ -5587,6 +5588,11 @@
         "additionalProperties": false,
         "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.\n\nVersion 1.2.0 reserves the same market-structure semantics for a separately\nvalidated HTR research-policy gate. It is fail-closed until a reviewed HTR-14\nvalidation artifact explicitly permits promotion; 1.0/1.1 semantics do not\nchange when HTR code evolves.",
         "properties": {
+          "allow_missing_tod_rvol": {
+            "default": false,
+            "title": "Allow Missing Tod Rvol",
+            "type": "boolean"
+          },
           "auto_archive_daily_universe": {
             "default": true,
             "title": "Auto Archive Daily Universe",
@@ -5642,6 +5648,28 @@
             ],
             "title": "Execution Interval",
             "type": "string"
+          },
+          "exit_rsi_period": {
+            "default": 14,
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Exit Rsi Period",
+            "type": "integer"
+          },
+          "exit_rsi_threshold": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "50",
+            "title": "Exit Rsi Threshold"
           },
           "float_preference_mode": {
             "default": "ignore",
@@ -5970,6 +5998,11 @@
         "additionalProperties": false,
         "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.\n\nVersion 1.2.0 reserves the same market-structure semantics for a separately\nvalidated HTR research-policy gate. It is fail-closed until a reviewed HTR-14\nvalidation artifact explicitly permits promotion; 1.0/1.1 semantics do not\nchange when HTR code evolves.",
         "properties": {
+          "allow_missing_tod_rvol": {
+            "default": false,
+            "title": "Allow Missing Tod Rvol",
+            "type": "boolean"
+          },
           "auto_archive_daily_universe": {
             "default": true,
             "title": "Auto Archive Daily Universe",
@@ -6007,6 +6040,19 @@
               "5m"
             ],
             "title": "Execution Interval",
+            "type": "string"
+          },
+          "exit_rsi_period": {
+            "default": 14,
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Exit Rsi Period",
+            "type": "integer"
+          },
+          "exit_rsi_threshold": {
+            "default": "50",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Exit Rsi Threshold",
             "type": "string"
           },
           "float_preference_mode": {
@@ -12736,7 +12782,8 @@
             "title": "Initial Cash"
           },
           "max_hold_minutes": {
-            "default": 90,
+            "default": 390,
+            "description": "Legacy compatibility field; indicator-based exits do not use elapsed time.",
             "maximum": 390.0,
             "minimum": 1.0,
             "title": "Max Hold Minutes",

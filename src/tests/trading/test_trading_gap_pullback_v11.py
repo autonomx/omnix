@@ -119,6 +119,20 @@ def test_v11_requires_fresh_catalyst_evidence() -> None:
     assert result.reason_code == "CATALYST_EVIDENCE_REQUIRED"
 
 
+def test_reconstructed_data_can_explicitly_allow_missing_tod_rvol() -> None:
+    missing_rvol = candidate(tod_rvol=None)
+
+    strict_result = evaluate_gap_pullback(missing_rvol, [], strict_config())
+    assert strict_result.reason_code == "TOD_RVOL_MISSING"
+
+    reconstructed_result = evaluate_gap_pullback(
+        missing_rvol,
+        [],
+        strict_config(allow_missing_tod_rvol=True),
+    )
+    assert reconstructed_result.state == "qualified_gap"
+
+
 def test_v11_rejects_configured_supply_risk() -> None:
     result = evaluate_gap_pullback(
         candidate(dilution_flags=("atm",)),

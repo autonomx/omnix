@@ -157,9 +157,9 @@ def evaluate_gap_pullback(
         rejection = "PRICE_OUT_OF_RANGE"
     elif candidate.premarket_dollar_volume < active.minimum_premarket_dollar_volume:
         rejection = "PREMARKET_DOLLAR_VOLUME_LOW"
-    elif candidate.tod_rvol is None:
+    elif candidate.tod_rvol is None and not active.allow_missing_tod_rvol:
         rejection = "TOD_RVOL_MISSING"
-    elif candidate.tod_rvol < active.minimum_tod_rvol:
+    elif candidate.tod_rvol is not None and candidate.tod_rvol < active.minimum_tod_rvol:
         rejection = "TOD_RVOL_LOW"
     elif candidate.spread_bps is None:
         rejection = "SPREAD_MISSING"

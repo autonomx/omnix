@@ -19,6 +19,7 @@ export type GapPullbackConfig = {
   maximum_price: string | number;
   minimum_premarket_dollar_volume: string | number;
   minimum_tod_rvol: string | number;
+  allow_missing_tod_rvol: boolean;
   maximum_spread_bps: string | number;
   preferred_float_min_shares: string | number;
   preferred_float_max_shares: string | number;
@@ -40,6 +41,8 @@ export type GapPullbackConfig = {
   minimum_quality_score: number;
   stop_buffer_bps: string | number;
   reward_multiple: string | number;
+  exit_rsi_period: number;
+  exit_rsi_threshold: string | number;
   entry_start_et: string;
   last_entry_et: string;
 };
@@ -193,7 +196,7 @@ export type GapPullbackBacktestTrade = {
   entry_fill_quantity: string | number;
   stop_price: string | number;
   target_price: string | number;
-  exit_reason: 'stop' | 'target' | 'time' | 'eod';
+  exit_reason: 'stop' | 'target' | 'rsi' | 'eod';
   pnl_per_share: string | number;
   r_multiple: string | number;
   mfe_r: string | number;
@@ -215,7 +218,7 @@ export type GapPullbackBacktestSummary = {
   average_hold_minutes: string | number;
   stop_count: number;
   target_count: number;
-  time_exit_count: number;
+  indicator_exit_count: number;
   risk_rejection_count: number;
   risk_rejection_reasons: Record<string, number>;
 };

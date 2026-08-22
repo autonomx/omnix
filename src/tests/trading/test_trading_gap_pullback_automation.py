@@ -278,6 +278,48 @@ def test_strategy_backtest_uses_shared_paper_execution_policy_and_next_bar_entry
     assert trade.r_multiple > Decimal("1.9")
 
 
+def test_strategy_backtest_exits_on_rsi_cross_instead_of_elapsed_time() -> None:
+    universe = freeze_gapper_universe(
+        universe_id="gappers-2026-08-18-rsi",
+        session_date=date(2026, 8, 18),
+        evaluation_time=datetime(2026, 8, 18, 13, 20, tzinfo=timezone.utc),
+        discovery_source="import",
+        candidates=[candidate()],
+    )
+    bars = pattern_bars()
+    bars.extend(
+        [
+            bar(12, "15.0", "15.2", "14.8", "15.1", "100000"),
+            bar(13, "15.1", "15.2", "14.5", "14.7", "100000"),
+            bar(14, "14.7", "14.8", "13.8", "13.9", "100000"),
+            bar(15, "13.9", "14.0", "13.5", "13.6", "100000"),
+        ]
+    )
+    dataset = freeze_backtest_session(
+        session_date=date(2026, 8, 18),
+        universe=universe,
+        bars_by_instrument={INSTRUMENT: bars},
+    )
+    config = causal_config().model_copy(
+        update={
+            "reward_multiple": Decimal("10"),
+            "exit_rsi_period": 2,
+            "exit_rsi_threshold": Decimal("70"),
+        }
+    )
+
+    result = run_gap_pullback_backtest(
+        dataset,
+        config,
+        PaperExecutionPolicy(max_volume_participation_pct=Decimal("1")),
+        max_hold_minutes=1,
+    )
+
+    assert result.summary.trade_count == 1
+    assert result.summary.indicator_exit_count == 1
+    assert result.trades[0].exit_reason == "rsi"
+
+
 def risk_snapshot(*, positions: int = 0, daily_loss: str = "0") -> PaperAccountSnapshot:
     ledger = []
     if Decimal(daily_loss) != 0:

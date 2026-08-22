@@ -5,7 +5,7 @@ import json
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .gapper_dataset import GapperUniverseSnapshot
+from .indicators.engine import relative_strength_index
 from .models import MarketBar
 from .paper import (
     PaperAccount,
@@ -89,7 +90,7 @@ class GapPullbackBacktestTrade(BaseModel):
     exit_slippage_bps: Decimal
     stop_price: Decimal
     target_price: Decimal
-    exit_reason: Literal["stop", "target", "time", "eod"]
+    exit_reason: Literal["stop", "target", "rsi", "eod"]
     pnl_per_share: Decimal
     r_multiple: Decimal
     mfe_r: Decimal
@@ -148,7 +149,7 @@ class GapPullbackBacktestSummary(BaseModel):
     trades_per_day: Decimal
     stop_count: int
     target_count: int
-    time_exit_count: int
+    indicator_exit_count: int
 
 
 class GapPullbackBacktestResult(BaseModel):
@@ -384,15 +385,23 @@ def _find_trade(
             rejection_reason="invalid_risk_distance",
         )
     target = entry + risk * config.reward_multiple
-    horizon = entry_bar.start_time + timedelta(minutes=max_hold_minutes)
     max_high = entry
     min_low = entry
+
+    # RSI is calculated from the execution stream so the exit can react at the
+    # configured execution resolution. The indicator implementation is causal:
+    # the value mapped to bar N only uses closes through bar N.
+    rsi_values = relative_strength_index(
+        [bar.close for bar in execution_bars],
+        config.exit_rsi_period,
+    )
 
     exit_price: Decimal | None = None
     exit_time: datetime | None = None
     exit_reference: Decimal | None = None
-    exit_reason: Literal["stop", "target", "time", "eod"] | None = None
+    exit_reason: Literal["stop", "target", "rsi", "eod"] | None = None
     last_exit_rejection: str | None = None
+    rsi_exit_requested = False
 
     for index in range(entry_index, len(execution_bars)):
         bar = execution_bars[index]
@@ -462,7 +471,18 @@ def _find_trade(
                 exit_reason = "target"
                 break
             last_exit_rejection = f"exit_execution:{decision.reason}"
-        if bar.end_time >= horizon:
+        rsi_index = index - config.exit_rsi_period
+        previous_rsi_index = rsi_index - 1
+        if (
+            previous_rsi_index >= 0
+            and rsi_index >= 0
+            and rsi_index < len(rsi_values)
+            and rsi_values[previous_rsi_index] >= config.exit_rsi_threshold
+            and rsi_values[rsi_index] < config.exit_rsi_threshold
+        ):
+            rsi_exit_requested = True
+
+        if rsi_exit_requested:
             decision = _exit_market_decision(
                 candidate=candidate,
                 bar=bar,
@@ -470,7 +490,7 @@ def _find_trade(
                 policy=policy,
                 assumed_spread_bps=assumed_spread_bps,
                 price=bar.close,
-                order_suffix="time",
+                order_suffix="rsi",
             )
             if (
                 decision.should_fill
@@ -481,7 +501,7 @@ def _find_trade(
                 exit_price = decision.fill_price
                 exit_time = bar.end_time
                 exit_reference = bar.close
-                exit_reason = "time"
+                exit_reason = "rsi"
                 break
             last_exit_rejection = f"exit_execution:{decision.reason}"
 
@@ -869,9 +889,7 @@ def run_gap_pullback_backtest(
         trades_per_day=Decimal(count),
         stop_count=sum(1 for trade in selected if trade.exit_reason == "stop"),
         target_count=sum(1 for trade in selected if trade.exit_reason == "target"),
-        time_exit_count=sum(
-            1 for trade in selected if trade.exit_reason in {"time", "eod"}
-        ),
+        indicator_exit_count=sum(1 for trade in selected if trade.exit_reason == "rsi"),
     )
     return GapPullbackBacktestResult(
         strategy_version=active.strategy_version,

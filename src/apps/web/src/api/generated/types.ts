@@ -4565,7 +4565,8 @@ export interface components {
             max_concurrent_positions: number;
             /**
              * Max Hold Minutes
-             * @default 90
+             * @description Legacy compatibility field; indicator-based exits do not use elapsed time.
+             * @default 390
              */
             max_hold_minutes: number;
             risk_profile?: components["schemas"]["StrategyRiskProfile-Input"];
@@ -4632,6 +4633,8 @@ export interface components {
             expectancy_r_ci95_high?: string | null;
             /** Expectancy R Ci95 Low */
             expectancy_r_ci95_low?: string | null;
+            /** Indicator Exit Count */
+            indicator_exit_count: number;
             /** Invalid Risk Count */
             invalid_risk_count: number;
             /** Loss Count */
@@ -4663,8 +4666,6 @@ export interface components {
             stop_count: number;
             /** Target Count */
             target_count: number;
-            /** Time Exit Count */
-            time_exit_count: number;
             /** Trade Count */
             trade_count: number;
             /** Trades Per Day */
@@ -4706,7 +4707,7 @@ export interface components {
              * Exit Reason
              * @enum {string}
              */
-            exit_reason: "stop" | "target" | "time" | "eod";
+            exit_reason: "stop" | "target" | "rsi" | "eod";
             /** Exit Slippage Bps */
             exit_slippage_bps: string;
             /**
@@ -4764,6 +4765,11 @@ export interface components {
          */
         "GapPullbackConfig-Input": {
             /**
+             * Allow Missing Tod Rvol
+             * @default false
+             */
+            allow_missing_tod_rvol: boolean;
+            /**
              * Auto Archive Daily Universe
              * @default true
              */
@@ -4795,6 +4801,16 @@ export interface components {
              * @enum {string}
              */
             execution_interval: "1m" | "5m";
+            /**
+             * Exit Rsi Period
+             * @default 14
+             */
+            exit_rsi_period: number;
+            /**
+             * Exit Rsi Threshold
+             * @default 50
+             */
+            exit_rsi_threshold: number | string;
             /**
              * Float Preference Mode
              * @default ignore
@@ -4967,6 +4983,11 @@ export interface components {
          */
         "GapPullbackConfig-Output": {
             /**
+             * Allow Missing Tod Rvol
+             * @default false
+             */
+            allow_missing_tod_rvol: boolean;
+            /**
              * Auto Archive Daily Universe
              * @default true
              */
@@ -4998,6 +5019,16 @@ export interface components {
              * @enum {string}
              */
             execution_interval: "1m" | "5m";
+            /**
+             * Exit Rsi Period
+             * @default 14
+             */
+            exit_rsi_period: number;
+            /**
+             * Exit Rsi Threshold
+             * @default 50
+             */
+            exit_rsi_threshold: string;
             /**
              * Float Preference Mode
              * @default ignore
@@ -7811,7 +7842,8 @@ export interface components {
             initial_cash: number | string;
             /**
              * Max Hold Minutes
-             * @default 90
+             * @description Legacy compatibility field; indicator-based exits do not use elapsed time.
+             * @default 390
              */
             max_hold_minutes: number;
             /**

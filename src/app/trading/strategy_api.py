@@ -113,7 +113,12 @@ class GapPullbackBacktestRequest(BaseModel):
     risk_profile: StrategyRiskProfile = Field(default_factory=StrategyRiskProfile)
     initial_cash: Decimal = Field(default=Decimal("100000"), gt=0)
     assumed_spread_bps: Decimal = Field(default=Decimal("40"), ge=0, le=10_000)
-    max_hold_minutes: int = Field(default=90, ge=1, le=390)
+    max_hold_minutes: int = Field(
+        default=390,
+        ge=1,
+        le=390,
+        description="Legacy compatibility field; indicator-based exits do not use elapsed time.",
+    )
     max_concurrent_positions: int = Field(default=3, ge=1, le=50)
 
 

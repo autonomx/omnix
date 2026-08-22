@@ -36,6 +36,7 @@ const strictV11Config = (): GapPullbackConfig => ({
   maximum_price: '20',
   minimum_premarket_dollar_volume: '10000000',
   minimum_tod_rvol: '5',
+  allow_missing_tod_rvol: false,
   maximum_spread_bps: '150',
   preferred_float_min_shares: '2000000',
   preferred_float_max_shares: '30000000',
@@ -57,6 +58,8 @@ const strictV11Config = (): GapPullbackConfig => ({
   minimum_quality_score: 7,
   stop_buffer_bps: '15',
   reward_multiple: '2',
+  exit_rsi_period: 14,
+  exit_rsi_threshold: '50',
   entry_start_et: '09:35:00',
   last_entry_et: '11:30:00',
 });
@@ -631,6 +634,7 @@ export function TradingStrategiesPanel() {
                     <ConfigNumber label="Maximum price" suffix="$" step="0.01" value={draft.config.maximum_price} onChange={(value) => setConfigNumber('maximum_price', value)} />
                     <ConfigNumber label="Premarket dollar volume" suffix="$" step="1000000" value={draft.config.minimum_premarket_dollar_volume} onChange={(value) => setConfigNumber('minimum_premarket_dollar_volume', value)} />
                     <ConfigNumber label="Minimum TOD RVOL" suffix="×" step="0.5" value={draft.config.minimum_tod_rvol} onChange={(value) => setConfigNumber('minimum_tod_rvol', value)} />
+                    <label className="toggle-field"><span>Allow missing TOD RVOL<small>reconstructed history only</small></span><input type="checkbox" checked={draft.config.allow_missing_tod_rvol} onChange={(event) => setConfig('allow_missing_tod_rvol', event.target.checked)} /></label>
                     <ConfigNumber label="Maximum spread" suffix="bps" step="10" value={draft.config.maximum_spread_bps} onChange={(value) => setConfigNumber('maximum_spread_bps', value)} />
                     <ConfigNumber label="Preferred float minimum" suffix="shares" step="100000" value={draft.config.preferred_float_min_shares} onChange={(value) => setConfigNumber('preferred_float_min_shares', value)} />
                     <ConfigNumber label="Preferred float maximum" suffix="shares" step="100000" value={draft.config.preferred_float_max_shares} onChange={(value) => setConfigNumber('preferred_float_max_shares', value)} />
@@ -672,6 +676,8 @@ export function TradingStrategiesPanel() {
                     <label><span>Minimum quality score<small>/ 10</small></span><input type="number" min="0" max="10" value={draft.config.minimum_quality_score} onChange={(event) => setConfig('minimum_quality_score', Number(event.target.value))} /></label>
                     <ConfigNumber label="Stop buffer" suffix="bps below L2" step="5" value={draft.config.stop_buffer_bps} onChange={(value) => setConfigNumber('stop_buffer_bps', value)} />
                     <ConfigNumber label="Reward multiple" suffix="R" step="0.25" value={draft.config.reward_multiple} onChange={(value) => setConfigNumber('reward_multiple', value)} />
+                    <label><span>RSI exit period<small>execution bars</small></span><input type="number" min="2" max="100" value={draft.config.exit_rsi_period} onChange={(event) => setConfig('exit_rsi_period', Number(event.target.value))} /></label>
+                    <ConfigNumber label="RSI exit threshold" suffix="RSI" step="1" value={draft.config.exit_rsi_threshold} onChange={(value) => setConfigNumber('exit_rsi_threshold', value)} />
                     <label><span>Entry starts ET</span><input type="time" step="1" value={draft.config.entry_start_et} onChange={(event) => setConfig('entry_start_et', event.target.value)} /></label>
                     <label><span>Last entry ET</span><input type="time" step="1" value={draft.config.last_entry_et} onChange={(event) => setConfig('last_entry_et', event.target.value)} /></label>
                   </div>

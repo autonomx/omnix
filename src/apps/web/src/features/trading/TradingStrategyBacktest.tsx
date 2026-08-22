@@ -57,7 +57,6 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
   const [endDate, setEndDate] = useState(() => isoDate(0));
   const [initialCash, setInitialCash] = useState('100000');
   const [spreadBps, setSpreadBps] = useState('40');
-  const [maxHoldMinutes, setMaxHoldMinutes] = useState('90');
   const [scanTimeEt, setScanTimeEt] = useState((strategy.config.universe_scan_time_et ?? '09:20:00').slice(0, 5));
   const [universeMode, setUniverseMode] = useState<HistoricalUniverseMode>('captured_or_reconstructed');
   const [reconstructionMaxAgeDays, setReconstructionMaxAgeDays] = useState('30');
@@ -105,7 +104,9 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
         end_date: endDate,
         initial_cash: initialCash,
         assumed_spread_bps: spreadBps,
-        max_hold_minutes: Number(maxHoldMinutes),
+        // Kept for the older API contract; the backtest exits on stop, target,
+        // RSI cross, or end-of-session safety flattening instead.
+        max_hold_minutes: 390,
         universe_scan_time_et: scanTimeEt ? `${scanTimeEt}:00` : null,
         universe_mode: universeMode,
         reconstruction_max_age_days: Number(reconstructionMaxAgeDays),
@@ -161,7 +162,6 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
           <label><span>End date</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
           <label><span>Initial cash</span><input type="number" min="1" step="1000" value={initialCash} onChange={(event) => setInitialCash(event.target.value)} /></label>
           <label><span>Assumed spread<small>bps; also used when historical spread is unavailable</small></span><input type="number" min="0" step="5" value={spreadBps} onChange={(event) => setSpreadBps(event.target.value)} /></label>
-          <label><span>Max hold<small>minutes</small></span><input type="number" min="1" max="390" value={maxHoldMinutes} onChange={(event) => setMaxHoldMinutes(event.target.value)} /></label>
           <label><span>Historical scan time ET<small>separate from the 09:35 entry window</small></span><input type="time" value={scanTimeEt} onChange={(event) => setScanTimeEt(event.target.value)} /></label>
           <label><span>Historical universe<small>{modeLabel(universeMode)}</small></span><select value={universeMode} onChange={(event) => setUniverseMode(event.target.value as HistoricalUniverseMode)}><option value="captured_or_reconstructed">Captured, reconstruct missing</option><option value="captured_only">Captured only (exact)</option><option value="reconstructed_only">Reconstruct only (approximate)</option></select></label>
           <label><span>Reconstruction age<small>maximum calendar days</small></span><input type="number" min="1" max="3650" value={reconstructionMaxAgeDays} onChange={(event) => setReconstructionMaxAgeDays(event.target.value)} disabled={universeMode === 'captured_only'} /></label>

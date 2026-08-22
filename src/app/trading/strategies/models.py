@@ -77,6 +77,7 @@ class GapPullbackConfig(BaseModel):
     maximum_price: Decimal = Field(default=Decimal("20"), gt=0)
     minimum_premarket_dollar_volume: Decimal = Field(default=Decimal("1000000"), ge=0)
     minimum_tod_rvol: Decimal = Field(default=Decimal("2"), ge=0)
+    allow_missing_tod_rvol: bool = False
     maximum_spread_bps: Decimal = Field(default=Decimal("150"), gt=0)
     preferred_float_min_shares: Decimal = Field(default=Decimal("2000000"), gt=0)
     preferred_float_max_shares: Decimal = Field(default=Decimal("30000000"), gt=0)
@@ -102,6 +103,8 @@ class GapPullbackConfig(BaseModel):
 
     stop_buffer_bps: Decimal = Field(default=Decimal("15"), ge=0)
     reward_multiple: Decimal = Field(default=Decimal("2"), gt=0, le=10)
+    exit_rsi_period: int = Field(default=14, ge=2, le=100)
+    exit_rsi_threshold: Decimal = Field(default=Decimal("50"), ge=0, le=100)
     entry_start_et: time = time(9, 35)
     last_entry_et: time = time(11, 30)
 
