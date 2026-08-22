@@ -2,6 +2,11 @@ name: Trading strategy extended dataset
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-extended-dataset.yml"
 
 permissions:
   contents: read
@@ -21,10 +26,10 @@ jobs:
       OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
       OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify Alpaca historical-data credentials
         shell: bash
@@ -66,13 +71,13 @@ jobs:
           empty="$(find .cache/trading-liquidity-datasets -type f -name '*.no-candidates.json' 2>/dev/null | wc -l | tr -d ' ')"
           echo "Starting with ${datasets} frozen datasets and ${empty} no-candidate markers."
 
-      - name: Extend cache across fresh unseen validation dates
+      - name: Extend cache across next untouched validation dates
         shell: bash
         run: |
           mkdir -p .cache/trading-liquidity-datasets
           python scripts/run_trading_strategy_liquidity_sweep_resilient.py \
-            --start-date 2026-06-26 \
-            --end-date 2026-07-23 \
+            --start-date 2026-05-26 \
+            --end-date 2026-06-18 \
             --initial-cash 100000 \
             --assumed-spread-bps 40 \
             --max-hold-minutes 90 \
@@ -80,7 +85,7 @@ jobs:
             --max-sessions 30 \
             --thresholds "100000" \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/fresh-validation-dataset \
+            --output-dir artifacts/next-validation-dataset \
             --require-covered-session
 
       - name: Save extended frozen datasets
@@ -96,7 +101,7 @@ jobs:
         run: |
           datasets="$(find .cache/trading-liquidity-datasets -type f -name 'session-*.json' 2>/dev/null | wc -l | tr -d ' ')"
           empty="$(find .cache/trading-liquidity-datasets -type f -name '*.no-candidates.json' 2>/dev/null | wc -l | tr -d ' ')"
-          echo "# Fresh trading validation dataset" >> "${GITHUB_STEP_SUMMARY}"
+          echo "# Next untouched trading validation dataset" >> "${GITHUB_STEP_SUMMARY}"
           echo "Frozen datasets: ${datasets}" >> "${GITHUB_STEP_SUMMARY}"
           echo "No-candidate markers: ${empty}" >> "${GITHUB_STEP_SUMMARY}"
 
@@ -104,7 +109,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-fresh-validation-dataset-evidence
-          path: artifacts/fresh-validation-dataset
+          name: trading-next-validation-dataset-evidence
+          path: artifacts/next-validation-dataset
           if-no-files-found: warn
           retention-days: 30
