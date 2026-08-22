@@ -8,10 +8,12 @@ on:
     paths:
       - ".github/workflows/trading-strategy-extended-dataset.yml"
 
-# One-shot branch-scoped trigger for the frozen V11 older stress capture.
-# Restore this workflow to manual-only immediately after the run is registered.
+# One-shot branch-scoped trigger. The stress candidate was frozen before this
+# block was reconstructed; this workflow never searches or retunes parameters.
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: trading-historical-alpaca-${{ github.repository }}
@@ -27,6 +29,7 @@ jobs:
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
       OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
       OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out exact workflow head
         uses: actions/checkout@v4
@@ -90,6 +93,15 @@ jobs:
             --output-dir artifacts/v11-older-stress-dataset \
             --require-covered-session
 
+      - name: Run frozen V11 older stress validator
+        shell: bash
+        run: |
+          python scripts/validate_trading_strategy_failed_selloff_v11_older_stress.py \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --output-dir artifacts/failed-selloff-v11-older-stress \
+            --initial-cash 100000 \
+            --assumed-spread-bps 40
+
       - name: Save extended frozen datasets
         if: always()
         uses: actions/cache/save@v4
@@ -97,23 +109,42 @@ jobs:
           path: .cache/trading-liquidity-datasets
           key: ${{ steps.dataset-cache-key.outputs.key }}
 
-      - name: Report final cache
+      - name: Publish stress summary
         if: always()
         shell: bash
         run: |
-          datasets="$(find .cache/trading-liquidity-datasets -type f -name 'session-*.json' 2>/dev/null | wc -l | tr -d ' ')"
-          empty="$(find .cache/trading-liquidity-datasets -type f -name '*.no-candidates.json' 2>/dev/null | wc -l | tr -d ' ')"
           echo "# V11 older frozen stress dataset" >> "${GITHUB_STEP_SUMMARY}"
-          echo "Frozen datasets: ${datasets}" >> "${GITHUB_STEP_SUMMARY}"
-          echo "No-candidate markers: ${empty}" >> "${GITHUB_STEP_SUMMARY}"
           echo "Stress window: 2026-03-31 through 2026-04-28" >> "${GITHUB_STEP_SUMMARY}"
           echo "Warning: this older reconstruction has stronger current-listing survivorship bias than the primary validation blocks." >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v11-older-stress/summary.md ]]; then
+            cat artifacts/failed-selloff-v11-older-stress/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Report frozen stress result on PR 1494
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/failed-selloff-v11-older-stress/summary.md ]]; then
+            {
+              echo "<!-- omnix-v11-older-stress:${GITHUB_SHA} -->"
+              echo "## Frozen V11 older stress result"
+              echo
+              echo "Actions run: ${GITHUB_RUN_ID} · commit: ${GITHUB_SHA}"
+              echo
+              cat artifacts/failed-selloff-v11-older-stress/summary.md
+            } > /tmp/v11-stress-comment.md
+            gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body-file /tmp/v11-stress-comment.md
+          else
+            gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "Frozen V11 older stress workflow ${GITHUB_RUN_ID} on ${GITHUB_SHA} did not produce a stress summary; inspect the Actions run."
+          fi
 
       - name: Upload extension evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-v11-older-stress-dataset-evidence
-          path: artifacts/v11-older-stress-dataset
+          name: trading-v11-older-stress-evidence
+          path: |
+            artifacts/v11-older-stress-dataset
+            artifacts/failed-selloff-v11-older-stress
           if-no-files-found: warn
           retention-days: 30
