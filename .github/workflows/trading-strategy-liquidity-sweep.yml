@@ -40,6 +40,7 @@ on:
       - ".github/workflows/trading-strategy-liquidity-sweep.yml"
       - "scripts/run_trading_strategy_backtest.py"
       - "scripts/run_trading_strategy_liquidity_sweep.py"
+      - "scripts/run_trading_strategy_liquidity_sweep_resilient.py"
       - "src/app/trading/strategy_backtest.py"
       - "src/app/trading/strategy_range_backtest.py"
       - "src/app/trading/strategy_historical_bars.py"
@@ -49,10 +50,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: trading-historical-alpaca-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   liquidity-sweep:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
@@ -127,7 +132,7 @@ jobs:
           if [[ -n "${END_DATE}" ]]; then
             args+=(--end-date "${END_DATE}")
           fi
-          python scripts/run_trading_strategy_liquidity_sweep.py "${args[@]}"
+          python scripts/run_trading_strategy_liquidity_sweep_resilient.py "${args[@]}"
 
       - name: Save frozen historical datasets
         if: always()
