@@ -1,0 +1,251 @@
+name: Trading strategy liquidity sweep
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Start date (YYYY-MM-DD); blank uses lookback"
+        required: false
+        default: ""
+        type: string
+      end_date:
+        description: "End date (YYYY-MM-DD); blank uses yesterday ET"
+        required: false
+        default: ""
+        type: string
+      lookback_days:
+        description: "Calendar-day lookback when start date is blank"
+        required: false
+        default: "14"
+        type: string
+      initial_cash:
+        description: "Initial paper cash"
+        required: false
+        default: "100000"
+        type: string
+      assumed_spread_bps:
+        description: "Historical assumed spread in basis points"
+        required: false
+        default: "40"
+        type: string
+      max_hold_minutes:
+        description: "Maximum hold time in minutes"
+        required: false
+        default: "90"
+        type: string
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-liquidity-sweep.yml"
+      - "scripts/run_trading_strategy_backtest.py"
+      - "src/app/trading/strategy_backtest.py"
+      - "src/app/trading/strategy_range_backtest.py"
+      - "src/app/trading/strategy_historical_bars.py"
+      - "src/app/trading/historical_gapper_reconstruction.py"
+      - "src/app/trading/strategies/**"
+
+permissions:
+  contents: read
+
+jobs:
+  liquidity-threshold:
+    name: premarket-${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - label: 250k
+            threshold: "250000"
+          - label: 500k
+            threshold: "500000"
+          - label: 1m
+            threshold: "1000000"
+          - label: 2m
+            threshold: "2000000"
+          - label: 5m
+            threshold: "5000000"
+          - label: 10m
+            threshold: "10000000"
+    env:
+      PYTHONPATH: src
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
+      OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
+      START_DATE: ${{ github.event.inputs.start_date || '' }}
+      END_DATE: ${{ github.event.inputs.end_date || '' }}
+      LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || '14' }}
+      INITIAL_CASH: ${{ github.event.inputs.initial_cash || '100000' }}
+      ASSUMED_SPREAD_BPS: ${{ github.event.inputs.assumed_spread_bps || '40' }}
+      MAX_HOLD_MINUTES: ${{ github.event.inputs.max_hold_minutes || '90' }}
+    steps:
+      - name: Check out exact workflow head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify Alpaca historical-data credentials
+        shell: bash
+        run: |
+          if [[ -z "${OMNIX_ALPACA_API_KEY_ID}" || -z "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
+            echo "::error::Repository Actions secrets OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY are required."
+            exit 2
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backtest dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Run strict v1.1 liquidity variant
+        shell: bash
+        run: |
+          args=(
+            --universe-mode reconstructed_only
+            --lookback-days "${LOOKBACK_DAYS}"
+            --initial-cash "${INITIAL_CASH}"
+            --assumed-spread-bps "${ASSUMED_SPREAD_BPS}"
+            --max-hold-minutes "${MAX_HOLD_MINUTES}"
+            --reconstruction-max-age-days 30
+            --max-sessions 60
+            --minimum-premarket-dollar-volume "${{ matrix.threshold }}"
+            --output-dir "artifacts/trading-backtest-${{ matrix.label }}"
+            --require-covered-session
+          )
+          if [[ -n "${START_DATE}" ]]; then
+            args+=(--start-date "${START_DATE}")
+          fi
+          if [[ -n "${END_DATE}" ]]; then
+            args+=(--end-date "${END_DATE}")
+          fi
+          python scripts/run_trading_strategy_backtest.py "${args[@]}"
+
+      - name: Publish variant summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "artifacts/trading-backtest-${{ matrix.label }}/summary.md" ]]; then
+            cat "artifacts/trading-backtest-${{ matrix.label }}/summary.md" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload variant evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquidity-sweep-${{ matrix.label }}
+          path: artifacts/trading-backtest-${{ matrix.label }}
+          if-no-files-found: error
+          retention-days: 30
+
+  aggregate:
+    name: aggregate-liquidity-sweep
+    runs-on: ubuntu-latest
+    needs: liquidity-threshold
+    if: always()
+    steps:
+      - name: Download sweep artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: liquidity-sweep-*
+          path: artifacts/sweep-input
+
+      - name: Build comparison
+        shell: bash
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          from pathlib import Path
+
+          root = Path("artifacts/sweep-input")
+          output = Path("artifacts/liquidity-sweep-summary")
+          output.mkdir(parents=True, exist_ok=True)
+          rows = []
+          for result_path in sorted(root.glob("liquidity-sweep-*/result.json")):
+              result = json.loads(result_path.read_text(encoding="utf-8"))
+              config = json.loads((result_path.parent / "strategy-config.json").read_text(encoding="utf-8"))
+              outcomes_path = result_path.parent / "candidate-outcomes.json"
+              outcomes = json.loads(outcomes_path.read_text(encoding="utf-8")) if outcomes_path.exists() else {}
+              threshold = int(config["config"]["minimum_premarket_dollar_volume"])
+              rows.append({
+                  "threshold": threshold,
+                  "covered_sessions": result["covered_sessions"],
+                  "candidate_count": result["candidate_count"],
+                  "trigger_count": result["trigger_count"],
+                  "trade_count": result["trade_count"],
+                  "win_count": result["win_count"],
+                  "loss_count": result["loss_count"],
+                  "pnl": result["pnl"],
+                  "return_pct": result["return_pct"],
+                  "expectancy_r": result["expectancy_r"],
+                  "premarket_volume_low": outcomes.get("PREMARKET_DOLLAR_VOLUME_LOW", 0),
+                  "tod_rvol_low": outcomes.get("TOD_RVOL_LOW", 0),
+                  "opening_impulse_low": outcomes.get("OPENING_IMPULSE_TOO_SMALL", 0),
+                  "pullback_volume_high": outcomes.get("PULLBACK_SELLING_VOLUME_TOO_HIGH", 0),
+                  "second_low_not_higher": outcomes.get("SECOND_LOW_NOT_HIGHER", 0),
+                  "waiting_vwap": outcomes.get("WAITING_FOR_VWAP_RECLAIM", 0),
+                  "waiting_breakout": outcomes.get("WAITING_FOR_BREAKOUT", 0),
+                  "breakout_volume_low": outcomes.get("BREAKOUT_VOLUME_TOO_LOW", 0),
+                  "breakout_hold_failed": outcomes.get("BREAKOUT_HOLD_FAILED", 0),
+                  "no_market_data": outcomes.get("NO_MARKET_DATA", 0),
+              })
+          rows.sort(key=lambda row: row["threshold"])
+          if not rows:
+              raise SystemExit("No sweep results were available to aggregate")
+
+          fieldnames = list(rows[0])
+          with (output / "comparison.csv").open("w", newline="", encoding="utf-8") as handle:
+              writer = csv.DictWriter(handle, fieldnames=fieldnames)
+              writer.writeheader()
+              writer.writerows(rows)
+          (output / "comparison.json").write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+
+          lines = [
+              "# Premarket liquidity sensitivity sweep",
+              "",
+              "All variants keep the strict v1.1 structure/risk rules fixed and vary only `minimum_premarket_dollar_volume`.",
+              "",
+              "| Premarket $ gate | Candidates | Triggers | Trades | W-L | P&L | Expectancy R | Rejected by $ gate |",
+              "|---:|---:|---:|---:|---:|---:|---:|---:|",
+          ]
+          for row in rows:
+              threshold = f"${row['threshold']:,}"
+              expectancy = "N/A" if row["expectancy_r"] is None else str(row["expectancy_r"])
+              pnl = "N/A" if row["pnl"] is None else str(row["pnl"])
+              lines.append(
+                  f"| {threshold} | {row['candidate_count']} | {row['trigger_count']} | {row['trade_count']} | "
+                  f"{row['win_count']}-{row['loss_count']} | {pnl} | {expectancy} | {row['premarket_volume_low']} |"
+              )
+          lines.extend([
+              "",
+              "## Interpretation guardrails",
+              "",
+              "- These are reconstructed sessions using current active listings and Alpaca IEX partial-market history, so results remain approximate.",
+              "- Historical catalyst, dilution/supply, float, and true historical spread evidence are unavailable in reconstruction.",
+              "- Do not promote a threshold to production from a small trade count; use the sweep to identify where candidates begin reaching the structural setup, then validate over larger captured datasets.",
+          ])
+          markdown = "\n".join(lines) + "\n"
+          (output / "summary.md").write_text(markdown, encoding="utf-8")
+          print(markdown)
+          PY
+
+      - name: Publish comparison summary
+        shell: bash
+        run: cat artifacts/liquidity-sweep-summary/summary.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload combined comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquidity-sweep-comparison
+          path: artifacts/liquidity-sweep-summary
+          if-no-files-found: error
+          retention-days: 30
