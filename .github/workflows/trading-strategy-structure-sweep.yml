@@ -18,21 +18,18 @@ on:
         required: false
         default: "14"
         type: string
-  pull_request:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/trading-strategy-structure-sweep.yml"
-      - "scripts/run_trading_strategy_structure_sweep.py"
-      - "scripts/run_trading_strategy_structure_sweep_resilient.py"
 
 permissions:
   contents: read
 
+concurrency:
+  group: trading-historical-alpaca-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   structure-diagnostic:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
@@ -46,7 +43,7 @@ jobs:
       - name: Check out exact workflow head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Verify Alpaca historical-data credentials
         shell: bash
