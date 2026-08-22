@@ -2,6 +2,12 @@ name: Trading strategy evolution sweep
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/run_trading_strategy_failed_selloff_v2_focused.py"
 
 permissions:
   contents: read
@@ -9,16 +15,16 @@ permissions:
 jobs:
   strategy-evolution:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
     steps:
-      - name: Check out exact workflow head
+      - name: Check out exact PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -48,16 +54,16 @@ jobs:
             exit 2
           fi
 
-      - name: Run failed-selloff v2 walk-forward evolution sweep
+      - name: Run focused failed-selloff v2 exact sweep
         shell: bash
         run: |
-          python scripts/run_trading_strategy_failed_selloff_v2_sweep.py \
+          python scripts/run_trading_strategy_failed_selloff_v2_focused.py \
             --start-date 2026-08-10 \
             --end-date 2026-08-21 \
             --train-sessions 6 \
             --top-k 30 \
             --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/failed-selloff-v2 \
+            --output-dir artifacts/failed-selloff-v2-focused \
             --initial-cash 100000 \
             --assumed-spread-bps 40 \
             --max-hold-minutes 90
@@ -66,15 +72,15 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [[ -f artifacts/failed-selloff-v2/summary.md ]]; then
-            cat artifacts/failed-selloff-v2/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          if [[ -f artifacts/failed-selloff-v2-focused/summary.md ]]; then
+            cat artifacts/failed-selloff-v2-focused/summary.md >> "${GITHUB_STEP_SUMMARY}"
           fi
 
       - name: Upload evolution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trading-strategy-failed-selloff-v2
-          path: artifacts/failed-selloff-v2
+          name: trading-strategy-failed-selloff-v2-focused
+          path: artifacts/failed-selloff-v2-focused
           if-no-files-found: warn
           retention-days: 30
