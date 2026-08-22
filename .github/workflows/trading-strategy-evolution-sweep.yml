@@ -1,0 +1,86 @@
+name: Trading strategy evolution sweep
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trading-strategy-evolution-sweep.yml"
+      - "scripts/run_trading_strategy_evolution_sweep.py"
+
+permissions:
+  contents: read
+
+jobs:
+  strategy-evolution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backtest dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Restore immutable trading datasets
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-strategy-evolution-${{ github.run_id }}
+          restore-keys: |
+            trading-liquidity-datasets-v1-${{ runner.os }}-
+
+      - name: Verify complete cached dataset
+        shell: bash
+        run: |
+          count="$(find .cache/trading-liquidity-datasets -type f -name 'session-*.json' 2>/dev/null | wc -l | tr -d ' ')"
+          echo "Frozen session datasets: ${count}"
+          if [[ "${count}" -lt 10 ]]; then
+            echo "::error::Expected the 10 fingerprint-verified Aug 10-21 session datasets; this workflow is cache-only and will not call Alpaca."
+            exit 2
+          fi
+
+      - name: Run walk-forward strategy evolution sweep
+        shell: bash
+        run: |
+          python scripts/run_trading_strategy_evolution_sweep.py \
+            --start-date 2026-08-10 \
+            --end-date 2026-08-21 \
+            --train-sessions 6 \
+            --top-k 20 \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --output-dir artifacts/strategy-evolution \
+            --initial-cash 100000 \
+            --assumed-spread-bps 40 \
+            --max-hold-minutes 90
+
+      - name: Publish evolution summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/strategy-evolution/summary.md ]]; then
+            cat artifacts/strategy-evolution/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload evolution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-strategy-evolution
+          path: artifacts/strategy-evolution
+          if-no-files-found: warn
+          retention-days: 30
