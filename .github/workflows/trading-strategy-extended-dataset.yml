@@ -6,6 +6,8 @@ on:
     paths:
       - ".github/workflows/trading-strategy-extended-dataset.yml"
 
+# One-shot PR trigger for the frozen V11 older stress capture. Restore this
+# workflow to manual-only immediately after GitHub registers the exact run.
 permissions:
   contents: read
 
