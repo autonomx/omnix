@@ -472,7 +472,7 @@ export class TradingChartAdapter {
     });
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.comparisonViewportHandler);
     this.priceSeries = this.createPriceSeries(chartType);
-    this.volumeSeries = this.chart.addSeries(HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' } });
+    this.volumeSeries = this.chart.addSeries(HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' }, priceLineVisible: false });
     this.volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   }
 
@@ -635,6 +635,7 @@ export class TradingChartAdapter {
           lineWidth: 2,
           title: item.label,
           lastValueVisible: false,
+          priceLineVisible: false,
           priceScaleId,
         }, paneIndex);
         this.comparisonSeries.set(item.instrumentId, series);
@@ -646,7 +647,7 @@ export class TradingChartAdapter {
       }
       const optionsKey = `${item.color}|${item.label}|${item.placement}|${priceScaleId}`;
       if (created || this.comparisonSeriesOptions.get(item.instrumentId) !== optionsKey) {
-        if (!created) series.applyOptions({ color: item.color, title: item.label, priceScaleId, lastValueVisible: false, lineWidth: 2 });
+        if (!created) series.applyOptions({ color: item.color, title: item.label, priceScaleId, lastValueVisible: false, priceLineVisible: false, lineWidth: 2 });
         this.comparisonSeriesOptions.set(item.instrumentId, optionsKey);
         if (item.placement === 'price-scale') {
           series.priceScale().applyOptions({ visible: true, borderVisible: true, ticksVisible: true, minimumWidth: 58 });
@@ -706,6 +707,7 @@ export class TradingChartAdapter {
           color,
           title: output.valuesInStatusLine === false ? '' : output.title,
           lastValueVisible: output.labelsOnPriceScale === true,
+          priceLineVisible: false,
           ...indicatorPriceFormat(output.precision),
         };
         series = output.kind === 'histogram'
@@ -722,6 +724,7 @@ export class TradingChartAdapter {
           color: output.color ?? indicatorColor(output),
           title: output.valuesInStatusLine === false ? '' : output.title,
           lastValueVisible: output.labelsOnPriceScale === true,
+          priceLineVisible: false,
           priceScaleId,
           ...indicatorPriceFormat(output.precision),
         });
@@ -731,6 +734,7 @@ export class TradingChartAdapter {
           color: output.color ?? indicatorColor(output),
           title: output.valuesInStatusLine === false ? '' : output.title,
           lastValueVisible: output.labelsOnPriceScale === true,
+          priceLineVisible: false,
           lineWidth: output.lineWidth ?? 1,
           priceScaleId,
           ...(lineStyle === undefined ? {} : { lineStyle }),
