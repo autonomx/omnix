@@ -15,8 +15,11 @@ E2E_ACTIVE_NEW = """  await expect(secondChart).toContainText('ETHUSDT');\n  con
 E2E_LABELS_OLD = """  await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);\n  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);\n"""
 E2E_LABELS_NEW = """  // The grid is BTC / ETH / BTC, so a BTC alert belongs on the two BTC charts.\n  await expect(page.locator('.trading-alert-price-label')).toHaveCount(2);\n  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(2);\n"""
 
+LOAD_OLD = """    setDraft({\n      ...draft,\n      strategy_version: '2.0.0',\n      mode: 'shadow',\n      config,\n      risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },\n    });\n"""
+LOAD_NEW = """    setDraft({\n      ...draft,\n      strategy_version: '2.0.0',\n      mode: 'shadow',\n      active_universe_id: null,\n      config,\n      risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },\n    });\n"""
+
 NOTICE_OLD = """    setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode: 1m L1→B1→higher-L2 structure, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Historical evidence is reconstructed and the external block had only two signals, so prospective shadow evidence remains required.');\n"""
-NOTICE_NEW = """    setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode: 1m L1→B1→higher-L2 structure, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Evidence is mixed: the 58-session revealed sample was positive, the April/May frozen block produced only two positive trades, and the older March/April stress block produced 5 trades at -0.546R expectancy. Keep 2.0 in prospective SHADOW until captured live evidence is reviewed; do not promote from historical reconstruction alone.');\n"""
+NOTICE_NEW = """    setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode and cleared any selected universe so qualification uses the strategy-owned raw morning archive. Structure: 1m L1→B1→higher-L2, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Evidence is mixed: the 58-session revealed sample was positive, the April/May frozen block produced only two positive trades, and the older March/April stress block produced 5 trades at -0.546R expectancy. Keep 2.0 in prospective SHADOW until captured live evidence is reviewed; do not promote from historical reconstruction alone.');\n"""
 
 
 def replace_exact(text: str, old: str, new: str, label: str) -> str:
@@ -33,6 +36,7 @@ def main() -> int:
     E2E.write_text(e2e, encoding="utf-8")
 
     panel = PANEL.read_text(encoding="utf-8")
+    panel = replace_exact(panel, LOAD_OLD, LOAD_NEW, "V2 raw archive preset")
     panel = replace_exact(panel, NOTICE_OLD, NOTICE_NEW, "V2 shadow notice")
     PANEL.write_text(panel, encoding="utf-8")
     return 0
