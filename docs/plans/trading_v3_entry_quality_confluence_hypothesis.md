@@ -1,6 +1,6 @@
 # Trading V3 research hypothesis — delayed-base entry quality confluence
 
-Status: **PREDECLARED DEVELOPMENT REPLAY; research only; no execution authority**.
+Status: **REJECTED ON DEVELOPMENT REPLAY; research only; no execution authority**.
 
 This hypothesis was frozen before the first replay. It does not modify frozen `gap_pullback_v1 2.0.0`, prospective SHADOW qualification, AUTO PAPER authority, or the sealed March 2026 holdout.
 
@@ -34,7 +34,7 @@ After the delayed-base structural prerequisite is satisfied, calculate five caus
 4. **Anti-chase candle:** signal-bar close/open body gain <= **3%**. Red/flat bodies pass this upper-bound check only if the delayed-base breakout prerequisite itself remains valid.
 5. **VWAP extension:** signal close is no more than **5% above** regular-session VWAP.
 
-Require **at least 4 of the 5** checks to pass. These values are frozen and are not swept.
+Require **at least 4 of the 5** checks to pass. These values were frozen and were not swept.
 
 A separate finalized 5m trend prerequisite is mandatory:
 
@@ -68,22 +68,86 @@ Replay only the immutable causal cache covering **2025-10-01 through 2026-02-27*
 - compare against the unchanged delayed-base baseline on the same cache;
 - report coverage and exact dataset fingerprints.
 
-## Metrics
+## Replay result
 
-Report baseline and Policy D:
+One-shot Actions run: **`32663139084`**. Artifact: **`9499276127`** (`trading-v3-entry-quality-confluence`).
 
-- trades, wins/losses, win rate;
-- expectancy R and one-sided 90% LCB;
-- max drawdown R;
-- same-risk-model P&L;
-- exit mix;
-- median/mean MFE and MAE when available;
-- quality-score distribution and rejection reasons.
+Coverage and safety:
 
-Also report the delta in win rate, expectancy, trade count and drawdown versus the delayed-base baseline.
+- period: **2025-10-01 through 2026-02-27**;
+- coverage: **103/103 sessions**;
+- provider calls: **0**;
+- March loaded: **no**;
+- frozen V2 changed: **no**;
+- production/AUTO PAPER authority changed: **no**.
+
+### Baseline delayed-base
+
+- trades: **35** (**19W / 16L**);
+- win rate: **54.29%**;
+- expectancy: **+0.11724R**;
+- one-sided 90% LCB: **-0.11687R**;
+- max drawdown: **3.51698R**;
+- P&L: **+$702.08**;
+- exit mix: **15 stop / 8 target / 12 time**.
+
+### Policy D
+
+- trades: **13** (**7W / 6L**);
+- win rate: **53.85%**;
+- expectancy: **+0.08070R**;
+- one-sided 90% LCB: **-0.29502R**;
+- max drawdown: **3.88400R**;
+- P&L: **+$350.28**;
+- exit mix: **6 stop / 3 target / 4 time**.
+
+### Policy D minus baseline
+
+- trades: **-22**;
+- win rate: **-0.44 percentage points**;
+- expectancy: **-0.03654R/trade**;
+- max drawdown: **+0.36702R**;
+- P&L: **-$351.79**.
+
+The causal implementation therefore **did not reproduce** the descriptive same-sample 4-of-5 filter's apparent win-rate improvement. It reduced trade count sharply without improving the win rate and worsened expectancy, uncertainty, drawdown and P&L.
+
+### Signal diagnostics
+
+Across the causal replay there were **103 delayed-base structural signal evaluations** before Policy D:
+
+- Policy D pass evaluations: **26**;
+- Policy D fail evaluations: **77**;
+- 5m EMA9 unwarmed: **43** evaluations;
+- 5m EMA9 not rising: **9**;
+- 5m price below EMA9: **9**;
+- quality-confluence score below 4/5: **56**.
+
+Individual failed quality checks across structural signal evaluations:
+
+- VWAP extension >5%: **44**;
+- breakout volume <2x: **38**;
+- gap <30%: **35**;
+- base range >8%: **35**;
+- breakout candle body >3%: **22**.
+
+The historical IEX cache is sparse enough that many otherwise-valid structural decisions do not contain nine complete finalized 5m buckets, so the mandatory 5m EMA9 trend prerequisite materially reduces historical coverage. That is a data-fidelity limitation, but it is not a reason to remove or relax the predeclared requirement after seeing the result.
+
+## Decision
+
+**Reject this exact Policy D on the development replay.**
+
+Do not rescue the same-sample result by:
+
+- dropping the 5m trend prerequisite;
+- changing the 4-of-5 vote;
+- moving the gap/base/volume/body/VWAP thresholds;
+- substituting a different EMA period;
+- opening March 2026.
+
+The discrepancy between the descriptive post-filter and the causal strategy replay is itself useful evidence: outcome-filtered trade tables can materially overstate an entry filter when they do not reproduce the actual minute-by-minute decision process, later qualifying opportunities, sparse-bar warm-up, execution and portfolio arbitration.
 
 ## Interpretation boundary
 
-Because the thresholds were formulated from the same Oct-Feb losers/winners, even a large improvement is **not validation**. The replay only answers whether the frozen recommendation reproduces its intended in-sample effect when implemented causally.
+This replay was already in-sample because the thresholds were formulated from the same Oct-Feb losers/winners. Its negative causal result is therefore sufficient to stop this exact hypothesis, but a positive result would not have been independent validation.
 
-A future authoritative successor would require untouched/prospective point-in-time evidence, including richer premarket structure, catalyst/supply facts, authoritative halt state and fully warmed multi-timeframe indicators. No same-sample threshold rescue is allowed after this replay.
+The next authoritative successor should rely on untouched/prospective point-in-time evidence rather than another same-sample threshold combination. Prospective SHADOW should continue collecting premarket structure, catalyst/supply facts, authoritative halt state, NBBO/spread context when available, and fully warmed 1m/5m indicators at the exact decision time.
