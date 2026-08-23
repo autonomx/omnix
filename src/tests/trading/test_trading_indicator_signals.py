@@ -30,8 +30,12 @@ def _bar(index: int, close: Decimal, *, session_day: int = 20) -> MarketBar:
     )
 
 
+def _accelerating_close(index: int) -> Decimal:
+    return Decimal("5") + Decimal(index * index) * Decimal("0.0005")
+
+
 def test_indicator_context_confirms_a_mature_uptrend_without_fabricating_5m_long_warmups() -> None:
-    bars = [_bar(index, Decimal("5") + Decimal(index) * Decimal("0.02")) for index in range(60)]
+    bars = [_bar(index, _accelerating_close(index)) for index in range(60)]
 
     context = multi_timeframe_indicator_context(bars)
     allowed, reasons = indicator_entry_confirmation(context)
@@ -63,7 +67,7 @@ def test_indicator_context_rejects_bearish_entry_confluence() -> None:
 
 def test_indicator_context_uses_only_latest_et_session() -> None:
     previous = [_bar(index, Decimal("100") + Decimal(index), session_day=19) for index in range(60)]
-    current = [_bar(index, Decimal("5") + Decimal(index) * Decimal("0.02"), session_day=20) for index in range(60)]
+    current = [_bar(index, _accelerating_close(index), session_day=20) for index in range(60)]
 
     context = multi_timeframe_indicator_context([*previous, *current])
 
