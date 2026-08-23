@@ -452,15 +452,18 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
   const rsiTopResize = page.locator('.trading-indicator-pane-resize-handle[data-indicator-id="rsi"][data-edge="top"]');
   await expect(rsiTopResize).toBeVisible();
   const initialRsiHeight = Number(await rsiTopResize.getAttribute('aria-valuenow'));
-  const resizeBox = await rsiTopResize.boundingBox();
-  expect(resizeBox).not.toBeNull();
-  if (resizeBox) {
-    await page.mouse.move(resizeBox.x + resizeBox.width / 2, resizeBox.y + resizeBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(resizeBox.x + resizeBox.width / 2, resizeBox.y - 24, { steps: 10 });
-    await expect(rsiTopResize).toHaveClass(/is-resizing/);
-    await page.mouse.up();
+  // Use Playwright's live locator actionability instead of a previously measured
+  // 8px hit target. Indicator geometry can refresh between boundingBox() and a
+  // raw mouse down, which made this drag intermittently miss the separator.
+  await rsiTopResize.hover();
+  await page.mouse.down();
+  await expect(rsiTopResize).toHaveClass(/is-resizing/);
+  const activeResizeBox = await rsiTopResize.boundingBox();
+  expect(activeResizeBox).not.toBeNull();
+  if (activeResizeBox) {
+    await page.mouse.move(activeResizeBox.x + activeResizeBox.width / 2, activeResizeBox.y - 24, { steps: 10 });
   }
+  await page.mouse.up();
   await expect.poll(async () => Number(await rsiTopResize.getAttribute('aria-valuenow'))).not.toBe(initialRsiHeight);
   const rsiBottomResize = page.locator('.trading-indicator-pane-resize-handle[data-indicator-id="rsi"][data-edge="bottom"]');
   const chartCanvas = page.locator('.trading-chart-canvas');
