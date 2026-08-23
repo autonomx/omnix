@@ -224,7 +224,8 @@ def _scan_seed_symbols(
             if observed is None or close is None or close <= 0:
                 continue
             local = observed.astimezone(_ET)
-            if local.date() != session_date or local.timetz().replace(tzinfo=None) > scan_time:
+            completed = local + timedelta(minutes=1)
+            if local.date() != session_date or completed.timetz().replace(tzinfo=None) > scan_time:
                 continue
             if latest is None or observed > latest[0]:
                 latest = (observed, close)
@@ -265,7 +266,8 @@ def _minute_candidate(
             continue
         local = timestamp.astimezone(_ET)
         clock = local.timetz().replace(tzinfo=None)
-        if clock < _PREMARKET_OPEN or clock > scan_time:
+        completed_clock = (local + timedelta(minutes=1)).timetz().replace(tzinfo=None)
+        if clock < _PREMARKET_OPEN or completed_clock > scan_time:
             continue
         if local.date() > session_date:
             continue
@@ -418,7 +420,7 @@ class AlpacaHistoricalGapperReconstructor:
             list(previous_close),
             timeframe="1Min",
             start=seed_start,
-            end=scan_at + timedelta(minutes=1),
+            end=scan_at,
             chunk_size=200,
         )
         seed_symbols = _scan_seed_symbols(
@@ -452,7 +454,7 @@ class AlpacaHistoricalGapperReconstructor:
             seed_symbols,
             timeframe="1Min",
             start=minute_start,
-            end=scan_at + timedelta(minutes=1),
+            end=scan_at,
             chunk_size=25,
         )
         candidates: list[GapperCandidate] = []

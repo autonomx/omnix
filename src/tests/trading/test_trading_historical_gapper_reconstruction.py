@@ -53,8 +53,11 @@ class FakeRuntime:
         for days_back in range(5, 0, -1):
             prior = self.session_date - timedelta(days=days_back)
             if prior.weekday() < 5:
-                bars.append({"t": f"{prior.isoformat()}T13:20:00Z", "c": 8, "v": 100})
-        bars.append({"t": f"{self.session_date.isoformat()}T13:20:00Z", "c": 10.4, "v": 600})
+                bars.append({"t": f"{prior.isoformat()}T13:19:00Z", "c": 8, "v": 100})
+        bars.append({"t": f"{self.session_date.isoformat()}T13:19:00Z", "c": 10.4, "v": 600})
+        # Alpaca timestamps minute bars at their start. This 09:20 ET bar is
+        # not complete at a 09:20 scan and must be causally invisible.
+        bars.append({"t": f"{self.session_date.isoformat()}T13:20:00Z", "c": 99, "v": 999999})
         return FakeResponse({"bars": {"ABC": bars}, "next_page_token": None})
 
 
@@ -93,6 +96,9 @@ def test_recent_alpaca_reconstruction_builds_explicit_approximate_universe_witho
     candidate = result.snapshot.candidates[0]
     assert candidate.instrument_id == "equity:NASDAQ:ABC"
     assert candidate.gap_pct == Decimal("30.0")
+    assert candidate.premarket_price == Decimal("10.4")
+    assert candidate.premarket_volume == Decimal("600")
+    assert candidate.tod_rvol == Decimal("6")
     assert candidate.spread_bps == Decimal("40")
     assert candidate.catalyst_evidence_ids == ()
     assert result.warnings

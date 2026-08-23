@@ -16,7 +16,7 @@ from app.trading.historical_gapper_reconstruction import (
     reconstructed_strategy_config,
 )
 from app.trading.paper import PaperExecutionPolicy
-from app.trading.providers.errors import ProviderRateLimitedError
+from app.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError, ProviderRateLimitedError
 from app.trading.providers.http_runtime import ProviderHttpRuntime
 from app.trading.strategy_backtest import (
     BacktestSessionDataset,
@@ -29,7 +29,7 @@ from scripts.run_trading_strategy_backtest import strict_v11_strategy
 
 
 _ET = ZoneInfo("America/New_York")
-_DATASET_CACHE_VERSION = "liquidity-sweep-dataset-v1"
+_DATASET_CACHE_VERSION = "liquidity-sweep-dataset-v2-causal-scan"
 _DEFAULT_THRESHOLDS = (
     Decimal("250000"),
     Decimal("500000"),
@@ -278,62 +278,73 @@ def main() -> int:
             cache_misses += 1
             active_reconstructor, active_regular_runtime = ensure_provider_clients()
             print(f"Cache miss for {session_date}; reconstructing once for {len(thresholds)} variants")
-            reconstruction = _with_rate_limit_retry(
-                f"reconstruct {session_date}",
-                lambda session_date=session_date: active_reconstructor(
-                    session_date=session_date,
-                    scan_time=time(9, 20),
-                    config=reconstruction_strategy.config,
-                    assumed_spread_bps=assumed_spread_bps,
-                    max_age_days=args.reconstruction_max_age_days,
-                ),
-            )
-            universe = reconstruction.snapshot
-            if universe is None:
-                if reconstruction.fidelity == "reconstructed_current_listings_iex":
-                    no_candidate_detail = reconstruction.detail or "Historical scan found no candidates."
-                    if no_candidate_path is not None:
-                        no_candidate_path.write_text(
-                            json.dumps(
-                                {
-                                    "cache_version": _DATASET_CACHE_VERSION,
-                                    "session_date": session_date.isoformat(),
-                                    "fidelity": reconstruction.fidelity,
-                                    "detail": no_candidate_detail,
-                                    "warnings": list(reconstruction.warnings),
-                                },
-                                indent=2,
-                                sort_keys=True,
-                            )
-                            + "\n",
-                            encoding="utf-8",
-                        )
-                else:
-                    unavailable_sessions.append(
-                        {
-                            "session_date": session_date.isoformat(),
-                            "fidelity": reconstruction.fidelity,
-                            "detail": reconstruction.detail,
-                        }
-                    )
-                    continue
-            else:
-                bars_by_instrument = _with_rate_limit_retry(
-                    f"regular bars {session_date}",
-                    lambda universe=universe, session_date=session_date: alpaca_historical_session_bars(
-                        universe.candidates,
-                        session_date,
-                        runtime=active_regular_runtime,
+            try:
+                reconstruction = _with_rate_limit_retry(
+                    f"reconstruct {session_date}",
+                    lambda session_date=session_date: active_reconstructor(
+                        session_date=session_date,
+                        scan_time=time(9, 20),
+                        config=reconstruction_strategy.config,
+                        assumed_spread_bps=assumed_spread_bps,
+                        max_age_days=args.reconstruction_max_age_days,
                     ),
                 )
-                dataset = freeze_backtest_session(
-                    session_date=session_date,
-                    universe=universe,
-                    bars_by_instrument=bars_by_instrument,
+                universe = reconstruction.snapshot
+                if universe is None:
+                    if reconstruction.fidelity == "reconstructed_current_listings_iex":
+                        no_candidate_detail = reconstruction.detail or "Historical scan found no candidates."
+                        if no_candidate_path is not None:
+                            no_candidate_path.write_text(
+                                json.dumps(
+                                    {
+                                        "cache_version": _DATASET_CACHE_VERSION,
+                                        "session_date": session_date.isoformat(),
+                                        "fidelity": reconstruction.fidelity,
+                                        "detail": no_candidate_detail,
+                                        "warnings": list(reconstruction.warnings),
+                                    },
+                                    indent=2,
+                                    sort_keys=True,
+                                )
+                                + "\n",
+                                encoding="utf-8",
+                            )
+                    else:
+                        unavailable_sessions.append(
+                            {
+                                "session_date": session_date.isoformat(),
+                                "fidelity": reconstruction.fidelity,
+                                "detail": reconstruction.detail,
+                            }
+                        )
+                        continue
+                else:
+                    bars_by_instrument = _with_rate_limit_retry(
+                        f"regular bars {session_date}",
+                        lambda universe=universe, session_date=session_date: alpaca_historical_session_bars(
+                            universe.candidates,
+                            session_date,
+                            runtime=active_regular_runtime,
+                        ),
+                    )
+                    dataset = freeze_backtest_session(
+                        session_date=session_date,
+                        universe=universe,
+                        bars_by_instrument=bars_by_instrument,
+                    )
+                    if dataset_path is not None:
+                        _write_cached_dataset(dataset_path, dataset)
+                        print(f"Cached frozen dataset for {session_date}: {dataset.dataset_fingerprint}")
+            except (ProviderContractError, ProviderDataUnavailableError, OSError) as exc:
+                unavailable_sessions.append(
+                    {
+                        "session_date": session_date.isoformat(),
+                        "fidelity": "provider_data_unavailable",
+                        "detail": f"{type(exc).__name__}: {exc}",
+                    }
                 )
-                if dataset_path is not None:
-                    _write_cached_dataset(dataset_path, dataset)
-                    print(f"Cached frozen dataset for {session_date}: {dataset.dataset_fingerprint}")
+                print(f"{session_date}: provider data unavailable; preserving completed cache and continuing: {exc}")
+                continue
 
         if dataset is None:
             covered_sessions += 1

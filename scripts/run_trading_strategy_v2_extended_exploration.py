@@ -1,66 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-
-def replace_once(path: str, old: str, new: str) -> None:
-    target = Path(path)
-    text = target.read_text(encoding="utf-8")
-    count = text.count(old)
-    if count != 1:
-        raise RuntimeError(f"expected exactly one match in {path}, found {count}: {old[:120]!r}")
-    target.write_text(text.replace(old, new), encoding="utf-8")
-
-
-# Alpaca historical stock bars are timestamped at BAR START. A 09:20 1m bar
-# contains 09:20-09:21 information and therefore is not causally available to a
-# 09:20 universe scan. Require every candidate/TOD bar to be complete by scan.
-replace_once(
-    "src/app/trading/historical_gapper_reconstruction.py",
-    """            local = observed.astimezone(_ET)\n            if local.date() != session_date or local.timetz().replace(tzinfo=None) > scan_time:\n                continue\n""",
-    """            local = observed.astimezone(_ET)\n            completed = local + timedelta(minutes=1)\n            if local.date() != session_date or completed.timetz().replace(tzinfo=None) > scan_time:\n                continue\n""",
-)
-replace_once(
-    "src/app/trading/historical_gapper_reconstruction.py",
-    """        clock = local.timetz().replace(tzinfo=None)\n        if clock < _PREMARKET_OPEN or clock > scan_time:\n            continue\n""",
-    """        clock = local.timetz().replace(tzinfo=None)\n        completed_clock = (local + timedelta(minutes=1)).timetz().replace(tzinfo=None)\n        if clock < _PREMARKET_OPEN or completed_clock > scan_time:\n            continue\n""",
-)
-# The API end is exclusive for our causal purpose: do not request the bar that
-# starts at the scan timestamp in either seed or deeper premarket history.
-replace_once(
-    "src/app/trading/historical_gapper_reconstruction.py",
-    """            end=scan_at + timedelta(minutes=1),\n            chunk_size=200,\n""",
-    """            end=scan_at,\n            chunk_size=200,\n""",
-)
-replace_once(
-    "src/app/trading/historical_gapper_reconstruction.py",
-    """            end=scan_at + timedelta(minutes=1),\n            chunk_size=25,\n""",
-    """            end=scan_at,\n            chunk_size=25,\n""",
-)
-
-# Old frozen dataset caches include the 09:20-starting bar in reconstructed
-# candidate features. Bump the namespace so those datasets can never be silently
-# reused after the causality fix.
-replace_once(
-    "scripts/run_trading_strategy_liquidity_sweep.py",
-    '_DATASET_CACHE_VERSION = "liquidity-sweep-dataset-v1"',
-    '_DATASET_CACHE_VERSION = "liquidity-sweep-dataset-v2-causal-scan"',
-)
-
-# Regression: a huge 09:20 bar must not change the 09:20 candidate snapshot.
-replace_once(
-    "src/tests/trading/test_trading_historical_gapper_reconstruction.py",
-    """                bars.append({\"t\": f\"{prior.isoformat()}T13:20:00Z\", \"c\": 8, \"v\": 100})\n        bars.append({\"t\": f\"{self.session_date.isoformat()}T13:20:00Z\", \"c\": 10.4, \"v\": 600})\n""",
-    """                bars.append({\"t\": f\"{prior.isoformat()}T13:19:00Z\", \"c\": 8, \"v\": 100})\n        bars.append({\"t\": f\"{self.session_date.isoformat()}T13:19:00Z\", \"c\": 10.4, \"v\": 600})\n        # Alpaca timestamps minute bars at their start. This 09:20 ET bar is\n        # not complete at a 09:20 scan and must be causally invisible.\n        bars.append({\"t\": f\"{self.session_date.isoformat()}T13:20:00Z\", \"c\": 99, \"v\": 999999})\n""",
-)
-replace_once(
-    "src/tests/trading/test_trading_historical_gapper_reconstruction.py",
-    """    assert candidate.gap_pct == Decimal(\"30.0\")\n    assert candidate.spread_bps == Decimal(\"40\")\n""",
-    """    assert candidate.gap_pct == Decimal(\"30.0\")\n    assert candidate.premarket_price == Decimal(\"10.4\")\n    assert candidate.premarket_volume == Decimal(\"600\")\n    assert candidate.tod_rvol == Decimal(\"6\")\n    assert candidate.spread_bps == Decimal(\"40\")\n""",
-)
-
-exploration = r'''from __future__ import annotations
-
 """Disciplined cached-data exploration around the frozen gap-pullback V2 profile.
 
 This utility never changes the frozen/prospective 2.0.0 profile. It evaluates a
@@ -279,10 +218,18 @@ def main() -> int:
     dev_datasets, dev_meta = _load_block(cache, dev_start, dev_end)
     val_datasets, val_meta = _load_block(cache, val_start, val_end)
 
-    if dev_meta["missing_sessions"] or val_meta["missing_sessions"]:
-        # Missing provider sessions are never silently turned into no-trade days.
-        print(json.dumps({"development": dev_meta, "validation": val_meta}, indent=2))
-        raise SystemExit(2)
+    def require_coverage(label: str, meta: dict[str, object], *, absolute_floor: int) -> None:
+        requested = int(meta["requested_sessions"])
+        covered = int(meta["covered_sessions"])
+        required = max(absolute_floor, math.ceil(requested * 0.80))
+        if covered < required:
+            print(json.dumps({label: meta, "required_covered_sessions": required}, indent=2))
+            raise SystemExit(2)
+
+    # Missing provider sessions stay explicit/excluded. A block is usable only if
+    # at least 80% is covered (and at least 20 dev / 10 validation sessions).
+    require_coverage("development", dev_meta, absolute_floor=20)
+    require_coverage("validation", val_meta, absolute_floor=10)
 
     frozen = frozen_v2_config()
     development: list[dict[str, object]] = []
@@ -387,146 +334,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'''
-Path("scripts/run_trading_strategy_v2_extended_exploration.py").write_text(exploration, encoding="utf-8")
-
-workflow = r'''name: Trading strategy extended dataset
-
-on:
-  workflow_dispatch:
-    inputs:
-      development_start:
-        description: Development block start (YYYY-MM-DD)
-        required: true
-        default: "2026-01-02"
-      development_end:
-        description: Development block end (YYYY-MM-DD)
-        required: true
-        default: "2026-02-27"
-      validation_start:
-        description: One-shot validation block start (YYYY-MM-DD)
-        required: true
-        default: "2026-03-02"
-      validation_end:
-        description: One-shot validation block end (YYYY-MM-DD)
-        required: true
-        default: "2026-03-27"
-
-permissions:
-  contents: read
-
-concurrency:
-  group: trading-historical-alpaca-${{ github.repository }}
-  cancel-in-progress: false
-
-jobs:
-  extend-frozen-dataset:
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    env:
-      PYTHONPATH: "src:."
-      OMNIX_PERSISTENCE_MODE: legacy_test
-      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
-      OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
-      OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
-    steps:
-      - name: Check out exact workflow head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Verify Alpaca historical-data credentials
-        shell: bash
-        run: |
-          if [[ -z "${OMNIX_ALPACA_API_KEY_ID}" || -z "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
-            echo "::error::Both OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY are required for cache misses."
-            exit 2
-          fi
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install backtest dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
-
-      - name: Build append-only causal cache key
-        id: dataset-cache-key
-        shell: bash
-        run: |
-          echo "key=trading-liquidity-datasets-v2-causal-${RUNNER_OS}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
-
-      - name: Restore causal frozen datasets
-        uses: actions/cache/restore@v4
-        with:
-          path: .cache/trading-liquidity-datasets
-          key: ${{ steps.dataset-cache-key.outputs.key }}
-          restore-keys: |
-            trading-liquidity-datasets-v2-causal-${{ runner.os }}-
-
-      - name: Capture only missing development + validation sessions
-        shell: bash
-        run: |
-          mkdir -p .cache/trading-liquidity-datasets
-          python scripts/run_trading_strategy_liquidity_sweep_resilient.py \
-            --start-date "${{ inputs.development_start }}" \
-            --end-date "${{ inputs.validation_end }}" \
-            --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/v2-extended-cache-capture \
-            --reconstruction-max-age-days 365 \
-            --max-sessions 80 \
-            --thresholds 100000 \
-            --initial-cash 100000 \
-            --assumed-spread-bps 150 \
-            --require-covered-session
-
-      - name: Explore frozen-V2 single-axis successors from cache only
-        shell: bash
-        run: |
-          python scripts/run_trading_strategy_v2_extended_exploration.py \
-            --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --development-start "${{ inputs.development_start }}" \
-            --development-end "${{ inputs.development_end }}" \
-            --validation-start "${{ inputs.validation_start }}" \
-            --validation-end "${{ inputs.validation_end }}" \
-            --initial-cash 100000 \
-            --assumed-spread-bps 150 \
-            --minimum-development-trades 5 \
-            --finalists 3 \
-            --output-dir artifacts/v2-extended-exploration
-
-      - name: Save causal frozen datasets
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: .cache/trading-liquidity-datasets
-          key: ${{ steps.dataset-cache-key.outputs.key }}
-
-      - name: Publish summaries
-        if: always()
-        shell: bash
-        run: |
-          if [[ -f artifacts/v2-extended-cache-capture/summary.md ]]; then
-            cat artifacts/v2-extended-cache-capture/summary.md >> "${GITHUB_STEP_SUMMARY}"
-          fi
-          if [[ -f artifacts/v2-extended-exploration/summary.md ]]; then
-            cat artifacts/v2-extended-exploration/summary.md >> "${GITHUB_STEP_SUMMARY}"
-          fi
-
-      - name: Upload extension evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trading-v2-extended-causal-evidence
-          path: |
-            artifacts/v2-extended-cache-capture
-            artifacts/v2-extended-exploration
-          if-no-files-found: warn
-          retention-days: 30
-'''
-Path(".github/workflows/trading-strategy-extended-dataset.yml").write_text(workflow, encoding="utf-8")
-
-print("Applied causal scan cutoff, cache v2 invalidation, regression coverage, cached V2 exploration, and extended workflow.")
