@@ -32,41 +32,49 @@ jobs:
           cache: pip
 
       - name: Apply guarded V2 continuous-qualification lifecycle
-        run: python scripts/patch_trading_v2_qualification_ui.py
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/patch_trading_v2_qualification_ui.py 2>&1 | tee /tmp/v2-qualification.log
 
       - name: Install focused test dependencies
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4" pytest
+          set -o pipefail
+          python -m pip install --upgrade pip 2>&1 | tee -a /tmp/v2-qualification.log
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4" pytest 2>&1 | tee -a /tmp/v2-qualification.log
 
       - name: Run V2 lifecycle and authority regressions
+        shell: bash
         run: |
+          set -o pipefail
           pytest -q \
             src/tests/trading/test_trading_strategy_shadow_universe.py \
             src/tests/trading/test_trading_strategy_shadow_execution.py \
             src/tests/trading/test_trading_strategy_v2_qualification_monitor.py \
             src/tests/trading/test_trading_strategy_v2_qualification.py \
-            src/tests/trading/test_trading_gap_pullback_v2.py
-          git diff --check
+            src/tests/trading/test_trading_gap_pullback_v2.py 2>&1 | tee -a /tmp/v2-qualification.log
+          git diff --check 2>&1 | tee -a /tmp/v2-qualification.log
 
       - name: Commit qualified lifecycle and remove staging files
         id: commit
         shell: bash
         run: |
+          set -o pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm \
             scripts/patch_trading_v2_qualification_ui.py \
             .github/workflows/trading-v2-qualification-ui.yml \
             scripts/patch_trading_v2_continuous_qualification.py \
-            .github/workflows/trading-v2-continuous-qualification.yml
+            .github/workflows/trading-v2-continuous-qualification.yml 2>&1 | tee -a /tmp/v2-qualification.log
           git add \
             src/app/trading/strategy_shadow_universe.py \
             src/app/trading/strategy_v2_qualification_monitor.py \
             src/tests/trading/test_trading_strategy_shadow_universe.py \
             src/tests/trading/test_trading_strategy_v2_qualification_monitor.py
-          git commit -m "trading: continue V2 qualification after promotion"
-          git push origin HEAD:agent/trading-auto-strategy-roadmap
+          git commit -m "trading: continue V2 qualification after promotion" 2>&1 | tee -a /tmp/v2-qualification.log
+          git push origin HEAD:agent/trading-auto-strategy-roadmap 2>&1 | tee -a /tmp/v2-qualification.log
           echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
       - name: Report success
@@ -74,7 +82,19 @@ jobs:
         run: |
           gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "Continuous V2 qualification passed focused archive/SHADOW/V2 regressions and pushed \`${{ steps.commit.outputs.sha }}\`. Post-session raw-archive replay now continues in AUTO PAPER as read-only evidence, while the execution fallback remains SHADOW-only and cannot authorize orders. All temporary V2 staging workflow/script files were removed in the same commit."
 
-      - name: Report failure
+      - name: Report failure with diagnostics
         if: failure()
+        shell: bash
         run: |
-          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "Continuous V2 qualification lifecycle failed on source head \`${GITHUB_SHA}\`. No lifecycle patch from this run should be trusted; inspect the workflow before continuing."
+          if test -f /tmp/v2-qualification.log; then
+            tail -c 12000 /tmp/v2-qualification.log > /tmp/v2-qualification-tail.log
+          else
+            printf '%s\n' 'No captured lifecycle log was produced.' > /tmp/v2-qualification-tail.log
+          fi
+          {
+            printf '%s\n\n' "Continuous V2 qualification lifecycle failed on source head \`${GITHUB_SHA}\`. No lifecycle patch from this run should be trusted. Diagnostic tail:"
+            printf '%s\n' '```text'
+            cat /tmp/v2-qualification-tail.log
+            printf '%s\n' '```'
+          } > /tmp/v2-qualification-comment.md
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body-file /tmp/v2-qualification-comment.md
