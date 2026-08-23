@@ -11,6 +11,7 @@ function event(execution: Record<string, unknown>): StrategyEvent {
     observed_at: '2026-08-24T13:45:00Z',
     state: 'entry_ready',
     reason_code: 'FAILED_SELL_OFF_CONFIRMED',
+    idempotency_key: 'strategy-1:event-1',
     payload: { execution },
   };
 }
