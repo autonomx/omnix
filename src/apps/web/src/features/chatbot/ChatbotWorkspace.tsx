@@ -334,8 +334,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }, [selectedSessionId, sessionsQuery.data]);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('omnix:chat-session-selected', { detail: { sessionId: selectedSessionId } }));
-  }, [selectedSessionId]);
+    const session = sessionQuery.data
+      ?? sessionsQuery.data?.sessions.find((candidate) => candidate.id === selectedSessionId);
+    window.dispatchEvent(new CustomEvent('omnix:chat-session-selected', {
+      detail: {
+        sessionId: selectedSessionId,
+        session,
+      },
+    }));
+  }, [selectedSessionId, sessionQuery.data, sessionsQuery.data]);
 
   useEffect(() => {
     const syncLiveChatSession = (event: Event) => {

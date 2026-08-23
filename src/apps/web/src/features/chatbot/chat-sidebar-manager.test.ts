@@ -44,7 +44,7 @@ describe('chat sidebar manager', () => {
       }
       return Response.json({
         sessions: [
-          { id: 'chat:one', title: 'First chat', message_count: 12, created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:01:00Z' },
+          { id: 'chat:one', title: 'First chat', provider_id: 'lm-studio', model_id: 'local-model', interaction_mode: 'character', character_id: 'maya', voice_asset_id: 'voice-cloning:Maya', read_memory: true, write_memory: false, shared_memory_access: 'read_only', transcript_policy: 'temporary', message_count: 12, created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:01:00Z' },
           { id: 'chat:two', title: 'Second chat', message_count: 4, created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:02:00Z' },
         ],
       });
@@ -109,6 +109,34 @@ describe('chat sidebar manager', () => {
     expect(createdSessions).toHaveLength(1);
     expect(stopEvents).toHaveBeenCalledTimes(1);
     expect(document.querySelector<HTMLTextAreaElement>('textarea[name="content"]')?.value).toBe('');
+  });
+
+  it('uses the selected session summary instead of rereading the transcript', async () => {
+    await vi.waitFor(() => expect(document.querySelectorAll('.assistant-chatgpt-row')).toHaveLength(2));
+    document.querySelector<HTMLButtonElement>(
+      '.assistant-chatgpt-row[data-session-id="chat:one"] .assistant-chatgpt-session',
+    )?.click();
+    fetchMock.mockClear();
+
+    document.querySelector<HTMLButtonElement>('.assistant-chatgpt-new')?.click();
+
+    await vi.waitFor(() => {
+      const postCall = fetchMock.mock.calls.find(([, init]) => String(init?.method ?? 'GET').toUpperCase() === 'POST');
+      expect(postCall).toBeDefined();
+      expect(JSON.parse(String(postCall?.[1]?.body))).toMatchObject({
+        title: 'New chat',
+        provider_id: 'lm-studio',
+        model_id: 'local-model',
+        interaction_mode: 'character',
+        character_id: 'maya',
+        voice_asset_id: 'voice-cloning:Maya',
+        read_memory: true,
+        write_memory: false,
+        shared_memory_access: 'read_only',
+        transcript_policy: 'temporary',
+      });
+    });
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/chat:one'))).toBe(false);
   });
 
   it('moves a pinned chat out of Sessions and into Pinned', async () => {

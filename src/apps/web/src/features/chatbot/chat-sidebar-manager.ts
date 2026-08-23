@@ -10,6 +10,15 @@ const REFRESH_DELAY_MS = 80;
 type SessionSummary = {
   id: string;
   title?: string | null;
+  provider_id?: string | null;
+  model_id?: string | null;
+  interaction_mode?: 'system' | 'character';
+  character_id?: string | null;
+  voice_asset_id?: string | null;
+  read_memory?: boolean;
+  write_memory?: boolean;
+  shared_memory_access?: 'none' | 'read_only';
+  transcript_policy?: 'persistent' | 'temporary' | 'none';
   message_count?: number;
   created_at?: string;
   updated_at?: string;
@@ -266,11 +275,18 @@ function createNewChatButton(): HTMLButtonElement {
   button.title = 'New chat';
   button.innerHTML = '<span aria-hidden="true">＋</span><span>New</span>';
   button.addEventListener('click', () => {
+    const originalContent = button.innerHTML;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
+    button.setAttribute('aria-label', 'Creating new chat');
+    const label = button.querySelector('span:last-child');
+    if (label) label.textContent = 'Creating...';
+    showSidebarStatus('Creating new chat...');
     void startBlankChat().catch((error) => {
       button.disabled = false;
       button.removeAttribute('aria-busy');
+      button.setAttribute('aria-label', 'New chat');
+      button.innerHTML = originalContent;
       showSidebarStatus(error instanceof Error ? error.message : 'New chat could not be created.', true);
     });
   });
@@ -292,7 +308,7 @@ function createSessionRow(session: SessionSummary, state: SidebarState, pinned: 
   title.className = 'assistant-chatgpt-title';
   title.textContent = displayTitle(session, entryState);
   select.appendChild(title);
-  select.addEventListener('click', () => selectSession(session.id));
+  select.addEventListener('click', () => selectSession(session));
 
   const actions = document.createElement('div');
   actions.className = 'assistant-chatgpt-actions';
@@ -420,11 +436,11 @@ async function deleteSession(session: SessionSummary): Promise<void> {
   }
 }
 
-function selectSession(sessionId: string): void {
-  selectedSessionId = sessionId;
+function selectSession(session: SessionSummary): void {
+  selectedSessionId = session.id;
   document.querySelector<HTMLButtonElement>('.assistant-sidebar-nav button[aria-label="Open Chats view"]')?.click();
-  window.dispatchEvent(new CustomEvent(LIVE_SESSION_CHANGED_EVENT, { detail: { sessionId } }));
-  window.dispatchEvent(new CustomEvent(SESSION_SELECTED_EVENT, { detail: { sessionId } }));
+  window.dispatchEvent(new CustomEvent(LIVE_SESSION_CHANGED_EVENT, { detail: { sessionId: session.id } }));
+  window.dispatchEvent(new CustomEvent(SESSION_SELECTED_EVENT, { detail: { sessionId: session.id, session } }));
   updateActiveRows();
   applySelectedTitleOverride();
 }
@@ -450,9 +466,10 @@ function applySharedSessionFromUrl(sessions: SessionSummary[]): void {
     sharedSessionFromUrlApplied = true;
     return;
   }
-  if (!sessions.some((session) => session.id === sessionId)) return;
+  const session = sessions.find((candidate) => candidate.id === sessionId);
+  if (!session) return;
   sharedSessionFromUrlApplied = true;
-  selectSession(sessionId);
+  selectSession(session);
 }
 
 function createStatusRegion(): HTMLElement {
