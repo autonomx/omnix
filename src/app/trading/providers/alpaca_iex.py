@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -15,7 +16,7 @@ from app.trading.execution import (
     assess_execution_observation,
     execution_observation_from_quote,
 )
-from app.trading.models import ProviderBinding
+from app.trading.models import AdjustmentMode, MarketBar, ProviderBinding
 from app.trading.us_equity_calendar import us_equity_session
 
 from .alpaca_iex_status import default_alpaca_iex_status_cache
@@ -25,6 +26,9 @@ from .http_runtime import ProviderHttpRuntime
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"
 ALPACA_IEX_PARTIAL_MARKET = True
+_ET = ZoneInfo("America/New_York")
+_EXTENDED_SESSION_OPEN = time(4, 0)
+_INDICATOR_BAR_LIMIT = 1000
 
 
 def _stored_credentials() -> dict[str, str]:
@@ -107,12 +111,25 @@ def _round_lot_shares(value: Any) -> Decimal | None:
     return lots * Decimal("100")
 
 
+def _decimal_bar_value(value: Any, *, field: str) -> Decimal:
+    if value in {None, ""}:
+        raise ProviderContractError(f"Alpaca IEX historical bar is missing {field}")
+    try:
+        return Decimal(str(value))
+    except Exception as exc:
+        raise ProviderContractError(
+            f"Alpaca IEX historical bar returned invalid {field}"
+        ) from exc
+
+
 class AlpacaIexExecutionProvider:
-    """Official Alpaca IEX quote adapter for paper execution only.
+    """Official Alpaca IEX adapter for paper execution and causal evidence.
 
     Alpaca Basic/Paper Only accounts expose real-time IEX data rather than the
     consolidated SIP. Omnix therefore records the provider as ``alpaca_iex`` and
-    never represents this feed as full-market NBBO coverage.
+    never represents this feed as full-market NBBO coverage. Historical 1-minute
+    bars exposed here are for causal SHADOW/research telemetry only and do not
+    grant execution authority.
     """
 
     provider_id = "alpaca_iex"
@@ -151,6 +168,101 @@ class AlpacaIexExecutionProvider:
         if binding is None:
             raise ValueError(f"Alpaca IEX does not support instrument: {instrument_id}")
         return binding
+
+    def indicator_bars_as_of(
+        self,
+        instrument_id: str,
+        *,
+        as_of: datetime,
+        cancellation=None,
+    ) -> list[MarketBar]:
+        """Return completed same-day 1m IEX bars from 04:00 ET through ``as_of``.
+
+        Alpaca timestamps one-minute bars at bar *start*. The provider can return
+        a bar whose start is before ``end`` but whose close is not yet knowable at
+        ``as_of``. Omnix therefore applies the stronger causal rule
+        ``bar_start + 1m <= as_of`` before exposing a bar to indicator telemetry.
+        """
+
+        if as_of.tzinfo is None:
+            raise ValueError("indicator history as_of must be timezone-aware")
+        cutoff = as_of.astimezone(timezone.utc)
+        local_cutoff = cutoff.astimezone(_ET)
+        session_start = datetime.combine(
+            local_cutoff.date(),
+            _EXTENDED_SESSION_OPEN,
+            tzinfo=_ET,
+        ).astimezone(timezone.utc)
+        if cutoff <= session_start:
+            return []
+
+        binding = self.get_binding(instrument_id)
+        headers = alpaca_iex_auth_headers()
+        params: dict[str, object] = {
+            "timeframe": "1Min",
+            "start": session_start.isoformat().replace("+00:00", "Z"),
+            "end": cutoff.isoformat().replace("+00:00", "Z"),
+            "adjustment": "raw",
+            "feed": "iex",
+            "sort": "asc",
+            "limit": _INDICATOR_BAR_LIMIT,
+        }
+        response = self.runtime.get(
+            f"{self.data_url}/v2/stocks/{binding.provider_symbol}/bars",
+            params=params,
+            headers=headers,
+            timeout=10,
+            cancellation=cancellation,
+        )
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ProviderContractError("Alpaca IEX returned invalid historical-bars JSON") from exc
+        if not isinstance(payload, dict):
+            raise ProviderContractError("Alpaca IEX historical-bars payload is malformed")
+        raw_bars = payload.get("bars")
+        if not isinstance(raw_bars, list):
+            raise ProviderContractError("Alpaca IEX historical-bars response has no bars list")
+
+        received_at = self.clock()
+        if received_at.tzinfo is None:
+            raise ProviderContractError("Alpaca IEX provider clock must be timezone-aware")
+        received_at = received_at.astimezone(timezone.utc)
+        bars: list[MarketBar] = []
+        for raw in raw_bars:
+            if not isinstance(raw, dict):
+                continue
+            start_time = _parse_timestamp(raw.get("t"), field="historical bar")
+            end_time = start_time + timedelta(minutes=1)
+            if start_time < session_start or end_time > cutoff:
+                continue
+            if start_time.astimezone(_ET).date() != local_cutoff.date():
+                continue
+            bars.append(
+                MarketBar(
+                    instrument_id=instrument_id,
+                    interval="1m",
+                    start_time=start_time,
+                    end_time=end_time,
+                    open=_decimal_bar_value(raw.get("o"), field="open"),
+                    high=_decimal_bar_value(raw.get("h"), field="high"),
+                    low=_decimal_bar_value(raw.get("l"), field="low"),
+                    close=_decimal_bar_value(raw.get("c"), field="close"),
+                    volume=_decimal_bar_value(raw.get("v") or 0, field="volume"),
+                    is_final=True,
+                    adjustment_mode=AdjustmentMode.RAW,
+                    session=us_equity_session(start_time),
+                    provider=self.provider_id,
+                    provider_event_id=str(raw.get("t") or start_time.isoformat()),
+                    received_at=received_at,
+                )
+            )
+        bars.sort(key=lambda bar: bar.start_time)
+        if not bars:
+            raise ProviderDataUnavailableError(
+                f"Alpaca IEX returned no completed same-day 1m bars for {binding.provider_symbol}"
+            )
+        return bars
 
     def execution_observation(
         self,
