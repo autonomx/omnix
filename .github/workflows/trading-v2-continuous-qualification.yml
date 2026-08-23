@@ -5,6 +5,7 @@ on:
     branches:
       - agent/trading-auto-strategy-roadmap
     paths:
+      - scripts/patch_trading_v2_continuous_qualification.py
       - src/app/trading/strategy_shadow_universe.py
       - src/app/trading/strategy_v2_qualification_monitor.py
       - src/tests/trading/test_trading_strategy_shadow_universe.py
@@ -12,7 +13,8 @@ on:
       - .github/workflows/trading-v2-continuous-qualification.yml
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   qualify:
@@ -22,6 +24,7 @@ jobs:
       PYTHONPATH: src
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,6 +34,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+
+      - name: Apply guarded continuous-qualification patch
+        run: python scripts/patch_trading_v2_continuous_qualification.py
 
       - name: Install focused test dependencies
         run: |
@@ -44,3 +50,23 @@ jobs:
             src/tests/trading/test_trading_strategy_v2_qualification_monitor.py \
             src/tests/trading/test_trading_strategy_v2_qualification.py
           git diff --check
+
+      - name: Commit qualified lifecycle and remove staging files
+        id: commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/patch_trading_v2_continuous_qualification.py .github/workflows/trading-v2-continuous-qualification.yml
+          git add \
+            src/app/trading/strategy_shadow_universe.py \
+            src/app/trading/strategy_v2_qualification_monitor.py \
+            src/tests/trading/test_trading_strategy_shadow_universe.py \
+            src/tests/trading/test_trading_strategy_v2_qualification_monitor.py
+          git commit -m "trading: continue V2 qualification after promotion"
+          git push origin HEAD:agent/trading-auto-strategy-roadmap
+          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - name: Report success
+        run: |
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "Continuous V2 qualification passed focused archive/qualification regressions and pushed \`${{ steps.commit.outputs.sha }}\`. Post-session raw-archive replay now continues in AUTO PAPER as read-only evidence, while the execution fallback remains SHADOW-only and cannot authorize orders. Temporary staging files were removed in the same commit."
