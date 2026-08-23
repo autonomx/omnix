@@ -1,6 +1,6 @@
 # Trading V3 research hypothesis — delayed base acceptance continuation
 
-Status: **development research only; not selectable; no execution authority**.
+Status: **REJECTED on development gate; not selectable; no execution authority**.
 
 This hypothesis was frozen after the cached 2025-10-01 through 2026-02-27 winner/loser attribution and before any March 2026 holdout access.
 
@@ -52,6 +52,25 @@ March 2026 remains unopened unless the exact frozen state machine above achieves
 - maximum drawdown **<= 5R**.
 
 If the development gate fails, March remains sealed and this hypothesis is rejected without threshold rescue. If it passes, March may be used exactly once as a separately declared holdout with no intervening changes.
+
+## Development result
+
+The exact frozen hypothesis was replayed cache-only over all **103/103 sessions** from 2025-10-01 through 2026-02-27.
+
+- Candidates: **447**
+- Triggers/trades: **35**
+- Winners/losses: **19 / 16**
+- Expectancy: **+0.11724R/trade**
+- One-sided 90% lower confidence bound: **-0.11687R**
+- Maximum drawdown: **3.51698R**
+- P&L from $100,000 initial cash under the existing deterministic paper model: **+$702.08**
+
+The hypothesis passed the sample-size and drawdown floors but failed both the **+0.20R expectancy** floor and the **positive 90% lower-bound** requirement. Therefore:
+
+- **development gate: FAILED**;
+- **March 2026 holdout: remains sealed / was not loaded**;
+- **no threshold/window rescue is permitted for this hypothesis**;
+- the result supports the descriptive idea that later maturation is preferable to immediate opening entries, but does not establish a tradable edge by itself.
 
 ## Known data limitations
 
