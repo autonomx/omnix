@@ -65,7 +65,7 @@ def _replay(event_id: str, entry_time: datetime, r_result: str) -> StrategyEvent
         payload={
             "qualification_version": V2_QUALIFICATION_VERSION,
             "replay_version": V2_REPLAY_VERSION,
-            "session_date": "2026-08-24",
+            "session_date": entry_time.date().isoformat(),
             "universe_source": "auto_archive_shadow",
             "profile_fingerprint": FROZEN_V2_PROFILE_FINGERPRINT,
             "entry_time": entry_time.isoformat(),
@@ -107,20 +107,14 @@ def test_prospective_dataset_does_not_match_outside_frozen_window() -> None:
 
 
 def test_prospective_dataset_readiness_reports_feature_coverage() -> None:
+    next_session = SESSION + timedelta(days=1)
     events = [
         _live("live-win", SESSION - timedelta(minutes=1), fingerprint="d" * 64),
         _replay("replay-win", SESSION, "1.5"),
-        _live("live-loss", SESSION + timedelta(days=1, minutes=-1), fingerprint="e" * 64),
-        StrategyEvent(
-            **_replay("replay-loss", SESSION + timedelta(days=1), "-1").model_dump(),
-            payload={
-                **_replay("replay-loss-copy", SESSION + timedelta(days=1), "-1").payload,
-                "session_date": "2026-08-25",
-            },
-        ),
+        _live("live-loss", next_session - timedelta(minutes=1), fingerprint="e" * 64),
+        _replay("replay-loss", next_session, "-1"),
     ]
 
-    # The second live event must also carry the next session date through observed_at.
     rows = matched_prospective_signal_outcomes(events)
     assert len(rows) == 2
     readiness = prospective_dataset_readiness(rows)
