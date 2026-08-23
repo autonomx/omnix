@@ -6,6 +6,10 @@ from typing import Literal
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from .providers.alpaca_iex_status import (
+    AlpacaIexStatusMonitor,
+    alpaca_iex_status_monitor_enabled,
+)
 from .strategy_monitor import TradingStrategyMonitor, trading_strategy_monitor_enabled
 from .strategy_universe_archive_monitor import (
     TradingStrategyUniverseArchiveMonitor,
@@ -36,6 +40,7 @@ class StrategyOperationsStatus(BaseModel):
     strategy_monitor: StrategyRuntimeMonitorStatus
     universe_archive_monitor: StrategyRuntimeMonitorStatus
     v2_qualification_monitor: StrategyRuntimeMonitorStatus
+    alpaca_status_monitor: StrategyRuntimeMonitorStatus
     execution_authority: Literal[False] = False
 
 
@@ -70,6 +75,32 @@ def _monitor_status(
     )
 
 
+def _alpaca_status(monitor: object | None) -> StrategyRuntimeMonitorStatus:
+    configured_enabled = alpaca_iex_status_monitor_enabled()
+    if not isinstance(monitor, AlpacaIexStatusMonitor):
+        return StrategyRuntimeMonitorStatus(
+            configured_enabled=configured_enabled,
+            registered=False,
+            running=False,
+        )
+    task = getattr(monitor, "_task", None)
+    cache_snapshot = monitor.cache.snapshot()
+    return StrategyRuntimeMonitorStatus(
+        configured_enabled=configured_enabled,
+        registered=True,
+        running=bool(task is not None and not task.done()),
+        interval_seconds=None,
+        last_run_at=monitor.last_message_at,
+        last_error=monitor.last_error,
+        counters={
+            "reconnect_count": int(monitor.reconnect_count),
+            "disconnect_count": int(cache_snapshot.get("disconnect_count", 0) or 0),
+            "known_halts": int(cache_snapshot.get("known_halts", 0) or 0),
+            "history_symbols": int(cache_snapshot.get("history_symbols", 0) or 0),
+        },
+    )
+
+
 def create_trading_strategy_operations_router() -> APIRouter:
     router = APIRouter(prefix="/api/trading/strategy-operations", tags=["trading-strategy-operations"])
 
@@ -95,6 +126,9 @@ def create_trading_strategy_operations_router() -> APIRouter:
                 expected_type=TradingStrategyV2QualificationMonitor,
                 configured_enabled=strategy_v2_qualification_monitor_enabled(),
                 counter_names=("replay_count",),
+            ),
+            alpaca_status_monitor=_alpaca_status(
+                getattr(state, "_omnix_alpaca_iex_status_monitor", None),
             ),
             execution_authority=False,
         )
