@@ -111,6 +111,9 @@ def test_shadow_execution_captures_eligible_iex_evidence_without_order_authority
     assert evidence.execution["indicator_context_partial_market"] is True
     assert evidence.execution["indicator_context_cutoff"] == execution.source_time
     assert evidence.execution["indicator_context_bar_count"] == 360
+    assert evidence.execution["indicator_context_full_warmup"] is True
+    assert evidence.execution["indicator_entry_confirmed"] is True
+    assert evidence.execution["indicator_entry_reason_codes"] == ()
     assert evidence.execution["indicator_context_error"] is None
     context = evidence.execution["indicator_context"]
     assert isinstance(context, dict)
@@ -133,6 +136,9 @@ def test_shadow_execution_preserves_ineligible_reasons() -> None:
     assert evidence.reason_code == "SHADOW_EXECUTION_INELIGIBLE"
     assert evidence.execution["execution_eligible"] is False
     assert evidence.execution["rejection_reasons"] == ("book_missing",)
+    # Entry-indicator research remains observational even when execution evidence
+    # is ineligible; it can never upgrade the execution decision.
+    assert evidence.execution["indicator_entry_confirmed"] is True
 
 
 def test_shadow_indicator_failure_cannot_change_execution_evidence() -> None:
@@ -152,6 +158,9 @@ def test_shadow_indicator_failure_cannot_change_execution_evidence() -> None:
     assert evidence.execution["rejection_reasons"] == ("book_missing",)
     assert evidence.execution["indicator_context"] is None
     assert evidence.execution["indicator_context_bar_count"] == 0
+    assert evidence.execution["indicator_context_full_warmup"] is False
+    assert evidence.execution["indicator_entry_confirmed"] is None
+    assert evidence.execution["indicator_entry_reason_codes"] == ()
     assert evidence.execution["indicator_context_error"] == (
         "RuntimeError: indicator history unavailable"
     )
