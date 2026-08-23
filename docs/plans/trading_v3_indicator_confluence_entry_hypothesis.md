@@ -1,8 +1,8 @@
 # Trading V3 research hypothesis — indicator-confluence entry confirmation
 
-Status: **development research only; not selectable; no execution authority**.
+Status: **INCONCLUSIVE on historical development data; not selectable; no execution authority**.
 
-This hypothesis was frozen after the user introduced their discretionary entry/exit process using Stochastic RSI, MACD, moving averages and multi-timeframe trend state. It is a new causal hypothesis, not a threshold rescue of the rejected delayed-base experiment. March 2026 remains sealed before this hypothesis is replayed.
+This hypothesis was frozen after introducing Stochastic RSI, MACD, moving averages and multi-timeframe trend state as candidate entry/exit evidence. It is a new causal hypothesis, not a threshold rescue of the rejected delayed-base experiment. March 2026 remained sealed throughout the development replay.
 
 ## Principle
 
@@ -68,7 +68,7 @@ For this entry experiment only:
 - max hold remains 60 minutes;
 - force-flat remains authoritative.
 
-Adaptive Stochastic-RSI/MACD/MA exits will be tested separately after entry attribution so entry and exit effects are not confounded.
+Adaptive Stochastic-RSI/MACD/MA exits are a separate experiment so entry and exit effects are not confounded.
 
 ## Development gate before March
 
@@ -84,11 +84,54 @@ March may be opened only if the indicator-confirmed sample achieves all of:
 
 If the sample has fewer than 10 trades, the result is `inconclusive_low_trade_count`, not a pass. If any other gate fails, the hypothesis is rejected. No indicator-period, vote-count, or threshold rescue is permitted on this development block.
 
+## Development result
+
+The exact frozen wrapper was replayed cache-only on **103/103 sessions** from 2025-10-01 through 2026-02-27. Provider calls: **0**. March loaded: **no**. Frozen V2 changed: **no**.
+
+The exact frozen V2 structural baseline itself produced only **3 trades** on this block:
+
+- 1 winner / 2 losers;
+- expectancy **+0.10063R**;
+- one-sided 90% lower bound **-0.85161R**;
+- maximum drawdown **1.19812R**;
+- P&L **-$334.32** under the existing deterministic paper model.
+
+At those three causal structural signal times, the old cache had:
+
+- 1m MACD available: **3/3**;
+- 1m Stochastic RSI available: **2/3**;
+- 5m EMA9 available: **1/3**;
+- 5m EMA20 available: **0/3**;
+- 5m MACD available: **0/3**;
+- 5m Stochastic RSI available: **0/3**.
+
+The predeclared overlay therefore confirmed **0/3** historical structural signals. Rejection/missing-evidence reasons were:
+
+- `INDICATOR_5M_EMA9_MISSING`: 2;
+- `INDICATOR_1M_MACD_MISSING`: 1;
+- `INDICATOR_1M_STOCH_RSI_MISSING`: 1.
+
+This is **not evidence that indicator confluence hurts entries**. The historical sample is simply unable to evaluate the intended multi-timeframe rule because the cache was constructed for the structural strategy and does not have the warm-up history required for these indicators at early signal times.
+
+Therefore:
+
+- development status: **`inconclusive_low_trade_count`**;
+- development gate: **NOT PASSED**;
+- March 2026 holdout: **remains sealed / was not loaded**;
+- the rule is **not weakened** to create historical trades;
+- indicator periods and confirmation thresholds remain frozen for prospective evidence collection.
+
 ## Data limitations
 
 - Historical reconstruction uses current listings and Alpaca IEX partial-market data, so survivorship/listing bias remains.
 - Historical point-in-time catalyst/supply/float evidence is not fabricated.
 - The old cache does not provide authoritative historical halt state.
 - Standard 5-minute MACD/Stochastic-RSI frequently need more warm-up history than the old regular-session-only cache has before 11:30; missing values are explicitly measured.
+
+## Prospective evidence path
+
+Prospective V2 SHADOW execution evidence records the finalized-bar 1m/5m indicator context at the exact structural signal time. This is telemetry only: it does not change the frozen V2 profile fingerprint, qualification thresholds, SHADOW execution authority, or AUTO PAPER gate.
+
+This prospective evidence is the correct dataset for deciding later whether the frozen indicator-confluence rule should become part of a separately versioned successor entry policy. The same snapshots can also support the separately isolated adaptive-exit experiment.
 
 Frozen V2 prospective SHADOW qualification remains unchanged and fail-closed.
