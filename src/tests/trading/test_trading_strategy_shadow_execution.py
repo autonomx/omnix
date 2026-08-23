@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
+from app.trading.models import MarketBar
 from app.trading.strategy_shadow_execution import observe_shadow_execution
 
 
@@ -35,18 +36,64 @@ def _execution(*, eligible: bool):
     )
 
 
+def _indicator_bars() -> list[MarketBar]:
+    start = datetime(2026, 8, 24, 8, 0, tzinfo=timezone.utc)  # 04:00 ET
+    bars: list[MarketBar] = []
+    for index in range(360):
+        observed = start + timedelta(minutes=index)
+        close = (
+            Decimal("5")
+            + Decimal(index) * Decimal("0.002")
+            + Decimal(index * index) * Decimal("0.00001")
+        )
+        bars.append(
+            MarketBar(
+                instrument_id=INSTRUMENT,
+                interval="1m",
+                start_time=observed,
+                end_time=observed + timedelta(minutes=1),
+                open=close - Decimal("0.01"),
+                high=close + Decimal("0.02"),
+                low=close - Decimal("0.02"),
+                close=close,
+                volume=Decimal("10000") + Decimal(index),
+                is_final=True,
+                session="extended_pre" if index < 330 else "regular",
+                provider="alpaca_iex",
+                provider_event_id=f"bar-{index}",
+                received_at=observed + timedelta(minutes=1),
+            )
+        )
+    return bars
+
+
 class FakeMarketService:
-    def __init__(self, execution) -> None:
+    def __init__(self, execution, *, history_error: Exception | None = None) -> None:
         self.execution = execution
+        self.history_error = history_error
         self.calls: list[tuple[str, str | None]] = []
+        self.indicator_calls: list[tuple[str, str | None, datetime]] = []
 
     def execution_observation(self, instrument_id: str, binding_id: str | None):
         self.calls.append((instrument_id, binding_id))
         return self.execution
 
+    def execution_indicator_bars(
+        self,
+        instrument_id: str,
+        binding_id: str | None,
+        *,
+        as_of: datetime,
+    ) -> list[MarketBar]:
+        self.indicator_calls.append((instrument_id, binding_id, as_of))
+        if self.history_error is not None:
+            raise self.history_error
+        return _indicator_bars()
+
 
 def test_shadow_execution_captures_eligible_iex_evidence_without_order_authority() -> None:
-    service = FakeMarketService(_execution(eligible=True))
+    execution = _execution(eligible=True)
+    service = FakeMarketService(execution)
     evidence = observe_shadow_execution(
         service,
         instrument_id=INSTRUMENT,
@@ -54,11 +101,25 @@ def test_shadow_execution_captures_eligible_iex_evidence_without_order_authority
     )
 
     assert service.calls == [(INSTRUMENT, BINDING)]
+    assert service.indicator_calls == [(INSTRUMENT, BINDING, execution.source_time)]
     assert evidence.reason_code == "SHADOW_EXECUTION_OBSERVED"
     assert evidence.execution["execution_eligible"] is True
     assert evidence.execution["bid"] == Decimal("10.09")
     assert evidence.execution["ask"] == Decimal("10.11")
     assert evidence.execution["source_time"] == datetime(2026, 8, 24, 14, 0, 30, tzinfo=timezone.utc)
+    assert evidence.execution["indicator_context_source"] == "alpaca_iex_same_day_1m"
+    assert evidence.execution["indicator_context_partial_market"] is True
+    assert evidence.execution["indicator_context_cutoff"] == execution.source_time
+    assert evidence.execution["indicator_context_bar_count"] == 360
+    assert evidence.execution["indicator_context_error"] is None
+    context = evidence.execution["indicator_context"]
+    assert isinstance(context, dict)
+    assert context["source_bar_count"] == 360
+    assert context["one_minute"]["macd"] is not None
+    assert context["one_minute"]["stochastic_rsi_k"] is not None
+    assert context["five_minute"]["ema20"] is not None
+    assert context["five_minute"]["macd"] is not None
+    assert context["five_minute"]["stochastic_rsi_k"] is not None
 
 
 def test_shadow_execution_preserves_ineligible_reasons() -> None:
@@ -72,6 +133,28 @@ def test_shadow_execution_preserves_ineligible_reasons() -> None:
     assert evidence.reason_code == "SHADOW_EXECUTION_INELIGIBLE"
     assert evidence.execution["execution_eligible"] is False
     assert evidence.execution["rejection_reasons"] == ("book_missing",)
+
+
+def test_shadow_indicator_failure_cannot_change_execution_evidence() -> None:
+    service = FakeMarketService(
+        _execution(eligible=False),
+        history_error=RuntimeError("indicator history unavailable"),
+    )
+
+    evidence = observe_shadow_execution(
+        service,
+        instrument_id=INSTRUMENT,
+        binding_id=BINDING,
+    )
+
+    assert evidence.reason_code == "SHADOW_EXECUTION_INELIGIBLE"
+    assert evidence.execution["execution_eligible"] is False
+    assert evidence.execution["rejection_reasons"] == ("book_missing",)
+    assert evidence.execution["indicator_context"] is None
+    assert evidence.execution["indicator_context_bar_count"] == 0
+    assert evidence.execution["indicator_context_error"] == (
+        "RuntimeError: indicator history unavailable"
+    )
 
 
 def test_shadow_execution_module_has_no_order_or_paper_repository_dependency() -> None:
