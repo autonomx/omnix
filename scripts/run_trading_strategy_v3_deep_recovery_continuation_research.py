@@ -11,7 +11,7 @@ paper fill/risk/management engine.
 
 import argparse
 import json
-from datetime import date, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
 
@@ -163,14 +163,16 @@ def evaluate_deep_recovery_continuation(
 
 def _trade_context(datasets, trade_row: dict[str, object]) -> dict[str, object]:
     instrument = str(trade_row["instrument_id"])
-    entry_time = str(trade_row["entry_time"])
+    entry_at = datetime.fromisoformat(str(trade_row["entry_time"]))
+    session_date = entry_at.astimezone(_ET).date()
     for dataset in datasets:
+        if dataset.session_date != session_date:
+            continue
         bars = dataset.bars_by_instrument.get(instrument)
         if not bars:
             continue
-        # Signal bar ends at or before next-bar entry time. ISO lexical ordering
-        # is safe here because cached bars and backtest trade times are UTC.
-        prefix = [bar for bar in bars if bar.end_time.isoformat() <= entry_time]
+        # The signal prefix contains only bars finalized by the next-bar entry.
+        prefix = [bar for bar in bars if bar.end_time <= entry_at]
         regular = _regular_bars(prefix)
         context = _context(regular)
         if context and regular:
