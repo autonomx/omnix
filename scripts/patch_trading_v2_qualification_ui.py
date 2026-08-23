@@ -3,77 +3,222 @@ from __future__ import annotations
 from pathlib import Path
 
 
-TYPES = Path("src/apps/web/src/features/trading/tradingStrategyTypes.ts")
-API = Path("src/apps/web/src/features/trading/tradingStrategyApi.ts")
-PANEL = Path("src/apps/web/src/features/trading/TradingStrategiesPanel.tsx")
-
-
-def replace_exact(text: str, old: str, new: str, label: str) -> str:
+def replace_once(path: str, old: str, new: str) -> None:
+    target = Path(path)
+    text = target.read_text(encoding="utf-8")
     count = text.count(old)
     if count != 1:
-        raise RuntimeError(f"{label}: expected exactly one anchor, found {count}")
-    return text.replace(old, new, 1)
+        raise RuntimeError(f"{path}: expected one guarded match, found {count}")
+    target.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
-def patch_types() -> None:
-    text = TYPES.read_text(encoding="utf-8")
-    anchor = """export type CatalystShadowClassification = {\n"""
-    insertion = """export type V2QualificationThresholds = {\n  prospective_start: string;\n  minimum_matched_trades: number;\n  minimum_distinct_sessions: number;\n  minimum_distinct_symbols: number;\n  minimum_execution_match_rate: string | number;\n  minimum_expectancy_r: string | number;\n  one_sided_confidence_level: string | number;\n  maximum_drawdown_r: string | number;\n  live_match_window_minutes: number;\n};\n\nexport type V2ProspectiveQualification = {\n  strategy_id: string;\n  qualification_version: string;\n  prospective_start: string;\n  expected_profile_fingerprint: string;\n  current_profile_fingerprint: string;\n  profile_match: boolean;\n  replay_trade_count: number;\n  matched_eligible_trade_count: number;\n  distinct_sessions: number;\n  distinct_symbols: number;\n  execution_match_rate?: string | number | null;\n  expectancy_r?: string | number | null;\n  one_sided_90_lcb_r?: string | number | null;\n  max_drawdown_r?: string | number | null;\n  thresholds: V2QualificationThresholds;\n  evidence_fingerprint: string;\n  qualified: boolean;\n  reviewed: boolean;\n  auto_paper_authorized: boolean;\n  reason_codes: string[];\n};\n\nexport type CatalystShadowClassification = {\n"""
-    TYPES.write_text(replace_exact(text, anchor, insertion, "V2 qualification types"), encoding="utf-8")
+replace_once(
+    "src/app/trading/strategy_shadow_universe.py",
+    '''def resolve_v2_shadow_archive_for_session(
+    config: TradingStrategyConfigDocument,
+    repository: TradingStrategyRepository,
+    *,
+    session_date: date,
+):
+    """Return one raw strategy-owned V2 SHADOW archive by session date.
+
+    This is a read-only evidence lookup. It never attaches a universe to the
+    strategy and is intentionally unavailable to AUTO PAPER, non-V2 strategies,
+    or SHADOW configs that already carry an explicit active universe.
+    """
+
+    if (
+        config.mode != "shadow"
+        or config.config.strategy_version != "2.0.0"
+        or config.active_universe_id is not None
+    ):
+        return None
+
+    marker = datetime.combine(session_date, config.config.universe_scan_time_et, tzinfo=_ET)
+    universe_id = _archive_universe_id(config, marker)
+    try:
+        snapshot = repository.get_universe(universe_id)
+    except ValueError as exc:
+        if str(exc) == "gapper_universe_not_found":
+            return None
+        raise
+    if snapshot.session_date != session_date:
+        return None
+    return snapshot
+''',
+    '''def resolve_v2_evidence_archive_for_session(
+    config: TradingStrategyConfigDocument,
+    repository: TradingStrategyRepository,
+    *,
+    session_date: date,
+):
+    """Return the immutable strategy-owned V2 raw archive for qualification evidence.
+
+    This resolver is deliberately read-only and independent of ``active_universe_id``.
+    It may be used while V2 is in SHADOW or AUTO PAPER so post-session evidence keeps
+    accumulating after promotion. It never attaches the archive to the strategy and
+    therefore cannot grant order authority.
+    """
+
+    if config.mode not in {"shadow", "auto_paper"} or config.config.strategy_version != "2.0.0":
+        return None
+
+    marker = datetime.combine(session_date, config.config.universe_scan_time_et, tzinfo=_ET)
+    universe_id = _archive_universe_id(config, marker)
+    try:
+        snapshot = repository.get_universe(universe_id)
+    except ValueError as exc:
+        if str(exc) == "gapper_universe_not_found":
+            return None
+        raise
+    if snapshot.session_date != session_date:
+        return None
+    return snapshot
 
 
-def patch_api() -> None:
-    text = API.read_text(encoding="utf-8")
-    import_old = """  StrategyResearchReviewResponse,\n  TradingStrategyConfig,\n"""
-    import_new = """  StrategyResearchReviewResponse,\n  TradingStrategyConfig,\n  V2ProspectiveQualification,\n"""
-    text = replace_exact(text, import_old, import_new, "strategy API type import")
-    method_old = """  protections: async (strategyId: string) => {\n    const payload = await requestJson<{ protections?: StrategyProtection[] }>(\n      `/api/trading/strategies/${encodeURIComponent(strategyId)}/protections?active_only=true`,\n    );\n    return Array.isArray(payload.protections) ? payload.protections : [];\n  },\n  discoverYahooUniverse: (input: YahooGapperDiscoveryInput) => requestJson<GapperUniverse>(\n"""
-    method_new = """  protections: async (strategyId: string) => {\n    const payload = await requestJson<{ protections?: StrategyProtection[] }>(\n      `/api/trading/strategies/${encodeURIComponent(strategyId)}/protections?active_only=true`,\n    );\n    return Array.isArray(payload.protections) ? payload.protections : [];\n  },\n  v2Qualification: (strategyId: string) =>\n    requestJson<V2ProspectiveQualification>(\n      `/api/trading/strategies/${encodeURIComponent(strategyId)}/v2/qualification`,\n    ),\n  reviewV2Qualification: (strategyId: string, reviewNote: string) =>\n    requestJson<V2ProspectiveQualification>(\n      `/api/trading/strategies/${encodeURIComponent(strategyId)}/v2/qualification/review`,\n      { method: 'POST', body: JSON.stringify({ review_note: reviewNote }) },\n    ),\n  discoverYahooUniverse: (input: YahooGapperDiscoveryInput) => requestJson<GapperUniverse>(\n"""
-    API.write_text(replace_exact(text, method_old, method_new, "strategy API qualification methods"), encoding="utf-8")
+def resolve_v2_shadow_archive_for_session(
+    config: TradingStrategyConfigDocument,
+    repository: TradingStrategyRepository,
+    *,
+    session_date: date,
+):
+    """Return one raw strategy-owned archive only for the V2 SHADOW execution fallback.
+
+    Unlike the qualification evidence resolver, this path remains unavailable to
+    AUTO PAPER and to SHADOW configs with an explicitly selected universe.
+    """
+
+    if config.mode != "shadow" or config.active_universe_id is not None:
+        return None
+    return resolve_v2_evidence_archive_for_session(
+        config,
+        repository,
+        session_date=session_date,
+    )
+''',
+)
+
+replace_once(
+    "src/app/trading/strategy_shadow_universe.py",
+    '__all__ = ["resolve_v2_shadow_archive", "resolve_v2_shadow_archive_for_session"]',
+    '__all__ = [\n    "resolve_v2_evidence_archive_for_session",\n    "resolve_v2_shadow_archive",\n    "resolve_v2_shadow_archive_for_session",\n]',
+)
+
+replace_once(
+    "src/app/trading/strategy_v2_qualification_monitor.py",
+    'from .strategy_shadow_universe import resolve_v2_shadow_archive_for_session',
+    'from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session',
+)
+replace_once(
+    "src/app/trading/strategy_v2_qualification_monitor.py",
+    '        and config.mode == "shadow"\n',
+    '        and config.mode in {"shadow", "auto_paper"}\n',
+)
+replace_once(
+    "src/app/trading/strategy_v2_qualification_monitor.py",
+    '    """Replay one already-captured prospective SHADOW session without order authority."""',
+    '    """Replay one captured prospective V2 session as evidence without order authority."""',
+)
+replace_once(
+    "src/app/trading/strategy_v2_qualification_monitor.py",
+    '    universe = resolve_v2_shadow_archive_for_session(config, repository, session_date=session_date)',
+    '    universe = resolve_v2_evidence_archive_for_session(config, repository, session_date=session_date)',
+)
+replace_once(
+    "src/app/trading/strategy_v2_qualification_monitor.py",
+    'class TradingStrategyV2QualificationMonitor:\n    """Evidence-only prospective V2 replay monitor; never creates orders."""',
+    'class TradingStrategyV2QualificationMonitor:\n    """Evidence-only prospective V2 replay monitor across SHADOW/AUTO PAPER; never creates orders."""',
+)
+
+replace_once(
+    "src/tests/trading/test_trading_strategy_shadow_universe.py",
+    'from app.trading.strategy_shadow_universe import resolve_v2_shadow_archive',
+    'from app.trading.strategy_shadow_universe import (\n    resolve_v2_evidence_archive_for_session,\n    resolve_v2_shadow_archive,\n)',
+)
+replace_once(
+    "src/tests/trading/test_trading_strategy_shadow_universe.py",
+    '''def test_shadow_archive_fallback_never_applies_to_auto_paper_or_explicit_universe() -> None:
+    repository = FakeRepository()
+    assert resolve_v2_shadow_archive(_config(mode="auto_paper"), repository, now=NOW) is None
+    assert resolve_v2_shadow_archive(_config(active="selected-universe"), repository, now=NOW) is None
+    assert repository.reads == []
+''',
+    '''def test_shadow_archive_fallback_never_applies_to_auto_paper_or_explicit_universe() -> None:
+    repository = FakeRepository()
+    assert resolve_v2_shadow_archive(_config(mode="auto_paper"), repository, now=NOW) is None
+    assert resolve_v2_shadow_archive(_config(active="selected-universe"), repository, now=NOW) is None
+    assert repository.reads == []
 
 
-def patch_panel() -> None:
-    text = PANEL.read_text(encoding="utf-8")
-    import_old = """  StrategyResearchReview,\n  TradingStrategyConfig,\n} from './tradingStrategyTypes';\n"""
-    import_new = """  StrategyResearchReview,\n  TradingStrategyConfig,\n  V2ProspectiveQualification,\n} from './tradingStrategyTypes';\n"""
-    text = replace_exact(text, import_old, import_new, "panel V2 type import")
+def test_v2_evidence_archive_remains_read_only_after_auto_paper_promotion() -> None:
+    config = _config(mode="auto_paper", active="selected-universe")
+    universe_id = _archive_universe_id(config, NOW.astimezone())
+    snapshot = freeze_gapper_universe(
+        universe_id=universe_id,
+        session_date=NOW.astimezone().date(),
+        evaluation_time=NOW,
+        discovery_source="provider",
+        candidates=[],
+        allow_empty=True,
+    )
+    repository = FakeRepository({universe_id: snapshot})
 
-    state_old = """  const [reviewing, setReviewing] = useState(false);\n  const [htrPromotionAllowed, setHtrPromotionAllowed] = useState(false);\n\n  const selected = useMemo(\n"""
-    state_new = """  const [reviewing, setReviewing] = useState(false);\n  const [htrPromotionAllowed, setHtrPromotionAllowed] = useState(false);\n  const [v2Qualification, setV2Qualification] = useState<V2ProspectiveQualification | null>(null);\n  const [v2ReviewNote, setV2ReviewNote] = useState('');\n  const [v2Reviewing, setV2Reviewing] = useState(false);\n\n  const selected = useMemo(\n"""
-    text = replace_exact(text, state_old, state_new, "panel qualification state")
+    resolved = resolve_v2_evidence_archive_for_session(
+        config,
+        repository,
+        session_date=NOW.astimezone().date(),
+    )
 
-    effect_old = """  useEffect(() => {\n    if (!selected) return;\n    setDraft(structuredClone(selected));\n"""
-    effect_new = """  useEffect(() => {\n    let alive = true;\n    if (!selected || selected.config.strategy_version !== '2.0.0') {\n      setV2Qualification(null);\n      return () => { alive = false; };\n    }\n    void tradingStrategyApi.v2Qualification(selected.strategy_id).then((qualification) => {\n      if (alive) setV2Qualification(qualification);\n    }).catch((error) => {\n      if (alive) {\n        setV2Qualification(null);\n        setNotice(error instanceof Error ? error.message : String(error));\n      }\n    });\n    return () => { alive = false; };\n  }, [selected?.strategy_id, selected?.revision, selected?.config.strategy_version]);\n\n  useEffect(() => {\n    if (!selected) return;\n    setDraft(structuredClone(selected));\n"""
-    text = replace_exact(text, effect_old, effect_new, "panel qualification effect")
+    assert resolved == snapshot
+    assert repository.reads == [universe_id]
+    assert repository.writes == 0
+    assert config.active_universe_id == "selected-universe"
+''',
+)
 
-    start_old = """    setResearchReviews([]);\n    setSelectedCandidates(new Set());\n    setDraft(defaultStrategy(accounts[0].account_id));\n"""
-    start_new = """    setResearchReviews([]);\n    setV2Qualification(null);\n    setV2ReviewNote('');\n    setSelectedCandidates(new Set());\n    setDraft(defaultStrategy(accounts[0].account_id));\n"""
-    text = replace_exact(text, start_old, start_new, "panel reset qualification")
+replace_once(
+    "src/tests/trading/test_trading_strategy_v2_qualification_monitor.py",
+    'def _strategy():\n',
+    'def _strategy(*, mode: str = "shadow", active_universe_id: str | None = None):\n',
+)
+replace_once(
+    "src/tests/trading/test_trading_strategy_v2_qualification_monitor.py",
+    '        mode="shadow",\n        active_universe_id=None,\n',
+    '        mode=mode,\n        active_universe_id=active_universe_id,\n',
+)
+replace_once(
+    "src/tests/trading/test_trading_strategy_v2_qualification_monitor.py",
+    '''def test_post_session_replay_refuses_noncanonical_v2_profile() -> None:
+''',
+    '''def test_post_session_replay_continues_after_auto_paper_promotion() -> None:
+    strategy = _strategy(mode="auto_paper", active_universe_id="selected-universe")
+    universe_id = _archive_universe_id(strategy, SESSION_NOW.astimezone())
+    universe = freeze_gapper_universe(
+        universe_id=universe_id,
+        session_date=SESSION_NOW.astimezone().date(),
+        evaluation_time=datetime(2026, 8, 24, 13, 20, tzinfo=timezone.utc),
+        discovery_source="provider",
+        candidates=[],
+        allow_empty=True,
+    )
+    repository = FakeRepository(universe)
 
-    action_old = """  const save = async () => {\n    if (!draft) return;\n"""
-    action_new = """  const reviewV2Qualification = async () => {\n    if (!selected || selected.config.strategy_version !== '2.0.0') return;\n    const note = v2ReviewNote.trim();\n    if (note.length < 10) {\n      setNotice('V2 prospective promotion review requires an audit note of at least 10 characters.');\n      return;\n    }\n    setV2Reviewing(true);\n    try {\n      const qualification = await tradingStrategyApi.reviewV2Qualification(selected.strategy_id, note);\n      setV2Qualification(qualification);\n      setV2ReviewNote('');\n      setNotice(qualification.auto_paper_authorized\n        ? 'V2 prospective evidence review recorded. AUTO PAPER is now authorized for this exact evidence/profile snapshot; future evidence changes require a new review.'\n        : 'V2 review recorded, but AUTO PAPER remains blocked by the server qualification policy.');\n    } catch (error) {\n      setNotice(error instanceof Error ? error.message : String(error));\n    } finally {\n      setV2Reviewing(false);\n    }\n  };\n\n  const save = async () => {\n    if (!draft) return;\n"""
-    text = replace_exact(text, action_old, action_new, "panel review action")
+    result = replay_v2_shadow_session(
+        strategy,
+        repository,
+        universe.session_date,
+        observed_at=SESSION_NOW,
+        bar_loader=lambda candidates, session_date: {},
+    )
 
-    save_guard_old = """    if (draft.config.strategy_version === '1.2.0' && !htrPromotionAllowed) {\n      setNotice('Strategy 1.2 requires an active reviewed HTR-15 validation artifact. Run HTR-14 validation and explicit promotion review first.');\n      return;\n    }\n    if (!draft.account_id) {\n"""
-    save_guard_new = """    if (draft.config.strategy_version === '1.2.0' && !htrPromotionAllowed) {\n      setNotice('Strategy 1.2 requires an active reviewed HTR-15 validation artifact. Run HTR-14 validation and explicit promotion review first.');\n      return;\n    }\n    if (draft.config.strategy_version === '2.0.0' && draft.mode === 'auto_paper' && !v2Qualification?.auto_paper_authorized) {\n      setNotice('Strategy 2.0 AUTO PAPER is fail-closed until the frozen prospective qualification floors pass and the exact evidence snapshot receives an explicit review.');\n      return;\n    }\n    if (!draft.account_id) {\n"""
-    text = replace_exact(text, save_guard_old, save_guard_new, "panel V2 save guard")
-
-    mode_old = """                {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => <button type=\"button\" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>)}\n"""
-    mode_new = """                {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => {\n                  const v2AutoBlocked = mode === 'auto_paper' && draft.config.strategy_version === '2.0.0' && !v2Qualification?.auto_paper_authorized;\n                  return <button type=\"button\" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} disabled={v2AutoBlocked} title={v2AutoBlocked ? 'Requires reviewed prospective V2 qualification' : undefined} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>;\n                })}\n"""
-    text = replace_exact(text, mode_old, mode_new, "panel V2 mode guard")
-
-    overview_old = """            </section>\n\n            <section className=\"trading-strategy-pipeline\">\n"""
-    overview_new = """            </section>\n\n            {draft.config.strategy_version === '2.0.0' ? (\n              <section className=\"trading-config-block\" aria-label=\"V2 prospective qualification\">\n                <header>\n                  <strong>Prospective AUTO PAPER qualification</strong>\n                  <small>Frozen Aug 24+ policy · raw morning archive + live eligible SHADOW signal + post-session Alpaca IEX replay</small>\n                </header>\n                {v2Qualification ? (\n                  <>\n                    <div className=\"trading-strategy-grid\">\n                      <div><strong>Profile</strong><small>{v2Qualification.profile_match ? 'Exact frozen V2 profile' : 'Mismatch — reload frozen V11 v2'}</small></div>\n                      <div><strong>Matched trades</strong><small>{v2Qualification.matched_eligible_trade_count} / {v2Qualification.thresholds.minimum_matched_trades}</small></div>\n                      <div><strong>Distinct sessions</strong><small>{v2Qualification.distinct_sessions} / {v2Qualification.thresholds.minimum_distinct_sessions}</small></div>\n                      <div><strong>Distinct symbols</strong><small>{v2Qualification.distinct_symbols} / {v2Qualification.thresholds.minimum_distinct_symbols}</small></div>\n                      <div><strong>Execution match</strong><small>{v2Qualification.execution_match_rate == null ? 'N/A' : `${(Number(v2Qualification.execution_match_rate) * 100).toFixed(1)}%`} · min {(Number(v2Qualification.thresholds.minimum_execution_match_rate) * 100).toFixed(0)}%</small></div>\n                      <div><strong>Expectancy</strong><small>{v2Qualification.expectancy_r == null ? 'N/A' : `${Number(v2Qualification.expectancy_r).toFixed(3)}R`} · min +{Number(v2Qualification.thresholds.minimum_expectancy_r).toFixed(2)}R</small></div>\n                      <div><strong>90% lower bound</strong><small>{v2Qualification.one_sided_90_lcb_r == null ? 'N/A' : `${Number(v2Qualification.one_sided_90_lcb_r).toFixed(3)}R`} · must be &gt; 0R</small></div>\n                      <div><strong>Max drawdown</strong><small>{v2Qualification.max_drawdown_r == null ? 'N/A' : `${Number(v2Qualification.max_drawdown_r).toFixed(3)}R`} · max {Number(v2Qualification.thresholds.maximum_drawdown_r).toFixed(1)}R</small></div>\n                    </div>\n                    <p><small>Profile <code>{v2Qualification.current_profile_fingerprint.slice(0, 12)}</code> · evidence <code>{v2Qualification.evidence_fingerprint.slice(0, 12)}</code> · replay trades {v2Qualification.replay_trade_count}. {v2Qualification.reason_codes.length ? `Blocking: ${v2Qualification.reason_codes.join(', ')}` : 'All quantitative floors pass.'}</small></p>\n                    <p><strong>{v2Qualification.auto_paper_authorized ? 'AUTO PAPER authorized' : v2Qualification.qualified ? 'Quantitatively qualified — explicit review required' : 'Prospective qualification in progress'}</strong></p>\n                    {v2Qualification.qualified && !v2Qualification.reviewed ? (\n                      <div className=\"trading-strategy-grid\">\n                        <label className=\"wide-field\"><span>Promotion review note<small>binds approval to this exact evidence fingerprint</small></span><textarea value={v2ReviewNote} onChange={(event) => setV2ReviewNote(event.target.value)} placeholder=\"Review the prospective sample, execution coverage, drawdown and edge before approving AUTO PAPER.\" /></label>\n                        <button type=\"button\" onClick={() => void reviewV2Qualification()} disabled={v2Reviewing || v2ReviewNote.trim().length < 10}>{v2Reviewing ? 'Recording review…' : 'Approve exact V2 evidence snapshot'}</button>\n                      </div>\n                    ) : null}\n                  </>\n                ) : (\n                  <p><small>Save the frozen V2 profile in SHADOW mode first. Qualification begins with the prospective epoch on 2026-08-24; historical reconstruction cannot unlock AUTO PAPER.</small></p>\n                )}\n              </section>\n            ) : null}\n\n            <section className=\"trading-strategy-pipeline\">\n"""
-    text = replace_exact(text, overview_old, overview_new, "panel qualification card")
-    PANEL.write_text(text, encoding="utf-8")
+    assert result is not None
+    assert result.summary.trade_count == 0
+    assert repository.writes == 1
+    assert repository.events[0].event_type == "v2_shadow_replay_session"
+    assert repository.events[0].payload["execution_authority"] is False
+    assert strategy.active_universe_id == "selected-universe"
 
 
-def main() -> int:
-    patch_types()
-    patch_api()
-    patch_panel()
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def test_post_session_replay_refuses_noncanonical_v2_profile() -> None:
+''',
+)

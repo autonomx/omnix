@@ -1,4 +1,4 @@
-name: Trading V2 qualification UI patch
+name: Trading V2 continuous qualification patch
 
 on:
   push:
@@ -17,54 +17,64 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      PYTHONPATH: src
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/trading-auto-strategy-roadmap
-          fetch-depth: 1
+          ref: ${{ github.sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: "22"
-          cache: npm
+          python-version: "3.12"
+          cache: pip
 
-      - name: Apply guarded V2 qualification UI
+      - name: Apply guarded V2 continuous-qualification lifecycle
         run: python scripts/patch_trading_v2_qualification_ui.py
 
-      - name: Install web dependencies
-        run: npm install
-
-      - name: Run Trading frontend and typecheck
+      - name: Install focused test dependencies
         run: |
-          npm --workspace @omnix/web run test:trading
-          npm --workspace @omnix/web run typecheck:trading
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4" pytest
+
+      - name: Run V2 lifecycle and authority regressions
+        run: |
+          pytest -q \
+            src/tests/trading/test_trading_strategy_shadow_universe.py \
+            src/tests/trading/test_trading_strategy_shadow_execution.py \
+            src/tests/trading/test_trading_strategy_v2_qualification_monitor.py \
+            src/tests/trading/test_trading_strategy_v2_qualification.py \
+            src/tests/trading/test_trading_gap_pullback_v2.py
           git diff --check
 
-      - name: Commit qualified UI
+      - name: Commit qualified lifecycle and remove staging files
         id: commit
         shell: bash
         run: |
-          if git diff --quiet; then
-            echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm \
+            scripts/patch_trading_v2_qualification_ui.py \
+            .github/workflows/trading-v2-qualification-ui.yml \
+            scripts/patch_trading_v2_continuous_qualification.py \
+            .github/workflows/trading-v2-continuous-qualification.yml
           git add \
-            src/apps/web/src/features/trading/tradingStrategyTypes.ts \
-            src/apps/web/src/features/trading/tradingStrategyApi.ts \
-            src/apps/web/src/features/trading/TradingStrategiesPanel.tsx
-          git commit -m "trading: expose V2 prospective qualification"
+            src/app/trading/strategy_shadow_universe.py \
+            src/app/trading/strategy_v2_qualification_monitor.py \
+            src/tests/trading/test_trading_strategy_shadow_universe.py \
+            src/tests/trading/test_trading_strategy_v2_qualification_monitor.py
+          git commit -m "trading: continue V2 qualification after promotion"
           git push origin HEAD:agent/trading-auto-strategy-roadmap
           echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
       - name: Report success
         if: success()
         run: |
-          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 qualification UI passed Trading frontend and TypeScript gates and pushed \`${{ steps.commit.outputs.sha }}\`. Strategies now displays every prospective floor, profile/evidence fingerprints, blocking reasons and explicit evidence-bound review; V2 AUTO PAPER is disabled in the UI until the server reports authorization."
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "Continuous V2 qualification passed focused archive/SHADOW/V2 regressions and pushed \`${{ steps.commit.outputs.sha }}\`. Post-session raw-archive replay now continues in AUTO PAPER as read-only evidence, while the execution fallback remains SHADOW-only and cannot authorize orders. All temporary V2 staging workflow/script files were removed in the same commit."
 
       - name: Report failure
         if: failure()
         run: |
-          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 qualification UI failed on source head \`${GITHUB_SHA}\`. No UI patch from this run should be trusted; inspect the workflow before continuing."
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "Continuous V2 qualification lifecycle failed on source head \`${GITHUB_SHA}\`. No lifecycle patch from this run should be trusted; inspect the workflow before continuing."
