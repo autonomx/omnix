@@ -17,15 +17,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  qualify-and-extend:
+  qualify-and-promote-code:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 30
     env:
       PYTHONPATH: "src:."
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
-      OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
-      OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
     steps:
       - name: Check out staging source head
         uses: actions/checkout@v4
@@ -43,13 +41,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets pytest playwright "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
 
-      - name: Apply causal-cache and exploration patch
+      - name: Apply already-evidenced causal cache patch
         run: |
           python scripts/patch_trading_extended_backtest_cache.py
           python scripts/patch_trading_extended_backtest_resilience.py
           python -m py_compile scripts/run_trading_strategy_v2_extended_exploration.py
 
-      - name: Run causal reconstruction and V2 regressions
+      - name: Requalify causal reconstruction and V2 regressions
         run: |
           pytest -q \
             src/tests/trading/test_trading_historical_gapper_reconstruction.py \
@@ -58,100 +56,17 @@ jobs:
             src/tests/trading/test_trading_gap_pullback_v2_backtest_management.py \
             src/tests/trading/test_trading_strategy_v2_qualification.py
 
-      - name: Verify Alpaca historical-data credentials
-        shell: bash
-        run: |
-          if [[ -z "${OMNIX_ALPACA_API_KEY_ID}" || -z "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
-            echo "::error::Both OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY are required for cache misses."
-            exit 2
-          fi
-
-      - name: Build append-only causal cache key
-        id: dataset-cache-key
-        shell: bash
-        run: |
-          echo "key=trading-liquidity-datasets-v2-causal-${RUNNER_OS}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
-
-      - name: Restore causal frozen datasets
-        uses: actions/cache/restore@v4
-        with:
-          path: .cache/trading-liquidity-datasets
-          key: ${{ steps.dataset-cache-key.outputs.key }}
-          restore-keys: |
-            trading-liquidity-datasets-v2-causal-${{ runner.os }}-
-
-      - name: Capture January-March causal historical cache
-        run: |
-          mkdir -p .cache/trading-liquidity-datasets
-          python scripts/run_trading_strategy_liquidity_sweep_resilient.py \
-            --start-date 2026-01-02 \
-            --end-date 2026-03-27 \
-            --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --output-dir artifacts/v2-extended-cache-capture \
-            --reconstruction-max-age-days 365 \
-            --max-sessions 80 \
-            --thresholds 100000 \
-            --initial-cash 100000 \
-            --assumed-spread-bps 150 \
-            --require-covered-session
-
-      - name: Run development-only selection and one-shot March validation
-        run: |
-          python scripts/run_trading_strategy_v2_extended_exploration.py \
-            --dataset-cache-dir .cache/trading-liquidity-datasets \
-            --development-start 2026-01-02 \
-            --development-end 2026-02-27 \
-            --validation-start 2026-03-02 \
-            --validation-end 2026-03-27 \
-            --initial-cash 100000 \
-            --assumed-spread-bps 150 \
-            --minimum-development-trades 5 \
-            --finalists 3 \
-            --output-dir artifacts/v2-extended-exploration
-
-      - name: Save causal frozen datasets
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: .cache/trading-liquidity-datasets
-          key: ${{ steps.dataset-cache-key.outputs.key }}
-
-      - name: Publish backtest summaries
-        if: always()
-        shell: bash
-        run: |
-          if [[ -f artifacts/v2-extended-cache-capture/summary.md ]]; then
-            cat artifacts/v2-extended-cache-capture/summary.md >> "${GITHUB_STEP_SUMMARY}"
-          fi
-          if [[ -f artifacts/v2-extended-exploration/summary.md ]]; then
-            cat artifacts/v2-extended-exploration/summary.md >> "${GITHUB_STEP_SUMMARY}"
-          fi
-
-      - name: Upload extended evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trading-v2-extended-causal-evidence
-          path: |
-            artifacts/v2-extended-cache-capture
-            artifacts/v2-extended-exploration
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Commit qualified implementation and remove staging files
-        if: success()
+      - name: Commit qualified code only
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/trading-extended-backtest-staging.yml
           git rm scripts/patch_trading_extended_backtest_cache.py
           git rm scripts/patch_trading_extended_backtest_resilience.py
           git add \
             src/app/trading/historical_gapper_reconstruction.py \
             src/tests/trading/test_trading_historical_gapper_reconstruction.py \
             scripts/run_trading_strategy_liquidity_sweep.py \
-            scripts/run_trading_strategy_v2_extended_exploration.py \
-            .github/workflows/trading-strategy-extended-dataset.yml
+            scripts/run_trading_strategy_v2_extended_exploration.py
           git commit -m "backtest: add causal cached V2 exploration"
           git push origin HEAD:agent/trading-auto-strategy-roadmap
