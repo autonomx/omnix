@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TradingHermesResearchPanel } from './TradingHermesResearchPanel';
+import { TradingStrategyIndicatorEvidence } from './TradingStrategyIndicatorEvidence';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type {
   HistoricalUniverseMode,
+  StrategyEvent,
   StrategyRangeBacktestResult,
   TradingStrategyConfig,
 } from './tradingStrategyTypes';
@@ -49,12 +51,27 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState('Backtest the saved strategy configuration across a date range.');
   const [result, setResult] = useState<StrategyRangeBacktestResult | null>(null);
+  const [indicatorEvents, setIndicatorEvents] = useState<StrategyEvent[]>([]);
+  const [indicatorEventsError, setIndicatorEventsError] = useState<string | null>(null);
 
   useEffect(() => {
     setScanTimeEt((strategy.config.universe_scan_time_et ?? '09:20:00').slice(0, 5));
     setResult(null);
     setNotice('Backtest the saved strategy configuration across a date range.');
   }, [strategy.strategy_id, strategy.revision]);
+
+  useEffect(() => {
+    let alive = true;
+    setIndicatorEvents([]);
+    setIndicatorEventsError(null);
+    if (strategy.config.strategy_version !== '2.0.0') return () => { alive = false; };
+    void tradingStrategyApi.events(strategy.strategy_id).then((next) => {
+      if (alive) setIndicatorEvents(next);
+    }).catch((error) => {
+      if (alive) setIndicatorEventsError(error instanceof Error ? error.message : String(error));
+    });
+    return () => { alive = false; };
+  }, [strategy.strategy_id, strategy.revision, strategy.config.strategy_version]);
 
   const run = async () => {
     if (!startDate || !endDate) {
@@ -178,6 +195,11 @@ export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrateg
           </>
         ) : null}
       </section>
+      <TradingStrategyIndicatorEvidence
+        events={indicatorEvents}
+        visible={strategy.config.strategy_version === '2.0.0'}
+        loadError={indicatorEventsError}
+      />
       <TradingHermesResearchPanel strategy={strategy} />
     </>
   );
