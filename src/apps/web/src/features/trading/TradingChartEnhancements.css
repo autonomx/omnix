@@ -49,3 +49,8 @@
 :root[data-omnix-appearance='light'] .trading-indicator-object-toolbar button{border-color:rgba(111,135,157,.28);background:#f5f8fb;color:#40556b}
 :root[data-omnix-appearance='light'] .trading-indicator-object-toolbar button:hover,:root[data-omnix-appearance='light'] .trading-indicator-object-toolbar button:focus-visible{border-color:rgba(22,136,255,.58);background:#eef6ff;color:#155b91}
 .trading-chart-grid.is-chart-focus-mode{grid-template-columns:1fr!important;grid-template-rows:1fr!important}
+.trading-chart-panel.replay-active{grid-template-rows:auto minmax(0,1fr) 48px}
+.trading-chart-panel.replay-active>footer{position:relative;justify-content:center;min-height:48px;padding:0 7px}
+.trading-chart-panel.replay-active>footer>nav{position:absolute;left:7px}
+.trading-chart-panel.replay-active>footer>.trading-chart-footer-meta{position:absolute;right:7px}
+.trading-chart-panel.replay-active .trading-replay-toolbar{position:relative;inset:auto;left:auto;bottom:auto;display:flex;flex:0 1 auto;margin:0;transform:none}

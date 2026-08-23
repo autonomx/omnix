@@ -19,6 +19,8 @@ vi.mock('./tradingPaperApi', () => ({ tradingPaperApi: paperApi }));
 vi.mock('./tradingApi', () => ({ tradingApi }));
 
 import { TradingPaperPanel } from './TradingPaperPanel';
+import { useTradingReplayStore } from './tradingReplayStore';
+import { useTradingStore } from './tradingStore';
 
 const account = {
   account_id: 'paper-1',
@@ -31,6 +33,8 @@ const account = {
 
 describe('TradingPaperPanel', () => {
   beforeEach(() => {
+    useTradingStore.setState({ replayMode: false, replaySessionId: 0 });
+    useTradingReplayStore.getState().clear();
     paperApi.accounts.mockResolvedValue([account]);
     paperApi.snapshot.mockResolvedValue({
       account,
@@ -45,7 +49,11 @@ describe('TradingPaperPanel', () => {
     paperApi.placeOrder.mockRejectedValue(new Error('Paper Trading request failed (422): insufficient_paper_cash'));
   });
 
-  afterEach(() => vi.clearAllMocks());
+  afterEach(() => {
+    useTradingStore.setState({ replayMode: false });
+    useTradingReplayStore.getState().clear();
+    vi.clearAllMocks();
+  });
 
   it('shows the server rejection when an order cannot be funded', async () => {
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
@@ -91,5 +99,32 @@ describe('TradingPaperPanel', () => {
       provider: 'paper-reference',
       price: '75.62',
     }));
+  });
+
+  it('uses the replay bar price without creating a persisted paper order', async () => {
+    useTradingStore.setState({ replayMode: true, replaySessionId: 7 });
+    useTradingReplayStore.getState().setBar({
+      instrument_id: 'crypto:BINANCE:spot:SOL-USDT', interval: '1h',
+      start_time: '2024-01-02T10:00:00Z', end_time: '2024-01-02T11:00:00Z',
+      open: '100', high: '103', low: '99', close: '101.25', volume: '10', is_final: true,
+      adjustment_mode: 'raw', session: '24x7', provider: 'replay-test',
+      provider_event_id: null, provider_sequence: null, ingestion_revision: 1,
+      received_at: '2024-01-02T11:00:01Z',
+    });
+
+    render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+
+    await screen.findByRole('textbox', { name: 'Order quantity' });
+    expect(await screen.findByText('Replay only')).toBeInTheDocument();
+    expect(screen.getAllByText('101.25').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /Buy 1 SOL\/USDT MARKET/ }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Market order executed on');
+    expect(paperApi.placeOrder).not.toHaveBeenCalled();
+    expect(paperApi.processObservation).not.toHaveBeenCalled();
+    expect(useTradingReplayStore.getState().snapshot?.order_history).toHaveLength(1);
+    expect(useTradingReplayStore.getState().snapshot?.order_history?.[0]).toMatchObject({
+      status: 'filled', average_fill_price: '101.25',
+    });
   });
 });

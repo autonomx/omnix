@@ -15,6 +15,7 @@ import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInst
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
+import { useTradingReplayStore } from './tradingReplayStore';
 import type { BarsResponse, MarketBar, TradingAlertIndicatorId, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 import { TradingIndicatorObjectToolbar } from './TradingIndicatorObjectToolbar';
@@ -341,7 +342,11 @@ export function TradingChartPanel({
   const setDrawingTool = useTradingStore((state) => state.setDrawingTool);
   const drawingSnapMode = useTradingStore((state) => state.drawingSnapMode);
   const replayMode = useTradingStore((state) => state.replayMode);
+  const replaySessionId = useTradingStore((state) => state.replaySessionId);
   const setReplayMode = useTradingStore((state) => state.setReplayMode);
+  const restartReplaySession = useTradingStore((state) => state.restartReplaySession);
+  const setReplayBar = useTradingReplayStore((state) => state.setBar);
+  const clearReplayState = useTradingReplayStore((state) => state.clear);
   const drawings = useTradingDrawings(instrumentId);
   const selectedDrawing = drawings.state.drawings.find((drawing) => drawing.drawingId === drawings.state.selectedId) ?? null;
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
@@ -576,7 +581,7 @@ export function TradingChartPanel({
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || !adapter || (replayMode && active)) return;
+    if (!host || !adapter) return;
     let pan: { pointerId: number; lastX: number; lastY: number; paneY: number; paneId: string | null; mode: 'chart-pan' | 'price-scale' | 'price-pan' } | null = null;
     const insideHost = (event: PointerEvent) => event.target instanceof Node && host.contains(event.target);
     const pointerDown = (event: PointerEvent) => {
@@ -593,6 +598,10 @@ export function TradingChartPanel({
       const x = event.clientX - bounds.left;
       const paneY = event.clientY - bounds.top;
       const onPriceScale = adapter.isPriceScaleCoordinate(x);
+      // Replay owns the chart canvas for bar selection/playback, but the
+      // price scale remains an independent viewport control. Keep its
+      // TradingView-style drag zoom available while replay is active.
+      if (replayMode && active && !onPriceScale) return;
       pan = {
         pointerId: event.pointerId,
         lastX: event.clientX,
@@ -694,7 +703,11 @@ export function TradingChartPanel({
     const dataChanged = dataKey !== null && dataKey !== fittedBarsKeyRef.current;
     const replayViewChanged = replayWasVisibleRef.current !== replayVisible;
     replayWasVisibleRef.current = replayVisible;
-    const shouldFit = dataChanged || replayViewChanged;
+    // Selecting a replay bar replaces the data with the historical prefix,
+    // but must preserve the pre-click logical range. Fitting that prefix would
+    // move the selected bar to the right edge instead of leaving it where the
+    // user clicked. Fit only when loading new data or returning to live mode.
+    const shouldFit = dataChanged || (replayViewChanged && !replayVisible);
     const keepSelectedRange = dataChanged && pendingRangeIntervalRef.current === interval;
     if (dataChanged && !keepSelectedRange) {
       selectedRangeRef.current = undefined;
@@ -715,13 +728,22 @@ export function TradingChartPanel({
     if (keepSelectedRange) pendingRangeIntervalRef.current = null;
     if (dataKey !== null && bars.length > 0) fittedBarsKeyRef.current = dataKey;
     scheduleIndicators();
-  }, [chartQuery.data, interval, replayCursorIndex, replayVisible, rightOffset, scheduleIndicators]);
+  }, [active, chartQuery.data, interval, replayCursorIndex, replayMode, replayStartIndex, replayVisible, rightOffset, scheduleIndicators]);
 
   useEffect(() => {
     setReplayStartIndex(null);
     setReplayCursorIndex(null);
     setReplayPlaying(false);
-  }, [instrumentId, bindingId, interval]);
+    if (replayMode && active) restartReplaySession();
+  }, [active, bindingId, instrumentId, interval, replayMode, restartReplaySession]);
+
+  useEffect(() => {
+    if (!replayMode || !active) {
+      if (!replayMode && active) clearReplayState();
+      return;
+    }
+    setReplayBar(replayCurrentBar);
+  }, [active, clearReplayState, replayCursorIndex, replayMode, replaySessionId, setReplayBar]);
 
   useEffect(() => {
     if (!replayMode || !active) {
@@ -1197,12 +1219,19 @@ export function TradingChartPanel({
 
   const handleReplayStageClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!replayMode || !active || !adapter || allBarsRef.current.length === 0) return;
+    // A chart click chooses a new replay start only after the user explicitly
+    // enters Select bar mode. Normal clicks during an active replay must not
+    // restart the session and discard its simulated positions.
+    if (replayCursorIndex !== null) return;
     const target = event.target as Element;
     if (target.closest('button, input, select, textarea, [role="dialog"], .trading-drawing-overlay')) return;
     const bounds = event.currentTarget.getBoundingClientRect();
-    const index = adapter.barIndexAtCoordinate(event.clientX - bounds.left, allBarsRef.current.length);
+    const x = event.clientX - bounds.left;
+    if (adapter.isPriceScaleCoordinate(x)) return;
+    const index = adapter.barIndexAtCoordinate(x, allBarsRef.current.length);
     if (index === null) return;
     setReplayPlaying(false);
+    restartReplaySession();
     setReplayStartIndex(index);
     setReplayCursorIndex(index);
   };
@@ -1210,7 +1239,15 @@ export function TradingChartPanel({
   const resetReplay = () => {
     if (replayStartIndex === null) return;
     setReplayPlaying(false);
+    restartReplaySession();
     setReplayCursorIndex(replayStartIndex);
+  };
+
+  const previousReplayBar = () => {
+    if (replayCursorIndex === null || replayStartIndex === null || replayCursorIndex <= replayStartIndex) return;
+    setReplayPlaying(false);
+    restartReplaySession();
+    setReplayCursorIndex(Math.max(replayStartIndex, replayCursorIndex - 1));
   };
 
   const exitReplay = () => {
@@ -1225,17 +1262,21 @@ export function TradingChartPanel({
     }
     const updateMarker = () => {
       const startBar = allBarsRef.current[replayStartIndex];
-      setReplayMarkerX(startBar ? adapter.timeToCoordinate(startBar.start_time) : null);
+      setReplayMarkerX(startBar
+        ? adapter.barTimeToCoordinate(startBar.start_time) ?? adapter.timeToCoordinate(startBar.start_time)
+        : null);
     };
     const frame = window.requestAnimationFrame(updateMarker);
     window.addEventListener('resize', updateMarker);
     const host = hostRef.current;
     const observer = typeof ResizeObserver === 'undefined' || !host ? null : new ResizeObserver(updateMarker);
     observer?.observe(host as Element);
+    const unsubscribeViewport = adapter.onViewportChange(updateMarker);
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', updateMarker);
       observer?.disconnect();
+      unsubscribeViewport();
     };
   }, [active, adapter, replayCursorIndex, replayMode, replayStartIndex]);
 
@@ -1246,7 +1287,7 @@ export function TradingChartPanel({
   return (
     <article
       ref={panelRef}
-      className={`trading-chart-panel${active ? ' active' : ''}${chartFocusMode ? ' is-chart-focus-mode' : ''}`}
+      className={`trading-chart-panel${active ? ' active' : ''}${chartFocusMode ? ' is-chart-focus-mode' : ''}${replayMode && active ? ' replay-active' : ''}`}
       data-chart-id={chartId}
       data-stream-status={streamStatus}
       onPointerDown={onActivate}
@@ -1592,20 +1633,6 @@ export function TradingChartPanel({
           onPlacementConsumed={clearAlertPlacement}
         />
         <TradingPositionOverlay adapter={adapter} accountId={paperAccountId} instrumentId={instrumentId} />
-        {replayMode && active ? (
-          <div className="trading-replay-toolbar" role="group" aria-label="Chart replay controls" onPointerDown={(event) => event.stopPropagation()}>
-            <button type="button" onClick={exitReplay} aria-label="Exit replay mode" title="Exit replay mode">×</button>
-            <button type="button" onClick={() => setReplayCursorIndex(null)} disabled={replayStartIndex === null} aria-label="Choose replay start" title="Choose replay start">Select bar</button>
-            <button type="button" onClick={resetReplay} disabled={replayStartIndex === null} aria-label="Reset replay" title="Reset replay">↤</button>
-            <button type="button" onClick={() => setReplayCursorIndex((current) => current === null || replayStartIndex === null ? current : Math.max(replayStartIndex, current - 1))} disabled={replayCursorIndex === null || replayCursorIndex <= replayStartIndex!} aria-label="Replay previous bar" title="Previous bar">|‹</button>
-            <button type="button" className="trading-replay-play" onClick={() => setReplayPlaying((value) => !value)} disabled={replayStartIndex === null || !replayHasNextBar} aria-label={replayPlaying ? 'Pause replay' : 'Play replay'} title={replayPlaying ? 'Pause replay' : 'Play replay'}>{replayPlaying ? 'Ⅱ' : '▶'}</button>
-            <button type="button" onClick={() => setReplayCursorIndex((current) => current === null || replayStartIndex === null ? current : Math.min(allBarsRef.current.length - 1, Math.max(replayStartIndex, current + 1)))} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Next bar">›|</button>
-            <select aria-label="Replay speed" value={replaySpeed} onChange={(event) => setReplaySpeed(event.target.value)}>
-              {['0.5', '1', '2', '4', '8'].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}
-            </select>
-            <span className="trading-replay-progress">{replayCurrentBar ? new Date(replayCurrentBar.end_time).toLocaleDateString() : 'Select a bar'} · {replayCursorIndex === null ? 0 : replayCursorIndex + 1}/{allBarsRef.current.length}</span>
-          </div>
-        ) : null}
         {tableVisible ? (
           <div className="trading-chart-table-view" role="dialog" aria-label="Chart table view" onPointerDown={(event) => event.stopPropagation()}>
             <header><strong>Table view · {chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong><button type="button" onClick={() => setTableVisible(false)} aria-label="Close table view">×</button></header>
@@ -1698,6 +1725,20 @@ export function TradingChartPanel({
       {streamError ? <div className="trading-chart-state error">{streamError}</div> : null}
       {indicatorError ? <div className="trading-chart-state error">Indicator calculation failed: {indicatorError}</div> : null}
       <footer>
+        {replayMode && active ? (
+          <div className="trading-replay-toolbar" role="group" aria-label="Chart replay controls" onPointerDown={(event) => event.stopPropagation()}>
+            <button type="button" onClick={exitReplay} aria-label="Exit replay mode" title="Exit replay mode">×</button>
+            <button type="button" onClick={() => setReplayCursorIndex(null)} disabled={replayStartIndex === null} aria-label="Choose replay start" title="Choose replay start">Select bar</button>
+            <button type="button" onClick={resetReplay} disabled={replayStartIndex === null} aria-label="Reset replay" title="Reset replay">↤</button>
+            <button type="button" onClick={previousReplayBar} disabled={replayCursorIndex === null || replayCursorIndex <= replayStartIndex!} aria-label="Replay previous bar" title="Previous bar">|‹</button>
+            <button type="button" className="trading-replay-play" onClick={() => setReplayPlaying((value) => !value)} disabled={replayStartIndex === null || !replayHasNextBar} aria-label={replayPlaying ? 'Pause replay' : 'Play replay'} title={replayPlaying ? 'Pause replay' : 'Play replay'}>{replayPlaying ? 'Ⅱ' : '▶'}</button>
+            <button type="button" onClick={() => setReplayCursorIndex((current) => current === null || replayStartIndex === null ? current : Math.min(allBarsRef.current.length - 1, Math.max(replayStartIndex, current + 1)))} disabled={!replayHasNextBar} aria-label="Replay next bar" title="Replay next bar">›|</button>
+            <select aria-label="Replay speed" value={replaySpeed} onChange={(event) => setReplaySpeed(event.target.value)}>
+              {['0.5', '1', '2', '4', '8'].map((speed) => <option key={speed} value={speed}>{speed}×</option>)}
+            </select>
+            <span className="trading-replay-progress">{replayCurrentBar ? new Date(replayCurrentBar.end_time).toLocaleDateString() : 'Select a bar'} · {replayCursorIndex === null ? 0 : replayCursorIndex + 1}/{allBarsRef.current.length}</span>
+          </div>
+        ) : null}
         <nav aria-label={`${chartId} visible range`} onPointerDown={(event) => event.stopPropagation()}>
           {ranges.map((range) => (
             <button

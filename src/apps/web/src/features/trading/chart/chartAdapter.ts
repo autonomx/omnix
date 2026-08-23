@@ -1337,6 +1337,11 @@ export class TradingChartAdapter {
     const logical = drawingLogicalIndexForTime(value, this.bars);
     return logical === null ? null : timeScale.logicalToCoordinate(logical as Logical);
   }
+  barTimeToCoordinate(value: string): number | null {
+    this.assertActive();
+    const logical = drawingLogicalIndexForTime(value, this.bars);
+    return logical === null ? null : this.chart.timeScale().logicalToCoordinate(logical as Logical);
+  }
   barIndexAtCoordinate(x: number, barCount: number): number | null {
     this.assertActive();
     const logical = this.chart.timeScale().coordinateToLogical(x);
