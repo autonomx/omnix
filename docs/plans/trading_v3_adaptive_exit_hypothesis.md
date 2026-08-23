@@ -1,6 +1,6 @@
 # Trading V3 research hypothesis — adaptive multi-timeframe exit
 
-Status: **FROZEN BEFORE DEVELOPMENT REPLAY; research only; no execution authority**.
+Status: **REJECTED ON DEVELOPMENT GATE; research only; no execution authority**.
 
 This experiment isolates exit management. It does not change frozen `gap_pullback_v1 2.0.0`, does not change entry selection, does not open the March 2026 holdout, and cannot authorize AUTO PAPER.
 
@@ -110,12 +110,92 @@ Before seeing the replay, policy B is considered to show a development-stage man
 
 This gate measures **exit effect only**. Passing it would justify a separately declared validation experiment; it cannot promote frozen V2 or the rejected delayed-base entry. Failing it means this exact adaptive rule is rejected on development without threshold/vote-count/indicator-period rescue.
 
+## Development replay result
+
+Final execution-qualified replay: Actions run **`32628370002`**, artifact **`9490338143`** (`trading-v3-adaptive-exit-research`).
+
+- Development period: **2025-10-01 through 2026-02-27**.
+- Coverage: **103/103 sessions**.
+- Same paired entries/fills/sizes: **35**.
+- Provider calls: **0**.
+- March loaded: **no**.
+- Frozen V2 / production authority changed: **no**.
+
+### Policy A — frozen V2 exits
+
+- Wins / losses: **19 / 16** (54.29% win rate).
+- Expectancy: **+0.11724R**.
+- One-sided 90% LCB: **-0.11687R**.
+- Average winner: **+0.94097R**.
+- Average loser: **-0.86093R**.
+- Profit factor in R: **1.29790**.
+- Maximum drawdown: **3.51698R**.
+- Average hold: **59.74 minutes**.
+- Average full-session MFE capture: **16.10%**.
+- Same-entry-size P&L from a $100k baseline: **+$702.08**.
+- Exit mix: **15 stop / 8 target / 12 time**.
+
+### Policy B — adaptive trend exit
+
+- Wins / losses: **15 / 20** (42.86% win rate).
+- Expectancy: **+0.20050R**.
+- One-sided 90% LCB: **-0.13774R**.
+- Median trade: **-0.18025R**.
+- Average winner: **+1.27737R**.
+- Average loser: **-0.60715R**.
+- Profit factor in R: **1.57791**.
+- Maximum drawdown: **5.52935R**.
+- Average hold: **64.94 minutes**.
+- Average full-session MFE capture: **13.05%**.
+- Same-entry-size P&L from a $100k baseline: **+$1,379.27**.
+- Exit mix: **12 stop / 21 indicator / 2 force-flat**.
+
+### Paired management effect
+
+- Mean `B - A`: **+0.08326R/trade**.
+- Median `B - A`: **0R**.
+- One-sided 90% LCB of paired delta: **-0.16803R**.
+- B better / same / worse: **16 / 5 / 14**.
+
+The point estimate therefore improved, mainly by making winning trades larger and losing trades smaller on average, but the improvement is not statistically credible on this development sample and drawdown became worse.
+
+### Concentration / stability diagnostic
+
+The raw mean improvement is not robust:
+
+- best paired improvement: **CRCG on 2026-02-25**, about **+5.717R** versus policy A, exiting through force-flat;
+- removing only that best trade changes mean paired `B - A` from **+0.083R to about -0.082R**;
+- monthly mean paired effects were approximately **Oct -0.116R, Nov +0.231R, Dec -0.199R, Jan -0.403R, Feb +1.288R**.
+
+That is substantial regime/outlier concentration rather than stable improvement.
+
+Of the **21 indicator exits**, every one included the 5m trend-break + 1m EMA weakness + 1m bearish MACD combination; only one also used the 5m-below-EMA20 strong confirmation. **Stochastic RSI did not become a contributing exit reason in this sample.** It remained part of the frozen rule but never supplied the extra warning/confirmation that determined one of these exits.
+
+## Decision
+
+**Development exit-effect gate FAILED.** Specifically:
+
+- paired trade-count floor: pass;
+- mean paired delta > 0: pass on the raw point estimate;
+- one-sided 90% LCB of paired delta > 0: **fail** (`-0.16803R`);
+- policy-B max drawdown <=5R: **fail** (`5.52935R`).
+
+Therefore:
+
+- **reject this exact adaptive full-position exit policy on development**;
+- **do not tune EMA/MACD/Stoch-RSI periods, vote counts, force-flat timing, or deterioration thresholds on this sample**;
+- **do not open March 2026 for this rejected policy**;
+- do not treat the +0.20050R B expectancy as established edge, because its own LCB is negative and the paired improvement is concentrated;
+- frozen `gap_pullback_v1 2.0.0` and its prospective SHADOW qualification remain unchanged.
+
+A future exit hypothesis must be separately formulated before replay. For example, partial-profit + runner management would be a new management hypothesis rather than a rescue of this exact full-position policy.
+
 ## Holdout and data boundaries
 
-- Development range: **2025-10-01 through 2026-02-27**.
-- March 2026: **sealed and must not be loaded by this run**.
-- Provider calls during replay: **prohibited**; use the immutable 103-session cache only.
+- March 2026: **sealed / not loaded**.
+- Provider calls during replay: **none**; immutable 103-session cache only.
 - Historical reconstruction uses current listings and Alpaca IEX partial-market bars, so survivorship/listing bias remains.
 - Historical catalyst/supply/float facts and authoritative halt state are not reconstructed with hindsight.
+- Policy B held the same entry sizes fixed instead of recomputing portfolio capacity under longer holding periods, so B P&L is a paired exit-management counterfactual, not a complete portfolio simulation.
 
 The result is research evidence, not proof of future profitability.
