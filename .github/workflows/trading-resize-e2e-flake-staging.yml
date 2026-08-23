@@ -1,0 +1,58 @@
+name: Trading resize E2E flake staging
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/patch_trading_resize_e2e_flake.py
+      - .github/workflows/trading-resize-e2e-flake-staging.yml
+
+permissions:
+  contents: write
+
+jobs:
+  qualify-and-promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Apply E2E stabilization patch
+        run: python scripts/patch_trading_resize_e2e_flake.py
+
+      - name: Install web dependencies
+        run: npm install
+
+      - name: Install Trading browser
+        run: npx playwright install chromium
+
+      - name: Qualify Trading browser smoke
+        run: npm --workspace @omnix/web run test:e2e:trading
+
+      - name: Verify patch shape
+        run: |
+          git diff --check
+          git diff -- src/apps/web/tests/e2e/trading-terminal.spec.ts
+
+      - name: Commit qualified test change only
+        shell: bash
+        run: |
+          if git diff --quiet -- src/apps/web/tests/e2e/trading-terminal.spec.ts; then
+            echo "::error::Expected E2E patch was not produced."
+            exit 2
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/apps/web/tests/e2e/trading-terminal.spec.ts
+          git commit -m "test: stabilize indicator resize e2e interaction"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
