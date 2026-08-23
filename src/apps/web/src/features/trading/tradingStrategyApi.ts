@@ -27,6 +27,7 @@ export type TradingStrategyOperationsStatus = {
   strategy_monitor: StrategyRuntimeMonitorStatus;
   universe_archive_monitor: StrategyRuntimeMonitorStatus;
   v2_qualification_monitor: StrategyRuntimeMonitorStatus;
+  alpaca_status_monitor: StrategyRuntimeMonitorStatus;
   execution_authority: false;
 };
 
