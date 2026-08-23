@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 from app.trading.gapper_dataset import freeze_gapper_universe
 from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
