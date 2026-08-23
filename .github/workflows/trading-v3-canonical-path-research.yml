@@ -1,0 +1,75 @@
+name: Trading V3 canonical path research
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/run_trading_strategy_v3_canonical_path_research.py
+      - .github/workflows/trading-v3-canonical-path-research.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - name: Check out exact research head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install cache-only backtest dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets pytest playwright "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Restore immutable causal datasets
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-${{ runner.os }}-v3research-${{ github.run_id }}
+          restore-keys: |
+            trading-liquidity-datasets-v2-causal-${{ runner.os }}-
+          fail-on-cache-miss: true
+
+      - name: Run canonical-path development research
+        run: |
+          python scripts/run_trading_strategy_v3_canonical_path_research.py \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --development-start 2026-01-02 \
+            --development-end 2026-02-27 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 150 \
+            --minimum-development-trades 5 \
+            --minimum-coverage-ratio 0.80 \
+            --minimum-covered-sessions 20 \
+            --output-dir artifacts/v3-canonical-path-research
+
+      - name: Publish research summary
+        if: always()
+        run: |
+          if [[ -f artifacts/v3-canonical-path-research/summary.md ]]; then
+            cat artifacts/v3-canonical-path-research/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload research evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-v3-canonical-path-research
+          path: artifacts/v3-canonical-path-research
+          if-no-files-found: error
+          retention-days: 30
