@@ -1,6 +1,6 @@
 import type { TradingIndicatorPaneGeometry } from './chart/chartAdapter';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
-import type { TradingIndicatorMove } from './tradingStore';
+import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
 
 export function TradingIndicatorPaneControls({
   indicator,
@@ -29,6 +29,12 @@ export function TradingIndicatorPaneControls({
   onMove: (direction: TradingIndicatorMove) => void;
   onClose: () => void;
 }) {
+  const drawingTool = useTradingStore((state) => state.drawingTool);
+  // A drawing/alert tool owns the chart pointer until it completes. Removing
+  // pane chrome from the DOM avoids stale hover state leaving an invisible
+  // control above the drawing overlay and stealing the placement click.
+  if (drawingTool !== 'cursor') return null;
+
   const label = `${indicator.id.toUpperCase()} ${indicator.period}`;
   return (
     <div
