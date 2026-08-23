@@ -104,6 +104,67 @@ def test_recent_alpaca_reconstruction_builds_explicit_approximate_universe_witho
     assert result.warnings
 
 
+
+def test_seed_scan_batches_one_thousand_symbols_without_changing_data_contract(monkeypatch) -> None:
+    session_date = date(2026, 8, 18)
+    symbols = [f"S{index:04d}" for index in range(1001)]
+
+    class BatchRuntime:
+        def __init__(self):
+            self.minute_seed_requests: list[tuple[str, ...]] = []
+
+        def get(self, url, *, params=None, headers=None, timeout=None, cancellation=None):
+            if url.endswith("/v2/assets"):
+                return FakeResponse([
+                    {"symbol": symbol, "exchange": "NASDAQ", "status": "active", "tradable": True}
+                    for symbol in symbols
+                ])
+            assert url.endswith("/v2/stocks/bars")
+            requested = tuple(str(params["symbols"]).split(","))
+            if params["timeframe"] == "1Day":
+                prior = session_date - timedelta(days=1)
+                return FakeResponse({
+                    "bars": {
+                        symbol: [{"t": f"{prior.isoformat()}T20:00:00Z", "o": 10, "c": 10}]
+                        for symbol in requested
+                    },
+                    "next_page_token": None,
+                })
+            self.minute_seed_requests.append(requested)
+            return FakeResponse({"bars": {}, "next_page_token": None})
+
+    monkeypatch.setattr(
+        reconstruction,
+        "alpaca_iex_auth_headers",
+        lambda: {"APCA-API-KEY-ID": "test-key", "APCA-API-SECRET-KEY": "test-secret"},
+    )
+    runtime = BatchRuntime()
+    config = GapPullbackConfig(
+        strategy_version="1.1.0",
+        minimum_gap_pct=Decimal("20"),
+        minimum_premarket_dollar_volume=Decimal("0"),
+        minimum_tod_rvol=Decimal("0"),
+        universe_discovery_count=10,
+    )
+
+    result = reconstruction.AlpacaHistoricalGapperReconstructor(
+        start_date=session_date,
+        end_date=session_date,
+        config=config,
+        assumed_spread_bps=Decimal("40"),
+        max_age_days=30,
+        clock=datetime(2026, 8, 19, 16, 0, tzinfo=timezone.utc),
+        runtime=runtime,
+    )(
+        session_date=session_date,
+        scan_time=time(9, 20),
+    )
+
+    assert result.snapshot is None
+    assert result.fidelity == "reconstructed_current_listings_iex"
+    assert [len(batch) for batch in runtime.minute_seed_requests] == [1000, 1]
+    assert reconstruction._SCAN_SEED_CHUNK_SIZE == 1000
+
 def test_reconstructed_strategy_config_relaxes_only_unavailable_historical_evidence() -> None:
     config = GapPullbackConfig(
         strategy_version="1.1.0",

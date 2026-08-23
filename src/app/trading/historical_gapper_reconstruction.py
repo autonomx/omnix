@@ -26,6 +26,10 @@ _DEFAULT_TRADING_URL = "https://paper-api.alpaca.markets"
 _ALLOWED_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA"}
 _SYMBOL = re.compile(r"^[A-Z0-9.\-]+$")
 _SCAN_SEED_LOOKBACK_MINUTES = 15
+# A 15-minute seed window yields at most 15 one-minute bars per symbol.
+# 1,000-symbol batches remain bounded by Alpaca pagination while reducing
+# request count versus the old 200-symbol batching.
+_SCAN_SEED_CHUNK_SIZE = 1000
 
 
 @dataclass(frozen=True)
@@ -421,7 +425,7 @@ class AlpacaHistoricalGapperReconstructor:
             timeframe="1Min",
             start=seed_start,
             end=scan_at,
-            chunk_size=200,
+            chunk_size=_SCAN_SEED_CHUNK_SIZE,
         )
         seed_symbols = _scan_seed_symbols(
             scan_window,
