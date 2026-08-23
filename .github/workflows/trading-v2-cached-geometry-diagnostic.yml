@@ -1,9 +1,9 @@
 name: Trading V2 cached geometry diagnostic
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/trading-auto-strategy-roadmap
+      - main
     paths:
       - scripts/run_trading_strategy_v2_geometry_diagnostic.py
       - .github/workflows/trading-v2-cached-geometry-diagnostic.yml
@@ -24,7 +24,7 @@ jobs:
       - name: Check out exact diagnostic head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
