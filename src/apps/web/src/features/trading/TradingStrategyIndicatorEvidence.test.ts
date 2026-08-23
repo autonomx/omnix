@@ -17,7 +17,7 @@ function event(execution: Record<string, unknown>): StrategyEvent {
 }
 
 describe('prospective indicator entry evidence', () => {
-  it('extracts the persisted frozen verdict and multi-timeframe snapshot', () => {
+  it('extracts the persisted frozen verdict, feature row, and multi-timeframe snapshot', () => {
     const values = collectProspectiveIndicatorEvidence([
       event({
         indicator_context_source: 'alpaca_iex_same_day_1m',
@@ -28,6 +28,36 @@ describe('prospective indicator entry evidence', () => {
         indicator_entry_confirmed: false,
         indicator_entry_reason_codes: ['INDICATOR_1M_MACD_BEARISH'],
         indicator_context_error: null,
+        prospective_signal_features: {
+          schema_version: 'v2-prospective-signal-features-1',
+          immutable_fingerprint: 'abc123',
+          completeness: {
+            premarket_available: true,
+            research_available: true,
+            halt_history_complete: true,
+            momentum_full_warmup: true,
+            all_core_available: true,
+          },
+          premarket: {
+            range_pct: '18.5',
+            close_vs_high_pct: '-2.5',
+            last_30m_return_pct: '3.2',
+          },
+          research: {
+            catalyst: {
+              catalyst_type: 'earnings',
+              primary_confirmed: true,
+            },
+            supply: {
+              resolution_status: 'clear',
+              immediate_supply_risk: false,
+            },
+          },
+          halt_history: {
+            halt_event_count: 1,
+            halted_at_decision: false,
+          },
+        },
         indicator_context: {
           one_minute: {
             close: '10.10',
@@ -66,6 +96,22 @@ describe('prospective indicator entry evidence', () => {
     });
     expect(values[0].oneMinute.macdHistogram).toBe('-0.01');
     expect(values[0].fiveMinute.stochasticRsiK).toBe('82');
+    expect(values[0].prospective).toMatchObject({
+      fingerprint: 'abc123',
+      allCoreAvailable: true,
+      premarketAvailable: true,
+      premarketRangePct: '18.5',
+      premarketCloseVsHighPct: '-2.5',
+      premarketLast30mReturnPct: '3.2',
+      researchAvailable: true,
+      catalystType: 'earnings',
+      primaryCatalystConfirmed: true,
+      supplyResolution: 'clear',
+      immediateSupplyRisk: false,
+      haltHistoryComplete: true,
+      haltEventCount: 1,
+      haltedAtDecision: false,
+    });
   });
 
   it('ignores old shadow events that predate the frozen persisted verdict', () => {
@@ -94,5 +140,7 @@ describe('prospective indicator entry evidence', () => {
     expect(values[0].fullWarmup).toBe(false);
     expect(values[0].error).toContain('ProviderDataUnavailableError');
     expect(values[0].reasonCodes).toEqual([]);
+    expect(values[0].prospective.allCoreAvailable).toBe(false);
+    expect(values[0].prospective.researchAvailable).toBe(false);
   });
 });
