@@ -124,6 +124,17 @@ def test_shadow_execution_captures_eligible_iex_evidence_without_order_authority
     assert context["five_minute"]["macd"] is not None
     assert context["five_minute"]["stochastic_rsi_k"] is not None
 
+    prospective = evidence.execution["prospective_signal_features"]
+    assert isinstance(prospective, dict)
+    assert prospective["schema_version"] == "v2-prospective-signal-features-1"
+    assert prospective["execution_authority"] is False
+    assert prospective["premarket"]["bar_count"] == 330
+    assert prospective["momentum"]["full_warmup"] is True
+    assert prospective["completeness"]["premarket_available"] is True
+    assert prospective["completeness"]["momentum_full_warmup"] is True
+    assert len(prospective["immutable_fingerprint"]) == 64
+    assert evidence.execution["prospective_signal_features_error"] is None
+
 
 def test_shadow_execution_preserves_ineligible_reasons() -> None:
     service = FakeMarketService(_execution(eligible=False))
@@ -139,6 +150,7 @@ def test_shadow_execution_preserves_ineligible_reasons() -> None:
     # Entry-indicator research remains observational even when execution evidence
     # is ineligible; it can never upgrade the execution decision.
     assert evidence.execution["indicator_entry_confirmed"] is True
+    assert evidence.execution["prospective_signal_features"]["execution_authority"] is False
 
 
 def test_shadow_indicator_failure_cannot_change_execution_evidence() -> None:
@@ -164,6 +176,10 @@ def test_shadow_indicator_failure_cannot_change_execution_evidence() -> None:
     assert evidence.execution["indicator_context_error"] == (
         "RuntimeError: indicator history unavailable"
     )
+    prospective = evidence.execution["prospective_signal_features"]
+    assert prospective["premarket"]["available"] is False
+    assert prospective["momentum"]["available"] is False
+    assert prospective["execution_authority"] is False
 
 
 def test_shadow_execution_module_has_no_order_or_paper_repository_dependency() -> None:
