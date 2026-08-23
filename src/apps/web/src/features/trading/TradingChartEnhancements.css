@@ -54,3 +54,7 @@
 .trading-chart-panel.replay-active>footer>nav{position:absolute;left:7px}
 .trading-chart-panel.replay-active>footer>.trading-chart-footer-meta{position:absolute;right:7px}
 .trading-chart-panel.replay-active .trading-replay-toolbar{position:relative;inset:auto;left:auto;bottom:auto;display:flex;flex:0 1 auto;margin:0;transform:none}
+.trading-replay-future-overlay{position:absolute;z-index:3;top:0;right:0;bottom:0;min-width:0;background:linear-gradient(90deg,rgba(4,10,17,.08),rgba(4,10,17,.42));pointer-events:none}
+.trading-replay-selection-divider{position:absolute;z-index:5;top:0;bottom:0;width:2px;transform:translateX(-1px);background:#2e7cff;box-shadow:0 0 8px rgba(46,124,255,.6);pointer-events:none}
+.trading-replay-selection-divider>span{position:absolute;top:50%;left:50%;display:grid;place-items:center;width:25px;height:25px;transform:translate(-50%,-50%);border:2px solid #07111c;border-radius:50%;background:#fff;color:#07111c;font-size:17px;line-height:1}
+.trading-replay-selection-divider>small{position:absolute;bottom:0;left:50%;transform:translate(-50%,100%);border-radius:2px;background:#2e7cff;padding:4px 8px;color:#fff;font-size:9px;font-weight:600;white-space:nowrap}

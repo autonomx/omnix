@@ -380,6 +380,8 @@ export function TradingChartPanel({
   const [replayPlaying, setReplayPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState('1');
   const [replayMarkerX, setReplayMarkerX] = useState<number | null>(null);
+  const [replaySelectionIndex, setReplaySelectionIndex] = useState<number | null>(null);
+  const [replaySelectionX, setReplaySelectionX] = useState<number | null>(null);
   const [minimizedIndicators, setMinimizedIndicators] = useState<Set<CoreIndicatorId>>(() => new Set());
   const minimizedIndicatorsRef = useRef<Set<CoreIndicatorId>>(new Set());
   const [fullscreenIndicator, setFullscreenIndicator] = useState<CoreIndicatorId | null>(null);
@@ -1155,6 +1157,13 @@ export function TradingChartPanel({
       return;
     }
     const bounds = event.currentTarget.getBoundingClientRect();
+    if (replayMode && active && replayCursorIndex === null && !target.closest('button, input, select, textarea, [role="dialog"]')) {
+      const x = event.clientX - bounds.left;
+      if (!targetAdapter.isPriceScaleCoordinate(x)) {
+        const index = targetAdapter.barIndexAtCoordinate(x, allBarsRef.current.length);
+        if (index !== null) setReplaySelectionIndex(index);
+      }
+    }
     const nextHovered = targetAdapter.isMainPriceScaleCoordinate(event.clientX - bounds.left);
     setPriceScaleHovered((current) => current === nextHovered ? current : nextHovered);
   };
@@ -1232,6 +1241,7 @@ export function TradingChartPanel({
     if (index === null) return;
     setReplayPlaying(false);
     restartReplaySession();
+    setReplaySelectionIndex(index);
     setReplayStartIndex(index);
     setReplayCursorIndex(index);
   };
@@ -1279,6 +1289,40 @@ export function TradingChartPanel({
       unsubscribeViewport();
     };
   }, [active, adapter, replayCursorIndex, replayMode, replayStartIndex]);
+
+  useEffect(() => {
+    const selecting = replayMode && active && replayCursorIndex === null;
+    if (!selecting || !adapter || allBarsRef.current.length === 0) {
+      setReplaySelectionX(null);
+      setReplaySelectionIndex(null);
+      return;
+    }
+    if (replaySelectionIndex === null || replaySelectionIndex >= allBarsRef.current.length) {
+      const initialIndex = replayStartIndex ?? adapter.barIndexAtCoordinate(
+        adapter.indicatorPlotWidth() / 2,
+        allBarsRef.current.length,
+      );
+      setReplaySelectionIndex(initialIndex);
+      return;
+    }
+    const updateDivider = () => {
+      const bar = allBarsRef.current[replaySelectionIndex];
+      setReplaySelectionX(bar
+        ? adapter.barTimeToCoordinate(bar.start_time) ?? adapter.timeToCoordinate(bar.start_time)
+        : null);
+    };
+    updateDivider();
+    window.addEventListener('resize', updateDivider);
+    const host = hostRef.current;
+    const observer = typeof ResizeObserver === 'undefined' || !host ? null : new ResizeObserver(updateDivider);
+    observer?.observe(host as Element);
+    const unsubscribeViewport = adapter.onViewportChange(updateDivider);
+    return () => {
+      window.removeEventListener('resize', updateDivider);
+      observer?.disconnect();
+      unsubscribeViewport();
+    };
+  }, [active, adapter, chartQuery.data, replayCursorIndex, replayMode, replaySelectionIndex, replayStartIndex]);
 
   const replayStartBar = replayStartIndex === null ? null : allBarsRef.current[replayStartIndex] ?? null;
   const replayCurrentBar = replayCursorIndex === null ? null : allBarsRef.current[replayCursorIndex] ?? null;
@@ -1401,9 +1445,22 @@ export function TradingChartPanel({
             />
           ));
         }) : null}
+        {replayMode && active && replayCursorIndex === null && replaySelectionX !== null ? (
+          <div
+            className="trading-replay-future-overlay"
+            style={{ left: `${replaySelectionX}px` }}
+            aria-hidden="true"
+          />
+        ) : null}
         {replayMode && active && replayMarkerX !== null ? (
           <div className="trading-replay-marker" style={{ left: `${replayMarkerX}px` }} aria-hidden="true">
             <span>Replay start</span>
+          </div>
+        ) : null}
+        {replayMode && active && replayCursorIndex === null && replaySelectionX !== null ? (
+          <div className="trading-replay-selection-divider" style={{ left: `${replaySelectionX}px` }} aria-hidden="true">
+            <span>✂</span>
+            <small>{replaySelectionIndex === null ? 'Select replay start' : 'Replay start'}</small>
           </div>
         ) : null}
         {replayMode && active ? (
