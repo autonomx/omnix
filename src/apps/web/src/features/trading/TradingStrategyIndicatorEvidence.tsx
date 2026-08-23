@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { tradingStrategyApi, type StrategyRuntimeMonitorStatus, type TradingStrategyOperationsStatus } from './tradingStrategyApi';
 import type { StrategyEvent } from './tradingStrategyTypes';
 import './TradingStrategyIndicatorEvidence.css';
 
@@ -122,6 +124,47 @@ function statusTone(item: ProspectiveIndicatorEvidence): string {
   return 'unavailable';
 }
 
+function runtimeTone(status: StrategyRuntimeMonitorStatus): string {
+  if (!status.configured_enabled) return 'disabled';
+  if (!status.registered || !status.running) return 'stopped';
+  return 'running';
+}
+
+function runtimeLabel(status: StrategyRuntimeMonitorStatus): string {
+  if (!status.configured_enabled) return 'DISABLED';
+  if (!status.registered) return 'NOT REGISTERED';
+  return status.running ? 'RUNNING' : 'STOPPED';
+}
+
+function counterSummary(status: StrategyRuntimeMonitorStatus): string {
+  const entries = Object.entries(status.counters);
+  if (!entries.length) return 'no counters';
+  return entries.map(([key, value]) => `${key.replaceAll('_', ' ')} ${value}`).join(' · ');
+}
+
+function RuntimeMonitor({
+  label,
+  purpose,
+  status,
+}: {
+  label: string;
+  purpose: string;
+  status: StrategyRuntimeMonitorStatus;
+}) {
+  return (
+    <article className="indicator-runtime-monitor" data-status={runtimeTone(status)}>
+      <header><strong>{label}</strong><span>{runtimeLabel(status)}</span></header>
+      <small>{purpose}</small>
+      <div>
+        <span>{status.interval_seconds == null ? 'interval —' : `every ${status.interval_seconds}s`}</span>
+        <span>{status.last_run_at ? `last run ${new Date(status.last_run_at).toLocaleTimeString()}` : 'no completed run yet'}</span>
+      </div>
+      <small>{counterSummary(status)}</small>
+      {status.last_error ? <p title={status.last_error}>Last reported error: {status.last_error}</p> : null}
+    </article>
+  );
+}
+
 function IndicatorValues({ label, value }: { label: string; value: IndicatorSnapshotEvidence }) {
   return (
     <div className="indicator-evidence-timeframe">
@@ -147,6 +190,35 @@ export function TradingStrategyIndicatorEvidence({
   visible: boolean;
   loadError?: string | null;
 }) {
+  const [operations, setOperations] = useState<TradingStrategyOperationsStatus | null>(null);
+  const [operationsError, setOperationsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) {
+      setOperations(null);
+      setOperationsError(null);
+      return;
+    }
+    let alive = true;
+    const refreshOperations = async () => {
+      try {
+        const next = await tradingStrategyApi.operationsStatus();
+        if (!alive) return;
+        setOperations(next);
+        setOperationsError(null);
+      } catch (error) {
+        if (!alive) return;
+        setOperationsError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void refreshOperations();
+    const timer = window.setInterval(() => void refreshOperations(), 30_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [visible]);
+
   if (!visible) return null;
   const evidence = collectProspectiveIndicatorEvidence(events);
   return (
@@ -158,6 +230,17 @@ export function TradingStrategyIndicatorEvidence({
         </div>
         <span>{evidence.length} signals</span>
       </header>
+      {operations ? (
+        <div className="indicator-runtime-grid" aria-label="Prospective capture runtime">
+          <RuntimeMonitor label="Morning archive" purpose="09:20 ET immutable raw universe capture" status={operations.universe_archive_monitor} />
+          <RuntimeMonitor label="SHADOW evaluator" purpose="Deterministic structural/live execution observation" status={operations.strategy_monitor} />
+          <RuntimeMonitor label="Post-session replay" purpose="Canonical V2 replay and qualification evidence" status={operations.v2_qualification_monitor} />
+        </div>
+      ) : operationsError ? (
+        <p className="indicator-evidence-error">Could not load prospective runtime status: {operationsError}</p>
+      ) : (
+        <p className="indicator-runtime-loading">Checking prospective capture monitors…</p>
+      )}
       {evidence.length ? (
         <div className="indicator-evidence-list">
           {evidence.map((item) => (
