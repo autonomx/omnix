@@ -34,9 +34,9 @@ The fixed profit/time exits are removed:
 
 - **no fixed 1.5R take-profit**;
 - **no 60-minute maximum-hold exit**;
-- force-flat at **15:55 ET** if the adaptive exit has not fired.
+- force-flat decision at **15:55 ET** if the adaptive exit has not fired.
 
-There are no partial profits in this first experiment. Adding partials would create another management axis and is deliberately deferred.
+There are no intentional partial-profit rules in this first experiment. Execution-model partial fills are still honored when historical bar liquidity cannot fill the entire exit order at once.
 
 ### Indicator deterioration rule
 
@@ -74,6 +74,15 @@ This is deliberately a paired trade experiment rather than a new portfolio backt
 - do **not** resize later B positions or reject later B entries because B may hold an earlier trade longer.
 
 That keeps the comparison focused on exit quality. It also means aggregate B P&L is a same-sized paired counterfactual, **not** a claim that the altered holding periods would satisfy the original portfolio-capacity path.
+
+### Execution-model clarification discovered during dry-run qualification
+
+The indicator rule, entry cohort and statistical gate above were frozen before reading development performance. Two dry-run execution issues were found while qualifying the replay harness; neither changes the indicator hypothesis:
+
+1. Sparse historical IEX bars can have no trade exactly at 15:55. The force-flat **decision** therefore becomes irrevocable using the last finalized observation known by the cutoff rather than waiting to make a new decision on a later bar.
+2. `paper-execution-v2` permits partial market fills when historical bar volume is smaller than the remaining position. A force-flat/indicator/triggered-stop order therefore remains active until its residual quantity is filled. Later bars may supply execution for that already-issued order, but they cannot cancel it or introduce a new indicator/discretionary decision.
+
+The replay reports the volume-weighted average exit price and final fill time for multi-fill exits. This is execution realism, not a partial-profit strategy. The predeclared EMA/MACD/Stoch-RSI conditions and development gate are unchanged. The earlier dry-run artifacts are engineering diagnostics and are not treated as the scientific development result.
 
 ## Metrics
 
