@@ -1,0 +1,70 @@
+name: Trading V2 qualification UI patch
+
+on:
+  push:
+    branches:
+      - agent/trading-auto-strategy-roadmap
+    paths:
+      - scripts/patch_trading_v2_qualification_ui.py
+      - .github/workflows/trading-v2-qualification-ui.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  patch-and-qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/trading-auto-strategy-roadmap
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Apply guarded V2 qualification UI
+        run: python scripts/patch_trading_v2_qualification_ui.py
+
+      - name: Install web dependencies
+        run: npm install
+
+      - name: Run Trading frontend and typecheck
+        run: |
+          npm --workspace @omnix/web run test:trading
+          npm --workspace @omnix/web run typecheck:trading
+          git diff --check
+
+      - name: Commit qualified UI
+        id: commit
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/apps/web/src/features/trading/tradingStrategyTypes.ts \
+            src/apps/web/src/features/trading/tradingStrategyApi.ts \
+            src/apps/web/src/features/trading/TradingStrategiesPanel.tsx
+          git commit -m "trading: expose V2 prospective qualification"
+          git push origin HEAD:agent/trading-auto-strategy-roadmap
+          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - name: Report success
+        if: success()
+        run: |
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 qualification UI passed Trading frontend and TypeScript gates and pushed \`${{ steps.commit.outputs.sha }}\`. Strategies now displays every prospective floor, profile/evidence fingerprints, blocking reasons and explicit evidence-bound review; V2 AUTO PAPER is disabled in the UI until the server reports authorization."
+
+      - name: Report failure
+        if: failure()
+        run: |
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 qualification UI failed on source head \`${GITHUB_SHA}\`. No UI patch from this run should be trusted; inspect the workflow before continuing."
