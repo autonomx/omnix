@@ -4,9 +4,11 @@ import asyncio
 import json
 import os
 import threading
+from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
@@ -15,27 +17,48 @@ ALPACA_IEX_STREAM_URL = "wss://stream.data.alpaca.markets/v2/iex"
 _STATE_KEY = "_omnix_alpaca_iex_status_monitor"
 _HALT_CODES = {"2", "H", "P"}
 _RESUME_CODES = {"3", "Q", "T"}
+_HISTORY_LIMIT_PER_SYMBOL = 256
+_ET = ZoneInfo("America/New_York")
+_EXTENDED_SESSION_OPEN = time(4, 0)
+
+
+def _stored_credentials() -> dict[str, str]:
+    try:
+        from app.persistence.provider_secret_store import load_trading_provider_secrets
+
+        return dict(load_trading_provider_secrets().get("alpaca_iex") or {})
+    except Exception:
+        return {}
 
 
 def _api_key() -> str:
-    return (
+    environment_value = (
         os.environ.get("OMNIX_ALPACA_API_KEY_ID")
         or os.environ.get("APCA_API_KEY_ID")
         or ""
     ).strip()
+    return environment_value or _stored_credentials().get("api_key_id", "").strip()
 
 
 def _api_secret() -> str:
-    return (
+    environment_value = (
         os.environ.get("OMNIX_ALPACA_API_SECRET_KEY")
         or os.environ.get("APCA_API_SECRET_KEY")
         or ""
     ).strip()
+    return environment_value or _stored_credentials().get("secret_key", "").strip()
 
 
 def _enabled() -> bool:
     value = os.environ.get("OMNIX_ALPACA_STATUS_STREAM", "1").strip().lower()
     return value in {"1", "true", "yes", "on"} and bool(_api_key() and _api_secret())
+
+
+def _utc(value: datetime | None = None) -> datetime:
+    observed = value or datetime.now(timezone.utc)
+    if observed.tzinfo is None:
+        raise ValueError("Alpaca status timestamps must be timezone-aware")
+    return observed.astimezone(timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -49,25 +72,51 @@ class AlpacaTradingStatus:
 
 
 class AlpacaIexStatusCache:
-    """Thread-safe cache of Alpaca IEX trading-status stream evidence.
+    """Thread-safe live halt cache plus bounded prospective status history.
 
-    A known halt remains fail-closed even while the stream is disconnected. A
-    previously observed resume is returned as authoritative only while the stream
-    is connected, because a later halt could otherwise have been missed.
+    ``halted()`` preserves the conservative execution contract: a resume is
+    authoritative only while the stream is currently connected. The separate
+    ``history_snapshot()`` method is evidence-only and reports whether the stream
+    has been continuously connected since 04:00 ET before inferring that no halt
+    was observed during the session.
     """
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._values: dict[str, AlpacaTradingStatus] = {}
+        self._history: dict[str, deque[AlpacaTradingStatus]] = {}
         self._connected = False
+        self._connected_since: datetime | None = None
+        self._last_disconnect_at: datetime | None = None
+        self._disconnect_count = 0
 
-    def set_connected(self, connected: bool) -> None:
+    def set_connected(self, connected: bool, *, observed_at: datetime | None = None) -> None:
+        observed = _utc(observed_at)
         with self._lock:
+            if connected and not self._connected:
+                self._connected_since = observed
+            elif not connected and self._connected:
+                self._last_disconnect_at = observed
+                self._disconnect_count += 1
+                self._connected_since = None
             self._connected = connected
 
     def record(self, status: AlpacaTradingStatus) -> None:
+        normalized = AlpacaTradingStatus(
+            symbol=status.symbol.upper(),
+            status_code=status.status_code,
+            reason_code=status.reason_code,
+            message=status.message,
+            observed_at=_utc(status.observed_at),
+            halted=status.halted,
+        )
         with self._lock:
-            self._values[status.symbol] = status
+            self._values[normalized.symbol] = normalized
+            history = self._history.setdefault(
+                normalized.symbol,
+                deque(maxlen=_HISTORY_LIMIT_PER_SYMBOL),
+            )
+            history.append(normalized)
 
     def halted(self, symbol: str) -> bool | None:
         with self._lock:
@@ -78,11 +127,78 @@ class AlpacaIexStatusCache:
                 return True
             return False if self._connected else None
 
+    def history_snapshot(self, symbol: str, *, as_of: datetime) -> dict[str, object]:
+        cutoff = _utc(as_of)
+        local_cutoff = cutoff.astimezone(_ET)
+        session_start = datetime.combine(
+            local_cutoff.date(),
+            _EXTENDED_SESSION_OPEN,
+            tzinfo=_ET,
+        ).astimezone(timezone.utc)
+        key = symbol.upper()
+        with self._lock:
+            history = [
+                item
+                for item in self._history.get(key, ())
+                if session_start <= item.observed_at <= cutoff
+            ]
+            history.sort(key=lambda item: item.observed_at)
+            latest = history[-1] if history else None
+            session_complete = bool(
+                self._connected
+                and self._connected_since is not None
+                and self._connected_since <= session_start
+            )
+            # With continuous status coverage from 04:00 ET, no status event means
+            # no halt/resume transition was observed during the session. This is
+            # research evidence only and never changes execution eligibility.
+            halted_at_decision: bool | None
+            if latest is not None:
+                halted_at_decision = latest.halted
+            elif session_complete:
+                halted_at_decision = False
+            else:
+                halted_at_decision = None
+            halts = [item for item in history if item.halted]
+            resumes = [item for item in history if not item.halted]
+            return {
+                "symbol": key,
+                "available": latest is not None or session_complete,
+                "stream_connected": self._connected,
+                "stream_connected_since": (
+                    self._connected_since.isoformat() if self._connected_since is not None else None
+                ),
+                "last_disconnect_at": (
+                    self._last_disconnect_at.isoformat() if self._last_disconnect_at is not None else None
+                ),
+                "disconnect_count": self._disconnect_count,
+                "session_start": session_start.isoformat(),
+                "session_history_complete": session_complete,
+                "halted_at_decision": halted_at_decision,
+                "halt_event_count": len(halts),
+                "resume_event_count": len(resumes),
+                "last_halt_at": halts[-1].observed_at.isoformat() if halts else None,
+                "last_resume_at": resumes[-1].observed_at.isoformat() if resumes else None,
+                "last_status_code": latest.status_code if latest is not None else None,
+                "last_reason_code": latest.reason_code if latest is not None else None,
+                "last_message": latest.message if latest is not None else None,
+                "last_status_at": latest.observed_at.isoformat() if latest is not None else None,
+                "error": None,
+            }
+
     def snapshot(self) -> dict[str, object]:
         with self._lock:
             return {
                 "connected": self._connected,
+                "connected_since": (
+                    self._connected_since.isoformat() if self._connected_since is not None else None
+                ),
+                "last_disconnect_at": (
+                    self._last_disconnect_at.isoformat() if self._last_disconnect_at is not None else None
+                ),
+                "disconnect_count": self._disconnect_count,
                 "symbols": len(self._values),
+                "history_symbols": len(self._history),
                 "known_halts": sum(1 for item in self._values.values() if item.halted),
             }
 
@@ -107,7 +223,7 @@ def _parse_time(value: Any) -> datetime:
 
 
 class AlpacaIexStatusMonitor:
-    """Optional low-volume status stream used only to reject known trading halts."""
+    """Optional low-volume status stream used to reject known trading halts and capture research history."""
 
     def __init__(self, cache: AlpacaIexStatusCache | None = None) -> None:
         self.cache = cache or default_alpaca_iex_status_cache()
@@ -144,11 +260,6 @@ class AlpacaIexStatusMonitor:
             raise RuntimeError(f"Alpaca IEX status stream did not confirm {expected}")
 
     async def _session(self) -> None:
-        # Keep websockets optional at import time. Several shared gateway/RPG
-        # verification jobs intentionally install only a minimal dependency set;
-        # they must still be able to construct the gateway when Alpaca status
-        # streaming is disabled/unconfigured. A configured runtime without the
-        # dependency records a monitor error and retries without affecting fills.
         try:
             import websockets
         except ImportError as exc:
