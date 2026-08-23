@@ -8,6 +8,7 @@ from .indicator_signals import (
     multi_timeframe_indicator_context,
 )
 from .providers.alpaca_iex import ALPACA_IEX_PARTIAL_MARKET
+from .strategy_prospective_signal_features import build_prospective_signal_features
 
 
 ShadowExecutionReason = Literal[
@@ -72,17 +73,16 @@ def observe_shadow_execution(
     instrument_id: str,
     binding_id: str | None,
 ) -> ShadowExecutionEvidence:
-    """Capture execution and indicator evidence a SHADOW signal sees without trading.
+    """Capture causal execution/research evidence for a SHADOW signal without trading.
 
     This module intentionally has no paper repository or order dependency. SHADOW
-    may observe quote/book/freshness/halt state plus finalized 1m/5m momentum
-    context, but only AUTO PAPER is allowed to create orders or protections.
+    may observe quote/book/freshness/halt state plus finalized 1m/5m momentum,
+    premarket structure and point-in-time research context, but only AUTO PAPER is
+    allowed to create orders or protections.
 
-    Indicator telemetry is supplemental: inability to refresh indicator bars does
-    not change execution eligibility or suppress the execution evidence. The
-    execution observation's own ``source_time`` is the indicator-history cutoff,
-    so a fresher later market-data response cannot leak future bars into the
-    signal-time snapshot.
+    Supplemental telemetry can fail independently. Neither indicator/research
+    availability nor the prospective feature record may upgrade or downgrade the
+    execution observation returned by the authoritative execution provider.
     """
 
     execution = market_service.execution_observation(instrument_id, binding_id)
@@ -90,6 +90,10 @@ def observe_shadow_execution(
     payload["indicator_context_source"] = "alpaca_iex_same_day_1m"
     payload["indicator_context_partial_market"] = ALPACA_IEX_PARTIAL_MARKET
     payload["indicator_context_cutoff"] = getattr(execution, "source_time", None)
+
+    finalized = []
+    context = None
+    full_warmup = False
     try:
         source_time = execution.source_time
         bars = market_service.execution_indicator_bars(
@@ -104,9 +108,10 @@ def observe_shadow_execution(
         ]
         context = multi_timeframe_indicator_context(finalized)
         entry_allowed, entry_reasons = indicator_entry_confirmation(context)
+        full_warmup = _full_indicator_warmup(context)
         payload["indicator_context"] = context.model_dump(mode="json")
         payload["indicator_context_bar_count"] = len(finalized)
-        payload["indicator_context_full_warmup"] = _full_indicator_warmup(context)
+        payload["indicator_context_full_warmup"] = full_warmup
         payload["indicator_entry_confirmed"] = entry_allowed
         payload["indicator_entry_reason_codes"] = entry_reasons
         payload["indicator_context_error"] = None
@@ -117,6 +122,20 @@ def observe_shadow_execution(
         payload["indicator_entry_confirmed"] = None
         payload["indicator_entry_reason_codes"] = ()
         payload["indicator_context_error"] = f"{type(exc).__name__}: {exc}"
+
+    try:
+        payload["prospective_signal_features"] = build_prospective_signal_features(
+            instrument_id=instrument_id,
+            decision_at=execution.source_time,
+            bars=finalized,
+            indicator_context=context,
+            indicator_full_warmup=full_warmup,
+        )
+        payload["prospective_signal_features_error"] = None
+    except Exception as exc:  # feature capture is evidence-only and fail-open
+        payload["prospective_signal_features"] = None
+        payload["prospective_signal_features_error"] = f"{type(exc).__name__}: {exc}"
+
     reason: ShadowExecutionReason = (
         "SHADOW_EXECUTION_OBSERVED"
         if execution.execution_eligible
