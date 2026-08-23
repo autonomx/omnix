@@ -15,7 +15,7 @@ permissions:
 jobs:
   patch-and-qualify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       PYTHONPATH: src
       OMNIX_PERSISTENCE_MODE: legacy_test
@@ -31,18 +31,24 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
       - name: Apply guarded V2 continuous-qualification lifecycle
         shell: bash
         run: |
           set -o pipefail
           python scripts/patch_trading_v2_qualification_ui.py 2>&1 | tee /tmp/v2-qualification.log
 
-      - name: Install focused test dependencies
+      - name: Install focused test and contract dependencies
         shell: bash
         run: |
           set -o pipefail
           python -m pip install --upgrade pip 2>&1 | tee -a /tmp/v2-qualification.log
-          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4" pytest 2>&1 | tee -a /tmp/v2-qualification.log
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4" pytest 2>&1 | tee -a /tmp/v2-qualification.log
+          npm install 2>&1 | tee -a /tmp/v2-qualification.log
 
       - name: Run V2 lifecycle and authority regressions
         shell: bash
@@ -56,7 +62,14 @@ jobs:
             src/tests/trading/test_trading_gap_pullback_v2.py 2>&1 | tee -a /tmp/v2-qualification.log
           git diff --check 2>&1 | tee -a /tmp/v2-qualification.log
 
-      - name: Commit qualified lifecycle and remove staging files
+      - name: Regenerate shared gateway API contract
+        shell: bash
+        run: |
+          set -o pipefail
+          npm --workspace @omnix/web run api:generate 2>&1 | tee -a /tmp/v2-qualification.log
+          git diff --check -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts 2>&1 | tee -a /tmp/v2-qualification.log
+
+      - name: Commit qualified lifecycle, generated contract, and remove staging files
         id: commit
         shell: bash
         run: |
@@ -72,7 +85,9 @@ jobs:
             src/app/trading/strategy_shadow_universe.py \
             src/app/trading/strategy_v2_qualification_monitor.py \
             src/tests/trading/test_trading_strategy_shadow_universe.py \
-            src/tests/trading/test_trading_strategy_v2_qualification_monitor.py
+            src/tests/trading/test_trading_strategy_v2_qualification_monitor.py \
+            src/apps/web/src/api/generated/openapi.json \
+            src/apps/web/src/api/generated/types.ts
           git commit -m "trading: continue V2 qualification after promotion" 2>&1 | tee -a /tmp/v2-qualification.log
           git push origin HEAD:agent/trading-auto-strategy-roadmap 2>&1 | tee -a /tmp/v2-qualification.log
           echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
@@ -80,7 +95,7 @@ jobs:
       - name: Report success
         if: success()
         run: |
-          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "Continuous V2 qualification passed focused archive/SHADOW/V2 regressions and pushed \`${{ steps.commit.outputs.sha }}\`. Post-session raw-archive replay now continues in AUTO PAPER as read-only evidence, while the execution fallback remains SHADOW-only and cannot authorize orders. All temporary V2 staging workflow/script files were removed in the same commit."
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "Continuous V2 qualification passed focused archive/SHADOW/V2 regressions and pushed \`${{ steps.commit.outputs.sha }}\`. Post-session raw-archive replay now continues in AUTO PAPER as read-only evidence, while the execution fallback remains SHADOW-only and cannot authorize orders. The V2 OpenAPI/types contract was regenerated and all temporary V2 staging workflow/script files were removed in the same commit."
 
       - name: Report failure with diagnostics
         if: failure()
