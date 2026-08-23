@@ -18,6 +18,29 @@
 .indicator-evidence-list article>header>div{display:grid;gap:2px}
 .trading-indicator-evidence small{color:#72869b;font-size:9px;line-height:1.4}
 .trading-indicator-evidence>header>span{color:#7f96aa;font-size:9px}
+.indicator-runtime-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:8px}
+.indicator-runtime-monitor{
+  display:grid;
+  gap:4px;
+  min-width:0;
+  padding:7px;
+  border:1px solid rgba(117,151,181,.12);
+  border-left:2px solid #61788e;
+  border-radius:6px;
+  background:rgba(6,16,26,.72)
+}
+.indicator-runtime-monitor[data-status=running]{border-left-color:#31cf91}
+.indicator-runtime-monitor[data-status=stopped]{border-left-color:#ff6872}
+.indicator-runtime-monitor[data-status=disabled]{border-left-color:#e8b34f}
+.indicator-runtime-monitor>header{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.indicator-runtime-monitor>header strong{font-size:9px}
+.indicator-runtime-monitor>header span{font-size:7px;font-weight:700;color:#8ca0b3}
+.indicator-runtime-monitor[data-status=running]>header span{color:#55d6a3}
+.indicator-runtime-monitor[data-status=stopped]>header span{color:#ff8d95}
+.indicator-runtime-monitor[data-status=disabled]>header span{color:#e5ba69}
+.indicator-runtime-monitor>div{display:flex;flex-wrap:wrap;gap:4px 9px;color:#7890a4;font-size:7px}
+.indicator-runtime-monitor>p{overflow:hidden;margin:0;color:#d7a8aa;font-size:7px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+.indicator-runtime-loading{margin:0 0 8px;padding:6px 7px;border:1px dashed rgba(117,151,181,.16);border-radius:5px;color:#71869b;font-size:8px;text-align:center}
 .indicator-evidence-list{display:grid;gap:7px}
 .indicator-evidence-list article{
   display:grid;
@@ -70,6 +93,7 @@ article[data-status=unavailable] .indicator-evidence-status{background:rgba(232,
 .indicator-evidence-timeframe>span{display:grid;gap:2px;color:#70859a;font-size:7px}
 .indicator-evidence-timeframe b{color:#a9bdcf;font-size:8px;font-weight:600}
 @media(max-width:1050px){
+  .indicator-runtime-grid{grid-template-columns:1fr}
   .indicator-evidence-timeframes{grid-template-columns:1fr}
 }
 @media(max-width:620px){
