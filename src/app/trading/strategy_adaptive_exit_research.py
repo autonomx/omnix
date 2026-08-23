@@ -19,12 +19,7 @@ from .indicator_signals import MultiTimeframeIndicatorContext, multi_timeframe_i
 from .models import MarketBar
 from .paper import PaperExecutionPolicy, PaperOrder, paper_fill_decision, paper_protection_trigger
 from .strategies.models import GapPullbackConfig
-from .strategy_backtest import (
-    GapPullbackBacktestTrade,
-    _adverse_sell_slippage_bps,
-    _bar_observation,
-    _exit_market_decision,
-)
+from .strategy_backtest import GapPullbackBacktestTrade, _adverse_sell_slippage_bps, _bar_observation
 from .strategy_timeframes import resample_final_bars
 from .strategy_v2_management import v2_active_stop_for_prior_high
 
@@ -32,6 +27,7 @@ from .strategy_v2_management import v2_active_stop_for_prior_high
 _ET = ZoneInfo("America/New_York")
 _FORCE_FLAT_ET = time(15, 55)
 _NO_TARGET_MULTIPLE = Decimal("1000000")
+ExitKind = Literal["stop", "indicator", "force_flat"]
 
 
 class AdaptiveExitDecision(BaseModel):
@@ -55,9 +51,11 @@ class AdaptiveExitReplayTrade(BaseModel):
     entry_fill_quantity: Decimal
     exit_time: datetime
     exit_price: Decimal
-    exit_reason: Literal["stop", "indicator", "force_flat"]
+    exit_reason: ExitKind
     indicator_reason_codes: tuple[str, ...] = ()
     exit_slippage_bps: Decimal
+    exit_fill_count: int = 1
+    exit_partially_filled: bool = False
     pnl_per_share: Decimal
     r_multiple: Decimal
     mfe_r: Decimal
@@ -121,25 +119,78 @@ def adaptive_exit_deterioration(
     )
 
 
-def _stop_fill(
+def _observation(
     *,
     candidate: GapperCandidate,
     bar: MarketBar,
-    quantity: Decimal,
-    active_stop: Decimal,
-    policy: PaperExecutionPolicy,
     assumed_spread_bps: Decimal,
-    open_only: bool,
+    price: Decimal,
+    open_only: bool = False,
 ):
     observation = _bar_observation(
         bar,
         instrument_id=candidate.instrument_id,
         binding_id=candidate.binding_id,
         spread_bps=assumed_spread_bps,
-        price=bar.open,
+        price=price,
     )
     if open_only:
-        observation = observation.model_copy(update={"high": bar.open, "low": bar.open, "price": bar.open})
+        observation = observation.model_copy(update={"high": price, "low": price, "price": price})
+    return observation
+
+
+def _market_fill(
+    *,
+    candidate: GapperCandidate,
+    bar: MarketBar,
+    total_quantity: Decimal,
+    already_filled: Decimal,
+    policy: PaperExecutionPolicy,
+    assumed_spread_bps: Decimal,
+    price: Decimal,
+    order_suffix: str,
+):
+    order = PaperOrder(
+        account_id="backtest",
+        order_id=f"{order_suffix}:{candidate.instrument_id}",
+        instrument_id=candidate.instrument_id,
+        binding_id=candidate.binding_id,
+        side="sell",
+        order_type="market",
+        quantity=total_quantity,
+        filled_quantity=already_filled,
+        idempotency_key=f"{order_suffix}:{candidate.instrument_id}",
+    )
+    return paper_fill_decision(
+        order,
+        _observation(
+            candidate=candidate,
+            bar=bar,
+            assumed_spread_bps=assumed_spread_bps,
+            price=price,
+            open_only=True,
+        ),
+        policy,
+    )
+
+
+def _stop_fill(
+    *,
+    candidate: GapperCandidate,
+    bar: MarketBar,
+    remaining_quantity: Decimal,
+    active_stop: Decimal,
+    policy: PaperExecutionPolicy,
+    assumed_spread_bps: Decimal,
+    open_only: bool,
+):
+    observation = _observation(
+        candidate=candidate,
+        bar=bar,
+        assumed_spread_bps=assumed_spread_bps,
+        price=bar.open,
+        open_only=open_only,
+    )
     order = PaperOrder(
         account_id="backtest",
         order_id=f"adaptive-stop:{candidate.instrument_id}:{bar.start_time.isoformat()}",
@@ -147,7 +198,7 @@ def _stop_fill(
         binding_id=candidate.binding_id,
         side="sell",
         order_type="stop",
-        quantity=quantity,
+        quantity=remaining_quantity,
         stop_price=active_stop,
         idempotency_key=f"adaptive-stop:{candidate.instrument_id}:{bar.start_time.isoformat()}",
     )
@@ -169,7 +220,11 @@ def replay_adaptive_indicator_exit(
     The initial structural stop and V2 +0.75R -> +0.25R protection are retained.
     There is no fixed profit target and no 60-minute time exit. Indicator exits
     are decided only on finalized bars and submitted at the next 1m bar open.
-    Force-flat uses the last finalized bar known by 15:55 ET, never a later bar.
+
+    A force-flat order becomes irrevocably active at the last finalized bar known
+    by 15:55 ET. If historical bar liquidity permits only a partial fill, the
+    already-issued market exit may consume later observations until flat; no
+    later indicator/discretionary decision is made.
     """
 
     if candidate.instrument_id != baseline_trade.instrument_id:
@@ -203,16 +258,33 @@ def replay_adaptive_indicator_exit(
     min_low = entry
     previous_context = multi_timeframe_indicator_context(execution_bars[:entry_index]) if entry_index > 0 else None
     pending_indicator_reasons: tuple[str, ...] | None = None
-    last_exit_rejection: str | None = None
+    active_exit_kind: ExitKind | None = None
+    active_indicator_reasons: tuple[str, ...] = ()
 
-    exit_price: Decimal | None = None
-    exit_time: datetime | None = None
-    exit_reference: Decimal | None = None
-    exit_reason: Literal["stop", "indicator", "force_flat"] | None = None
-    exit_indicator_reasons: tuple[str, ...] = ()
+    filled_quantity = Decimal("0")
+    exit_notional = Decimal("0")
+    reference_notional = Decimal("0")
+    fill_count = 0
+    final_fill_time: datetime | None = None
+    last_exit_error: str | None = None
 
-    for index in range(entry_index, min(len(execution_bars), force_flat_index + 1)):
+    def record_fill(fill_price: Decimal, fill_quantity: Decimal, reference: Decimal, fill_time: datetime) -> None:
+        nonlocal filled_quantity, exit_notional, reference_notional, fill_count, final_fill_time
+        accepted = min(fill_quantity, quantity - filled_quantity)
+        if accepted <= 0:
+            return
+        filled_quantity += accepted
+        exit_notional += fill_price * accepted
+        reference_notional += reference * accepted
+        fill_count += 1
+        final_fill_time = fill_time
+
+    for index in range(entry_index, len(execution_bars)):
         bar = execution_bars[index]
+        remaining = quantity - filled_quantity
+        if remaining <= 0:
+            break
+
         active_stop = v2_active_stop_for_prior_high(
             config,
             entry_price=entry,
@@ -220,64 +292,59 @@ def replay_adaptive_indicator_exit(
             prior_finalized_high=max_high,
         )
 
-        # A pending next-bar market exit owns the bar open. A gap through the
-        # already-active stop is still treated pessimistically as the stop first.
-        if pending_indicator_reasons is not None:
+        # A causal indicator decision is submitted at the next bar open.
+        if active_exit_kind is None and pending_indicator_reasons is not None:
+            active_exit_kind = "indicator"
+            active_indicator_reasons = pending_indicator_reasons
+
+        # Once any market exit is active, the decision never changes back. A gap
+        # through the already-active protection is priced pessimistically as stop
+        # execution for that bar and turns the residual into a stop liquidation.
+        if active_exit_kind in {"indicator", "force_flat", "stop"}:
             max_high = max(max_high, bar.open)
             min_low = min(min_low, bar.open)
-            if bar.open <= active_stop:
-                stop_decision = _stop_fill(
+            if active_exit_kind != "stop" and bar.open <= active_stop:
+                decision = _stop_fill(
                     candidate=candidate,
                     bar=bar,
-                    quantity=quantity,
+                    remaining_quantity=remaining,
                     active_stop=active_stop,
                     policy=policy,
                     assumed_spread_bps=assumed_spread_bps,
                     open_only=True,
                 )
-                if (
-                    stop_decision.should_fill
-                    and stop_decision.fill_price is not None
-                    and stop_decision.fill_quantity is not None
-                    and stop_decision.fill_quantity >= quantity
-                ):
-                    exit_price = stop_decision.fill_price
-                    exit_time = bar.start_time
-                    exit_reference = active_stop
-                    exit_reason = "stop"
-                    break
-                last_exit_rejection = f"exit_execution:{stop_decision.reason}"
+                if decision.should_fill and decision.fill_price is not None and decision.fill_quantity is not None:
+                    record_fill(decision.fill_price, decision.fill_quantity, active_stop, bar.start_time)
+                    active_exit_kind = "stop"
+                    if filled_quantity >= quantity:
+                        break
+                    continue
+                last_exit_error = f"exit_execution:{decision.reason}"
 
-            market = _exit_market_decision(
+            decision = _market_fill(
                 candidate=candidate,
                 bar=bar,
-                quantity=quantity,
+                total_quantity=quantity,
+                already_filled=filled_quantity,
                 policy=policy,
                 assumed_spread_bps=assumed_spread_bps,
                 price=bar.open,
-                order_suffix="adaptive-indicator",
+                order_suffix=f"adaptive-{active_exit_kind}",
             )
-            if (
-                market.should_fill
-                and market.fill_price is not None
-                and market.fill_quantity is not None
-                and market.fill_quantity >= quantity
-            ):
-                exit_price = market.fill_price
-                exit_time = bar.start_time
-                exit_reference = bar.open
-                exit_reason = "indicator"
-                exit_indicator_reasons = pending_indicator_reasons
-                break
-            last_exit_rejection = f"exit_execution:{market.reason}"
+            if decision.should_fill and decision.fill_price is not None and decision.fill_quantity is not None:
+                record_fill(decision.fill_price, decision.fill_quantity, bar.open, bar.start_time)
+                if filled_quantity >= quantity:
+                    break
+                continue
+            last_exit_error = f"exit_execution:{decision.reason}"
+            continue
 
         max_high = max(max_high, bar.high)
         min_low = min(min_low, bar.low)
-        observation = _bar_observation(
-            bar,
-            instrument_id=candidate.instrument_id,
-            binding_id=candidate.binding_id,
-            spread_bps=assumed_spread_bps,
+        observation = _observation(
+            candidate=candidate,
+            bar=bar,
+            assumed_spread_bps=assumed_spread_bps,
             price=bar.open,
         )
         trigger = paper_protection_trigger(
@@ -288,60 +355,56 @@ def replay_adaptive_indicator_exit(
             activated_at=baseline_trade.entry_time,
         )
         if trigger == "stop":
-            stop_decision = _stop_fill(
+            decision = _stop_fill(
                 candidate=candidate,
                 bar=bar,
-                quantity=quantity,
+                remaining_quantity=remaining,
                 active_stop=active_stop,
                 policy=policy,
                 assumed_spread_bps=assumed_spread_bps,
                 open_only=False,
             )
-            if (
-                stop_decision.should_fill
-                and stop_decision.fill_price is not None
-                and stop_decision.fill_quantity is not None
-                and stop_decision.fill_quantity >= quantity
-            ):
-                exit_price = stop_decision.fill_price
-                exit_time = bar.end_time
-                exit_reference = active_stop
-                exit_reason = "stop"
-                break
-            last_exit_rejection = f"exit_execution:{stop_decision.reason}"
+            if decision.should_fill and decision.fill_price is not None and decision.fill_quantity is not None:
+                record_fill(decision.fill_price, decision.fill_quantity, active_stop, bar.end_time)
+                active_exit_kind = "stop"
+                if filled_quantity >= quantity:
+                    break
+                continue
+            last_exit_error = f"exit_execution:{decision.reason}"
 
         context = multi_timeframe_indicator_context(execution_bars[: index + 1])
-        decision = adaptive_exit_deterioration(context, previous_context)
+        deterioration = adaptive_exit_deterioration(context, previous_context)
         previous_context = context
-        if decision.exit and pending_indicator_reasons is None:
-            pending_indicator_reasons = decision.reason_codes
+        if deterioration.exit and pending_indicator_reasons is None:
+            pending_indicator_reasons = deterioration.reason_codes
 
-        if index == force_flat_index:
-            market = _exit_market_decision(
+        # Force-flat is an execution decision, not an indicator observation. Use
+        # the last finalized bar known by 15:55 for the first market fill. Any
+        # partial residual stays under that already-active order on later bars.
+        if index == force_flat_index and active_exit_kind is None:
+            active_exit_kind = "force_flat"
+            decision = _market_fill(
                 candidate=candidate,
                 bar=bar,
-                quantity=quantity,
+                total_quantity=quantity,
+                already_filled=filled_quantity,
                 policy=policy,
                 assumed_spread_bps=assumed_spread_bps,
                 price=bar.close,
                 order_suffix="adaptive-force-flat",
             )
-            if (
-                market.should_fill
-                and market.fill_price is not None
-                and market.fill_quantity is not None
-                and market.fill_quantity >= quantity
-            ):
-                exit_price = market.fill_price
-                exit_time = bar.end_time
-                exit_reference = bar.close
-                exit_reason = "force_flat"
-                break
-            last_exit_rejection = f"exit_execution:{market.reason}"
+            if decision.should_fill and decision.fill_price is not None and decision.fill_quantity is not None:
+                record_fill(decision.fill_price, decision.fill_quantity, bar.close, bar.end_time)
+                if filled_quantity >= quantity:
+                    break
+            else:
+                last_exit_error = f"exit_execution:{decision.reason}"
 
-    if exit_price is None or exit_time is None or exit_reference is None or exit_reason is None:
-        raise RuntimeError(last_exit_rejection or "adaptive exit could not be filled by force-flat cutoff")
+    if filled_quantity < quantity or final_fill_time is None or active_exit_kind is None:
+        raise RuntimeError(last_exit_error or "adaptive exit remained partially filled after final historical observation")
 
+    exit_price = exit_notional / filled_quantity
+    exit_reference = reference_notional / filled_quantity
     pnl = exit_price - entry
     return AdaptiveExitReplayTrade(
         instrument_id=candidate.instrument_id,
@@ -350,16 +413,18 @@ def replay_adaptive_indicator_exit(
         entry_price=entry,
         stop_price=stop,
         entry_fill_quantity=quantity,
-        exit_time=exit_time,
+        exit_time=final_fill_time,
         exit_price=exit_price,
-        exit_reason=exit_reason,
-        indicator_reason_codes=exit_indicator_reasons,
+        exit_reason=active_exit_kind,
+        indicator_reason_codes=active_indicator_reasons if active_exit_kind == "indicator" else (),
         exit_slippage_bps=_adverse_sell_slippage_bps(exit_price, exit_reference),
+        exit_fill_count=fill_count,
+        exit_partially_filled=fill_count > 1,
         pnl_per_share=pnl,
         r_multiple=pnl / risk,
         mfe_r=(max_high - entry) / risk,
         mae_r=(min_low - entry) / risk,
-        hold_minutes=Decimal(str((exit_time - baseline_trade.entry_time).total_seconds() / 60)),
+        hold_minutes=Decimal(str((final_fill_time - baseline_trade.entry_time).total_seconds() / 60)),
     )
 
 
