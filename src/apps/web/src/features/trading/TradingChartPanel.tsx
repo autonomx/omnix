@@ -1,12 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PriceScaleMode, type IChartApi } from 'lightweight-charts';
 import { TradingChartAlertOverlay } from './TradingChartAlertOverlay';
 import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
-import { DEFAULT_TRADING_RIGHT_OFFSET, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
+import { DEFAULT_TRADING_RIGHT_OFFSET, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingComparisonData, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
@@ -15,13 +15,15 @@ import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInst
 import { TradingIndicatorScheduler } from './indicators/indicatorScheduler';
 import { tradingStreamHub, type TradingStreamStatus } from './streaming/tradingStreamHub';
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
-import type { MarketBar, TradingAlertIndicatorId, TradingStreamMessage } from './tradingTypes';
+import type { BarsResponse, MarketBar, TradingAlertIndicatorId, TradingStreamMessage } from './tradingTypes';
 import { TradingIndicatorPaneControls } from './TradingIndicatorPaneControls';
 import { TradingIndicatorObjectToolbar } from './TradingIndicatorObjectToolbar';
 import { TradingIndicatorSettings } from './TradingIndicatorSettings';
 import { TradingIndicatorBackgroundOverlay } from './TradingIndicatorBackgroundOverlay';
 import { TradingVolumeProfileOverlay } from './TradingVolumeProfileOverlay';
 import { TradingYAxisControls } from './TradingYAxisControls';
+import { TradingCompareSymbolDialog } from './TradingCompareSymbolDialog';
+import { TRADING_COMPARISON_COLORS, type TradingComparison } from './tradingComparisons';
 import './TradingChartOverlayLayout.css';
 import './TradingChartRangeTooltip.css';
 import { OMNIX_APPEARANCE_CHANGE_EVENT } from '../settings/appearanceEffects';
@@ -195,6 +197,32 @@ function applyVisibleRange(chart: IChartApi, days: number | null, total: number,
   });
 }
 
+function comparisonPercent(bars: readonly MarketBar[]): string {
+  const first = Number(bars[0]?.close);
+  const last = Number(bars.at(-1)?.close);
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first === 0) return '—';
+  return `${((last / first - 1) * 100).toFixed(2)}%`;
+}
+
+const comparisonCurrencyNames: Record<string, string> = {
+  BTC: 'Bitcoin',
+  ETH: 'Ethereum',
+  SOL: 'Solana',
+  USD: 'U.S. Dollar',
+  USDT: 'Tether',
+  USDC: 'USD Coin',
+};
+
+function comparisonLabel(instrument: { display_symbol: string; venue: string; asset_class?: string | null; base_currency?: string | null; quote_currency?: string | null } | undefined, fallback: string): string {
+  if (!instrument) return fallback;
+  if (instrument.asset_class === 'crypto') {
+    const base = comparisonCurrencyNames[instrument.base_currency ?? ''] ?? instrument.base_currency ?? instrument.display_symbol;
+    const quote = comparisonCurrencyNames[instrument.quote_currency ?? ''] ?? instrument.quote_currency ?? 'U.S. Dollar';
+    return `${base} / ${quote} · ${instrument.venue}`;
+  }
+  return `${instrument.display_symbol} · ${instrument.venue}`;
+}
+
 function chartHistoryLimit(
   instrumentId: string,
   interval: string,
@@ -206,6 +234,40 @@ function chartHistoryLimit(
   return 1_000;
 }
 
+type ComparisonBarsResponse = BarsResponse & { historySourceInstrumentId?: string };
+
+function longHistoryEquivalent(instrumentId: string, interval: string): string | null {
+  if (!['1d', '1w'].includes(interval)) return null;
+  const match = /^crypto:([^:]+):spot:([^:]+)-USD$/i.exec(instrumentId);
+  if (!match) return null;
+  return `crypto:${match[1]}:spot:${match[2]}-USDT`;
+}
+
+function firstBarTime(response: BarsResponse): number {
+  const value = Date.parse(response.bars[0]?.start_time ?? '');
+  return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
+}
+
+async function comparisonBars(
+  instrumentId: string,
+  interval: string,
+  limit: number,
+): Promise<ComparisonBarsResponse> {
+  const selected = await tradingApi.bars(instrumentId, interval, limit);
+  const equivalent = longHistoryEquivalent(instrumentId, interval);
+  if (!equivalent || equivalent === instrumentId) return selected;
+  try {
+    const candidate = await tradingApi.bars(equivalent, interval, limit);
+    if (candidate.bars.length > selected.bars.length && firstBarTime(candidate) < firstBarTime(selected)) {
+      return { ...selected, bars: candidate.bars, historySourceInstrumentId: candidate.instrument.instrument_id };
+    }
+  } catch {
+    // The selected instrument remains a valid comparison if its equivalent
+    // long-history market is unavailable.
+  }
+  return selected;
+}
+
 export function TradingChartPanel({
   chartId,
   chartNumber,
@@ -214,6 +276,7 @@ export function TradingChartPanel({
   interval,
   chartType,
   indicators,
+  comparisons,
   active,
   chartFocusMode,
   onActivate,
@@ -226,6 +289,7 @@ export function TradingChartPanel({
   onToggleIndicatorVisibility,
   onUpdateIndicator,
   onMoveIndicator,
+  onUpdateComparisons,
   onOpenPineScript,
   synchronization,
   paperAccountId,
@@ -237,6 +301,7 @@ export function TradingChartPanel({
   interval: string;
   chartType: TradingChartType;
   indicators: CoreIndicatorInstance[];
+  comparisons: TradingComparison[];
   active: boolean;
   chartFocusMode: boolean;
   onActivate: () => void;
@@ -249,6 +314,7 @@ export function TradingChartPanel({
   onToggleIndicatorVisibility: (id: CoreIndicatorId) => void;
   onUpdateIndicator: (id: CoreIndicatorId, patch: Partial<CoreIndicatorInstance>) => void;
   onMoveIndicator: (id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
+  onUpdateComparisons: (comparisons: TradingComparison[]) => void;
   onOpenPineScript: (id: CoreIndicatorId) => void;
   synchronization: TradingChartSynchronization;
   paperAccountId?: string | null;
@@ -297,6 +363,7 @@ export function TradingChartPanel({
   const [indicatorPaneGeometry, setIndicatorPaneGeometry] = useState<TradingIndicatorPaneGeometry[]>([]);
   const [indicatorOutputs, setIndicatorOutputs] = useState<IndicatorOutput[]>([]);
   const [indicatorLegendCollapsed, setIndicatorLegendCollapsed] = useState(false);
+  const [compareDialogOpen, setCompareDialogOpen] = useState(false);
   const [hoveredIndicatorPane, setHoveredIndicatorPane] = useState<CoreIndicatorId | null>(null);
   const [resizingIndicatorPane, setResizingIndicatorPane] = useState<CoreIndicatorId | null>(null);
   const [settingsIndicator, setSettingsIndicator] = useState<CoreIndicatorInstance | null>(null);
@@ -385,6 +452,28 @@ export function TradingChartPanel({
     enabled: Boolean(instrumentId),
     staleTime: 15_000,
   });
+  const comparisonQueries = useQueries({
+    queries: comparisons.map((comparison) => {
+      const comparisonLimit = chartHistoryLimit(comparison.instrumentId, interval, []);
+      return {
+        queryKey: ['trading', 'comparison-bars-v2', comparison.instrumentId, interval, comparisonLimit, comparison.placement],
+        queryFn: () => comparisonBars(comparison.instrumentId, interval, comparisonLimit),
+        enabled: Boolean(comparison.instrumentId),
+        staleTime: 15_000,
+      };
+    }),
+  });
+  const comparisonRenderData = useMemo<TradingComparisonData[]>(() => comparisons.map((comparison, index) => {
+    const result = comparisonQueries[index];
+    return {
+      instrumentId: comparison.instrumentId,
+      label: comparisonLabel(result?.data?.instrument, comparison.instrumentId),
+      placement: comparison.placement,
+      color: TRADING_COMPARISON_COLORS[index % TRADING_COMPARISON_COLORS.length],
+      visible: comparison.visible !== false,
+      bars: (result?.data?.bars ?? []) as MarketBar[],
+    };
+  }), [comparisons, comparisonQueries]);
   const sourceCurrency = chartQuery.data?.instrument.quote_currency?.toUpperCase() ?? 'USD';
   const currencyRateQuery = useQuery({
     queryKey: ['trading', 'currency-rate', sourceCurrency, priceScaleCurrency],
@@ -405,6 +494,11 @@ export function TradingChartPanel({
     if (!adapter) return;
     adapter.setPriceScaleMultiplier(priceScaleMultiplier);
   }, [adapter, priceScaleMultiplier]);
+
+  useEffect(() => {
+    if (!adapter) return;
+    adapter.setComparisonData(comparisonRenderData);
+  }, [adapter, comparisonRenderData]);
 
   useEffect(() => {
     if (!adapter) return;
@@ -798,6 +892,8 @@ export function TradingChartPanel({
     : fullscreenIndicator
       ? indicatorControls.filter((indicator) => indicator.id === fullscreenIndicator)
       : indicatorControls;
+  const legendComparisons = fullscreenIndicator ? [] : comparisonRenderData;
+  const legendCount = legendIndicators.length + legendComparisons.length;
   const visibleIndicatorOutputs = fullscreenMainPane
     ? indicatorOutputs.filter((output) => output.pane === 0)
     : fullscreenIndicator
@@ -1170,6 +1266,14 @@ export function TradingChartPanel({
               <strong>{chartQuery.data?.instrument.display_symbol ?? instrumentId}</strong>
               <span aria-hidden="true">⌄</span>
             </button>
+            <button
+              type="button"
+              className="trading-compare-trigger"
+              aria-label="Compare another symbol"
+              title="Compare another symbol"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setCompareDialogOpen(true)}
+            >+</button>
             <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
             <i className={`trading-stream-dot ${streamStatus}`} aria-label={`Feed ${streamStatus}`} />
           </div>
@@ -1311,7 +1415,7 @@ export function TradingChartPanel({
             ) : null}
           </>
         ) : null}
-        {legendIndicators.length > 0 ? (
+        {legendCount > 0 ? (
           <div
             className={`trading-overlay-indicator-controls trading-indicator-legend${indicatorLegendCollapsed ? ' is-collapsed' : ''}`}
             role="group"
@@ -1363,6 +1467,31 @@ export function TradingChartPanel({
                 </div>
               );
             }) : null}
+            {!indicatorLegendCollapsed ? legendComparisons.map((comparison) => (
+              <div key={comparison.instrumentId} className={`trading-overlay-indicator${comparison.visible ? ' active' : ' hidden'}`}>
+                <span className="trading-overlay-indicator-label">{comparison.label} · {comparisonPercent(comparison.bars)}</span>
+                <button
+                  type="button"
+                  aria-label={`${comparison.visible ? 'Hide' : 'Show'} ${comparison.label}`}
+                  aria-pressed={comparison.visible}
+                  title={`${comparison.visible ? 'Hide' : 'Show'} ${comparison.label}`}
+                  onClick={() => onUpdateComparisons(comparisons.map((item) => item.instrumentId === comparison.instrumentId ? { ...item, visible: !comparison.visible } : item))}
+                >{comparison.visible ? '◉' : '○'}</button>
+                <button
+                  type="button"
+                  aria-label={`Open comparison settings for ${comparison.label}`}
+                  title="Add or change comparison"
+                  onClick={() => setCompareDialogOpen(true)}
+                >⚙</button>
+                <button
+                  type="button"
+                  className="trading-overlay-indicator-delete"
+                  aria-label={`Remove comparison ${comparison.label}`}
+                  title={`Remove ${comparison.label}`}
+                  onClick={() => onUpdateComparisons(comparisons.filter((item) => item.instrumentId !== comparison.instrumentId))}
+                >×</button>
+              </div>
+            )) : null}
             <button
               type="button"
               className="trading-indicator-legend-toggle"
@@ -1372,7 +1501,7 @@ export function TradingChartPanel({
               onClick={() => setIndicatorLegendCollapsed((collapsed) => !collapsed)}
             >
               <span aria-hidden="true">{indicatorLegendCollapsed ? '⌄' : '⌃'}</span>
-              {indicatorLegendCollapsed ? <span className="trading-indicator-legend-count">{legendIndicators.length}</span> : null}
+              {indicatorLegendCollapsed ? <span className="trading-indicator-legend-count">{legendCount}</span> : null}
             </button>
           </div>
         ) : null}
@@ -1552,6 +1681,18 @@ export function TradingChartPanel({
           </>
         ) : null}
       </div>
+      <TradingCompareSymbolDialog
+        open={compareDialogOpen}
+        currentInstrumentId={instrumentId}
+        existingInstrumentIds={comparisons.map((comparison) => comparison.instrumentId)}
+        onAdd={(instrument, placement) => {
+          if (instrument.instrument_id === instrumentId) return;
+          onUpdateComparisons(comparisons.some((comparison) => comparison.instrumentId === instrument.instrument_id)
+            ? comparisons.map((comparison) => comparison.instrumentId === instrument.instrument_id ? { ...comparison, placement } : comparison)
+            : [...comparisons, { instrumentId: instrument.instrument_id, placement, visible: true }]);
+        }}
+        onClose={() => setCompareDialogOpen(false)}
+      />
       {chartQuery.isLoading ? <div className="trading-chart-state">Loading historical bars…</div> : null}
       {chartQuery.error ? <div className="trading-chart-state error">{chartQuery.error.message}</div> : null}
       {streamError ? <div className="trading-chart-state error">{streamError}</div> : null}

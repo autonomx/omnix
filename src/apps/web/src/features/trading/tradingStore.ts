@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
 import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInstance } from './indicators/coreIndicators';
+import type { TradingComparison } from './tradingComparisons';
 
 export type TradingLayout = 'auto' | 'columns-1' | 'columns-2' | 'columns-3' | 'columns-4';
 export const MIN_TRADING_CHARTS = 1;
@@ -14,6 +15,7 @@ export type TradingChartState = {
   interval: string;
   chartType: TradingChartType;
   indicators: CoreIndicatorInstance[];
+  comparisons?: TradingComparison[];
 };
 export type TradingIndicatorMove = 'up' | 'down';
 export type TradingLinkState = {
@@ -100,6 +102,7 @@ function initialChart(): TradingChartState {
     interval: '1h',
     chartType: 'candlestick',
     indicators: defaultTradingIndicators(),
+    comparisons: [],
   };
 }
 
@@ -115,6 +118,7 @@ function copyChart(source: TradingChartState, chartId: string): TradingChartStat
     ...source,
     chartId,
     indicators: source.indicators.map((indicator) => ({ ...indicator })),
+    comparisons: (source.comparisons ?? []).map((comparison) => ({ ...comparison })),
   };
 }
 

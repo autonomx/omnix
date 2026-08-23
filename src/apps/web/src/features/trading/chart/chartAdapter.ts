@@ -23,6 +23,7 @@ import {
 import type { DrawingPoint } from '../drawings/drawingCommands';
 import { indicatorOutputs, indicatorPaneScale, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
+import type { TradingComparisonPlacement } from '../tradingComparisons';
 
 export type TradingChartTypeGroup = 'candles' | 'lines' | 'areas' | 'columns' | 'profiles' | 'specialty';
 export const TRADING_CHART_TYPE_GROUPS: readonly { id: TradingChartTypeGroup; label: string }[] = [
@@ -73,6 +74,14 @@ export type TradingIndicatorSelection = {
   y: number;
 };
 export type TradingPriceScaleSide = 'left' | 'right';
+export type TradingComparisonData = {
+  instrumentId: string;
+  label: string;
+  placement: TradingComparisonPlacement;
+  color: string;
+  visible: boolean;
+  bars: readonly MarketBar[];
+};
 export const DEFAULT_TRADING_RIGHT_OFFSET = 10;
 type PriceSeries =
   | ISeriesApi<'Candlestick'>
@@ -112,6 +121,43 @@ function barCadenceMilliseconds(bars: readonly MarketBar[]): number | null {
     .sort((left, right) => left - right);
   if (intervals.length === 0) return null;
   return intervals[Math.floor(intervals.length / 2)] ?? null;
+}
+
+function closeAtOrBefore(bars: readonly MarketBar[], targetTime: string | null): number {
+  if (bars.length === 0) return 0;
+  const target = targetTime === null ? Number.POSITIVE_INFINITY : Date.parse(targetTime);
+  let candidate = Number(bars[0].close);
+  for (const bar of bars) {
+    const time = Date.parse(bar.start_time);
+    if (!Number.isFinite(time) || time > target) break;
+    const close = Number(bar.close);
+    if (Number.isFinite(close)) candidate = close;
+  }
+  return candidate;
+}
+
+function visiblePrimaryPriceRange(
+  bars: readonly MarketBar[],
+  logicalRange: LogicalRange | null,
+  multiplier: number,
+): { min: number; max: number; fromTime: number; toTime: number } {
+  if (bars.length === 0) return { min: 0, max: 1, fromTime: Number.NEGATIVE_INFINITY, toTime: Number.POSITIVE_INFINITY };
+  const fromIndex = Math.max(0, Math.floor(logicalRange?.from ?? 0));
+  const toIndex = Math.min(bars.length - 1, Math.ceil(logicalRange?.to ?? bars.length - 1));
+  const visibleBars = bars.slice(fromIndex, Math.max(fromIndex + 1, toIndex + 1));
+  const prices = visibleBars.flatMap((bar) => [bar.open, bar.high, bar.low, bar.close]
+    .map((value) => Number(value) * multiplier)
+    .filter((value) => Number.isFinite(value)));
+  if (prices.length === 0) return { min: 0, max: 1, fromTime: Number.NEGATIVE_INFINITY, toTime: Number.POSITIVE_INFINITY };
+  const rawMin = Math.min(...prices);
+  const rawMax = Math.max(...prices);
+  const padding = Math.max((rawMax - rawMin) * 0.05, Math.abs(rawMax || rawMin || 1) * 0.001, Number.EPSILON);
+  return {
+    min: rawMin - padding,
+    max: rawMax + padding,
+    fromTime: Date.parse(visibleBars[0]?.start_time ?? bars[0].start_time),
+    toTime: Date.parse(visibleBars.at(-1)?.start_time ?? bars.at(-1)!.start_time),
+  };
 }
 
 export function drawingTimeForLogicalIndex(logical: number, bars: readonly MarketBar[]): string | null {
@@ -367,6 +413,9 @@ export class TradingChartAdapter {
   private readonly volumeSeries: ISeriesApi<'Histogram'>;
   private readonly indicatorSeries = new Map<string, IndicatorSeries>();
   private readonly indicatorSeriesPanes = new Map<string, number>();
+  private readonly comparisonSeries = new Map<string, ISeriesApi<'Line'>>();
+  private readonly comparisonSeriesPanes = new Map<string, number>();
+  private readonly comparisonSeriesOptions = new Map<string, string>();
   private readonly indicatorScaleRanges = new Map<string, { from: number; to: number }>();
   private indicatorPaneIds: string[] = [];
   private readonly indicatorPaneHeights = new Map<string, number>();
@@ -384,8 +433,10 @@ export class TradingChartAdapter {
   private chartType: TradingChartType;
   private readonly revisions = new Map<number, number>();
   private readonly viewportListeners = new Set<() => void>();
+  private readonly comparisonViewportHandler = () => this.renderComparisonSeries();
   private bars: MarketBar[] = [];
   private indicatorOutputs: IndicatorOutput[] = [];
+  private comparisonData: TradingComparisonData[] = [];
   private priceScaleMultiplier = 1;
   private destroyed = false;
 
@@ -419,6 +470,7 @@ export class TradingChartAdapter {
       },
       kineticScroll: { mouse: true, touch: true },
     });
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.comparisonViewportHandler);
     this.priceSeries = this.createPriceSeries(chartType);
     this.volumeSeries = this.chart.addSeries(HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' } });
     this.volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
@@ -516,6 +568,7 @@ export class TradingChartAdapter {
     for (const bar of bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
     this.setPriceData(bars);
     this.volumeSeries.setData(bars.map(volumeData));
+    this.renderComparisonSeries();
     if (fit) this.fitContent();
     else if (visibleRange) this.chart.timeScale().setVisibleLogicalRange(visibleRange);
   }
@@ -523,6 +576,101 @@ export class TradingChartAdapter {
   setIndicators(bars: readonly MarketBar[], indicators: readonly CoreIndicatorInstance[]): void {
     const outputs = indicators.filter((item) => item.enabled && item.visible !== false).flatMap((item) => indicatorOutputs(bars, item));
     this.setIndicatorOutputs(outputs);
+  }
+
+  setComparisonData(items: readonly TradingComparisonData[]): void {
+    this.assertActive();
+    this.comparisonData = items.map((item) => ({ ...item, bars: [...item.bars] }));
+    this.renderComparisonSeries();
+  }
+
+  private renderComparisonSeries(): void {
+    if (this.destroyed) return;
+    // Lightweight Charts re-hit-tests the active crosshair when a series is
+    // moved or its options change. Clear it first so a transient empty
+    // histogram point cannot crash the chart during a zoom/pan redraw.
+    this.chart.clearCrosshairPosition();
+    const paneItems = this.comparisonData.filter((item) => item.placement === 'pane');
+    const enabled = new Set(this.comparisonData.map((item) => item.instrumentId));
+    for (const [instrumentId, series] of this.comparisonSeries) {
+      if (!enabled.has(instrumentId)) {
+        this.chart.removeSeries(series);
+        this.comparisonSeries.delete(instrumentId);
+        this.comparisonSeriesPanes.delete(instrumentId);
+        this.comparisonSeriesOptions.delete(instrumentId);
+      }
+    }
+
+    let paneOffset = 0;
+    const visibleRange = this.chart.timeScale().getVisibleLogicalRange();
+    const anchorIndex = Math.max(0, Math.floor(visibleRange?.from ?? 0));
+    const anchorTime = this.bars[anchorIndex]?.start_time ?? this.bars[0]?.start_time ?? null;
+    const primaryRange = visiblePrimaryPriceRange(this.bars, visibleRange, this.priceScaleMultiplier);
+    const percentValues = this.comparisonData.flatMap((item) => {
+      if (item.placement !== 'percent') return [];
+      const anchorClose = closeAtOrBefore(item.bars, anchorTime);
+      if (anchorClose <= 0) return [];
+      return item.bars.flatMap((bar) => {
+        const time = Date.parse(bar.start_time);
+        const close = Number(bar.close);
+        if (!Number.isFinite(time) || time < primaryRange.fromTime || time > primaryRange.toTime || !Number.isFinite(close)) return [];
+        return [(close / anchorClose - 1) * 100];
+      });
+    });
+    const percentMin = Math.min(0, ...percentValues);
+    const percentMax = Math.max(0, ...percentValues);
+    const percentSpan = Math.max(Number.EPSILON, percentMax - percentMin);
+    const priceSpan = primaryRange.max - primaryRange.min;
+    for (const item of this.comparisonData) {
+      const paneIndex = item.placement === 'pane' ? this.indicatorPaneIds.length + 1 + paneOffset++ : 0;
+      const priceScaleId = item.placement === 'price-scale'
+        ? `comparison:${item.instrumentId.replace(/[^a-z0-9_-]/gi, '_')}`
+        : item.placement === 'pane' ? 'right' : this.priceScaleSide;
+      const comparisonAnchorClose = closeAtOrBefore(item.bars, anchorTime);
+      let series = this.comparisonSeries.get(item.instrumentId);
+      let created = false;
+      if (!series) {
+        series = this.chart.addSeries(LineSeries, {
+          color: item.color,
+          lineWidth: 2,
+          title: item.label,
+          lastValueVisible: false,
+          priceScaleId,
+        }, paneIndex);
+        this.comparisonSeries.set(item.instrumentId, series);
+        this.comparisonSeriesPanes.set(item.instrumentId, paneIndex);
+        created = true;
+      } else if (this.comparisonSeriesPanes.get(item.instrumentId) !== paneIndex) {
+        series.moveToPane(paneIndex);
+        this.comparisonSeriesPanes.set(item.instrumentId, paneIndex);
+      }
+      const optionsKey = `${item.color}|${item.label}|${item.placement}|${priceScaleId}`;
+      if (created || this.comparisonSeriesOptions.get(item.instrumentId) !== optionsKey) {
+        if (!created) series.applyOptions({ color: item.color, title: item.label, priceScaleId, lastValueVisible: false, lineWidth: 2 });
+        this.comparisonSeriesOptions.set(item.instrumentId, optionsKey);
+        if (item.placement === 'price-scale') {
+          series.priceScale().applyOptions({ visible: true, borderVisible: true, ticksVisible: true, minimumWidth: 58 });
+        } else if (item.placement === 'pane') {
+          series.priceScale().applyOptions({ visible: true, borderVisible: true, ticksVisible: true, minimumWidth: 58, scaleMargins: { top: 0.1, bottom: 0.1 } });
+        }
+      }
+      const values = item.visible ? item.bars.flatMap((bar) => {
+        const close = Number(bar.close);
+        if (!Number.isFinite(close) || !Number.isFinite(Date.parse(bar.start_time))) return [];
+        const percentChange = comparisonAnchorClose > 0 ? (close / comparisonAnchorClose - 1) * 100 : 0;
+        const value = item.placement === 'percent'
+          ? primaryRange.min + ((percentChange - percentMin) / percentSpan) * priceSpan
+          : close;
+        return [{ time: timestamp(bar.start_time), value }];
+      }) : [];
+      series.setData(values);
+    }
+
+    const lastComparisonPane = this.indicatorPaneIds.length + paneItems.length;
+    for (let index = this.chart.panes().length - 1; index > lastComparisonPane; index -= 1) {
+      const pane = this.chart.panes()[index];
+      if (pane?.getSeries().length === 0) this.chart.removePane(index);
+    }
   }
 
   setIndicatorOutputs(outputs: readonly IndicatorOutput[]): void {
@@ -621,10 +769,12 @@ export class TradingChartAdapter {
     for (const id of this.indicatorPaneHeights.keys()) {
       if (!paneIds.includes(id)) this.indicatorPaneHeights.delete(id);
     }
-    for (let index = this.chart.panes().length - 1; index > paneIds.length; index -= 1) {
+    const comparisonPaneCount = this.comparisonData.filter((item) => item.placement === 'pane').length;
+    for (let index = this.chart.panes().length - 1; index > paneIds.length + comparisonPaneCount; index -= 1) {
       const pane = this.chart.panes()[index];
       if (pane?.getSeries().length === 0) this.chart.removePane(index);
     }
+    this.renderComparisonSeries();
   }
 
   indicatorPaneGeometry(): TradingIndicatorPaneGeometry[] {
@@ -1062,6 +1212,10 @@ export class TradingChartAdapter {
     for (const [key, series] of this.indicatorSeries) {
       if (this.indicatorSeriesPanes.get(key) === 0) series.applyOptions({ priceScaleId: side });
     }
+    for (const [instrumentId, series] of this.comparisonSeries) {
+      const item = this.comparisonData.find((comparison) => comparison.instrumentId === instrumentId);
+      if (item?.placement === 'percent') series.applyOptions({ priceScaleId: side });
+    }
     this.chart.applyOptions({
       leftPriceScale: { visible: side === 'left' && this.priceScaleLabelsVisible, borderVisible: this.priceScaleLinesVisible, ticksVisible: this.priceScaleLinesVisible },
       rightPriceScale: { visible: side === 'right' && this.priceScaleLabelsVisible, borderVisible: this.priceScaleLinesVisible, ticksVisible: this.priceScaleLinesVisible },
@@ -1214,7 +1368,7 @@ export class TradingChartAdapter {
   }
   scrollToLatest(): void { this.assertActive(); this.chart.timeScale().scrollToRealTime(); }
   api(): IChartApi { this.assertActive(); return this.chart; }
-  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.indicatorSeries.clear(); this.viewportListeners.clear(); this.chart.remove(); }
+  destroy(): void { if (this.destroyed) return; this.restoreFullscreenPaneHeights(); this.destroyed = true; this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.comparisonViewportHandler); this.revisions.clear(); this.bars = []; this.indicatorOutputs = []; this.comparisonData = []; this.indicatorSeries.clear(); this.comparisonSeries.clear(); this.comparisonSeriesPanes.clear(); this.comparisonSeriesOptions.clear(); this.viewportListeners.clear(); this.chart.remove(); }
   private notifyViewportChange(): void { for (const listener of this.viewportListeners) listener(); }
   private assertActive(): void { if (this.destroyed) throw new Error('Trading chart adapter is disposed'); }
 }

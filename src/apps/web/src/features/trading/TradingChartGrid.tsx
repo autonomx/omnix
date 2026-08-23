@@ -76,6 +76,7 @@ export function TradingChartGrid({
             interval={chart.interval}
             chartType={chart.chartType}
             indicators={chart.indicators}
+            comparisons={chart.comparisons ?? []}
             active={chart.chartId === activeChartId}
             chartFocusMode={focusedChart?.chartId === chart.chartId}
             onChartFocusChange={(focused) => setFocusedChartId(focused ? chart.chartId : null)}
@@ -88,6 +89,7 @@ export function TradingChartGrid({
             onToggleIndicatorVisibility={(id) => toggleIndicatorVisibility(chart.chartId, id)}
             onUpdateIndicator={(id, patch) => updateIndicator(chart.chartId, id, patch)}
             onMoveIndicator={(id, direction) => moveIndicator(chart.chartId, id, direction)}
+            onUpdateComparisons={(comparisons) => updateChart(chart.chartId, { comparisons })}
             onOpenPineScript={(id) => { setActiveChart(chart.chartId); onOpenPineScript(id); }}
             synchronization={synchronization}
             paperAccountId={paperAccountId}
