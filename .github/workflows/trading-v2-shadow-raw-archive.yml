@@ -101,3 +101,5 @@ jobs:
             echo '```'
           } > /tmp/raw-archive-failure.md
           gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body-file /tmp/raw-archive-failure.md
+
+# Retry after fixing the integration assertion import.
