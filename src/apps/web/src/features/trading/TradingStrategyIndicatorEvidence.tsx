@@ -1,4 +1,5 @@
 import type { StrategyEvent } from './tradingStrategyTypes';
+import './TradingStrategyIndicatorEvidence.css';
 
 export type IndicatorSnapshotEvidence = {
   close: string | null;
