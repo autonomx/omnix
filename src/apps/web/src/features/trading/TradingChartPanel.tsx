@@ -911,7 +911,11 @@ export function TradingChartPanel({
   const handleStagePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const targetAdapter = adapterRef.current;
     const target = event.target as Element;
-    if (targetAdapter) {
+    // Drawing and alert tools own the chart pointer. Do not let transient pane
+    // hover chrome appear underneath that interaction and intercept placement.
+    if (drawingTool !== 'cursor') {
+      setHoveredIndicatorPane(null);
+    } else if (targetAdapter) {
       const bounds = event.currentTarget.getBoundingClientRect();
       const y = event.clientY - bounds.top;
       const hoveredPane = indicatorPaneGeometry.find((pane) => y >= pane.top && y <= pane.top + pane.height);
