@@ -26,7 +26,7 @@ from .strategy_backtest import (
     _exit_market_decision,
 )
 from .strategy_timeframes import resample_final_bars
-from .strategy_v2_management import v2_active_stop_for_prior_high, v2_management_levels
+from .strategy_v2_management import v2_active_stop_for_prior_high
 
 
 _ET = ZoneInfo("America/New_York")
@@ -169,6 +169,7 @@ def replay_adaptive_indicator_exit(
     The initial structural stop and V2 +0.75R -> +0.25R protection are retained.
     There is no fixed profit target and no 60-minute time exit. Indicator exits
     are decided only on finalized bars and submitted at the next 1m bar open.
+    Force-flat uses the last finalized bar known by 15:55 ET, never a later bar.
     """
 
     if candidate.instrument_id != baseline_trade.instrument_id:
@@ -187,8 +188,16 @@ def replay_adaptive_indicator_exit(
     if risk <= 0:
         raise ValueError("baseline trade has non-positive risk")
     quantity = baseline_trade.entry_fill_quantity
-    v2_management_levels(config, entry_price=entry, initial_stop=stop)
     unreachable_target = entry + risk * _NO_TARGET_MULTIPLE
+
+    force_flat_index = max(
+        (
+            index
+            for index, bar in enumerate(execution_bars)
+            if index >= entry_index and bar.start_time.astimezone(_ET).time() < force_flat_et
+        ),
+        default=len(execution_bars) - 1,
+    )
 
     max_high = entry
     min_low = entry
@@ -202,7 +211,7 @@ def replay_adaptive_indicator_exit(
     exit_reason: Literal["stop", "indicator", "force_flat"] | None = None
     exit_indicator_reasons: tuple[str, ...] = ()
 
-    for index in range(entry_index, len(execution_bars)):
+    for index in range(entry_index, min(len(execution_bars), force_flat_index + 1)):
         bar = execution_bars[index]
         active_stop = v2_active_stop_for_prior_high(
             config,
@@ -213,8 +222,7 @@ def replay_adaptive_indicator_exit(
 
         # A pending next-bar market exit owns the bar open. A gap through the
         # already-active stop is still treated pessimistically as the stop first.
-        open_exit = pending_indicator_reasons is not None or bar.start_time.astimezone(_ET).time() >= force_flat_et
-        if open_exit:
+        if pending_indicator_reasons is not None:
             max_high = max(max_high, bar.open)
             min_low = min(min_low, bar.open)
             if bar.open <= active_stop:
@@ -240,9 +248,6 @@ def replay_adaptive_indicator_exit(
                     break
                 last_exit_rejection = f"exit_execution:{stop_decision.reason}"
 
-            market_reason: Literal["indicator", "force_flat"] = (
-                "indicator" if pending_indicator_reasons is not None else "force_flat"
-            )
             market = _exit_market_decision(
                 candidate=candidate,
                 bar=bar,
@@ -250,7 +255,7 @@ def replay_adaptive_indicator_exit(
                 policy=policy,
                 assumed_spread_bps=assumed_spread_bps,
                 price=bar.open,
-                order_suffix=f"adaptive-{market_reason}",
+                order_suffix="adaptive-indicator",
             )
             if (
                 market.should_fill
@@ -261,9 +266,8 @@ def replay_adaptive_indicator_exit(
                 exit_price = market.fill_price
                 exit_time = bar.start_time
                 exit_reference = bar.open
-                exit_reason = market_reason
-                if market_reason == "indicator":
-                    exit_indicator_reasons = pending_indicator_reasons or ()
+                exit_reason = "indicator"
+                exit_indicator_reasons = pending_indicator_reasons
                 break
             last_exit_rejection = f"exit_execution:{market.reason}"
 
@@ -312,32 +316,31 @@ def replay_adaptive_indicator_exit(
         if decision.exit and pending_indicator_reasons is None:
             pending_indicator_reasons = decision.reason_codes
 
-    if exit_price is None:
-        last_bar = execution_bars[-1]
-        market = _exit_market_decision(
-            candidate=candidate,
-            bar=last_bar,
-            quantity=quantity,
-            policy=policy,
-            assumed_spread_bps=assumed_spread_bps,
-            price=last_bar.close,
-            order_suffix="adaptive-eod",
-        )
-        if (
-            market.should_fill
-            and market.fill_price is not None
-            and market.fill_quantity is not None
-            and market.fill_quantity >= quantity
-        ):
-            exit_price = market.fill_price
-            exit_time = last_bar.end_time
-            exit_reference = last_bar.close
-            exit_reason = "force_flat"
-        else:
+        if index == force_flat_index:
+            market = _exit_market_decision(
+                candidate=candidate,
+                bar=bar,
+                quantity=quantity,
+                policy=policy,
+                assumed_spread_bps=assumed_spread_bps,
+                price=bar.close,
+                order_suffix="adaptive-force-flat",
+            )
+            if (
+                market.should_fill
+                and market.fill_price is not None
+                and market.fill_quantity is not None
+                and market.fill_quantity >= quantity
+            ):
+                exit_price = market.fill_price
+                exit_time = bar.end_time
+                exit_reference = bar.close
+                exit_reason = "force_flat"
+                break
             last_exit_rejection = f"exit_execution:{market.reason}"
 
     if exit_price is None or exit_time is None or exit_reference is None or exit_reason is None:
-        raise RuntimeError(last_exit_rejection or "adaptive exit could not be filled")
+        raise RuntimeError(last_exit_rejection or "adaptive exit could not be filled by force-flat cutoff")
 
     pnl = exit_price - entry
     return AdaptiveExitReplayTrade(
