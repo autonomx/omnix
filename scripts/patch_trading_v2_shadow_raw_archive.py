@@ -6,7 +6,6 @@ from pathlib import Path
 
 
 MONITOR = Path("src/app/trading/strategy_monitor.py")
-TEST = Path("src/tests/trading/test_trading_strategy_shadow_universe.py")
 
 IMPORT_OLD = """from .strategy_risk import size_strategy_entry\nfrom .strategy_shadow_execution import observe_shadow_execution\nfrom .strategy_v2_management import (\n"""
 IMPORT_NEW = """from .strategy_risk import size_strategy_entry\nfrom .strategy_shadow_execution import observe_shadow_execution\nfrom .strategy_shadow_universe import resolve_v2_shadow_archive\nfrom .strategy_v2_management import (\n"""
@@ -19,8 +18,6 @@ PAYLOAD_OLD = """                        \"mode\": \"shadow\",\n                
 PAYLOAD_NEW = """                        \"mode\": \"shadow\",\n                        \"universe_id\": universe.universe_id,\n                        \"universe_source\": universe_source,\n                        \"signal\": result.signal.model_dump(mode=\"json\"),\n"""
 PAYLOAD2_OLD = """                    \"mode\": \"shadow\",\n                    \"universe_id\": universe.universe_id,\n                    \"signal\": result.signal.model_dump(mode=\"json\"),\n"""
 PAYLOAD2_NEW = """                    \"mode\": \"shadow\",\n                    \"universe_id\": universe.universe_id,\n                    \"universe_source\": universe_source,\n                    \"signal\": result.signal.model_dump(mode=\"json\"),\n"""
-
-TEST_APPEND = '''\n\ndef test_strategy_monitor_uses_raw_archive_only_as_v2_shadow_fallback() -> None:\n    from pathlib import Path as _Path\n\n    source = _Path("src/app/trading/strategy_monitor.py").read_text(encoding="utf-8")\n    fallback = source.index("resolve_v2_shadow_archive")\n    evaluation = source.index("proposals = await self._evaluate_candidates", fallback)\n    block = source[fallback:evaluation]\n\n    assert 'universe_source = "auto_archive_shadow"' in block\n    assert '"v2_shadow_archive_not_ready"' in block\n    assert "config.active_universe_id is not None" in block\n    assert "place_order" not in block\n    assert "save_protection" not in block\n'''
 
 
 def replace_exact(text: str, old: str, new: str, label: str) -> str:
@@ -37,12 +34,6 @@ def main() -> int:
     monitor = replace_exact(monitor, PAYLOAD_OLD, PAYLOAD_NEW, "shadow unavailable payload")
     monitor = replace_exact(monitor, PAYLOAD2_OLD, PAYLOAD2_NEW, "shadow observed payload")
     MONITOR.write_text(monitor, encoding="utf-8")
-
-    tests = TEST.read_text(encoding="utf-8")
-    marker = "def test_strategy_monitor_uses_raw_archive_only_as_v2_shadow_fallback()"
-    if marker not in tests:
-        tests += TEST_APPEND
-    TEST.write_text(tests, encoding="utf-8")
     return 0
 
 
