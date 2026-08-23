@@ -13,7 +13,7 @@ E2E_ACTIVE_OLD = """  await expect(secondChart).toContainText('ETHUSDT');\n  awa
 E2E_ACTIVE_NEW = """  await expect(secondChart).toContainText('ETHUSDT');\n  const firstChart = page.locator('.trading-chart-panel').first();\n  await expect(firstChart).toContainText('BTCUSDT');\n  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(3);\n"""
 
 E2E_ALERT_OLD = """  await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);\n\n  await page.getByRole('button', { name: 'Place price alert' }).click();\n  await overlay.click({ position: { x: 180, y: 100 } });\n"""
-E2E_ALERT_NEW = """  await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);\n\n  // Chart 2 remains active for the drawing flow above. Switch to BTC Chart 1\n  // only for the BTC-specific alert flow; panel onPointerDown is the product's\n  // chart-activation contract.\n  await firstChart.click({ position: { x: 8, y: 8 }, force: true });\n  await expect(firstChart).toHaveClass(/active/);\n  const btcOverlay = firstChart.locator('.trading-drawing-overlay');\n  await page.getByRole('button', { name: 'Place price alert' }).click();\n  await btcOverlay.click({ position: { x: 180, y: 100 } });\n"""
+E2E_ALERT_NEW = """  await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);\n\n  // Chart 2 remains active for the drawing flow above. Switch to BTC Chart 1\n  // only for the BTC-specific alert flow; panel onPointerDown is the product's\n  // chart-activation contract. Keep the toolbar action visible, but use the\n  // chart context menu to avoid coordinate-sensitive alert placement in smoke.\n  await firstChart.click({ position: { x: 8, y: 8 }, force: true });\n  await expect(firstChart).toHaveClass(/active/);\n  await expect(page.getByRole('button', { name: 'Place price alert' })).toBeVisible();\n  const btcStage = firstChart.locator('.trading-chart-stage');\n  const btcStageBox = await btcStage.boundingBox();\n  expect(btcStageBox).not.toBeNull();\n  if (btcStageBox) {\n    await btcStage.click({\n      button: 'right',\n      position: { x: btcStageBox.width / 2, y: Math.max(12, btcStageBox.height * 0.2) },\n      force: true,\n    });\n  }\n  const btcAlertMenu = page.getByRole('menu', { name: 'Chart context menu' });\n  await expect(btcAlertMenu).toBeVisible();\n  await btcAlertMenu.getByRole('menuitem', { name: /Add alert on BTCUSDT/ }).click();\n"""
 
 E2E_LABELS_OLD = """  await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);\n  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);\n"""
 E2E_LABELS_NEW = """  // The grid is BTC / ETH / BTC, so a BTC alert belongs on the two BTC charts.\n  await expect(page.locator('.trading-alert-price-label')).toHaveCount(2);\n  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(2);\n"""
@@ -35,7 +35,7 @@ def replace_exact(text: str, old: str, new: str, label: str) -> str:
 def main() -> int:
     e2e = E2E.read_text(encoding="utf-8")
     e2e = replace_exact(e2e, E2E_ACTIVE_OLD, E2E_ACTIVE_NEW, "active chart declaration")
-    e2e = replace_exact(e2e, E2E_ALERT_OLD, E2E_ALERT_NEW, "BTC alert activation")
+    e2e = replace_exact(e2e, E2E_ALERT_OLD, E2E_ALERT_NEW, "BTC context-menu alert")
     e2e = replace_exact(e2e, E2E_LABELS_OLD, E2E_LABELS_NEW, "alert overlay expectation")
     E2E.write_text(e2e, encoding="utf-8")
 
