@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .indicator_signals import multi_timeframe_indicator_context
+from .providers.alpaca_iex import ALPACA_IEX_PARTIAL_MARKET
 
 
 ShadowExecutionReason = Literal[
@@ -53,19 +54,36 @@ def observe_shadow_execution(
     context, but only AUTO PAPER is allowed to create orders or protections.
 
     Indicator telemetry is supplemental: inability to refresh indicator bars does
-    not change execution eligibility or suppress the execution evidence.
+    not change execution eligibility or suppress the execution evidence. The
+    execution observation's own ``source_time`` is the indicator-history cutoff,
+    so a fresher later market-data response cannot leak future bars into the
+    signal-time snapshot.
     """
 
     execution = market_service.execution_observation(instrument_id, binding_id)
     payload = {field: getattr(execution, field, None) for field in _EXECUTION_FIELDS}
+    payload["indicator_context_source"] = "alpaca_iex_same_day_1m"
+    payload["indicator_context_partial_market"] = ALPACA_IEX_PARTIAL_MARKET
+    payload["indicator_context_cutoff"] = getattr(execution, "source_time", None)
     try:
-        response = market_service.bars(instrument_id, "1m", 240, binding_id)
-        finalized = [bar for bar in response.bars if bar.is_final]
+        source_time = execution.source_time
+        bars = market_service.execution_indicator_bars(
+            instrument_id,
+            binding_id,
+            as_of=source_time,
+        )
+        finalized = [
+            bar
+            for bar in bars
+            if bar.is_final and bar.end_time <= source_time
+        ]
         context = multi_timeframe_indicator_context(finalized)
         payload["indicator_context"] = context.model_dump(mode="json")
+        payload["indicator_context_bar_count"] = len(finalized)
         payload["indicator_context_error"] = None
     except Exception as exc:  # telemetry must never alter the execution decision
         payload["indicator_context"] = None
+        payload["indicator_context_bar_count"] = 0
         payload["indicator_context_error"] = f"{type(exc).__name__}: {exc}"
     reason: ShadowExecutionReason = (
         "SHADOW_EXECUTION_OBSERVED"
