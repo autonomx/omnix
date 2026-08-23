@@ -50,7 +50,7 @@ const MODULE_API_PREFIXES: Record<OmnixModuleId, readonly string[]> = {
   jobs: ['/api/jobs', '/api/assets', '/api/reports', '/api/diagnostics'],
   assets: ['/api/assets', '/api/jobs', '/api/reports'],
   reports: ['/api/reports', '/api/assets', '/api/jobs', '/api/replay'],
-  settings: ['/api/settings', '/api/providers', '/api/models', '/api/runtime', '/api/assistant', '/api/hermes', '/api/diagnostics', '/api/workers'],
+  settings: ['/api/settings', '/api/providers', '/api/models', '/api/runtime', '/api/assistant', '/api/hermes', '/api/diagnostics', '/api/workers', '/api/trading/market-data'],
   diagnostics: ['/api/diagnostics', '/api/health', '/api/runtime', '/api/providers', '/api/models', '/api/jobs'],
 };
 

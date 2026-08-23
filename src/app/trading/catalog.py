@@ -122,6 +122,21 @@ HYPERLIQUID_POLICY = _policy(
     intervals=("1m", "5m", "15m", "1h", "4h", "1d"),
     terms="https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api",
 )
+COINMARKETCAP_POLICY = ProviderPolicy(
+    usage_scope=UsageScope.PERSONAL_LOCAL,
+    redistribution_allowed=False,
+    authentication_required=True,
+    is_official_api=True,
+    realtime_scope="daily historical crypto market-cap metrics",
+    delay_seconds=300,
+    terms_reference="https://coinmarketcap.com/api/documentation/",
+    supported_asset_classes=(AssetClass.CRYPTO,),
+    supported_intervals=("1d",),
+    history_depth="provider_defined",
+    rate_limit_policy=(
+        "CoinMarketCap API credits with Omnix bounded provider semaphore and cache"
+    ),
+)
 
 POLICIES = {
     "binance": BINANCE_POLICY,
@@ -131,6 +146,7 @@ POLICIES = {
     "coinbase": COINBASE_POLICY,
     "kraken": KRAKEN_POLICY,
     "hyperliquid": HYPERLIQUID_POLICY,
+    "coinmarketcap": COINMARKETCAP_POLICY,
 }
 
 
@@ -173,6 +189,24 @@ def _equity(venue: str, symbol: str) -> CanonicalInstrument:
     )
 
 
+def _crypto_cap(symbol: str) -> CanonicalInstrument:
+    is_dominance = symbol.endswith(".D")
+    return CanonicalInstrument(
+        instrument_id=f"index:CRYPTOCAP:{symbol}",
+        asset_class=AssetClass.CRYPTO,
+        instrument_type=InstrumentType.INDEX,
+        venue="CRYPTOCAP",
+        venue_symbol=symbol,
+        display_symbol=symbol,
+        base_currency=symbol.removesuffix(".D"),
+        quote_currency="%" if is_dominance else "USD",
+        exchange_timezone="UTC",
+        session_calendar="24x7",
+        price_scale=100,
+        minimum_tick=Decimal("0.0001" if is_dominance else "0.01"),
+    )
+
+
 INSTRUMENTS = (
     *tuple(_crypto("BINANCE", base, "USDT") for base in ("BTC", "ETH", "SOL")),
     *tuple(_crypto("COINBASE", base, "USD") for base in ("BTC", "ETH")),
@@ -180,6 +214,27 @@ INSTRUMENTS = (
     *tuple(
         _crypto("HYPERLIQUID", base, "USD", InstrumentType.PERPETUAL)
         for base in ("BTC", "ETH")
+    ),
+    *tuple(
+        _crypto_cap(symbol)
+        for symbol in (
+            "TOTAL",
+            "TOTAL2",
+            "TOTAL3",
+            "BTC",
+            "ETH",
+            "USDT",
+            "USDC",
+            "DAI",
+            "BTC.D",
+            "ETH.D",
+            "USDT.D",
+            "USDC.D",
+            "DAI.D",
+            "TOTAL.D",
+            "TOTAL2.D",
+            "TOTAL3.D",
+        )
     ),
     _equity("NASDAQ", "AAPL"),
     _equity("NASDAQ", "NVDA"),
@@ -263,6 +318,15 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
             ),
         )
         if instrument.venue == "HYPERLIQUID"
+        else (
+            _binding(
+                instrument,
+                "coinmarketcap",
+                instrument.venue_symbol,
+                FeedType.HISTORICAL_DAILY,
+            ),
+        )
+        if instrument.venue == "CRYPTOCAP"
         else (
             _binding(
                 instrument,

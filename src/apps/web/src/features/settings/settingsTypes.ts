@@ -2,6 +2,7 @@ export const SETTINGS_CATEGORY_IDS = [
   'overview',
   'appearance-accessibility',
   'ai-providers',
+  'trading-market-data',
   'models-runtime',
   'assistant-chat',
   'voice-audio',

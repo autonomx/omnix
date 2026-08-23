@@ -75,6 +75,11 @@ function locallyMatches(instrument: CanonicalInstrument, query: string): boolean
 }
 
 function instrumentName(instrument: CanonicalInstrument): string {
+  if (instrument.venue === 'CRYPTOCAP') {
+    return instrument.display_symbol.endsWith('.D')
+      ? `Market Cap ${instrument.display_symbol.slice(0, -2)} Dominance, %`
+      : `Crypto Market Cap ${instrument.display_symbol}`;
+  }
   if (instrument.asset_class === 'crypto') {
     const base = currencyNames[instrument.base_currency ?? ''] ?? instrument.base_currency ?? instrument.display_symbol;
     const quote = currencyNames[instrument.quote_currency ?? ''] ?? instrument.quote_currency ?? 'USD';
@@ -84,6 +89,7 @@ function instrumentName(instrument: CanonicalInstrument): string {
 }
 
 function instrumentTypeLabel(instrument: CanonicalInstrument): string {
+  if (instrument.venue === 'CRYPTOCAP') return 'index crypto';
   if (instrument.asset_class === 'crypto') {
     return instrument.instrument_type === 'perpetual' ? 'perpetual crypto' : 'spot crypto';
   }

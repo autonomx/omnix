@@ -126,9 +126,13 @@ def _persisted_instrument_ids(value: object, key: str | None = None) -> set[str]
     """Find canonical instrument IDs in persisted Trading document payloads."""
     if key in _INSTRUMENT_ID_KEYS:
         if isinstance(value, str):
-            return {value}
+            return set() if value.startswith("formula:") else {value}
         if isinstance(value, list):
-            return {item for item in value if isinstance(item, str)}
+            return {
+                item
+                for item in value
+                if isinstance(item, str) and not item.startswith("formula:")
+            }
         return set()
     if isinstance(value, dict):
         nested_ids: set[str] = set()

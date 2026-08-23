@@ -23,6 +23,7 @@ from .aggregation import (
 )
 from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .binance import BinanceMarketDataProvider
+from .coinmarketcap import CoinMarketCapProvider, coinmarketcap_configured
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
 from .errors import ProviderFallbackEligibleError
@@ -44,6 +45,7 @@ class ProviderRegistry:
             "coinbase": lambda: AdditionalCryptoProvider("coinbase", cache=self.cache),
             "kraken": lambda: AdditionalCryptoProvider("kraken", cache=self.cache),
             "hyperliquid": lambda: AdditionalCryptoProvider("hyperliquid", cache=self.cache),
+            "coinmarketcap": lambda: CoinMarketCapProvider(cache=self.cache),
         }
         self._providers: dict[str, Any] = {}
 
@@ -298,11 +300,23 @@ class ProviderRegistry:
                 if snapshot is not None
                 else {}
             )
-            configured = alpaca_iex_configured() if provider_id == "alpaca_iex" else True
+            configured = (
+                alpaca_iex_configured()
+                if provider_id == "alpaca_iex"
+                else coinmarketcap_configured()
+                if provider_id == "coinmarketcap"
+                else True
+            )
             descriptors.append(
                 {
                     "provider": provider_id,
-                    "display_name": "Alpaca IEX" if provider_id == "alpaca_iex" else provider_id.title(),
+                    "display_name": (
+                        "Alpaca IEX"
+                        if provider_id == "alpaca_iex"
+                        else "CoinMarketCap"
+                        if provider_id == "coinmarketcap"
+                        else provider_id.title()
+                    ),
                     "enabled": configured,
                     "status": (
                         snapshot.status if configured and snapshot is not None else "unconfigured"

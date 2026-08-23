@@ -3986,6 +3986,75 @@
         "title": "ClaimJobResponse",
         "type": "object"
       },
+      "CoinMarketCapCredentialStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key_editable": {
+            "title": "Api Key Editable",
+            "type": "boolean"
+          },
+          "api_key_masked": {
+            "default": "",
+            "title": "Api Key Masked",
+            "type": "string"
+          },
+          "api_key_source": {
+            "enum": [
+              "environment",
+              "os_protected_store",
+              "missing"
+            ],
+            "title": "Api Key Source",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "provider": {
+            "const": "coinmarketcap",
+            "default": "coinmarketcap",
+            "title": "Provider",
+            "type": "string"
+          },
+          "storage": {
+            "title": "Storage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "api_key_source",
+          "api_key_editable",
+          "storage"
+        ],
+        "title": "CoinMarketCapCredentialStatus",
+        "type": "object"
+      },
+      "CoinMarketCapCredentialUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          }
+        },
+        "title": "CoinMarketCapCredentialUpdate",
+        "type": "object"
+      },
       "CompatibilityHandoffPayload": {
         "properties": {
           "domain_logic_policy": {
@@ -21296,6 +21365,66 @@
         "summary": "Instruments",
         "tags": [
           "trading"
+        ]
+      }
+    },
+    "/api/trading/market-data/providers/coinmarketcap/credentials": {
+      "get": {
+        "operationId": "coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoinMarketCapCredentialStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Coinmarketcap Credentials",
+        "tags": [
+          "trading-market-data"
+        ]
+      },
+      "put": {
+        "operationId": "update_coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoinMarketCapCredentialUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoinMarketCapCredentialStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Coinmarketcap Credentials",
+        "tags": [
+          "trading-market-data"
         ]
       }
     },

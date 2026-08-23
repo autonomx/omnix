@@ -9,6 +9,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryDefinition[] = [
   { id: 'overview', label: 'Overview', description: 'Global defaults and whole-system health.', icon: 'grid', order: 0 },
   { id: 'appearance-accessibility', label: 'Appearance & Accessibility', description: 'Theme, text size, density, motion, captions, and accessibility preferences.', icon: 'display', order: 10, searchAliases: ['theme', 'dark mode', 'text size', 'font size', 'captions'] },
   { id: 'ai-providers', label: 'AI Providers', description: 'Provider defaults, configuration summaries, and connection testing.', icon: 'providers', order: 20, searchAliases: ['llm', 'tts', 'stt', 'image provider'] },
+  { id: 'trading-market-data', label: 'Trading & Market Data', description: 'Market-data provider credentials used by charts, watchlists, arithmetic symbols, and replay.', icon: 'chart', order: 25, searchAliases: ['coinmarketcap', 'crypto', 'cryptocap', 'market cap', 'dominance', 'usdt.d'] },
   { id: 'models-runtime', label: 'Models & Runtime', description: 'Model discovery, routing, residency, and runtime policy.', icon: 'chip', order: 30, searchAliases: ['gpu', 'vram', 'routing'] },
   { id: 'assistant-chat', label: 'Assistant & Chat', description: 'Assistant personality, voice, live chat, web research, and session defaults.', icon: 'chat', order: 40, searchAliases: ['quick search', 'deep research', 'web provider', 'citations'] },
   { id: 'voice-audio', label: 'Voice & Audio', description: 'Speech synthesis, voice cloning, playback, and output tuning.', icon: 'waveform', order: 50, searchAliases: ['tts', 'voice cloning'] },
@@ -21,6 +22,18 @@ export const SETTINGS_CATEGORIES: SettingsCategoryDefinition[] = [
 ];
 
 export const INITIAL_SETTINGS_REGISTRY: SettingDefinition[] = [
+  {
+    key: 'trading.marketData.coinmarketcap',
+    categoryId: 'trading-market-data',
+    sectionId: 'coinmarketcap',
+    label: 'CoinMarketCap API key',
+    kind: 'string',
+    scope: 'global',
+    persistenceOwner: 'integration-api',
+    writable: true,
+    appliesTo: 'immediately',
+    searchAliases: ['CRYPTOCAP', 'TOTAL3', 'USDT.D', 'dominance'],
+  },
   {
     key: 'global.providers.llm',
     categoryId: 'ai-providers',

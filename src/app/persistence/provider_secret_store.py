@@ -28,12 +28,15 @@ _RESEARCH_ENVIRONMENT_KEYS: dict[str, tuple[str, ...]] = {
 }
 _LEGACY_RESEARCH_ENVIRONMENT_KEY = "OMNIX_WEB_SEARCH_API_KEY"
 _LEGACY_RESEARCH_PROVIDER_ENVIRONMENT_KEY = "OMNIX_WEB_SEARCH_PROVIDER"
-_TRADING_PROVIDERS = ("alpaca_iex",)
+_TRADING_PROVIDERS = ("alpaca_iex", "coinmarketcap")
 _TRADING_ENVIRONMENT_KEYS: dict[str, dict[str, tuple[str, ...]]] = {
     "alpaca_iex": {
         "api_key_id": ("OMNIX_ALPACA_API_KEY_ID", "APCA_API_KEY_ID"),
         "secret_key": ("OMNIX_ALPACA_API_SECRET_KEY", "APCA_API_SECRET_KEY"),
-    }
+    },
+    "coinmarketcap": {
+        "api_key": ("COINMARKETCAP_API_KEY", "CMC_PRO_API_KEY"),
+    },
 }
 _DESCRIPTION = "Omnix provider API keys"
 _CRYPTPROTECT_UI_FORBIDDEN = 0x01
@@ -110,10 +113,14 @@ def _unprotect(value: bytes) -> bytes:
 
 def _stored_payload() -> dict[str, Any]:
     path = provider_secret_path()
-    if not path.exists() or path.read_bytes() == _ENVIRONMENT_OWNED_MARKER:
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return {}
+    if raw == _ENVIRONMENT_OWNED_MARKER:
         return {}
     try:
-        payload = json.loads(_unprotect(path.read_bytes()).decode("utf-8"))
+        payload = json.loads(_unprotect(raw).decode("utf-8"))
     except (OSError, UnicodeError, ValueError, LegacyPersistenceRetired):
         return {}
     return payload if isinstance(payload, dict) else {}

@@ -8,7 +8,9 @@ import type {
   TradingAlertUpdateInput,
   TradingDocument,
   TradingStreamMessage,
+  MarketBar,
 } from './tradingTypes';
+import { decodeTradingFormula, evaluateTradingFormula, parseTradingFormula } from './tradingFormula';
 
 export type TradingDocumentKind = 'workspaces' | 'watchlists' | 'drawings' | 'indicator-presets';
 
@@ -79,6 +81,132 @@ function marketQuery(
   return query.toString();
 }
 
+function formulaInstrument(instrumentId: string, expression: string, source: CanonicalInstrument): CanonicalInstrument {
+  return {
+    ...source,
+    instrument_id: instrumentId,
+    display_symbol: expression,
+    venue_symbol: expression,
+    venue: 'DERIVED',
+    instrument_type: 'index',
+    base_currency: null,
+    quote_currency: null,
+    minimum_tick: '0.00000001',
+    price_scale: 100,
+  };
+}
+
+function formulaBarNumber(bar: MarketBar | undefined, field: 'open' | 'high' | 'low' | 'close' | 'volume'): number | null {
+  const value = Number(bar?.[field]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function normalizedFormulaSymbol(value: string): string {
+  return value.toUpperCase().replace(/[-:_/]/g, '');
+}
+
+function isCanonicalFormulaOperand(value: string): boolean {
+  return /^(crypto|equity):/i.test(value);
+}
+
+async function resolveFormulaOperand(symbol: string, operandId: string): Promise<string> {
+  if (isCanonicalFormulaOperand(operandId)) return operandId;
+
+  const candidates = arrayField<CanonicalInstrument>(
+    await requestJson<unknown>(`/api/trading/instruments/search?query=${encodeURIComponent(operandId || symbol)}`),
+    'instruments',
+  );
+  const normalized = normalizedFormulaSymbol(operandId || symbol);
+  const match = candidates.find((candidate) => [
+    candidate.display_symbol,
+    candidate.venue_symbol,
+    candidate.instrument_id,
+  ].some((value) => normalizedFormulaSymbol(value) === normalized));
+  if (!match) throw new Error(`Arithmetic chart symbol could not be resolved: ${symbol}`);
+  return match.instrument_id;
+}
+
+async function formulaBars(
+  instrumentId: string,
+  interval: string,
+  limit: number,
+): Promise<BarsResponse> {
+  const payload = decodeTradingFormula(instrumentId);
+  if (!payload) throw new Error('Invalid arithmetic chart formula.');
+  const formula = parseTradingFormula(payload.expression, { symbolHints: Object.keys(payload.operands) });
+  if (!formula) throw new Error('Invalid arithmetic chart formula.');
+
+  const operandIds = await Promise.all(formula.symbols.map((symbol) => resolveFormulaOperand(
+    symbol,
+    payload.operands[symbol] ?? symbol,
+  )));
+  const responses = await Promise.all(operandIds.map((operandId) => requestJson<BarsResponse>(
+    `/api/trading/bars?${marketQuery(operandId, undefined, { interval, limit: String(limit) })}`,
+  )));
+  const source = responses[0];
+  if (!source) throw new Error('Arithmetic chart formula has no market data.');
+
+  const operandBars = new Map(formula.symbols.map((symbol, index) => [symbol, responses[index]?.bars ?? []]));
+  const cursors = new Map(formula.symbols.map((symbol) => [symbol, 0]));
+  const valueAt = (symbol: string, time: number, field: 'open' | 'high' | 'low' | 'close'): number | null => {
+    const bars = operandBars.get(symbol) ?? [];
+    if (bars.length === 0) return null;
+    let cursor = cursors.get(symbol) ?? 0;
+    while (cursor + 1 < bars.length && Date.parse(bars[cursor + 1].start_time) <= time) cursor += 1;
+    cursors.set(symbol, cursor);
+    if (Date.parse(bars[cursor]?.start_time ?? '') > time) return null;
+    return formulaBarNumber(bars[cursor], field);
+  };
+
+  const bars = source.bars.flatMap((sourceBar) => {
+    const time = Date.parse(sourceBar.start_time);
+    if (!Number.isFinite(time)) return [];
+    const values = (field: 'open' | 'high' | 'low' | 'close') => evaluateTradingFormula(
+      formula.root,
+      (symbol) => valueAt(symbol, time, field),
+    );
+    const open = values('open');
+    const high = values('high');
+    const low = values('low');
+    const close = values('close');
+    if ([open, high, low, close].some((value) => value === null)) return [];
+    const normalizedValues = [open as number, high as number, low as number, close as number];
+    const volume = formula.symbols.reduce((sum, symbol) => sum + (formulaBarNumber(
+      operandBars.get(symbol)?.[cursors.get(symbol) ?? 0],
+      'volume',
+    ) ?? 0), 0);
+    return [{
+      ...sourceBar,
+      instrument_id: instrumentId,
+      open: String(normalizedValues[0]),
+      high: String(Math.max(...normalizedValues)),
+      low: String(Math.min(...normalizedValues)),
+      close: String(normalizedValues[3]),
+      volume: String(Math.max(0, volume)),
+      provider: 'DERIVED',
+      provider_event_id: null,
+      provider_sequence: null,
+      received_at: sourceBar.received_at ?? source.provenance.received_at,
+    }];
+  });
+
+  const binding = {
+    ...source.binding,
+    binding_id: `formula:${source.binding.binding_id}`,
+    instrument_id: instrumentId,
+    provider: 'DERIVED',
+    provider_symbol: payload.expression,
+    realtime_scope: 'none',
+  };
+  return {
+    ...source,
+    bars,
+    binding,
+    instrument: formulaInstrument(instrumentId, payload.expression, source.instrument),
+    provenance: { ...source.provenance, instrument_id: instrumentId },
+  };
+}
+
 export const tradingApi = {
   providers: async () => {
     const payload = await requestJson<unknown>('/api/trading/providers/status');
@@ -90,10 +218,12 @@ export const tradingApi = {
     );
     return arrayField<CanonicalInstrument>(payload, 'instruments');
   },
-  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null) =>
-    requestJson<BarsResponse>(
+  bars: (instrumentId: string, interval: string, limit = 1_000, bindingId?: string | null) => {
+    if (decodeTradingFormula(instrumentId)) return formulaBars(instrumentId, interval, limit);
+    return requestJson<BarsResponse>(
       `/api/trading/bars?${marketQuery(instrumentId, bindingId, { interval, limit: String(limit) })}`,
-    ),
+    );
+  },
   quote: (instrumentId: string, bindingId?: string | null) =>
     requestJson<Record<string, string>>(
       `/api/trading/quotes?${marketQuery(instrumentId, bindingId)}`,

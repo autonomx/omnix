@@ -37,13 +37,29 @@ export class SettingsProfileApiError extends Error {
 
 export type SettingsFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+const SETTINGS_LOAD_MAX_ATTEMPTS = 3;
+const SETTINGS_LOAD_RETRY_DELAY_MS = 100;
+
+function waitForSettingsRetry(): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, SETTINGS_LOAD_RETRY_DELAY_MS));
+}
+
 export async function loadSettingsProfile(fetcherOrContext?: SettingsFetch | unknown): Promise<SettingsProfileEnvelope> {
   const fetcher = typeof fetcherOrContext === 'function' ? fetcherOrContext as SettingsFetch : fetch;
-  const response = await fetcher('/api/settings');
-  if (!response.ok) throw new SettingsProfileApiError('Settings request failed.', response.status);
-  const legacy = await response.json() as SettingsApiPayload;
-  const raw = legacy.settings?.settings_control_center;
-  return { profile: migrateSettingsDocument(raw), legacy };
+  for (let attempt = 1; attempt <= SETTINGS_LOAD_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetcher('/api/settings');
+      if (!response.ok) throw new SettingsProfileApiError('Settings request failed.', response.status);
+      const legacy = await response.json() as SettingsApiPayload;
+      const raw = legacy.settings?.settings_control_center;
+      return { profile: migrateSettingsDocument(raw), legacy };
+    } catch (error) {
+      const nonRetryable = error instanceof SettingsProfileApiError && error.status < 500;
+      if (nonRetryable || attempt === SETTINGS_LOAD_MAX_ATTEMPTS) throw error;
+      await waitForSettingsRetry();
+    }
+  }
+  throw new SettingsProfileApiError('Settings request failed.', 500);
 }
 
 export async function saveSettingsProfile(request: SettingsProfileSaveRequest, fetcher: SettingsFetch = fetch): Promise<void> {

@@ -24,6 +24,7 @@ import { TradingIndicatorBackgroundOverlay } from './TradingIndicatorBackgroundO
 import { TradingVolumeProfileOverlay } from './TradingVolumeProfileOverlay';
 import { TradingYAxisControls } from './TradingYAxisControls';
 import { TradingCompareSymbolDialog } from './TradingCompareSymbolDialog';
+import { isTradingFormulaInstrumentId } from './tradingFormula';
 import { TRADING_COMPARISON_COLORS, type TradingComparison } from './tradingComparisons';
 import './TradingChartOverlayLayout.css';
 import './TradingChartRangeTooltip.css';
@@ -230,6 +231,7 @@ function chartHistoryLimit(
   indicators: readonly CoreIndicatorInstance[],
 ): number {
   const needsExtendedHistory = indicators.some((indicator) => indicator.enabled && indicator.id === 'bull-market-band');
+  if (instrumentId.startsWith('index:CRYPTOCAP:') && interval === '1d') return 5_000;
   if (instrumentId.startsWith('crypto:BINANCE:') && (['1d', '1w'].includes(interval) || needsExtendedHistory)) return 5_000;
   if (instrumentId.startsWith('equity:') && interval === '1d') return 2_000;
   return 1_000;
@@ -292,6 +294,7 @@ export function TradingChartPanel({
   onMoveIndicator,
   onUpdateComparisons,
   onOpenPineScript,
+  onOpenMarketDataSettings,
   synchronization,
   paperAccountId,
 }: {
@@ -317,6 +320,7 @@ export function TradingChartPanel({
   onMoveIndicator: (id: CoreIndicatorId, direction: TradingIndicatorMove) => void;
   onUpdateComparisons: (comparisons: TradingComparison[]) => void;
   onOpenPineScript: (id: CoreIndicatorId) => void;
+  onOpenMarketDataSettings?: () => void;
   synchronization: TradingChartSynchronization;
   paperAccountId?: string | null;
 }) {
@@ -482,14 +486,16 @@ export function TradingChartPanel({
     };
   }), [comparisons, comparisonQueries]);
   const sourceCurrency = chartQuery.data?.instrument.quote_currency?.toUpperCase() ?? 'USD';
+  const supportsCurrencyConversion = /^[A-Z]{3}$/u.test(sourceCurrency);
   const currencyRateQuery = useQuery({
     queryKey: ['trading', 'currency-rate', sourceCurrency, priceScaleCurrency],
     queryFn: () => tradingApi.currencyRate(sourceCurrency, priceScaleCurrency),
-    enabled: Boolean(sourceCurrency && priceScaleCurrency && sourceCurrency !== priceScaleCurrency),
+    enabled: supportsCurrencyConversion
+      && Boolean(sourceCurrency && priceScaleCurrency && sourceCurrency !== priceScaleCurrency),
     staleTime: 5 * 60_000,
     retry: 1,
   });
-  const priceScaleMultiplier = sourceCurrency === priceScaleCurrency
+  const priceScaleMultiplier = !supportsCurrencyConversion || sourceCurrency === priceScaleCurrency
     ? 1
     : currencyRateQuery.data?.rate ?? 1;
 
@@ -855,6 +861,11 @@ export function TradingChartPanel({
       setStreamStatus('replay');
       return;
     }
+    if (isTradingFormulaInstrumentId(instrumentId)) {
+      setStreamStatus('polling');
+      const poll = window.setInterval(() => void chartQuery.refetch(), 30_000);
+      return () => window.clearInterval(poll);
+    }
     setStreamError(null);
     const derivedInterval = !resolved.supported_intervals.includes(interval);
     if (resolved.feed_type !== 'websocket_and_rest' || derivedInterval) {
@@ -1203,28 +1214,39 @@ export function TradingChartPanel({
     if (contextMenu?.indicatorId || !contextMenu?.contextIndicatorId) setAlertPlacement(contextMenu);
   };
 
-  const handleChartWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    const targetAdapter = adapterRef.current;
-    if (!targetAdapter) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
-    const y = event.clientY - bounds.top;
-    if (targetAdapter.isPriceScaleCoordinate(x)) {
-      targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
-      return;
-    }
-    if (event.deltaX !== 0) {
-      targetAdapter.panTimeByPixels(-event.deltaX);
-      return;
-    }
-    if (event.shiftKey) {
-      targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
-      return;
-    }
-    targetAdapter.zoomAtCoordinate(x, event.deltaY);
-  };
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    // React delegates wheel events through a passive listener in this setup.
+    // Use a native non-passive listener because chart zoom intentionally
+    // consumes the wheel event so the page does not scroll underneath it.
+    const handleChartWheel = (event: WheelEvent) => {
+      const targetAdapter = adapterRef.current;
+      if (!targetAdapter) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const bounds = host.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const y = event.clientY - bounds.top;
+      if (targetAdapter.isPriceScaleCoordinate(x)) {
+        targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
+        return;
+      }
+      if (event.deltaX !== 0) {
+        targetAdapter.panTimeByPixels(-event.deltaX);
+        return;
+      }
+      if (event.shiftKey) {
+        targetAdapter.zoomPriceScaleAtCoordinate(y, event.deltaY);
+        return;
+      }
+      targetAdapter.zoomAtCoordinate(x, event.deltaY);
+    };
+
+    host.addEventListener('wheel', handleChartWheel, { capture: true, passive: false });
+    return () => host.removeEventListener('wheel', handleChartWheel, true);
+  }, [adapter]);
 
   const handleReplayStageClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!replayMode || !active || !adapter || allBarsRef.current.length === 0) return;
@@ -1423,7 +1445,7 @@ export function TradingChartPanel({
         onPointerMove={handleStagePointerMove}
         onPointerLeave={handleStagePointerLeave}
       >
-        <div ref={hostRef} className={`trading-chart-canvas${drawingTool === 'cursor' && !replayMode ? ' is-pan-ready' : ''}${chartPanning ? ' is-grabbing' : ''}`} data-panning-indicator={panningIndicatorPane ?? undefined} aria-label={`${instrumentId} ${interval} chart`} onWheelCapture={handleChartWheel} />
+        <div ref={hostRef} className={`trading-chart-canvas${drawingTool === 'cursor' && !replayMode ? ' is-pan-ready' : ''}${chartPanning ? ' is-grabbing' : ''}`} data-panning-indicator={panningIndicatorPane ?? undefined} aria-label={`${instrumentId} ${interval} chart`} />
         {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
         {adapter ? <TradingVolumeProfileOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
         {!fullscreenIndicator && !fullscreenMainPane ? paneIndicators.flatMap((indicator) => {
@@ -1778,7 +1800,14 @@ export function TradingChartPanel({
         onClose={() => setCompareDialogOpen(false)}
       />
       {chartQuery.isLoading ? <div className="trading-chart-state">Loading historical bars…</div> : null}
-      {chartQuery.error ? <div className="trading-chart-state error">{chartQuery.error.message}</div> : null}
+      {chartQuery.error ? (
+        <div className="trading-chart-state error">
+          <span>{chartQuery.error.message}</span>
+          {chartQuery.error.message.includes('CoinMarketCap API key') && onOpenMarketDataSettings ? (
+            <button type="button" onClick={onOpenMarketDataSettings}>Open market-data settings</button>
+          ) : null}
+        </div>
+      ) : null}
       {streamError ? <div className="trading-chart-state error">{streamError}</div> : null}
       {indicatorError ? <div className="trading-chart-state error">Indicator calculation failed: {indicatorError}</div> : null}
       <footer>

@@ -27,6 +27,11 @@ describe('view API scope', () => {
     expect(isApiAllowedForView('/api/voice-library', 'trading')).toBe(false);
   });
 
+  it('allows global market-data credentials from the settings view', () => {
+    expect(isApiAllowedForView('/api/trading/market-data/providers/coinmarketcap/credentials', 'settings')).toBe(true);
+    expect(isApiAllowedForView('/api/trading/bars', 'settings')).toBe(false);
+  });
+
   it('blocks off-view network calls without invoking the browser fetch', async () => {
     window.history.replaceState({}, '', '/trading');
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));

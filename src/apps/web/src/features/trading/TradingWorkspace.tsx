@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
@@ -12,7 +13,7 @@ import { TradingSideRail } from './TradingSideRail';
 import type { TradingSideTab } from './TradingSidePanel';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
 import { TradingTerminalDock } from './TradingTerminalDock';
-import { TradingSymbolSearch } from './TradingSymbolSearch';
+import { TradingSymbolSearch, type TradingFormulaSearchPreview } from './TradingSymbolSearch';
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { tradingApi } from './tradingApi';
@@ -34,6 +35,7 @@ import {
   type TradingLayout,
 } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
+import { encodeTradingFormula, parseTradingFormula, tradingFormulaDisplaySymbol } from './tradingFormula';
 import './TradingWorkspace.css';
 import './TradingAdvanced.css';
 import './TradingFlexibleLayout.css';
@@ -74,6 +76,7 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
 const quickIntervalPriority = ['1h', '2h', '4h'];
 
 type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'research';
+type FormulaResolution = TradingFormulaSearchPreview & { operands: Record<string, string> };
 
 // TradingSidePanel mounts TradingPaperPanel in the dedicated Trade tab.
 
@@ -97,12 +100,14 @@ function preferredInstrument(
 }
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
+  const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
   const [symbolSearchChartId, setSymbolSearchChartId] = useState<string | null>(null);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
+  const [formulaResolution, setFormulaResolution] = useState<FormulaResolution | null>(null);
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
   const [toolPanelFullscreen, setToolPanelFullscreen] = useState(false);
   const [sidePanelTab, setSidePanelTab] = useState<TradingSideTab>('watchlist');
@@ -184,11 +189,53 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (!symbolSearchOpen || !query) {
       setSymbolSearchResults([]);
       setSymbolSearchLoading(false);
+      setFormulaResolution(null);
       return;
     }
 
+    const formulaHints = (instruments.data ?? []).flatMap((instrument) => [
+      instrument.display_symbol,
+      instrument.venue_symbol,
+      instrument.instrument_id,
+    ]);
+    const formula = parseTradingFormula(query, { symbolHints: formulaHints });
     let cancelled = false;
     setSymbolSearchLoading(true);
+    if (formula) {
+      setFormulaResolution({ formula, operands: {}, unresolvedSymbols: formula.symbols, loading: true });
+      const resolve = async () => {
+        const matches = await Promise.all(formula.symbols.map((symbol) => tradingApi.instruments(symbol)));
+        if (cancelled) return;
+        const candidates = matches.flat();
+        const operands: Record<string, string> = {};
+        const unresolvedSymbols: string[] = [];
+        for (const symbol of formula.symbols) {
+          const normalized = symbol.toUpperCase();
+          const symbolCandidates = [...(instruments.data ?? []), ...candidates]
+            .filter((instrument, index, all) => all.findIndex((item) => item.instrument_id === instrument.instrument_id) === index)
+            .filter((instrument) => [instrument.display_symbol, instrument.venue_symbol, instrument.instrument_id]
+              .some((value) => value.toUpperCase() === normalized || value.toUpperCase().replace(/[-:_/]/g, '') === normalized.replace(/[-:_/]/g, '')))
+            .sort((left, right) => left.display_symbol.localeCompare(right.display_symbol) || left.venue.localeCompare(right.venue));
+          const match = symbolCandidates[0];
+          if (!match) unresolvedSymbols.push(symbol);
+          else operands[symbol] = preferredInstrument(match, symbolCandidates).instrument_id;
+        }
+        setSymbolSearchResults(candidates);
+        setFormulaResolution({ formula, operands, unresolvedSymbols, loading: false });
+        setSymbolSearchLoading(false);
+      };
+      void resolve().catch(() => {
+        if (!cancelled) {
+          setFormulaResolution({ formula, operands: {}, unresolvedSymbols: formula.symbols, loading: false });
+          setSymbolSearchResults([]);
+          setSymbolSearchLoading(false);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setFormulaResolution(null);
     const timer = window.setTimeout(() => {
       void tradingApi.instruments(query).then((matches) => {
         if (!cancelled) {
@@ -206,7 +253,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [symbolQuery, symbolSearchOpen]);
+  }, [instruments.data, symbolQuery, symbolSearchOpen]);
 
   const applySymbolMatch = (match: CanonicalInstrument, candidates: readonly CanonicalInstrument[]) => {
     const next = preferredInstrument(match, [...(instruments.data ?? []), ...candidates]);
@@ -219,6 +266,22 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setSymbolSearchChartId(null);
     void instruments.refetch();
     void providers.refetch();
+  };
+
+  const applyFormulaResolution = (resolution: FormulaResolution | null) => {
+    if (!resolution || resolution.loading) return;
+    const targetChartId = symbolSearchChartId ?? activeChartId;
+    const operands = Object.fromEntries(
+      resolution.formula.symbols.map((symbol) => [symbol, resolution.operands[symbol] ?? symbol]),
+    );
+    const instrumentId = encodeTradingFormula(resolution.formula.expression, operands);
+    updateChart(targetChartId, { instrumentId, bindingId: null });
+    setActiveChart(targetChartId);
+    setSymbolQuery(resolution.formula.expression);
+    setSymbolSearchResults([]);
+    setFormulaResolution(null);
+    setSymbolSearchOpen(false);
+    setSymbolSearchChartId(null);
   };
 
   const selectBinding = (bindingId: string) => {
@@ -298,8 +361,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     const targetInstrument = (instruments.data ?? []).find((instrument) => instrument.instrument_id === targetChart.instrumentId);
     setActiveChart(targetChart.chartId);
     setSymbolSearchChartId(targetChart.chartId);
-    setSymbolQuery(targetInstrument?.display_symbol ?? targetChart.instrumentId.split(':').at(-1)?.replace('-', '/') ?? '');
+    setSymbolQuery(targetInstrument?.display_symbol ?? tradingFormulaDisplaySymbol(targetChart.instrumentId) ?? targetChart.instrumentId.split(':').at(-1)?.replace('-', '/') ?? '');
     setSymbolSearchResults([]);
+    setFormulaResolution(null);
     setSymbolSearchOpen(true);
   };
 
@@ -314,6 +378,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const closeSymbolSearch = () => {
     setSymbolSearchOpen(false);
     setSymbolSearchChartId(null);
+    setFormulaResolution(null);
   };
 
   const symbolSearchTarget = charts.find((chart) => chart.chartId === symbolSearchChartId) ?? activeChart;
@@ -322,6 +387,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   );
 
   const activeSymbolLabel = activeInstrument?.display_symbol
+    ?? tradingFormulaDisplaySymbol(activeChart.instrumentId)
     ?? activeChart.instrumentId.split(':').at(-1)?.replace('-', '/')
     ?? 'Select symbol';
 
@@ -517,8 +583,10 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         instruments={[...(instruments.data ?? []), ...symbolSearchResults]}
         activeInstrumentId={symbolSearchTargetInstrument?.instrument_id ?? symbolSearchTarget.instrumentId}
         loading={symbolSearchLoading}
+        formulaPreview={formulaResolution}
         onQueryChange={setSymbolQuery}
         onSelect={(match) => applySymbolMatch(match, [match])}
+        onSelectFormula={() => applyFormulaResolution(formulaResolution)}
         onClose={closeSymbolSearch}
       />
       <TradingAlertToastLayer />
@@ -527,7 +595,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />
         <div className="trading-chart-column">
           <section className="trading-chart-shell" aria-label="Trading chart workspace">
-            <TradingChartGrid paperAccountId={paperAccountId} onOpenSymbolSearch={openSymbolSearch} onOpenPineScript={openPineEditor} />
+            <TradingChartGrid
+              paperAccountId={paperAccountId}
+              onOpenSymbolSearch={openSymbolSearch}
+              onOpenPineScript={openPineEditor}
+              onOpenMarketDataSettings={() => { void navigate({ to: '/settings', search: { category: 'trading-market-data' } }); }}
+            />
           </section>
           {workspaceHydrated && panels.bottom && !toolPanel ? (
             <TradingTerminalDock

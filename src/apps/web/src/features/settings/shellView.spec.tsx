@@ -23,12 +23,11 @@ describe('settings shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Images & Speech Input/ }));
     expect(screen.getByRole('heading', { name: 'Images & Speech Input' })).toBeInTheDocument();
     expect(screen.getByLabelText('Width')).toBeInTheDocument();
-    const categoryButtons = screen.getByLabelText('Settings categories').querySelectorAll('nav button');
-    fireEvent.click(categoryButtons[9]!);
+    fireEvent.click(screen.getByRole('button', { name: /Tools & Integrations/ }));
     expect(screen.getByText('Configuration ownership')).toBeInTheDocument();
-    fireEvent.click(categoryButtons[10]!);
+    fireEvent.click(screen.getByRole('button', { name: /Jobs, Assets & Storage/ }));
     expect(screen.getByLabelText('Retention days')).toBeInTheDocument();
-    fireEvent.click(categoryButtons[11]!);
+    fireEvent.click(screen.getByRole('button', { name: /Diagnostics & Developer/ }));
     expect(screen.getByRole('heading', { name: 'Runtime details' })).toBeInTheDocument();
   });
 

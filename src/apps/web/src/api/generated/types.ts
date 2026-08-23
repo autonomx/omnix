@@ -1568,6 +1568,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/market-data/providers/coinmarketcap/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Coinmarketcap Credentials */
+        get: operations["coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_get"];
+        /** Update Coinmarketcap Credentials */
+        put: operations["update_coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/models/bounce": {
         parameters: {
             query?: never;
@@ -4079,6 +4097,41 @@ export interface components {
             ok: boolean;
             /** Reason */
             reason?: string | null;
+        };
+        /** CoinMarketCapCredentialStatus */
+        CoinMarketCapCredentialStatus: {
+            /** Api Key Editable */
+            api_key_editable: boolean;
+            /**
+             * Api Key Masked
+             * @default
+             */
+            api_key_masked: string;
+            /**
+             * Api Key Source
+             * @enum {string}
+             */
+            api_key_source: "environment" | "os_protected_store" | "missing";
+            /** Configured */
+            configured: boolean;
+            /**
+             * Provider
+             * @default coinmarketcap
+             * @constant
+             */
+            provider: "coinmarketcap";
+            /** Storage */
+            storage: string;
+        };
+        /** CoinMarketCapCredentialUpdate */
+        CoinMarketCapCredentialUpdate: {
+            /** Api Key */
+            api_key?: string | null;
+            /**
+             * Clear Api Key
+             * @default false
+             */
+            clear_api_key: boolean;
         };
         /** CompatibilityHandoffPayload */
         CompatibilityHandoffPayload: {
@@ -12909,6 +12962,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InstrumentSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoinMarketCapCredentialStatus"];
+                };
+            };
+        };
+    };
+    update_coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoinMarketCapCredentialUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoinMarketCapCredentialStatus"];
                 };
             };
             /** @description Validation Error */

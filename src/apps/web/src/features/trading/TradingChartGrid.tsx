@@ -19,10 +19,12 @@ export function TradingChartGrid({
   paperAccountId,
   onOpenSymbolSearch,
   onOpenPineScript,
+  onOpenMarketDataSettings,
 }: {
   paperAccountId?: string | null;
   onOpenSymbolSearch: (chartId: string) => void;
   onOpenPineScript: (id: CoreIndicatorId) => void;
+  onOpenMarketDataSettings?: () => void;
 }) {
   const layout = useTradingStore((state) => state.layout);
   const charts = useTradingStore((state) => state.charts);
@@ -91,6 +93,7 @@ export function TradingChartGrid({
             onMoveIndicator={(id, direction) => moveIndicator(chart.chartId, id, direction)}
             onUpdateComparisons={(comparisons) => updateChart(chart.chartId, { comparisons })}
             onOpenPineScript={(id) => { setActiveChart(chart.chartId); onOpenPineScript(id); }}
+            onOpenMarketDataSettings={onOpenMarketDataSettings}
             synchronization={synchronization}
             paperAccountId={paperAccountId}
           />
