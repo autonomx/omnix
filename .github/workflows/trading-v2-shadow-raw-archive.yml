@@ -38,17 +38,35 @@ jobs:
           python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
 
       - name: Apply guarded raw-archive integration
-        run: python scripts/patch_trading_v2_shadow_raw_archive.py
+        shell: bash
+        run: |
+          set +e
+          python scripts/patch_trading_v2_shadow_raw_archive.py > /tmp/raw-archive-patch.log 2>&1
+          code=$?
+          cat /tmp/raw-archive-patch.log
+          exit ${code}
 
       - name: Run V2 shadow and archive regressions
+        shell: bash
         run: |
-          python -m pytest \
-            src/tests/trading/test_trading_strategy_shadow_universe.py \
-            src/tests/trading/test_trading_strategy_shadow_execution.py \
-            src/tests/trading/test_trading_strategy_universe_archiver.py \
-            src/tests/trading/test_trading_gap_pullback_v2.py \
-            -q --tb=short
-          git diff --check
+          set +e
+          {
+            python -m pytest \
+              src/tests/trading/test_trading_strategy_shadow_universe.py \
+              src/tests/trading/test_trading_strategy_shadow_execution.py \
+              src/tests/trading/test_trading_strategy_universe_archiver.py \
+              src/tests/trading/test_trading_gap_pullback_v2.py \
+              -q --tb=short
+            status=$?
+            if [[ ${status} -eq 0 ]]; then
+              git diff --check
+              status=$?
+            fi
+            exit ${status}
+          } > /tmp/raw-archive-tests.log 2>&1
+          code=$?
+          cat /tmp/raw-archive-tests.log
+          exit ${code}
 
       - name: Commit qualified patch
         id: commit
@@ -70,7 +88,16 @@ jobs:
         run: |
           gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 prospective SHADOW raw-archive integration passed shadow/archive/V2 regressions and pushed \`${{ steps.commit.outputs.sha }}\`. With no active universe, 2.0 SHADOW reads today's strategy-owned immutable auto-archive without mutating active_universe_id; shadow execution events record universe_source for qualification filtering."
 
-      - name: Report failure
+      - name: Report failure with diagnostic tail
         if: failure()
+        shell: bash
         run: |
-          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body "V2 prospective SHADOW raw-archive integration failed on source head \`${GITHUB_SHA}\`. No monitor patch from this run should be trusted; inspect the workflow before continuing."
+          {
+            echo "V2 prospective SHADOW raw-archive integration failed on source head \`${GITHUB_SHA}\`. No monitor patch from this run should be trusted."
+            echo
+            echo '```text'
+            if [[ -f /tmp/raw-archive-patch.log ]]; then tail -n 40 /tmp/raw-archive-patch.log; fi
+            if [[ -f /tmp/raw-archive-tests.log ]]; then tail -n 80 /tmp/raw-archive-tests.log; fi
+            echo '```'
+          } > /tmp/raw-archive-failure.md
+          gh pr comment 1494 --repo "${GITHUB_REPOSITORY}" --body-file /tmp/raw-archive-failure.md
