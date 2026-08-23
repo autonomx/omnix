@@ -141,9 +141,11 @@ function IndicatorValues({ label, value }: { label: string; value: IndicatorSnap
 export function TradingStrategyIndicatorEvidence({
   events,
   visible,
+  loadError = null,
 }: {
   events: StrategyEvent[];
   visible: boolean;
+  loadError?: string | null;
 }) {
   if (!visible) return null;
   const evidence = collectProspectiveIndicatorEvidence(events);
@@ -183,6 +185,8 @@ export function TradingStrategyIndicatorEvidence({
             </article>
           ))}
         </div>
+      ) : loadError ? (
+        <p className="indicator-evidence-error">Could not load persisted SHADOW indicator evidence: {loadError}</p>
       ) : (
         <p className="indicator-evidence-empty">Waiting for prospective Aug 24+ V2 SHADOW structural signals. No indicator result is inferred before a signal exists.</p>
       )}
