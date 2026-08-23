@@ -54,6 +54,12 @@ def _enabled() -> bool:
     return value in {"1", "true", "yes", "on"} and bool(_api_key() and _api_secret())
 
 
+def alpaca_iex_status_monitor_enabled() -> bool:
+    """Public readiness predicate shared by gateway operations telemetry."""
+
+    return _enabled()
+
+
 def _utc(value: datetime | None = None) -> datetime:
     observed = value or datetime.now(timezone.utc)
     if observed.tzinfo is None:
@@ -149,9 +155,6 @@ class AlpacaIexStatusCache:
                 and self._connected_since is not None
                 and self._connected_since <= session_start
             )
-            # With continuous status coverage from 04:00 ET, no status event means
-            # no halt/resume transition was observed during the session. This is
-            # research evidence only and never changes execution eligibility.
             halted_at_decision: bool | None
             if latest is not None:
                 halted_at_decision = latest.halted
