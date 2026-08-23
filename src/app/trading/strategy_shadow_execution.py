@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from .indicator_signals import multi_timeframe_indicator_context
+from .indicator_signals import (
+    indicator_entry_confirmation,
+    multi_timeframe_indicator_context,
+)
 from .providers.alpaca_iex import ALPACA_IEX_PARTIAL_MARKET
 
 
@@ -39,6 +42,28 @@ _EXECUTION_FIELDS = (
 class ShadowExecutionEvidence:
     reason_code: ShadowExecutionReason
     execution: dict[str, object]
+
+
+def _full_indicator_warmup(context) -> bool:
+    one = context.one_minute
+    five = context.five_minute
+    return all(
+        value is not None
+        for value in (
+            one.ema9,
+            one.ema20,
+            one.macd,
+            one.macd_signal,
+            one.stochastic_rsi_k,
+            one.stochastic_rsi_d,
+            five.ema9,
+            five.ema20,
+            five.macd,
+            five.macd_signal,
+            five.stochastic_rsi_k,
+            five.stochastic_rsi_d,
+        )
+    )
 
 
 def observe_shadow_execution(
@@ -78,12 +103,19 @@ def observe_shadow_execution(
             if bar.is_final and bar.end_time <= source_time
         ]
         context = multi_timeframe_indicator_context(finalized)
+        entry_allowed, entry_reasons = indicator_entry_confirmation(context)
         payload["indicator_context"] = context.model_dump(mode="json")
         payload["indicator_context_bar_count"] = len(finalized)
+        payload["indicator_context_full_warmup"] = _full_indicator_warmup(context)
+        payload["indicator_entry_confirmed"] = entry_allowed
+        payload["indicator_entry_reason_codes"] = entry_reasons
         payload["indicator_context_error"] = None
     except Exception as exc:  # telemetry must never alter the execution decision
         payload["indicator_context"] = None
         payload["indicator_context_bar_count"] = 0
+        payload["indicator_context_full_warmup"] = False
+        payload["indicator_entry_confirmed"] = None
+        payload["indicator_entry_reason_codes"] = ()
         payload["indicator_context_error"] = f"{type(exc).__name__}: {exc}"
     reason: ShadowExecutionReason = (
         "SHADOW_EXECUTION_OBSERVED"
