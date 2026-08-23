@@ -397,17 +397,21 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   }
   await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);
 
+  // Changing Chart 2 to ETH makes Chart 2 active by design. Exercise the
+  // alert tool against that actual active-chart contract instead of assuming
+  // the workspace silently switches back to BTC.
   await page.getByRole('button', { name: 'Place price alert' }).click();
   await overlay.click({ position: { x: 180, y: 100 } });
-  await expect(page.getByRole('dialog', { name: /Create alert on BTCUSDT/ })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: /Create alert on ETHUSDT/ })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Alert trigger' })).toHaveValue('every_time');
   await expect(page.getByRole('checkbox', { name: 'App' })).toBeChecked();
-  await page.getByRole('textbox', { name: 'Alert message' }).fill('BTC alert');
-  await page.getByRole('dialog', { name: /Create alert on BTCUSDT/ }).getByRole('button', { name: 'Create alert' }).click();
+  await page.getByRole('textbox', { name: 'Alert message' }).fill('ETH alert');
+  await page.getByRole('dialog', { name: /Create alert on ETHUSDT/ }).getByRole('button', { name: 'Create alert' }).click();
   await expect.poll(() => state.alerts.length).toBe(1);
-  expect((state.alerts[0].parameters as Record<string, unknown>).message).toBe('BTC alert');
-  await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);
-  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);
+  expect((state.alerts[0].parameters as Record<string, unknown>).message).toBe('ETH alert');
+  // Only Chart 2 is ETH, so the ETH alert belongs on exactly one chart.
+  await expect(page.locator('.trading-alert-price-label')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(1);
   const alertRow = sidePanel.locator('.trading-alert-list li').first();
   await expect(alertRow).toBeVisible();
   await alertRow.getByRole('button', { name: /Options for/ }).click();
@@ -429,7 +433,7 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   const chartMenu = page.getByRole('menu', { name: 'Chart context menu' });
   await expect(chartMenu).toBeVisible();
   await expect(chartMenu.getByRole('menuitem', { name: /Reset chart view/ })).toBeVisible();
-  await expect(chartMenu.getByRole('menuitem', { name: /Add alert on BTCUSDT/ })).toBeVisible();
+  await expect(chartMenu.getByRole('menuitem', { name: /Add alert on ETHUSDT/ })).toBeVisible();
   await chartMenu.getByRole('menuitemcheckbox', { name: 'Table view' }).click();
   await expect(page.getByRole('dialog', { name: /Chart table view/ })).toBeVisible();
   await sideRail.getByRole('button', { name: 'Collapse right panel' }).click();

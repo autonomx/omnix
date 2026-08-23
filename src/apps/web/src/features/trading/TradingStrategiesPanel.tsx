@@ -370,10 +370,11 @@ export function TradingStrategiesPanel() {
       ...draft,
       strategy_version: '2.0.0',
       mode: 'shadow',
+      active_universe_id: null,
       config,
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
-    setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode: 1m L1→B1→higher-L2 structure, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Historical evidence is reconstructed and the external block had only two signals, so prospective shadow evidence remains required.');
+    setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode and cleared any selected universe so qualification uses the strategy-owned raw morning archive. Structure: 1m L1→B1→higher-L2, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Evidence is mixed: the 58-session revealed sample was positive, the April/May frozen block produced only two positive trades, and the older March/April stress block produced 5 trades at -0.546R expectancy. Keep 2.0 in prospective SHADOW until captured live evidence is reviewed; do not promote from historical reconstruction alone.');
   };
 
   const save = async () => {
