@@ -8,6 +8,7 @@ import type {
   StrategyRangeBacktestResult,
   StrategyResearchReviewResponse,
   TradingStrategyConfig,
+  V2ProspectiveQualification,
   YahooGapperDiscoveryInput,
 } from './tradingStrategyTypes';
 
@@ -67,6 +68,15 @@ export const tradingStrategyApi = {
     );
     return Array.isArray(payload.protections) ? payload.protections : [];
   },
+  v2Qualification: (strategyId: string) =>
+    requestJson<V2ProspectiveQualification>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/v2/qualification`,
+    ),
+  reviewV2Qualification: (strategyId: string, reviewNote: string) =>
+    requestJson<V2ProspectiveQualification>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/v2/qualification/review`,
+      { method: 'POST', body: JSON.stringify({ review_note: reviewNote }) },
+    ),
   discoverYahooUniverse: (input: YahooGapperDiscoveryInput) => requestJson<GapperUniverse>(
     '/api/trading/strategies/universes/discover-yahoo',
     { method: 'POST', body: JSON.stringify(input) },
