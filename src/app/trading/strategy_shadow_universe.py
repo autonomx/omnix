@@ -10,24 +10,21 @@ from .strategy_universe_archiver import _archive_universe_id
 _ET = ZoneInfo("America/New_York")
 
 
-def resolve_v2_shadow_archive_for_session(
+def resolve_v2_evidence_archive_for_session(
     config: TradingStrategyConfigDocument,
     repository: TradingStrategyRepository,
     *,
     session_date: date,
 ):
-    """Return one raw strategy-owned V2 SHADOW archive by session date.
+    """Return the immutable strategy-owned V2 raw archive for qualification evidence.
 
-    This is a read-only evidence lookup. It never attaches a universe to the
-    strategy and is intentionally unavailable to AUTO PAPER, non-V2 strategies,
-    or SHADOW configs that already carry an explicit active universe.
+    This resolver is deliberately read-only and independent of ``active_universe_id``.
+    It may be used while V2 is in SHADOW or AUTO PAPER so post-session evidence keeps
+    accumulating after promotion. It never attaches the archive to the strategy and
+    therefore cannot grant order authority.
     """
 
-    if (
-        config.mode != "shadow"
-        or config.config.strategy_version != "2.0.0"
-        or config.active_universe_id is not None
-    ):
+    if config.mode not in {"shadow", "auto_paper"} or config.config.strategy_version != "2.0.0":
         return None
 
     marker = datetime.combine(session_date, config.config.universe_scan_time_et, tzinfo=_ET)
@@ -41,6 +38,27 @@ def resolve_v2_shadow_archive_for_session(
     if snapshot.session_date != session_date:
         return None
     return snapshot
+
+
+def resolve_v2_shadow_archive_for_session(
+    config: TradingStrategyConfigDocument,
+    repository: TradingStrategyRepository,
+    *,
+    session_date: date,
+):
+    """Return one raw strategy-owned archive only for the V2 SHADOW execution fallback.
+
+    Unlike the qualification evidence resolver, this path remains unavailable to
+    AUTO PAPER and to SHADOW configs with an explicitly selected universe.
+    """
+
+    if config.mode != "shadow" or config.active_universe_id is not None:
+        return None
+    return resolve_v2_evidence_archive_for_session(
+        config,
+        repository,
+        session_date=session_date,
+    )
 
 
 def resolve_v2_shadow_archive(
@@ -61,4 +79,8 @@ def resolve_v2_shadow_archive(
     )
 
 
-__all__ = ["resolve_v2_shadow_archive", "resolve_v2_shadow_archive_for_session"]
+__all__ = [
+    "resolve_v2_evidence_archive_for_session",
+    "resolve_v2_shadow_archive",
+    "resolve_v2_shadow_archive_for_session",
+]

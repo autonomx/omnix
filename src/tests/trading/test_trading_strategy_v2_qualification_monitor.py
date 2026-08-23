@@ -36,15 +36,15 @@ class FakeRepository:
         return True
 
 
-def _strategy():
+def _strategy(*, mode: str = "shadow", active_universe_id: str | None = None):
     config = frozen_v2_config()
     return TradingStrategyConfigDocument(
         strategy_id="v2-prospective",
         account_id="paper-1",
         strategy_kind="gap_pullback_v1",
         strategy_version="2.0.0",
-        mode="shadow",
-        active_universe_id=None,
+        mode=mode,
+        active_universe_id=active_universe_id,
         config=config,
         risk=StrategyRiskProfile(),
         enabled=True,
@@ -91,6 +91,35 @@ def test_post_session_replay_persists_completed_zero_trade_session_once() -> Non
     )
     assert second is None
     assert repository.writes == 1
+
+
+def test_post_session_replay_continues_after_auto_paper_promotion() -> None:
+    strategy = _strategy(mode="auto_paper", active_universe_id="selected-universe")
+    universe_id = _archive_universe_id(strategy, SESSION_NOW.astimezone())
+    universe = freeze_gapper_universe(
+        universe_id=universe_id,
+        session_date=SESSION_NOW.astimezone().date(),
+        evaluation_time=datetime(2026, 8, 24, 13, 20, tzinfo=timezone.utc),
+        discovery_source="provider",
+        candidates=[],
+        allow_empty=True,
+    )
+    repository = FakeRepository(universe)
+
+    result = replay_v2_shadow_session(
+        strategy,
+        repository,
+        universe.session_date,
+        observed_at=SESSION_NOW,
+        bar_loader=lambda candidates, session_date: {},
+    )
+
+    assert result is not None
+    assert result.summary.trade_count == 0
+    assert repository.writes == 1
+    assert repository.events[0].event_type == "v2_shadow_replay_session"
+    assert repository.events[0].payload["execution_authority"] is False
+    assert strategy.active_universe_id == "selected-universe"
 
 
 def test_post_session_replay_refuses_noncanonical_v2_profile() -> None:

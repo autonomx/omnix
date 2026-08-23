@@ -21,7 +21,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
-from .strategy_shadow_universe import resolve_v2_shadow_archive_for_session
+from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .strategy_v2_qualification import (
     FROZEN_V2_PROFILE_FINGERPRINT,
     V2_PROSPECTIVE_START,
@@ -64,7 +64,7 @@ def _interval_seconds() -> float:
 def _eligible_strategy(config: TradingStrategyConfigDocument) -> bool:
     return (
         config.enabled
-        and config.mode == "shadow"
+        and config.mode in {"shadow", "auto_paper"}
         and config.config.strategy_version == "2.0.0"
         and v2_profile_fingerprint(config.config) == FROZEN_V2_PROFILE_FINGERPRINT
     )
@@ -133,7 +133,7 @@ def replay_v2_shadow_session(
     observed_at: datetime | None = None,
     bar_loader=alpaca_historical_session_bars,
 ) -> GapPullbackBacktestResult | None:
-    """Replay one already-captured prospective SHADOW session without order authority."""
+    """Replay one captured prospective V2 session as evidence without order authority."""
 
     if not _eligible_strategy(config) or not _trading_session(session_date):
         return None
@@ -153,7 +153,7 @@ def replay_v2_shadow_session(
     if _already_replayed(events, session_date, profile_fingerprint):
         return None
 
-    universe = resolve_v2_shadow_archive_for_session(config, repository, session_date=session_date)
+    universe = resolve_v2_evidence_archive_for_session(config, repository, session_date=session_date)
     if universe is None:
         return None
 
@@ -272,7 +272,7 @@ def replay_v2_shadow_session(
 
 
 class TradingStrategyV2QualificationMonitor:
-    """Evidence-only prospective V2 replay monitor; never creates orders."""
+    """Evidence-only prospective V2 replay monitor across SHADOW/AUTO PAPER; never creates orders."""
 
     def __init__(self, *, interval_seconds: float | None = None) -> None:
         self.interval_seconds = interval_seconds or _interval_seconds()
