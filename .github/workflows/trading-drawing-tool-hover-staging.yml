@@ -1,0 +1,61 @@
+name: Trading drawing-tool hover staging
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/patch_trading_drawing_tool_indicator_hover.py
+      - .github/workflows/trading-drawing-tool-hover-staging.yml
+
+permissions:
+  contents: write
+
+jobs:
+  qualify-and-promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Apply drawing-tool hover patch
+        run: python scripts/patch_trading_drawing_tool_indicator_hover.py
+
+      - name: Install web dependencies
+        run: npm install
+
+      - name: Typecheck Trading
+        run: npm --workspace @omnix/web run typecheck:trading
+
+      - name: Install Trading browser
+        run: npx playwright install chromium
+
+      - name: Qualify Trading browser smoke
+        run: npm --workspace @omnix/web run test:e2e:trading
+
+      - name: Verify patch shape
+        run: |
+          git diff --check
+          git diff -- src/apps/web/src/features/trading/TradingChartPanel.tsx
+
+      - name: Commit qualified production change only
+        shell: bash
+        run: |
+          if git diff --quiet -- src/apps/web/src/features/trading/TradingChartPanel.tsx; then
+            echo "::error::Expected TradingChartPanel patch was not produced."
+            exit 2
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/apps/web/src/features/trading/TradingChartPanel.tsx
+          git commit -m "fix: isolate drawing tools from indicator hover chrome"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
