@@ -5,8 +5,8 @@ This runbook covers the frozen `gap_pullback_v1` `2.0.0` prospective evidence pa
 ## Authority boundary
 
 - V2 begins in `shadow` and has no paper-order authority from prospective telemetry alone.
-- The morning archive, SHADOW execution observation, indicator-entry telemetry, and post-session replay are evidence-only.
-- AI/LLM research and the prospective indicator verdict cannot place or authorize an order.
+- The morning archive, SHADOW execution observation, indicator-entry telemetry, prospective signal-feature row, and post-session replay are evidence-only.
+- AI/LLM research and prospective feature analysis cannot place or authorize an order.
 - AUTO PAPER remains fail-closed until the quantitative qualification floors pass and an operator explicitly reviews the exact evidence fingerprint.
 - Alpaca IEX is partial-market evidence, not consolidated SIP/NBBO.
 
@@ -14,7 +14,7 @@ This runbook covers the frozen `gap_pullback_v1` `2.0.0` prospective evidence pa
 
 1. Run the normal Omnix web gateway. Do not launch a separate Trading service.
 2. Save and enable the exact frozen V2 strategy in `shadow` mode.
-3. Confirm Alpaca IEX credentials are configured without exposing the secret in browser state.
+3. Confirm Alpaca IEX credentials are configured without exposing the secret in browser state. The halt-status stream uses the same environment-or-protected-store credential resolution as the execution provider.
 4. In **Trading → Strategies → Prospective indicator entry evidence**, confirm all three runtime cards are healthy:
    - **Morning archive** — configured and RUNNING.
    - **SHADOW evaluator** — configured and RUNNING.
@@ -56,6 +56,22 @@ The indicator verdict is research telemetry. It must not be retroactively insert
 
 The UI should display the persisted 1m/5m EMA9, EMA20, MACD/signal/histogram, Stoch-RSI K/D, finalized-bar count, source, cutoff, warm-up completeness, and veto reasons. Do not recompute a different rule later and substitute it for the stored verdict.
 
+## Prospective win-rate feature record
+
+Each persisted `shadow_execution` event now carries an immutable `v2-prospective-signal-features-1` record at the execution observation cutoff. The record is deliberately descriptive and has `execution_authority=false`.
+
+It captures the following causal feature families without applying a new entry gate:
+
+- **Premarket structure:** finalized 04:00-09:30 ET IEX bar count, PM open/high/low/close, high/low timestamps, range, PM return, PM VWAP, close-vs-VWAP, close-vs-PM-high, PM volume/dollar volume, and the final 30-minute return.
+- **Catalyst quality:** latest fact/report known by the cutoff, primary-source confirmation, same-day status, catalyst type, primary/secondary source counts, official filing/company-release presence, publication time/age, research status, coverage, and unresolved facts.
+- **Supply/dilution:** point-in-time supply-resolution state, immediate-supply-risk flag, potential dilution, remaining ATM capacity, in-the-money warrant overhang, registered resale overhang, and typed supply facts with active/terminated/exhausted/etc. status.
+- **Halt history:** Alpaca trading-status halt/resume events observed during the session, last halt/resume/status information, and whether the status stream was continuously connected from 04:00 ET. A disconnect makes session halt history incomplete rather than silently assuming no halt.
+- **Multi-timeframe momentum:** the already persisted causal 1m/5m EMA9/EMA20, MACD/signal/histogram, Stoch-RSI K/D, and explicit full-warm-up state.
+
+The record includes an immutable SHA-256 fingerprint plus per-family completeness flags. Missing research, sparse IEX bars, a status-stream disconnect, or insufficient indicator warm-up stays missing/partial forever for that signal; do not backfill it later and label it exact prospective evidence.
+
+The Alpaca status cache is intentionally conservative for execution. Halt-history completeness is research metadata only and never converts an unknown execution halt state into an executable one.
+
 ## Post-session canonical replay
 
 The V2 qualification monitor runs automatically; there is no manual replay step required for normal operation.
@@ -71,6 +87,21 @@ After the regular-session close plus the configured replay grace period, it:
 7. keeps `execution_authority=false` throughout.
 
 If a finalized session has no immutable raw archive, the monitor must not reconstruct one and count it as prospective evidence.
+
+## Prospective winner/loser attribution
+
+`strategy_prospective_dataset.py` deterministically joins a captured SHADOW feature row to the canonical replay outcome only when symbol/session match and the signal is within the frozen V2 live-match window. One live feature row can be consumed only once. The joined row contains the exact feature fingerprint plus replay `R`, MFE, and MAE.
+
+The reporting script is provider-free:
+
+```text
+python scripts/run_trading_strategy_v2_prospective_winrate_attribution.py \
+  --strategy-id <saved-strategy-id>
+```
+
+Until at least **20 matched outcomes** with at least **5 winners and 5 losers** exist, the script reports `collecting_prospective_outcomes` and emits no winner/loser feature attribution. Once ready, it reports predeclared descriptive feature medians and Cliff's delta; it does not search thresholds or grant strategy authority.
+
+Any pattern discovered from the first prospective attribution block is still hypothesis generation. Freeze a future successor rule before evaluating it on a later untouched/prospective validation block. Do not promote a threshold on the same outcomes used to discover it.
 
 ## Qualification review
 
