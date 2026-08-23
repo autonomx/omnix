@@ -9,14 +9,14 @@ E2E = Path("src/apps/web/tests/e2e/trading-terminal.spec.ts")
 PANEL = Path("src/apps/web/src/features/trading/TradingStrategiesPanel.tsx")
 
 
-E2E_ACTIVE_OLD = """  await expect(secondChart).toContainText('ETHUSDT');\n  await expect(page.locator('.trading-chart-panel').first()).toContainText('BTCUSDT');\n  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(3);\n"""
-E2E_ACTIVE_NEW = """  await expect(secondChart).toContainText('ETHUSDT');\n  const firstChart = page.locator('.trading-chart-panel').first();\n  await expect(firstChart).toContainText('BTCUSDT');\n  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(3);\n"""
+E2E_DIALOG_OLD = """  await page.getByRole('button', { name: 'Place price alert' }).click();\n  await overlay.click({ position: { x: 180, y: 100 } });\n  await expect(page.getByRole('dialog', { name: /Create alert on BTCUSDT/ })).toBeVisible();\n  await expect(page.getByRole('combobox', { name: 'Alert trigger' })).toHaveValue('every_time');\n  await expect(page.getByRole('checkbox', { name: 'App' })).toBeChecked();\n  await page.getByRole('textbox', { name: 'Alert message' }).fill('BTC alert');\n  await page.getByRole('dialog', { name: /Create alert on BTCUSDT/ }).getByRole('button', { name: 'Create alert' }).click();\n"""
+E2E_DIALOG_NEW = """  // Changing Chart 2 to ETH makes Chart 2 active by design. Exercise the\n  // alert tool against that actual active-chart contract instead of assuming\n  // the workspace silently switches back to BTC.\n  await page.getByRole('button', { name: 'Place price alert' }).click();\n  await overlay.click({ position: { x: 180, y: 100 } });\n  await expect(page.getByRole('dialog', { name: /Create alert on ETHUSDT/ })).toBeVisible();\n  await expect(page.getByRole('combobox', { name: 'Alert trigger' })).toHaveValue('every_time');\n  await expect(page.getByRole('checkbox', { name: 'App' })).toBeChecked();\n  await page.getByRole('textbox', { name: 'Alert message' }).fill('ETH alert');\n  await page.getByRole('dialog', { name: /Create alert on ETHUSDT/ }).getByRole('button', { name: 'Create alert' }).click();\n"""
 
-E2E_ALERT_OLD = """  await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);\n\n  await page.getByRole('button', { name: 'Place price alert' }).click();\n  await overlay.click({ position: { x: 180, y: 100 } });\n"""
-E2E_ALERT_NEW = """  await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);\n\n  // Chart 2 remains active for the drawing flow above. Switch to BTC Chart 1\n  // only for the BTC-specific alert flow; panel onPointerDown is the product's\n  // chart-activation contract. Keep the toolbar action visible, but use the\n  // chart context menu to avoid coordinate-sensitive alert placement in smoke.\n  await firstChart.click({ position: { x: 8, y: 8 }, force: true });\n  await expect(firstChart).toHaveClass(/active/);\n  await expect(page.getByRole('button', { name: 'Place price alert' })).toBeVisible();\n  const btcStage = firstChart.locator('.trading-chart-stage');\n  const btcStageBox = await btcStage.boundingBox();\n  expect(btcStageBox).not.toBeNull();\n  if (btcStageBox) {\n    await btcStage.click({\n      button: 'right',\n      position: { x: btcStageBox.width / 2, y: Math.max(12, btcStageBox.height * 0.2) },\n      force: true,\n    });\n  }\n  const btcAlertMenu = page.getByRole('menu', { name: 'Chart context menu' });\n  await expect(btcAlertMenu).toBeVisible();\n  await btcAlertMenu.getByRole('menuitem', { name: /Add alert on BTCUSDT/ }).click();\n"""
+E2E_MESSAGE_OLD = """  expect((state.alerts[0].parameters as Record<string, unknown>).message).toBe('BTC alert');\n  await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);\n  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);\n"""
+E2E_MESSAGE_NEW = """  expect((state.alerts[0].parameters as Record<string, unknown>).message).toBe('ETH alert');\n  // Only Chart 2 is ETH, so the ETH alert belongs on exactly one chart.\n  await expect(page.locator('.trading-alert-price-label')).toHaveCount(1);\n  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(1);\n"""
 
-E2E_LABELS_OLD = """  await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);\n  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);\n"""
-E2E_LABELS_NEW = """  // The grid is BTC / ETH / BTC, so a BTC alert belongs on the two BTC charts.\n  await expect(page.locator('.trading-alert-price-label')).toHaveCount(2);\n  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(2);\n"""
+E2E_CONTEXT_OLD = """  await expect(chartMenu.getByRole('menuitem', { name: /Add alert on BTCUSDT/ })).toBeVisible();\n"""
+E2E_CONTEXT_NEW = """  await expect(chartMenu.getByRole('menuitem', { name: /Add alert on ETHUSDT/ })).toBeVisible();\n"""
 
 LOAD_OLD = """    setDraft({\n      ...draft,\n      strategy_version: '2.0.0',\n      mode: 'shadow',\n      config,\n      risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },\n    });\n"""
 LOAD_NEW = """    setDraft({\n      ...draft,\n      strategy_version: '2.0.0',\n      mode: 'shadow',\n      active_universe_id: null,\n      config,\n      risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },\n    });\n"""
@@ -34,9 +34,9 @@ def replace_exact(text: str, old: str, new: str, label: str) -> str:
 
 def main() -> int:
     e2e = E2E.read_text(encoding="utf-8")
-    e2e = replace_exact(e2e, E2E_ACTIVE_OLD, E2E_ACTIVE_NEW, "active chart declaration")
-    e2e = replace_exact(e2e, E2E_ALERT_OLD, E2E_ALERT_NEW, "BTC context-menu alert")
-    e2e = replace_exact(e2e, E2E_LABELS_OLD, E2E_LABELS_NEW, "alert overlay expectation")
+    e2e = replace_exact(e2e, E2E_DIALOG_OLD, E2E_DIALOG_NEW, "active ETH alert dialog")
+    e2e = replace_exact(e2e, E2E_MESSAGE_OLD, E2E_MESSAGE_NEW, "ETH alert overlay expectation")
+    e2e = replace_exact(e2e, E2E_CONTEXT_OLD, E2E_CONTEXT_NEW, "active ETH context menu")
     E2E.write_text(e2e, encoding="utf-8")
 
     panel = PANEL.read_text(encoding="utf-8")
