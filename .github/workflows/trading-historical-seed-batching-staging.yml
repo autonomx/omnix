@@ -1,0 +1,57 @@
+name: Trading historical seed batching staging
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/patch_trading_historical_seed_batching.py
+      - .github/workflows/trading-historical-seed-batching-staging.yml
+
+permissions:
+  contents: write
+
+jobs:
+  qualify-and-promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - name: Check out branch head
+        uses: actions/checkout@v4
+        with:
+          ref: agent/trading-auto-strategy-roadmap
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install targeted dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets pytest playwright "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Apply seed batching patch
+        run: python scripts/patch_trading_historical_seed_batching.py
+
+      - name: Qualify reconstruction behavior
+        run: |
+          pytest -q \
+            src/tests/trading/test_trading_historical_gapper_reconstruction.py \
+            src/tests/trading/test_trading_strategy_historical_bars.py
+
+      - name: Commit qualified code only
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/app/trading/historical_gapper_reconstruction.py \
+            src/tests/trading/test_trading_historical_gapper_reconstruction.py
+          git commit -m "backtest: batch historical seed scans efficiently"
+          git push origin HEAD:agent/trading-auto-strategy-roadmap
