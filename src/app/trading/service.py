@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import threading
 from collections.abc import AsyncIterator
+from datetime import datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
-from .models import FeedType
+from .models import FeedType, MarketBar
 from .providers.binance import BinanceMarketDataProvider
 from .providers.registry import ProviderRegistry
 from .streaming.binance_stream import BinanceWebSocketStream
@@ -72,6 +73,21 @@ class TradingMarketDataService:
             instrument_id,
             binding_id,
             policy=policy,
+            cancellation=cancellation,
+        )
+
+    def execution_indicator_bars(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        as_of: datetime,
+        cancellation: threading.Event | None = None,
+    ) -> list[MarketBar]:
+        return self.registry.execution_indicator_bars(
+            instrument_id,
+            binding_id,
+            as_of=as_of,
             cancellation=cancellation,
         )
 
