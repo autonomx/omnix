@@ -14,6 +14,23 @@ export type IndicatorSnapshotEvidence = {
   stochasticRsiD: string | null;
 };
 
+export type ProspectiveFeatureEvidence = {
+  fingerprint: string | null;
+  allCoreAvailable: boolean;
+  premarketAvailable: boolean;
+  premarketRangePct: string | null;
+  premarketCloseVsHighPct: string | null;
+  premarketLast30mReturnPct: string | null;
+  researchAvailable: boolean;
+  catalystType: string | null;
+  primaryCatalystConfirmed: boolean | null;
+  supplyResolution: string | null;
+  immediateSupplyRisk: boolean | null;
+  haltHistoryComplete: boolean;
+  haltEventCount: number;
+  haltedAtDecision: boolean | null;
+};
+
 export type ProspectiveIndicatorEvidence = {
   eventId: string;
   instrumentId: string;
@@ -28,6 +45,7 @@ export type ProspectiveIndicatorEvidence = {
   error: string | null;
   oneMinute: IndicatorSnapshotEvidence;
   fiveMinute: IndicatorSnapshotEvidence;
+  prospective: ProspectiveFeatureEvidence;
 };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -69,6 +87,32 @@ function snapshot(value: unknown): IndicatorSnapshotEvidence {
   };
 }
 
+function prospectiveFeatures(execution: Record<string, unknown>): ProspectiveFeatureEvidence {
+  const features = record(execution.prospective_signal_features);
+  const completeness = record(features?.completeness);
+  const premarket = record(features?.premarket);
+  const research = record(features?.research);
+  const catalyst = record(research?.catalyst);
+  const supply = record(research?.supply);
+  const halt = record(features?.halt_history);
+  return {
+    fingerprint: text(features?.immutable_fingerprint),
+    allCoreAvailable: booleanValue(completeness?.all_core_available) === true,
+    premarketAvailable: booleanValue(completeness?.premarket_available) === true,
+    premarketRangePct: text(premarket?.range_pct),
+    premarketCloseVsHighPct: text(premarket?.close_vs_high_pct),
+    premarketLast30mReturnPct: text(premarket?.last_30m_return_pct),
+    researchAvailable: booleanValue(completeness?.research_available) === true,
+    catalystType: text(catalyst?.catalyst_type),
+    primaryCatalystConfirmed: booleanValue(catalyst?.primary_confirmed),
+    supplyResolution: text(supply?.resolution_status),
+    immediateSupplyRisk: booleanValue(supply?.immediate_supply_risk),
+    haltHistoryComplete: booleanValue(completeness?.halt_history_complete) === true,
+    haltEventCount: numberValue(halt?.halt_event_count),
+    haltedAtDecision: booleanValue(halt?.halted_at_decision),
+  };
+}
+
 export function collectProspectiveIndicatorEvidence(
   events: StrategyEvent[],
   limit = 12,
@@ -96,6 +140,7 @@ export function collectProspectiveIndicatorEvidence(
       error: text(execution.indicator_context_error),
       oneMinute: snapshot(context?.one_minute),
       fiveMinute: snapshot(context?.five_minute),
+      prospective: prospectiveFeatures(execution),
     });
     if (output.length >= Math.max(0, limit)) break;
   }
@@ -110,6 +155,10 @@ function compactDecimal(value: string | null): string {
   if (magnitude >= 100) return parsed.toFixed(2);
   if (magnitude >= 1) return parsed.toFixed(3);
   return parsed.toFixed(4);
+}
+
+function percent(value: string | null): string {
+  return value === null ? '—' : `${compactDecimal(value)}%`;
 }
 
 function statusLabel(item: ProspectiveIndicatorEvidence): string {
@@ -181,6 +230,24 @@ function IndicatorValues({ label, value }: { label: string; value: IndicatorSnap
   );
 }
 
+function ProspectiveFeatures({ value }: { value: ProspectiveFeatureEvidence }) {
+  const catalyst = value.catalystType ?? (value.researchAvailable ? 'unknown catalyst' : 'research unavailable');
+  const supply = value.supplyResolution ?? (value.researchAvailable ? 'supply unresolved' : 'research unavailable');
+  const halt = value.haltHistoryComplete
+    ? `${value.haltEventCount} halt event${value.haltEventCount === 1 ? '' : 's'}`
+    : 'halt history incomplete';
+  return (
+    <div className="indicator-evidence-meta" aria-label="Prospective win-rate feature coverage">
+      <span className={value.allCoreAvailable ? 'pass' : 'warn'}>{value.allCoreAvailable ? 'All core features captured' : 'Partial prospective features'}</span>
+      <span>{value.premarketAvailable ? `PM range ${percent(value.premarketRangePct)} · vs high ${percent(value.premarketCloseVsHighPct)}` : 'PM structure unavailable'}</span>
+      <span>{value.premarketAvailable ? `PM last 30m ${percent(value.premarketLast30mReturnPct)}` : 'PM trend unavailable'}</span>
+      <span>{catalyst}{value.primaryCatalystConfirmed === true ? ' · primary confirmed' : ''}</span>
+      <span>{supply}{value.immediateSupplyRisk === true ? ' · immediate risk' : ''}</span>
+      <span>{halt}{value.haltedAtDecision === true ? ' · HALTED' : ''}</span>
+    </div>
+  );
+}
+
 export function TradingStrategyIndicatorEvidence({
   events,
   visible,
@@ -225,8 +292,8 @@ export function TradingStrategyIndicatorEvidence({
     <section className="trading-indicator-evidence" aria-label="Prospective indicator entry evidence">
       <header>
         <div>
-          <strong>Prospective indicator entry evidence</strong>
-          <small>Research only · frozen entry rule · no AUTO PAPER authority · Alpaca IEX partial-market evidence</small>
+          <strong>Prospective indicator & win-rate evidence</strong>
+          <small>Research only · PM/catalyst/supply/halt/MTF capture · no AUTO PAPER authority · Alpaca IEX partial-market evidence</small>
         </div>
         <span>{evidence.length} signals</span>
       </header>
@@ -256,7 +323,9 @@ export function TradingStrategyIndicatorEvidence({
                 <span className={item.fullWarmup ? 'pass' : 'warn'}>{item.fullWarmup ? 'Full 1m/5m warm-up' : 'Partial warm-up'}</span>
                 <span>{item.barCount} finalized 1m bars</span>
                 <span>{item.source ?? 'unknown source'}{item.partialMarket ? ' · partial market' : ''}</span>
+                {item.prospective.fingerprint ? <span title={item.prospective.fingerprint}>feature fp {item.prospective.fingerprint.slice(0, 10)}…</span> : null}
               </div>
+              <ProspectiveFeatures value={item.prospective} />
               {item.error ? <p className="indicator-evidence-error">{item.error}</p> : null}
               {!item.error && item.reasonCodes.length ? (
                 <p className="indicator-evidence-reasons">Veto: {item.reasonCodes.join(' · ')}</p>
@@ -271,7 +340,7 @@ export function TradingStrategyIndicatorEvidence({
       ) : loadError ? (
         <p className="indicator-evidence-error">Could not load persisted SHADOW indicator evidence: {loadError}</p>
       ) : (
-        <p className="indicator-evidence-empty">Waiting for prospective Aug 24+ V2 SHADOW structural signals. No indicator result is inferred before a signal exists.</p>
+        <p className="indicator-evidence-empty">Waiting for prospective Aug 24+ V2 SHADOW structural signals. No indicator or win-rate feature result is inferred before a signal exists.</p>
       )}
     </section>
   );
