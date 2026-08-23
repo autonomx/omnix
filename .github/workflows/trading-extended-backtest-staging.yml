@@ -1,9 +1,9 @@
 name: Trading extended backtest staging
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/trading-auto-strategy-roadmap
+      - main
     paths:
       - scripts/patch_trading_extended_backtest_cache.py
       - scripts/patch_trading_extended_backtest_resilience.py
