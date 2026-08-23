@@ -14,4 +14,16 @@ new = '''            active_reconstructor, active_regular_runtime = ensure_provi
 if text.count(old) != 1:
     raise RuntimeError(f"unexpected cache-miss block shape: {text.count(old)} matches")
 path.write_text(text.replace(old, new), encoding="utf-8")
-print("Applied per-session provider-hole resilience to cached historical sweeps.")
+
+# The exploration must never turn provider holes into flat/no-trade sessions, but
+# requiring literally 100% coverage makes a large historical block brittle. Keep
+# missing dates explicit and require a strong predeclared coverage floor instead.
+exploration_path = Path("scripts/run_trading_strategy_v2_extended_exploration.py")
+exploration = exploration_path.read_text(encoding="utf-8")
+strict = '''    if dev_meta["missing_sessions"] or val_meta["missing_sessions"]:\n        # Missing provider sessions are never silently turned into no-trade days.\n        print(json.dumps({"development": dev_meta, "validation": val_meta}, indent=2))\n        raise SystemExit(2)\n'''
+coverage = '''    def require_coverage(label: str, meta: dict[str, object], *, absolute_floor: int) -> None:\n        requested = int(meta["requested_sessions"])\n        covered = int(meta["covered_sessions"])\n        required = max(absolute_floor, math.ceil(requested * 0.80))\n        if covered < required:\n            print(json.dumps({label: meta, "required_covered_sessions": required}, indent=2))\n            raise SystemExit(2)\n\n    # Missing provider sessions stay explicit/excluded. A block is usable only if\n    # at least 80% is covered (and at least 20 dev / 10 validation sessions).\n    require_coverage("development", dev_meta, absolute_floor=20)\n    require_coverage("validation", val_meta, absolute_floor=10)\n'''
+if exploration.count(strict) != 1:
+    raise RuntimeError(f"unexpected exploration coverage block: {exploration.count(strict)} matches")
+exploration_path.write_text(exploration.replace(strict, coverage), encoding="utf-8")
+
+print("Applied per-session provider-hole resilience and explicit 80% historical coverage floors.")
