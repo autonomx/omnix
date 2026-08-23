@@ -30,6 +30,7 @@ from .strategy_repository import (
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
+from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_v2_management import (
     v2_active_stop_for_prior_high,
     v2_hold_expired,
@@ -787,19 +788,13 @@ class TradingStrategyMonitor:
             paper_repository,
             market_service,
         )
-        if config.mode == "off" or not config.enabled or not config.active_universe_id:
+        if config.mode == "off" or not config.enabled:
             trade_log(
                 "auto_trading",
                 "strategy_cycle_skipped",
                 run_id=self.current_run_id,
                 strategy_id=config.strategy_id,
-                reason=(
-                    "mode_off"
-                    if config.mode == "off"
-                    else "disabled"
-                    if not config.enabled
-                    else "no_active_universe"
-                ),
+                reason="mode_off" if config.mode == "off" else "disabled",
             )
             return
 
@@ -809,16 +804,41 @@ class TradingStrategyMonitor:
         day_start_et = datetime(today_et.year, today_et.month, today_et.day, tzinfo=_ET)
         day_end_et = day_start_et + timedelta(days=1)
 
-        universe = await asyncio.to_thread(
-            strategy_repository.get_universe,
-            config.active_universe_id,
-        )
+        universe_source = "active_universe"
+        if config.active_universe_id is not None:
+            universe = await asyncio.to_thread(
+                strategy_repository.get_universe,
+                config.active_universe_id,
+            )
+        else:
+            universe = await asyncio.to_thread(
+                resolve_v2_shadow_archive,
+                config,
+                strategy_repository,
+                now=now_utc,
+            )
+            universe_source = "auto_archive_shadow"
+            if universe is None:
+                trade_log(
+                    "auto_trading",
+                    "strategy_cycle_skipped",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    reason=(
+                        "v2_shadow_archive_not_ready"
+                        if config.mode == "shadow" and config.config.strategy_version == "2.0.0"
+                        else "no_active_universe"
+                    ),
+                )
+                return
+
         trade_log(
             "auto_trading",
             "universe_loaded",
             run_id=self.current_run_id,
             strategy_id=config.strategy_id,
             universe_id=universe.universe_id,
+            runtime_universe_source=universe_source,
             session_date=universe.session_date,
             evaluation_time=universe.evaluation_time,
             discovery_source=universe.discovery_source,
@@ -868,6 +888,7 @@ class TradingStrategyMonitor:
                         "strategy_version": config.config.strategy_version,
                         "mode": "shadow",
                         "universe_id": universe.universe_id,
+                        "universe_source": universe_source,
                         "signal": result.signal.model_dump(mode="json"),
                         "features": result.features.model_dump(mode="json"),
                         "error_type": type(exc).__name__,
@@ -898,6 +919,7 @@ class TradingStrategyMonitor:
                     "strategy_version": config.config.strategy_version,
                     "mode": "shadow",
                     "universe_id": universe.universe_id,
+                    "universe_source": universe_source,
                     "signal": result.signal.model_dump(mode="json"),
                     "features": result.features.model_dump(mode="json"),
                     "execution": evidence.execution,
