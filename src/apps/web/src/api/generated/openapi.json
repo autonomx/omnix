@@ -12497,6 +12497,38 @@
         "title": "StrategyEventListResponse",
         "type": "object"
       },
+      "StrategyOperationsStatus": {
+        "properties": {
+          "execution_authority": {
+            "const": false,
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "strategy_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
+          "universe_archive_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
+          "v2_qualification_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          }
+        },
+        "required": [
+          "observed_at",
+          "strategy_monitor",
+          "universe_archive_monitor",
+          "v2_qualification_monitor"
+        ],
+        "title": "StrategyOperationsStatus",
+        "type": "object"
+      },
       "StrategyProtection": {
         "additionalProperties": false,
         "properties": {
@@ -13517,6 +13549,70 @@
           }
         },
         "title": "StrategyRiskProfile",
+        "type": "object"
+      },
+      "StrategyRuntimeMonitorStatus": {
+        "properties": {
+          "configured_enabled": {
+            "title": "Configured Enabled",
+            "type": "boolean"
+          },
+          "counters": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counters",
+            "type": "object"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "registered": {
+            "title": "Registered",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "configured_enabled",
+          "registered",
+          "running"
+        ],
+        "title": "StrategyRuntimeMonitorStatus",
         "type": "object"
       },
       "StrategySignal": {
@@ -23813,6 +23909,27 @@
         "summary": "Review V2 Qualification",
         "tags": [
           "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategy-operations/status": {
+      "get": {
+        "operationId": "strategy_operations_status_api_trading_strategy_operations_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyOperationsStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Strategy Operations Status",
+        "tags": [
+          "trading-strategy-operations"
         ]
       }
     },

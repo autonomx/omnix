@@ -2273,6 +2273,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategy-operations/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Strategy Operations Status */
+        get: operations["strategy_operations_status_api_trading_strategy_operations_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/watchlists": {
         parameters: {
             query?: never;
@@ -7763,6 +7780,23 @@ export interface components {
             /** Events */
             events: components["schemas"]["StrategyEvent"][];
         };
+        /** StrategyOperationsStatus */
+        StrategyOperationsStatus: {
+            /**
+             * Execution Authority
+             * @default false
+             * @constant
+             */
+            execution_authority: false;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            v2_qualification_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+        };
         /** StrategyProtection */
         StrategyProtection: {
             /** Account Id */
@@ -8236,6 +8270,25 @@ export interface components {
              * @default 0.35
              */
             risk_per_trade_pct: string;
+        };
+        /** StrategyRuntimeMonitorStatus */
+        StrategyRuntimeMonitorStatus: {
+            /** Configured Enabled */
+            configured_enabled: boolean;
+            /** Counters */
+            counters?: {
+                [key: string]: number;
+            };
+            /** Interval Seconds */
+            interval_seconds?: number | null;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Run At */
+            last_run_at?: string | null;
+            /** Registered */
+            registered: boolean;
+            /** Running */
+            running: boolean;
         };
         /** StrategySignal */
         StrategySignal: {
@@ -14685,6 +14738,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    strategy_operations_status_api_trading_strategy_operations_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyOperationsStatus"];
                 };
             };
         };
