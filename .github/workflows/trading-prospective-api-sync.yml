@@ -42,7 +42,7 @@ jobs:
           PYTHONPATH: src
           OMNIX_PERSISTENCE_MODE: legacy_test
           OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
-        run: npm run api:generate
+        run: npm --workspace @omnix/web run api:generate
 
       - name: Commit generated contract and retire workflow
         run: |
