@@ -31,6 +31,12 @@ from .strategy_research_policy import apply_research_policy_to_quality, resolve_
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_v2_qualification import (
+    V2_PROSPECTIVE_START,
+    V2_QUALIFICATION_EVENT_TYPES,
+    evaluate_v2_prospective_qualification,
+    v2_profile_fingerprint,
+)
 from .strategy_v2_management import (
     v2_active_stop_for_prior_high,
     v2_hold_expired,
@@ -65,6 +71,35 @@ def _interval_seconds() -> float:
 
 def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
+
+
+def _v2_qualification_events(
+    repository: TradingStrategyRepository,
+    strategy_id: str,
+    *,
+    now: datetime,
+) -> list[StrategyEvent]:
+    start = datetime(
+        V2_PROSPECTIVE_START.year,
+        V2_PROSPECTIVE_START.month,
+        V2_PROSPECTIVE_START.day,
+        tzinfo=timezone.utc,
+    )
+    end = now.astimezone(timezone.utc) + timedelta(seconds=1)
+    if hasattr(repository, "events_by_types_between"):
+        return repository.events_by_types_between(
+            strategy_id,
+            event_types=V2_QUALIFICATION_EVENT_TYPES,
+            start_time=start,
+            end_time=end,
+            limit=20_000,
+        )
+    return [
+        event
+        for event in repository.recent_events(strategy_id, 20_000)
+        if event.event_type in V2_QUALIFICATION_EVENT_TYPES
+        and start <= event.observed_at.astimezone(timezone.utc) < end
+    ]
 
 
 def _run_id(prefix: str, observed_at: datetime) -> str:
@@ -799,6 +834,35 @@ class TradingStrategyMonitor:
             return
 
         now_utc = datetime.now(timezone.utc)
+        if config.mode == "auto_paper" and config.config.strategy_version == "2.0.0":
+            qualification_events = await asyncio.to_thread(
+                _v2_qualification_events,
+                strategy_repository,
+                config.strategy_id,
+                now=now_utc,
+            )
+            qualification = await asyncio.to_thread(
+                evaluate_v2_prospective_qualification,
+                config,
+                qualification_events,
+            )
+            if not qualification.auto_paper_authorized:
+                trade_log(
+                    "auto_trading",
+                    "v2_auto_paper_qualification_blocked",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    profile_fingerprint=qualification.current_profile_fingerprint,
+                    evidence_fingerprint=qualification.evidence_fingerprint,
+                    reason_codes=qualification.reason_codes,
+                    matched_eligible_trade_count=qualification.matched_eligible_trade_count,
+                    execution_match_rate=qualification.execution_match_rate,
+                    expectancy_r=qualification.expectancy_r,
+                    one_sided_90_lcb_r=qualification.one_sided_90_lcb_r,
+                    max_drawdown_r=qualification.max_drawdown_r,
+                    execution_authority=False,
+                )
+                return
         now_et = now_utc.astimezone(_ET)
         today_et = now_et.date()
         day_start_et = datetime(today_et.year, today_et.month, today_et.day, tzinfo=_ET)
@@ -889,6 +953,11 @@ class TradingStrategyMonitor:
                         "mode": "shadow",
                         "universe_id": universe.universe_id,
                         "universe_source": universe_source,
+                        "profile_fingerprint": (
+                            v2_profile_fingerprint(config.config)
+                            if config.config.strategy_version == "2.0.0"
+                            else None
+                        ),
                         "signal": result.signal.model_dump(mode="json"),
                         "features": result.features.model_dump(mode="json"),
                         "error_type": type(exc).__name__,
@@ -920,6 +989,11 @@ class TradingStrategyMonitor:
                     "mode": "shadow",
                     "universe_id": universe.universe_id,
                     "universe_source": universe_source,
+                    "profile_fingerprint": (
+                        v2_profile_fingerprint(config.config)
+                        if config.config.strategy_version == "2.0.0"
+                        else None
+                    ),
                     "signal": result.signal.model_dump(mode="json"),
                     "features": result.features.model_dump(mode="json"),
                     "execution": evidence.execution,

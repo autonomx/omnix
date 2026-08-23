@@ -429,6 +429,46 @@ class TradingStrategyRepository:
             ).fetchall()
         return [_event(row) for row in rows]
 
+    def events_by_types_between(
+        self,
+        strategy_id: str,
+        *,
+        event_types: list[str] | tuple[str, ...],
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 10_000,
+    ) -> list[StrategyEvent]:
+        if start_time.tzinfo is None or end_time.tzinfo is None:
+            raise ValueError("qualification event boundaries must be timezone-aware")
+        if end_time <= start_time:
+            raise ValueError("qualification event end_time must follow start_time")
+        normalized_types = [str(value).strip() for value in event_types if str(value).strip()]
+        if not normalized_types:
+            return []
+        if limit < 1 or limit > 50_000:
+            raise ValueError("qualification event limit must be between 1 and 50000")
+        with self.uow_factory() as uow:
+            rows = uow.connection.execute(
+                f"""
+                SELECT {_EVENT_COLUMNS}
+                  FROM omnix_trading_strategy_events
+                 WHERE workspace_id = %s AND strategy_id = %s
+                   AND event_type = ANY(%s)
+                   AND observed_at >= %s AND observed_at < %s
+                 ORDER BY observed_at, created_at, event_id
+                 LIMIT %s
+                """,
+                (
+                    self.context.workspace_id,
+                    strategy_id,
+                    normalized_types,
+                    start_time,
+                    end_time,
+                    limit,
+                ),
+            ).fetchall()
+        return [_event(row) for row in rows]
+
     def entry_events_between(
         self,
         strategy_id: str,
