@@ -12,6 +12,24 @@ import type {
   YahooGapperDiscoveryInput,
 } from './tradingStrategyTypes';
 
+export type StrategyRuntimeMonitorStatus = {
+  configured_enabled: boolean;
+  registered: boolean;
+  running: boolean;
+  interval_seconds: number | null;
+  last_run_at: string | null;
+  last_error: string | null;
+  counters: Record<string, number>;
+};
+
+export type TradingStrategyOperationsStatus = {
+  observed_at: string;
+  strategy_monitor: StrategyRuntimeMonitorStatus;
+  universe_archive_monitor: StrategyRuntimeMonitorStatus;
+  v2_qualification_monitor: StrategyRuntimeMonitorStatus;
+  execution_authority: false;
+};
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -68,6 +86,8 @@ export const tradingStrategyApi = {
     );
     return Array.isArray(payload.protections) ? payload.protections : [];
   },
+  operationsStatus: () =>
+    requestJson<TradingStrategyOperationsStatus>('/api/trading/strategy-operations/status'),
   v2Qualification: (strategyId: string) =>
     requestJson<V2ProspectiveQualification>(
       `/api/trading/strategies/${encodeURIComponent(strategyId)}/v2/qualification`,
