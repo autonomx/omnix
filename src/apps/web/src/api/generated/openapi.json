@@ -12499,6 +12499,9 @@
       },
       "StrategyOperationsStatus": {
         "properties": {
+          "alpaca_status_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
           "execution_authority": {
             "const": false,
             "default": false,
@@ -12524,7 +12527,8 @@
           "observed_at",
           "strategy_monitor",
           "universe_archive_monitor",
-          "v2_qualification_monitor"
+          "v2_qualification_monitor",
+          "alpaca_status_monitor"
         ],
         "title": "StrategyOperationsStatus",
         "type": "object"

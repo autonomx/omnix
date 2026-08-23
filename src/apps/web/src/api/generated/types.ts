@@ -7782,6 +7782,7 @@ export interface components {
         };
         /** StrategyOperationsStatus */
         StrategyOperationsStatus: {
+            alpaca_status_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             /**
              * Execution Authority
              * @default false
