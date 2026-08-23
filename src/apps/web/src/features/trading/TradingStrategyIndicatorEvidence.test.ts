@@ -1,0 +1,97 @@
+import { describe, expect, it } from 'vitest';
+import { collectProspectiveIndicatorEvidence } from './TradingStrategyIndicatorEvidence';
+import type { StrategyEvent } from './tradingStrategyTypes';
+
+function event(execution: Record<string, unknown>): StrategyEvent {
+  return {
+    event_id: 'event-1',
+    strategy_id: 'strategy-1',
+    event_type: 'shadow_execution',
+    instrument_id: 'equity:NASDAQ:TEST',
+    observed_at: '2026-08-24T13:45:00Z',
+    state: 'entry_ready',
+    reason_code: 'FAILED_SELL_OFF_CONFIRMED',
+    payload: { execution },
+  };
+}
+
+describe('prospective indicator entry evidence', () => {
+  it('extracts the persisted frozen verdict and multi-timeframe snapshot', () => {
+    const values = collectProspectiveIndicatorEvidence([
+      event({
+        indicator_context_source: 'alpaca_iex_same_day_1m',
+        indicator_context_partial_market: true,
+        indicator_context_cutoff: '2026-08-24T13:44:30Z',
+        indicator_context_bar_count: 344,
+        indicator_context_full_warmup: true,
+        indicator_entry_confirmed: false,
+        indicator_entry_reason_codes: ['INDICATOR_1M_MACD_BEARISH'],
+        indicator_context_error: null,
+        indicator_context: {
+          one_minute: {
+            close: '10.10',
+            ema9: '10.05',
+            ema20: '9.95',
+            macd: '0.04',
+            macd_signal: '0.05',
+            macd_histogram: '-0.01',
+            stochastic_rsi_k: '70',
+            stochastic_rsi_d: '65',
+          },
+          five_minute: {
+            close: '10.10',
+            ema9: '9.90',
+            ema20: '9.70',
+            macd: '0.20',
+            macd_signal: '0.15',
+            macd_histogram: '0.05',
+            stochastic_rsi_k: '82',
+            stochastic_rsi_d: '77',
+          },
+        },
+      }),
+    ]);
+
+    expect(values).toHaveLength(1);
+    expect(values[0]).toMatchObject({
+      instrumentId: 'equity:NASDAQ:TEST',
+      cutoff: '2026-08-24T13:44:30Z',
+      source: 'alpaca_iex_same_day_1m',
+      partialMarket: true,
+      barCount: 344,
+      fullWarmup: true,
+      confirmed: false,
+      reasonCodes: ['INDICATOR_1M_MACD_BEARISH'],
+    });
+    expect(values[0].oneMinute.macdHistogram).toBe('-0.01');
+    expect(values[0].fiveMinute.stochasticRsiK).toBe('82');
+  });
+
+  it('ignores old shadow events that predate the frozen persisted verdict', () => {
+    const values = collectProspectiveIndicatorEvidence([
+      event({ execution_eligible: true, indicator_context: null }),
+    ]);
+
+    expect(values).toEqual([]);
+  });
+
+  it('preserves unavailable telemetry without pretending it was a veto', () => {
+    const values = collectProspectiveIndicatorEvidence([
+      event({
+        indicator_context_source: 'alpaca_iex_same_day_1m',
+        indicator_context_partial_market: true,
+        indicator_context_bar_count: 0,
+        indicator_context_full_warmup: false,
+        indicator_entry_confirmed: null,
+        indicator_entry_reason_codes: [],
+        indicator_context_error: 'ProviderDataUnavailableError: no bars',
+        indicator_context: null,
+      }),
+    ]);
+
+    expect(values[0].confirmed).toBeNull();
+    expect(values[0].fullWarmup).toBe(false);
+    expect(values[0].error).toContain('ProviderDataUnavailableError');
+    expect(values[0].reasonCodes).toEqual([]);
+  });
+});
