@@ -1,0 +1,77 @@
+.trading-indicator-evidence{
+  margin-bottom:10px;
+  padding:10px;
+  border:1px solid rgba(95,169,231,.2);
+  border-radius:8px;
+  background:linear-gradient(90deg,rgba(20,62,96,.18),rgba(7,17,28,.94));
+  color:#cbd8e5
+}
+.trading-indicator-evidence>header,
+.indicator-evidence-list article>header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px
+}
+.trading-indicator-evidence>header{margin-bottom:8px}
+.trading-indicator-evidence>header>div,
+.indicator-evidence-list article>header>div{display:grid;gap:2px}
+.trading-indicator-evidence small{color:#72869b;font-size:9px;line-height:1.4}
+.trading-indicator-evidence>header>span{color:#7f96aa;font-size:9px}
+.indicator-evidence-list{display:grid;gap:7px}
+.indicator-evidence-list article{
+  display:grid;
+  gap:7px;
+  padding:9px;
+  border:1px solid rgba(117,151,181,.12);
+  border-left:2px solid #61788e;
+  border-radius:7px;
+  background:#081522
+}
+.indicator-evidence-list article[data-status=confirmed]{border-left-color:#31cf91}
+.indicator-evidence-list article[data-status=vetoed]{border-left-color:#ff6872}
+.indicator-evidence-list article[data-status=unavailable]{border-left-color:#e8b34f}
+.indicator-evidence-list article>header strong{font-size:11px}
+.indicator-evidence-status{
+  border-radius:999px;
+  padding:3px 6px;
+  background:rgba(117,151,181,.12);
+  color:#91a4b7;
+  font-size:8px;
+  font-weight:700
+}
+article[data-status=confirmed] .indicator-evidence-status{background:rgba(49,207,145,.12);color:#5bd9a9}
+article[data-status=vetoed] .indicator-evidence-status{background:rgba(255,104,114,.12);color:#ff8d95}
+article[data-status=unavailable] .indicator-evidence-status{background:rgba(232,179,79,.12);color:#e5ba69}
+.indicator-evidence-meta{display:flex;flex-wrap:wrap;gap:5px 12px;color:#8195a8;font-size:8px}
+.indicator-evidence-meta .pass{color:#55d6a3}
+.indicator-evidence-meta .warn{color:#e8bb64}
+.indicator-evidence-reasons,.indicator-evidence-error,.indicator-evidence-empty{
+  margin:0;
+  padding:6px 7px;
+  border-radius:5px;
+  font-size:8px;
+  line-height:1.45
+}
+.indicator-evidence-reasons{background:rgba(255,104,114,.07);color:#e89aa0}
+.indicator-evidence-error{background:rgba(232,179,79,.07);color:#d7b878}
+.indicator-evidence-empty{border:1px dashed rgba(117,151,181,.16);color:#71869b;text-align:center}
+.indicator-evidence-timeframes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.indicator-evidence-timeframe{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:5px;
+  padding:7px;
+  border:1px solid rgba(117,151,181,.09);
+  border-radius:6px;
+  background:#06101a
+}
+.indicator-evidence-timeframe>strong{grid-column:1/-1;color:#7ebcf3;font-size:9px}
+.indicator-evidence-timeframe>span{display:grid;gap:2px;color:#70859a;font-size:7px}
+.indicator-evidence-timeframe b{color:#a9bdcf;font-size:8px;font-weight:600}
+@media(max-width:1050px){
+  .indicator-evidence-timeframes{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .indicator-evidence-timeframe{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
