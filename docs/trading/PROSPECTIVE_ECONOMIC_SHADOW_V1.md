@@ -53,6 +53,7 @@ The profile fingerprint includes:
 - the existing isolated deep-recovery SHADOW setup/rule version used as the prospective source stream;
 - the exact frozen V2 profile fingerprint;
 - the economic first-passage label and 1-minute resolution semantics;
+- the end-to-end evidence-completion definition below;
 - all collection, one-shot evaluation, holdout and soak thresholds below.
 
 Changing any of these creates a **new profile**. Evidence from different fingerprints must not be pooled for promotion.
@@ -95,6 +96,14 @@ Persist:
 
 Event storage is append-only. The recorder has no paper repository, order request, broker adapter or order-placement call.
 
+### End-to-end evidence completion
+
+The API field retained for compatibility as `execution_match_rate` is frozen to mean:
+
+`completed matched economic outcomes / all frozen prospective signals`
+
+This is deliberately stricter than quote/execution eligibility. Execution-ineligible signals, data-incomplete outcomes and signals whose 60-bar outcome is still pending all remain in the denominator until they have a complete matched economic outcome. They cannot be censored out to make win rate, expectancy or confidence bounds appear cleaner than the signal stream actually was.
+
 ## Stage 1 — collect prospective evidence
 
 Before a one-shot evaluation may be recorded, require at least:
@@ -105,13 +114,13 @@ Before a one-shot evaluation may be recorded, require at least:
 
 The quantitative gate then requires:
 
-- execution match rate >= **90%**;
+- end-to-end evidence completion >= **90%**;
 - `+1R before -1R` win rate >= **65%**;
 - mean 60-bar result >= **+0.20R**;
 - one-sided 90% expectancy lower confidence bound **> 0R**;
 - max drawdown <= **5R**.
 
-These thresholds are frozen before prospective results accumulate.
+These thresholds and the evidence-completion denominator are frozen before prospective results accumulate.
 
 ## Stage 2 — evaluate exactly once
 
@@ -145,7 +154,7 @@ Minimum soak:
 - >=10 matched completed outcomes;
 - >=8 distinct sessions;
 - >=8 distinct symbols;
-- execution match >=90%;
+- end-to-end evidence completion >=90%;
 - win rate >=55%;
 - expectancy >0R;
 - max drawdown <=5R.
@@ -174,5 +183,6 @@ No historical research, LLM output, dashboard action or economic recorder event 
 5. Do not count pre-review observations toward the post-holdout soak.
 6. Do not pool events from different profile fingerprints.
 7. Do not reinterpret incomplete market/execution evidence as a loss, win or no-trade without an explicit recorded state.
-8. Do not allow candidate diagnostics to enter promotion metrics or evidence fingerprints.
-9. Do not allow any research component, LLM or UI to become execution authority.
+8. Do not censor incomplete, ineligible or pending signal outcomes from the end-to-end evidence-completion denominator.
+9. Do not allow candidate diagnostics to enter promotion metrics or evidence fingerprints.
+10. Do not allow any research component, LLM or UI to become execution authority.
