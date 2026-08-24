@@ -236,22 +236,54 @@ def _worse_price(price: Decimal, side: PaperSide, bps: Decimal) -> Decimal:
     return price * (Decimal("1") + fraction if side == "buy" else Decimal("1") - fraction)
 
 
+def _order_activation_time(
+    order: PaperOrder,
+    policy: PaperExecutionPolicy,
+) -> datetime | None:
+    if order.created_at is None:
+        return None
+    return order.created_at.astimezone(timezone.utc) + timedelta(milliseconds=policy.latency_ms)
+
+
+def _bar_evidence_is_causal(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy,
+) -> bool:
+    """Whether the whole observed bar happened after this order became executable.
+
+    A bar that started before activation may contain a trigger or traded volume
+    that occurred before the order existed. Only point-in-time quote/last-price
+    evidence is safe in that case.
+    """
+    activation = _order_activation_time(order, policy)
+    if activation is None:
+        return True
+    if observation.bar_start_time is None:
+        return False
+    return observation.bar_start_time.astimezone(timezone.utc) >= activation
+
+
 def _liquidity_capacity(
     order: PaperOrder,
     observation: PaperMarketObservation,
     policy: PaperExecutionPolicy,
 ) -> Decimal | None:
-    """Return side-specific executable capacity.
+    """Return side-specific executable capacity without pre-activation volume.
 
     Live observations prefer displayed top-of-book size. Historical/backtest
-    observations do not have a quote book and fall back to the bar's traded
-    volume. Cumulative daily volume is intentionally not accepted here.
+    observations do not have a quote book and may fall back to bar volume only
+    when the complete bar starts after the order's activation time. Cumulative
+    daily volume is intentionally not accepted here.
     """
     displayed = observation.ask_size if order.side == "buy" else observation.bid_size
-    source = displayed if displayed is not None else observation.volume
-    if source is None:
+    if displayed is not None:
+        return displayed * policy.max_volume_participation_pct
+    if observation.volume is None:
         return None
-    return source * policy.max_volume_participation_pct
+    if not _bar_evidence_is_causal(order, observation, policy):
+        return Decimal("0")
+    return observation.volume * policy.max_volume_participation_pct
 
 
 def paper_protection_trigger(
@@ -310,10 +342,9 @@ def paper_fill_decision(
         return PaperFillDecision(should_fill=False, reason="stale_market_data")
     if active.reject_halted and observation.halted:
         return PaperFillDecision(should_fill=False, reason="market_halted")
-    if order.created_at is not None:
-        eligible_time = order.created_at.astimezone(timezone.utc) + timedelta(milliseconds=active.latency_ms)
-        if observation.source_time.astimezone(timezone.utc) < eligible_time:
-            return PaperFillDecision(should_fill=False, reason="execution_latency_not_elapsed")
+    activation = _order_activation_time(order, active)
+    if activation is not None and observation.source_time.astimezone(timezone.utc) < activation:
+        return PaperFillDecision(should_fill=False, reason="execution_latency_not_elapsed")
 
     remaining = max(Decimal("0"), order.quantity - order.filled_quantity)
     if remaining <= 0:
@@ -322,7 +353,7 @@ def paper_fill_decision(
     participation_capacity = _liquidity_capacity(order, observation, active)
     if participation_capacity is not None:
         if participation_capacity <= 0:
-            return PaperFillDecision(should_fill=False, reason="no_executable_volume")
+            return PaperFillDecision(should_fill=False, reason="no_causal_executable_volume")
         fill_quantity = min(remaining, participation_capacity)
         if fill_quantity <= 0:
             return PaperFillDecision(should_fill=False, reason="volume_participation_exceeded")
@@ -342,14 +373,20 @@ def paper_fill_decision(
             reason="market_execution_observation",
         )
 
-    high = observation.high if observation.high is not None else observation.price
-    low = observation.low if observation.low is not None else observation.price
+    use_range = (
+        observation.high is not None
+        and observation.low is not None
+        and _bar_evidence_is_causal(order, observation, active)
+    )
+    market_side = observation.ask if order.side == "buy" else observation.bid
+    current_price = market_side if market_side is not None else observation.price
+    high = observation.high if use_range and observation.high is not None else current_price
+    low = observation.low if use_range and observation.low is not None else current_price
     if order.order_type == "limit":
         assert order.limit_price is not None
         triggered = low <= order.limit_price if order.side == "buy" else high >= order.limit_price
         if not triggered:
             return PaperFillDecision(should_fill=False, reason="limit_range_not_reached")
-        market_side = observation.ask if order.side == "buy" else observation.bid
         if market_side is None:
             fill_price = order.limit_price
         elif order.side == "buy":
@@ -360,21 +397,20 @@ def paper_fill_decision(
             should_fill=True,
             fill_price=fill_price,
             fill_quantity=fill_quantity,
-            reason="limit_range_reached",
+            reason="limit_range_reached" if use_range else "limit_current_market_reached",
         )
 
     assert order.stop_price is not None
     triggered = high >= order.stop_price if order.side == "buy" else low <= order.stop_price
     if not triggered:
         return PaperFillDecision(should_fill=False, reason="stop_range_not_triggered")
-    market_side = observation.ask if order.side == "buy" else observation.bid
-    observed = market_side if market_side is not None else observation.price
+    observed = current_price
     gap_through = max(order.stop_price, observed) if order.side == "buy" else min(order.stop_price, observed)
     return PaperFillDecision(
         should_fill=True,
         fill_price=_worse_price(gap_through, order.side, active.stop_slippage_bps),
         fill_quantity=fill_quantity,
-        reason="stop_range_triggered_gap_aware",
+        reason="stop_range_triggered_gap_aware" if use_range else "stop_current_market_triggered",
     )
 
 
