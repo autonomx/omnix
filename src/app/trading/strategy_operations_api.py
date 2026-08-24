@@ -124,7 +124,12 @@ def create_trading_strategy_operations_router() -> APIRouter:
                 getattr(state, "_omnix_trading_strategy_deep_recovery_shadow_monitor", None),
                 expected_type=TradingStrategyDeepRecoveryShadowMonitor,
                 configured_enabled=strategy_deep_recovery_shadow_monitor_enabled(),
-                counter_names=("evaluation_count", "signal_count", "execution_observation_count"),
+                counter_names=(
+                    "evaluation_count",
+                    "state_transition_count",
+                    "signal_count",
+                    "execution_observation_count",
+                ),
             ),
             universe_archive_monitor=_monitor_status(
                 getattr(state, "_omnix_trading_strategy_universe_archive_monitor", None),
