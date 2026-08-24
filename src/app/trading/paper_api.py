@@ -46,13 +46,6 @@ class PaperResetRequest(BaseModel):
 
 
 class PaperOrderReplaceRequest(BaseModel):
-    """Fail-safe cancel/replace request.
-
-    Replacement uses a new order/idempotency identity. The old order is always
-    cancelled first so a failed replacement cannot create accidental duplicate
-    exposure. The response reports both lifecycle objects explicitly.
-    """
-
     model_config = ConfigDict(extra="forbid")
     replacement: PaperOrderRequest
 
@@ -66,6 +59,15 @@ class PaperOrderReplaceResponse(BaseModel):
 RepositoryFactory = Callable[[], TradingPaperRepository]
 LifecycleFactory = Callable[[], TradingPaperLifecycle]
 ProtectionRepositoryFactory = Callable[[], TradingPaperProtectionRepository]
+_ORDER_MANAGEMENT_HEADER = "X-Omnix-Paper-Order-Management"
+_ORDER_MANAGEMENT_VERSION = "v2"
+
+
+def _require_order_management(version: str | None) -> None:
+    # Preserve the legacy disabled route for old clients while allowing the new
+    # workstation to opt into explicit cancel/replace semantics.
+    if version != _ORDER_MANAGEMENT_VERSION:
+        raise HTTPException(status_code=409, detail="paper_order_cancellation_disabled")
 
 
 def create_trading_paper_router(
@@ -181,7 +183,12 @@ def create_trading_paper_router(
         response_model=PaperOrder,
         include_in_schema=False,
     )
-    async def cancel_order(account_id: str, order_id: str):
+    async def cancel_order(
+        account_id: str,
+        order_id: str,
+        order_management: str | None = Header(default=None, alias=_ORDER_MANAGEMENT_HEADER),
+    ):
+        _require_order_management(order_management)
         try:
             return await asyncio.to_thread(
                 repository_factory().cancel_order,
@@ -198,7 +205,13 @@ def create_trading_paper_router(
         response_model=PaperOrderReplaceResponse,
         include_in_schema=False,
     )
-    async def replace_order(account_id: str, order_id: str, request: PaperOrderReplaceRequest):
+    async def replace_order(
+        account_id: str,
+        order_id: str,
+        request: PaperOrderReplaceRequest,
+        order_management: str | None = Header(default=None, alias=_ORDER_MANAGEMENT_HEADER),
+    ):
+        _require_order_management(order_management)
         repository = repository_factory()
         try:
             cancelled = await asyncio.to_thread(repository.cancel_order, account_id, order_id)
@@ -213,8 +226,6 @@ def create_trading_paper_router(
                 request.replacement,
             )
         except ValueError as exc:
-            # Fail safe: cancellation is durable; never resurrect the old order
-            # or create duplicate exposure if the replacement cannot be funded.
             raise HTTPException(
                 status_code=409,
                 detail=f"paper_order_replacement_failed_after_cancel:{exc}",
