@@ -82,6 +82,11 @@
   color: #fff;
 }
 
+.paper-trade-drilldown-header button:focus-visible {
+  outline: 2px solid #6ba6e5;
+  outline-offset: 2px;
+}
+
 .paper-trade-drilldown-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -134,6 +139,10 @@
   border: 1px solid #253148;
   border-radius: 9px;
   background: #101927;
+}
+
+.paper-trade-drilldown-review {
+  margin: 14px 20px;
 }
 
 .paper-trade-drilldown-section > header {
@@ -324,6 +333,81 @@
   background: #17263a;
   color: #d5e9ff;
   outline: none;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown {
+  border-left-color: #d8e0ea;
+  background: #fff;
+  color: #172033;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-header {
+  border-bottom-color: #dfe5ec;
+  background: rgba(255, 255, 255, 0.97);
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-header small,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-summary small,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-kpis small,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-features small,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-identity small,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-section > header span,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-events time,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-events small,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-empty,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-fills,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown > footer {
+  color: #697b91;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-header button {
+  border-color: #d8e0ea;
+  background: #f6f8fb;
+  color: #43536a;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-summary {
+  border-color: #dfe5ec;
+  background: #dfe5ec;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-summary > div,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-kpis > span,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-section,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-notice,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-features > span,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-identity {
+  border-color: #e1e7ef;
+  background: #f9fbfd;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-summary strong,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-kpis strong,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-section > header strong,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-notice strong,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-features strong,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-events strong {
+  color: #253248;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-notice p,
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-observations {
+  color: #5f7188;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-events {
+  border-color: #e1e7ef;
+  background: #e1e7ef;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-drilldown-events > div {
+  background: #fff;
+}
+
+:root[data-omnix-appearance='light'] .paper-trade-view-button {
+  border-color: #cdd7e4;
+  background: #f7f9fc;
+  color: #3169a5;
 }
 
 @media (max-width: 720px) {
