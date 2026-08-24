@@ -4,8 +4,9 @@ from __future__ import annotations
 
 The historical V3-V8 recovery studies showed that a descriptive recovery label can
 be accurate while being economically exhausted by entry time. This module makes
-the prospective research target explicit: +1R before -1R within 60 minutes using
-captured execution evidence and a structural stop known at signal time.
+the prospective research target explicit: +1R before -1R within 60 full finalized
+one-minute bars using captured execution evidence and a structural stop known at
+signal time.
 
 Everything here is evidence/promotion policy only. It has no paper-order or broker
 dependency and cannot authorize execution by itself.
@@ -188,8 +189,8 @@ def prospective_economic_profile_fingerprint(config: TradingStrategyConfigDocume
         "source_setup_id": DEEP_RECOVERY_SETUP_ID,
         "source_rule_version": DEEP_RECOVERY_RULE_VERSION,
         "v2_profile_fingerprint": v2_profile_fingerprint(config.config),
-        "economic_label": "+1R before -1R within 60 finalized 1m minutes; stop wins intrabar ties",
-        "mark_to_market": "if neither boundary is hit, 60m close R clipped to [-1,+1]",
+        "economic_label": "+1R before -1R within 60 full finalized 1m bars beginning at/after signal; stop wins intrabar ties",
+        "mark_to_market": "if neither boundary is hit, close of bar 60 R clipped to [-1,+1]",
         "thresholds": ProspectiveEconomicThresholds().model_dump(mode="json"),
         "holdout_policy": {
             "minimum_trades": PROSPECTIVE_ECONOMIC_HOLDOUT_MIN_TRADES,
@@ -378,13 +379,15 @@ def evaluate_prospective_economic_status(
     if evaluation is not None:
         evaluation_passed = bool(evaluation.payload.get("passed") is True)
 
+    # A holdout review is one-shot regardless of verdict. Do not filter to
+    # approved events here: a recorded FAIL/UNDERPOWERED result must retire this
+    # promotion path rather than disappearing and allowing a second attempt.
     holdout = next(
         (
             event for event in ordered
             if event.event_type == "prospective_economic_holdout_review"
             and evaluation is not None
             and event.payload.get("evaluation_event_id") == evaluation.event_id
-            and event.payload.get("approved") is True
         ),
         None,
     )
