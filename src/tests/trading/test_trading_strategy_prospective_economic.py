@@ -109,6 +109,28 @@ def _sample(
     return events
 
 
+def _passing_evaluation(strategy: TradingStrategyConfigDocument, events: list[StrategyEvent]) -> StrategyEvent:
+    before = evaluate_prospective_economic_status(strategy, events)
+    observed_at = max(event.observed_at for event in events) + timedelta(minutes=1)
+    return _event(
+        event_type="prospective_economic_evaluation",
+        instrument_id="strategy:prospective-economic-test",
+        observed_at=observed_at,
+        suffix="evaluation",
+        state="passed",
+        payload={
+            "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
+            "profile_fingerprint": before.profile_fingerprint,
+            "evidence_fingerprint": before.evidence_fingerprint,
+            "metrics": before.metrics.model_dump(mode="json"),
+            "thresholds": before.thresholds.model_dump(mode="json"),
+            "passed": True,
+            "immutable_one_shot": True,
+            "execution_authority": False,
+        },
+    )
+
+
 def test_pipeline_is_sequential_and_final_review_binds_exact_soak_snapshot() -> None:
     strategy = _strategy()
     initial = _sample(
@@ -131,24 +153,8 @@ def test_pipeline_is_sequential_and_final_review_binds_exact_soak_snapshot() -> 
     assert before.evaluation_recorded is False
     assert before.sealed_holdout_unlocked is False
 
-    evaluation_at = max(event.observed_at for event in initial) + timedelta(minutes=1)
-    evaluation = _event(
-        event_type="prospective_economic_evaluation",
-        instrument_id="strategy:prospective-economic-test",
-        observed_at=evaluation_at,
-        suffix="evaluation",
-        state="passed",
-        payload={
-            "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
-            "profile_fingerprint": before.profile_fingerprint,
-            "evidence_fingerprint": before.evidence_fingerprint,
-            "metrics": before.metrics.model_dump(mode="json"),
-            "thresholds": before.thresholds.model_dump(mode="json"),
-            "passed": True,
-            "immutable_one_shot": True,
-            "execution_authority": False,
-        },
-    )
+    evaluation = _passing_evaluation(strategy, initial)
+    evaluation_at = evaluation.observed_at
     after_evaluation = evaluate_prospective_economic_status(strategy, [*initial, evaluation])
     assert after_evaluation.evaluation_passed is True
     assert after_evaluation.sealed_holdout_unlocked is True
@@ -253,3 +259,83 @@ def test_failed_one_shot_cannot_be_rescued_by_later_winning_data() -> None:
     assert result.sealed_holdout_unlocked is False
     assert result.auto_paper_research_authorized is False
     assert "PROSPECTIVE_ECONOMIC_ONE_SHOT_EVALUATION_FAILED" in result.reason_codes
+
+
+def test_candidate_diagnostics_never_change_promotion_metrics_or_evidence_fingerprint() -> None:
+    strategy = _strategy()
+    initial = _sample(
+        strategy,
+        start=datetime(2026, 8, 24, 14, 0, tzinfo=timezone.utc),
+        count=30,
+        loss_every=5,
+        suffix="initial-candidate-proof",
+    )
+    baseline = evaluate_prospective_economic_status(strategy, initial)
+    diagnostic = _event(
+        event_type="prospective_economic_candidate",
+        instrument_id="equity:DIAGNOSTIC",
+        observed_at=datetime(2026, 8, 24, 13, 45, tzinfo=timezone.utc),
+        suffix="diagnostic-only",
+        state="watching",
+        payload={
+            "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
+            "profile_fingerprint": baseline.profile_fingerprint,
+            "source_state": "watching",
+            "diagnostic_only": True,
+            "promotion_metric_eligible": False,
+            "execution_authority": False,
+        },
+    )
+
+    with_diagnostic = evaluate_prospective_economic_status(strategy, [diagnostic, *initial])
+
+    assert with_diagnostic.metrics == baseline.metrics
+    assert with_diagnostic.evidence_fingerprint == baseline.evidence_fingerprint
+    assert with_diagnostic.quantitative_pass == baseline.quantitative_pass
+
+
+def test_failed_holdout_review_is_terminal_and_cannot_open_soak_path() -> None:
+    strategy = _strategy()
+    initial = _sample(
+        strategy,
+        start=datetime(2026, 8, 24, 14, 0, tzinfo=timezone.utc),
+        count=30,
+        loss_every=5,
+        suffix="holdout-fail-initial",
+    )
+    evaluation = _passing_evaluation(strategy, initial)
+    profile = prospective_economic_profile_fingerprint(strategy)
+    failed_holdout = _event(
+        event_type="prospective_economic_holdout_review",
+        instrument_id="strategy:prospective-economic-test",
+        observed_at=evaluation.observed_at + timedelta(minutes=1),
+        suffix="failed-holdout",
+        state="failed",
+        payload={
+            "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
+            "profile_fingerprint": profile,
+            "evaluation_event_id": evaluation.event_id,
+            "holdout_verdict": "FAIL",
+            "approved": False,
+            "execution_authority": False,
+        },
+    )
+    later_wins = _sample(
+        strategy,
+        start=failed_holdout.observed_at + timedelta(days=1),
+        count=20,
+        loss_every=None,
+        suffix="post-failed-holdout",
+    )
+
+    result = evaluate_prospective_economic_status(
+        strategy,
+        [*initial, evaluation, failed_holdout, *later_wins],
+    )
+
+    assert result.holdout_reviewed is True
+    assert result.holdout_verdict == "FAIL"
+    assert result.holdout_event_id == failed_holdout.event_id
+    assert result.soak_passed is False
+    assert result.auto_paper_research_authorized is False
+    assert "PROSPECTIVE_ECONOMIC_SEALED_HOLDOUT_FAILED" in result.reason_codes
