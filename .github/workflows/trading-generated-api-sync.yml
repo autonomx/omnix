@@ -1,0 +1,61 @@
+name: Trading generated API sync
+
+on:
+  push:
+    branches: [agent/trading-auto-strategy-roadmap]
+    paths:
+      - ".github/workflows/trading-generated-api-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-generated-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Refuse to publish over a newer branch head
+        shell: bash
+        run: |
+          git fetch origin agent/trading-auto-strategy-roadmap
+          expected="${GITHUB_SHA}"
+          current="$(git rev-parse origin/agent/trading-auto-strategy-roadmap)"
+          echo "Workflow head: ${expected}"
+          echo "Branch head:   ${current}"
+          test "${current}" = "${expected}"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install contract generation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+      - name: Generate exact shared gateway contract
+        run: npm --workspace @omnix/web run api:generate
+      - name: Commit generated contract
+        shell: bash
+        run: |
+          git add src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
+          if git diff --cached --quiet; then
+            echo "Generated contract is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(trading): update generated API contract"
+          git push origin HEAD:agent/trading-auto-strategy-roadmap
