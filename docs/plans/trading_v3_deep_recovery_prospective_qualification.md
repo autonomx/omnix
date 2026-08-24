@@ -8,6 +8,8 @@ Rule version: `1.0.0-shadow`
 
 Prospective epoch: **2026-08-24 onward**
 
+Implementation checkpoint: the SHADOW monitor is gateway-registered, exposed through strategy-operations diagnostics, isolated from the authoritative V2 activity feed, and represented in the generated gateway API contract. This checkpoint changes no qualification threshold and grants no execution authority.
+
 This policy is frozen before the first prospective session for the deep-recovery continuation setup. Historical development feasibility cannot satisfy any item in this policy and must never be mixed into the prospective sample.
 
 ## Strategy definition under qualification
