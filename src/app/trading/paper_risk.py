@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_DOWN, Decimal
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -9,6 +11,9 @@ from .execution import ExecutionObservation
 from .paper import PaperAccountSnapshot, PaperOrderRequest
 from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
 from .strategy_risk import paper_account_equity, paper_daily_realized_pnl
+
+
+_ET = ZoneInfo("America/New_York")
 
 
 class PaperRiskPolicy(BaseModel):
@@ -89,6 +94,13 @@ class PaperRiskOrderRequest(BaseModel):
         return self
 
 
+def paper_risk_day_bounds(observed_at: datetime | None = None) -> tuple[datetime, datetime]:
+    """Return the current Eastern trading-day bounds used by paper risk gates."""
+    now_et = (observed_at or datetime.now(timezone.utc)).astimezone(_ET)
+    start = datetime(now_et.year, now_et.month, now_et.day, tzinfo=_ET)
+    return start, start + timedelta(days=1)
+
+
 def _entry_price(order) -> Decimal | None:
     return order.limit_price or order.stop_price or order.reference_price or order.average_fill_price
 
@@ -153,10 +165,15 @@ def preview_paper_risk(
     observation: ExecutionObservation,
     request: PaperRiskPreviewRequest,
     policy: PaperRiskPolicy | None = None,
+    daily_realized_pnl: Decimal | None = None,
 ) -> PaperRiskPreview:
     active = policy or PaperRiskPolicy()
     equity = paper_account_equity(snapshot)
-    daily_realized = paper_daily_realized_pnl(snapshot)
+    daily_realized = (
+        paper_daily_realized_pnl(snapshot)
+        if daily_realized_pnl is None
+        else daily_realized_pnl
+    )
     open_risk, unprotected = paper_account_open_risk(snapshot, protections)
     balance = next(
         (item for item in snapshot.balances if item.currency == snapshot.account.base_currency),
