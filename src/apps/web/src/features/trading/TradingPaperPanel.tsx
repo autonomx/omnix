@@ -123,22 +123,7 @@ export function TradingPaperPanel({
       const nextId = preferredId || retainedId || nextAccounts[0]?.account_id || '';
       setAccountId(nextId);
       onAccountChange?.(nextId);
-      let nextSnapshot = nextId ? await tradingPaperApi.snapshot(nextId) : null;
-      const openMarketOrders = nextSnapshot?.open_orders.filter(
-        (order) => order.order_type === 'market' && order.status === 'open' && order.reference_price,
-      ) ?? [];
-      if (!replayMode && nextId && openMarketOrders.length > 0) {
-        const now = new Date().toISOString();
-        await Promise.allSettled(openMarketOrders.map((order) => tradingPaperApi.processObservation(nextId, {
-          instrument_id: order.instrument_id,
-          binding_id: order.binding_id,
-          provider: 'paper-reference',
-          price: String(order.reference_price),
-          source_time: order.created_at ?? now,
-          evaluated_at: now,
-        })));
-        nextSnapshot = await tradingPaperApi.snapshot(nextId);
-      }
+      const nextSnapshot = nextId ? await tradingPaperApi.snapshot(nextId) : null;
       setSnapshot(nextSnapshot);
       setStatus('ready');
     } catch {
@@ -175,7 +160,16 @@ export function TradingPaperPanel({
     const context = `${replaySessionId}:${replayBar.start_time}:${replayBar.end_time}`;
     if (replayBarContextRef.current === context) return;
     replayBarContextRef.current = context;
-    setReplaySnapshot(advanceReplaySnapshot(replaySnapshot, replayBar));
+    let cancelled = false;
+    void advanceReplaySnapshot(replaySnapshot, replayBar).then((nextSnapshot) => {
+      if (!cancelled) setReplaySnapshot(nextSnapshot);
+    }).catch((error) => {
+      if (!cancelled) {
+        setStatus('error');
+        setNotice({ kind: 'error', message: paperErrorMessage(error, 'Replay execution') });
+      }
+    });
+    return () => { cancelled = true; };
   }, [activeAccount, instrumentId, replayBar, replayMode, replaySessionId, replaySnapshot, setReplaySnapshot]);
 
   useEffect(() => {
@@ -288,28 +282,12 @@ export function TradingPaperPanel({
       let order: PaperOrder;
       if (replayMode) {
         if (!replaySnapshot || !replayBar) throw new Error('Replay account is still loading. Select a replay bar and try again.');
-        const result = placeReplayOrder(replaySnapshot, input, replayBar);
+        const result = await placeReplayOrder(replaySnapshot, input, replayBar);
         setReplaySnapshot(result.snapshot);
         order = result.order;
         setStatus('ready');
       } else {
         order = await tradingPaperApi.placeOrder(activeAccount.account_id, input);
-      }
-      const marketReference = order.reference_price ?? (side === 'buy' ? askPrice : bidPrice);
-      if (!replayMode && orderType === 'market' && order.status === 'open' && marketReference !== null) {
-        const now = new Date().toISOString();
-        try {
-          await tradingPaperApi.processObservation(activeAccount.account_id, {
-            instrument_id: instrumentId,
-            binding_id: bindingId,
-            provider: 'paper-reference',
-            price: String(marketReference),
-            source_time: now,
-            evaluated_at: now,
-          });
-        } catch {
-          // The monitor can retry an accepted order if the immediate observation is unavailable.
-        }
       }
       if (!replayMode) {
         writePaperPositionProtection(activeAccount.account_id, instrumentId, {
