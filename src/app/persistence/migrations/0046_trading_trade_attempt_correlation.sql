@@ -201,16 +201,28 @@ BEGIN
         IF FOUND THEN
             NEW.strategy_run_id := COALESCE(NEW.strategy_run_id, event_row.run_id);
             NEW.strategy_revision := COALESCE(NEW.strategy_revision, event_row.strategy_revision);
-            NEW.correlation_version := COALESCE(
-                event_row.correlation_version,
-                NEW.correlation_version,
-                'trade-lifecycle-v1'
-            );
             NEW.session_id := COALESCE(NEW.session_id, event_row.session_id);
-            NEW.setup_id := COALESCE(NEW.setup_id, event_row.setup_id);
-            NEW.trade_attempt_id := COALESCE(NEW.trade_attempt_id, event_row.trade_attempt_id);
-            NEW.trade_intent_id := COALESCE(NEW.trade_intent_id, event_row.trade_intent_id);
-            NEW.risk_decision_id := COALESCE(NEW.risk_decision_id, event_row.risk_decision_id);
+
+            -- A v2 attempt is one atomic correlation identity. Never pair a v2
+            -- correlation_version/trade_attempt_id with legacy v1 setup/intent
+            -- values that may already exist on an older trade row.
+            IF event_row.trade_attempt_id IS NOT NULL THEN
+                NEW.correlation_version := 'trade-lifecycle-v2';
+                NEW.setup_id := event_row.setup_id;
+                NEW.trade_attempt_id := event_row.trade_attempt_id;
+                NEW.trade_intent_id := event_row.trade_intent_id;
+                NEW.risk_decision_id := event_row.risk_decision_id;
+            ELSE
+                NEW.correlation_version := COALESCE(
+                    NEW.correlation_version,
+                    event_row.correlation_version,
+                    'trade-lifecycle-v1'
+                );
+                NEW.setup_id := COALESCE(NEW.setup_id, event_row.setup_id);
+                NEW.trade_attempt_id := COALESCE(NEW.trade_attempt_id, event_row.trade_attempt_id);
+                NEW.trade_intent_id := COALESCE(NEW.trade_intent_id, event_row.trade_intent_id);
+                NEW.risk_decision_id := COALESCE(NEW.risk_decision_id, event_row.risk_decision_id);
+            END IF;
         END IF;
     END IF;
 
