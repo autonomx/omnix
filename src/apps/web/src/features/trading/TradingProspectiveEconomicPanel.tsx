@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { tradingStrategyApi, type TradingStrategyOperationsStatus } from './tradingStrategyApi';
 import type {
   ProspectiveEconomicHoldoutReviewInput,
-  ProspectiveEconomicMetrics,
   ProspectiveEconomicStatus,
   StrategyEvent,
   TradingStrategyConfig,
@@ -84,7 +83,7 @@ function Step({
   title: string;
   subtitle: string;
   tone: 'done' | 'failed' | 'pending';
-  children?: React.ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <section className={`prospective-economic-step ${tone}`}>
@@ -197,6 +196,7 @@ export function TradingProspectiveEconomicPanel() {
   const thresholds = status?.thresholds;
   const evaluationFailed = Boolean(status?.evaluation_recorded && !status.evaluation_passed);
   const holdoutFailed = Boolean(status?.holdout_reviewed && !['ROBUST', 'GOLD'].includes(status.holdout_verdict));
+  const candidateTransitions = events.filter((event) => event.event_type === 'prospective_economic_candidate').length;
   const recent = events.slice(0, 18);
 
   return (
@@ -204,7 +204,7 @@ export function TradingProspectiveEconomicPanel() {
       <header className="prospective-economic-hero">
         <div>
           <strong>Prospective economic evidence</strong>
-          <small>Frozen Aug 24, 2026 · +1R before −1R within 60m · SHADOW only</small>
+          <small>Frozen Aug 24, 2026 · +1R before −1R within 60 full 1m bars · SHADOW only</small>
         </div>
         <span className={monitor?.running ? 'monitor-live' : 'monitor-off'}>{monitor?.running ? 'RECORDER LIVE' : 'RECORDER OFF'}</span>
       </header>
@@ -232,14 +232,14 @@ export function TradingProspectiveEconomicPanel() {
           <Step
             index={1}
             title="Collect prospective economic signals"
-            subtitle="Live IEX execution evidence + immutable 60-minute first-passage outcome"
+            subtitle="All causal candidate states retained diagnostically; only frozen signals/outcomes score promotion"
             tone={status.sample_ready ? 'done' : 'pending'}
           >
             <ProgressMetric label="Matched outcomes" value={metrics.matched_outcome_count} required={thresholds.minimum_matched_outcomes} />
             <ProgressMetric label="Distinct sessions" value={metrics.distinct_sessions} required={thresholds.minimum_distinct_sessions} />
             <ProgressMetric label="Distinct symbols" value={metrics.distinct_symbols} required={thresholds.minimum_distinct_symbols} />
             <Metric label="Execution match" value={pct(metrics.execution_match_rate)} hint={`min ${pct(thresholds.minimum_execution_match_rate)}`} />
-            <p><small>Signals {metrics.signal_count} · executable {metrics.matched_signal_count} · completed outcomes {metrics.matched_outcome_count}. Missing/ineligible evidence remains visible rather than becoming a zero-trade session.</small></p>
+            <p><small>Candidate transitions {candidateTransitions} loaded · signals {metrics.signal_count} · executable {metrics.matched_signal_count} · completed outcomes {metrics.matched_outcome_count}. Candidate diagnostics never enter the promotion metrics or evidence fingerprint. Missing/ineligible execution evidence remains explicit.</small></p>
           </Step>
 
           <Step
