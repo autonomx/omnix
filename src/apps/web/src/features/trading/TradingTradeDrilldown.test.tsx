@@ -93,10 +93,11 @@ describe('TradingTradeDrilldown', () => {
     analyticsApi.journal.mockResolvedValue({ account_id: 'paper-1', entries: [journalEntry] });
   });
 
-  it('resolves the exact canonical AUTO PAPER trade and renders lifecycle evidence', async () => {
+  it('resolves the exact canonical AUTO PAPER trade, focuses the dialog controls, and renders lifecycle evidence', async () => {
     render(<TradingTradeDrilldown trade={autoTrade} accountId="paper-1" currency="USD" onClose={vi.fn()} />);
 
     expect(screen.getByRole('dialog', { name: /OSRH/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close trade drill-down' })).toHaveFocus();
     await waitFor(() => expect(analyticsApi.journal).toHaveBeenCalledWith({
       accountId: 'paper-1',
       strategyId: 'gap-v2',
@@ -107,6 +108,7 @@ describe('TradingTradeDrilldown', () => {
     }));
     expect(await screen.findByText('Canonical lifecycle')).toBeInTheDocument();
     expect(screen.getByText('Outcome: win; realized P&L +120.00; +1.200R')).toBeInTheDocument();
+    expect(screen.getByText(/Operator gate unchanged/)).toBeInTheDocument();
     expect(screen.getByText(/entry-fill-1/)).toBeInTheDocument();
     expect(screen.getByText('entry order submitted')).toBeInTheDocument();
     expect(screen.getByText(/cannot place, modify, cancel, or authorize/)).toBeInTheDocument();
