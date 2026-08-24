@@ -114,9 +114,8 @@ export function TradingTradeJournal({
       : entries
   ), [entries, instrumentId, selectedOnly]);
 
-  const selected = entries.find((entry) => entry.trade_id === selectedTradeId)
+  const selected = visibleEntries.find((entry) => entry.trade_id === selectedTradeId)
     ?? visibleEntries[0]
-    ?? entries[0]
     ?? null;
   const wins = entries.filter((entry) => entry.outcome === 'win').length;
   const losses = entries.filter((entry) => entry.outcome === 'loss').length;
@@ -132,7 +131,7 @@ export function TradingTradeJournal({
   }
 
   return (
-    <section className="trading-trade-journal" aria-label="Automatic trade journal" data-status={status}>
+    <section className="trading-trade-journal" aria-label="Automatic trade journal" data-status={status} aria-busy={status === 'loading'}>
       <header className="trade-journal-header">
         <div>
           <strong>Automatic Journal</strong>
@@ -168,6 +167,7 @@ export function TradingTradeJournal({
             key={entry.trade_id}
             type="button"
             className={entry.trade_id === selected?.trade_id ? 'selected' : undefined}
+            aria-pressed={entry.trade_id === selected?.trade_id}
             onClick={() => setSelectedTradeId(entry.trade_id)}
           >
             <span className={`trade-journal-outcome ${outcomeTone(entry.outcome)}`}>{entry.outcome.toUpperCase()}</span>
