@@ -2427,6 +2427,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategy-operations/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Strategy Operational Health */
+        get: operations["strategy_operational_health_api_trading_strategy_operations_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/strategy-operations/status": {
         parameters: {
             query?: never;
@@ -2573,6 +2590,52 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountRiskHealth */
+        AccountRiskHealth: {
+            /** Account Id */
+            account_id: string;
+            /** Active Protection Count */
+            active_protection_count: number;
+            /** Buying Power */
+            buying_power: string;
+            /** Daily Loss Limit Dollars */
+            daily_loss_limit_dollars: string;
+            /** Daily Loss Remaining */
+            daily_loss_remaining: string;
+            /** Daily Realized Pnl */
+            daily_realized_pnl: string;
+            /** Equity */
+            equity: string;
+            /** Max Daily Loss Pct */
+            max_daily_loss_pct: string;
+            /** Max Open Risk Pct */
+            max_open_risk_pct: string;
+            /** Open Order Count */
+            open_order_count: number;
+            /** Open Risk Dollars */
+            open_risk_dollars: string;
+            /** Open Risk Pct */
+            open_risk_pct: string;
+            /**
+             * Policy Source
+             * @enum {string}
+             */
+            policy_source: "active_strategy" | "paper_default";
+            /** Position Count */
+            position_count: number;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "healthy" | "degraded" | "blocked" | "unknown";
+            /** Unprotected Exposure Count */
+            unprotected_exposure_count: number;
+        };
         /**
          * AdjustmentMode
          * @enum {string}
@@ -4514,6 +4577,46 @@ export interface components {
             /** Status */
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
+        };
+        /** ExecutionHealth */
+        ExecutionHealth: {
+            /**
+             * Execution Eligible
+             * @default false
+             */
+            execution_eligible: boolean;
+            /** Freshness Mode */
+            freshness_mode?: string | null;
+            /** Halted */
+            halted?: boolean | null;
+            /** Instrument Id */
+            instrument_id?: string | null;
+            /** Observation Age Ms */
+            observation_age_ms?: string | null;
+            /** Policy Version */
+            policy_version?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Requested Binding Id */
+            requested_binding_id?: string | null;
+            /** Resolved Binding Id */
+            resolved_binding_id?: string | null;
+            /** Session */
+            session?: string | null;
+            /** Source Time */
+            source_time?: string | null;
+            /** Spread Bps */
+            spread_bps?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "healthy" | "degraded" | "blocked" | "unknown";
         };
         /**
          * ExecutionObservation
@@ -8579,6 +8682,7 @@ export interface components {
              * Format: date-time
              */
             observed_at: string;
+            paper_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             prospective_economic_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
@@ -9700,6 +9804,44 @@ export interface components {
              * @default []
              */
             unresolved_facts: string[];
+        };
+        /** TradingOperationalHealth */
+        TradingOperationalHealth: {
+            /**
+             * Ai Order Placement Enabled
+             * @default false
+             * @constant
+             */
+            ai_order_placement_enabled: false;
+            execution: components["schemas"]["ExecutionHealth"];
+            /**
+             * Live Broker Enabled
+             * @default false
+             * @constant
+             */
+            live_broker_enabled: false;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Paper Only
+             * @default true
+             * @constant
+             */
+            paper_only: true;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            risk: components["schemas"]["AccountRiskHealth"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "healthy" | "degraded" | "blocked" | "unknown";
         };
         /** TradingResearchAuditView */
         TradingResearchAuditView: {
@@ -15896,6 +16038,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["V2ProspectiveQualification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    strategy_operational_health_api_trading_strategy_operations_health_get: {
+        parameters: {
+            query: {
+                account_id: string;
+                instrument_id?: string | null;
+                binding_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingOperationalHealth"];
                 };
             };
             /** @description Validation Error */
