@@ -29,12 +29,14 @@ from .paper_risk import (
     PaperRiskOrderRequest,
     PaperRiskPreview,
     PaperRiskPreviewRequest,
+    paper_risk_day_bounds,
     preview_paper_risk,
     risk_order_request,
     risk_protection_request,
 )
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
+from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 
 
 class PaperAccountListResponse(BaseModel):
@@ -76,6 +78,7 @@ RepositoryFactory = Callable[[], TradingPaperRepository]
 LifecycleFactory = Callable[[], TradingPaperLifecycle]
 ProtectionRepositoryFactory = Callable[[], TradingPaperProtectionRepository]
 MarketServiceFactory = Callable[[], TradingMarketDataService]
+StrategyRepositoryFactory = Callable[[], TradingStrategyRepository]
 _ORDER_MANAGEMENT_HEADER = "X-Omnix-Paper-Order-Management"
 _ORDER_MANAGEMENT_VERSION = "v2"
 
@@ -87,19 +90,68 @@ def _require_order_management(version: str | None) -> None:
         raise HTTPException(status_code=409, detail="paper_order_cancellation_disabled")
 
 
+def _raw_order_is_reducing_long_exposure(
+    snapshot: PaperAccountSnapshot,
+    request: PaperOrderRequest,
+    *,
+    replacing_order_id: str | None = None,
+) -> bool:
+    """Raw HTTP orders are exit-only; new exposure must use server risk intent.
+
+    The currently supported manual workstation is long-entry only. A raw sell is
+    allowed only when the relational position and reservations prove it cannot
+    increase or reverse exposure. Replacement validation gives the cancelled
+    order's reservation back before checking the new quantity.
+    """
+    if request.side != "sell":
+        return False
+    position = next(
+        (
+            item
+            for item in snapshot.positions
+            if item.instrument_id == request.instrument_id and item.quantity > 0
+        ),
+        None,
+    )
+    if position is None:
+        return False
+    reserved = position.reserved_quantity
+    if replacing_order_id:
+        replaced = next(
+            (
+                order
+                for order in snapshot.open_orders
+                if order.order_id == replacing_order_id
+                and order.instrument_id == request.instrument_id
+                and order.side == "sell"
+                and order.status == "open"
+            ),
+            None,
+        )
+        if replaced is not None:
+            reserved = max(
+                Decimal("0"),
+                reserved - max(Decimal("0"), replaced.quantity - replaced.filled_quantity),
+            )
+    available = max(Decimal("0"), position.quantity - reserved)
+    return request.quantity <= available
+
+
 def create_trading_paper_router(
     repository_factory: RepositoryFactory = default_runtime_paper_repository,
     lifecycle_factory: LifecycleFactory = default_paper_lifecycle,
     protection_repository_factory: ProtectionRepositoryFactory = default_paper_protection_repository,
     market_service_factory: MarketServiceFactory = default_market_data_service,
+    strategy_repository_factory: StrategyRepositoryFactory = default_strategy_repository,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/paper", tags=["trading-paper"])
 
     async def risk_context(account_id: str, request: PaperRiskPreviewRequest):
         repository = repository_factory()
         protections = protection_repository_factory()
+        start_time, end_time = paper_risk_day_bounds()
         try:
-            snapshot, active_protections, execution = await asyncio.gather(
+            snapshot, active_protections, execution, daily_realized = await asyncio.gather(
                 asyncio.to_thread(repository.snapshot, account_id),
                 asyncio.to_thread(protections.list, account_id, active_only=True),
                 asyncio.to_thread(
@@ -107,20 +159,27 @@ def create_trading_paper_router(
                     request.instrument_id,
                     request.binding_id,
                 ),
+                asyncio.to_thread(
+                    strategy_repository_factory().daily_paper_pnl,
+                    account_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                ),
             )
         except ValueError as exc:
             detail = str(exc)
             status = 404 if "account_not_found" in detail else 422
             raise HTTPException(status_code=status, detail=detail) from exc
-        return snapshot, active_protections, execution
+        return snapshot, active_protections, execution, daily_realized
 
     async def evaluate_risk(account_id: str, request: PaperRiskPreviewRequest) -> PaperRiskPreview:
-        snapshot, active_protections, execution = await risk_context(account_id, request)
+        snapshot, active_protections, execution, daily_realized = await risk_context(account_id, request)
         return preview_paper_risk(
             snapshot=snapshot,
             protections=active_protections,
             observation=execution,
             request=request,
+            daily_realized_pnl=daily_realized,
         )
 
     @router.get("/accounts", response_model=PaperAccountListResponse)
@@ -168,7 +227,7 @@ def create_trading_paper_router(
             stop_price=request.stop_loss,
             desired_risk_pct=request.desired_risk_pct,
         )
-        snapshot, active_protections, execution = await risk_context(account_id, probe)
+        snapshot, active_protections, execution, daily_realized = await risk_context(account_id, probe)
         entry_price = (
             (execution.ask or execution.last)
             if request.order_type == "market"
@@ -188,6 +247,7 @@ def create_trading_paper_router(
             protections=active_protections,
             observation=execution,
             request=preview_request,
+            daily_realized_pnl=daily_realized,
         )
         if not preview.allowed or preview.recommended_quantity <= 0:
             raise HTTPException(
@@ -201,6 +261,18 @@ def create_trading_paper_router(
 
         repository = repository_factory()
         protection_repository = protection_repository_factory()
+        protection_request = risk_protection_request(request)
+        try:
+            protection = await asyncio.to_thread(
+                protection_repository.arm_pending_entry,
+                account_id,
+                protection_request,
+            )
+        except ValueError as exc:
+            detail = str(exc)
+            status = 404 if "not_found" in detail else 409 if "already_submitted" in detail else 422
+            raise HTTPException(status_code=status, detail=detail) from exc
+
         order_request = risk_order_request(
             request,
             entry_price=entry_price,
@@ -209,28 +281,23 @@ def create_trading_paper_router(
         try:
             order = await asyncio.to_thread(repository.place_order, account_id, order_request)
         except ValueError as exc:
+            cleanup_error = None
+            try:
+                await asyncio.to_thread(
+                    protection_repository.transition,
+                    account_id,
+                    request.instrument_id,
+                    status="cancelled",
+                    exit_order_id=None,
+                    trigger_reason="entry_submit_failed",
+                )
+            except ValueError as cleanup_exc:
+                cleanup_error = str(cleanup_exc)
             detail = str(exc)
+            if cleanup_error:
+                detail = f"{detail}:protection_cleanup_failed:{cleanup_error}"
             status = 404 if "not_found" in detail else 409 if "insufficient" in detail else 422
             raise HTTPException(status_code=status, detail=detail) from exc
-
-        try:
-            protection = await asyncio.to_thread(
-                protection_repository.upsert,
-                account_id,
-                risk_protection_request(request),
-            )
-        except ValueError as exc:
-            # Normally the order is still open because the monitor is asynchronous.
-            # Fail closed by cancelling it if its protection cannot be persisted.
-            cancel_error = None
-            try:
-                await asyncio.to_thread(repository.cancel_order, account_id, order.order_id)
-            except ValueError as cancel_exc:
-                cancel_error = str(cancel_exc)
-            detail = f"paper_risk_protection_failed:{exc}"
-            if cancel_error:
-                detail += f":cancel_failed:{cancel_error}"
-            raise HTTPException(status_code=409, detail=detail) from exc
 
         return PaperRiskOrderResult(preview=preview, order=order, protection=protection)
 
@@ -303,17 +370,24 @@ def create_trading_paper_router(
         status_code=201,
     )
     async def place_order(account_id: str, request: PaperOrderRequest):
-        """Accept an order without manufacturing a fill from caller price data.
+        """Submit an exit-only raw order without allowing unmanaged entry exposure.
 
-        reference_price is reservation-only. A market order remains open until
-        the server-side monitor receives an execution-eligible market observation.
+        New manual long entries must use /risk-orders so quantity, daily loss,
+        open risk, spread, execution eligibility, and protection are server-owned.
+        The raw route remains for reducing an existing long position only.
         """
+        repository = repository_factory()
         try:
-            return await asyncio.to_thread(
-                repository_factory().place_order,
-                account_id,
-                request,
+            snapshot = await asyncio.to_thread(repository.snapshot, account_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not _raw_order_is_reducing_long_exposure(snapshot, request):
+            raise HTTPException(
+                status_code=409,
+                detail="paper_entry_requires_server_risk_authority",
             )
+        try:
+            return await asyncio.to_thread(repository.place_order, account_id, request)
         except ValueError as exc:
             detail = str(exc)
             status = 404 if "not_found" in detail else 422
@@ -354,6 +428,19 @@ def create_trading_paper_router(
     ):
         _require_order_management(order_management)
         repository = repository_factory()
+        try:
+            snapshot = await asyncio.to_thread(repository.snapshot, account_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not _raw_order_is_reducing_long_exposure(
+            snapshot,
+            request.replacement,
+            replacing_order_id=order_id,
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="paper_order_replacement_requires_server_risk_authority",
+            )
         try:
             cancelled = await asyncio.to_thread(repository.cancel_order, account_id, order_id)
         except ValueError as exc:
