@@ -185,11 +185,10 @@ export function TradingPositionOverlay({
     if (!Number.isFinite(referencePrice) || referencePrice <= 0) {
       throw new Error('A current paper price is required to close this position.');
     }
-    const now = new Date().toISOString();
     const orderId = `paper-overlay-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     if (replayMode) {
       if (!replaySnapshot || !replayBar) throw new Error('Select a replay bar before trading.');
-      const result = placeReplayOrder(replaySnapshot, {
+      const result = await placeReplayOrder(replaySnapshot, {
         order_id: orderId,
         instrument_id: instrumentId,
         binding_id: null,
@@ -203,9 +202,9 @@ export function TradingPositionOverlay({
       }, replayBar);
       setReplaySnapshot(result.snapshot);
       if (result.order.status === 'rejected') throw new Error(result.order.rejection_reason ?? 'Replay order rejected.');
-      return;
+      return result.order;
     }
-    const order = await tradingPaperApi.placeOrder(accountId!, {
+    return tradingPaperApi.placeOrder(accountId!, {
       order_id: orderId,
       instrument_id: instrumentId,
       binding_id: null,
@@ -217,16 +216,6 @@ export function TradingPositionOverlay({
       reference_price: String(referencePrice),
       idempotency_key: orderId,
     });
-    if (order.status === 'open') {
-      await tradingPaperApi.processObservation(accountId!, {
-        instrument_id: instrumentId,
-        binding_id: null,
-        provider: 'paper-reference',
-        price: String(referencePrice),
-        source_time: now,
-        evaluated_at: now,
-      });
-    }
   };
 
   const confirmAction = async () => {
