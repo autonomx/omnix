@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PaperAccount, PaperAccountSnapshot, PaperOrder, PaperOrderType, PaperSide } from './paperTypes';
+import type { PaperAccount, PaperAccountSnapshot, PaperOrder, PaperOrderType, PaperRiskPreview, PaperSide } from './paperTypes';
 import { tradingApi } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
-import { writePaperPositionProtection } from './paperPositionProtection';
 import { advanceReplaySnapshot, createReplaySnapshot, placeReplayOrder } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
@@ -53,6 +52,9 @@ function paperErrorMessage(error: unknown, action = 'Order'): string {
   if (raw.includes('paper_account_disabled')) {
     return 'Order not placed: this paper account is archived.';
   }
+  if (raw.includes('paper_risk_rejected')) {
+    return 'Order not placed: the server risk gate rejected this entry. Review the risk and execution checks below.';
+  }
   const detail = raw.replace(/^Paper Trading request failed \(\d+\):\s*/, '');
   return `${action} failed: ${detail}`;
 }
@@ -77,6 +79,8 @@ export function TradingPaperPanel({
   const [side, setSide] = useState<PaperSide>('buy');
   const [orderType, setOrderType] = useState<PaperOrderType>('market');
   const [quantity, setQuantity] = useState('1');
+  const [riskPct, setRiskPct] = useState('0.35');
+  const [riskPreview, setRiskPreview] = useState<PaperRiskPreview | null>(null);
   const [triggerPrice, setTriggerPrice] = useState('');
   const [takeProfitEnabled, setTakeProfitEnabled] = useState(false);
   const [stopLossEnabled, setStopLossEnabled] = useState(false);
@@ -110,7 +114,11 @@ export function TradingPaperPanel({
   const quotePrice = referencePrice === null ? '—' : number(String(referencePrice), 2);
   const bidLabel = bidPrice === null ? '—' : number(String(bidPrice), 2);
   const askLabel = askPrice === null ? '—' : number(String(askPrice), 2);
-  const tradeValue = referencePrice === null ? null : referencePrice * (parsePositive(quantity) ?? 0);
+  const riskManagedEntry = !replayMode && side === 'buy';
+  const displayedQuantity = riskManagedEntry ? riskPreview?.recommended_quantity ?? '' : quantity;
+  const tradeValue = riskManagedEntry
+    ? (riskPreview ? Number(riskPreview.estimated_notional) : null)
+    : referencePrice === null ? null : referencePrice * (parsePositive(quantity) ?? 0);
   const balance = displayedSnapshot?.balances.find((item) => item.currency === activeAccount?.base_currency);
   const availableFunds = balance?.available;
   const reservedFunds = balance?.reserved;
@@ -196,6 +204,38 @@ export function TradingPaperPanel({
   }, [bindingId, instrumentId, replayMode]);
 
   useEffect(() => {
+    if (!riskManagedEntry || !activeAccount || !stopLossEnabled) {
+      setRiskPreview(null);
+      return;
+    }
+    const entryPrice = orderType === 'market' ? askPrice : parsePositive(triggerPrice);
+    const stopPrice = parsePositive(stopLoss);
+    const desiredRisk = parsePositive(riskPct);
+    if (entryPrice === null || stopPrice === null || desiredRisk === null) {
+      setRiskPreview(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void tradingPaperApi.riskPreview(activeAccount.account_id, {
+        instrument_id: instrumentId,
+        binding_id: bindingId,
+        entry_price: String(entryPrice),
+        stop_price: String(stopPrice),
+        desired_risk_pct: String(desiredRisk),
+      }).then((preview) => {
+        if (!cancelled) setRiskPreview(preview);
+      }).catch(() => {
+        if (!cancelled) setRiskPreview(null);
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeAccount, askPrice, bindingId, instrumentId, orderType, riskManagedEntry, riskPct, stopLoss, stopLossEnabled, triggerPrice]);
+
+  useEffect(() => {
     if (!notice && !confirmation) return;
     const timer = window.setTimeout(() => {
       setNotice(null);
@@ -248,7 +288,25 @@ export function TradingPaperPanel({
     const numericTrigger = parsePositive(triggerPrice);
     const numericTakeProfit = takeProfitEnabled ? parsePositive(takeProfit) : null;
     const numericStopLoss = stopLossEnabled ? parsePositive(stopLoss) : null;
-    if (
+    const numericRiskPct = parsePositive(riskPct);
+    if (riskManagedEntry) {
+      if (
+        !stopLossEnabled
+        || numericStopLoss === null
+        || numericRiskPct === null
+        || (orderType !== 'market' && numericTrigger === null)
+        || (takeProfitEnabled && numericTakeProfit === null)
+      ) {
+        setStatus('error');
+        setNotice({ kind: 'error', message: 'New paper entries require a valid stop loss, risk %, order price, and optional take-profit.' });
+        return;
+      }
+      if (!riskPreview?.allowed) {
+        setStatus('error');
+        setNotice({ kind: 'error', message: 'Server risk approval is required before submitting this entry.' });
+        return;
+      }
+    } else if (
       numericQuantity === null
       || (orderType !== 'market' && numericTrigger === null)
       || (takeProfitEnabled && numericTakeProfit === null)
@@ -263,48 +321,62 @@ export function TradingPaperPanel({
     setNotice(null);
     setConfirmation(null);
     try {
-      const input = {
-        order_id: orderId,
-        instrument_id: instrumentId,
-        binding_id: bindingId,
-        side,
-        order_type: orderType,
-        quantity,
-        limit_price: orderType === 'limit' ? triggerPrice : null,
-        stop_price: orderType === 'stop' ? triggerPrice : null,
-        reference_price: orderType === 'market'
-          ? (side === 'buy' ? askPrice : bidPrice) === null
-            ? null
-            : String(side === 'buy' ? askPrice : bidPrice)
-          : null,
-        idempotency_key: orderId,
-      };
       let order: PaperOrder;
-      if (replayMode) {
-        if (!replaySnapshot || !replayBar) throw new Error('Replay account is still loading. Select a replay bar and try again.');
-        const result = await placeReplayOrder(replaySnapshot, input, replayBar);
-        setReplaySnapshot(result.snapshot);
-        order = result.order;
-        setStatus('ready');
-      } else {
-        order = await tradingPaperApi.placeOrder(activeAccount.account_id, input);
-      }
-      if (!replayMode) {
-        writePaperPositionProtection(activeAccount.account_id, instrumentId, {
-          takeProfit: numericTakeProfit,
-          stopLoss: numericStopLoss,
+      let submittedQuantity = quantity;
+      if (riskManagedEntry) {
+        const result = await tradingPaperApi.placeRiskOrder(activeAccount.account_id, {
+          order_id: orderId,
+          instrument_id: instrumentId,
+          binding_id: bindingId,
+          order_type: orderType,
+          trigger_price: orderType === 'market' ? null : triggerPrice,
+          stop_loss: stopLoss,
+          take_profit: takeProfitEnabled ? takeProfit : null,
+          desired_risk_pct: riskPct,
+          idempotency_key: orderId,
         });
+        order = result.order;
+        submittedQuantity = result.order.quantity;
+        setRiskPreview(result.preview);
         await refresh(activeAccount.account_id);
+      } else {
+        const input = {
+          order_id: orderId,
+          instrument_id: instrumentId,
+          binding_id: bindingId,
+          side,
+          order_type: orderType,
+          quantity,
+          limit_price: orderType === 'limit' ? triggerPrice : null,
+          stop_price: orderType === 'stop' ? triggerPrice : null,
+          reference_price: orderType === 'market'
+            ? (side === 'buy' ? askPrice : bidPrice) === null
+              ? null
+              : String(side === 'buy' ? askPrice : bidPrice)
+            : null,
+          idempotency_key: orderId,
+        };
+        if (replayMode) {
+          if (!replaySnapshot || !replayBar) throw new Error('Replay account is still loading. Select a replay bar and try again.');
+          const result = await placeReplayOrder(replaySnapshot, input, replayBar);
+          setReplaySnapshot(result.snapshot);
+          order = result.order;
+          setStatus('ready');
+        } else {
+          order = await tradingPaperApi.placeOrder(activeAccount.account_id, input);
+          await refresh(activeAccount.account_id);
+        }
       }
       const orderPrice = order.average_fill_price
         ?? order.limit_price
         ?? order.stop_price
+        ?? order.reference_price
         ?? (side === 'buy' ? askPrice : bidPrice);
       setConfirmation({
         title: `${orderType[0].toUpperCase()}${orderType.slice(1)} order ${order.status === 'filled' ? 'executed' : 'submitted'} on`,
         market: displayMarket(instrumentId),
         side,
-        quantity,
+        quantity: submittedQuantity,
         price: orderPrice === null || orderPrice === undefined ? '—' : number(String(orderPrice), 2),
       });
     } catch (error) {
@@ -394,12 +466,26 @@ export function TradingPaperPanel({
           </div>
 
           <label className="trading-paper-units">
-            <span>Units</span>
+            <span>{riskManagedEntry ? 'Units · server sized' : 'Units'}</span>
             <div>
-              <input aria-label="Order quantity" inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+              <input
+                aria-label="Order quantity"
+                inputMode="decimal"
+                value={displayedQuantity}
+                readOnly={riskManagedEntry}
+                placeholder={riskManagedEntry ? 'Risk preview' : undefined}
+                onChange={(event) => setQuantity(event.target.value)}
+              />
               <span>{symbol.split('/')[0]}</span>
             </div>
           </label>
+
+          {riskManagedEntry ? (
+            <label className="trading-paper-price-field">
+              Risk per trade, %
+              <input aria-label="Risk per trade percent" inputMode="decimal" value={riskPct} onChange={(event) => setRiskPct(event.target.value)} />
+            </label>
+          ) : null}
 
           {orderType !== 'market' ? (
             <label className="trading-paper-price-field">
@@ -412,6 +498,10 @@ export function TradingPaperPanel({
             <div><dt>Trade value</dt><dd>{tradeValue === null ? '—' : `${number(String(tradeValue))} ${activeAccount.base_currency}`}</dd></div>
             <div><dt>Available funds</dt><dd>{availableFunds == null ? '—' : `${number(availableFunds)} ${activeAccount.base_currency}`}</dd></div>
             <div><dt>Reserved funds</dt><dd>{reservedFunds == null ? '—' : `${number(reservedFunds)} ${activeAccount.base_currency}`}</dd></div>
+            {riskManagedEntry ? <div><dt>Risk at stop</dt><dd>{riskPreview ? `${number(riskPreview.actual_risk_dollars)} ${activeAccount.base_currency} · ${number(riskPreview.actual_risk_pct, 3)}%` : '—'}</dd></div> : null}
+            {riskManagedEntry ? <div><dt>Open risk</dt><dd>{riskPreview ? `${number(riskPreview.aggregate_open_risk_dollars)} ${activeAccount.base_currency} · ${number(riskPreview.aggregate_open_risk_pct, 3)}%` : '—'}</dd></div> : null}
+            {riskManagedEntry ? <div><dt>Buying power after</dt><dd>{riskPreview ? `${number(riskPreview.buying_power_after)} ${activeAccount.base_currency}` : '—'}</dd></div> : null}
+            {riskManagedEntry ? <div><dt>Execution check</dt><dd>{riskPreview ? `${riskPreview.execution_eligible ? 'Eligible' : 'Blocked'} · ${riskPreview.spread_bps == null ? 'spread —' : `${number(riskPreview.spread_bps)} bps`} · ${riskPreview.freshness_mode}` : 'Awaiting server preview'}</dd></div> : null}
           </dl>
 
           <details className="trading-paper-exits" open>
@@ -421,17 +511,21 @@ export function TradingPaperPanel({
               <button type="button" role="switch" aria-checked={takeProfitEnabled} aria-label="Enable take profit" className={takeProfitEnabled ? 'active' : undefined} onClick={() => setTakeProfitEnabled((value) => !value)}><i /></button>
             </div>
             <div className="trading-paper-exit-row">
-              <label><span>Stop loss, price</span>{stopLossEnabled ? <input aria-label="Stop loss price" inputMode="decimal" value={stopLoss} onChange={(event) => setStopLoss(event.target.value)} placeholder={quotePrice} /> : null}</label>
+              <label><span>Stop loss, price{riskManagedEntry ? ' · required' : ''}</span>{stopLossEnabled ? <input aria-label="Stop loss price" inputMode="decimal" value={stopLoss} onChange={(event) => setStopLoss(event.target.value)} placeholder={quotePrice} /> : null}</label>
               <button type="button" role="switch" aria-checked={stopLossEnabled} aria-label="Enable stop loss" className={stopLossEnabled ? 'active' : undefined} onClick={() => setStopLossEnabled((value) => !value)}><i /></button>
             </div>
           </details>
 
-          <button type="button" className={`trading-paper-submit ${side}`} disabled={status === 'saving'} onClick={() => void placeOrder()}>
+          {riskManagedEntry && riskPreview && !riskPreview.allowed ? (
+            <div className="trading-paper-notice error" role="alert">Risk blocked: {riskPreview.reason_codes.join(' · ')}</div>
+          ) : null}
+
+          <button type="button" className={`trading-paper-submit ${side}`} disabled={status === 'saving' || (riskManagedEntry && !riskPreview?.allowed)} onClick={() => void placeOrder()}>
             <strong>{side === 'buy' ? 'Buy' : 'Sell'}</strong>
-            <span>{quantity || '0'} {symbol} {orderType.toUpperCase()}</span>
+            <span>{displayedQuantity || '0'} {symbol} {orderType.toUpperCase()}</span>
           </button>
           {notice?.kind === 'error' ? <div className="trading-paper-notice error" role="alert" aria-live="polite">{notice.message}</div> : null}
-          <small className="trading-paper-disclaimer">Paper only · no live brokerage execution</small>
+          <small className="trading-paper-disclaimer">Paper only · server-authoritative risk · no live brokerage execution</small>
         </div>
       ) : (
         <div className="trading-paper-create" role="tabpanel" aria-label="Create paper account">
