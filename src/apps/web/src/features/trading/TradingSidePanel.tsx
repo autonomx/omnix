@@ -6,6 +6,7 @@ import { TradingNewsPanel } from './TradingNewsPanel';
 import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingProspectiveEconomicPanel } from './TradingProspectiveEconomicPanel';
 import { TradingSymbolIntelligence } from './TradingSymbolIntelligence';
+import { TradingTradeJournal } from './TradingTradeJournal';
 import { TradingWatchlist } from './TradingWatchlist';
 import { TradingObjectPanel } from './TradingObjectPanel';
 import { TradingPinePanel } from './TradingPinePanel';
@@ -14,12 +15,13 @@ import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIn
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
 
-export type TradingSideTab = 'watchlist' | 'paper' | 'intelligence' | 'prospective' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects' | 'pine';
+export type TradingSideTab = 'watchlist' | 'paper' | 'intelligence' | 'journal' | 'prospective' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects' | 'pine';
 
 const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
   { id: 'paper', label: 'Trade' },
   { id: 'intelligence', label: 'Intel' },
+  { id: 'journal', label: 'Journal' },
   { id: 'prospective', label: 'Evidence' },
   { id: 'indicators', label: 'Indicators' },
   { id: 'alerts', label: 'Alerts' },
@@ -167,6 +169,12 @@ export function TradingSidePanel({
             instrumentId={activeInstrumentId}
             bindingId={bindingId}
             accountId={paperAccountId}
+          />
+        ) : null}
+        {activeTab === 'journal' ? (
+          <TradingTradeJournal
+            accountId={paperAccountId}
+            instrumentId={activeInstrumentId}
           />
         ) : null}
         {activeTab === 'prospective' ? <TradingProspectiveEconomicPanel /> : null}
