@@ -34,6 +34,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.research_api import create_trading_research_router
     from app.trading.scanner_api import create_trading_scanner_router
     from app.trading.strategy_api import create_trading_strategy_router
+    from app.trading.strategy_deep_recovery_monitor import register_trading_strategy_deep_recovery_shadow_monitor
     from app.trading.strategy_monitor import register_trading_strategy_monitor
     from app.trading.strategy_operations_api import create_trading_strategy_operations_router
     from app.trading.strategy_research_monitor import register_trading_strategy_research_monitor
@@ -57,6 +58,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     register_alpaca_iex_status_monitor(gateway)
     register_trading_paper_monitor(gateway)
     register_trading_strategy_monitor(gateway)
+    register_trading_strategy_deep_recovery_shadow_monitor(gateway)
     register_trading_strategy_universe_archive_monitor(gateway)
     register_trading_strategy_v2_qualification_monitor(gateway)
     register_trading_strategy_research_monitor(gateway)
