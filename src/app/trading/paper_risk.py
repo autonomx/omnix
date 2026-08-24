@@ -89,14 +89,6 @@ class PaperRiskOrderRequest(BaseModel):
         return self
 
 
-class PaperRiskOrderResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    preview: PaperRiskPreview
-    order: object
-    protection: PaperPositionProtection
-
-
 def _entry_price(order) -> Decimal | None:
     return order.limit_price or order.stop_price or order.reference_price or order.average_fill_price
 
@@ -173,7 +165,19 @@ def preview_paper_risk(
     buying_power = balance.available if balance is not None else Decimal("0")
     spread = observation.spread_bps
     reasons: list[str] = []
+    existing_target_exposure = any(
+        item.instrument_id == request.instrument_id and item.quantity != 0
+        for item in snapshot.positions
+    ) or any(
+        item.instrument_id == request.instrument_id
+        and item.side == "buy"
+        and item.status == "open"
+        and item.quantity > item.filled_quantity
+        for item in snapshot.open_orders
+    )
 
+    if existing_target_exposure:
+        reasons.append("EXISTING_INSTRUMENT_EXPOSURE")
     if request.stop_price >= request.entry_price:
         reasons.append("STOP_NOT_BELOW_ENTRY")
     if request.desired_risk_pct > active.max_risk_per_trade_pct:
