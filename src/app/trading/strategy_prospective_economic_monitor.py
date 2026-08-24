@@ -2,8 +2,10 @@ from __future__ import annotations
 
 """Prospective economic-SHADOW recorder.
 
-This monitor consumes the already-isolated deep-recovery SHADOW signal stream,
-freezes the executable entry/structural risk geometry available at decision time,
+This monitor consumes the isolated deep-recovery SHADOW state/signal stream. It
+mirrors all causal state transitions for unbiased later diagnostics, while only
+frozen signal events enter the economic promotion sample. For each signal it
+freezes the executable entry/structural risk geometry available at decision time
 and resolves direct +R/-R first-passage outcomes from finalized 1-minute bars.
 It has no paper repository and can never create or authorize an order.
 """
@@ -41,7 +43,9 @@ from .trade_logging import trade_log
 
 _ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_prospective_economic_monitor"
+_SOURCE_STATE_EVENT_TYPE = "deep_recovery_state"
 _SOURCE_EVENT_TYPE = "deep_recovery_shadow"
+_CANDIDATE_EVENT_TYPE = "prospective_economic_candidate"
 _SIGNAL_EVENT_TYPE = "prospective_economic_signal"
 _OUTCOME_EVENT_TYPE = "prospective_economic_outcome"
 
@@ -167,6 +171,7 @@ class TradingStrategyProspectiveEconomicMonitor:
         self._task: asyncio.Task[None] | None = None
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
+        self.candidate_capture_count = 0
         self.signal_capture_count = 0
         self.outcome_capture_count = 0
         self.incomplete_outcome_count = 0
@@ -191,7 +196,12 @@ class TradingStrategyProspectiveEconomicMonitor:
         now: datetime,
     ) -> list[StrategyEvent]:
         start, end = _event_window(now)
-        event_types = (_SOURCE_EVENT_TYPE, *PROSPECTIVE_ECONOMIC_EVENT_TYPES)
+        event_types = (
+            _SOURCE_STATE_EVENT_TYPE,
+            _SOURCE_EVENT_TYPE,
+            _CANDIDATE_EVENT_TYPE,
+            *PROSPECTIVE_ECONOMIC_EVENT_TYPES,
+        )
         if hasattr(repository, "events_by_types_between"):
             return await asyncio.to_thread(
                 repository.events_by_types_between,
@@ -236,6 +246,71 @@ class TradingStrategyProspectiveEconomicMonitor:
                 payload=payload,
             ),
         )
+
+    async def _capture_candidates(
+        self,
+        repository: TradingStrategyRepository,
+        config: TradingStrategyConfigDocument,
+        events: list[StrategyEvent],
+    ) -> int:
+        """Mirror every causal source state transition for unbiased diagnostics.
+
+        These events are intentionally diagnostic-only: they never enter the
+        promotion metrics/evidence fingerprint, which remain signal/outcome based.
+        """
+        profile = prospective_economic_profile_fingerprint(config)
+        current_v2 = v2_profile_fingerprint(config.config)
+        existing_sources = {
+            str(event.payload.get("source_event_id"))
+            for event in events
+            if event.event_type == _CANDIDATE_EVENT_TYPE
+            and event.payload.get("profile_fingerprint") == profile
+        }
+        captured = 0
+        for source in events:
+            if source.event_type != _SOURCE_STATE_EVENT_TYPE or source.event_id in existing_sources:
+                continue
+            if source.payload.get("setup_id") != DEEP_RECOVERY_SETUP_ID:
+                continue
+            if source.payload.get("rule_version") != DEEP_RECOVERY_RULE_VERSION:
+                continue
+            if source.payload.get("profile_fingerprint") != current_v2:
+                continue
+            observed_at = source.observed_at.astimezone(timezone.utc)
+            evaluation = source.payload.get("evaluation")
+            evaluation_dict = evaluation if isinstance(evaluation, dict) else {}
+            payload: dict[str, object] = {
+                "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
+                "profile_fingerprint": profile,
+                "source_event_id": source.event_id,
+                "source_setup_id": DEEP_RECOVERY_SETUP_ID,
+                "source_rule_version": DEEP_RECOVERY_RULE_VERSION,
+                "session_date": observed_at.astimezone(_ET).date().isoformat(),
+                "source_state": source.state,
+                "source_reason_code": source.reason_code,
+                "source_evaluation": evaluation_dict,
+                "universe_id": source.payload.get("universe_id"),
+                "universe_source": source.payload.get("universe_source"),
+                "finalized_bar_count": source.payload.get("finalized_bar_count"),
+                "diagnostic_only": True,
+                "promotion_metric_eligible": False,
+                "execution_authority": False,
+            }
+            persisted = await self._append(
+                repository,
+                config,
+                instrument_id=source.instrument_id,
+                event_type=_CANDIDATE_EVENT_TYPE,
+                state=source.state,
+                reason_code="PROSPECTIVE_ECONOMIC_CANDIDATE_STATE",
+                observed_at=observed_at,
+                payload=payload,
+                identity=(source.event_id,),
+            )
+            captured += int(persisted)
+            if persisted:
+                self.candidate_capture_count += 1
+        return captured
 
     async def _capture_signals(
         self,
@@ -495,8 +570,9 @@ class TradingStrategyProspectiveEconomicMonitor:
         if not _eligible(config):
             return 0
         events = await self._events(repository, config.strategy_id, now=now)
-        captured = await self._capture_signals(repository, config, events)
-        # Re-read so signals appended above can become outcomes in the same cycle
+        captured = await self._capture_candidates(repository, config, events)
+        captured += await self._capture_signals(repository, config, events)
+        # Re-read so events appended above can become outcomes in the same cycle
         # if the monitor was offline for more than the 60-minute horizon.
         if captured:
             events = await self._events(repository, config.strategy_id, now=now)
@@ -550,6 +626,7 @@ class TradingStrategyProspectiveEconomicMonitor:
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
+            "candidate_capture_count": self.candidate_capture_count,
             "signal_capture_count": self.signal_capture_count,
             "outcome_capture_count": self.outcome_capture_count,
             "incomplete_outcome_count": self.incomplete_outcome_count,
