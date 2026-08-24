@@ -114,7 +114,7 @@ class FakeRepository:
             universe_id="universe-2026-08-24",
             session_date=NOW.date(),
             evaluation_time=OPEN - timedelta(minutes=10),
-            discovery_source="fixture",
+            discovery_source="import",
             source_fingerprint="f" * 64,
             candidates=[_candidate()],
         )
