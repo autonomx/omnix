@@ -42,6 +42,16 @@ export const tradingPaperApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  cancelOrder: (accountId: string, orderId: string) =>
+    requestJson<PaperOrder>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}`,
+      { method: 'DELETE' },
+    ),
+  replaceOrder: (accountId: string, orderId: string, replacement: PaperOrderInput) =>
+    requestJson<{ cancelled: PaperOrder; replacement: PaperOrder }>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}/replace`,
+      { method: 'POST', body: JSON.stringify({ replacement }) },
+    ),
   /** @deprecated Browser observations are deliberately non-authoritative. */
   processObservation: async (_accountId: string, _input: unknown) => ({ fills: [] as unknown[] }),
   protections: async (accountId: string) => {
