@@ -332,7 +332,7 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await expect(symbolSearch.getByRole('button', { name: /BTCUSDT/ })).toBeVisible();
   await symbolSearch.getByRole('button', { name: /BTCUSDT/ }).click();
   await expect(symbolSearch).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Focus this chart' })).toHaveCount(1);
   await expect(page.getByRole('group', { name: 'Indicator legend' })).toHaveCount(1);
   await page.getByRole('button', { name: 'Hide SMA 20 overlay' }).click();
   await expect(page.getByRole('button', { name: 'Show SMA 20 overlay' })).toBeVisible();
@@ -374,7 +374,7 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await secondChartSymbolSearch.getByRole('button', { name: /ETHUSDT/ }).click();
   await expect(secondChart).toContainText('ETHUSDT');
   await expect(page.locator('.trading-chart-panel').first()).toContainText('BTCUSDT');
-  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Focus this chart' })).toHaveCount(3);
   await page.getByLabel('Grid columns').selectOption('columns-3');
 
   page.once('dialog', (dialog) => dialog.accept('Swing Research'));
@@ -502,17 +502,17 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
   await enterRsiFullscreen.click();
   const exitRsiFullscreen = page.getByRole('button', { name: 'Exit fullscreen RSI 14 panel' });
   await expect(exitRsiFullscreen).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.trading-chart-panel.is-immersive-fullscreen')).toHaveCount(1);
-  await expect(page.locator('.trading-chart-panel.is-immersive-fullscreen .trading-indicator-pane-controls')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel.is-chart-focus-mode')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel.is-chart-focus-mode .trading-indicator-pane-controls')).toHaveCount(1);
   await exitRsiFullscreen.click();
   await expect(page.getByRole('button', { name: 'Enter fullscreen RSI 14 panel' })).toHaveAttribute('aria-pressed', 'false');
 
-  const enterChartFullscreen = page.getByRole('button', { name: 'Enter fullscreen chart' });
-  await enterChartFullscreen.click();
-  await expect(page.locator('.trading-chart-panel.is-immersive-fullscreen')).toHaveCount(1);
-  await expect(page.locator('.trading-chart-panel.is-immersive-fullscreen .trading-indicator-pane-controls')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Exit fullscreen chart' }).click();
-  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveAttribute('aria-pressed', 'false');
+  const enterChartFocus = page.getByRole('button', { name: 'Focus this chart' });
+  await enterChartFocus.click();
+  await expect(page.locator('.trading-chart-panel.is-chart-focus-mode')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel.is-chart-focus-mode .trading-indicator-pane-controls')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Exit chart focus mode' }).click();
+  await expect(page.getByRole('button', { name: 'Focus this chart' })).toHaveAttribute('aria-pressed', 'false');
 
   await page.getByRole('button', { name: 'Minimize RSI 14 panel' }).click();
   await expect(page.getByRole('button', { name: 'Restore RSI 14 panel' })).toHaveAttribute('aria-expanded', 'false');
