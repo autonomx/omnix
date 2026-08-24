@@ -1207,6 +1207,12 @@ class TradingStrategyMonitor:
             ]
         trades_today = len(entry_events)
         traded_symbols = {event.instrument_id for event in entry_events}
+        submitted_attempts = {
+            str(event.payload.get("trade_attempt_id"))
+            if event.payload.get("trade_attempt_id")
+            else _trade_attempt_id(config.strategy_id, event.instrument_id, event.observed_at)
+            for event in entry_events
+        }
 
         daily_realized_pnl: Decimal | None = None
         if hasattr(strategy_repository, "daily_paper_pnl"):
@@ -1252,6 +1258,7 @@ class TradingStrategyMonitor:
             account_id=config.account_id,
             trades_today=trades_today,
             traded_symbols=sorted(traded_symbols),
+            submitted_attempts=sorted(submitted_attempts),
             protected_symbols=sorted(protected_symbols),
             daily_realized_pnl=daily_realized_pnl,
             open_strategy_risk=open_risk,
@@ -1270,6 +1277,17 @@ class TradingStrategyMonitor:
                 candidate.instrument_id,
                 observed_at,
             )
+            if trade_attempt_id in submitted_attempts:
+                trade_log(
+                    "auto_trading",
+                    "candidate_skipped",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    instrument_id=candidate.instrument_id,
+                    trade_attempt_id=trade_attempt_id,
+                    reason="trade_attempt_already_submitted",
+                )
+                continue
             if candidate.instrument_id in protected_symbols:
                 trade_log(
                     "auto_trading",
@@ -1547,6 +1565,7 @@ class TradingStrategyMonitor:
             self.paper_order_count += 1
             trades_today += 1
             traded_symbols.add(candidate.instrument_id)
+            submitted_attempts.add(trade_attempt_id)
             protected_symbols.add(candidate.instrument_id)
             open_risk += decision.estimated_risk
 
