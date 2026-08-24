@@ -82,28 +82,7 @@ jobs:
       - name: Recover exact frozen recovery-selector source
         shell: bash
         run: |
-          python - <<'PYCODE'
-          import base64, gzip, hashlib, re
-          from pathlib import Path
-          expected = "5c98837cc96ad7c692d45b0bafff6a025f04f52599985cc6e85af734f6917607"
-          text = Path(".github/workflows/trading-v3-recovery-precision-search.yml").read_text(encoding="utf-8")
-          match = re.search(r'payload = "([A-Za-z0-9+/=]+)"', text)
-          if match is None:
-              raise SystemExit("embedded selector payload not found")
-          payload = match.group(1)
-          for index in range(-1, len(payload)):
-              candidate = payload if index < 0 else payload[:index] + payload[index + 1:]
-              try:
-                  source = gzip.decompress(base64.b64decode(candidate, validate=True))
-              except Exception:
-                  continue
-              if hashlib.sha256(source).hexdigest() == expected:
-                  Path("/tmp/recovery_selector.py").write_bytes(source)
-                  print(f"Recovered exact selector source sha256={expected}")
-                  break
-          else:
-              raise SystemExit("exact selector source fingerprint not recoverable")
-          PYCODE
+          python scripts/recover_trading_v3_selector.py --output /tmp/recovery_selector.py
           python -m py_compile /tmp/recovery_selector.py
 
       - name: Run one-shot March holdout
