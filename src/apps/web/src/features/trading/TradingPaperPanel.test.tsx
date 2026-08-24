@@ -5,6 +5,8 @@ const paperApi = vi.hoisted(() => ({
   accounts: vi.fn(),
   snapshot: vi.fn(),
   createAccount: vi.fn(),
+  riskPreview: vi.fn(),
+  placeRiskOrder: vi.fn(),
   placeOrder: vi.fn(),
   processObservation: vi.fn(),
   resetAccount: vi.fn(),
@@ -47,6 +49,42 @@ const accountSnapshot = () => ({
   recent_ledger: [],
 });
 
+const riskPreview = () => ({
+  allowed: true,
+  policy_version: 'paper-risk-v1',
+  reason_codes: [],
+  limiting_reason_code: 'RISK_BUDGET',
+  recommended_quantity: '3',
+  account_equity: '100000',
+  desired_risk_pct: '0.35',
+  actual_risk_dollars: '350',
+  actual_risk_pct: '0.35',
+  estimated_notional: '226.86',
+  buying_power_before: '100000',
+  buying_power_after: '99773.14',
+  aggregate_open_risk_dollars: '0',
+  aggregate_open_risk_pct: '0',
+  daily_realized_pnl: '0',
+  daily_loss_remaining: '1500',
+  spread_bps: '2.64',
+  observation_age_seconds: '0.1',
+  freshness_mode: 'polled',
+  execution_eligible: true,
+  unprotected_exposure_count: 0,
+});
+
+async function prepareRiskManagedBuy() {
+  fireEvent.click(await screen.findByRole('switch', { name: 'Enable stop loss' }));
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Stop loss price' }), { target: { value: '74.50' } });
+  await waitFor(() => expect(paperApi.riskPreview).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+    instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
+    entry_price: '75.62',
+    stop_price: '74.5',
+    desired_risk_pct: '0.35',
+  })));
+  await screen.findByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ });
+}
+
 describe('TradingPaperPanel', () => {
   beforeEach(() => {
     useTradingStore.setState({ replayMode: false, replaySessionId: 0 });
@@ -54,7 +92,9 @@ describe('TradingPaperPanel', () => {
     paperApi.accounts.mockResolvedValue([account]);
     paperApi.snapshot.mockResolvedValue(accountSnapshot());
     tradingApi.quote.mockResolvedValue({ price: '75.61', bid: '75.60', ask: '75.62' });
+    paperApi.riskPreview.mockResolvedValue(riskPreview());
     paperApi.processObservation.mockResolvedValue({ fills: [] });
+    paperApi.placeRiskOrder.mockRejectedValue(new Error('Paper Trading request failed (422): insufficient_paper_cash'));
     paperApi.placeOrder.mockRejectedValue(new Error('Paper Trading request failed (422): insufficient_paper_cash'));
     replayApi.advanceExecution.mockImplementation(async (snapshot) => snapshot);
     replayApi.placeExecutionOrder.mockImplementation(async (snapshot, order) => {
@@ -83,26 +123,43 @@ describe('TradingPaperPanel', () => {
     vi.clearAllMocks();
   });
 
-  it('shows the server rejection when an order cannot be funded', async () => {
+  it('shows the server rejection when a risk-sized order cannot be funded', async () => {
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
+    await prepareRiskManagedBuy();
 
-    const quantity = await screen.findByRole('textbox', { name: 'Order quantity' });
-    fireEvent.change(quantity, { target: { value: '3' } });
+    const quantity = screen.getByRole('textbox', { name: 'Order quantity' });
+    expect(quantity).toHaveValue('3');
+    expect(quantity).toHaveAttribute('readonly');
     fireEvent.click(screen.getByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Order not placed: insufficient available paper cash. Check reserved funds or wait for an open order to fill.',
     );
-    expect(paperApi.placeOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({ quantity: '3' }));
+    expect(paperApi.placeRiskOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+      stop_loss: '74.50',
+      desired_risk_pct: '0.35',
+    }));
+    expect(paperApi.placeRiskOrder.mock.calls[0][1]).not.toHaveProperty('quantity');
+    expect(paperApi.placeOrder).not.toHaveBeenCalled();
   });
 
-  it('shows a confirmation tooltip after a paper order is accepted', async () => {
-    paperApi.placeOrder.mockResolvedValue({ status: 'filled' });
+  it('shows a confirmation after the server accepts a risk-sized paper entry', async () => {
+    paperApi.placeRiskOrder.mockResolvedValue({
+      preview: riskPreview(),
+      order: {
+        status: 'filled',
+        order_id: 'risk-order',
+        quantity: '3',
+        average_fill_price: '75.63',
+        limit_price: null,
+        stop_price: null,
+        reference_price: '75.62',
+      },
+      protection: { entry_order_id: 'risk-order', stop_loss: '74.50' },
+    });
 
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
-
-    const quantity = await screen.findByRole('textbox', { name: 'Order quantity' });
-    fireEvent.change(quantity, { target: { value: '3' } });
+    await prepareRiskManagedBuy();
     fireEvent.click(screen.getByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ }));
 
     const confirmation = await screen.findByRole('status');
@@ -110,22 +167,36 @@ describe('TradingPaperPanel', () => {
     expect(confirmation).toHaveTextContent('Market order executed on');
     expect(confirmation).toHaveTextContent('BINANCE:SOLUSDT');
     expect(confirmation).toHaveTextContent('Buy 3');
+    expect(paperApi.placeRiskOrder.mock.calls[0][1]).not.toHaveProperty('quantity');
   });
 
-  it('leaves an accepted open market order to server-authoritative execution', async () => {
-    paperApi.placeOrder.mockResolvedValue({ status: 'open', reference_price: '75.62' });
+  it('leaves an accepted risk-sized market order to server-authoritative execution', async () => {
+    paperApi.placeRiskOrder.mockResolvedValue({
+      preview: riskPreview(),
+      order: {
+        status: 'open',
+        order_id: 'risk-order',
+        quantity: '3',
+        reference_price: '75.62',
+        average_fill_price: null,
+        limit_price: null,
+        stop_price: null,
+      },
+      protection: { entry_order_id: 'risk-order', stop_loss: '74.50' },
+    });
 
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
-
-    const quantity = await screen.findByRole('textbox', { name: 'Order quantity' });
-    fireEvent.change(quantity, { target: { value: '3' } });
+    await prepareRiskManagedBuy();
     fireEvent.click(screen.getByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('Market order submitted on');
-    expect(paperApi.placeOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+    expect(paperApi.placeRiskOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({
       instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
-      reference_price: '75.62',
+      order_type: 'market',
+      trigger_price: null,
+      stop_loss: '74.50',
     }));
+    expect(paperApi.placeRiskOrder.mock.calls[0][1]).not.toHaveProperty('quantity');
     expect(paperApi.processObservation).not.toHaveBeenCalled();
   });
 
@@ -149,6 +220,7 @@ describe('TradingPaperPanel', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent('Market order executed on');
     expect(paperApi.placeOrder).not.toHaveBeenCalled();
+    expect(paperApi.placeRiskOrder).not.toHaveBeenCalled();
     expect(paperApi.processObservation).not.toHaveBeenCalled();
     expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ account: expect.objectContaining({ account_id: 'paper-1' }) }),
