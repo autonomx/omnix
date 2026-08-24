@@ -3,11 +3,18 @@ from __future__ import annotations
 import inspect
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, all_bindings, binding_by_id, default_binding
-from app.trading.models import BarsResponse, ProviderBinding
+from app.trading.execution import (
+    ExecutionEligibilityPolicy,
+    ExecutionObservation,
+    assess_execution_observation,
+    execution_observation_from_quote,
+)
+from app.trading.models import BarsResponse, MarketBar, ProviderBinding
 
 from .additional_crypto import AdditionalCryptoProvider
 from .aggregation import (
@@ -15,8 +22,11 @@ from .aggregation import (
     aggregated_dataset_fingerprint,
     aggregation_plan,
 )
+from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .binance import BinanceMarketDataProvider
+from .coinmarketcap import CoinMarketCapProvider, coinmarketcap_configured
 from .equity import StooqEquityProvider, YahooEquityProvider
+from .equity_execution import yahoo_execution_observation
 from .errors import ProviderFallbackEligibleError
 
 
@@ -31,10 +41,12 @@ class ProviderRegistry:
         self._factories = factories or {
             "binance": lambda: BinanceMarketDataProvider(cache=self.cache),
             "yahoo": lambda: YahooEquityProvider(cache=self.cache),
+            "alpaca_iex": lambda: AlpacaIexExecutionProvider(),
             "stooq": lambda: StooqEquityProvider(cache=self.cache),
             "coinbase": lambda: AdditionalCryptoProvider("coinbase", cache=self.cache),
             "kraken": lambda: AdditionalCryptoProvider("kraken", cache=self.cache),
             "hyperliquid": lambda: AdditionalCryptoProvider("hyperliquid", cache=self.cache),
+            "coinmarketcap": lambda: CoinMarketCapProvider(cache=self.cache),
         }
         self._providers: dict[str, Any] = {}
 
@@ -52,6 +64,36 @@ class ProviderRegistry:
         if binding is None or binding.instrument_id != instrument_id:
             raise ValueError(f"invalid provider binding for {instrument_id}: {binding_id}")
         return binding
+
+    def resolve_execution_binding(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+    ) -> ProviderBinding:
+        """Resolve the authoritative paper-execution feed without changing chart history.
+
+        Equity charts and strategy bars continue to use Yahoo/Stooq bindings. Any
+        equity execution request is overlaid onto the official Alpaca IEX binding.
+        Missing Alpaca credentials then fail closed at quote fetch time rather than
+        silently falling back to Yahoo or a caller supplied price.
+        """
+        requested = self.resolve_binding(instrument_id, binding_id)
+        if instrument_id.startswith("equity:") and requested.provider in {
+            "yahoo",
+            "stooq",
+            "alpaca_iex",
+        }:
+            alpaca = next(
+                (
+                    item
+                    for item in all_bindings()
+                    if item.instrument_id == instrument_id and item.provider == "alpaca_iex"
+                ),
+                None,
+            )
+            if alpaca is not None:
+                return alpaca
+        return requested
 
     @staticmethod
     def _supports_cancellation(function: Callable[..., Any]) -> bool:
@@ -188,6 +230,72 @@ class ProviderRegistry:
             return provider.get_quote(instrument_id, cancellation=cancellation)
         return provider.get_quote(instrument_id)
 
+    def execution_observation(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        policy: ExecutionEligibilityPolicy | None = None,
+        cancellation: threading.Event | None = None,
+    ) -> ExecutionObservation:
+        requested = self.resolve_binding(instrument_id, binding_id)
+        binding = self.resolve_execution_binding(instrument_id, requested.binding_id)
+        provider = self.provider(binding.provider)
+        if binding.provider == "alpaca_iex":
+            observation = provider.execution_observation(
+                instrument_id,
+                policy=policy,
+                cancellation=cancellation,
+            )
+            if requested.binding_id != binding.binding_id:
+                observation = observation.model_copy(update={"binding_id": requested.binding_id})
+            return observation
+        if binding.provider == "yahoo":
+            return yahoo_execution_observation(
+                provider,
+                instrument_id,
+                policy=policy,
+                cancellation=cancellation,
+            )
+        quote = self.quote(instrument_id, binding.binding_id, cancellation)
+        observation = execution_observation_from_quote(
+            quote,
+            binding_id=binding.binding_id,
+            provider=binding.provider,
+        )
+        return assess_execution_observation(observation, policy)
+
+    def execution_indicator_bars(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        as_of: datetime,
+        cancellation: threading.Event | None = None,
+    ) -> list[MarketBar]:
+        """Return causal indicator history from the authoritative execution feed.
+
+        This deliberately follows execution binding resolution rather than chart
+        history resolution. Equity strategies therefore use Alpaca IEX evidence
+        even when their persisted/chart binding is Yahoo or Stooq.
+        """
+
+        requested = self.resolve_binding(instrument_id, binding_id)
+        binding = self.resolve_execution_binding(instrument_id, requested.binding_id)
+        provider = self.provider(binding.provider)
+        method = getattr(provider, "indicator_bars_as_of", None)
+        if not callable(method):
+            raise ValueError(
+                f"execution provider does not support indicator history: {binding.provider}"
+            )
+        if self._supports_cancellation(method):
+            return method(
+                instrument_id,
+                as_of=as_of,
+                cancellation=cancellation,
+            )
+        return method(instrument_id, as_of=as_of)
+
     def currency_rate(
         self,
         base_currency: str,
@@ -224,12 +332,29 @@ class ProviderRegistry:
                 if snapshot is not None
                 else {}
             )
+            configured = (
+                alpaca_iex_configured()
+                if provider_id == "alpaca_iex"
+                else coinmarketcap_configured()
+                if provider_id == "coinmarketcap"
+                else True
+            )
             descriptors.append(
                 {
                     "provider": provider_id,
-                    "display_name": provider_id.title(),
-                    "enabled": True,
-                    "status": snapshot.status if snapshot is not None else "ready",
+                    "display_name": (
+                        "Alpaca IEX"
+                        if provider_id == "alpaca_iex"
+                        else "CoinMarketCap"
+                        if provider_id == "coinmarketcap"
+                        else provider_id.title()
+                    ),
+                    "enabled": configured,
+                    "status": (
+                        snapshot.status if configured and snapshot is not None else "unconfigured"
+                        if not configured
+                        else "ready"
+                    ),
                     "policy": policy,
                     "bindings": [
                         binding for binding in all_bindings() if binding.provider == provider_id

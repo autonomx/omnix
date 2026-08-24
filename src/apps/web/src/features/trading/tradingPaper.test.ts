@@ -24,7 +24,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Trading paper client', () => {
   it('uses revision headers for reset and archive', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(snapshot), {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(snapshot), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));
@@ -42,7 +42,7 @@ describe('Trading paper client', () => {
   });
 
   it('submits only paper namespace orders', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
       account_id: 'paper-1',
       order_id: 'order-1',
       instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
@@ -70,5 +70,16 @@ describe('Trading paper client', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/trading/paper/accounts/paper-1/orders');
     expect(String(fetchMock.mock.calls[0][0])).not.toContain('broker');
     expect(String(fetchMock.mock.calls[0][0])).not.toContain('live');
+  });
+
+  it('hydrates an absent protection from the account list without a per-symbol 404', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ protections: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(tradingPaperApi.protection('paper-1', 'equity:NYSE:GME')).resolves.toBeNull();
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/trading/paper/accounts/paper-1/protections?active_only=true');
   });
 });

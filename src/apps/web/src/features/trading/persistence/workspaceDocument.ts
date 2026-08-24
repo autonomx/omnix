@@ -1,4 +1,5 @@
 import type { CoreIndicatorInstance, CoreIndicatorStyle } from '../indicators/coreIndicators';
+import { TRADING_CHART_TYPE_OPTIONS } from '../chart/chartAdapter';
 import { binanceInstrumentIdFor } from '../cryptoInstrumentDefaults';
 import {
   MAX_TRADING_CHARTS,
@@ -7,9 +8,10 @@ import {
   type TradingLinkState,
   type TradingPanelState,
 } from '../tradingStore';
+import type { TradingComparison, TradingComparisonPlacement } from '../tradingComparisons';
 
 export type TradingWorkspacePayload = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   name: string;
   layout: TradingLayout;
   activeChartId: string;
@@ -19,9 +21,10 @@ export type TradingWorkspacePayload = {
   favoriteInstrumentIds: string[];
 };
 
-type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId'> & {
+type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId' | 'comparisons'> & {
   indicators?: CoreIndicatorInstance[];
   bindingId?: string | null;
+  comparisons?: TradingComparison[];
 };
 
 type LegacyLayout = 'one' | 'two-horizontal' | 'two-vertical' | 'four';
@@ -39,7 +42,7 @@ export function serializeTradingWorkspace(input: {
   favoriteInstrumentIds?: string[];
 }): TradingWorkspacePayload {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     name: input.name?.trim() || 'Main Workspace',
     layout: input.layout,
     activeChartId: input.activeChartId,
@@ -47,6 +50,7 @@ export function serializeTradingWorkspace(input: {
       ...chart,
       bindingId: chart.bindingId ?? null,
       indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
+      comparisons: (chart.comparisons ?? []).map((comparison) => ({ ...comparison })),
     })),
     links: { ...input.links },
     panels: { ...(input.panels ?? { right: true, bottom: true }) },
@@ -90,9 +94,20 @@ function indicator(value: unknown): value is CoreIndicatorInstance {
   return true;
 }
 
+function comparison(value: unknown): value is TradingComparison {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<TradingComparison>;
+  const placements: TradingComparisonPlacement[] = ['percent', 'price-scale', 'pane'];
+  return typeof item.instrumentId === 'string'
+    && item.instrumentId.length > 0
+    && typeof item.placement === 'string'
+    && placements.includes(item.placement as TradingComparisonPlacement)
+    && (item.visible === undefined || typeof item.visible === 'boolean');
+}
+
 function parseCharts(value: unknown): TradingChartState[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_TRADING_CHARTS) return null;
-  const chartTypes = ['candlestick', 'bar', 'line', 'area', 'baseline'];
+  const chartTypes = TRADING_CHART_TYPE_OPTIONS.map((option) => option.value);
   const charts: TradingChartState[] = [];
   for (const raw of value) {
     if (!raw || typeof raw !== 'object') return null;
@@ -107,6 +122,8 @@ function parseCharts(value: unknown): TradingChartState[] | null {
     if (bindingId === undefined) return null;
     const indicators = Array.isArray(chart.indicators) ? chart.indicators.filter(indicator) : [];
     if (Array.isArray(chart.indicators) && indicators.length !== chart.indicators.length) return null;
+    const comparisons = Array.isArray(chart.comparisons) ? chart.comparisons.filter(comparison) : [];
+    if (Array.isArray(chart.comparisons) && comparisons.length !== chart.comparisons.length) return null;
     charts.push({
       chartId: chart.chartId,
       instrumentId: chart.instrumentId,
@@ -114,6 +131,7 @@ function parseCharts(value: unknown): TradingChartState[] | null {
       interval: chart.interval,
       chartType: chart.chartType,
       indicators,
+      comparisons,
     });
   }
   if (new Set(charts.map((chart) => chart.chartId)).size !== charts.length) return null;
@@ -190,27 +208,28 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
       ? requestedActive
       : migratedCharts[0].chartId;
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: typeof payload.name === 'string' ? payload.name : 'Main Workspace',
       layout: migrateLegacyLayout(legacyLayout),
       activeChartId,
       charts: migratedCharts,
-      links,
+      links: { ...links, visibleRange: false },
       panels: parsePanels(payload.panels),
       favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
     };
   }
 
-  if (payload.schemaVersion !== 2 || typeof payload.layout !== 'string' || !layouts.includes(payload.layout as TradingLayout)) return null;
+  if ((payload.schemaVersion !== 2 && payload.schemaVersion !== 3) || typeof payload.layout !== 'string' || !layouts.includes(payload.layout as TradingLayout)) return null;
   const requestedActive = typeof payload.activeChartId === 'string' ? payload.activeChartId : charts[0].chartId;
   const migratedCharts = migrateCryptoChartsToBinance(charts);
+  const migratedLinks = payload.schemaVersion === 2 ? { ...links, visibleRange: false } : links;
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : 'Main Workspace',
     layout: payload.layout as TradingLayout,
     activeChartId: migratedCharts.some((chart) => chart.chartId === requestedActive) ? requestedActive : migratedCharts[0].chartId,
     charts: migratedCharts,
-    links,
+    links: migratedLinks,
     panels: parsePanels(payload.panels),
     favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
   };

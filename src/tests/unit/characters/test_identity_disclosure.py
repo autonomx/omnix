@@ -14,17 +14,17 @@ def _character(policy: dict[str, object]) -> CharacterProfileSnapshot:
     )
 
 
-def test_character_prompt_contains_hard_ai_identity_disclosure(monkeypatch) -> None:
+def test_character_prompt_uses_persona_while_identity_policy_stays_server_enforced(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     context = resolve_interaction_context(
         InteractionSelection(interaction_mode="character", character_id="maya"),
         character=_character({"disclosure_required": True}),
     )
 
-    identity = "\n".join(context.assistant_identity)
-    assert "AI character, not a human" in identity
-    assert "Never claim human identity" in identity
-    assert '"disclosure_required":true' in identity
+    # Governance is validated before this context is returned, but policy prose is
+    # deliberately not injected beside the saved persona as a competing model
+    # instruction. Character Mode has one authoritative persona prompt.
+    assert context.assistant_identity == ["Be warm and easygoing."]
 
 
 @pytest.mark.parametrize(

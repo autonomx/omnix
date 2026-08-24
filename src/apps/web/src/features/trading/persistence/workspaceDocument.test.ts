@@ -18,7 +18,7 @@ const state = {
 describe('Trading workspace document', () => {
   it('round trips exact charts, panels, favorites, active chart, and links', () => {
     const serialized = serializeTradingWorkspace(state);
-    expect(serialized.schemaVersion).toBe(2);
+    expect(serialized.schemaVersion).toBe(3);
     expect(serialized.panels).toEqual({ right: false, bottom: true });
     expect(serialized.favoriteInstrumentIds).toEqual(['eth', 'btc']);
     expect(parseTradingWorkspace(serialized)).toEqual(serialized);
@@ -39,7 +39,7 @@ describe('Trading workspace document', () => {
       panels: { right: false },
       favoriteInstrumentIds: ['sol'],
     });
-    expect(migrated?.schemaVersion).toBe(2);
+    expect(migrated?.schemaVersion).toBe(3);
     expect(migrated?.layout).toBe('columns-1');
     expect(migrated?.charts.map((chart) => chart.chartId)).toEqual(['chart-3']);
     expect(migrated?.activeChartId).toBe('chart-3');
@@ -73,8 +73,20 @@ describe('Trading workspace document', () => {
     expect(migrated?.favoriteInstrumentIds).toEqual(['crypto:BINANCE:spot:BTC-USDT']);
   });
 
+  it('migrates legacy linked ranges to independent chart navigation', () => {
+    const migrated = parseTradingWorkspace({
+      schemaVersion: 2,
+      layout: 'auto',
+      charts: state.charts,
+      links: { ...state.links, visibleRange: true },
+    });
+
+    expect(migrated?.schemaVersion).toBe(3);
+    expect(migrated?.links.visibleRange).toBe(false);
+  });
+
   it('rejects unknown schema versions, layouts, and malformed charts', () => {
-    expect(parseTradingWorkspace({ schemaVersion: 3, layout: 'auto', charts: [], links: state.links })).toBeNull();
+    expect(parseTradingWorkspace({ schemaVersion: 4, layout: 'auto', charts: [], links: state.links })).toBeNull();
     expect(parseTradingWorkspace({ schemaVersion: 2, layout: 'four', charts: state.charts, links: state.links })).toBeNull();
     expect(parseTradingWorkspace({
       schemaVersion: 2,

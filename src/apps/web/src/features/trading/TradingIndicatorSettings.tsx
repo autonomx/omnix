@@ -65,9 +65,10 @@ function defaultPlotColor(key: string, index: number): string {
   return plotColors[index % plotColors.length];
 }
 
-function copyStyle(style: CoreIndicatorStyle | undefined): CoreIndicatorStyle | undefined {
-  if (!style) return undefined;
+function copyStyle(style: CoreIndicatorStyle | undefined): CoreIndicatorStyle {
+  if (!style) return { labelsOnPriceScale: false };
   return {
+    labelsOnPriceScale: false,
     ...style,
     plots: style.plots ? { ...style.plots } : undefined,
     colors: style.colors ? { ...style.colors } : undefined,
@@ -275,13 +276,13 @@ export function TradingIndicatorSettings({
                   {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((value) => <option key={value} value={value}>{value} decimal{value === 1 ? '' : 's'}</option>)}
                 </select>
               </label>
-              <label className="trading-indicator-settings-check"><input type="checkbox" checked={style?.labelsOnPriceScale === true} onChange={(event) => setStyle({ labelsOnPriceScale: event.target.checked })} /><span>Show price levels</span></label>
+              <label className="trading-indicator-settings-check"><input aria-label="Show indicator labels on Y-axis" type="checkbox" checked={style?.labelsOnPriceScale === true} onChange={(event) => setStyle({ labelsOnPriceScale: event.target.checked })} /><span>Show labels on Y-axis</span></label>
               <label className="trading-indicator-settings-check"><input type="checkbox" checked={style?.valuesInStatusLine !== false} onChange={(event) => setStyle({ valuesInStatusLine: event.target.checked })} /><span>Values in status line</span></label>
               <div className="trading-indicator-settings-section-label">Input values</div>
               <label className="trading-indicator-settings-check"><input type="checkbox" checked={style?.inputsInStatusLine !== false} onChange={(event) => setStyle({ inputsInStatusLine: event.target.checked })} /><span>Inputs in status line</span></label>
               <label className="trading-indicator-settings-field">
                 <span>Line width</span>
-                <select value={String(style?.lineWidth ?? 2)} onChange={(event) => setStyle({ lineWidth: Number(event.target.value) as 1 | 2 | 3 | 4 })}>
+                <select value={String(style?.lineWidth ?? 1)} onChange={(event) => setStyle({ lineWidth: Number(event.target.value) as 1 | 2 | 3 | 4 })}>
                   <option value="1">1 px</option><option value="2">2 px</option><option value="3">3 px</option><option value="4">4 px</option>
                 </select>
               </label>

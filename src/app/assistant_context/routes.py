@@ -119,6 +119,7 @@ def register_assistant_context_routes(
         policy = policy_factory() if policy_factory is not None else settings.policy
         request.internal_research_identity = session_id
         request.internal_research_provider = settings.effective_provider
+        request.internal_research_provider_chain = list(settings.effective_provider_chain)
         request.internal_research_policy = {
             "search_cache_ttl_seconds": policy.search_cache_ttl_seconds,
             "extraction_cache_ttl_seconds": policy.extraction_cache_ttl_seconds,
@@ -249,6 +250,7 @@ def register_assistant_context_routes(
         policy = policy_factory() if policy_factory is not None else settings.policy
         request.internal_research_identity = session_id
         request.internal_research_provider = settings.effective_provider
+        request.internal_research_provider_chain = list(settings.effective_provider_chain)
         request.internal_research_policy = {
             "search_cache_ttl_seconds": policy.search_cache_ttl_seconds,
             "extraction_cache_ttl_seconds": policy.extraction_cache_ttl_seconds,
@@ -343,7 +345,8 @@ def _begin_deep_research(
     settings: ResearchRuntimeSettings,
     decision: ResearchReleaseDecision,
 ) -> SendChatMessageResponse:
-    research_provider = _deep_research_provider(settings)
+    research_provider = settings.effective_provider
+    research_provider_chain = list(settings.effective_provider_chain)
     appended = chat_store.begin_user_message(
         session_id,
         _send_request(request),
@@ -351,6 +354,7 @@ def _begin_deep_research(
             "web_research_mode": "deep",
             "web_search_status": "queued_as_durable_research_job",
             "research_provider": research_provider,
+            "research_provider_chain": research_provider_chain,
             "research_requested_mode": decision.requested_mode,
             "research_effective_mode": decision.effective_mode,
             "research_release_status": decision.status,
@@ -370,6 +374,7 @@ def _begin_deep_research(
                 provider_id=request.provider_id or session.provider_id,
                 model_id=request.model_id or session.model_id,
                 research_provider=research_provider,
+                research_provider_chain=research_provider_chain,
                 max_steps=settings.max_steps,
                 max_queries=settings.max_queries,
                 max_sources=settings.max_sources,
@@ -396,11 +401,6 @@ def _begin_deep_research(
     if linked is not None:
         session, user_message = linked
     return SendChatMessageResponse(session=session, user_message=user_message, job=job)
-
-
-def _deep_research_provider(settings: ResearchRuntimeSettings) -> str:
-    provider = settings.effective_provider
-    return "playwright" if provider == "duckduckgo" else provider
 
 
 def _send_request(request: AssistantContextChatRequest) -> SendChatMessageRequest:

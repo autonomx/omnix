@@ -91,6 +91,46 @@ afterEach(() => {
 });
 
 describe('ChatbotWorkspace', () => {
+  it('keeps the selected session when a previous mutation snapshot is still cached', () => {
+    const previous = {
+      id: 'chat:previous',
+      message_count: 8,
+      messages: [{ id: 'msg:previous', role: 'assistant', content: 'Previous chat' }],
+    };
+    const selected = {
+      id: 'chat:selected',
+      message_count: 2,
+      messages: [
+        { id: 'msg:selected-user', role: 'user', content: 'Selected chat' },
+        { id: 'msg:selected-assistant', role: 'assistant', content: 'Selected reply' },
+      ],
+    };
+
+    expect(selectFreshChatSession(previous, selected)).toBe(selected);
+  });
+
+  it('prefers the fuller transcript when response counts tie', () => {
+    const queued = {
+      id: 'chat:research',
+      message_count: 4,
+      messages: [
+        { id: 'msg:recent-user', role: 'user', content: 'Recent prompt' },
+        { id: 'msg:recent-assistant', role: 'assistant', content: 'Recent answer' },
+      ],
+    };
+    const refreshed = {
+      id: 'chat:research',
+      message_count: 4,
+      messages: [
+        { id: 'msg:old-user', role: 'user', content: 'Earlier prompt' },
+        { id: 'msg:old-assistant', role: 'assistant', content: 'Earlier answer' },
+        ...queued.messages,
+      ],
+    };
+
+    expect(selectFreshChatSession(queued, refreshed)).toBe(refreshed);
+  });
+
   it('prefers a refreshed session over the queued mutation snapshot', () => {
     const queued = {
       id: 'chat:research',

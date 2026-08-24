@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
+import { TradingPaperDashboard } from './TradingPaperDashboard';
 import type { TradingAlert } from './tradingTypes';
+import { useTradingReplayStore } from './tradingReplayStore';
+import { useTradingStore } from './tradingStore';
 import './TradingTerminalDock.css';
 import './TradingTerminalDockMinimize.css';
 import './TradingTerminalDockLight.css';
 import './TradingTerminalDockData.css';
 
-type DockTab = 'positions' | 'orders' | 'history' | 'balance' | 'journal';
+type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal';
 type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected';
 type AccountModal = 'create' | 'settings' | null;
 type CommissionType = 'Percent' | 'Fixed';
@@ -25,6 +28,7 @@ type CreateAccountDraft = PaperAccountSettings & { name: string; balance: string
 type DockPosition = PaperAccountSnapshot['positions'][number] & { pending?: boolean; pendingSide?: 'buy' | 'sell'; pendingOrderId?: string };
 
 const tabs: Array<{ id: DockTab; label: string }> = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'positions', label: 'Positions' }, { id: 'orders', label: 'Orders' },
   { id: 'history', label: 'Order history' }, { id: 'balance', label: 'Balance history' },
   { id: 'journal', label: 'Trading journal' },
@@ -160,6 +164,7 @@ export function TradingTerminalDock({
   const [tab, setTab] = useState<DockTab>('positions');
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('all');
   const [minimized, setMinimized] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [modal, setModal] = useState<AccountModal>(null);
   const [accounts, setAccounts] = useState<PaperAccount[]>([]);
@@ -170,13 +175,16 @@ export function TradingTerminalDock({
   const [settingsByAccount, setSettingsByAccount] = useState<Record<string, PaperAccountSettings>>(readStoredSettings);
   const [settingsDraft, setSettingsDraft] = useState<PaperAccountSettings>(defaultSettings());
   const [createDraft, setCreateDraft] = useState<CreateAccountDraft>(defaultCreateDraft);
+  const replayMode = useTradingStore((state) => state.replayMode);
+  const replaySnapshot = useTradingReplayStore((state) => state.snapshot);
 
   const activeAccount = useMemo(() => accounts.find((account) => account.account_id === accountId) ?? accounts[0] ?? null, [accountId, accounts]);
-  const positions = snapshot?.positions.filter((position) => Number(position.quantity) !== 0) ?? [];
-  const orderHistory = snapshot?.order_history ?? snapshot?.open_orders ?? [];
+  const displayedSnapshot = replayMode ? replaySnapshot ?? snapshot : snapshot;
+  const positions = displayedSnapshot?.positions.filter((position) => Number(position.quantity) !== 0) ?? [];
+  const orderHistory = displayedSnapshot?.order_history ?? displayedSnapshot?.open_orders ?? [];
   const displayedPositions = useMemo<DockPosition[]>(() => {
     const actualPositions: DockPosition[] = [...positions];
-    for (const order of snapshot?.open_orders ?? []) {
+    for (const order of displayedSnapshot?.open_orders ?? []) {
       actualPositions.push({
         instrument_id: order.instrument_id,
         quantity: order.quantity,
@@ -190,11 +198,11 @@ export function TradingTerminalDock({
       });
     }
     return actualPositions;
-  }, [positions, snapshot?.open_orders]);
+  }, [displayedSnapshot?.open_orders, positions]);
   const activeSettings = activeAccount ? settingsByAccount[activeAccount.account_id] ?? defaultSettings(activeAccount) : defaultSettings();
-  const baseBalance = useMemo(() => snapshot?.balances.find((balance) => balance.currency === activeAccount?.base_currency) ?? snapshot?.balances[0] ?? null, [activeAccount?.base_currency, snapshot?.balances]);
-  const realizedPnl = useMemo(() => (snapshot?.positions ?? []).reduce((total, position) => total + Number(position.realized_pnl), 0), [snapshot?.positions]);
-  const unrealizedPnl = useMemo(() => (snapshot?.positions ?? []).reduce((total, position) => total + Number(position.unrealized_pnl), 0), [snapshot?.positions]);
+  const baseBalance = useMemo(() => displayedSnapshot?.balances.find((balance) => balance.currency === activeAccount?.base_currency) ?? displayedSnapshot?.balances[0] ?? null, [activeAccount?.base_currency, displayedSnapshot?.balances]);
+  const realizedPnl = useMemo(() => (displayedSnapshot?.positions ?? []).reduce((total, position) => total + Number(position.realized_pnl), 0), [displayedSnapshot?.positions]);
+  const unrealizedPnl = useMemo(() => (displayedSnapshot?.positions ?? []).reduce((total, position) => total + Number(position.unrealized_pnl), 0), [displayedSnapshot?.positions]);
   const accountBalance = Number(baseBalance?.available ?? 0) + Number(baseBalance?.reserved ?? 0);
   const equity = accountBalance + unrealizedPnl;
   const ordersMargin = Number(baseBalance?.reserved ?? 0);
@@ -205,9 +213,9 @@ export function TradingTerminalDock({
   const marginBuffer = equity > 0 ? (Number(baseBalance?.available ?? 0) / equity) * 100 : 0;
   const commissionByOrder = useMemo(() => {
     const commissions = new Map<string, string>();
-    for (const fill of snapshot?.recent_fills ?? []) commissions.set(fill.order_id, String(Number(commissions.get(fill.order_id) ?? 0) + Number(fill.commission)));
+    for (const fill of displayedSnapshot?.recent_fills ?? []) commissions.set(fill.order_id, String(Number(commissions.get(fill.order_id) ?? 0) + Number(fill.commission)));
     return commissions;
-  }, [snapshot?.recent_fills]);
+  }, [displayedSnapshot?.recent_fills]);
   const orderCounts = useMemo(() => ({
     all: orderHistory.length, working: orderHistory.filter((order) => order.status === 'open').length, inactive: 0,
     filled: orderHistory.filter((order) => order.status === 'filled').length,
@@ -222,8 +230,8 @@ export function TradingTerminalDock({
   }, [orderFilter, orderHistory]);
   const historyFilters = orderFilters.filter((filter) => ['all', 'filled', 'cancelled', 'rejected'].includes(filter.id));
   const balanceHistory = useMemo(() => {
-    if (!snapshot) return [];
-    const ledger = snapshot.recent_ledger;
+    if (!displayedSnapshot) return [];
+    const ledger = displayedSnapshot.recent_ledger;
     const currentCash = Number(baseBalance?.available ?? 0) + Number(baseBalance?.reserved ?? 0);
     const ledgerTotal = ledger.reduce((total, entry) => total + Number(entry.amount), 0);
     const ordersById = new Map(orderHistory.map((order) => [order.order_id, order]));
@@ -234,7 +242,7 @@ export function TradingTerminalDock({
         realized: 0,
         action: `Deposit ${number(entry.amount)} ${entry.currency}`,
       })),
-      ...snapshot.recent_fills.map((fill) => {
+      ...displayedSnapshot.recent_fills.map((fill) => {
         const orderEntries = ledger.filter((entry) => entry.order_id === fill.order_id);
         const order = ordersById.get(fill.order_id);
         const realized = orderEntries.filter((entry) => entry.entry_type === 'realized_pnl').reduce((total, entry) => total + Number(entry.amount), 0);
@@ -251,9 +259,9 @@ export function TradingTerminalDock({
       return row;
     });
     return rows.reverse();
-  }, [activeAccount?.base_currency, baseBalance?.available, baseBalance?.currency, baseBalance?.reserved, orderHistory, snapshot]);
+  }, [activeAccount?.base_currency, baseBalance?.available, baseBalance?.currency, baseBalance?.reserved, displayedSnapshot, orderHistory]);
   const journalEntries = useMemo(() => {
-    const fillsByOrder = new Map((snapshot?.recent_fills ?? []).map((fill) => [fill.order_id, fill]));
+    const fillsByOrder = new Map((displayedSnapshot?.recent_fills ?? []).map((fill) => [fill.order_id, fill]));
     return orderHistory.flatMap((order) => {
       const fill = fillsByOrder.get(order.order_id);
       const market = symbol(order.instrument_id);
@@ -264,7 +272,7 @@ export function TradingTerminalDock({
       if (fill) entries.unshift({ time: fill.source_time, id: `${fill.fill_id}-executed`, text: `Order ${fill.order_id} for symbol ${market} has been executed at price ${number(fill.price, 4)} for ${quantity(fill.quantity)} units` });
       return entries;
     }).sort((left, right) => new Date(right.time ?? 0).getTime() - new Date(left.time ?? 0).getTime());
-  }, [orderHistory, snapshot?.recent_fills]);
+  }, [displayedSnapshot?.recent_fills, orderHistory]);
 
   const refresh = async (preferredId?: string) => {
     try {
@@ -291,6 +299,14 @@ export function TradingTerminalDock({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [modal]);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fullscreen]);
 
   const selectAccount = (nextId: string) => {
     setAccountMenuOpen(false); setAccountId(nextId); onAccountChange?.(nextId); void refresh(nextId);
@@ -352,9 +368,23 @@ export function TradingTerminalDock({
     if (modal === 'create') setCreateDraft((current) => ({ ...current, [key]: value }));
     else if (key in settingsDraft) setSettingsDraft((current) => ({ ...current, [key as keyof PaperAccountSettings]: value } as PaperAccountSettings));
   };
+  const toggleFullscreen = () => {
+    setFullscreen((current) => {
+      const next = !current;
+      if (next) setMinimized(false);
+      return next;
+    });
+  };
+  const toggleMinimized = () => {
+    setMinimized((current) => {
+      const next = !current;
+      if (next) setFullscreen(false);
+      return next;
+    });
+  };
 
   return (
-    <section className={`trading-terminal-dock${minimized ? ' is-minimized' : ''}`} aria-label="Paper trading activity" data-status={status}>
+    <section className={`trading-terminal-dock${minimized ? ' is-minimized' : ''}${fullscreen ? ' is-fullscreen' : ''}`} aria-label="Paper trading activity" data-status={status}>
       <div className="trading-dock-main">
         <header className="trading-dock-toolbar">
           <div className="trading-dock-mode"><span className="trading-dock-logo" aria-hidden="true">T</span><strong>Paper Trading</strong><span className="trading-dock-caret" aria-hidden="true">⌄</span></div>
@@ -363,20 +393,22 @@ export function TradingTerminalDock({
             {activeAccount ? <button type="button" className="trading-dock-settings-button" aria-label={`Open settings for ${activeAccount.name}`} onClick={openSettings}>⚙</button> : null}
             {accountMenuOpen ? <div className="trading-dock-account-menu" role="menu" aria-label="Paper trading accounts"><span className="trading-dock-account-menu-label">Accounts</span>{accounts.map((account) => <button key={account.account_id} type="button" role="menuitem" className={account.account_id === activeAccount?.account_id ? 'active' : undefined} onClick={() => selectAccount(account.account_id)}><span>{account.name}</span><small>{account.base_currency}</small>{account.account_id === activeAccount?.account_id ? <span aria-hidden="true">✓</span> : null}</button>)}{accounts.length === 0 ? <span className="trading-dock-account-menu-empty">No accounts yet</span> : null}<button type="button" role="menuitem" className="trading-dock-create-account-link" onClick={() => { setAccountMenuOpen(false); setNotice(null); setCreateDraft(defaultCreateDraft()); setModal('create'); }}><span aria-hidden="true">＋</span>Create account…</button></div> : null}
           </div>
-          <span className="trading-dock-status">{status === 'error' ? 'Connection error' : 'Paper only'}</span>
+          <span className="trading-dock-status">{status === 'error' ? 'Connection error' : replayMode ? 'Replay only' : 'Paper only'}</span>
           <button type="button" className="trading-dock-download" aria-label="Download order history" title="Download order history" onClick={downloadOrderHistory}>⇩</button>
-          <button type="button" className="trading-dock-toggle" aria-label={minimized ? 'Restore paper trading panel' : 'Minimize paper trading panel'} aria-expanded={!minimized} onClick={() => setMinimized((current) => !current)}>{minimized ? 'Show' : 'Minimize'}</button>
+          <button type="button" className="trading-dock-fullscreen" aria-label={fullscreen ? 'Exit fullscreen paper trading panel' : 'Fullscreen paper trading panel'} title={fullscreen ? 'Exit fullscreen paper trading panel' : 'Fullscreen paper trading panel'} aria-pressed={fullscreen} onClick={toggleFullscreen}>{fullscreen ? '↙' : '⛶'}</button>
+          <button type="button" className="trading-dock-toggle" aria-label={minimized ? 'Restore paper trading panel' : 'Minimize paper trading panel'} aria-expanded={!minimized} onClick={toggleMinimized}>{minimized ? 'Show' : 'Minimize'}</button>
         </header>
 
         {!minimized ? <>
-          <div className="trading-dock-summary" aria-label="Paper trading account summary">
-            {[['Account balance', accountBalance, activeAccount?.base_currency], ['Equity', equity, activeAccount?.base_currency], ['Realized PnL', realizedPnl, activeAccount?.base_currency], ['Unrealized PnL', unrealizedPnl, activeAccount?.base_currency], ['Account margin', accountMargin, activeAccount?.base_currency], ['Available funds', Number(baseBalance?.available ?? 0), activeAccount?.base_currency], ['Orders margin', ordersMargin, activeAccount?.base_currency], ['Margin buffer', marginBuffer, '%']].map(([label, value, suffix]) => <div key={String(label)} className="trading-dock-summary-item"><span>{label}</span><strong className={label === 'Realized PnL' || label === 'Unrealized PnL' ? signedClass(value as number) : undefined}>{snapshot ? number(value as number) : '—'}{snapshot && suffix ? <small> {suffix}</small> : null}</strong></div>)}
-          </div>
+          {tab !== 'dashboard' ? <div className="trading-dock-summary" aria-label="Paper trading account summary">
+            {[['Account balance', accountBalance, activeAccount?.base_currency], ['Equity', equity, activeAccount?.base_currency], ['Realized PnL', realizedPnl, activeAccount?.base_currency], ['Unrealized PnL', unrealizedPnl, activeAccount?.base_currency], ['Account margin', accountMargin, activeAccount?.base_currency], ['Available funds', Number(baseBalance?.available ?? 0), activeAccount?.base_currency], ['Orders margin', ordersMargin, activeAccount?.base_currency], ['Margin buffer', marginBuffer, '%']].map(([label, value, suffix]) => <div key={String(label)} className="trading-dock-summary-item"><span>{label}</span><strong className={label === 'Realized PnL' || label === 'Unrealized PnL' ? signedClass(value as number) : undefined}>{displayedSnapshot ? number(value as number) : '—'}{displayedSnapshot && suffix ? <small> {suffix}</small> : null}</strong></div>)}
+          </div> : null}
           <nav className="trading-dock-tabs" role="tablist" aria-label="Paper trading activity">{tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => { setTab(item.id); if (item.id === 'history' && !historyFilters.some((filter) => filter.id === orderFilter)) setOrderFilter('all'); }}>{item.id === 'positions' && displayedPositions.length > 0 ? `${item.label} ${displayedPositions.length}` : item.label}</button>)}</nav>
           {tab === 'orders' || tab === 'history' ? <nav className="trading-order-filters" role="tablist" aria-label="Order status filters">{(tab === 'orders' ? orderFilters : historyFilters).map((filter) => <button key={filter.id} type="button" role="tab" aria-selected={orderFilter === filter.id} onClick={() => setOrderFilter(filter.id)}>{filter.label}<small>{orderCounts[filter.id]}</small></button>)}</nav> : null}
-          <div className={`trading-dock-content${tab === 'history' ? ' trading-dock-content-history' : ''}`} role="tabpanel" tabIndex={0}>
-            {!snapshot ? <div className="trading-dock-empty"><strong>No paper account</strong><span>Select an account above or create one to begin simulation.</span><button type="button" onClick={() => { setCreateDraft(defaultCreateDraft()); setModal('create'); }}>Create account</button></div> : null}
-            {snapshot && tab === 'positions' ? (
+          <div className={`trading-dock-content${tab === 'history' ? ' trading-dock-content-history' : ''}${tab === 'dashboard' ? ' trading-dock-content-dashboard' : ''}`} role="tabpanel" tabIndex={0}>
+            {tab !== 'dashboard' && !displayedSnapshot ? <div className="trading-dock-empty"><strong>No paper account</strong><span>Select an account above or create one to begin simulation.</span><button type="button" onClick={() => { setCreateDraft(defaultCreateDraft()); setModal('create'); }}>Create account</button></div> : null}
+            {tab === 'dashboard' ? <TradingPaperDashboard /> : null}
+            {displayedSnapshot && tab === 'positions' ? (
               <div className="trading-dock-table-scroll">
                 <table className="trading-positions-table"><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Avg fill price</th><th>Take profit</th><th>Stop loss</th><th>Last price</th><th>Unrealized PnL ↑</th><th>Unrealized PnL %</th><th aria-label="Actions" /></tr></thead><tbody>
                   {displayedPositions.map((position) => {
@@ -390,20 +422,20 @@ export function TradingTerminalDock({
                 </tbody></table>
               </div>
             ) : null}
-            {snapshot && tab === 'orders' ? (
+            {displayedSnapshot && tab === 'orders' ? (
               <div className="trading-dock-table-scroll"><table className="trading-orders-table"><thead><tr><th>Symbol</th><th>Type</th><th>Quantity</th><th>Limit price</th><th>Stop price</th><th>Fill price</th><th>Take profit</th><th>Stop loss</th><th>Instruction</th><th>Status</th></tr></thead><tbody>
                 {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td>{order.order_type[0].toUpperCase() + order.order_type.slice(1)}</td><td>{quantity(order.filled_quantity !== '0' ? order.filled_quantity : order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td>—</td><td>—</td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td></tr>)}
                 {filteredOrders.length === 0 ? <tr><td colSpan={10}>No orders in this filter.</td></tr> : null}
               </tbody></table></div>
             ) : null}
-            {snapshot && tab === 'history' ? (
+            {displayedSnapshot && tab === 'history' ? (
               <div className="trading-dock-table-scroll trading-order-history-scroll"><table className="trading-order-history-table"><thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Quantity</th><th>Limit price</th><th>Stop price</th><th>Fill price</th><th>Status</th><th>Commission</th><th>Placing time ↓</th><th>Closing time</th><th>Order ID</th><th>Level ID</th><th>Leverage</th><th>Margin</th></tr></thead><tbody>
                 {filteredOrders.map((order) => <tr key={order.order_id}><td><MarketBadge instrumentId={order.instrument_id} /></td><td className={order.side === 'buy' ? 'positive' : 'negative'}>{order.side === 'buy' ? 'Buy' : 'Sell'}</td><td>{order.order_type[0].toUpperCase() + order.order_type.slice(1)}</td><td>{quantity(order.quantity)}</td><td>{number(order.limit_price)}</td><td>{number(order.stop_price)}</td><td>{orderPrice(order)}</td><td className={order.status === 'rejected' ? 'negative' : undefined}><OrderStatus order={order} /></td><td>{number(commissionByOrder.get(order.order_id))}</td><td>{tableTime(order.created_at)}</td><td>{order.status === 'open' ? '—' : tableTime(order.updated_at)}</td><td>{order.order_id}</td><td>—</td><td>{activeSettings.leverage.crypto}</td><td>{number(String(Number(order.quantity) * Number(order.average_fill_price ?? order.limit_price ?? order.stop_price ?? 0) / Math.max(1, Number.parseFloat(activeSettings.leverage.crypto))))} <small>{activeAccount?.base_currency}</small></td></tr>)}
                 {filteredOrders.length === 0 ? <tr><td colSpan={15}>No orders in this filter.</td></tr> : null}
               </tbody></table></div>
             ) : null}
-            {snapshot && tab === 'balance' ? <div className="trading-dock-table-scroll"><table className="trading-balance-history-table"><thead><tr><th>Time</th><th>Balance before</th><th>Balance after</th><th>Realized PnL</th><th>Action</th></tr></thead><tbody>{balanceHistory.map((entry, index) => <tr key={`${entry.time ?? 'balance'}-${index}`}><td>{tableTime(entry.time)}</td><td>{number(entry.before)}</td><td>{number(entry.after)}</td><td className={signedClass(entry.realized)}>{signedNumber(entry.realized)} <small>{activeAccount?.base_currency}</small></td><td className="trading-action-cell">{entry.action}</td></tr>)}{balanceHistory.length === 0 ? <tr><td colSpan={5}>No balance history yet.</td></tr> : null}</tbody></table></div> : null}
-            {snapshot && tab === 'journal' ? <div className="trading-dock-table-scroll"><table className="trading-journal-table"><thead><tr><th>Time</th><th>Text</th></tr></thead><tbody>{journalEntries.map((entry) => <tr key={entry.id}><td>{tableTime(entry.time)}</td><td className="trading-journal-text">{entry.text}</td></tr>)}{journalEntries.length === 0 ? <tr><td colSpan={2}>No journal entries yet.</td></tr> : null}</tbody></table></div> : null}
+             {displayedSnapshot && tab === 'balance' ? <div className="trading-dock-table-scroll"><table className="trading-balance-history-table"><thead><tr><th>Time</th><th>Balance before</th><th>Balance after</th><th>Realized PnL</th><th>Action</th></tr></thead><tbody>{balanceHistory.map((entry, index) => <tr key={`${entry.time ?? 'balance'}-${index}`}><td>{tableTime(entry.time)}</td><td>{number(entry.before)}</td><td>{number(entry.after)}</td><td className={signedClass(entry.realized)}>{signedNumber(entry.realized)} <small>{activeAccount?.base_currency}</small></td><td className="trading-action-cell">{entry.action}</td></tr>)}{balanceHistory.length === 0 ? <tr><td colSpan={5}>No balance history yet.</td></tr> : null}</tbody></table></div> : null}
+            {displayedSnapshot && tab === 'journal' ? <div className="trading-dock-table-scroll"><table className="trading-journal-table"><thead><tr><th>Time</th><th>Text</th></tr></thead><tbody>{journalEntries.map((entry) => <tr key={entry.id}><td>{tableTime(entry.time)}</td><td className="trading-journal-text">{entry.text}</td></tr>)}{journalEntries.length === 0 ? <tr><td colSpan={2}>No journal entries yet.</td></tr> : null}</tbody></table></div> : null}
           </div>
         </> : null}
       </div>
@@ -416,7 +448,7 @@ export function TradingTerminalDock({
           <fieldset><legend>Leverage</legend><label className="trading-account-check"><input type="checkbox" checked={currentForm.marginControl} onChange={(event) => setFormValue('marginControl', event.target.checked)} /><span>Margin control</span><small>i</small></label><div className="trading-account-field-grid">{modal === 'create' ? <>{(['stocks', 'futures', 'forex', 'crypto', 'others'] as const).map((key) => <label key={key} className="trading-account-field"><span>{key[0].toUpperCase() + key.slice(1)}</span><select value={createDraft.leverage[key]} onChange={(event) => setCreateDraft((current) => ({ ...current, leverage: { ...current.leverage, [key]: event.target.value } }))}>{leverageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>)}</> : <>{renderLeverageField('Stocks', 'stocks')}{renderLeverageField('Futures', 'futures')}{renderLeverageField('Forex', 'forex')}{renderLeverageField('Crypto', 'crypto')}{renderLeverageField('Others', 'others')}</>}</div></fieldset>
           <fieldset><legend>Commission</legend><label className="trading-account-check"><input type="checkbox" checked={currentForm.futuresOptions} onChange={(event) => setFormValue('futuresOptions', event.target.checked)} /><span>Futures and options</span></label><label className="trading-account-field trading-account-field-wide"><span>Commission per contract</span><input inputMode="decimal" value={currentForm.commissionPerContract} disabled={!currentForm.futuresOptions} onChange={(event) => setFormValue('commissionPerContract', event.target.value)} /></label><label className="trading-account-check"><input type="checkbox" checked={currentForm.othersCommission} onChange={(event) => setFormValue('othersCommission', event.target.checked)} /><span>Others</span></label><div className="trading-account-field-grid"><label className="trading-account-field"><span>Commission</span><input inputMode="decimal" value={currentForm.commission} disabled={!currentForm.othersCommission} onChange={(event) => setFormValue('commission', event.target.value)} /></label><label className="trading-account-field"><span>Commission type</span><select value={currentForm.commissionType} onChange={(event) => setFormValue('commissionType', event.target.value as CommissionType)}><option>Percent</option><option>Fixed</option></select></label></div></fieldset>
         </div>
-        <footer><div>{modal === 'settings' ? <><button type="button" className="trading-account-reset" onClick={() => void resetAccount()} disabled={status === 'saving'}>Reset account</button><button type="button" className="trading-account-archive" onClick={() => void archiveAccount()} disabled={status === 'saving' || !activeAccount?.enabled}>Archive</button></> : null}</div><div><button type="button" onClick={() => setModal(null)}>Cancel</button><button type="button" className="trading-account-primary" onClick={() => modal === 'create' ? void createAccount() : saveSettings()} disabled={status === 'saving'}>{modal === 'create' ? 'Create' : 'Save'}</button></div></footer>
+        <footer><div>{modal === 'settings' ? <><button type="button" className="trading-account-reset" onClick={() => void resetAccount()} disabled={status === 'saving' || replayMode}>Reset account</button><button type="button" className="trading-account-archive" onClick={() => void archiveAccount()} disabled={status === 'saving' || replayMode || !activeAccount?.enabled}>Archive</button></> : null}</div><div><button type="button" onClick={() => setModal(null)}>Cancel</button><button type="button" className="trading-account-primary" onClick={() => modal === 'create' ? void createAccount() : saveSettings()} disabled={status === 'saving'}>{modal === 'create' ? 'Create' : 'Save'}</button></div></footer>
       </section></div> : null}
     </section>
   );

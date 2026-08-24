@@ -1,0 +1,137 @@
+name: Trading strategy backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Start date (YYYY-MM-DD); blank uses lookback"
+        required: false
+        default: ""
+        type: string
+      end_date:
+        description: "End date (YYYY-MM-DD); blank uses yesterday ET"
+        required: false
+        default: ""
+        type: string
+      lookback_days:
+        description: "Calendar-day lookback when start date is blank"
+        required: false
+        default: "14"
+        type: string
+      initial_cash:
+        description: "Initial paper cash"
+        required: false
+        default: "100000"
+        type: string
+      assumed_spread_bps:
+        description: "Historical assumed spread in basis points"
+        required: false
+        default: "40"
+        type: string
+      max_hold_minutes:
+        description: "Maximum hold time in minutes"
+        required: false
+        default: "90"
+        type: string
+      reconstruction_max_age_days:
+        description: "Maximum age for approximate Alpaca reconstruction"
+        required: false
+        default: "30"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  strict-v11-backtest:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: src
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
+      OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
+      START_DATE: ${{ github.event.inputs.start_date || '' }}
+      END_DATE: ${{ github.event.inputs.end_date || '' }}
+      LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || '14' }}
+      INITIAL_CASH: ${{ github.event.inputs.initial_cash || '100000' }}
+      ASSUMED_SPREAD_BPS: ${{ github.event.inputs.assumed_spread_bps || '40' }}
+      MAX_HOLD_MINUTES: ${{ github.event.inputs.max_hold_minutes || '90' }}
+      RECONSTRUCTION_MAX_AGE_DAYS: ${{ github.event.inputs.reconstruction_max_age_days || '30' }}
+    steps:
+      - name: Check out exact workflow head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify exact checked-out head
+        shell: bash
+        run: |
+          expected="${{ github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          echo "Expected head: ${expected}"
+          echo "Checked out:   ${actual}"
+          test "${actual}" = "${expected}"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backtest dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Verify Alpaca historical-data credentials
+        shell: bash
+        run: |
+          if [[ -z "${OMNIX_ALPACA_API_KEY_ID}" || -z "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
+            echo "::error::Repository Actions secrets OMNIX_ALPACA_API_KEY_ID and OMNIX_ALPACA_API_SECRET_KEY are required for reconstructed historical backtests."
+            exit 2
+          fi
+          echo "Alpaca credentials are configured for this Actions run."
+
+      - name: Run strict v1.1 reconstructed backtest
+        shell: bash
+        run: |
+          args=(
+            --universe-mode reconstructed_only
+            --lookback-days "${LOOKBACK_DAYS}"
+            --initial-cash "${INITIAL_CASH}"
+            --assumed-spread-bps "${ASSUMED_SPREAD_BPS}"
+            --max-hold-minutes "${MAX_HOLD_MINUTES}"
+            --reconstruction-max-age-days "${RECONSTRUCTION_MAX_AGE_DAYS}"
+            --max-sessions 60
+            --output-dir artifacts/trading-backtest
+            --require-covered-session
+          )
+          if [[ -n "${START_DATE}" ]]; then
+            args+=(--start-date "${START_DATE}")
+          fi
+          if [[ -n "${END_DATE}" ]]; then
+            args+=(--end-date "${END_DATE}")
+          fi
+          python scripts/run_trading_strategy_backtest.py "${args[@]}"
+
+      - name: Publish Actions summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/trading-backtest/summary.md ]]; then
+            cat artifacts/trading-backtest/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "# Trading strategy backtest" >> "${GITHUB_STEP_SUMMARY}"
+            echo "Backtest result files were not produced." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload backtest evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-strategy-backtest-${{ github.run_id }}
+          path: artifacts/trading-backtest
+          if-no-files-found: warn
+          retention-days: 30

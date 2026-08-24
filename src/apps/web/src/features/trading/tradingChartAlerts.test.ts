@@ -5,6 +5,7 @@ import {
   chartAlertUpdateInput,
   cooldownForTriggerPolicy,
   expirationTimestamp,
+  formatAlertThreshold,
   priceConditionForThreshold,
 } from './tradingChartAlerts';
 import type { TradingAlert } from './tradingTypes';
@@ -92,5 +93,24 @@ describe('chart-native Trading alerts', () => {
     expect(input.evaluation_policy.interval).toBe('2h');
     expect(input.parameters).toEqual(baseAlert.parameters);
     expect(input.enabled).toBe(true);
+  });
+
+  it('formats alert values to two decimal places', () => {
+    expect(formatAlertThreshold(73.16472733528584)).toBe('73.16');
+    expect(formatAlertThreshold('73')).toBe('73.00');
+    expect(formatAlertThreshold('')).toBe('');
+  });
+
+  it('persists the indicator identity when an alert is changed to RSI', () => {
+    const input = chartAlertUpdateInput(baseAlert, {
+      condition_type: 'indicator_cross_below',
+      indicator_id: 'rsi',
+      period: 14,
+      threshold: '73',
+    });
+
+    expect(input.condition_type).toBe('indicator_cross_below');
+    expect(input.parameters.indicator_id).toBe('rsi');
+    expect(input.parameters.period).toBe(14);
   });
 });

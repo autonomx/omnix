@@ -27,7 +27,7 @@ beforeEach(() => {
       chart('chart-3', 'sol', '15m'),
       chart('chart-4', 'btc', '1h'),
     ],
-    links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
+    links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
     panels: { right: true, bottom: true },
     favoriteInstrumentIds: [],
   });

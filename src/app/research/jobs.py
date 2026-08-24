@@ -17,7 +17,11 @@ class DeepResearchJobInput(BaseModel):
     question: str
     provider_id: str | None = None
     model_id: str | None = None
-    research_provider: str = "duckduckgo"
+    research_provider: str = "brave"
+    research_provider_chain: list[str] = Field(
+        default_factory=lambda: ["brave", "playwright", "duckduckgo"],
+        max_length=4,
+    )
     source_manifest_id: str | None = None
     max_steps: int = Field(default=6, ge=1, le=12)
     max_queries: int = Field(default=5, ge=1, le=10)

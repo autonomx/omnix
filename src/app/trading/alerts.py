@@ -34,7 +34,16 @@ AlertCondition = Literal[
     "trendline_above",
     "trendline_below",
 ]
-IndicatorId = Literal["sma", "ema", "rsi", "macd", "bollinger", "atr", "vwap"]
+IndicatorId = Literal[
+    "sma",
+    "ema",
+    "rsi",
+    "macd",
+    "bollinger",
+    "atr",
+    "vwap",
+    "stochastic-rsi",
+]
 TrendlineMode = Literal[
     "crossing",
     "crossing_up",
@@ -423,9 +432,7 @@ class TradingAlertRepository:
         with self.uow_factory() as uow:
             row = uow.connection.execute(
                 f"""
-                UPDATE omnix_trading_alerts
-                   SET enabled = FALSE, revision = revision + 1,
-                       updated_at = CURRENT_TIMESTAMP
+                DELETE FROM omnix_trading_alerts
                  WHERE workspace_id = %s AND alert_id = %s AND revision = %s
                 RETURNING {_ALERT_COLUMNS}
                 """,
@@ -436,7 +443,7 @@ class TradingAlertRepository:
                     f"Trading alert expected revision {expected_revision}: {alert_id}"
                 )
             uow.commit()
-            return _alert(row)
+            return _alert(row).model_copy(update={"enabled": False})
 
     def list_triggers(self, limit: int = 200) -> list[TradingAlertTrigger]:
         with self.uow_factory() as uow:

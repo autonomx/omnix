@@ -10,8 +10,12 @@ from app.gateway.main import create_gateway_app
 
 
 def test_shared_asset_store_reads_legacy_voice_clone_profiles(tmp_path, monkeypatch) -> None:
-    import app.shared as shared
+    import app.assets as assets_module
 
+    # This test exercises one configured voice source in isolation. Suppress the
+    # independent canonical merge and make the compatibility scanner use only the
+    # fixture directory rather than also discovering checked-in voice profiles.
+    monkeypatch.setattr(assets_module, "discover_canonical_voice_clone_assets", lambda: [])
     voice_dir = tmp_path / "voice_clones"
     voice_dir.mkdir()
     (voice_dir / "narrator.wav").write_bytes(b"RIFF")
@@ -31,8 +35,8 @@ def test_shared_asset_store_reads_legacy_voice_clone_profiles(tmp_path, monkeypa
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(voice_dir))
-    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(voice_manifest))
+    monkeypatch.setenv("OMNIX_VOICE_CLONES_DIR", str(voice_dir))
+    monkeypatch.setenv("OMNIX_VOICE_CLONES_FILE", str(voice_manifest))
 
     store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
 
@@ -258,8 +262,11 @@ def test_manifest_asset_overrides_matching_legacy_document_artifact(tmp_path, mo
 
 
 def test_legacy_non_image_dry_run_reports_collisions_without_mutating(tmp_path, monkeypatch) -> None:
-    import app.shared as shared
+    import app.assets as assets_module
 
+    # The dry-run assertions below are about the fixtures created by this test,
+    # not whatever canonical voice profiles happen to be checked into the repo.
+    monkeypatch.setattr(assets_module, "discover_canonical_voice_clone_assets", lambda: [])
     tts_dir = tmp_path / "tts"
     story_dir = tmp_path / "stories"
     voice_dir = tmp_path / "voice_clones"
@@ -270,8 +277,8 @@ def test_legacy_non_image_dry_run_reports_collisions_without_mutating(tmp_path, 
     (tts_dir / "notes.txt").write_text("not audio", encoding="utf-8")
     (story_dir / "adventure.md").write_text("# tale", encoding="utf-8")
     (story_dir / "cover.png").write_bytes(b"PNG")
-    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(voice_dir))
-    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(voice_dir / "voice_clones.json"))
+    monkeypatch.setenv("OMNIX_VOICE_CLONES_DIR", str(voice_dir))
+    monkeypatch.setenv("OMNIX_VOICE_CLONES_FILE", str(voice_dir / "voice_clones.json"))
     monkeypatch.setenv("OMNIX_LEGACY_AUDIO_DIRS", str(tts_dir))
     monkeypatch.setenv("OMNIX_LEGACY_DOCUMENT_DIRS", str(story_dir))
 

@@ -16,6 +16,14 @@ const instrument = {
   status: 'active',
 } as const;
 
+const alternateInstrument = {
+  ...instrument,
+  instrument_id: 'crypto:BINANCE:spot:ETH-USDT',
+  venue_symbol: 'ETH-USDT',
+  display_symbol: 'ETHUSDT',
+  base_currency: 'ETH',
+} as const;
+
 const binding = {
   binding_id: 'binance:historical_polling:crypto:BINANCE:spot:BTC-USDT',
   instrument_id: instrument.instrument_id,
@@ -30,8 +38,15 @@ const binding = {
   is_official_api: true,
 } as const;
 
+const alternateBinding = {
+  ...binding,
+  binding_id: 'binance:historical_polling:crypto:BINANCE:spot:ETH-USDT',
+  instrument_id: alternateInstrument.instrument_id,
+  provider_symbol: alternateInstrument.display_symbol,
+} as const;
+
 const workspacePayload = (name = 'Main Workspace') => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   name,
   layout: 'auto',
   activeChartId: 'chart-1',
@@ -47,18 +62,18 @@ const workspacePayload = (name = 'Main Workspace') => ({
       { id: 'macd', period: 9, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, enabled: false },
     ],
   }],
-  links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
+  links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
   panels: { right: false, bottom: false },
   favoriteInstrumentIds: [],
 });
 
-function bars() {
+function bars(marketInstrument: typeof instrument | typeof alternateInstrument = instrument) {
   return Array.from({ length: 120 }, (_, index) => {
     const start = new Date(Date.UTC(2026, 0, 1, index, 0));
     const end = new Date(start.getTime() + 3_600_000);
     const base = 70_000 + index * 10;
     return {
-      instrument_id: instrument.instrument_id,
+      instrument_id: marketInstrument.instrument_id,
       interval: '1h',
       start_time: start.toISOString(),
       end_time: end.toISOString(),
@@ -132,7 +147,7 @@ async function installTradingMocks(page: Page): Promise<MockState> {
             history_depth: 'fixture',
             rate_limit_policy: 'fixture',
           },
-          bindings: [binding],
+          bindings: [binding, alternateBinding],
           runtime: {
             request_count: 1,
             success_count: 1,
@@ -147,19 +162,23 @@ async function installTradingMocks(page: Page): Promise<MockState> {
       return;
     }
     if (path === '/api/trading/instruments/search') {
-      await fulfill(route, { instruments: [instrument] });
+      await fulfill(route, { instruments: [instrument, alternateInstrument] });
       return;
     }
     if (path === '/api/trading/bars') {
       state.barLimits.push(Number(url.searchParams.get('limit') ?? '0'));
-      const dataset = bars();
+      const marketInstrument = url.searchParams.get('instrument_id') === alternateInstrument.instrument_id
+        ? alternateInstrument
+        : instrument;
+      const marketBinding = marketInstrument.instrument_id === alternateInstrument.instrument_id ? alternateBinding : binding;
+      const dataset = bars(marketInstrument);
       await fulfill(route, {
-        instrument,
-        binding,
+        instrument: marketInstrument,
+        binding: marketBinding,
         provenance: {
-          instrument_id: instrument.instrument_id,
-          requested_binding: binding.binding_id,
-          resolved_binding: binding.binding_id,
+          instrument_id: marketInstrument.instrument_id,
+          requested_binding: marketBinding.binding_id,
+          resolved_binding: marketBinding.binding_id,
           fallback_reason: null,
           dataset_fingerprint: 'playwright-bars-v1',
           freshness_mode: 'polled',
@@ -257,6 +276,13 @@ async function installTradingMocks(page: Page): Promise<MockState> {
       await fulfill(route, updated);
       return;
     }
+    if (path.startsWith('/api/trading/alerts/') && method === 'DELETE') {
+      const id = decodeURIComponent(path.split('/').at(-1) ?? '');
+      const index = state.alerts.findIndex((alert) => alert.alert_id === id);
+      const [removed] = index >= 0 ? state.alerts.splice(index, 1) : [];
+      await fulfill(route, { ...(removed ?? {}), alert_id: id, enabled: false, revision: Number(removed?.revision ?? 1) + 1 });
+      return;
+    }
     await fulfill(route, { records: [], alerts: [], triggers: [] });
   });
 
@@ -306,8 +332,8 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   await expect(symbolSearch.getByRole('button', { name: /BTCUSDT/ })).toBeVisible();
   await symbolSearch.getByRole('button', { name: /BTCUSDT/ }).click();
   await expect(symbolSearch).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(1);
-  await expect(page.getByRole('group', { name: 'Overlay indicators' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Focus this chart' })).toHaveCount(1);
+  await expect(page.getByRole('group', { name: 'Indicator legend' })).toHaveCount(1);
   await page.getByRole('button', { name: 'Hide SMA 20 overlay' }).click();
   await expect(page.getByRole('button', { name: 'Show SMA 20 overlay' })).toBeVisible();
   await page.getByRole('button', { name: 'Show SMA 20 overlay' }).click();
@@ -323,10 +349,11 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   const rangeNav = page.getByRole('navigation', { name: 'chart-1 visible range' });
   const timeframe = page.getByRole('combobox', { name: 'All supported Trading intervals' });
   for (const [range, interval] of [['1D', '1m'], ['5D', '5m'], ['1M', '30m'], ['3M', '1h'], ['6M', '2h'], ['YTD', '1d'], ['1Y', '1d'], ['5Y', '1w'], ['All', '1mo']] as const) {
-    await rangeNav.getByRole('button', { name: range, exact: true }).click();
+    const rangeButton = rangeNav.getByRole('button', { name: new RegExp(`^${range}:`) });
+    await rangeButton.click();
     const expectedLabel = interval.endsWith('mo') ? interval.replace('mo', 'M') : interval.endsWith('m') ? interval : interval.toUpperCase();
     await expect(timeframe).toContainText(expectedLabel);
-    await expect(rangeNav.getByRole('button', { name: range, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(rangeButton).toHaveAttribute('aria-pressed', 'true');
   }
   await timeframe.click();
   const intervalMenu = page.getByRole('listbox', { name: 'TradingView intervals' });
@@ -340,7 +367,14 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
 
   await page.getByLabel('Number of charts').selectOption('3');
   await expect(page.locator('.trading-chart-panel')).toHaveCount(3);
-  await expect(page.getByRole('button', { name: 'Enter fullscreen chart' })).toHaveCount(3);
+  const secondChart = page.locator('.trading-chart-panel').nth(1);
+  await secondChart.getByRole('button', { name: 'Change symbol for Chart 2' }).click();
+  const secondChartSymbolSearch = page.getByRole('dialog', { name: 'Symbol search' });
+  await secondChartSymbolSearch.getByRole('textbox', { name: 'Search symbols' }).fill('ETH');
+  await secondChartSymbolSearch.getByRole('button', { name: /ETHUSDT/ }).click();
+  await expect(secondChart).toContainText('ETHUSDT');
+  await expect(page.locator('.trading-chart-panel').first()).toContainText('BTCUSDT');
+  await expect(page.getByRole('button', { name: 'Focus this chart' })).toHaveCount(3);
   await page.getByLabel('Grid columns').selectOption('columns-3');
 
   page.once('dialog', (dialog) => dialog.accept('Swing Research'));
@@ -363,17 +397,28 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   }
   await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);
 
+  // Changing Chart 2 to ETH makes Chart 2 active by design. Exercise the
+  // alert tool against that actual active-chart contract instead of assuming
+  // the workspace silently switches back to BTC.
   await page.getByRole('button', { name: 'Place price alert' }).click();
   await overlay.click({ position: { x: 180, y: 100 } });
-  await expect(page.getByRole('dialog', { name: /Create alert on BTCUSDT/ })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: /Create alert on ETHUSDT/ })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Alert trigger' })).toHaveValue('every_time');
   await expect(page.getByRole('checkbox', { name: 'App' })).toBeChecked();
-  await page.getByRole('textbox', { name: 'Alert message' }).fill('BTC alert');
-  await page.getByRole('dialog', { name: /Create alert on BTCUSDT/ }).getByRole('button', { name: 'Create alert' }).click();
+  await page.getByRole('textbox', { name: 'Alert message' }).fill('ETH alert');
+  await page.getByRole('dialog', { name: /Create alert on ETHUSDT/ }).getByRole('button', { name: 'Create alert' }).click();
   await expect.poll(() => state.alerts.length).toBe(1);
-  expect((state.alerts[0].parameters as Record<string, unknown>).message).toBe('BTC alert');
-  await expect(page.locator('.trading-alert-price-label')).toHaveCount(3);
-  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(3);
+  expect((state.alerts[0].parameters as Record<string, unknown>).message).toBe('ETH alert');
+  // Only Chart 2 is ETH, so the ETH alert belongs on exactly one chart.
+  await expect(page.locator('.trading-alert-price-label')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel').filter({ has: page.locator('.trading-alert-price-label') })).toHaveCount(1);
+  const alertRow = sidePanel.locator('.trading-alert-list li').first();
+  await expect(alertRow).toBeVisible();
+  await alertRow.getByRole('button', { name: /Options for/ }).click();
+  await sidePanel.getByRole('menuitem', { name: 'Delete alert' }).click();
+  await expect.poll(() => state.alerts.length).toBe(0);
+  await expect(sidePanel.locator('.trading-alert-list li')).toHaveCount(0);
+  await expect(page.locator('.trading-alert-price-label')).toHaveCount(0);
 
   const chartStage = page.locator('.trading-chart-panel.active .trading-chart-stage');
   const chartStageBox = await chartStage.boundingBox();
@@ -381,14 +426,14 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   if (chartStageBox) {
     await chartStage.click({
       button: 'right',
-      position: { x: chartStageBox.width / 2, y: Math.max(12, chartStageBox.height * 0.2) },
+      position: { x: chartStageBox.width / 2, y: 12 },
       force: true,
     });
   }
   const chartMenu = page.getByRole('menu', { name: 'Chart context menu' });
   await expect(chartMenu).toBeVisible();
   await expect(chartMenu.getByRole('menuitem', { name: /Reset chart view/ })).toBeVisible();
-  await expect(chartMenu.getByRole('menuitem', { name: /Add alert on BTCUSDT/ })).toBeVisible();
+  await expect(chartMenu.getByRole('menuitem', { name: /Add alert on ETHUSDT/ })).toBeVisible();
   await chartMenu.getByRole('menuitemcheckbox', { name: 'Table view' }).click();
   await expect(page.getByRole('dialog', { name: /Chart table view/ })).toBeVisible();
   await sideRail.getByRole('button', { name: 'Collapse right panel' }).click();
@@ -403,8 +448,71 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
 
   const rsiControls = page.locator('.trading-indicator-pane-controls[data-indicator-id="rsi"]');
   await expect(rsiControls).toBeVisible();
+  await expect(rsiControls).toHaveCSS('opacity', '0');
+  const rsiTopResize = page.locator('.trading-indicator-pane-resize-handle[data-indicator-id="rsi"][data-edge="top"]');
+  await expect(rsiTopResize).toBeVisible();
+  const initialRsiHeight = Number(await rsiTopResize.getAttribute('aria-valuenow'));
+  // Use Playwright's live locator actionability instead of a previously measured
+  // 8px hit target. Indicator geometry can refresh between boundingBox() and a
+  // raw mouse down, which made this drag intermittently miss the separator.
+  await rsiTopResize.hover();
+  await page.mouse.down();
+  await expect(rsiTopResize).toHaveClass(/is-resizing/);
+  const activeResizeBox = await rsiTopResize.boundingBox();
+  expect(activeResizeBox).not.toBeNull();
+  if (activeResizeBox) {
+    await page.mouse.move(activeResizeBox.x + activeResizeBox.width / 2, activeResizeBox.y - 24, { steps: 10 });
+  }
+  await page.mouse.up();
+  await expect.poll(async () => Number(await rsiTopResize.getAttribute('aria-valuenow'))).not.toBe(initialRsiHeight);
+  const rsiBottomResize = page.locator('.trading-indicator-pane-resize-handle[data-indicator-id="rsi"][data-edge="bottom"]');
+  const chartCanvas = page.locator('.trading-chart-canvas');
+  const topBorderBox = await rsiTopResize.boundingBox();
+  const bottomBorderBox = await rsiBottomResize.boundingBox();
+  const canvasBox = await chartCanvas.boundingBox();
+  expect(topBorderBox).not.toBeNull();
+  expect(bottomBorderBox).not.toBeNull();
+  expect(canvasBox).not.toBeNull();
+  if (topBorderBox && bottomBorderBox && canvasBox) {
+    const x = canvasBox.x + canvasBox.width * 0.4;
+    const y = (topBorderBox.y + bottomBorderBox.y) / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await expect(chartCanvas).toHaveAttribute('data-panning-indicator', 'rsi');
+    await expect(chartCanvas).toHaveClass(/is-grabbing/);
+    await page.mouse.move(x, y - 20, { steps: 8 });
+    await page.mouse.up();
+  }
+  const indicatorLegend = page.getByRole('group', { name: 'Indicator legend' });
+  await expect(indicatorLegend.getByRole('button', { name: 'Open RSI 14 settings' })).toBeVisible();
+  await expect(indicatorLegend.getByRole('button', { name: 'Hide RSI 14 indicator' })).toBeVisible();
+  await indicatorLegend.getByRole('button', { name: 'Collapse indicator legend' }).click();
+  const expandLegend = indicatorLegend.getByRole('button', { name: 'Expand indicator legend' });
+  await expect(expandLegend).toHaveText(/2/);
+  await expect(expandLegend).toHaveCSS('flex-direction', 'row');
+  await expect(indicatorLegend.getByRole('button', { name: 'Open RSI 14 settings' })).toHaveCount(0);
+  await expandLegend.click();
+  await expect(indicatorLegend.getByRole('button', { name: 'Open RSI 14 settings' })).toBeVisible();
+  await rsiControls.hover();
+  await expect(rsiControls).toHaveCSS('opacity', '1');
   await expect(page.getByRole('button', { name: 'Move RSI 14 panel up' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move RSI 14 panel down' })).toBeDisabled();
+  const enterRsiFullscreen = page.getByRole('button', { name: 'Enter fullscreen RSI 14 panel' });
+  await expect(enterRsiFullscreen).toBeVisible();
+  await enterRsiFullscreen.click();
+  const exitRsiFullscreen = page.getByRole('button', { name: 'Exit fullscreen RSI 14 panel' });
+  await expect(exitRsiFullscreen).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.trading-chart-panel.is-chart-focus-mode')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel.is-chart-focus-mode .trading-indicator-pane-controls')).toHaveCount(1);
+  await exitRsiFullscreen.click();
+  await expect(page.getByRole('button', { name: 'Enter fullscreen RSI 14 panel' })).toHaveAttribute('aria-pressed', 'false');
+
+  const enterChartFocus = page.getByRole('button', { name: 'Focus this chart' });
+  await enterChartFocus.click();
+  await expect(page.locator('.trading-chart-panel.is-chart-focus-mode')).toHaveCount(1);
+  await expect(page.locator('.trading-chart-panel.is-chart-focus-mode .trading-indicator-pane-controls')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Exit chart focus mode' }).click();
+  await expect(page.getByRole('button', { name: 'Focus this chart' })).toHaveAttribute('aria-pressed', 'false');
 
   await page.getByRole('button', { name: 'Minimize RSI 14 panel' }).click();
   await expect(page.getByRole('button', { name: 'Restore RSI 14 panel' })).toHaveAttribute('aria-expanded', 'false');
@@ -418,4 +526,37 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
 
   await page.getByRole('button', { name: 'Close RSI 14 panel' }).click();
   await expect(page.locator('.trading-indicator-pane-controls[data-indicator-id="rsi"]')).toHaveCount(0);
+});
+
+test('Volume Profile renders volume-at-price bars along the price scale', async ({ page }) => {
+  await installTradingMocks(page);
+  await page.goto('/trading');
+
+  await page.locator('.trading-indicator-manager').getByRole('button', { name: 'Indicators' }).click();
+  await page.getByRole('button', { name: 'Volume Profile', exact: true }).click();
+
+  const profileOverlay = page.locator('.trading-volume-profile-overlay');
+  await expect(profileOverlay).toBeVisible();
+  await expect(profileOverlay.locator('[data-volume-profile-bin]')).not.toHaveCount(0);
+  await expect(profileOverlay.locator('[data-volume-profile-bin].is-poc')).toHaveCount(1);
+});
+
+test('right panel exposes TradingView-style Object tree and Data window views', async ({ page }) => {
+  await installTradingMocks(page);
+  await page.goto('/trading');
+
+  await page.getByRole('button', { name: 'Object tree' }).click();
+  const objectPanel = page.getByRole('complementary', { name: 'Trading object tree and data window' });
+  await expect(objectPanel).toBeVisible();
+  await expect(objectPanel.getByRole('tab', { name: 'Object tree' })).toHaveAttribute('aria-selected', 'true');
+  await expect(objectPanel).toContainText('BTCUSDT');
+  await expect(objectPanel).toContainText('Indicators');
+  await expect(objectPanel).toContainText('Simple Moving Average 20');
+
+  await objectPanel.getByRole('tab', { name: 'Data window' }).click();
+  await expect(objectPanel.getByRole('tab', { name: 'Data window' })).toHaveAttribute('aria-selected', 'true');
+  await expect(objectPanel.locator('.trading-data-window-date strong')).not.toHaveText('—');
+  await expect(objectPanel).toContainText('Open');
+  await expect(objectPanel).toContainText('Close');
+  await expect(objectPanel).toContainText('Relative Strength Index (14)');
 });

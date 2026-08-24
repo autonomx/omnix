@@ -5,6 +5,9 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
+from app.gateway.tts_live_call_startup_frame_policy import (
+    TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
+)
 
 
 class FakeTtsProvider:
@@ -109,7 +112,7 @@ def test_item_cancellation_preserves_unrelated_persistent_tts_output(monkeypatch
     assert started["generation_epoch"] == 1
     assert started["output_order"] == 1
     assert started["segment_id"] == "segment-output-b"
-    assert len(frame) == 4_800
+    assert len(frame) == TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES * 2
     assert completed["type"] == "done"
     assert completed["output_id"] == "output-b"
     assert completed["generation_epoch"] == 1

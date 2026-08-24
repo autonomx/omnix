@@ -7,7 +7,9 @@ set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
 
 set "OMNIX_TTS_URL=http://127.0.0.1:5101"
 set "OMNIX_STT_URL=http://127.0.0.1:5201"
+set "OMNIX_GATEWAY_URL=http://127.0.0.1:8000"
 set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
+if not defined OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS set "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS=45"
 if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5173/"
 if not defined OMNIX_POSTGRES_CONTAINER set "OMNIX_POSTGRES_CONTAINER=omnix-postgres"
 if not defined OMNIX_POSTGRES_START_WAIT_ATTEMPTS set "OMNIX_POSTGRES_START_WAIT_ATTEMPTS=30"
@@ -80,6 +82,7 @@ echo.
 echo This starts one launcher dashboard instead of opening separate service terminals.
 echo Dashboard: %OMNIX_LAUNCHER_URL%
 echo Private app button: %OMNIX_APP_OPEN_URL%
+echo API gateway: %OMNIX_GATEWAY_URL%
 echo.
 echo [LIVE AGENT] Enabled: %OMNIX_LIVE_AGENT_ENABLED%
 echo [LIVE AGENT] Automatic routing: %OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%
@@ -169,6 +172,8 @@ if /I "%OMNIX_LAUNCHER_OPEN_BROWSER%"=="1" (
 set "PYTHONPATH=%~dp0src"
 set "OMNIX_TTS_URL=%OMNIX_TTS_URL%"
 set "OMNIX_STT_URL=%OMNIX_STT_URL%"
+set "OMNIX_GATEWAY_URL=%OMNIX_GATEWAY_URL%"
+set "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS=%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%"
 set "OMNIX_IMAGE_ENABLED=%OMNIX_IMAGE_ENABLED%"
 set "OMNIX_START_IMAGE_SERVICE=%OMNIX_START_IMAGE_SERVICE%"
 set "OMNIX_IMAGE_PRELOAD=%OMNIX_IMAGE_PRELOAD%"
@@ -195,7 +200,13 @@ set "OMNIX_KASA_DEVICE_ALIAS=%OMNIX_KASA_DEVICE_ALIAS%"
 set "KASA_USERNAME=%KASA_USERNAME%"
 set "KASA_PASSWORD=%KASA_PASSWORD%"
 
-"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055
+REM The launcher normally auto-starts the gateway. This watchdog retries that
+REM managed service and waits for the API before the web app is used, preventing
+REM the Vite proxy from repeatedly receiving ECONNREFUSED on port 8000.
+start "Omnix Gateway Startup Check" /b powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$launcher='%OMNIX_LAUNCHER_URL%'; $health='%OMNIX_GATEWAY_URL%/api/health'; $deadline=(Get-Date).AddSeconds(%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%); while ((Get-Date) -lt $deadline) { try { $null=Invoke-WebRequest -UseBasicParsing -Uri $launcher -TimeoutSec 2; try { $null=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/gateway/start') -TimeoutSec 10 } catch { }; try { $null=Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 2; Write-Host '[STARTUP] Omnix gateway is ready on port 8000.'; exit 0 } catch { } } catch { }; Start-Sleep -Seconds 1 }; Write-Host '[STARTUP] WARNING: Omnix gateway did not become ready on port 8000.'"
+
+"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055 --lifespan on
 set "OMNIX_EXIT_CODE=%ERRORLEVEL%"
 
 endlocal & exit /b %OMNIX_EXIT_CODE%

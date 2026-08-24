@@ -4,17 +4,21 @@ import { TradingIndicatorPresets } from './TradingIndicatorPresets';
 import { TradingLayoutPanel } from './TradingLayoutPanel';
 import { TradingNewsPanel } from './TradingNewsPanel';
 import { TradingPaperPanel } from './TradingPaperPanel';
+import { TradingProspectiveEconomicPanel } from './TradingProspectiveEconomicPanel';
 import { TradingWatchlist } from './TradingWatchlist';
+import { TradingObjectPanel } from './TradingObjectPanel';
+import { TradingPinePanel } from './TradingPinePanel';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
-import type { CoreIndicatorInstance } from './indicators/coreIndicators';
+import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
-import type { CanonicalInstrument, TradingAlert } from './tradingTypes';
+import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
 
-export type TradingSideTab = 'watchlist' | 'paper' | 'indicators' | 'alerts' | 'news' | 'layout';
+export type TradingSideTab = 'watchlist' | 'paper' | 'prospective' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects' | 'pine';
 
 const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
   { id: 'paper', label: 'Trade' },
+  { id: 'prospective', label: 'Evidence' },
   { id: 'indicators', label: 'Indicators' },
   { id: 'alerts', label: 'Alerts' },
   { id: 'news', label: 'News' },
@@ -25,6 +29,7 @@ export function TradingSidePanel({
   instruments,
   activeInstrumentId,
   bindingId,
+  providerBindings,
   interval,
   selectedTab,
   onTabChange,
@@ -40,6 +45,9 @@ export function TradingSidePanel({
   onSelectInstrument,
   onSelectAlert,
   onSetIndicators,
+  pineIndicatorId,
+  onPineIndicatorChange,
+  onOpenPineScript,
   onSetLayout,
   onSetChartCount,
   onAddChart,
@@ -51,6 +59,7 @@ export function TradingSidePanel({
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
   bindingId: string | null;
+  providerBindings?: readonly ProviderBinding[];
   interval: string;
   selectedTab?: TradingSideTab;
   onTabChange?: (tab: TradingSideTab) => void;
@@ -66,6 +75,9 @@ export function TradingSidePanel({
   onSelectInstrument: (instrumentId: string) => void;
   onSelectAlert: (alert: TradingAlert) => void;
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
+  pineIndicatorId: CoreIndicatorId | null;
+  onPineIndicatorChange: (id: CoreIndicatorId) => void;
+  onOpenPineScript: (id: CoreIndicatorId) => void;
   onSetLayout: (layout: TradingLayout) => void;
   onSetChartCount: (count: number) => void;
   onAddChart: () => void;
@@ -80,6 +92,32 @@ export function TradingSidePanel({
     setInternalTab(tab);
     onTabChange?.(tab);
   };
+  if (activeTab === 'objects') {
+    return (
+      <aside className="trading-side-panel trading-object-side-panel" aria-label="Trading object tree and data window">
+        <TradingObjectPanel
+          instruments={instruments}
+          activeInstrumentId={activeInstrumentId}
+          bindingId={bindingId}
+          interval={interval}
+          indicators={indicators}
+          onSetIndicators={onSetIndicators}
+          onOpenPineScript={onOpenPineScript}
+        />
+      </aside>
+    );
+  }
+  if (activeTab === 'pine') {
+    return (
+      <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Pine Editor">
+        <TradingPinePanel
+          indicators={indicators}
+          activeIndicatorId={pineIndicatorId}
+          onActiveIndicatorChange={onPineIndicatorChange}
+        />
+      </aside>
+    );
+  }
   return (
     <aside className="trading-side-panel" aria-label="Trading side panel">
       <nav role="tablist" aria-label="Trading side panel sections">
@@ -102,6 +140,7 @@ export function TradingSidePanel({
         role="tabpanel"
         id={`trading-panel-${activeTab}`}
         aria-labelledby={`trading-tab-${activeTab}`}
+        className={activeTab === 'watchlist' ? 'trading-side-panel-watchlist' : undefined}
         tabIndex={0}
       >
         {activeTab === 'watchlist' ? (
@@ -109,6 +148,7 @@ export function TradingSidePanel({
             instruments={instruments}
             activeInstrumentId={activeInstrumentId}
             interval={interval}
+            providerBindings={providerBindings}
             onSelect={onSelectInstrument}
           />
         ) : null}
@@ -120,6 +160,7 @@ export function TradingSidePanel({
             onAccountChange={onPaperAccountChange}
           />
         ) : null}
+        {activeTab === 'prospective' ? <TradingProspectiveEconomicPanel /> : null}
         {activeTab === 'indicators' ? (
           <TradingIndicatorPresets indicators={indicators} onApply={onSetIndicators} />
         ) : null}

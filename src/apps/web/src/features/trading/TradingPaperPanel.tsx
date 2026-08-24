@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { PaperAccount, PaperAccountSnapshot, PaperOrderType, PaperSide } from './paperTypes';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PaperAccount, PaperAccountSnapshot, PaperOrder, PaperOrderType, PaperSide } from './paperTypes';
 import { tradingApi } from './tradingApi';
 import { tradingPaperApi } from './tradingPaperApi';
 import { writePaperPositionProtection } from './paperPositionProtection';
+import { advanceReplaySnapshot, createReplaySnapshot, placeReplayOrder } from './replayTrading';
+import { useTradingReplayStore } from './tradingReplayStore';
+import { useTradingStore } from './tradingStore';
 import './TradingPaper.css';
 
 type PaperTicketTab = 'order' | 'dom';
@@ -82,23 +85,33 @@ export function TradingPaperPanel({
   const [quote, setQuote] = useState<Record<string, string> | null>(null);
   const [notice, setNotice] = useState<PaperNotice | null>(null);
   const [confirmation, setConfirmation] = useState<PaperConfirmation | null>(null);
+  const replayMode = useTradingStore((state) => state.replayMode);
+  const replaySessionId = useTradingStore((state) => state.replaySessionId);
+  const replayBar = useTradingReplayStore((state) => state.bar);
+  const replaySnapshot = useTradingReplayStore((state) => state.snapshot);
+  const setReplaySnapshot = useTradingReplayStore((state) => state.setSnapshot);
+  const replayContextRef = useRef<string | null>(null);
+  const replayBarContextRef = useRef<string | null>(null);
+  const replaySeedPendingRef = useRef(false);
 
   const activeAccount = useMemo(
     () => accounts.find((account) => account.account_id === accountId) ?? accounts[0] ?? null,
     [accountId, accounts],
   );
+  const displayedSnapshot = replayMode ? replaySnapshot ?? snapshot : snapshot;
   const symbol = displaySymbol(instrumentId);
-  const position = snapshot?.positions.find((item) => item.instrument_id === instrumentId);
-  const referencePrice = parsePositive(quote?.price ?? '')
+  const position = displayedSnapshot?.positions.find((item) => item.instrument_id === instrumentId);
+  const replayPrice = replayBar ? parsePositive(replayBar.close) : null;
+  const referencePrice = replayMode ? replayPrice : parsePositive(quote?.price ?? '')
     ?? parsePositive(position?.last_price ?? '')
     ?? parsePositive(position?.average_cost ?? '');
-  const bidPrice = parsePositive(quote?.bid ?? '') ?? referencePrice;
-  const askPrice = parsePositive(quote?.ask ?? '') ?? referencePrice;
+  const bidPrice = replayMode ? referencePrice : parsePositive(quote?.bid ?? '') ?? referencePrice;
+  const askPrice = replayMode ? referencePrice : parsePositive(quote?.ask ?? '') ?? referencePrice;
   const quotePrice = referencePrice === null ? '—' : number(String(referencePrice), 2);
   const bidLabel = bidPrice === null ? '—' : number(String(bidPrice), 2);
   const askLabel = askPrice === null ? '—' : number(String(askPrice), 2);
   const tradeValue = referencePrice === null ? null : referencePrice * (parsePositive(quantity) ?? 0);
-  const balance = snapshot?.balances.find((item) => item.currency === activeAccount?.base_currency);
+  const balance = displayedSnapshot?.balances.find((item) => item.currency === activeAccount?.base_currency);
   const availableFunds = balance?.available;
   const reservedFunds = balance?.reserved;
 
@@ -114,7 +127,7 @@ export function TradingPaperPanel({
       const openMarketOrders = nextSnapshot?.open_orders.filter(
         (order) => order.order_type === 'market' && order.status === 'open' && order.reference_price,
       ) ?? [];
-      if (nextId && openMarketOrders.length > 0) {
+      if (!replayMode && nextId && openMarketOrders.length > 0) {
         const now = new Date().toISOString();
         await Promise.allSettled(openMarketOrders.map((order) => tradingPaperApi.processObservation(nextId, {
           instrument_id: order.instrument_id,
@@ -138,12 +151,44 @@ export function TradingPaperPanel({
   }, [preferredAccountId]);
 
   useEffect(() => {
+    if (!replayMode) {
+      replayContextRef.current = null;
+      replayBarContextRef.current = null;
+      replaySeedPendingRef.current = false;
+      return;
+    }
+    if (!snapshot || !activeAccount) return;
+    const context = `${replaySessionId}:${activeAccount.account_id}:${instrumentId}`;
+    if (replayContextRef.current === context) return;
+    replayContextRef.current = context;
+    replaySeedPendingRef.current = true;
+    setReplaySnapshot(createReplaySnapshot(snapshot));
+  }, [activeAccount, instrumentId, replayMode, replaySessionId, setReplaySnapshot, snapshot]);
+
+  useEffect(() => {
+    if (!replayMode || !replaySnapshot || !replayBar || !activeAccount) return;
+    if (replayContextRef.current !== `${replaySessionId}:${activeAccount.account_id}:${instrumentId}`) return;
+    if (replaySeedPendingRef.current) {
+      replaySeedPendingRef.current = false;
+      return;
+    }
+    const context = `${replaySessionId}:${replayBar.start_time}:${replayBar.end_time}`;
+    if (replayBarContextRef.current === context) return;
+    replayBarContextRef.current = context;
+    setReplaySnapshot(advanceReplaySnapshot(replaySnapshot, replayBar));
+  }, [activeAccount, instrumentId, replayBar, replayMode, replaySessionId, replaySnapshot, setReplaySnapshot]);
+
+  useEffect(() => {
     if (!accountId) return;
     const timer = window.setInterval(() => void refresh(accountId), 5_000);
     return () => window.clearInterval(timer);
   }, [accountId]);
 
   useEffect(() => {
+    if (replayMode) {
+      setQuote(null);
+      return;
+    }
     let cancelled = false;
     setQuote(null);
     void tradingApi.quote(instrumentId, bindingId).then((nextQuote) => {
@@ -154,7 +199,7 @@ export function TradingPaperPanel({
     return () => {
       cancelled = true;
     };
-  }, [bindingId, instrumentId]);
+  }, [bindingId, instrumentId, replayMode]);
 
   useEffect(() => {
     if (!notice && !confirmation) return;
@@ -201,6 +246,10 @@ export function TradingPaperPanel({
       setNotice({ kind: 'error', message: 'Order not placed: select an enabled paper account.' });
       return;
     }
+    if (replayMode && !replayBar) {
+      setNotice({ kind: 'error', message: 'Select a replay bar before placing an order.' });
+      return;
+    }
     const numericQuantity = parsePositive(quantity);
     const numericTrigger = parsePositive(triggerPrice);
     const numericTakeProfit = takeProfitEnabled ? parsePositive(takeProfit) : null;
@@ -220,7 +269,7 @@ export function TradingPaperPanel({
     setNotice(null);
     setConfirmation(null);
     try {
-      const order = await tradingPaperApi.placeOrder(activeAccount.account_id, {
+      const input = {
         order_id: orderId,
         instrument_id: instrumentId,
         binding_id: bindingId,
@@ -235,9 +284,19 @@ export function TradingPaperPanel({
             : String(side === 'buy' ? askPrice : bidPrice)
           : null,
         idempotency_key: orderId,
-      });
+      };
+      let order: PaperOrder;
+      if (replayMode) {
+        if (!replaySnapshot || !replayBar) throw new Error('Replay account is still loading. Select a replay bar and try again.');
+        const result = placeReplayOrder(replaySnapshot, input, replayBar);
+        setReplaySnapshot(result.snapshot);
+        order = result.order;
+        setStatus('ready');
+      } else {
+        order = await tradingPaperApi.placeOrder(activeAccount.account_id, input);
+      }
       const marketReference = order.reference_price ?? (side === 'buy' ? askPrice : bidPrice);
-      if (orderType === 'market' && order.status === 'open' && marketReference !== null) {
+      if (!replayMode && orderType === 'market' && order.status === 'open' && marketReference !== null) {
         const now = new Date().toISOString();
         try {
           await tradingPaperApi.processObservation(activeAccount.account_id, {
@@ -252,11 +311,13 @@ export function TradingPaperPanel({
           // The monitor can retry an accepted order if the immediate observation is unavailable.
         }
       }
-      writePaperPositionProtection(activeAccount.account_id, instrumentId, {
-        takeProfit: numericTakeProfit,
-        stopLoss: numericStopLoss,
-      });
-      await refresh(activeAccount.account_id);
+      if (!replayMode) {
+        writePaperPositionProtection(activeAccount.account_id, instrumentId, {
+          takeProfit: numericTakeProfit,
+          stopLoss: numericStopLoss,
+        });
+        await refresh(activeAccount.account_id);
+      }
       const orderPrice = order.average_fill_price
         ?? order.limit_price
         ?? order.stop_price
@@ -275,17 +336,17 @@ export function TradingPaperPanel({
   };
 
   return (
-    <section className="trading-paper-panel" aria-label="Paper trading order ticket" data-status={status}>
+    <section className={`trading-paper-panel${replayMode ? ' is-replay-trading' : ''}`} aria-label="Paper trading order ticket" data-status={status}>
       <header className="trading-paper-header">
         <div className="trading-paper-symbol">
           <span className="trading-paper-symbol-mark" aria-hidden="true">P</span>
           <div>
             <strong>{symbol}</strong>
-            <small>Paper trading</small>
+            <small>{replayMode ? 'Replay simulation' : 'Paper trading'}</small>
           </div>
         </div>
         <div className="trading-paper-header-actions">
-          <span className="trading-paper-status">Simulation</span>
+          <span className="trading-paper-status">{replayMode ? 'Replay only' : 'Simulation'}</span>
           <button type="button" aria-label="Refresh paper account" onClick={() => void refresh(accountId)}>↻</button>
         </div>
       </header>
@@ -403,35 +464,35 @@ export function TradingPaperPanel({
         </div>
       )}
 
-      {snapshot ? (
+      {displayedSnapshot ? (
         <div className="trading-paper-activity">
           <details>
-            <summary>Positions <span>{snapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).length}</span></summary>
+            <summary>Positions <span>{displayedSnapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).length}</span></summary>
             <ul className="trading-paper-list">
-              {snapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).map((positionItem) => (
+              {displayedSnapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).map((positionItem) => (
                 <li key={positionItem.instrument_id}><strong>{displaySymbol(positionItem.instrument_id)}</strong><span>{positionItem.quantity} @ {positionItem.average_cost}</span></li>
               ))}
-              {snapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).length === 0 ? <li className="empty">No open positions.</li> : null}
+              {displayedSnapshot.positions.filter((positionItem) => Number(positionItem.quantity) !== 0).length === 0 ? <li className="empty">No open positions.</li> : null}
             </ul>
           </details>
           <details>
-            <summary>Open orders <span>{snapshot.open_orders.length}</span></summary>
+            <summary>Open orders <span>{displayedSnapshot.open_orders.length}</span></summary>
             <ul className="trading-paper-list">
-              {snapshot.open_orders.map((order) => (
+              {displayedSnapshot.open_orders.map((order) => (
                 <li key={order.order_id}>
                   <strong>{order.side} {order.quantity} · {order.order_type}</strong>
                   <span>{displaySymbol(order.instrument_id)}</span>
                   <span>Awaiting fill</span>
                 </li>
               ))}
-              {snapshot.open_orders.length === 0 ? <li className="empty">No open orders.</li> : null}
+              {displayedSnapshot.open_orders.length === 0 ? <li className="empty">No open orders.</li> : null}
             </ul>
           </details>
           <details>
             <summary>Account actions</summary>
             <div className="trading-paper-danger-actions">
-              <button type="button" onClick={() => void mutate(() => tradingPaperApi.resetAccount(snapshot.account, initialCash), snapshot.account.account_id)}>Reset</button>
-              <button type="button" disabled={!snapshot.account.enabled} onClick={() => void mutate(() => tradingPaperApi.archiveAccount(snapshot.account), snapshot.account.account_id)}>Archive</button>
+              <button type="button" disabled={replayMode} onClick={() => void mutate(() => tradingPaperApi.resetAccount(displayedSnapshot.account, initialCash), displayedSnapshot.account.account_id)}>Reset</button>
+              <button type="button" disabled={replayMode || !displayedSnapshot.account.enabled} onClick={() => void mutate(() => tradingPaperApi.archiveAccount(displayedSnapshot.account), displayedSnapshot.account.account_id)}>Archive</button>
             </div>
           </details>
         </div>

@@ -3,6 +3,7 @@ import fixture from './fixtures/coreIndicators.json';
 import {
   CORE_INDICATOR_FORMULA_VERSION,
   exponentialMovingAverage,
+  indicatorPaneScale,
   indicatorOutputs,
   relativeStrengthIndex,
   simpleMovingAverage,
@@ -55,7 +56,23 @@ describe('versioned core indicators', () => {
     }
   });
 
-  it('hides indicator price levels by default and allows explicit opt-in', () => {
+  it('exposes volume-at-price bins for the Volume Profile renderer', () => {
+    const bars: MarketBar[] = Array.from({ length: 80 }, (_, index) => ({
+      instrument_id: 'fixture', interval: '1d',
+      start_time: new Date(Date.UTC(2025, 0, index + 1)).toISOString(),
+      end_time: new Date(Date.UTC(2025, 0, index + 2)).toISOString(),
+      open: String(100 + index / 4), high: String(104 + index / 4), low: String(96 + index / 4), close: String(100 + index / 4), volume: String(1_000 + index * 10),
+      is_final: true, adjustment_mode: 'raw', session: 'regular', provider: 'fixture', ingestion_revision: 1, received_at: new Date().toISOString(),
+    }));
+    const outputs = indicatorOutputs(bars, { id: 'volume-profile', period: 80, enabled: true });
+    const profile = outputs[0]?.volumeProfile;
+    expect(profile).toBeDefined();
+    expect(profile?.bins.length).toBeGreaterThan(0);
+    expect(profile?.maxVolume).toBeGreaterThan(0);
+    expect(profile?.bins.some((bin) => bin.volume > 0)).toBe(true);
+  });
+
+  it('hides indicator Y-axis labels by default and allows explicit opt-in', () => {
     const bars: MarketBar[] = Array.from({ length: 30 }, (_, index) => ({
       instrument_id: 'fixture', interval: '1d',
       start_time: new Date(Date.UTC(2025, 0, index + 1)).toISOString(),
@@ -65,5 +82,22 @@ describe('versioned core indicators', () => {
     }));
     expect(indicatorOutputs(bars, { id: 'sma', period: 5, enabled: true })[0].labelsOnPriceScale).toBe(false);
     expect(indicatorOutputs(bars, { id: 'sma', period: 5, enabled: true, style: { labelsOnPriceScale: true } })[0].labelsOnPriceScale).toBe(true);
+  });
+
+  it('defines bounded oscillator scales and 0-100 Stoch RSI values', () => {
+    expect(indicatorPaneScale('rsi')).toMatchObject({ min: 0, max: 100, band: { from: 30, to: 70 } });
+    expect(indicatorPaneScale('stochastic-rsi')).toMatchObject({ min: 0, max: 100, band: { from: 20, to: 80 } });
+    expect(indicatorPaneScale('macd')).toBeNull();
+    const bars: MarketBar[] = Array.from({ length: 120 }, (_, index) => ({
+      instrument_id: 'fixture', interval: '1d',
+      start_time: new Date(Date.UTC(2025, 0, index + 1)).toISOString(),
+      end_time: new Date(Date.UTC(2025, 0, index + 2)).toISOString(),
+      open: '100', high: String(102 + (index % 3)), low: String(98 - (index % 2)), close: String(100 + Math.sin(index / 4) * 4), volume: '1000',
+      is_final: true, adjustment_mode: 'raw', session: 'regular', provider: 'fixture', ingestion_revision: 1, received_at: new Date().toISOString(),
+    }));
+    const points = indicatorOutputs(bars, { id: 'stochastic-rsi', period: 14, fastPeriod: 3, signalPeriod: 3, enabled: true })
+      .flatMap((output) => output.points);
+    expect(points.length).toBeGreaterThan(0);
+    expect(points.every((point) => point.value >= 0 && point.value <= 100)).toBe(true);
   });
 });

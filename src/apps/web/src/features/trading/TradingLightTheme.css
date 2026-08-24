@@ -32,6 +32,12 @@
   box-shadow: 0 4px 14px rgba(50, 70, 92, 0.06) !important;
 }
 
+:root[data-omnix-appearance='light'] .trading-tool-shortcuts {
+  border-left-color: var(--trading-light-line-soft) !important;
+  background: var(--trading-light-surface) !important;
+  box-shadow: -14px 0 20px rgba(50, 70, 92, 0.08) !important;
+}
+
 :root[data-omnix-appearance='light'] .trading-terminal-brand strong,
 :root[data-omnix-appearance='light'] .trading-chart-title-row strong,
 :root[data-omnix-appearance='light'] .trading-order-ticket-row strong,
@@ -124,6 +130,48 @@
   color: #465568 !important;
 }
 
+:root[data-omnix-appearance='light'] .trading-indicator-pane-controls {
+  border-color: var(--trading-light-line) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 5px 16px rgba(50, 70, 92, 0.18) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-indicator-pane-label {
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-indicator-pane-controls button {
+  border-color: var(--trading-light-line) !important;
+  background: var(--trading-light-surface) !important;
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-indicator-pane-controls button:hover:not(:disabled) {
+  border-color: rgba(22, 136, 255, 0.62) !important;
+  background: #eef6ff !important;
+  color: #155b91 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-indicator-pane-controls button[aria-pressed='true'] {
+  border-color: rgba(22, 136, 255, 0.72) !important;
+  background: #e6f2ff !important;
+  color: #155b91 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-indicator-pane-controls button:disabled {
+  background: var(--trading-light-surface-muted) !important;
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-indicator-pane-controls button:last-child {
+  color: #c43e4b !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-alerts-panel-header {
+  background: var(--trading-light-surface) !important;
+  color: var(--trading-light-text) !important;
+}
+
 :root[data-omnix-appearance='light'] .trading-chart-provenance span {
   background: rgba(91, 111, 132, 0.1) !important;
   color: #657487 !important;
@@ -145,6 +193,10 @@
   border-color: var(--trading-light-line) !important;
   background: rgba(255, 255, 255, 0.96) !important;
   box-shadow: 0 6px 18px rgba(50, 70, 92, 0.16) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-replay-future-overlay {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.58)) !important;
 }
 
 :root[data-omnix-appearance='light'] .trading-replay-mode-hint {

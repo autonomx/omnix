@@ -150,8 +150,8 @@ export type LiveVoicePcmSession = {
 
 type OutputTimestampSource = {
   getOutputTimestamp?: () => {
-    contextTime: number;
-    performanceTime: number;
+    contextTime?: number;
+    performanceTime?: number;
   };
 };
 
@@ -165,9 +165,11 @@ export function resolveWorkletPlaybackPerformanceTimeMs(
   if (typeof audioContext.getOutputTimestamp !== 'function') return null;
   try {
     const timestamp = audioContext.getOutputTimestamp();
-    if (!Number.isFinite(timestamp.contextTime) || !Number.isFinite(timestamp.performanceTime)) return null;
-    const projected = timestamp.performanceTime
-      + ((eventContextTime - timestamp.contextTime) * 1_000);
+    const { contextTime, performanceTime } = timestamp;
+    if (typeof contextTime !== 'number' || !Number.isFinite(contextTime)
+      || typeof performanceTime !== 'number' || !Number.isFinite(performanceTime)) return null;
+    const projected = performanceTime
+      + ((eventContextTime - contextTime) * 1_000);
     // Reject a broken or cross-origin clock mapping. A worklet notification can
     // be delayed, but a live-call playback event cannot reasonably predate its
     // receipt by more than ten seconds or be materially in the future.

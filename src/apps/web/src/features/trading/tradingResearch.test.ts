@@ -27,7 +27,7 @@ describe('Trading research client', () => {
       read_only: true,
       disclaimer: 'Research only. Not financial advice. No order was created or executed.',
     };
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(payload), {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(payload), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));

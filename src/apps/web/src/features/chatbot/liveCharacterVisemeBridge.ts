@@ -1,3 +1,5 @@
+import { isActiveView } from '../../app/viewApiScope';
+
 export type CharacterViseme = 'silence' | 'A' | 'E' | 'O' | 'U' | 'MBP' | 'FV' | 'L' | 'WQ' | 'other';
 
 export interface TimedCharacterViseme {
@@ -130,6 +132,12 @@ function install(): void {
   if (state[INSTALL_KEY]) return;
   state[INSTALL_KEY] = true;
   window.addEventListener(RUNTIME_EVENT, (event) => {
+    if (!isActiveView('chatbot')) {
+      runtime = null;
+      currentViseme = 'silence';
+      clearAnimationTimers();
+      return;
+    }
     runtime = (event as CustomEvent<RuntimeDetail | null>).detail;
     currentViseme = 'silence';
     clearAnimationTimers();
@@ -147,6 +155,7 @@ function installFetchMonitor(): void {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const text = url.includes(TTS_STREAM_PATH) ? requestText(init?.body) : '';
     const response = await originalFetch(input, init);
+    if (!isActiveView('chatbot')) return response;
     if (!text || !response.body || typeof response.body.tee !== 'function') return response;
     const [applicationBody, monitorBody] = response.body.tee();
     void monitorStream(monitorBody, text);
@@ -255,6 +264,7 @@ function displaySpriteFrame(
   frameKey: string,
   viseme: CharacterViseme,
 ): void {
+  if (!isActiveView('chatbot')) return;
   const host = document.querySelector<HTMLElement>('.assistant-live-character-avatar');
   const currentImage = host?.querySelector<HTMLImageElement>('img:not([data-avatar-layer="previous"])');
   if (!host || !currentImage) return;
@@ -328,7 +338,7 @@ function frameAssetId(pack: RuntimeAvatarPack, frameKey: string): string {
 
 function preloadAvatarFrames(pack: RuntimeAvatarPack | null): void {
   preloadedImages.clear();
-  if (!pack || typeof window.Image !== 'function') return;
+  if (!isActiveView('chatbot') || !pack || typeof window.Image !== 'function') return;
   const assetIds = new Set([
     ...Object.values(pack.mouth_frames),
     pack.base_asset_id || '',

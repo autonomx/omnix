@@ -20,7 +20,7 @@ def test_frontend_camel_case_profile_fields_round_trip() -> None:
                     },
                 },
             },
-            "appearance": {"theme": "midnight", "reduceMotion": True, "liveCaptions": False},
+            "appearance": {"theme": "midnight", "textScale": 115, "reduceMotion": True, "liveCaptions": False},
             "voice": {"cloningLanguage": "French", "cloningQuality": "Studio"},
             "storyteller": {
                 "providerId": "cerebras",
@@ -58,6 +58,7 @@ def test_frontend_camel_case_profile_fields_round_trip() -> None:
         "mode": "system",
         "theme": "midnight",
         "density": "comfortable",
+        "textScale": 115,
         "reduceMotion": True,
         "liveCaptions": False,
     }
@@ -84,6 +85,7 @@ def test_legacy_snake_case_profile_fields_remain_accepted() -> None:
                 "models": {"image_prompt": "legacy-prompt"},
                 "routing": {"fallback_behavior": "fail", "task_overrides": {}},
             },
+            "appearance": {"text_scale": 125},
             "storyteller": {"writing_style": "Legacy sparse"},
             "podcast": {"duration_minutes": 45},
             "rpg": {"world_activity": "quiet"},
@@ -96,6 +98,7 @@ def test_legacy_snake_case_profile_fields_remain_accepted() -> None:
 
     assert payload["global"]["models"]["imagePrompt"] == "legacy-prompt"
     assert payload["global"]["routing"]["fallbackBehavior"] == "fail"
+    assert payload["appearance"]["textScale"] == 125
     assert payload["storyteller"]["writingStyle"] == "Legacy sparse"
     assert payload["podcast"]["durationMinutes"] == 45
     assert payload["rpg"]["worldActivity"] == "quiet"

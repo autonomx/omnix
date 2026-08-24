@@ -32,17 +32,45 @@
 }
 
 .trading-header-actions {
-  order: 2;
+  order: 1;
   flex: 0 0 auto;
   margin-left: auto;
 }
 
+/*
+ * Scanner / Backtest / Strategies / AI Research are primary terminal
+ * navigation. Paper Trading already has its dedicated lower/right entry point,
+ * so the duplicate fourth shortcut (Trade) stays out of this compact strip.
+ */
 .trading-tool-shortcuts {
-  margin-left: 0;
+  position: static;
+  z-index: 1;
+  order: 3 !important;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 2px 3px;
+  border-left: 1px solid rgba(117, 151, 181, .16);
+  background: rgba(7, 16, 26, .98);
+  box-shadow: none;
+}
+
+.trading-tool-shortcuts > button:nth-child(4) {
+  display: none;
+}
+
+.trading-provider-status {
+  order: 2 !important;
 }
 
 @media (max-width: 1000px) {
   .trading-terminal-header {
     height: 42px;
+  }
+
+  .trading-tool-shortcuts {
+    position: static;
+    order: 1 !important;
+    margin-left: 0;
+    box-shadow: none;
   }
 }

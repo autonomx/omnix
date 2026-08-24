@@ -15,6 +15,7 @@ import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar }
 import { DEFAULT_OMNIX_THEME, type OmnixThemeId } from '../design/appearanceThemes';
 import {
   commitAppearanceSettings,
+  DEFAULT_OMNIX_TEXT_SCALE,
   loadStoredAppearancePreferences,
   OMNIX_APPEARANCE_CHANGE_EVENT,
   resolveAppearanceMode,
@@ -23,6 +24,7 @@ import {
 } from '../features/settings/appearanceEffects';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
+import { setActiveViewModule } from './viewApiScope';
 
 const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, module])) as Record<
   OmnixModuleId,
@@ -30,6 +32,17 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
 >;
 const defaultModule = moduleById.chatbot;
 const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'podcast', 'voice', 'image-generation'];
+
+// Keep lower-level platform workspaces routable without crowding the primary
+// workstation navigation. These pages remain available by direct route and can
+// be linked contextually from settings/diagnostics when needed.
+const sidebarHiddenModuleIds = new Set<OmnixModuleId>([
+  'voice-cloning',
+  'providers',
+  'models',
+  'jobs',
+]);
+const sidebarModules = omnixModules.filter((module) => !sidebarHiddenModuleIds.has(module.id));
 
 function moduleFromPath(pathname: string): OmnixModuleDefinition {
   return (
@@ -47,6 +60,10 @@ function initialThemeId(): OmnixThemeId {
   return loadStoredAppearancePreferences().theme ?? DEFAULT_OMNIX_THEME;
 }
 
+function initialTextScale(): number {
+  return loadStoredAppearancePreferences().textScale ?? DEFAULT_OMNIX_TEXT_SCALE;
+}
+
 function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
@@ -54,9 +71,14 @@ function OmnixShell() {
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [appearanceMode, setAppearanceMode] = useState<OmnixAppearanceMode>(initialAppearanceMode);
   const [themeId, setThemeId] = useState<OmnixThemeId>(initialThemeId);
+  const [textScale, setTextScale] = useState(initialTextScale);
   const activeModule = moduleFromPath(pathname);
   const modeModules = modeModuleIds.map((moduleId) => moduleById[moduleId]);
   const resolvedAppearanceMode = resolveAppearanceMode(appearanceMode);
+
+  useEffect(() => {
+    setActiveViewModule(activeModule.id);
+  }, [activeModule.id]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -64,10 +86,11 @@ function OmnixShell() {
       mode: appearanceMode,
       theme: themeId,
       density: root.dataset.omnixDensity ?? 'comfortable',
+      textScale,
       reduceMotion: root.classList.contains('omnix-reduce-motion'),
     });
     setColorScheme(detail.resolvedMode);
-  }, [appearanceMode, setColorScheme, themeId]);
+  }, [appearanceMode, setColorScheme, textScale, themeId]);
 
   useEffect(() => {
     const syncAppearance = (event: Event) => {
@@ -75,6 +98,7 @@ function OmnixShell() {
       if (!detail) return;
       setAppearanceMode(detail.mode);
       setThemeId(detail.theme);
+      setTextScale(detail.textScale);
       setColorScheme(detail.resolvedMode);
     };
     window.addEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, syncAppearance);
@@ -88,7 +112,7 @@ function OmnixShell() {
         <OmnixSidebar hidden={!isSidebarVisible}>
           <OmnixBrand />
           <nav className="omnix-nav">
-            {omnixModules.map((module) => (
+            {sidebarModules.map((module) => (
               <Link key={module.id} to={module.route as never} title={module.label} activeProps={{ className: 'active' }}>
                 <OmnixNavItem active={module.id === activeModule.id} moduleId={module.id}>
                   {module.label}

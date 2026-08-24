@@ -96,7 +96,7 @@ describe('TradingPositionOverlay', () => {
     await screen.findByRole('button', { name: 'Close paper position' });
     fireEvent.click(screen.getByRole('button', { name: 'Close paper position' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('Close position');
-    fireEvent.click(screen.getByRole('button', { name: 'Close position', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close position' }));
 
     await waitFor(() => expect(paperApi.placeOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({
       side: 'sell',
@@ -133,7 +133,7 @@ describe('TradingPositionOverlay', () => {
     await screen.findByRole('button', { name: 'Reverse paper position' });
     fireEvent.click(screen.getByRole('button', { name: 'Reverse paper position' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('Reverse BINANCE:SOLUSDT position?');
-    fireEvent.click(screen.getByRole('button', { name: 'Reverse position', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reverse position' }));
 
     await waitFor(() => expect(paperApi.placeOrder).toHaveBeenCalledTimes(2));
     expect(paperApi.placeOrder).toHaveBeenNthCalledWith(1, 'paper-1', expect.objectContaining({ side: 'sell', quantity: '5' }));

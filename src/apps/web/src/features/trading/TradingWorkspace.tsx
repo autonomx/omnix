@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
@@ -6,16 +7,18 @@ import { TradingIndicatorManager } from './TradingIndicatorManager';
 import { TradingReplayPanel } from './TradingReplayPanel';
 import { TradingResearchPanel } from './TradingResearchPanel';
 import { TradingScannerPanel } from './TradingScannerPanel';
+import { TradingStrategiesPanel } from './TradingStrategiesPanel';
 import { TradingSidePanel } from './TradingSidePanel';
 import { TradingSideRail } from './TradingSideRail';
 import type { TradingSideTab } from './TradingSidePanel';
+import type { CoreIndicatorId } from './indicators/coreIndicators';
 import { TradingTerminalDock } from './TradingTerminalDock';
-import { TradingSymbolSearch } from './TradingSymbolSearch';
+import { TradingSymbolSearch, type TradingFormulaSearchPreview } from './TradingSymbolSearch';
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { tradingApi } from './tradingApi';
-import type { TradingChartType } from './chart/chartAdapter';
-import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
+import type { DrawingSnapMode } from './drawings/drawingCommands';
+import { TradingChartTypeMenu } from './TradingChartTypeMenu';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
 import { preferredCryptoInstrument } from './cryptoInstrumentDefaults';
@@ -32,6 +35,7 @@ import {
   type TradingLayout,
 } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
+import { encodeTradingFormula, parseTradingFormula, tradingFormulaDisplaySymbol } from './tradingFormula';
 import './TradingWorkspace.css';
 import './TradingAdvanced.css';
 import './TradingFlexibleLayout.css';
@@ -46,19 +50,7 @@ import './TradingLightTheme.css';
 import './TradingChartPan.css';
 import './TradingChartChrome.css';
 import './TradingTypography.css';
-
-const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
-  { id: 'cursor', label: 'Cursor', glyph: '↖' },
-  { id: 'alert', label: 'Place price alert', glyph: '⏰' },
-  { id: 'trend-line', label: 'Trend line', glyph: '╱' },
-  { id: 'horizontal-line', label: 'Horizontal line', glyph: '─' },
-  { id: 'vertical-line', label: 'Vertical line', glyph: '│' },
-  { id: 'ray', label: 'Ray', glyph: '↗' },
-  { id: 'rectangle', label: 'Rectangle', glyph: '□' },
-  { id: 'fibonacci', label: 'Fibonacci retracement', glyph: '≋' },
-  { id: 'text', label: 'Text note', glyph: 'T' },
-  { id: 'measurement', label: 'Measure', glyph: '↔' },
-];
+import './TradingToolFullscreen.css';
 
 const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'auto', label: 'Auto grid' },
@@ -70,15 +62,8 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
 
 const quickIntervalPriority = ['1h', '2h', '4h'];
 
-const chartTypeGlyphs: Record<TradingChartType, string> = {
-  candlestick: 'candles',
-  bar: 'bars',
-  line: 'line',
-  area: 'area',
-  baseline: 'baseline',
-};
-
-type ToolPanel = 'scanner' | 'replay' | 'research';
+type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'research';
+type FormulaResolution = TradingFormulaSearchPreview & { operands: Record<string, string> };
 
 // TradingSidePanel mounts TradingPaperPanel in the dedicated Trade tab.
 
@@ -102,13 +87,18 @@ function preferredInstrument(
 }
 
 export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) {
+  const navigate = useNavigate();
   const [focusMode, setFocusMode] = useState(false);
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  const [symbolSearchChartId, setSymbolSearchChartId] = useState<string | null>(null);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
+  const [formulaResolution, setFormulaResolution] = useState<FormulaResolution | null>(null);
   const [toolPanel, setToolPanel] = useState<ToolPanel | null>(null);
+  const [toolPanelFullscreen, setToolPanelFullscreen] = useState(false);
   const [sidePanelTab, setSidePanelTab] = useState<TradingSideTab>('watchlist');
+  const [pineIndicatorId, setPineIndicatorId] = useState<CoreIndicatorId | null>(null);
   const [paperAccountId, setPaperAccountId] = useState<string | null>(null);
   const persistence = useTradingWorkspacePersistence();
   const workspaceHydrated = persistence.status !== 'loading';
@@ -138,10 +128,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const setPanel = useTradingStore((state) => state.setPanel);
   const toggleFavoriteInstrument = useTradingStore((state) => state.toggleFavoriteInstrument);
   const activeChart = charts.find((chart) => chart.chartId === activeChartId) ?? charts[0];
+  const providerBindings = useMemo(
+    () => (providers.data ?? []).flatMap((provider) => provider.bindings ?? []),
+    [providers.data],
+  );
   const availableBindings = useMemo(
-    () => (providers.data ?? []).flatMap((provider) => provider.bindings ?? [])
-      .filter((binding) => binding.instrument_id === activeChart.instrumentId),
-    [activeChart.instrumentId, providers.data],
+    () => providerBindings.filter((binding) => binding.instrument_id === activeChart.instrumentId),
+    [activeChart.instrumentId, providerBindings],
   );
   const selectedBinding = availableBindings.find((binding) => binding.binding_id === activeChart.bindingId)
     ?? availableBindings[0];
@@ -183,11 +176,53 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (!symbolSearchOpen || !query) {
       setSymbolSearchResults([]);
       setSymbolSearchLoading(false);
+      setFormulaResolution(null);
       return;
     }
 
+    const formulaHints = (instruments.data ?? []).flatMap((instrument) => [
+      instrument.display_symbol,
+      instrument.venue_symbol,
+      instrument.instrument_id,
+    ]);
+    const formula = parseTradingFormula(query, { symbolHints: formulaHints });
     let cancelled = false;
     setSymbolSearchLoading(true);
+    if (formula) {
+      setFormulaResolution({ formula, operands: {}, unresolvedSymbols: formula.symbols, loading: true });
+      const resolve = async () => {
+        const matches = await Promise.all(formula.symbols.map((symbol) => tradingApi.instruments(symbol)));
+        if (cancelled) return;
+        const candidates = matches.flat();
+        const operands: Record<string, string> = {};
+        const unresolvedSymbols: string[] = [];
+        for (const symbol of formula.symbols) {
+          const normalized = symbol.toUpperCase();
+          const symbolCandidates = [...(instruments.data ?? []), ...candidates]
+            .filter((instrument, index, all) => all.findIndex((item) => item.instrument_id === instrument.instrument_id) === index)
+            .filter((instrument) => [instrument.display_symbol, instrument.venue_symbol, instrument.instrument_id]
+              .some((value) => value.toUpperCase() === normalized || value.toUpperCase().replace(/[-:_/]/g, '') === normalized.replace(/[-:_/]/g, '')))
+            .sort((left, right) => left.display_symbol.localeCompare(right.display_symbol) || left.venue.localeCompare(right.venue));
+          const match = symbolCandidates[0];
+          if (!match) unresolvedSymbols.push(symbol);
+          else operands[symbol] = preferredInstrument(match, symbolCandidates).instrument_id;
+        }
+        setSymbolSearchResults(candidates);
+        setFormulaResolution({ formula, operands, unresolvedSymbols, loading: false });
+        setSymbolSearchLoading(false);
+      };
+      void resolve().catch(() => {
+        if (!cancelled) {
+          setFormulaResolution({ formula, operands: {}, unresolvedSymbols: formula.symbols, loading: false });
+          setSymbolSearchResults([]);
+          setSymbolSearchLoading(false);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setFormulaResolution(null);
     const timer = window.setTimeout(() => {
       void tradingApi.instruments(query).then((matches) => {
         if (!cancelled) {
@@ -205,16 +240,35 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [symbolQuery, symbolSearchOpen]);
+  }, [instruments.data, symbolQuery, symbolSearchOpen]);
 
   const applySymbolMatch = (match: CanonicalInstrument, candidates: readonly CanonicalInstrument[]) => {
     const next = preferredInstrument(match, [...(instruments.data ?? []), ...candidates]);
-    updateChart(activeChartId, { instrumentId: next.instrument_id, bindingId: null });
+    const targetChartId = symbolSearchChartId ?? activeChartId;
+    updateChart(targetChartId, { instrumentId: next.instrument_id, bindingId: null });
+    setActiveChart(targetChartId);
     setSymbolQuery(next.display_symbol);
     setSymbolSearchResults([]);
     setSymbolSearchOpen(false);
+    setSymbolSearchChartId(null);
     void instruments.refetch();
     void providers.refetch();
+  };
+
+  const applyFormulaResolution = (resolution: FormulaResolution | null) => {
+    if (!resolution || resolution.loading) return;
+    const targetChartId = symbolSearchChartId ?? activeChartId;
+    const operands = Object.fromEntries(
+      resolution.formula.symbols.map((symbol) => [symbol, resolution.operands[symbol] ?? symbol]),
+    );
+    const instrumentId = encodeTradingFormula(resolution.formula.expression, operands);
+    updateChart(targetChartId, { instrumentId, bindingId: null });
+    setActiveChart(targetChartId);
+    setSymbolQuery(resolution.formula.expression);
+    setSymbolSearchResults([]);
+    setFormulaResolution(null);
+    setSymbolSearchOpen(false);
+    setSymbolSearchChartId(null);
   };
 
   const selectBinding = (bindingId: string) => {
@@ -254,14 +308,25 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   };
 
   const toggleToolPanel = (panel: ToolPanel) => {
+    setToolPanelFullscreen(false);
     setToolPanel((current) => current === panel ? null : panel);
   };
 
   const openPaperTrading = () => {
     setSidePanelTab('paper');
     setPanel('right', true);
+    setToolPanelFullscreen(false);
     setToolPanel(null);
   };
+
+  useEffect(() => {
+    if (!toolPanelFullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setToolPanelFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toolPanelFullscreen]);
 
   const createWorkspace = () => {
     const name = window.prompt('Workspace name', `Workspace ${persistence.workspaces.length + 1}`);
@@ -278,13 +343,38 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (window.confirm(`Delete ${persistence.activeWorkspaceName}?`)) void persistence.deleteWorkspace();
   };
 
-  const openSymbolSearch = () => {
-    setSymbolQuery(activeInstrument?.display_symbol ?? '');
+  const openSymbolSearch = (chartId = activeChartId) => {
+    const targetChart = charts.find((chart) => chart.chartId === chartId) ?? activeChart;
+    const targetInstrument = (instruments.data ?? []).find((instrument) => instrument.instrument_id === targetChart.instrumentId);
+    setActiveChart(targetChart.chartId);
+    setSymbolSearchChartId(targetChart.chartId);
+    setSymbolQuery(targetInstrument?.display_symbol ?? tradingFormulaDisplaySymbol(targetChart.instrumentId) ?? targetChart.instrumentId.split(':').at(-1)?.replace('-', '/') ?? '');
     setSymbolSearchResults([]);
+    setFormulaResolution(null);
     setSymbolSearchOpen(true);
   };
 
+  const openPineEditor = (id: CoreIndicatorId) => {
+    setPineIndicatorId(id);
+    setSidePanelTab('pine');
+    setPanel('right', true);
+    setToolPanelFullscreen(false);
+    setToolPanel(null);
+  };
+
+  const closeSymbolSearch = () => {
+    setSymbolSearchOpen(false);
+    setSymbolSearchChartId(null);
+    setFormulaResolution(null);
+  };
+
+  const symbolSearchTarget = charts.find((chart) => chart.chartId === symbolSearchChartId) ?? activeChart;
+  const symbolSearchTargetInstrument = (instruments.data ?? []).find(
+    (instrument) => instrument.instrument_id === symbolSearchTarget.instrumentId,
+  );
+
   const activeSymbolLabel = activeInstrument?.display_symbol
+    ?? tradingFormulaDisplaySymbol(activeChart.instrumentId)
     ?? activeChart.instrumentId.split(':').at(-1)?.replace('-', '/')
     ?? 'Select symbol';
 
@@ -341,7 +431,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       <section className="trading-command-bar" aria-label="Trading command bar">
         <div className="trading-chart-controls" role="group" aria-label="Chart controls">
         <div className="trading-chart-symbol-options" aria-label="Chart symbol options">
-        <button type="button" className="trading-symbol-trigger" aria-label="Open symbol search" onClick={openSymbolSearch}>
+        <button type="button" className="trading-symbol-trigger" aria-label="Open symbol search" onClick={() => openSymbolSearch()}>
           <span className="trading-symbol-trigger-icon" aria-hidden="true" />
           <span className="trading-symbol-trigger-copy">
             <strong>{activeSymbolLabel}</strong>
@@ -440,12 +530,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </details>
           </div>
 
-          <label className="trading-chart-type-control" title={`Chart type: ${activeChart.chartType}`}>
-            <span className={`trading-chart-type-glyph ${chartTypeGlyphs[activeChart.chartType]}`} aria-hidden="true"><i /><i /><i /></span>
-            <select aria-label="Trading chart type" value={activeChart.chartType} onChange={(event) => updateChart(activeChartId, { chartType: event.target.value as TradingChartType })}>
-              {(['candlestick', 'bar', 'line', 'area', 'baseline'] as TradingChartType[]).map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
+          <TradingChartTypeMenu value={activeChart.chartType} onChange={(chartType) => updateChart(activeChartId, { chartType })} />
 
           <TradingIndicatorManager indicators={activeChart.indicators} onToggle={(id) => toggleIndicator(activeChartId, id)} />
           <button
@@ -468,6 +553,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         <div className="trading-tool-shortcuts" role="group" aria-label="Trading tools">
           <button type="button" aria-pressed={toolPanel === 'scanner'} onClick={() => toggleToolPanel('scanner')}>Scanner</button>
           <button type="button" aria-pressed={toolPanel === 'replay'} onClick={() => toggleToolPanel('replay')}>Backtest</button>
+          <button type="button" aria-pressed={toolPanel === 'strategies'} onClick={() => toggleToolPanel('strategies')}>Strategies</button>
           <button type="button" aria-pressed={sidePanelTab === 'paper' && panels.right} onClick={openPaperTrading}>Trade</button>
           <button type="button" aria-pressed={toolPanel === 'research'} onClick={() => toggleToolPanel('research')}>AI Research</button>
         </div>
@@ -482,19 +568,28 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         open={symbolSearchOpen}
         query={symbolQuery}
         instruments={[...(instruments.data ?? []), ...symbolSearchResults]}
-        activeInstrumentId={activeChart.instrumentId}
+        activeInstrumentId={symbolSearchTargetInstrument?.instrument_id ?? symbolSearchTarget.instrumentId}
         loading={symbolSearchLoading}
+        formulaPreview={formulaResolution}
         onQueryChange={setSymbolQuery}
         onSelect={(match) => applySymbolMatch(match, [match])}
-        onClose={() => setSymbolSearchOpen(false)}
+        onSelectFormula={() => applyFormulaResolution(formulaResolution)}
+        onClose={closeSymbolSearch}
       />
       <TradingAlertToastLayer />
 
       <div className="trading-body">
         <TradingDrawingTools selectedTool={drawingTool} onSelect={setDrawingTool} />
         <div className="trading-chart-column">
-          <section className="trading-chart-shell" aria-label="Trading chart workspace"><TradingChartGrid paperAccountId={paperAccountId} /></section>
-          {workspaceHydrated && panels.bottom ? (
+          <section className="trading-chart-shell" aria-label="Trading chart workspace">
+            <TradingChartGrid
+              paperAccountId={paperAccountId}
+              onOpenSymbolSearch={openSymbolSearch}
+              onOpenPineScript={openPineEditor}
+              onOpenMarketDataSettings={() => { void navigate({ to: '/settings', search: { category: 'trading-market-data' } }); }}
+            />
+          </section>
+          {workspaceHydrated && panels.bottom && !toolPanel ? (
             <TradingTerminalDock
               instrumentId={activeChart.instrumentId}
               bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
@@ -502,6 +597,33 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               onAccountChange={setPaperAccountId}
               onSelectAlert={navigateToAlert}
             />
+          ) : null}
+          {toolPanel ? (
+            <section className={`trading-tool-drawer${toolPanelFullscreen ? ' is-fullscreen' : ''}`} aria-label="Trading analysis tool">
+              <header>
+                <strong>{toolPanel === 'scanner'
+                  ? 'Market scanner'
+                  : toolPanel === 'replay'
+                    ? 'Replay & backtest'
+                    : toolPanel === 'strategies'
+                      ? 'Automated strategies'
+                      : 'AI market research'}</strong>
+                <div className="trading-tool-drawer-actions">
+                  <button type="button" onClick={() => setToolPanelFullscreen((value) => !value)} aria-pressed={toolPanelFullscreen} aria-label={toolPanelFullscreen ? 'Restore analysis tool' : 'Fullscreen analysis tool'}>{toolPanelFullscreen ? 'Restore' : 'Fullscreen'}</button>
+                  <button type="button" onClick={() => { setToolPanelFullscreen(false); setToolPanel(null); }} aria-label="Close analysis tool">×</button>
+                </div>
+              </header>
+              <div>
+                {toolPanel === 'scanner' ? <TradingScannerPanel instruments={instruments.data ?? []} /> : null}
+                {toolPanel === 'replay' ? (
+                  <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
+                ) : null}
+                {toolPanel === 'strategies' ? <TradingStrategiesPanel /> : null}
+                {toolPanel === 'research' ? (
+                  <TradingResearchPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
+                ) : null}
+              </div>
+            </section>
           ) : null}
         </div>
         {workspaceHydrated ? (
@@ -511,12 +633,15 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 instruments={visibleInstruments}
                 activeInstrumentId={activeChart.instrumentId}
                 bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
+                providerBindings={providerBindings}
                 interval={activeChart.interval}
                 selectedTab={sidePanelTab}
                 onTabChange={setSidePanelTab}
                 paperAccountId={paperAccountId}
                 onPaperAccountChange={setPaperAccountId}
                 indicators={activeChart.indicators}
+                pineIndicatorId={pineIndicatorId}
+                onPineIndicatorChange={setPineIndicatorId}
                 layout={layout}
                 chartCount={charts.length}
                 minimumChartCount={MIN_TRADING_CHARTS}
@@ -530,6 +655,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 }}
                 onSelectAlert={navigateToAlert}
                 onSetIndicators={(next) => setIndicators(activeChartId, next)}
+                onOpenPineScript={openPineEditor}
                 onSetLayout={setLayout}
                 onSetChartCount={setChartCount}
                 onAddChart={addChart}
@@ -548,24 +674,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
         ) : null}
       </div>
-
-      {toolPanel ? (
-        <section className="trading-tool-drawer" aria-label="Trading analysis tool">
-          <header>
-            <strong>{toolPanel === 'scanner' ? 'Market scanner' : toolPanel === 'replay' ? 'Replay & backtest' : 'AI market research'}</strong>
-            <button type="button" onClick={() => setToolPanel(null)} aria-label="Close analysis tool">×</button>
-          </header>
-          <div>
-            {toolPanel === 'scanner' ? <TradingScannerPanel instruments={instruments.data ?? []} /> : null}
-            {toolPanel === 'replay' ? (
-              <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
-            ) : null}
-            {toolPanel === 'research' ? (
-              <TradingResearchPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
-            ) : null}
-          </div>
-        </section>
-      ) : null}
 
     </main>
   );

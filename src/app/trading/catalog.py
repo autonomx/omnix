@@ -75,6 +75,21 @@ YAHOO_POLICY = _policy(
     intervals=("1m", "5m", "15m", "1h", "1d", "1w", "1mo"),
     terms="https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html",
 )
+ALPACA_IEX_POLICY = ProviderPolicy(
+    usage_scope=UsageScope.PERSONAL_LOCAL,
+    redistribution_allowed=False,
+    authentication_required=True,
+    is_official_api=True,
+    realtime_scope="real-time IEX only; partial US market coverage; paper execution quotes",
+    delay_seconds=0,
+    terms_reference="https://docs.alpaca.markets/docs/about-market-data-api",
+    supported_asset_classes=(AssetClass.EQUITY,),
+    supported_intervals=(),
+    history_depth="execution_quote_only",
+    rate_limit_policy=(
+        "Alpaca Basic REST limits with Omnix bounded provider semaphore and retry-after backoff"
+    ),
+)
 STOOQ_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
     official=False,
@@ -107,14 +122,31 @@ HYPERLIQUID_POLICY = _policy(
     intervals=("1m", "5m", "15m", "1h", "4h", "1d"),
     terms="https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api",
 )
+COINMARKETCAP_POLICY = ProviderPolicy(
+    usage_scope=UsageScope.PERSONAL_LOCAL,
+    redistribution_allowed=False,
+    authentication_required=True,
+    is_official_api=True,
+    realtime_scope="daily historical crypto market-cap metrics",
+    delay_seconds=300,
+    terms_reference="https://coinmarketcap.com/api/documentation/",
+    supported_asset_classes=(AssetClass.CRYPTO,),
+    supported_intervals=("1d",),
+    history_depth="provider_defined",
+    rate_limit_policy=(
+        "CoinMarketCap API credits with Omnix bounded provider semaphore and cache"
+    ),
+)
 
 POLICIES = {
     "binance": BINANCE_POLICY,
     "yahoo": YAHOO_POLICY,
+    "alpaca_iex": ALPACA_IEX_POLICY,
     "stooq": STOOQ_POLICY,
     "coinbase": COINBASE_POLICY,
     "kraken": KRAKEN_POLICY,
     "hyperliquid": HYPERLIQUID_POLICY,
+    "coinmarketcap": COINMARKETCAP_POLICY,
 }
 
 
@@ -157,6 +189,24 @@ def _equity(venue: str, symbol: str) -> CanonicalInstrument:
     )
 
 
+def _crypto_cap(symbol: str) -> CanonicalInstrument:
+    is_dominance = symbol.endswith(".D")
+    return CanonicalInstrument(
+        instrument_id=f"index:CRYPTOCAP:{symbol}",
+        asset_class=AssetClass.CRYPTO,
+        instrument_type=InstrumentType.INDEX,
+        venue="CRYPTOCAP",
+        venue_symbol=symbol,
+        display_symbol=symbol,
+        base_currency=symbol.removesuffix(".D"),
+        quote_currency="%" if is_dominance else "USD",
+        exchange_timezone="UTC",
+        session_calendar="24x7",
+        price_scale=100,
+        minimum_tick=Decimal("0.0001" if is_dominance else "0.01"),
+    )
+
+
 INSTRUMENTS = (
     *tuple(_crypto("BINANCE", base, "USDT") for base in ("BTC", "ETH", "SOL")),
     *tuple(_crypto("COINBASE", base, "USD") for base in ("BTC", "ETH")),
@@ -164,6 +214,27 @@ INSTRUMENTS = (
     *tuple(
         _crypto("HYPERLIQUID", base, "USD", InstrumentType.PERPETUAL)
         for base in ("BTC", "ETH")
+    ),
+    *tuple(
+        _crypto_cap(symbol)
+        for symbol in (
+            "TOTAL",
+            "TOTAL2",
+            "TOTAL3",
+            "BTC",
+            "ETH",
+            "USDT",
+            "USDC",
+            "DAI",
+            "BTC.D",
+            "ETH.D",
+            "USDT.D",
+            "USDC.D",
+            "DAI.D",
+            "TOTAL.D",
+            "TOTAL2.D",
+            "TOTAL3.D",
+        )
     ),
     _equity("NASDAQ", "AAPL"),
     _equity("NASDAQ", "NVDA"),
@@ -181,6 +252,17 @@ def _binding(
     adjustments: tuple[AdjustmentMode, ...] = (AdjustmentMode.RAW,),
 ) -> ProviderBinding:
     policy = POLICIES[provider]
+    supported_intervals = policy.supported_intervals
+    # Yahoo's chart endpoint generally exposes only end-of-day history for OTC
+    # and other non-listed venues. Keep the binding capabilities honest so the
+    # chart and watchlist do not probe unsupported intraday intervals.
+    if provider == "yahoo" and instrument.asset_class is AssetClass.EQUITY and instrument.venue not in {
+        "NASDAQ",
+        "NYSE",
+        "ARCA",
+        "AMEX",
+    }:
+        supported_intervals = ("1d", "1w", "1mo")
     return ProviderBinding(
         binding_id=f"{provider}:{feed_type.value}:{instrument.instrument_id}",
         instrument_id=instrument.instrument_id,
@@ -190,7 +272,7 @@ def _binding(
         realtime_scope=policy.realtime_scope,
         delay_seconds=policy.delay_seconds,
         adjustment_capabilities=adjustments,
-        supported_intervals=policy.supported_intervals,
+        supported_intervals=supported_intervals,
         usage_scope=policy.usage_scope,
         is_official_api=policy.is_official_api,
     )
@@ -239,9 +321,25 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
         else (
             _binding(
                 instrument,
+                "coinmarketcap",
+                instrument.venue_symbol,
+                FeedType.HISTORICAL_DAILY,
+            ),
+        )
+        if instrument.venue == "CRYPTOCAP"
+        else (
+            _binding(
+                instrument,
                 "yahoo",
                 instrument.display_symbol,
                 FeedType.HISTORICAL_POLLING,
+                adjustments=(AdjustmentMode.RAW,),
+            ),
+            _binding(
+                instrument,
+                "alpaca_iex",
+                instrument.display_symbol,
+                FeedType.REST,
                 adjustments=(AdjustmentMode.RAW,),
             ),
             _binding(
@@ -258,6 +356,38 @@ _catalog_lock = RLock()
 _dynamic_instruments: dict[str, CanonicalInstrument] = {}
 _dynamic_bindings: dict[str, ProviderBinding] = {}
 _CANONICAL_EQUITY_TOKEN = re.compile(r"^[A-Z0-9._^=-]+$")
+_CANONICAL_CRYPTO_TOKEN = re.compile(r"^[A-Z0-9]+$")
+
+
+def _restore_dynamic_crypto(instrument_id: str) -> CanonicalInstrument | None:
+    """Rehydrate a Binance spot symbol persisted from a previous process."""
+    parts = instrument_id.split(":")
+    if len(parts) != 4 or parts[:3] != ["crypto", "BINANCE", "spot"]:
+        return None
+    pair = parts[3].split("-")
+    if len(pair) != 2 or any(not _CANONICAL_CRYPTO_TOKEN.fullmatch(value) for value in pair):
+        return None
+    base, quote = pair
+    instrument = CanonicalInstrument(
+        instrument_id=instrument_id,
+        asset_class=AssetClass.CRYPTO,
+        instrument_type=InstrumentType.SPOT,
+        venue="BINANCE",
+        venue_symbol=f"{base}-{quote}",
+        display_symbol=f"{base}{quote}",
+        base_currency=base,
+        quote_currency=quote,
+        exchange_timezone="UTC",
+        session_calendar="24x7",
+        price_scale=100,
+        minimum_tick=Decimal("0.00000001"),
+        status="active",
+    )
+    register_instrument(
+        instrument,
+        (_binding(instrument, "binance", instrument.display_symbol, FeedType.WEBSOCKET_AND_REST),),
+    )
+    return instrument
 
 
 def _restore_dynamic_equity(instrument_id: str) -> CanonicalInstrument | None:
@@ -300,6 +430,12 @@ def _restore_dynamic_equity(instrument_id: str) -> CanonicalInstrument | None:
                 "yahoo",
                 symbol,
                 FeedType.HISTORICAL_POLLING,
+            ),
+            _binding(
+                instrument,
+                "alpaca_iex",
+                symbol,
+                FeedType.REST,
             ),
             _binding(
                 instrument,
@@ -354,7 +490,10 @@ def search_instruments(query: str = "") -> list[CanonicalInstrument]:
 def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
     if instrument_id in _dynamic_instruments:
         return _dynamic_instruments[instrument_id]
-    return next((item for item in INSTRUMENTS if item.instrument_id == instrument_id), None)
+    static = next((item for item in INSTRUMENTS if item.instrument_id == instrument_id), None)
+    if static is not None:
+        return static
+    return _restore_dynamic_equity(instrument_id) or _restore_dynamic_crypto(instrument_id)
 
 
 def binding_by_id(binding_id: str) -> ProviderBinding | None:
@@ -368,8 +507,10 @@ def binding_by_id(binding_id: str) -> ProviderBinding | None:
     # discovered in a previous process lifetime.  Recreate the dynamic catalog
     # entry before looking up that binding.
     parts = binding_id.split(":", 2)
-    if len(parts) == 3 and parts[0] in {"yahoo", "stooq"}:
+    if len(parts) == 3 and parts[0] in {"yahoo", "alpaca_iex", "stooq"}:
         _restore_dynamic_equity(parts[2])
+    elif len(parts) == 3 and parts[0] == "binance":
+        _restore_dynamic_crypto(parts[2])
     return _dynamic_bindings.get(binding_id)
 
 
@@ -378,6 +519,7 @@ def bindings_for_instrument(instrument_id: str) -> list[ProviderBinding]:
     if bindings:
         return bindings
     _restore_dynamic_equity(instrument_id)
+    _restore_dynamic_crypto(instrument_id)
     return [item for item in all_bindings() if item.instrument_id == instrument_id]
 
 

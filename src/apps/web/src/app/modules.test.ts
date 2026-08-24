@@ -10,6 +10,7 @@ const canonicalModuleIds = [
   'voice-cloning',
   'stt',
   'image-generation',
+  'trading',
   'providers',
   'models',
   'jobs',

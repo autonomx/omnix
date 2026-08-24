@@ -32,7 +32,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Trading alert client', () => {
   it('sends revision headers without dropping condition policy', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(alert), {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(alert), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));
@@ -60,7 +60,7 @@ describe('Trading alert client', () => {
   });
 
   it('keeps alert evaluation on the server endpoint', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ triggers: [] }), {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ triggers: [] }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));
@@ -69,5 +69,17 @@ describe('Trading alert client', () => {
     await tradingApi.evaluateAlerts(alert.instrument_id, '101.5', '2026-08-05T12:00:00Z');
     expect(fetchMock.mock.calls[0][0]).toBe('/api/trading/alerts/evaluate');
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' });
+  });
+
+  it('does not cache alert reads after a mutation', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ alerts: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await tradingApi.alerts();
+
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
   });
 });

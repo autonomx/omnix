@@ -19,6 +19,7 @@ def runtime_settings(**overrides) -> ResearchRuntimeSettings:
     payload = {
         "default_mode": "quick",
         "provider": "brave",
+        "provider_fallbacks": ("playwright", "duckduckgo"),
         "max_results": 7,
         "max_steps": 9,
         "max_queries": 4,
@@ -47,6 +48,7 @@ def test_runtime_settings_load_saved_profile_values(monkeypatch) -> None:
                 "assistant": {
                     "researchDefaultMode": "deep",
                     "researchProvider": "tavily",
+                    "researchProviderFallbacks": ["playwright", "duckduckgo"],
                     "researchMaxResults": 6,
                     "researchMaxSteps": 10,
                     "researchMaxQueries": 7,
@@ -68,6 +70,8 @@ def test_runtime_settings_load_saved_profile_values(monkeypatch) -> None:
 
     assert settings.default_mode == "deep"
     assert settings.provider == "tavily"
+    assert settings.provider_fallbacks == ("playwright", "duckduckgo")
+    assert settings.effective_provider_chain == ("tavily", "playwright", "duckduckgo")
     assert settings.max_results == 6
     assert settings.max_steps == 10
     assert settings.max_queries == 7
@@ -91,7 +95,7 @@ class CapturingContextService:
         return AssistantContextBuildResult()
 
 
-def test_quick_search_route_applies_saved_provider_result_limit_and_policy(tmp_path, monkeypatch) -> None:
+def test_quick_search_route_applies_saved_provider_chain_result_limit_and_policy(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "fixture-key")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
@@ -116,12 +120,17 @@ def test_quick_search_route_applies_saved_provider_result_limit_and_policy(tmp_p
     assert response.status_code == 200
     assert context_service.request is not None
     assert context_service.request.internal_research_provider == "brave"
+    assert context_service.request.internal_research_provider_chain == [
+        "brave",
+        "playwright",
+        "duckduckgo",
+    ]
     assert context_service.request.web_search_max_results == 7
     assert context_service.request.internal_research_policy["search_cache_ttl_seconds"] == 901
     assert context_service.request.internal_research_policy["extraction_cache_ttl_seconds"] == 1802
 
 
-def test_deep_research_job_freezes_saved_provider_budgets_and_cache_ttls(tmp_path, monkeypatch) -> None:
+def test_deep_research_job_freezes_saved_provider_chain_budgets_and_cache_ttls(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "fixture-key")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
@@ -148,6 +157,7 @@ def test_deep_research_job_freezes_saved_provider_budgets_and_cache_ttls(tmp_pat
     assert response.status_code == 200
     payload = response.json()["job"]["input_payload"]
     assert payload["research_provider"] == "brave"
+    assert payload["research_provider_chain"] == ["brave", "playwright", "duckduckgo"]
     assert payload["max_steps"] == 9
     assert payload["max_queries"] == 4
     assert payload["max_sources"] == 18
@@ -157,7 +167,7 @@ def test_deep_research_job_freezes_saved_provider_budgets_and_cache_ttls(tmp_pat
     assert payload["hermes_planner_enabled"] is True
 
 
-def test_deep_research_uses_playwright_when_saved_provider_is_duckduckgo(
+def test_deep_research_honors_explicit_duckduckgo_primary_priority(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -165,7 +175,10 @@ def test_deep_research_uses_playwright_when_saved_provider_is_duckduckgo(
     chat_store = ChatSessionStore(tmp_path / "chat.json")
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     session = chat_store.create_session(CreateChatSessionRequest(title="Deep browser settings"))
-    settings = runtime_settings(provider="duckduckgo")
+    settings = runtime_settings(
+        provider="duckduckgo",
+        provider_fallbacks=("playwright",),
+    )
     app = FastAPI()
     register_assistant_context_routes(
         app,
@@ -181,10 +194,11 @@ def test_deep_research_uses_playwright_when_saved_provider_is_duckduckgo(
 
     assert response.status_code == 200
     payload = response.json()["job"]["input_payload"]
-    assert payload["research_provider"] == "playwright"
+    assert payload["research_provider"] == "duckduckgo"
+    assert payload["research_provider_chain"] == ["duckduckgo", "playwright"]
 
 
-def test_api_backed_environment_provider_overrides_duckduckgo_fallback(tmp_path, monkeypatch) -> None:
+def test_api_backed_environment_provider_overrides_duckduckgo_primary(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_PROVIDER", "brave")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "fixture-key")
@@ -192,7 +206,7 @@ def test_api_backed_environment_provider_overrides_duckduckgo_fallback(tmp_path,
     job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
     context_service = CapturingContextService()
     session = chat_store.create_session(CreateChatSessionRequest(title="Provider override"))
-    settings = runtime_settings(provider="duckduckgo")
+    settings = runtime_settings(provider="duckduckgo", provider_fallbacks=("playwright", "duckduckgo"))
     app = FastAPI()
     register_assistant_context_routes(
         app,
@@ -211,11 +225,16 @@ def test_api_backed_environment_provider_overrides_duckduckgo_fallback(tmp_path,
     assert response.status_code == 200
     assert context_service.request is not None
     assert context_service.request.internal_research_provider == "brave"
+    assert context_service.request.internal_research_provider_chain == [
+        "brave",
+        "playwright",
+        "duckduckgo",
+    ]
     assert status.json()["provider"]["provider"] == "brave"
     assert status.json()["provider"]["coverage"] == "general web search"
 
 
-def test_research_status_reports_capability_without_exposing_secret(tmp_path, monkeypatch) -> None:
+def test_research_status_reports_provider_chain_without_exposing_secret(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_WEB_SEARCH_API_KEY", "never-return-this-secret")
     monkeypatch.setenv("OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED", "1")
     monkeypatch.setenv("OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET", "2026-09-01")
@@ -237,6 +256,12 @@ def test_research_status_reports_capability_without_exposing_secret(tmp_path, mo
     assert payload["provider"]["credential_required"] is True
     assert payload["provider"]["credential_configured"] is True
     assert payload["provider"]["available"] is True
+    assert [item["provider"] for item in payload["provider_chain"]] == [
+        "brave",
+        "playwright",
+        "duckduckgo",
+    ]
+    assert payload["provider_chain"][1]["credential_required"] is False
     assert payload["budgets"]["deep_max_steps"] == 9
     assert payload["retention"]["raw_snapshot_retention_days"] == 3
     assert payload["compatibility"]["aliases_enabled"] is True

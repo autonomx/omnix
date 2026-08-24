@@ -4,71 +4,71 @@
 .trading-workspace .trading-timeframe-buttons button,
 .trading-workspace .trading-tool-shortcuts button,
 .trading-workspace .trading-provider-status {
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .trading-workspace .trading-symbol-trigger-copy strong {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .trading-workspace .trading-symbol-trigger-copy small {
-  font-size: 9px;
+  font-size: 0.5625rem;
 }
 
 .trading-workspace .trading-chart-title-row strong {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .trading-workspace .trading-chart-title-row span,
 .trading-workspace .trading-chart-ohlc,
 .trading-workspace .trading-chart-state {
-  font-size: 9px;
+  font-size: 0.5625rem;
 }
 
 .trading-workspace .trading-chart-provenance span,
 .trading-workspace .trading-chart-footer-meta {
-  font-size: 8px;
+  font-size: 0.5rem;
 }
 
 .trading-workspace .trading-tools button,
 .trading-workspace .trading-drawing-tool-group > button {
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .trading-workspace .trading-drawing-tool-menu header {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .trading-workspace .trading-drawing-tool-item {
-  font-size: 12px !important;
+  font-size: 0.75rem !important;
 }
 
 .trading-workspace .trading-drawing-tool-shortcut,
 .trading-workspace .trading-drawing-tool-soon {
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .trading-workspace .trading-price-scale-menu-row,
 .trading-workspace .trading-chart-context-menu button {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .trading-workspace .trading-price-scale-menu-row kbd,
 .trading-workspace .trading-price-scale-menu-row small,
 .trading-workspace .trading-chart-context-menu button > kbd {
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .trading-workspace .trading-indicator-menu button,
 .trading-workspace .trading-interval-menu button,
 .trading-workspace .trading-alert-options-menu button,
 .trading-workspace .trading-watchlist .trading-watchlist-options-menu button {
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .trading-workspace .trading-side-panel > nav button,
 .trading-workspace .trading-side-rail nav button {
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .trading-workspace .trading-watchlist .trading-watchlist-controls select,
@@ -76,25 +76,25 @@
 .trading-workspace .trading-watchlist li > button strong,
 .trading-workspace .trading-watchlist-price,
 .trading-workspace .trading-watchlist-change {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .trading-workspace .trading-watchlist-columns {
-  font-size: 9px;
+  font-size: 0.5625rem;
 }
 
 .trading-workspace .trading-alert-row-copy > span,
 .trading-workspace .trading-alert-options-menu button,
 .trading-workspace .trading-alert-log-group h3 {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .trading-workspace .trading-alert-options-menu button {
-  font-size: 11px !important;
+  font-size: 0.6875rem !important;
 }
 
 .trading-workspace .trading-dock-content,
 .trading-workspace .trading-dock-content th,
 .trading-workspace .trading-dock-content td {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }

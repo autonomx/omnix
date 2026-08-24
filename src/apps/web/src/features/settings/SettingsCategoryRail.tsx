@@ -1,9 +1,11 @@
 import { INITIAL_SETTINGS_REGISTRY, SETTINGS_CATEGORIES } from './settingsRegistry';
 import type { SettingsCategoryId } from './settingsTypes';
 
-const categoryGlyphs: Record<SettingsCategoryId, string> = {
+const categoryGlyphs: Partial<Record<SettingsCategoryId, string>> = {
   overview: '▦', 'appearance-accessibility': '▣', 'ai-providers': '⌘', 'models-runtime': '▧', 'assistant-chat': '◯', 'voice-audio': '≋', 'storyteller-podcast': '▤', rpg: '◇', 'images-speech-input': '▨', 'tools-integrations': '✣', 'jobs-assets-storage': '▥', 'diagnostics-developer': '<>',
 };
+
+categoryGlyphs['trading-market-data'] = '▥';
 
 export function SettingsCategoryRail({ activeCategory, query, onQueryChange, onSelect }: {
   activeCategory: SettingsCategoryId;

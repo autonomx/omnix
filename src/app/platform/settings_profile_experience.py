@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.research import ResearchMode
 
+ResearchProvider = Literal["duckduckgo", "brave", "tavily", "playwright"]
+
 
 class AppearanceSettingsProfile(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
@@ -12,6 +14,7 @@ class AppearanceSettingsProfile(BaseModel):
     mode: str = "system"
     theme: str = "aurora"
     density: str = "comfortable"
+    text_scale: int = Field(100, ge=80, le=140, alias="textScale")
     reduce_motion: bool = Field(False, alias="reduceMotion")
     live_captions: bool = Field(True, alias="liveCaptions")
 
@@ -27,9 +30,14 @@ class AssistantSettingsProfile(BaseModel):
     streaming_audio: bool = Field(default=True, alias="streamingAudio")
 
     research_default_mode: ResearchMode = Field(default="disabled", alias="researchDefaultMode")
-    research_provider: Literal["duckduckgo", "brave", "tavily", "playwright"] = Field(
-        default="duckduckgo",
+    research_provider: ResearchProvider = Field(
+        default="brave",
         alias="researchProvider",
+    )
+    research_provider_fallbacks: list[ResearchProvider] = Field(
+        default_factory=lambda: ["playwright", "duckduckgo"],
+        max_length=3,
+        alias="researchProviderFallbacks",
     )
     research_max_results: int = Field(default=5, ge=1, le=8, alias="researchMaxResults")
     research_max_steps: int = Field(default=6, ge=1, le=12, alias="researchMaxSteps")

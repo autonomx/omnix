@@ -2,7 +2,10 @@ import type { TradingSideTab } from './TradingSidePanel';
 import './TradingSideRail.css';
 
 const railTabs: Array<{ id: TradingSideTab; label: string; glyph: string }> = [
+  { id: 'pine', label: 'Pine Editor', glyph: '{}' },
+  { id: 'objects', label: 'Object tree', glyph: '▱' },
   { id: 'paper', label: 'Trade', glyph: '⇄' },
+  { id: 'prospective', label: 'Evidence', glyph: '✓' },
   { id: 'watchlist', label: 'Watchlist', glyph: '▤' },
   { id: 'alerts', label: 'Alerts', glyph: '◷' },
   { id: 'indicators', label: 'Indicators', glyph: '◇' },

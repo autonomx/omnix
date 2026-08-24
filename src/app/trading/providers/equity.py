@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import threading
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from io import StringIO
 from typing import Any
 
@@ -116,6 +116,19 @@ class YahooEquityProvider:
                 open_value, high, low, close, volume = (items[index] for items in values)
                 if None in (open_value, high, low, close):
                     continue
+                try:
+                    open_decimal = Decimal(str(open_value))
+                    high_decimal = Decimal(str(high))
+                    low_decimal = Decimal(str(low))
+                    close_decimal = Decimal(str(close))
+                    if (
+                        not all(value.is_finite() for value in (open_decimal, high_decimal, low_decimal, close_decimal))
+                        or high_decimal < max(open_decimal, close_decimal)
+                        or low_decimal > min(open_decimal, close_decimal)
+                    ):
+                        continue
+                except (InvalidOperation, TypeError, ValueError):
+                    continue
                 rows.append([int(timestamp), open_value, high, low, close, volume or 0])
             if not rows:
                 raise ProviderDataUnavailableError(
@@ -129,9 +142,30 @@ class YahooEquityProvider:
             ttl_seconds=60 if interval not in {"1d", "1w", "1mo"} else 900,
             source="yahoo_chart",
         )
+        valid_rows = []
+        for row in payload.get("rows", []):
+            try:
+                open_decimal = Decimal(str(row[1]))
+                high_decimal = Decimal(str(row[2]))
+                low_decimal = Decimal(str(row[3]))
+                close_decimal = Decimal(str(row[4]))
+                if (
+                    not all(value.is_finite() for value in (open_decimal, high_decimal, low_decimal, close_decimal))
+                    or high_decimal < max(open_decimal, close_decimal)
+                    or low_decimal > min(open_decimal, close_decimal)
+                ):
+                    continue
+            except (IndexError, InvalidOperation, TypeError, ValueError):
+                continue
+            valid_rows.append(row)
+        if not valid_rows:
+            raise ProviderDataUnavailableError(
+                f"Yahoo returned no valid OHLC bars for {instrument_id} {interval}"
+            )
+
         received = datetime.now(timezone.utc)
         bars: list[MarketBar] = []
-        for row in payload["rows"]:
+        for row in valid_rows:
             provider_time = datetime.fromtimestamp(int(row[0]), tz=timezone.utc)
             start, end, session = equity_bar_times(
                 provider_time,

@@ -14,7 +14,8 @@ def test_profile_contract() -> None:
     assert payload["schema_version"] == 1
     assert payload["global"]["providers"]["llm"] == "lmstudio"
     assert payload["assistant"]["researchDefaultMode"] == "disabled"
-    assert payload["assistant"]["researchProvider"] == "duckduckgo"
+    assert payload["assistant"]["researchProvider"] == "brave"
+    assert payload["assistant"]["researchProviderFallbacks"] == ["playwright", "duckduckgo"]
     assert len(payload["revision"]) == 16
 
 
@@ -27,14 +28,15 @@ def test_profile_patch_preserves_defaults_and_syncs_legacy_provider() -> None:
     assert settings["provider"] == "cerebras"
 
 
-def test_profile_persists_research_provider_budgets_and_retention() -> None:
+def test_profile_persists_research_provider_priority_budgets_and_retention() -> None:
     settings = {"provider": "lmstudio"}
     current = load_settings_profile(settings)
     saved = save_settings_profile(
         settings,
         {
             "assistant": {
-                "researchProvider": "brave",
+                "researchProvider": "tavily",
+                "researchProviderFallbacks": ["playwright", "duckduckgo"],
                 "researchMaxResults": 7,
                 "researchMaxSteps": 9,
                 "researchMaxQueries": 6,
@@ -52,7 +54,8 @@ def test_profile_persists_research_provider_budgets_and_retention() -> None:
         current.revision,
     )
     payload = profile_payload(saved)["assistant"]
-    assert payload["researchProvider"] == "brave"
+    assert payload["researchProvider"] == "tavily"
+    assert payload["researchProviderFallbacks"] == ["playwright", "duckduckgo"]
     assert payload["researchMaxResults"] == 7
     assert payload["researchMaxSteps"] == 9
     assert payload["researchMaxQueries"] == 6
@@ -66,6 +69,8 @@ def test_profile_persists_research_provider_budgets_and_retention() -> None:
     assert payload["researchDeepEnabled"] is True
     assert payload["researchHermesPlannerEnabled"] is True
     reloaded = profile_payload(load_settings_profile(settings))["assistant"]
+    assert reloaded["researchProvider"] == "tavily"
+    assert reloaded["researchProviderFallbacks"] == ["playwright", "duckduckgo"]
     assert reloaded["researchDeepEnabled"] is True
     assert reloaded["researchHermesPlannerEnabled"] is True
 

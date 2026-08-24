@@ -126,6 +126,12 @@ def _dynamic_bindings(instrument: CanonicalInstrument) -> tuple[ProviderBinding,
         ),
         _binding(
             instrument,
+            "alpaca_iex",
+            instrument.display_symbol,
+            FeedType.REST,
+        ),
+        _binding(
+            instrument,
             "stooq",
             f"{instrument.display_symbol}.US",
             FeedType.HISTORICAL_DAILY,
