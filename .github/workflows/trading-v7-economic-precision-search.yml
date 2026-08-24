@@ -1,0 +1,175 @@
+name: Trading V7 economic precision search
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/trading-v7-economic-precision-search.yml
+      - scripts/run_trading_strategy_v7_economic_precision_search.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trading-v7-economic-precision-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
+      OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
+    steps:
+      - name: Check out exact research head with history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install targeted trading dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Restore complete Jan2025-Mar2026 causal cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-Linux-v5-expanded-32685922430-1
+          fail-on-cache-miss: true
+
+      - name: Recover exact frozen V3 selector source
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import base64, gzip, hashlib, re, subprocess
+          from pathlib import Path
+          source_commit = "5529cb1bc223aa6f018630792aa5ce5e16c5071f"
+          expected = "5c98837cc96ad7c692d45b0bafff6a025f04f52599985cc6e85af734f6917607"
+          historical = subprocess.check_output(["git", "show", f"{source_commit}:.github/workflows/trading-v3-recovery-precision-search.yml"], text=True)
+          match = re.search(r'payload = "([A-Za-z0-9+/=]+)"', historical)
+          if match is None:
+              raise SystemExit("historical embedded selector payload not found")
+          payload = match.group(1)
+          for removed_index in range(len(payload)):
+              candidate = payload[:removed_index] + payload[removed_index + 1:]
+              try:
+                  source = gzip.decompress(base64.b64decode(candidate, validate=True))
+              except Exception:
+                  continue
+              if hashlib.sha256(source).hexdigest() == expected:
+                  if removed_index != 3382:
+                      raise SystemExit(f"unexpected corruption index: {removed_index}")
+                  Path("/tmp/recovery_selector.py").write_bytes(source)
+                  print(f"Recovered exact selector source sha256={expected}; removed_index={removed_index}")
+                  break
+          else:
+              raise SystemExit("exact selector source fingerprint not recoverable")
+          PYCODE
+          python -m py_compile /tmp/recovery_selector.py scripts/run_trading_strategy_v7_economic_precision_search.py
+
+      - name: Run bounded V7 economic precision development search
+        id: development
+        shell: bash
+        run: |
+          rm -f /tmp/v7-selected.json
+          python scripts/run_trading_strategy_v7_economic_precision_search.py \
+            --mode development \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --start-date 2025-01-02 \
+            --end-date 2026-03-27 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 150 \
+            --selector-source /tmp/recovery_selector.py \
+            --selection-file /tmp/v7-selected.json \
+            --minimum-coverage-ratio 0.98 \
+            --minimum-covered-sessions 300 \
+            --output-dir artifacts/v7-economic-precision-development
+          if [[ -f /tmp/v7-selected.json ]]; then
+            echo "selected=true" >> "${GITHUB_OUTPUT}"
+            cat /tmp/v7-selected.json
+          else
+            echo "selected=false" >> "${GITHUB_OUTPUT}"
+            echo "No V7 rule cleared temporal plus realistic trade gates; forward holdout remains sealed."
+          fi
+
+      - name: Verify Alpaca credentials only after V7 development pass
+        if: steps.development.outputs.selected == 'true'
+        shell: bash
+        run: |
+          if [[ -z "${OMNIX_ALPACA_API_KEY_ID}" || -z "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
+            echo "::error::Alpaca credentials are required only because a V7 rule earned the forward holdout."
+            exit 2
+          fi
+
+      - name: Freeze Mar31-Apr28 2026 forward holdout only after V7 selection
+        if: steps.development.outputs.selected == 'true'
+        shell: bash
+        run: |
+          python scripts/run_trading_strategy_liquidity_sweep_resilient.py \
+            --start-date 2026-03-31 \
+            --end-date 2026-04-28 \
+            --thresholds 100000 \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --output-dir artifacts/v7-economic-precision-holdout-capture \
+            --reconstruction-max-age-days 180 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 150 \
+            --max-hold-minutes 60 \
+            --max-sessions 25 \
+            --require-covered-session
+
+      - name: Run exactly one selected V7 forward holdout
+        if: steps.development.outputs.selected == 'true'
+        shell: bash
+        run: |
+          python scripts/run_trading_strategy_v7_economic_precision_search.py \
+            --mode holdout \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --start-date 2026-03-31 \
+            --end-date 2026-04-28 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 150 \
+            --selector-source /tmp/recovery_selector.py \
+            --rule-json /tmp/v7-selected.json \
+            --minimum-coverage-ratio 0.90 \
+            --minimum-covered-sessions 18 \
+            --output-dir artifacts/v7-economic-precision-holdout
+
+      - name: Save V7 cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-${{ runner.os }}-v7-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Publish V7 summaries
+        if: always()
+        shell: bash
+        run: |
+          for summary in artifacts/v7-economic-precision-development/summary.md artifacts/v7-economic-precision-holdout/summary.md; do
+            if [[ -f "${summary}" ]]; then cat "${summary}" >> "${GITHUB_STEP_SUMMARY}"; printf '\n' >> "${GITHUB_STEP_SUMMARY}"; fi
+          done
+
+      - name: Upload V7 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-v7-economic-precision-search
+          path: |
+            artifacts/v7-economic-precision-development
+            artifacts/v7-economic-precision-holdout-capture
+            artifacts/v7-economic-precision-holdout
+          if-no-files-found: warn
+          retention-days: 30
