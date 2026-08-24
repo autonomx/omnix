@@ -57,6 +57,18 @@ The profile fingerprint includes:
 
 Changing any of these creates a **new profile**. Evidence from different fingerprints must not be pooled for promotion.
 
+### Unbiased candidate diagnostics
+
+The recorder mirrors every causal `deep_recovery_state` transition for the exact frozen source/profile into a `prospective_economic_candidate` event. This preserves the full watch/reject/advance population needed for future winner/loser and regime analysis rather than retaining only good-looking signals.
+
+Candidate diagnostic events preserve the source event ID, setup/rule/profile, source state/reason, full causal evaluation payload, universe identity/source and finalized-bar count. They are always marked:
+
+- `diagnostic_only=true`;
+- `promotion_metric_eligible=false`;
+- `execution_authority=false`.
+
+They **never** count toward matched outcomes, win rate, expectancy, confidence bounds, drawdown, sample-size gates or the economic evidence fingerprint. A regression test verifies that inserting candidate diagnostics leaves promotion metrics and the evidence fingerprint unchanged.
+
 ### Signal and outcome capture
 
 For every eligible prospective SHADOW signal, persist immutable decision-time evidence:
@@ -122,7 +134,7 @@ Verdicts:
 - **ROBUST**: >=5 trades, >=60% wins, >0R expectancy, <=5R drawdown
 - otherwise **FAIL**
 
-Only GOLD or ROBUST may continue. The review event records the artifact/run reference and the operator's confirmation that the block was not opened before the prospective PASS.
+Only GOLD or ROBUST may continue. Any recorded holdout review is one-shot: `FAIL` and `UNDERPOWERED` are terminal for that profile and cannot be replaced by a second result. The review event records the artifact/run reference and the operator's confirmation that the block was not opened before the prospective PASS.
 
 ## Stage 4 — fresh SHADOW soak
 
@@ -158,8 +170,9 @@ No historical research, LLM output, dashboard action or economic recorder event 
 1. Do not change thresholds after seeing prospective results for this fingerprint.
 2. Do not repeat the one-shot evaluation for a failed fingerprint.
 3. Do not open the sealed holdout before a recorded prospective PASS.
-4. Do not search multiple holdout variants or rescue a failed holdout.
+4. Do not search multiple holdout variants or rescue a failed/underpowered holdout.
 5. Do not count pre-review observations toward the post-holdout soak.
 6. Do not pool events from different profile fingerprints.
 7. Do not reinterpret incomplete market/execution evidence as a loss, win or no-trade without an explicit recorded state.
-8. Do not allow any research component, LLM or UI to become execution authority.
+8. Do not allow candidate diagnostics to enter promotion metrics or evidence fingerprints.
+9. Do not allow any research component, LLM or UI to become execution authority.
