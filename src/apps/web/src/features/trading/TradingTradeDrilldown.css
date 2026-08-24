@@ -1,0 +1,343 @@
+.paper-trade-drilldown-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(5, 9, 18, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.paper-trade-drilldown {
+  width: min(620px, 94vw);
+  height: 100%;
+  overflow-y: auto;
+  background: #0d1421;
+  border-left: 1px solid #253148;
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.35);
+  color: #d8e1ef;
+}
+
+.paper-trade-drilldown-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  background: rgba(13, 20, 33, 0.97);
+  border-bottom: 1px solid #253148;
+}
+
+.paper-trade-drilldown-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.paper-trade-drilldown-header span {
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.paper-trade-drilldown-header span.auto {
+  color: #91dcff;
+  background: rgba(42, 151, 214, 0.16);
+  border: 1px solid rgba(72, 181, 242, 0.35);
+}
+
+.paper-trade-drilldown-header span.shadow {
+  color: #ccb6ff;
+  background: rgba(132, 88, 210, 0.16);
+  border: 1px solid rgba(161, 119, 236, 0.34);
+}
+
+.paper-trade-drilldown-header strong {
+  font-size: 18px;
+}
+
+.paper-trade-drilldown-header small {
+  color: #8492a8;
+}
+
+.paper-trade-drilldown-header button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #2e3a51;
+  border-radius: 7px;
+  background: #131d2c;
+  color: #b7c4d7;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.paper-trade-drilldown-header button:hover {
+  background: #1a2638;
+  color: #fff;
+}
+
+.paper-trade-drilldown-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 16px 20px;
+  overflow: hidden;
+  border: 1px solid #253148;
+  border-radius: 9px;
+  background: #253148;
+}
+
+.paper-trade-drilldown-summary > div,
+.paper-trade-drilldown-kpis > span {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  background: #111a29;
+}
+
+.paper-trade-drilldown-summary small,
+.paper-trade-drilldown-kpis small,
+.paper-trade-drilldown-features small,
+.paper-trade-drilldown-identity small {
+  color: #7f8da2;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.paper-trade-drilldown-summary strong,
+.paper-trade-drilldown-kpis strong {
+  overflow: hidden;
+  color: #dfe8f5;
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.paper-trade-drilldown .positive {
+  color: #55d69b;
+}
+
+.paper-trade-drilldown .negative {
+  color: #ff7485;
+}
+
+.paper-trade-drilldown-section,
+.paper-trade-drilldown-notice {
+  margin: 14px 20px;
+  padding: 14px;
+  border: 1px solid #253148;
+  border-radius: 9px;
+  background: #101927;
+}
+
+.paper-trade-drilldown-section > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.paper-trade-drilldown-section > header strong {
+  color: #e1e9f5;
+  font-size: 13px;
+}
+
+.paper-trade-drilldown-section > header span {
+  color: #78869c;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.paper-trade-drilldown-kpis,
+.paper-trade-drilldown-features,
+.paper-trade-drilldown-identities {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.paper-trade-drilldown-kpis > span {
+  border: 1px solid #202c40;
+  border-radius: 6px;
+}
+
+.paper-trade-drilldown-notice {
+  border-left-width: 3px;
+}
+
+.paper-trade-drilldown-notice.shadow {
+  border-left-color: #8f70dc;
+  background: rgba(111, 73, 180, 0.09);
+}
+
+.paper-trade-drilldown-notice.warning {
+  border-left-color: #e2a54b;
+  background: rgba(202, 139, 42, 0.08);
+}
+
+.paper-trade-drilldown-notice strong {
+  color: #e1e9f5;
+  font-size: 13px;
+}
+
+.paper-trade-drilldown-notice p {
+  margin: 7px 0 0;
+  color: #9aa7b9;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.paper-trade-drilldown-loading {
+  margin: 16px 20px;
+  padding: 18px;
+  border: 1px dashed #2c3a53;
+  border-radius: 8px;
+  color: #90a0b6;
+  text-align: center;
+  font-size: 12px;
+}
+
+.paper-trade-drilldown-features > span {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid #202c40;
+  border-radius: 6px;
+  background: #0d1624;
+}
+
+.paper-trade-drilldown-features strong {
+  overflow: hidden;
+  color: #d6e0ee;
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.paper-trade-drilldown-observations {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 20px;
+  color: #aebbd0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.paper-trade-drilldown-identity {
+  display: grid;
+  gap: 4px;
+  padding: 8px 9px;
+  border: 1px solid #202c40;
+  border-radius: 6px;
+  background: #0d1624;
+}
+
+.paper-trade-drilldown-identity code {
+  overflow: hidden;
+  color: #a9c9ef;
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.paper-trade-drilldown-fills {
+  margin: 11px 0 0;
+  color: #8d9bb0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.paper-trade-drilldown-events {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #202c40;
+  border-radius: 7px;
+  background: #202c40;
+}
+
+.paper-trade-drilldown-events > div {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  gap: 12px;
+  padding: 9px 10px;
+  background: #0e1725;
+}
+
+.paper-trade-drilldown-events time {
+  color: #728198;
+  font-size: 10px;
+}
+
+.paper-trade-drilldown-events span {
+  display: grid;
+  gap: 2px;
+}
+
+.paper-trade-drilldown-events strong {
+  color: #cbd7e8;
+  font-size: 11px;
+}
+
+.paper-trade-drilldown-events small {
+  color: #77869c;
+  font-size: 10px;
+}
+
+.paper-trade-drilldown-empty {
+  margin: 0;
+  color: #7e8da3;
+  font-size: 12px;
+}
+
+.paper-trade-drilldown > footer {
+  margin: 18px 20px 24px;
+  padding-top: 12px;
+  border-top: 1px solid #202c40;
+  color: #6f7e93;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.paper-trade-view-button {
+  border: 1px solid #2d3b55;
+  border-radius: 5px;
+  padding: 4px 8px;
+  background: #111c2c;
+  color: #9fc7f2;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.paper-trade-view-button:hover,
+.paper-trade-view-button:focus-visible {
+  border-color: #4c7fb5;
+  background: #17263a;
+  color: #d5e9ff;
+  outline: none;
+}
+
+@media (max-width: 720px) {
+  .paper-trade-drilldown {
+    width: 100%;
+  }
+
+  .paper-trade-drilldown-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .paper-trade-drilldown-kpis,
+  .paper-trade-drilldown-features,
+  .paper-trade-drilldown-identities {
+    grid-template-columns: 1fr;
+  }
+}
