@@ -17,18 +17,19 @@ jobs:
       PYTHONPATH: src
       OMNIX_PERSISTENCE_MODE: legacy_test
       OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      TARGET_BRANCH: agent/trading-auto-strategy-roadmap
     steps:
-      - name: Check out exact PR head
+      - name: Check out PR branch with full history
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: agent/trading-auto-strategy-roadmap
           fetch-depth: 0
 
-      - name: Refuse to publish over a newer branch head
+      - name: Rebase worktree to latest authoritative branch tip
         shell: bash
         run: |
-          git fetch origin agent/trading-auto-strategy-roadmap
-          test "$(git rev-parse origin/agent/trading-auto-strategy-roadmap)" = "${{ github.event.pull_request.head.sha }}"
+          git fetch origin "${TARGET_BRANCH}"
+          git reset --hard "origin/${TARGET_BRANCH}"
 
       - name: Extract and run staged completion patch
         shell: bash
@@ -74,15 +75,27 @@ jobs:
       - name: Generate exact shared gateway contract
         run: npm --workspace @omnix/web run api:generate
 
-      - name: Commit final implementation and remove bootstrap workflows
+      - name: Commit final implementation and fast-forward across unrelated branch races
         shell: bash
         run: |
           rm -f .github/workflows/trading-roadmap-completion-sync.yml
           rm -f .github/workflows/trading-roadmap-completion-pr.yml
-          git fetch origin agent/trading-auto-strategy-roadmap
-          test "$(git rev-parse origin/agent/trading-auto-strategy-roadmap)" = "${{ github.event.pull_request.head.sha }}"
           git add -A
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "fix(trading): close roadmap correctness gaps"
-          git push origin HEAD:agent/trading-auto-strategy-roadmap
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin "${TARGET_BRANCH}"
+            if ! git rebase "origin/${TARGET_BRANCH}"; then
+              git rebase --abort || true
+              echo "::error::Latest branch changed overlapping files; refusing to overwrite."
+              exit 2
+            fi
+            if git push origin "HEAD:${TARGET_BRANCH}"; then
+              exit 0
+            fi
+            echo "Branch advanced during push attempt ${attempt}; retrying safe rebase."
+          done
+          echo "::error::Branch kept advancing; no force push attempted."
+          exit 3
