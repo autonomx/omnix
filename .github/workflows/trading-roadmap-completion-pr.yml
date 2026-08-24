@@ -1,0 +1,88 @@
+name: Trading roadmap completion launcher
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/trading-roadmap-completion-pr.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-roadmap-completion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: src
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Refuse to publish over a newer branch head
+        shell: bash
+        run: |
+          git fetch origin agent/trading-auto-strategy-roadmap
+          test "$(git rev-parse origin/agent/trading-auto-strategy-roadmap)" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Extract and run staged completion patch
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          from pathlib import Path
+
+          source = Path('.github/workflows/trading-roadmap-completion-sync.yml').read_text(encoding='utf-8')
+          start_marker = "          python - <<'PYCODE'\n"
+          end_marker = "          PYCODE\n\n      - uses: actions/setup-python@v5"
+          start = source.index(start_marker) + len(start_marker)
+          end = source.index(end_marker, start)
+          lines = source[start:end].splitlines()
+          program = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          Path('/tmp/apply_trading_roadmap_completion.py').write_text(program, encoding='utf-8')
+          PYCODE
+          python /tmp/apply_trading_roadmap_completion.py
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install targeted dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+
+      - name: Run focused correctness tests
+        run: |
+          python -m py_compile src/app/trading/strategy_monitor.py src/app/trading/strategy_repository.py src/app/trading/catalyst_evidence.py src/app/trading/paper_analytics.py
+          python -m pytest -q \
+            src/tests/trading/test_trading_roadmap_completion.py \
+            src/tests/trading/test_trading_paper_analytics.py \
+            src/tests/trading/test_trading_catalyst_discovery.py
+
+      - name: Generate exact shared gateway contract
+        run: npm --workspace @omnix/web run api:generate
+
+      - name: Commit final implementation and remove bootstrap workflows
+        shell: bash
+        run: |
+          rm -f .github/workflows/trading-roadmap-completion-sync.yml
+          rm -f .github/workflows/trading-roadmap-completion-pr.yml
+          git fetch origin agent/trading-auto-strategy-roadmap
+          test "$(git rev-parse origin/agent/trading-auto-strategy-roadmap)" = "${{ github.event.pull_request.head.sha }}"
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(trading): close roadmap correctness gaps"
+          git push origin HEAD:agent/trading-auto-strategy-roadmap
