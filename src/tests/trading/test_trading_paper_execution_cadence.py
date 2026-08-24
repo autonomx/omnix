@@ -11,6 +11,7 @@ from app.trading.paper_monitor import TradingPaperMonitor
 
 NOW = datetime.now(timezone.utc)
 INSTRUMENT = "equity:NYSE:TEST"
+BINDING = "fixture:test"
 
 
 class Repo:
@@ -25,7 +26,7 @@ class Repo:
             account_id="paper-1",
             order_id="order-1",
             instrument_id=INSTRUMENT,
-            binding_id=None,
+            binding_id=BINDING,
             side="buy",
             order_type="market",
             quantity=Decimal("1"),
@@ -64,7 +65,7 @@ class Market:
     def execution_observation(self, instrument_id, binding_id=None):
         return ExecutionObservation(
             instrument_id=instrument_id,
-            binding_id=None,
+            binding_id=binding_id or BINDING,
             provider="fixture",
             bid=Decimal("9.99"),
             ask=Decimal("10.01"),
