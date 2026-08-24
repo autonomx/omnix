@@ -339,3 +339,40 @@ def test_failed_holdout_review_is_terminal_and_cannot_open_soak_path() -> None:
     assert result.soak_passed is False
     assert result.auto_paper_research_authorized is False
     assert "PROSPECTIVE_ECONOMIC_SEALED_HOLDOUT_FAILED" in result.reason_codes
+
+
+def test_end_to_end_completion_rate_keeps_missing_outcomes_in_denominator() -> None:
+    strategy = _strategy()
+    complete = _sample(
+        strategy,
+        start=datetime(2026, 8, 24, 14, 0, tzinfo=timezone.utc),
+        count=30,
+        loss_every=5,
+        suffix="complete-coverage",
+    )
+    pending_pairs = _sample(
+        strategy,
+        start=datetime(2026, 10, 1, 14, 0, tzinfo=timezone.utc),
+        count=4,
+        loss_every=None,
+        suffix="pending-coverage",
+    )
+    pending_signals = [
+        event for event in pending_pairs
+        if event.event_type == "prospective_economic_signal"
+    ]
+
+    censored = evaluate_prospective_economic_status(strategy, [*complete, *pending_signals])
+
+    assert censored.metrics.signal_count == 34
+    assert censored.metrics.matched_signal_count == 34
+    assert censored.metrics.matched_outcome_count == 30
+    assert censored.metrics.execution_match_rate == Decimal(30) / Decimal(34)
+    assert censored.metrics.execution_match_rate < Decimal("0.90")
+    assert censored.sample_ready is True
+    assert censored.quantitative_pass is False
+
+    completed = evaluate_prospective_economic_status(strategy, [*complete, *pending_pairs])
+    assert completed.metrics.matched_outcome_count == 34
+    assert completed.metrics.execution_match_rate == Decimal("1")
+    assert completed.quantitative_pass is True
