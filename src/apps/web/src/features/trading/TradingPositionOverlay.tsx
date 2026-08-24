@@ -227,7 +227,7 @@ export function TradingPositionOverlay({
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
       const snapshot = await tradingPaperApi.snapshot(accountId);
-      const order = snapshot.order_history.find((item) => item.order_id === orderId);
+      const order = (snapshot.order_history ?? []).find((item) => item.order_id === orderId);
       if (order?.status === 'filled' || order?.status === 'rejected' || order?.status === 'cancelled') {
         return { order, snapshot };
       }
