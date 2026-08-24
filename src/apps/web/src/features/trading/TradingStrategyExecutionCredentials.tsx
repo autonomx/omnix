@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { tradingExecutionApi, type AlpacaIexCredentialStatus } from './tradingExecutionApi';
+import { TradingPaperDashboard } from './TradingPaperDashboard';
 import { tradingStrategyApi, type TradingStrategyOperationsStatus } from './tradingStrategyApi';
 
 function sourceLabel(source: AlpacaIexCredentialStatus['api_key_source']): string {
@@ -99,6 +100,8 @@ export function TradingStrategyExecutionCredentials() {
 
   return (
     <>
+      <TradingPaperDashboard />
+
       <section className="strategy-provider-card" aria-label="Alpaca IEX execution credentials">
         <header>
           <div>

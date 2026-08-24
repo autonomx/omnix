@@ -35,6 +35,122 @@ class TradingPaperLifecycle:
             )
         )
 
+    def _archive_current_epoch(
+        self,
+        uow: PostgresUnitOfWork,
+        account_id: str,
+        reason: str,
+    ) -> str | None:
+        """Freeze the current simulator state before a lifecycle boundary.
+
+        The operational paper tables remain current-simulation tables. Epoch
+        archives preserve the complete pre-reset/pre-archive evidence so a UI
+        reset can never erase strategy-validation history.
+        """
+
+        row = uow.connection.execute(
+            """
+            SELECT epoch_id
+              FROM omnix_trading_paper_simulation_epochs
+             WHERE workspace_id = %s AND account_id = %s AND is_current = TRUE
+             ORDER BY ordinal DESC
+             LIMIT 1
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, account_id),
+        ).fetchone()
+        if row is None:
+            return None
+        epoch_id = str(row[0])
+        workspace_id = self.context.workspace_id
+        uow.connection.execute(
+            """
+            INSERT INTO omnix_trading_paper_epoch_archives (
+                workspace_id, account_id, epoch_id, reason, snapshot
+            )
+            SELECT %s, %s, %s, %s,
+                   jsonb_build_object(
+                       'account', COALESCE((
+                           SELECT to_jsonb(item)
+                             FROM omnix_trading_paper_accounts AS item
+                            WHERE item.workspace_id = %s AND item.account_id = %s
+                       ), '{}'::jsonb),
+                       'balances', COALESCE((
+                           SELECT jsonb_agg(to_jsonb(item) ORDER BY item.currency)
+                             FROM omnix_trading_paper_balances AS item
+                            WHERE item.workspace_id = %s AND item.account_id = %s
+                       ), '[]'::jsonb),
+                       'positions', COALESCE((
+                           SELECT jsonb_agg(to_jsonb(item) ORDER BY item.instrument_id)
+                             FROM omnix_trading_paper_positions AS item
+                            WHERE item.workspace_id = %s AND item.account_id = %s
+                       ), '[]'::jsonb),
+                       'orders', COALESCE((
+                           SELECT jsonb_agg(to_jsonb(item) ORDER BY item.created_at, item.order_id)
+                             FROM omnix_trading_paper_orders AS item
+                            WHERE item.workspace_id = %s AND item.account_id = %s
+                       ), '[]'::jsonb),
+                       'fills', COALESCE((
+                           SELECT jsonb_agg(to_jsonb(item) ORDER BY item.source_time, item.fill_id)
+                             FROM omnix_trading_paper_fills AS item
+                            WHERE item.workspace_id = %s AND item.account_id = %s
+                       ), '[]'::jsonb),
+                       'ledger', COALESCE((
+                           SELECT jsonb_agg(to_jsonb(item) ORDER BY item.created_at, item.ledger_id)
+                             FROM omnix_trading_paper_ledger AS item
+                            WHERE item.workspace_id = %s AND item.account_id = %s
+                       ), '[]'::jsonb),
+                       'manual_protections', COALESCE((
+                           SELECT jsonb_agg(to_jsonb(item) ORDER BY item.created_at, item.instrument_id)
+                             FROM omnix_trading_paper_protections AS item
+                            WHERE item.workspace_id = %s AND item.account_id = %s
+                       ), '[]'::jsonb),
+                       'strategy_protections', COALESCE((
+                           SELECT jsonb_agg(to_jsonb(item) ORDER BY item.created_at, item.protection_id)
+                             FROM omnix_trading_strategy_protections AS item
+                            WHERE item.workspace_id = %s AND item.account_id = %s
+                       ), '[]'::jsonb)
+                   )
+            ON CONFLICT (workspace_id, account_id, epoch_id) DO UPDATE SET
+                archived_at = CURRENT_TIMESTAMP,
+                reason = EXCLUDED.reason,
+                snapshot = EXCLUDED.snapshot
+            """,
+            (
+                workspace_id,
+                account_id,
+                epoch_id,
+                reason,
+                workspace_id,
+                account_id,
+                workspace_id,
+                account_id,
+                workspace_id,
+                account_id,
+                workspace_id,
+                account_id,
+                workspace_id,
+                account_id,
+                workspace_id,
+                account_id,
+                workspace_id,
+                account_id,
+                workspace_id,
+                account_id,
+            ),
+        )
+        uow.connection.execute(
+            """
+            UPDATE omnix_trading_paper_simulation_epochs
+               SET is_current = FALSE,
+                   ended_at = COALESCE(ended_at, CURRENT_TIMESTAMP),
+                   end_reason = %s
+             WHERE workspace_id = %s AND account_id = %s AND epoch_id = %s
+            """,
+            (reason, workspace_id, account_id, epoch_id),
+        )
+        return epoch_id
+
     def _disable_account_automation(self, uow: PostgresUnitOfWork, account_id: str, reason: str) -> None:
         """Fail safe: lifecycle changes cannot leave autonomous entries armed."""
         uow.connection.execute(
@@ -94,10 +210,11 @@ class TradingPaperLifecycle:
                     f"Paper account expected revision {expected_revision}: {account_id}"
                 )
             currency = str(row[0])
+            prior_epoch_id = self._archive_current_epoch(uow, account_id, "account_reset")
             self._disable_account_automation(uow, account_id, "account_reset")
-            # Manual protections are lifecycle history, not part of the fresh
-            # account simulation. Strategy protections stay as cancelled audit
-            # records because they belong to strategy history.
+            # The old simulator state is now immutable in its epoch archive.
+            # Clear only the operational/current-simulation tables; analytics,
+            # completed trade records and prior equity curves remain durable.
             uow.connection.execute(
                 "DELETE FROM omnix_trading_paper_protections WHERE workspace_id = %s AND account_id = %s",
                 (self.context.workspace_id, account_id),
@@ -113,6 +230,7 @@ class TradingPaperLifecycle:
                     f"DELETE FROM {table} WHERE workspace_id = %s AND account_id = %s",
                     (self.context.workspace_id, account_id),
                 )
+            # The balance-insert epoch trigger creates the next current epoch.
             uow.connection.execute(
                 """
                 INSERT INTO omnix_trading_paper_balances (
@@ -140,6 +258,7 @@ class TradingPaperLifecycle:
                         {
                             "source": "explicit_account_reset",
                             "automation_mode_after_reset": "off",
+                            "prior_epoch_id": prior_epoch_id,
                         }
                     ),
                 ),
@@ -177,6 +296,7 @@ class TradingPaperLifecycle:
                     f"Paper account expected revision {expected_revision}: {account_id}"
                 )
             currency = str(account_row[0])
+            self._archive_current_epoch(uow, account_id, "account_archived")
             self._disable_account_automation(uow, account_id, "account_archived")
 
             # Release reservations before cancelling the open orders so the

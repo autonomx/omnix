@@ -28,6 +28,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.hermes_research_api import create_trading_hermes_research_router
     from app.trading.model_api import create_trading_model_router
     from app.trading.market_data_api import create_trading_market_data_router
+    from app.trading.paper_analytics_api import create_trading_paper_analytics_router
     from app.trading.paper_api import create_trading_paper_router
     from app.trading.paper_monitor import register_trading_paper_monitor
     from app.trading.providers.alpaca_iex_status import register_alpaca_iex_status_monitor
@@ -49,6 +50,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     gateway.include_router(create_trading_scanner_router())
     gateway.include_router(create_trading_replay_router())
     gateway.include_router(create_trading_paper_router())
+    gateway.include_router(create_trading_paper_analytics_router())
     gateway.include_router(create_trading_research_router())
     gateway.include_router(create_trading_hermes_research_router())
     gateway.include_router(create_trading_strategy_router())
