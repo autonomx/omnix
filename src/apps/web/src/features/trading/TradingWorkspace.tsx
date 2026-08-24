@@ -17,7 +17,7 @@ import { TradingSymbolSearch, type TradingFormulaSearchPreview } from './Trading
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
 import { TradingDrawingTools } from './TradingDrawingTools';
 import { tradingApi } from './tradingApi';
-import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
+import type { DrawingSnapMode } from './drawings/drawingCommands';
 import { TradingChartTypeMenu } from './TradingChartTypeMenu';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
@@ -51,19 +51,6 @@ import './TradingChartPan.css';
 import './TradingChartChrome.css';
 import './TradingTypography.css';
 import './TradingToolFullscreen.css';
-
-const drawingTools: Array<{ id: DrawingTool; label: string; glyph: string }> = [
-  { id: 'cursor', label: 'Cursor', glyph: '↖' },
-  { id: 'alert', label: 'Place price alert', glyph: '⏰' },
-  { id: 'trend-line', label: 'Trend line', glyph: '╱' },
-  { id: 'horizontal-line', label: 'Horizontal line', glyph: '─' },
-  { id: 'vertical-line', label: 'Vertical line', glyph: '│' },
-  { id: 'ray', label: 'Ray', glyph: '↗' },
-  { id: 'rectangle', label: 'Rectangle', glyph: '□' },
-  { id: 'fibonacci', label: 'Fibonacci retracement', glyph: '≋' },
-  { id: 'text', label: 'Text note', glyph: 'T' },
-  { id: 'measurement', label: 'Measure', glyph: '↔' },
-];
 
 const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'auto', label: 'Auto grid' },

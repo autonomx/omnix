@@ -325,19 +325,6 @@ export function TradingDrawingTools({
 
   return (
     <aside ref={rootRef} className="trading-tools trading-drawing-tools" aria-label="Chart drawing tools">
-      <button
-        type="button"
-        className={selectedTool === 'alert' ? 'active' : undefined}
-        aria-label="Place price alert"
-        aria-pressed={selectedTool === 'alert'}
-        title="Place price alert"
-        onClick={() => {
-          onSelect('alert');
-          setOpenGroup(null);
-        }}
-      >
-        <span aria-hidden="true">⏰</span>
-      </button>
       {drawingToolGroups.filter((group) => group.id !== 'measurers').map((group) => {
         const isCursorGroup = group.id === 'cursor';
         const selectedItem = group.items.find((item) => item.tool === selectedTool && itemIsAvailable(item));

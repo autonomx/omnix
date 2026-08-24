@@ -164,6 +164,7 @@ export function TradingTerminalDock({
   const [tab, setTab] = useState<DockTab>('positions');
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('all');
   const [minimized, setMinimized] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [modal, setModal] = useState<AccountModal>(null);
   const [accounts, setAccounts] = useState<PaperAccount[]>([]);
@@ -298,6 +299,14 @@ export function TradingTerminalDock({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [modal]);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fullscreen]);
 
   const selectAccount = (nextId: string) => {
     setAccountMenuOpen(false); setAccountId(nextId); onAccountChange?.(nextId); void refresh(nextId);
@@ -359,9 +368,23 @@ export function TradingTerminalDock({
     if (modal === 'create') setCreateDraft((current) => ({ ...current, [key]: value }));
     else if (key in settingsDraft) setSettingsDraft((current) => ({ ...current, [key as keyof PaperAccountSettings]: value } as PaperAccountSettings));
   };
+  const toggleFullscreen = () => {
+    setFullscreen((current) => {
+      const next = !current;
+      if (next) setMinimized(false);
+      return next;
+    });
+  };
+  const toggleMinimized = () => {
+    setMinimized((current) => {
+      const next = !current;
+      if (next) setFullscreen(false);
+      return next;
+    });
+  };
 
   return (
-    <section className={`trading-terminal-dock${minimized ? ' is-minimized' : ''}`} aria-label="Paper trading activity" data-status={status}>
+    <section className={`trading-terminal-dock${minimized ? ' is-minimized' : ''}${fullscreen ? ' is-fullscreen' : ''}`} aria-label="Paper trading activity" data-status={status}>
       <div className="trading-dock-main">
         <header className="trading-dock-toolbar">
           <div className="trading-dock-mode"><span className="trading-dock-logo" aria-hidden="true">T</span><strong>Paper Trading</strong><span className="trading-dock-caret" aria-hidden="true">⌄</span></div>
@@ -372,7 +395,8 @@ export function TradingTerminalDock({
           </div>
           <span className="trading-dock-status">{status === 'error' ? 'Connection error' : replayMode ? 'Replay only' : 'Paper only'}</span>
           <button type="button" className="trading-dock-download" aria-label="Download order history" title="Download order history" onClick={downloadOrderHistory}>⇩</button>
-          <button type="button" className="trading-dock-toggle" aria-label={minimized ? 'Restore paper trading panel' : 'Minimize paper trading panel'} aria-expanded={!minimized} onClick={() => setMinimized((current) => !current)}>{minimized ? 'Show' : 'Minimize'}</button>
+          <button type="button" className="trading-dock-fullscreen" aria-label={fullscreen ? 'Exit fullscreen paper trading panel' : 'Fullscreen paper trading panel'} title={fullscreen ? 'Exit fullscreen paper trading panel' : 'Fullscreen paper trading panel'} aria-pressed={fullscreen} onClick={toggleFullscreen}>{fullscreen ? '↙' : '⛶'}</button>
+          <button type="button" className="trading-dock-toggle" aria-label={minimized ? 'Restore paper trading panel' : 'Minimize paper trading panel'} aria-expanded={!minimized} onClick={toggleMinimized}>{minimized ? 'Show' : 'Minimize'}</button>
         </header>
 
         {!minimized ? <>
