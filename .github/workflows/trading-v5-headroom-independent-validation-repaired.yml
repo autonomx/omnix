@@ -1,0 +1,296 @@
+name: Trading V5 headroom independent validation repaired
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/trading-v5-headroom-independent-validation-repaired.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trading-v5-headroom-independent-repaired-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
+      OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
+    steps:
+      - name: Check out exact validation head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install targeted trading dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Restore exact frozen independent cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-Linux-v5-independent-32684772697-1
+          fail-on-cache-miss: true
+
+      - name: Recover exact frozen V3 selector source
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import base64, gzip, hashlib, re
+          from pathlib import Path
+          expected = "5c98837cc96ad7c692d45b0bafff6a025f04f52599985cc6e85af734f6917607"
+          text = Path(".github/workflows/trading-v3-recovery-precision-search.yml").read_text(encoding="utf-8")
+          match = re.search(r'payload = "([A-Za-z0-9+/=]+)"', text)
+          if match is None:
+              raise SystemExit("embedded selector payload not found")
+          payload = match.group(1)
+          for index in range(-1, len(payload)):
+              candidate = payload if index < 0 else payload[:index] + payload[index + 1:]
+              try:
+                  source = gzip.decompress(base64.b64decode(candidate, validate=True))
+              except Exception:
+                  continue
+              if hashlib.sha256(source).hexdigest() == expected:
+                  Path("/tmp/recovery_selector.py").write_bytes(source)
+                  print(f"Recovered exact selector source sha256={expected}")
+                  break
+          else:
+              raise SystemExit("exact selector source fingerprint not recoverable")
+          PYCODE
+          python -m py_compile /tmp/recovery_selector.py scripts/run_trading_strategy_v5_recovery_headroom.py
+
+      - name: Validate exact 0.75R rule on frozen Aug-Sep block
+        id: backward
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import json, math
+          from datetime import date
+          from decimal import Decimal
+          from pathlib import Path
+
+          import scripts.run_trading_strategy_v5_recovery_headroom as v5
+          from app.trading.strategy_v2_qualification import frozen_v2_config
+          from scripts.run_trading_strategy_backtest import strict_v11_strategy
+          from scripts.run_trading_strategy_liquidity_sweep import _cache_namespace
+          from scripts.run_trading_strategy_v2_extended_exploration import _load_block
+
+          start, end = date(2025, 8, 1), date(2025, 9, 30)
+          spread = Decimal("150")
+          namespace, cache_basis = _cache_namespace(
+              strict_v11_strategy(minimum_premarket_dollar_volume=Decimal("100000")), spread
+          )
+          datasets, coverage = _load_block(Path(".cache/trading-liquidity-datasets") / namespace, start, end)
+          requested = int(coverage["requested_sessions"])
+          covered = int(coverage["covered_sessions"])
+          required = max(40, math.ceil(requested * 0.95))
+          if covered < required:
+              raise SystemExit(f"backward coverage {covered}/{requested} below frozen requirement {required}")
+
+          module = v5._load_selector("/tmp/recovery_selector.py")
+          config = frozen_v2_config().model_copy(update={"reward_multiple": Decimal("1.0")})
+          row = {
+              "variant_id": "recovery_headroom_0.75R",
+              "minimum_headroom_r": "0.75",
+              **v5._metrics(module, datasets, Decimal("0.75"), config, Decimal("100000"), spread),
+          }
+          verdict = v5._holdout_verdict(row)
+          payload = {
+              "purpose": "independent backward validation of frozen V5 0.75R headroom rule",
+              "research_only": True,
+              "production_strategy_changed": False,
+              "execution_authority": False,
+              "no_parameter_search": True,
+              "period": [start.isoformat(), end.isoformat()],
+              "coverage": coverage,
+              "coverage_policy": {"minimum_ratio": 0.95, "minimum_sessions": 40, "required_sessions": required},
+              "missing_sessions_are_excluded_not_imputed": True,
+              "cache_namespace": namespace,
+              "cache_basis": cache_basis,
+              "selected_rule": "minimum 30pct-threshold headroom >=0.75R",
+              "result": row,
+              "holdout_verdict": verdict,
+              "forward_unlock_rule": "GOLD or ROBUST only",
+          }
+          out = Path("artifacts/v5-headroom-backward-validation-repaired")
+          out.mkdir(parents=True, exist_ok=True)
+          (out / "results.json").write_text(json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8")
+          precision = row["recovery_precision"].get("future_30pct_recovery_precision")
+          summary = "\n".join([
+              "# V5 independent backward validation — repaired coverage policy",
+              "",
+              f"- Period: **{start} through {end}**",
+              f"- Coverage: **{covered}/{requested}** (required >= {required}; missing sessions excluded, never imputed)",
+              "- Rule: **frozen 0.75R recovery headroom; no threshold search**",
+              f"- Trades: **{row['trade_count']}** ({row['win_count']}W/{row['loss_count']}L)",
+              f"- Win rate: **{row['win_rate']}**",
+              f"- Expectancy: **{row['expectancy_r']}R**",
+              f"- 90% LCB: **{row['one_sided_90_lcb_r']}R**",
+              f"- Max drawdown: **{row['max_drawdown_r']}R**",
+              f"- >=30% recovery precision: **{precision}**",
+              f"- Verdict: **{verdict}**",
+              "",
+          ])
+          (out / "summary.md").write_text(summary, encoding="utf-8")
+          print(summary)
+          print(f"VERDICT={verdict}")
+          PYCODE
+          verdict="$(python - <<'PYCODE'
+          import json
+          print(json.load(open('artifacts/v5-headroom-backward-validation-repaired/results.json', encoding='utf-8'))['holdout_verdict'])
+          PYCODE
+          )"
+          echo "verdict=${verdict}" >> "${GITHUB_OUTPUT}"
+          if [[ "${verdict}" == "GOLD" || "${verdict}" == "ROBUST" ]]; then
+            echo "open_forward=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "open_forward=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Verify Alpaca credentials only after backward pass
+        if: steps.backward.outputs.open_forward == 'true'
+        shell: bash
+        run: |
+          if [[ -z "${OMNIX_ALPACA_API_KEY_ID}" || -z "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
+            echo "::error::Alpaca credentials are required only because backward validation passed."
+            exit 2
+          fi
+
+      - name: Freeze forward Mar31-Apr28 block only after backward pass
+        if: steps.backward.outputs.open_forward == 'true'
+        shell: bash
+        run: |
+          python scripts/run_trading_strategy_liquidity_sweep_resilient.py \
+            --start-date 2026-03-31 \
+            --end-date 2026-04-28 \
+            --thresholds 100000 \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --output-dir artifacts/v5-headroom-forward-capture-repaired \
+            --reconstruction-max-age-days 180 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 150 \
+            --max-hold-minutes 60 \
+            --max-sessions 25 \
+            --require-covered-session
+
+      - name: Validate exact 0.75R rule on forward block
+        if: steps.backward.outputs.open_forward == 'true'
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import json, math
+          from datetime import date
+          from decimal import Decimal
+          from pathlib import Path
+
+          import scripts.run_trading_strategy_v5_recovery_headroom as v5
+          from app.trading.strategy_v2_qualification import frozen_v2_config
+          from scripts.run_trading_strategy_backtest import strict_v11_strategy
+          from scripts.run_trading_strategy_liquidity_sweep import _cache_namespace
+          from scripts.run_trading_strategy_v2_extended_exploration import _load_block
+
+          start, end = date(2026, 3, 31), date(2026, 4, 28)
+          spread = Decimal("150")
+          namespace, cache_basis = _cache_namespace(
+              strict_v11_strategy(minimum_premarket_dollar_volume=Decimal("100000")), spread
+          )
+          datasets, coverage = _load_block(Path(".cache/trading-liquidity-datasets") / namespace, start, end)
+          requested = int(coverage["requested_sessions"])
+          covered = int(coverage["covered_sessions"])
+          required = max(18, math.ceil(requested * 0.90))
+          if covered < required:
+              raise SystemExit(f"forward coverage {covered}/{requested} below frozen requirement {required}")
+
+          module = v5._load_selector("/tmp/recovery_selector.py")
+          config = frozen_v2_config().model_copy(update={"reward_multiple": Decimal("1.0")})
+          row = {
+              "variant_id": "recovery_headroom_0.75R",
+              "minimum_headroom_r": "0.75",
+              **v5._metrics(module, datasets, Decimal("0.75"), config, Decimal("100000"), spread),
+          }
+          verdict = v5._holdout_verdict(row)
+          payload = {
+              "purpose": "one-shot forward validation after independent backward pass",
+              "research_only": True,
+              "production_strategy_changed": False,
+              "execution_authority": False,
+              "no_parameter_search": True,
+              "period": [start.isoformat(), end.isoformat()],
+              "coverage": coverage,
+              "coverage_policy": {"minimum_ratio": 0.90, "minimum_sessions": 18, "required_sessions": required},
+              "missing_sessions_are_excluded_not_imputed": True,
+              "cache_namespace": namespace,
+              "cache_basis": cache_basis,
+              "selected_rule": "minimum 30pct-threshold headroom >=0.75R",
+              "result": row,
+              "holdout_verdict": verdict,
+          }
+          out = Path("artifacts/v5-headroom-forward-validation-repaired")
+          out.mkdir(parents=True, exist_ok=True)
+          (out / "results.json").write_text(json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8")
+          precision = row["recovery_precision"].get("future_30pct_recovery_precision")
+          summary = "\n".join([
+              "# V5 one-shot forward validation",
+              "",
+              f"- Period: **{start} through {end}**",
+              f"- Coverage: **{covered}/{requested}** (required >= {required})",
+              "- Rule: **same frozen 0.75R recovery headroom**",
+              f"- Trades: **{row['trade_count']}** ({row['win_count']}W/{row['loss_count']}L)",
+              f"- Win rate: **{row['win_rate']}**",
+              f"- Expectancy: **{row['expectancy_r']}R**",
+              f"- 90% LCB: **{row['one_sided_90_lcb_r']}R**",
+              f"- Max drawdown: **{row['max_drawdown_r']}R**",
+              f"- >=30% recovery precision: **{precision}**",
+              f"- Verdict: **{verdict}**",
+              "",
+          ])
+          (out / "summary.md").write_text(summary, encoding="utf-8")
+          print(summary)
+          PYCODE
+
+      - name: Save repaired validation cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-${{ runner.os }}-v5-independent-repaired-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Publish repaired validation summaries
+        if: always()
+        shell: bash
+        run: |
+          for summary in \
+            artifacts/v5-headroom-backward-validation-repaired/summary.md \
+            artifacts/v5-headroom-forward-validation-repaired/summary.md; do
+            if [[ -f "${summary}" ]]; then
+              cat "${summary}" >> "${GITHUB_STEP_SUMMARY}"
+              printf '\n' >> "${GITHUB_STEP_SUMMARY}"
+            fi
+          done
+
+      - name: Upload repaired independent validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-v5-headroom-independent-validation-repaired
+          path: |
+            artifacts/v5-headroom-backward-validation-repaired
+            artifacts/v5-headroom-forward-capture-repaired
+            artifacts/v5-headroom-forward-validation-repaired
+          if-no-files-found: warn
+          retention-days: 30
