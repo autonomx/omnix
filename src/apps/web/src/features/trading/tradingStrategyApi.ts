@@ -1,6 +1,8 @@
 import type {
   GapperUniverse,
   GapperUniverseFreezeInput,
+  ProspectiveEconomicHoldoutReviewInput,
+  ProspectiveEconomicStatus,
   StrategyCatalystCaptureResponse,
   StrategyEvent,
   StrategyProtection,
@@ -15,6 +17,14 @@ import type {
 } from './tradingStrategyTypes';
 
 const DEEP_RECOVERY_EVENT_TYPES = new Set(['deep_recovery_state', 'deep_recovery_shadow']);
+const PROSPECTIVE_ECONOMIC_EVENT_TYPES = new Set([
+  'prospective_economic_candidate',
+  'prospective_economic_signal',
+  'prospective_economic_outcome',
+  'prospective_economic_evaluation',
+  'prospective_economic_holdout_review',
+  'prospective_economic_auto_paper_review',
+]);
 
 export type StrategyRuntimeMonitorStatus = {
   configured_enabled: boolean;
@@ -30,6 +40,7 @@ export type TradingStrategyOperationsStatus = {
   observed_at: string;
   strategy_monitor: StrategyRuntimeMonitorStatus;
   deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus;
+  prospective_economic_monitor: StrategyRuntimeMonitorStatus;
   universe_archive_monitor: StrategyRuntimeMonitorStatus;
   v2_qualification_monitor: StrategyRuntimeMonitorStatus;
   alpaca_status_monitor: StrategyRuntimeMonitorStatus;
@@ -93,12 +104,40 @@ export const tradingStrategyApi = {
     ),
   events: async (strategyId: string, limit = 200) => {
     const rows = await strategyEvents(strategyId, Math.max(limit, 500));
-    return rows.filter((event) => !DEEP_RECOVERY_EVENT_TYPES.has(event.event_type)).slice(0, limit);
+    return rows.filter(
+      (event) => !DEEP_RECOVERY_EVENT_TYPES.has(event.event_type)
+        && !PROSPECTIVE_ECONOMIC_EVENT_TYPES.has(event.event_type),
+    ).slice(0, limit);
   },
   deepRecoveryEvents: async (strategyId: string, limit = 200) => {
     const rows = await strategyEvents(strategyId, Math.max(limit, 500));
     return rows.filter((event) => DEEP_RECOVERY_EVENT_TYPES.has(event.event_type)).slice(0, limit);
   },
+  prospectiveEconomicEvents: async (strategyId: string, limit = 500) => {
+    const payload = await requestJson<{ events?: StrategyEvent[] }>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/prospective-economic/events?limit=${limit}`,
+    );
+    return Array.isArray(payload.events) ? payload.events : [];
+  },
+  prospectiveEconomic: (strategyId: string) =>
+    requestJson<ProspectiveEconomicStatus>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/prospective-economic`,
+    ),
+  evaluateProspectiveEconomic: (strategyId: string, reviewNote: string) =>
+    requestJson<ProspectiveEconomicStatus>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/prospective-economic/evaluate`,
+      { method: 'POST', body: JSON.stringify({ review_note: reviewNote }) },
+    ),
+  reviewProspectiveEconomicHoldout: (strategyId: string, input: ProspectiveEconomicHoldoutReviewInput) =>
+    requestJson<ProspectiveEconomicStatus>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/prospective-economic/holdout-review`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  reviewProspectiveEconomicAutoPaper: (strategyId: string, reviewNote: string) =>
+    requestJson<ProspectiveEconomicStatus>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/prospective-economic/auto-paper-review`,
+      { method: 'POST', body: JSON.stringify({ review_note: reviewNote }) },
+    ),
   protections: async (strategyId: string) => {
     const payload = await requestJson<{ protections?: StrategyProtection[] }>(
       `/api/trading/strategies/${encodeURIComponent(strategyId)}/protections?active_only=true`,

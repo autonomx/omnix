@@ -192,10 +192,77 @@ export type V2ProspectiveQualification = {
   max_drawdown_r?: string | number | null;
   thresholds: V2QualificationThresholds;
   evidence_fingerprint: string;
+  prospective_economic_reviewed: boolean;
   qualified: boolean;
   reviewed: boolean;
   auto_paper_authorized: boolean;
   reason_codes: string[];
+};
+
+export type ProspectiveEconomicMetrics = {
+  signal_count: number;
+  matched_signal_count: number;
+  matched_outcome_count: number;
+  distinct_sessions: number;
+  distinct_symbols: number;
+  execution_match_rate?: string | number | null;
+  win_count: number;
+  win_rate?: string | number | null;
+  expectancy_r?: string | number | null;
+  one_sided_90_lcb_r?: string | number | null;
+  max_drawdown_r?: string | number | null;
+};
+
+export type ProspectiveEconomicThresholds = {
+  prospective_start: string;
+  horizon_minutes: number;
+  minimum_matched_outcomes: number;
+  minimum_distinct_sessions: number;
+  minimum_distinct_symbols: number;
+  minimum_execution_match_rate: string | number;
+  minimum_win_rate: string | number;
+  minimum_expectancy_r: string | number;
+  one_sided_confidence_level: string | number;
+  maximum_drawdown_r: string | number;
+  holdout_start: string;
+  holdout_end: string;
+  soak_minimum_matched_outcomes: number;
+  soak_minimum_distinct_sessions: number;
+  soak_minimum_distinct_symbols: number;
+};
+
+export type ProspectiveEconomicStatus = {
+  strategy_id: string;
+  policy_version: string;
+  profile_fingerprint: string;
+  thresholds: ProspectiveEconomicThresholds;
+  metrics: ProspectiveEconomicMetrics;
+  evidence_fingerprint: string;
+  sample_ready: boolean;
+  quantitative_pass: boolean;
+  evaluation_recorded: boolean;
+  evaluation_passed: boolean;
+  evaluation_event_id?: string | null;
+  sealed_holdout_unlocked: boolean;
+  holdout_reviewed: boolean;
+  holdout_verdict: 'UNOPENED' | 'UNDERPOWERED' | 'FAIL' | 'ROBUST' | 'GOLD';
+  holdout_event_id?: string | null;
+  soak_metrics: ProspectiveEconomicMetrics;
+  soak_passed: boolean;
+  auto_paper_reviewed: boolean;
+  auto_paper_research_authorized: boolean;
+  pipeline_evidence_fingerprint: string;
+  reason_codes: string[];
+};
+
+export type ProspectiveEconomicHoldoutReviewInput = {
+  trade_count: number;
+  win_rate: string | number;
+  expectancy_r: string | number;
+  one_sided_90_lcb_r?: string | number | null;
+  max_drawdown_r: string | number;
+  artifact_ref: string;
+  review_note: string;
 };
 
 export type CatalystShadowClassification = {

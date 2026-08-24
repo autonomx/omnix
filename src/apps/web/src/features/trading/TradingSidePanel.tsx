@@ -4,6 +4,7 @@ import { TradingIndicatorPresets } from './TradingIndicatorPresets';
 import { TradingLayoutPanel } from './TradingLayoutPanel';
 import { TradingNewsPanel } from './TradingNewsPanel';
 import { TradingPaperPanel } from './TradingPaperPanel';
+import { TradingProspectiveEconomicPanel } from './TradingProspectiveEconomicPanel';
 import { TradingWatchlist } from './TradingWatchlist';
 import { TradingObjectPanel } from './TradingObjectPanel';
 import { TradingPinePanel } from './TradingPinePanel';
@@ -12,11 +13,12 @@ import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIn
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
 
-export type TradingSideTab = 'watchlist' | 'paper' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects' | 'pine';
+export type TradingSideTab = 'watchlist' | 'paper' | 'prospective' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects' | 'pine';
 
 const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
   { id: 'paper', label: 'Trade' },
+  { id: 'prospective', label: 'Evidence' },
   { id: 'indicators', label: 'Indicators' },
   { id: 'alerts', label: 'Alerts' },
   { id: 'news', label: 'News' },
@@ -158,6 +160,7 @@ export function TradingSidePanel({
             onAccountChange={onPaperAccountChange}
           />
         ) : null}
+        {activeTab === 'prospective' ? <TradingProspectiveEconomicPanel /> : null}
         {activeTab === 'indicators' ? (
           <TradingIndicatorPresets indicators={indicators} onApply={onSetIndicators} />
         ) : null}

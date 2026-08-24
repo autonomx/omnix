@@ -15,6 +15,10 @@ from .strategy_deep_recovery_monitor import (
     strategy_deep_recovery_shadow_monitor_enabled,
 )
 from .strategy_monitor import TradingStrategyMonitor, trading_strategy_monitor_enabled
+from .strategy_prospective_economic_monitor import (
+    TradingStrategyProspectiveEconomicMonitor,
+    strategy_prospective_economic_monitor_enabled,
+)
 from .strategy_universe_archive_monitor import (
     TradingStrategyUniverseArchiveMonitor,
     strategy_universe_archive_monitor_enabled,
@@ -43,6 +47,7 @@ class StrategyOperationsStatus(BaseModel):
     observed_at: datetime
     strategy_monitor: StrategyRuntimeMonitorStatus
     deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus
+    prospective_economic_monitor: StrategyRuntimeMonitorStatus
     universe_archive_monitor: StrategyRuntimeMonitorStatus
     v2_qualification_monitor: StrategyRuntimeMonitorStatus
     alpaca_status_monitor: StrategyRuntimeMonitorStatus
@@ -129,6 +134,17 @@ def create_trading_strategy_operations_router() -> APIRouter:
                     "state_transition_count",
                     "signal_count",
                     "execution_observation_count",
+                ),
+            ),
+            prospective_economic_monitor=_monitor_status(
+                getattr(state, "_omnix_trading_strategy_prospective_economic_monitor", None),
+                expected_type=TradingStrategyProspectiveEconomicMonitor,
+                configured_enabled=strategy_prospective_economic_monitor_enabled(),
+                counter_names=(
+                    "candidate_capture_count",
+                    "signal_capture_count",
+                    "outcome_capture_count",
+                    "incomplete_outcome_count",
                 ),
             ),
             universe_archive_monitor=_monitor_status(

@@ -107,31 +107,59 @@ def _qualified_evidence() -> list[StrategyEvent]:
     return events
 
 
+def _economic_review(events: list[StrategyEvent], *, suffix: str = "economic-review") -> StrategyEvent:
+    reviewed_at = max(event.observed_at for event in events) + timedelta(minutes=1)
+    return _event(
+        event_type="prospective_economic_auto_paper_review",
+        instrument_id="strategy:v2-prospective",
+        observed_at=reviewed_at,
+        reason_code="PROSPECTIVE_ECONOMIC_AUTO_PAPER_REVIEW_APPROVED",
+        suffix=suffix,
+        payload={
+            "policy_version": "prospective-economic-shadow-v1",
+            "profile_fingerprint": "prospective-economic-profile-test",
+            "v2_profile_fingerprint": FROZEN_V2_PROFILE_FINGERPRINT,
+            "pipeline_evidence_fingerprint": "prospective-economic-pipeline-test",
+            "approved": True,
+            "review_note": "Prospective sample, sealed holdout and fresh SHADOW soak reviewed.",
+            "execution_authority": False,
+        },
+    )
+
+
 def test_frozen_v2_profile_fingerprint_is_stable_and_exact() -> None:
     assert v2_profile_fingerprint(frozen_v2_config()) == FROZEN_V2_PROFILE_FINGERPRINT
     changed = frozen_v2_config().model_copy(update={"v2_maximum_l2_to_signal_minutes": 9})
     assert v2_profile_fingerprint(changed) != FROZEN_V2_PROFILE_FINGERPRINT
 
 
-def test_qualification_requires_explicit_review_bound_to_current_evidence() -> None:
+def test_qualification_requires_economic_pipeline_then_exact_v2_review() -> None:
     strategy = _strategy()
     events = _qualified_evidence()
 
-    before_review = evaluate_v2_prospective_qualification(strategy, events)
+    before_economic_review = evaluate_v2_prospective_qualification(strategy, events)
 
-    assert before_review.profile_match is True
-    assert before_review.replay_trade_count == 20
-    assert before_review.matched_eligible_trade_count == 20
-    assert before_review.distinct_sessions == 20
-    assert before_review.distinct_symbols == 10
-    assert before_review.execution_match_rate == Decimal("1")
-    assert before_review.expectancy_r == Decimal("0.50")
-    assert before_review.one_sided_90_lcb_r == Decimal("0.50")
-    assert before_review.max_drawdown_r == Decimal("0")
-    assert before_review.qualified is True
-    assert before_review.reviewed is False
-    assert before_review.auto_paper_authorized is False
-    assert "V2_OPERATOR_REVIEW_REQUIRED" in before_review.reason_codes
+    assert before_economic_review.profile_match is True
+    assert before_economic_review.replay_trade_count == 20
+    assert before_economic_review.matched_eligible_trade_count == 20
+    assert before_economic_review.distinct_sessions == 20
+    assert before_economic_review.distinct_symbols == 10
+    assert before_economic_review.execution_match_rate == Decimal("1")
+    assert before_economic_review.expectancy_r == Decimal("0.50")
+    assert before_economic_review.one_sided_90_lcb_r == Decimal("0.50")
+    assert before_economic_review.max_drawdown_r == Decimal("0")
+    assert before_economic_review.prospective_economic_reviewed is False
+    assert before_economic_review.qualified is False
+    assert before_economic_review.auto_paper_authorized is False
+    assert "V2_PROSPECTIVE_ECONOMIC_PIPELINE_REVIEW_REQUIRED" in before_economic_review.reason_codes
+
+    events.append(_economic_review(events))
+    before_v2_review = evaluate_v2_prospective_qualification(strategy, events)
+    assert before_v2_review.prospective_economic_reviewed is True
+    assert before_v2_review.qualified is True
+    assert before_v2_review.reviewed is False
+    assert before_v2_review.auto_paper_authorized is False
+    assert "V2_OPERATOR_REVIEW_REQUIRED" in before_v2_review.reason_codes
 
     review_at = max(event.observed_at for event in events) + timedelta(minutes=1)
     events.append(
@@ -140,13 +168,13 @@ def test_qualification_requires_explicit_review_bound_to_current_evidence() -> N
             instrument_id="strategy:v2-prospective",
             observed_at=review_at,
             reason_code="V2_PROMOTION_REVIEW_APPROVED",
-            suffix="review",
+            suffix="v2-review",
             payload={
                 "qualification_version": V2_QUALIFICATION_VERSION,
-                "profile_fingerprint": before_review.current_profile_fingerprint,
-                "evidence_fingerprint": before_review.evidence_fingerprint,
+                "profile_fingerprint": before_v2_review.current_profile_fingerprint,
+                "evidence_fingerprint": before_v2_review.evidence_fingerprint,
                 "approved": True,
-                "review_note": "Prospective evidence reviewed and approved for AUTO PAPER.",
+                "review_note": "Current V2 prospective execution evidence reviewed for AUTO PAPER.",
                 "execution_authority": False,
             },
         )
@@ -159,9 +187,10 @@ def test_qualification_requires_explicit_review_bound_to_current_evidence() -> N
     assert "V2_OPERATOR_REVIEW_REQUIRED" not in after_review.reason_codes
 
 
-def test_new_trade_invalidates_prior_review_until_evidence_is_reviewed_again() -> None:
+def test_new_trade_invalidates_exact_v2_review_even_after_economic_pipeline_passes() -> None:
     strategy = _strategy()
     events = _qualified_evidence()
+    events.append(_economic_review(events))
     qualified = evaluate_v2_prospective_qualification(strategy, events)
     review_at = max(event.observed_at for event in events) + timedelta(minutes=1)
     review = _event(
@@ -175,7 +204,7 @@ def test_new_trade_invalidates_prior_review_until_evidence_is_reviewed_again() -
             "profile_fingerprint": qualified.current_profile_fingerprint,
             "evidence_fingerprint": qualified.evidence_fingerprint,
             "approved": True,
-            "review_note": "Initial prospective evidence explicitly reviewed.",
+            "review_note": "Initial V2 prospective execution evidence explicitly reviewed.",
             "execution_authority": False,
         },
     )
@@ -222,9 +251,11 @@ def test_new_trade_invalidates_prior_review_until_evidence_is_reviewed_again() -
     ])
 
     changed = evaluate_v2_prospective_qualification(strategy, events)
+    assert changed.prospective_economic_reviewed is True
     assert changed.qualified is True
     assert changed.reviewed is False
     assert changed.auto_paper_authorized is False
+    assert "V2_OPERATOR_REVIEW_REQUIRED" in changed.reason_codes
 
 
 def test_profile_mismatch_and_missing_execution_match_fail_closed() -> None:
