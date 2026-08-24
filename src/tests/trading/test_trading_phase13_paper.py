@@ -354,11 +354,11 @@ def test_paper_routes_support_orders_reset_archive_and_revision_conflicts() -> N
             "idempotency_key": "api-order",
         },
     )
-    assert placed.status_code == 201
-    assert placed.json()["status"] == "open"
+    assert placed.status_code == 409
+    assert placed.json()["detail"] == "paper_entry_requires_server_risk_authority"
 
     cancel = client.delete(
-        "/api/trading/paper/accounts/paper-1/orders/api-order",
+        "/api/trading/paper/accounts/paper-1/orders/buy-market",
     )
     assert cancel.status_code == 409
     assert cancel.json()["detail"] == "paper_order_cancellation_disabled"
