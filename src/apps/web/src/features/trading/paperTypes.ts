@@ -127,3 +127,53 @@ export interface PaperProtectionInput {
   take_profit?: string | null;
   stop_loss?: string | null;
 }
+
+export interface PaperRiskPreviewInput {
+  instrument_id: string;
+  binding_id?: string | null;
+  entry_price: string;
+  stop_price: string;
+  desired_risk_pct: string;
+}
+
+export interface PaperRiskPreview {
+  allowed: boolean;
+  policy_version: string;
+  reason_codes: string[];
+  limiting_reason_code?: string | null;
+  recommended_quantity: string;
+  account_equity: string;
+  desired_risk_pct: string;
+  actual_risk_dollars: string;
+  actual_risk_pct: string;
+  estimated_notional: string;
+  buying_power_before: string;
+  buying_power_after: string;
+  aggregate_open_risk_dollars: string;
+  aggregate_open_risk_pct: string;
+  daily_realized_pnl: string;
+  daily_loss_remaining: string;
+  spread_bps?: string | null;
+  observation_age_seconds?: string | null;
+  freshness_mode: string;
+  execution_eligible: boolean;
+  unprotected_exposure_count: number;
+}
+
+export interface PaperRiskOrderInput {
+  order_id: string;
+  instrument_id: string;
+  binding_id?: string | null;
+  order_type: PaperOrderType;
+  trigger_price?: string | null;
+  stop_loss: string;
+  take_profit?: string | null;
+  desired_risk_pct: string;
+  idempotency_key: string;
+}
+
+export interface PaperRiskOrderResult {
+  preview: PaperRiskPreview;
+  order: PaperOrder;
+  protection: PaperPositionProtection;
+}
