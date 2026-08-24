@@ -50,7 +50,10 @@ def _bar(close: str, *, high: str | None = None, low: str | None = None) -> Repl
 
 
 def test_replay_market_fill_uses_common_slippage_and_participation_policy() -> None:
-    detached = detached_replay_snapshot(_snapshot())
+    funded = _snapshot().model_copy(
+        update={"balances": [PaperBalance(currency="USD", available=Decimal("10000"), reserved=Decimal("0"))]}
+    )
+    detached = detached_replay_snapshot(funded)
     result = place_replay_order(
         detached,
         PaperOrderRequest(
