@@ -1,0 +1,216 @@
+name: Trading V3 recovery March diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/trading-v3-recovery-march-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - name: Check out exact diagnostic head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install targeted trading dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Restore exact frozen March holdout cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-Linux-march-holdout-32681695579-1
+          fail-on-cache-miss: true
+
+      - name: Recover exact frozen recovery-selector source
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import base64, gzip, hashlib, re
+          from pathlib import Path
+          expected = "5c98837cc96ad7c692d45b0bafff6a025f04f52599985cc6e85af734f6917607"
+          text = Path(".github/workflows/trading-v3-recovery-precision-search.yml").read_text(encoding="utf-8")
+          match = re.search(r'payload = "([A-Za-z0-9+/=]+)"', text)
+          if match is None:
+              raise SystemExit("embedded selector payload not found")
+          payload = match.group(1)
+          for index in range(-1, len(payload)):
+              candidate = payload if index < 0 else payload[:index] + payload[index + 1:]
+              try:
+                  source = gzip.decompress(base64.b64decode(candidate, validate=True))
+              except Exception:
+                  continue
+              if hashlib.sha256(source).hexdigest() == expected:
+                  Path("/tmp/recovery_selector.py").write_bytes(source)
+                  break
+          else:
+              raise SystemExit("exact selector source fingerprint not recoverable")
+          PYCODE
+
+      - name: Diagnose March selector outcomes
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import importlib.util
+          import json
+          import sys
+          from datetime import date, time
+          from decimal import Decimal
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          from app.trading.strategy_v2_qualification import frozen_v2_config
+          from scripts.run_trading_strategy_backtest import strict_v11_strategy
+          from scripts.run_trading_strategy_liquidity_sweep import _cache_namespace
+          from scripts.run_trading_strategy_v2_extended_exploration import _load_block
+
+          ET = ZoneInfo("America/New_York")
+          spec = importlib.util.spec_from_file_location("recovery_selector", "/tmp/recovery_selector.py")
+          module = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = module
+          spec.loader.exec_module(module)
+
+          rule = module.Rule((
+              module.Predicate("rebound>=20", "recovery", "recovery_pct", ">=", 20),
+              module.Predicate("retrace>=80", "retracement", "retracement_pct", ">=", 80),
+              module.Predicate("selloff>=15", "selloff", "selloff_pct", ">=", 15),
+              module.Predicate("vol5x>=1.5", "volume_ratio", "volume_ratio5", ">=", 1.5),
+          ))
+          evaluator = module._evaluator_for(rule)
+          config = frozen_v2_config().model_copy(update={"reward_multiple": Decimal("1.0")})
+
+          spread = Decimal("150")
+          namespace, _ = _cache_namespace(strict_v11_strategy(minimum_premarket_dollar_volume=Decimal("100000")), spread)
+          datasets, coverage = _load_block(Path(".cache/trading-liquidity-datasets") / namespace, date(2026,3,2), date(2026,3,27))
+          if int(coverage["covered_sessions"]) != int(coverage["requested_sessions"]):
+              raise SystemExit("exact complete March cache required")
+
+          rows = []
+          for dataset in datasets:
+              for candidate in dataset.universe.candidates:
+                  bars = tuple(dataset.bars_by_instrument[candidate.instrument_id])
+                  signal_index = None
+                  signal_result = None
+                  for i in range(1, len(bars) + 1):
+                      result = evaluator(candidate, bars[:i], config)
+                      if result.state == "entry_ready" and result.signal is not None:
+                          signal_index = i - 1
+                          signal_result = result
+                          break
+                  if signal_index is None:
+                      continue
+
+                  prefix = bars[:signal_index + 1]
+                  opening_indexes = [
+                      i for i, bar in enumerate(prefix)
+                      if time(9,30) <= bar.end_time.astimezone(ET).time() <= time(9,45)
+                  ]
+                  if not opening_indexes:
+                      continue
+                  opening_high_index = max(opening_indexes, key=lambda i: prefix[i].high)
+                  if opening_high_index + 1 > signal_index:
+                      continue
+                  trough_slice = prefix[opening_high_index + 1:signal_index + 1]
+                  if not trough_slice:
+                      continue
+                  trough = min(bar.low for bar in trough_slice)
+                  signal_close = prefix[-1].close
+                  future = bars[signal_index:]
+                  future_high = max(bar.high for bar in future)
+                  recovery_pct = (future_high / trough - Decimal("1")) * Decimal("100") if trough > 0 else Decimal("0")
+                  recovers_30 = recovery_pct >= Decimal("30")
+
+                  threshold_price = trough * Decimal("1.30")
+                  first_30 = next((j for j, bar in enumerate(future) if bar.high >= threshold_price), None)
+                  leg = signal_close - trough
+                  pre_target = future if first_30 is None else future[:first_30 + 1]
+                  minimum_low = min(bar.low for bar in pre_target)
+                  retrace_leg_pct = (
+                      (signal_close - minimum_low) / leg * Decimal("100")
+                      if leg > 0 else None
+                  )
+                  post_signal_max_pct = (future_high / signal_close - Decimal("1")) * Decimal("100") if signal_close > 0 else None
+                  post_signal_min_pct = (min(bar.low for bar in future) / signal_close - Decimal("1")) * Decimal("100") if signal_close > 0 else None
+
+                  rows.append({
+                      "session_date": dataset.session_date.isoformat(),
+                      "instrument_id": candidate.instrument_id,
+                      "signal_time": prefix[-1].end_time.isoformat(),
+                      "signal_close": str(signal_close),
+                      "observed_trough": str(trough),
+                      "future_max_recovery_from_trough_pct": str(recovery_pct),
+                      "future_recovers_30pct": recovers_30,
+                      "post_signal_max_pct": None if post_signal_max_pct is None else str(post_signal_max_pct),
+                      "post_signal_min_pct": None if post_signal_min_pct is None else str(post_signal_min_pct),
+                      "retrace_of_observed_recovery_leg_before_30pct_or_eod_pct": None if retrace_leg_pct is None else str(retrace_leg_pct),
+                      "features": signal_result.features.model_dump(mode="json"),
+                  })
+
+          positives = sum(bool(row["future_recovers_30pct"]) for row in rows)
+          payload = {
+              "diagnostic_only": True,
+              "march_verdict_unchanged": "FAIL",
+              "no_parameter_search": True,
+              "selector_rule": rule.key,
+              "coverage": coverage,
+              "signal_count": len(rows),
+              "future_30pct_recovery_count": positives,
+              "future_30pct_recovery_precision": (positives / len(rows)) if rows else None,
+              "signals": rows,
+              "warning": "Post-holdout diagnostic only. March may not be reused as an OOS validation block for any rule derived from these observations.",
+          }
+          out = Path("artifacts/v3-recovery-march-diagnostic")
+          out.mkdir(parents=True, exist_ok=True)
+          (out / "results.json").write_text(json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8")
+          lines = [
+              "# March failed-holdout diagnostic",
+              "",
+              "March verdict remains **FAIL**; this analysis does not search or retune parameters.",
+              "",
+              f"- Signals: {len(rows)}",
+              f"- Signals eventually reaching >=30% recovery from their observed trough: {positives}",
+              f"- Recovery precision: {(positives / len(rows)) if rows else 'N/A'}",
+              "",
+              "| Date | Symbol | >=30% recovery? | Max recovery | Post-signal max | Post-signal min | Recovery-leg retrace |",
+              "|---|---|---|---:|---:|---:|---:|",
+          ]
+          for row in rows:
+              symbol = row['instrument_id'].split(':')[-1]
+              lines.append(
+                  f"| {row['session_date']} | {symbol} | {'YES' if row['future_recovers_30pct'] else 'NO'} | {row['future_max_recovery_from_trough_pct']}% | {row['post_signal_max_pct']}% | {row['post_signal_min_pct']}% | {row['retrace_of_observed_recovery_leg_before_30pct_or_eod_pct']}% |"
+              )
+          (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("\n".join(lines))
+          PYCODE
+
+      - name: Publish diagnostic summary
+        if: always()
+        run: cat artifacts/v3-recovery-march-diagnostic/summary.md >> "${GITHUB_STEP_SUMMARY}" || true
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-v3-recovery-march-diagnostic
+          path: artifacts/v3-recovery-march-diagnostic
+          if-no-files-found: warn
+          retention-days: 30
