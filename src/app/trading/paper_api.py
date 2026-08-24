@@ -166,7 +166,11 @@ def create_trading_paper_router(
         status_code=201,
     )
     async def place_order(account_id: str, request: PaperOrderRequest):
-        """Accept an order without manufacturing a fill from caller price data."""
+        """Accept an order without manufacturing a fill from caller price data.
+
+        reference_price is reservation-only. A market order remains open until
+        the server-side monitor receives an execution-eligible market observation.
+        """
         try:
             return await asyncio.to_thread(
                 repository_factory().place_order,
