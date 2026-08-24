@@ -12,6 +12,8 @@ import type {
   YahooGapperDiscoveryInput,
 } from './tradingStrategyTypes';
 
+const DEEP_RECOVERY_EVENT_TYPES = new Set(['deep_recovery_state', 'deep_recovery_shadow']);
+
 export type StrategyRuntimeMonitorStatus = {
   configured_enabled: boolean;
   registered: boolean;
@@ -48,6 +50,13 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+async function strategyEvents(strategyId: string, limit: number): Promise<StrategyEvent[]> {
+  const payload = await requestJson<{ events?: StrategyEvent[] }>(
+    `/api/trading/strategies/${encodeURIComponent(strategyId)}/events?limit=${limit}`,
+  );
+  return Array.isArray(payload.events) ? payload.events : [];
+}
+
 export const tradingStrategyApi = {
   list: async () => {
     const payload = await requestJson<{ strategies?: TradingStrategyConfig[] }>('/api/trading/strategies');
@@ -77,10 +86,12 @@ export const tradingStrategyApi = {
       { method: 'POST', body: JSON.stringify(input) },
     ),
   events: async (strategyId: string, limit = 200) => {
-    const payload = await requestJson<{ events?: StrategyEvent[] }>(
-      `/api/trading/strategies/${encodeURIComponent(strategyId)}/events?limit=${limit}`,
-    );
-    return Array.isArray(payload.events) ? payload.events : [];
+    const rows = await strategyEvents(strategyId, Math.max(limit, 500));
+    return rows.filter((event) => !DEEP_RECOVERY_EVENT_TYPES.has(event.event_type)).slice(0, limit);
+  },
+  deepRecoveryEvents: async (strategyId: string, limit = 200) => {
+    const rows = await strategyEvents(strategyId, Math.max(limit, 500));
+    return rows.filter((event) => DEEP_RECOVERY_EVENT_TYPES.has(event.event_type)).slice(0, limit);
   },
   protections: async (strategyId: string) => {
     const payload = await requestJson<{ protections?: StrategyProtection[] }>(
