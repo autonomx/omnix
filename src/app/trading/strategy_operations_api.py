@@ -10,6 +10,10 @@ from .providers.alpaca_iex_status import (
     AlpacaIexStatusMonitor,
     alpaca_iex_status_monitor_enabled,
 )
+from .strategy_deep_recovery_monitor import (
+    TradingStrategyDeepRecoveryShadowMonitor,
+    strategy_deep_recovery_shadow_monitor_enabled,
+)
 from .strategy_monitor import TradingStrategyMonitor, trading_strategy_monitor_enabled
 from .strategy_universe_archive_monitor import (
     TradingStrategyUniverseArchiveMonitor,
@@ -38,6 +42,7 @@ class StrategyOperationsStatus(BaseModel):
 
     observed_at: datetime
     strategy_monitor: StrategyRuntimeMonitorStatus
+    deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus
     universe_archive_monitor: StrategyRuntimeMonitorStatus
     v2_qualification_monitor: StrategyRuntimeMonitorStatus
     alpaca_status_monitor: StrategyRuntimeMonitorStatus
@@ -114,6 +119,12 @@ def create_trading_strategy_operations_router() -> APIRouter:
                 expected_type=TradingStrategyMonitor,
                 configured_enabled=trading_strategy_monitor_enabled(),
                 counter_names=("evaluation_count", "signal_count", "paper_order_count"),
+            ),
+            deep_recovery_shadow_monitor=_monitor_status(
+                getattr(state, "_omnix_trading_strategy_deep_recovery_shadow_monitor", None),
+                expected_type=TradingStrategyDeepRecoveryShadowMonitor,
+                configured_enabled=strategy_deep_recovery_shadow_monitor_enabled(),
+                counter_names=("evaluation_count", "signal_count", "execution_observation_count"),
             ),
             universe_archive_monitor=_monitor_status(
                 getattr(state, "_omnix_trading_strategy_universe_archive_monitor", None),
