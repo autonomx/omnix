@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { TradingAutomatedReview } from './TradingAutomatedReview';
 import {
   tradingPaperAnalyticsApi,
   type AnalyticsNumeric,
@@ -207,6 +208,8 @@ export function TradingTradeJournal({
               <ul>{selected.automatic_observations.map((observation, index) => <li key={`${index}-${observation}`}>{observation}</li>)}</ul>
             ) : <p>No automatic observations were derivable from the persisted record.</p>}
           </section>
+
+          <TradingAutomatedReview entry={selected} />
 
           <section className="trade-journal-plan">
             <header><strong>Initial plan &amp; execution</strong></header>
