@@ -41,7 +41,7 @@ const snapshot = (): PaperAccountSnapshot => ({
   order_history: [{
     account_id: 'paper-1', order_id: 'actual-order', instrument_id: 'equity:NYSE:TEST',
     side: 'buy', order_type: 'market', quantity: '1', status: 'filled', filled_quantity: '1',
-    idempotency_key: 'actual-order', reserved_cash: '0',
+    idempotency_key: 'actual-order',
   }],
   recent_fills: [],
   recent_ledger: [],
@@ -73,7 +73,7 @@ describe('replay trading', () => {
       order: {
         account_id: 'paper-1', order_id: 'replay-order-1', instrument_id: 'equity:NYSE:TEST',
         side: 'buy', order_type: 'market', quantity: '2', status: 'filled', filled_quantity: '2',
-        average_fill_price: '101.101', reference_price: '101', idempotency_key: 'replay-order-1', reserved_cash: '0',
+        average_fill_price: '101.101', reference_price: '101', idempotency_key: 'replay-order-1',
       },
     });
 
