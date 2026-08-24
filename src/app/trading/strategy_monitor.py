@@ -74,6 +74,17 @@ def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
 
 
+def _trade_attempt_id(strategy_id: str, instrument_id: str, observed_at: datetime) -> str:
+    """Stable identity for one causal finalized-bar entry opportunity."""
+    digest = _key(
+        strategy_id,
+        instrument_id,
+        observed_at.astimezone(timezone.utc).isoformat(),
+        "long-entry-signal",
+    )
+    return f"attempt-{digest[:24]}"
+
+
 def _v2_qualification_events(
     repository: TradingStrategyRepository,
     strategy_id: str,
@@ -1254,6 +1265,11 @@ class TradingStrategyMonitor:
             result = proposal.result
             assert result.signal is not None
             observed_at = proposal.observed_at
+            trade_attempt_id = _trade_attempt_id(
+                config.strategy_id,
+                candidate.instrument_id,
+                observed_at,
+            )
             if candidate.instrument_id in protected_symbols:
                 trade_log(
                     "auto_trading",
@@ -1280,7 +1296,7 @@ class TradingStrategyMonitor:
                     state=result.state,
                     reason_code="DATA_UNAVAILABLE",
                     observed_at=observed_at,
-                    payload={"detail": str(exc)},
+                    payload={"detail": str(exc), "trade_attempt_id": trade_attempt_id},
                 )
                 trade_log(
                     "auto_trading",
@@ -1288,6 +1304,7 @@ class TradingStrategyMonitor:
                     run_id=self.current_run_id,
                     strategy_id=config.strategy_id,
                     instrument_id=candidate.instrument_id,
+                    trade_attempt_id=trade_attempt_id,
                     error_type=type(exc).__name__,
                     detail=str(exc),
                 )
@@ -1299,6 +1316,7 @@ class TradingStrategyMonitor:
                 run_id=self.current_run_id,
                 strategy_id=config.strategy_id,
                 instrument_id=candidate.instrument_id,
+                trade_attempt_id=trade_attempt_id,
                 signal=result.signal,
                 execution=execution_payload,
             )
@@ -1313,6 +1331,7 @@ class TradingStrategyMonitor:
                     reason_code="DATA_STALE_OR_INELIGIBLE",
                     observed_at=observed_at,
                     payload={
+                        "trade_attempt_id": trade_attempt_id,
                         "reasons": list(execution.rejection_reasons),
                         "execution": execution_payload,
                     },
@@ -1331,6 +1350,36 @@ class TradingStrategyMonitor:
                 observed_at=now_utc,
             )
             decision_payload = decision.model_dump(mode="json")
+            profile_fingerprint = (
+                v2_profile_fingerprint(config.config)
+                if config.config.strategy_version == "2.0.0"
+                else config.config.strategy_version
+            )
+            risk_event_payload = {
+                "trade_attempt_id": trade_attempt_id,
+                "strategy_version": config.config.strategy_version,
+                "profile_fingerprint": profile_fingerprint,
+                "universe_id": universe.universe_id,
+                "risk_decision": decision_payload,
+                "execution": execution_payload,
+                "signal": result.signal.model_dump(mode="json"),
+                "features": result.features.model_dump(mode="json"),
+                "trades_today_before_entry": trades_today,
+                "daily_realized_pnl": (
+                    str(daily_realized_pnl) if daily_realized_pnl is not None else None
+                ),
+                "open_strategy_risk_before_entry": str(open_risk),
+            }
+            await self._event(
+                strategy_repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="risk_decision",
+                state="approved" if decision.allowed else "rejected",
+                reason_code=decision.reason_code,
+                observed_at=observed_at,
+                payload=risk_event_payload,
+            )
             trade_log(
                 "auto_trading",
                 "risk_decision",
@@ -1338,6 +1387,7 @@ class TradingStrategyMonitor:
                 strategy_id=config.strategy_id,
                 account_id=config.account_id,
                 instrument_id=candidate.instrument_id,
+                trade_attempt_id=trade_attempt_id,
                 observed_at=observed_at,
                 trades_today=trades_today,
                 daily_realized_pnl=daily_realized_pnl,
@@ -1358,62 +1408,15 @@ class TradingStrategyMonitor:
                     observed_at=observed_at,
                     payload={
                         **decision_payload,
+                        "trade_attempt_id": trade_attempt_id,
                         "execution": execution_payload,
                         "signal": result.signal.model_dump(mode="json"),
                     },
                 )
                 continue
 
-            day = today_et.isoformat()
-            order_key = _key(config.strategy_id, day, candidate.instrument_id, "entry")
+            order_key = _key(config.strategy_id, trade_attempt_id, "entry")
             order_id = f"strat-{order_key[:32]}"
-            try:
-                await asyncio.to_thread(
-                    paper_repository.place_order,
-                    config.account_id,
-                    PaperOrderRequest(
-                        order_id=order_id,
-                        instrument_id=candidate.instrument_id,
-                        binding_id=candidate.binding_id,
-                        side="buy",
-                        order_type="market",
-                        quantity=decision.quantity,
-                        reference_price=execution.ask or execution.last,
-                        idempotency_key=order_key,
-                    ),
-                )
-            except ValueError as exc:
-                self.rejection_count += 1
-                await self._event(
-                    strategy_repository,
-                    config,
-                    instrument_id=candidate.instrument_id,
-                    event_type="rejection",
-                    state=result.state,
-                    reason_code="PAPER_ORDER_REJECTED",
-                    observed_at=observed_at,
-                    payload={
-                        "detail": str(exc),
-                        "order_id": order_id,
-                        "execution": execution_payload,
-                        "risk_decision": decision_payload,
-                        "signal": result.signal.model_dump(mode="json"),
-                    },
-                )
-                trade_log(
-                    "auto_trading",
-                    "entry_order_rejected",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    account_id=config.account_id,
-                    instrument_id=candidate.instrument_id,
-                    order_id=order_id,
-                    detail=str(exc),
-                    execution=execution_payload,
-                    risk_decision=decision_payload,
-                )
-                continue
-
             protection = StrategyProtection(
                 strategy_id=config.strategy_id,
                 protection_id=f"prot-{order_key[:32]}",
@@ -1430,7 +1433,65 @@ class TradingStrategyMonitor:
                 quantity=decision.quantity,
                 status="pending_entry",
             )
+            # Arm protection before the order can become executable. The strategy
+            # protection table intentionally does not require the paper order FK,
+            # so a crash between these writes is fail-closed rather than exposed.
             await asyncio.to_thread(strategy_repository.save_protection, protection)
+            try:
+                await asyncio.to_thread(
+                    paper_repository.place_order,
+                    config.account_id,
+                    PaperOrderRequest(
+                        order_id=order_id,
+                        instrument_id=candidate.instrument_id,
+                        binding_id=candidate.binding_id,
+                        side="buy",
+                        order_type="market",
+                        quantity=decision.quantity,
+                        reference_price=execution.ask or execution.last,
+                        idempotency_key=order_key,
+                    ),
+                )
+            except ValueError as exc:
+                protection.status = "cancelled"
+                protection.trigger_reason = "entry_submit_failed"
+                try:
+                    await asyncio.to_thread(strategy_repository.save_protection, protection)
+                except ValueError as cleanup_exc:
+                    self.last_error = f"entry_protection_cleanup: {cleanup_exc}"
+                self.rejection_count += 1
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="rejection",
+                    state=result.state,
+                    reason_code="PAPER_ORDER_REJECTED",
+                    observed_at=observed_at,
+                    payload={
+                        "detail": str(exc),
+                        "trade_attempt_id": trade_attempt_id,
+                        "order_id": order_id,
+                        "execution": execution_payload,
+                        "risk_decision": decision_payload,
+                        "signal": result.signal.model_dump(mode="json"),
+                    },
+                )
+                trade_log(
+                    "auto_trading",
+                    "entry_order_rejected",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    account_id=config.account_id,
+                    instrument_id=candidate.instrument_id,
+                    trade_attempt_id=trade_attempt_id,
+                    order_id=order_id,
+                    detail=str(exc),
+                    execution=execution_payload,
+                    risk_decision=decision_payload,
+                )
+                continue
+
             await self._event(
                 strategy_repository,
                 config,
@@ -1440,6 +1501,9 @@ class TradingStrategyMonitor:
                 reason_code="AUTO_PAPER_ENTRY_SUBMITTED",
                 observed_at=observed_at,
                 payload={
+                    "trade_attempt_id": trade_attempt_id,
+                    "strategy_version": config.config.strategy_version,
+                    "profile_fingerprint": profile_fingerprint,
                     "order_id": order_id,
                     "quantity": str(decision.quantity),
                     "reference_price": str(execution.ask or execution.last),
@@ -1471,6 +1535,7 @@ class TradingStrategyMonitor:
                 strategy_id=config.strategy_id,
                 account_id=config.account_id,
                 instrument_id=candidate.instrument_id,
+                trade_attempt_id=trade_attempt_id,
                 order_id=order_id,
                 quantity=decision.quantity,
                 reference_price=execution.ask or execution.last,
