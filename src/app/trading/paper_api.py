@@ -25,7 +25,16 @@ from .paper_protection_repository import (
     default_paper_protection_repository,
 )
 from .paper_repository import TradingPaperRepository
+from .paper_risk import (
+    PaperRiskOrderRequest,
+    PaperRiskPreview,
+    PaperRiskPreviewRequest,
+    preview_paper_risk,
+    risk_order_request,
+    risk_protection_request,
+)
 from .paper_runtime_repository import default_runtime_paper_repository
+from .service import TradingMarketDataService, default_market_data_service
 
 
 class PaperAccountListResponse(BaseModel):
@@ -56,9 +65,17 @@ class PaperOrderReplaceResponse(BaseModel):
     replacement: PaperOrder
 
 
+class PaperRiskOrderResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    preview: PaperRiskPreview
+    order: PaperOrder
+    protection: PaperPositionProtection
+
+
 RepositoryFactory = Callable[[], TradingPaperRepository]
 LifecycleFactory = Callable[[], TradingPaperLifecycle]
 ProtectionRepositoryFactory = Callable[[], TradingPaperProtectionRepository]
+MarketServiceFactory = Callable[[], TradingMarketDataService]
 _ORDER_MANAGEMENT_HEADER = "X-Omnix-Paper-Order-Management"
 _ORDER_MANAGEMENT_VERSION = "v2"
 
@@ -74,8 +91,37 @@ def create_trading_paper_router(
     repository_factory: RepositoryFactory = default_runtime_paper_repository,
     lifecycle_factory: LifecycleFactory = default_paper_lifecycle,
     protection_repository_factory: ProtectionRepositoryFactory = default_paper_protection_repository,
+    market_service_factory: MarketServiceFactory = default_market_data_service,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading/paper", tags=["trading-paper"])
+
+    async def risk_context(account_id: str, request: PaperRiskPreviewRequest):
+        repository = repository_factory()
+        protections = protection_repository_factory()
+        try:
+            snapshot, active_protections, execution = await asyncio.gather(
+                asyncio.to_thread(repository.snapshot, account_id),
+                asyncio.to_thread(protections.list, account_id, active_only=True),
+                asyncio.to_thread(
+                    market_service_factory().execution_observation,
+                    request.instrument_id,
+                    request.binding_id,
+                ),
+            )
+        except ValueError as exc:
+            detail = str(exc)
+            status = 404 if "account_not_found" in detail else 422
+            raise HTTPException(status_code=status, detail=detail) from exc
+        return snapshot, active_protections, execution
+
+    async def evaluate_risk(account_id: str, request: PaperRiskPreviewRequest) -> PaperRiskPreview:
+        snapshot, active_protections, execution = await risk_context(account_id, request)
+        return preview_paper_risk(
+            snapshot=snapshot,
+            protections=active_protections,
+            observation=execution,
+            request=request,
+        )
 
     @router.get("/accounts", response_model=PaperAccountListResponse)
     async def list_accounts(limit: int = Query(default=100, ge=1, le=500)):
@@ -96,6 +142,97 @@ def create_trading_paper_router(
             return await asyncio.to_thread(repository_factory().snapshot, account_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @router.post(
+        "/accounts/{account_id}/risk-preview",
+        response_model=PaperRiskPreview,
+        include_in_schema=False,
+    )
+    async def risk_preview(account_id: str, request: PaperRiskPreviewRequest):
+        """Return the canonical server sizing/risk decision for a proposed long entry."""
+        return await evaluate_risk(account_id, request)
+
+    @router.post(
+        "/accounts/{account_id}/risk-orders",
+        response_model=PaperRiskOrderResult,
+        include_in_schema=False,
+        status_code=201,
+    )
+    async def place_risk_order(account_id: str, request: PaperRiskOrderRequest):
+        """Size and submit a new long entry entirely from server-owned risk rules."""
+        probe_price = request.trigger_price or Decimal("1")
+        probe = PaperRiskPreviewRequest(
+            instrument_id=request.instrument_id,
+            binding_id=request.binding_id,
+            entry_price=probe_price,
+            stop_price=request.stop_loss,
+            desired_risk_pct=request.desired_risk_pct,
+        )
+        snapshot, active_protections, execution = await risk_context(account_id, probe)
+        entry_price = (
+            (execution.ask or execution.last)
+            if request.order_type == "market"
+            else request.trigger_price
+        )
+        if entry_price is None:
+            raise HTTPException(status_code=422, detail="paper_risk_entry_price_unavailable")
+        preview_request = PaperRiskPreviewRequest(
+            instrument_id=request.instrument_id,
+            binding_id=request.binding_id,
+            entry_price=entry_price,
+            stop_price=request.stop_loss,
+            desired_risk_pct=request.desired_risk_pct,
+        )
+        preview = preview_paper_risk(
+            snapshot=snapshot,
+            protections=active_protections,
+            observation=execution,
+            request=preview_request,
+        )
+        if not preview.allowed or preview.recommended_quantity <= 0:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "paper_risk_rejected",
+                    "reason_codes": list(preview.reason_codes),
+                    "preview": preview.model_dump(mode="json"),
+                },
+            )
+
+        repository = repository_factory()
+        protection_repository = protection_repository_factory()
+        order_request = risk_order_request(
+            request,
+            entry_price=entry_price,
+            quantity=preview.recommended_quantity,
+        )
+        try:
+            order = await asyncio.to_thread(repository.place_order, account_id, order_request)
+        except ValueError as exc:
+            detail = str(exc)
+            status = 404 if "not_found" in detail else 409 if "insufficient" in detail else 422
+            raise HTTPException(status_code=status, detail=detail) from exc
+
+        try:
+            protection = await asyncio.to_thread(
+                protection_repository.upsert,
+                account_id,
+                risk_protection_request(request),
+            )
+        except ValueError as exc:
+            # Normally the order is still open because the monitor is asynchronous.
+            # Fail closed by cancelling it if its protection cannot be persisted.
+            cancel_error = None
+            try:
+                await asyncio.to_thread(repository.cancel_order, account_id, order.order_id)
+            except ValueError as cancel_exc:
+                cancel_error = str(cancel_exc)
+            detail = f"paper_risk_protection_failed:{exc}"
+            if cancel_error:
+                detail += f":cancel_failed:{cancel_error}"
+            raise HTTPException(status_code=409, detail=detail) from exc
+
+        return PaperRiskOrderResult(preview=preview, order=order, protection=protection)
 
     @router.get(
         "/accounts/{account_id}/protections",
