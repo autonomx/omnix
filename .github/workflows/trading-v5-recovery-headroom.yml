@@ -1,0 +1,179 @@
+name: Trading V5 recovery headroom
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/trading-v5-recovery-headroom.yml
+      - scripts/run_trading_strategy_v5_recovery_headroom.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trading-historical-alpaca-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
+      OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
+    steps:
+      - name: Check out exact research head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install targeted trading dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Restore exact Oct-March causal development cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-Linux-march-holdout-32681695579-1
+          fail-on-cache-miss: true
+
+      - name: Recover exact frozen V3 selector source
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import base64, gzip, hashlib, re
+          from pathlib import Path
+          expected = "5c98837cc96ad7c692d45b0bafff6a025f04f52599985cc6e85af734f6917607"
+          text = Path(".github/workflows/trading-v3-recovery-precision-search.yml").read_text(encoding="utf-8")
+          match = re.search(r'payload = "([A-Za-z0-9+/=]+)"', text)
+          if match is None:
+              raise SystemExit("embedded selector payload not found")
+          payload = match.group(1)
+          for index in range(-1, len(payload)):
+              candidate = payload if index < 0 else payload[:index] + payload[index + 1:]
+              try:
+                  source = gzip.decompress(base64.b64decode(candidate, validate=True))
+              except Exception:
+                  continue
+              if hashlib.sha256(source).hexdigest() == expected:
+                  Path("/tmp/recovery_selector.py").write_bytes(source)
+                  print(f"Recovered exact selector source sha256={expected}")
+                  break
+          else:
+              raise SystemExit("exact selector source fingerprint not recoverable")
+          PYCODE
+          python -m py_compile /tmp/recovery_selector.py scripts/run_trading_strategy_v5_recovery_headroom.py
+
+      - name: Run Oct-March V5 development study
+        id: development
+        shell: bash
+        run: |
+          rm -f /tmp/v5-selected.json
+          python scripts/run_trading_strategy_v5_recovery_headroom.py \
+            --mode development \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --start-date 2025-10-01 \
+            --end-date 2026-03-27 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 150 \
+            --selector-source /tmp/recovery_selector.py \
+            --selection-file /tmp/v5-selected.json \
+            --output-dir artifacts/v5-recovery-headroom-development
+          if [[ -f /tmp/v5-selected.json ]]; then
+            echo "selected=true" >> "${GITHUB_OUTPUT}"
+            echo "Frozen V5 development selection:"
+            cat /tmp/v5-selected.json
+          else
+            echo "selected=false" >> "${GITHUB_OUTPUT}"
+            echo "No V5 headroom variant cleared the predeclared development gate. Later holdout remains unopened."
+          fi
+
+      - name: Verify Alpaca credentials only after V5 development pass
+        if: steps.development.outputs.selected == 'true'
+        shell: bash
+        run: |
+          if [[ -z "${OMNIX_ALPACA_API_KEY_ID}" || -z "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
+            echo "::error::Alpaca credentials are required only because a frozen V5 candidate earned the new holdout."
+            exit 2
+          fi
+
+      - name: Freeze new March-April temporal holdout only after V5 selection
+        if: steps.development.outputs.selected == 'true'
+        shell: bash
+        run: |
+          python scripts/run_trading_strategy_liquidity_sweep_resilient.py \
+            --start-date 2026-03-31 \
+            --end-date 2026-04-28 \
+            --thresholds 100000 \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --output-dir artifacts/v5-recovery-headroom-holdout-capture \
+            --reconstruction-max-age-days 180 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 150 \
+            --max-hold-minutes 60 \
+            --max-sessions 25 \
+            --require-covered-session
+
+      - name: Save frozen V5 temporal holdout cache
+        if: steps.development.outputs.selected == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-${{ runner.os }}-v5-holdout-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Run exactly one selected V5 holdout
+        if: steps.development.outputs.selected == 'true'
+        shell: bash
+        run: |
+          headroom="$(python - <<'PYCODE'
+          import json
+          print(json.load(open('/tmp/v5-selected.json', encoding='utf-8'))['minimum_headroom_r'])
+          PYCODE
+          )"
+          echo "Testing frozen minimum headroom=${headroom}R; no holdout search or fallback is permitted."
+          python scripts/run_trading_strategy_v5_recovery_headroom.py \
+            --mode holdout \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --start-date 2026-03-31 \
+            --end-date 2026-04-28 \
+            --initial-cash 100000 \
+            --assumed-spread-bps 150 \
+            --selector-source /tmp/recovery_selector.py \
+            --minimum-headroom-r "${headroom}" \
+            --output-dir artifacts/v5-recovery-headroom-holdout
+
+      - name: Publish V5 summaries
+        if: always()
+        shell: bash
+        run: |
+          for summary in \
+            artifacts/v5-recovery-headroom-development/summary.md \
+            artifacts/v5-recovery-headroom-holdout/summary.md; do
+            if [[ -f "${summary}" ]]; then
+              cat "${summary}" >> "${GITHUB_STEP_SUMMARY}"
+              printf '\n' >> "${GITHUB_STEP_SUMMARY}"
+            fi
+          done
+
+      - name: Upload V5 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-v5-recovery-headroom
+          path: |
+            artifacts/v5-recovery-headroom-development
+            artifacts/v5-recovery-headroom-holdout-capture
+            artifacts/v5-recovery-headroom-holdout
+          if-no-files-found: warn
+          retention-days: 30
