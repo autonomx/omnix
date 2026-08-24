@@ -94,11 +94,13 @@ jobs:
       - name: Generate exact shared gateway contract
         run: npm --workspace @omnix/web run api:generate
 
-      - name: Commit final implementation and fast-forward across unrelated branch races
+      - name: Commit application implementation only
         shell: bash
         run: |
-          rm -f .github/workflows/trading-roadmap-completion-sync.yml
-          rm -f .github/workflows/trading-roadmap-completion-pr.yml
+          # The workflow token has normal contents:write but not workflows:write.
+          # Restore every workflow file to the branch baseline; ChatGPT will do
+          # workflow repair/cleanup separately through the GitHub connector.
+          git restore --source=HEAD --staged --worktree .github/workflows
           git add -A
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
