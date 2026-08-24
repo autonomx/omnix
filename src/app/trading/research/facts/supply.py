@@ -8,7 +8,7 @@ from decimal import Decimal
 from ..contracts import SupplyFact, TradingEvidence, fingerprint
 
 _TYPE_PATTERNS = (
-    ("atm", re.compile(r"\b(?:at[- ]the[- ]market|ATM facility|ATM offering|sales agreement)\b", re.I)),
+    ("atm", re.compile(r"\b(?:at[- ]the[- ]market|ATM (?:facility|offering|program|sales agreement))\b", re.I)),
     ("warrant", re.compile(r"\bwarrants?\b", re.I)),
     ("resale_registration", re.compile(r"\b(?:resale registration|selling stockholders?|resale prospectus)\b", re.I)),
     ("convertible", re.compile(r"\bconvertible (?:notes?|debt|preferred|securities)\b", re.I)),
@@ -22,7 +22,7 @@ _EXPIRED = re.compile(r"\bexpired\b", re.I)
 _REDEEMED = re.compile(r"\bredeemed\b", re.I)
 _WITHDRAWN = re.compile(r"\bwithdrawn\b", re.I)
 _EXERCISABLE = re.compile(r"\b(?:exercisable|may be exercised|currently outstanding)\b", re.I)
-_ACTIVE = re.compile(r"\b(?:active|remains? available|outstanding|effective|may sell|may issue|may offer)\b", re.I)
+_ACTIVE = re.compile(r"\b(?:active|remains? available|outstanding|effective|may sell|may issue|may offer|entered into|enters? into|enters? (?:an? )?(?:at[- ]the[- ]market|ATM)|commenced|launched|currently available)\b", re.I)
 _EFFECTIVE = re.compile(r"\b(?:became|is|was|declared) effective\b", re.I)
 _COUNT = r"(?P<n>\d[\d,.]*)\s*(?P<u>thousand|million|billion|k|m|b)?"
 _SHARE = re.compile(_COUNT + r"\s+shares?", re.I)

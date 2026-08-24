@@ -28,6 +28,8 @@ class TradingStrategyConfigDocument(BaseModel):
     config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
     risk: StrategyRiskProfile = Field(default_factory=StrategyRiskProfile)
     enabled: bool = True
+    archived_at: datetime | None = None
+    archived_reason: str | None = None
     revision: int = Field(default=1, ge=1)
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -65,6 +67,10 @@ class StrategyProtection(BaseModel):
     exit_order_id: str | None = None
     stop_price: Decimal = Field(gt=0)
     target_price: Decimal = Field(gt=0)
+    initial_stop_price: Decimal | None = Field(default=None, gt=0)
+    initial_target_price: Decimal | None = Field(default=None, gt=0)
+    mae_price: Decimal | None = Field(default=None, gt=0)
+    mfe_price: Decimal | None = Field(default=None, gt=0)
     quantity: Decimal = Field(gt=0)
     status: Literal["pending_entry", "active", "exit_submitted", "closed", "cancelled"] = "pending_entry"
     trigger_reason: str | None = None
@@ -84,9 +90,11 @@ def _config(row) -> TradingStrategyConfigDocument:
         config=GapPullbackConfig.model_validate(row[6]),
         risk=StrategyRiskProfile.model_validate(row[7]),
         enabled=bool(row[8]),
-        revision=int(row[9]),
-        created_at=row[10],
-        updated_at=row[11],
+        archived_at=row[9],
+        archived_reason=str(row[10]) if row[10] is not None else None,
+        revision=int(row[11]),
+        created_at=row[12],
+        updated_at=row[13],
     )
 
 
@@ -115,12 +123,16 @@ def _protection(row) -> StrategyProtection:
         exit_order_id=str(row[5]) if row[5] is not None else None,
         stop_price=Decimal(row[6]),
         target_price=Decimal(row[7]),
-        quantity=Decimal(row[8]),
-        status=str(row[9]),
-        trigger_reason=str(row[10]) if row[10] is not None else None,
-        revision=int(row[11]),
-        created_at=row[12],
-        updated_at=row[13],
+        initial_stop_price=Decimal(row[8]) if row[8] is not None else None,
+        initial_target_price=Decimal(row[9]) if row[9] is not None else None,
+        mae_price=Decimal(row[10]) if row[10] is not None else None,
+        mfe_price=Decimal(row[11]) if row[11] is not None else None,
+        quantity=Decimal(row[12]),
+        status=str(row[13]),
+        trigger_reason=str(row[14]) if row[14] is not None else None,
+        revision=int(row[15]),
+        created_at=row[16],
+        updated_at=row[17],
     )
 
 
@@ -139,7 +151,8 @@ def _universe(row) -> GapperUniverseSnapshot:
 
 _CONFIG_COLUMNS = """
 strategy_id, account_id, strategy_kind, strategy_version, mode,
-active_universe_id, config, risk, enabled, revision, created_at, updated_at
+active_universe_id, config, risk, enabled, archived_at, archived_reason,
+revision, created_at, updated_at
 """
 _EVENT_COLUMNS = """
 strategy_id, event_id, run_id, instrument_id, event_type,
@@ -147,8 +160,8 @@ state, reason_code, observed_at, idempotency_key, payload
 """
 _PROTECTION_COLUMNS = """
 strategy_id, protection_id, account_id, instrument_id, entry_order_id,
-exit_order_id, stop_price, target_price, quantity, status, trigger_reason,
-revision, created_at, updated_at
+exit_order_id, stop_price, target_price, initial_stop_price, initial_target_price,
+mae_price, mfe_price, quantity, status, trigger_reason, revision, created_at, updated_at
 """
 _UNIVERSE_COLUMNS = """
 universe_id, session_date, evaluation_time, discovery_source,
@@ -203,6 +216,8 @@ class TradingStrategyRepository:
     ) -> TradingStrategyConfigDocument:
         if strategy_id != document.strategy_id:
             raise ValueError("strategy_id_mismatch")
+        if document.archived_at is not None:
+            raise ValueError("archived_strategy_is_read_only")
         with self.uow_factory() as uow:
             row = uow.connection.execute(
                 f"""
@@ -212,6 +227,7 @@ class TradingStrategyRepository:
                        risk = %s::jsonb, enabled = %s,
                        revision = revision + 1, updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND strategy_id = %s AND revision = %s
+                   AND archived_at IS NULL
                 RETURNING {_CONFIG_COLUMNS}
                 """,
                 (
@@ -234,18 +250,12 @@ class TradingStrategyRepository:
             return _config(row)
 
     def delete_config(self, strategy_id: str, *, expected_revision: int) -> None:
-        """Delete a safely stopped strategy and cascade its strategy-owned history.
-
-        Frozen universes and catalyst evidence are intentionally retained because
-        they are immutable research artifacts and may be referenced by other
-        strategy instances/backtests. Active protection state blocks deletion so
-        a strategy cannot orphan a paper position without its exit authority.
-        """
+        """Soft-archive a safely stopped strategy without deleting evidence."""
 
         with self.uow_factory() as uow:
             row = uow.connection.execute(
                 """
-                SELECT mode, revision
+                SELECT mode, revision, archived_at
                   FROM omnix_trading_strategy_configs
                  WHERE workspace_id = %s AND strategy_id = %s
                  FOR UPDATE
@@ -256,8 +266,10 @@ class TradingStrategyRepository:
                 raise ValueError("strategy_config_not_found")
             if int(row[1]) != expected_revision:
                 raise RevisionConflict("stale trading strategy configuration")
+            if row[2] is not None:
+                raise ValueError("strategy_already_archived")
             if str(row[0]) == "auto_paper":
-                raise ValueError("disable_auto_paper_before_delete")
+                raise ValueError("disable_auto_paper_before_archive")
             active = uow.connection.execute(
                 """
                 SELECT COUNT(*)
@@ -268,28 +280,33 @@ class TradingStrategyRepository:
                 (self.context.workspace_id, strategy_id),
             ).fetchone()
             if active is not None and int(active[0]) > 0:
-                raise ValueError("close_strategy_protections_before_delete")
-            deleted = uow.connection.execute(
+                raise ValueError("close_strategy_protections_before_archive")
+            archived = uow.connection.execute(
                 """
-                DELETE FROM omnix_trading_strategy_configs
-                 WHERE workspace_id = %s AND strategy_id = %s AND revision = %s
+                UPDATE omnix_trading_strategy_configs
+                   SET mode = 'off', enabled = FALSE,
+                       archived_at = CURRENT_TIMESTAMP,
+                       archived_reason = 'operator_archive',
+                       revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND strategy_id = %s
+                   AND revision = %s AND archived_at IS NULL
                 RETURNING strategy_id
                 """,
                 (self.context.workspace_id, strategy_id, expected_revision),
             ).fetchone()
-            if deleted is None:
+            if archived is None:
                 raise RevisionConflict("stale trading strategy configuration")
             uow.commit()
 
     def list_configs(self, *, active_only: bool = False) -> list[TradingStrategyConfigDocument]:
-        predicate = "AND enabled = TRUE AND mode <> 'off'" if active_only else ""
+        predicate = "AND archived_at IS NULL AND enabled = TRUE AND mode <> 'off'" if active_only else ""
         with self.uow_factory() as uow:
             rows = uow.connection.execute(
                 f"""
                 SELECT {_CONFIG_COLUMNS}
                   FROM omnix_trading_strategy_configs
                  WHERE workspace_id = %s {predicate}
-                 ORDER BY updated_at DESC, strategy_id
+                 ORDER BY (archived_at IS NOT NULL), updated_at DESC, strategy_id
                 """,
                 (self.context.workspace_id,),
             ).fetchall()
@@ -528,12 +545,17 @@ class TradingStrategyRepository:
                 INSERT INTO omnix_trading_strategy_protections (
                     workspace_id, strategy_id, protection_id, account_id,
                     instrument_id, entry_order_id, exit_order_id, stop_price,
-                    target_price, quantity, status, trigger_reason
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    target_price, initial_stop_price, initial_target_price,
+                    mae_price, mfe_price, quantity, status, trigger_reason
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (workspace_id, strategy_id, entry_order_id) DO UPDATE
                    SET exit_order_id = EXCLUDED.exit_order_id,
                        stop_price = EXCLUDED.stop_price,
                        target_price = EXCLUDED.target_price,
+                       initial_stop_price = COALESCE(omnix_trading_strategy_protections.initial_stop_price, EXCLUDED.initial_stop_price),
+                       initial_target_price = COALESCE(EXCLUDED.initial_target_price, omnix_trading_strategy_protections.initial_target_price),
+                       mae_price = EXCLUDED.mae_price,
+                       mfe_price = EXCLUDED.mfe_price,
                        quantity = EXCLUDED.quantity,
                        status = EXCLUDED.status,
                        trigger_reason = EXCLUDED.trigger_reason,
@@ -551,6 +573,10 @@ class TradingStrategyRepository:
                     protection.exit_order_id,
                     protection.stop_price,
                     protection.target_price,
+                    protection.initial_stop_price,
+                    protection.initial_target_price,
+                    protection.mae_price,
+                    protection.mfe_price,
                     protection.quantity,
                     protection.status,
                     protection.trigger_reason,
@@ -569,6 +595,10 @@ class TradingStrategyRepository:
             exit_order_id=saved.exit_order_id,
             stop_price=saved.stop_price,
             target_price=saved.target_price,
+            initial_stop_price=saved.initial_stop_price,
+            initial_target_price=saved.initial_target_price,
+            mae_price=saved.mae_price,
+            mfe_price=saved.mfe_price,
             quantity=saved.quantity,
             status=saved.status,
             trigger_reason=saved.trigger_reason,

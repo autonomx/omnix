@@ -93,6 +93,14 @@ class PaperPerformanceSummary(BaseModel):
     max_drawdown_r: Decimal | None = None
 
 
+class PaperModeComparison(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    shadow: PaperPerformanceSummary = Field(default_factory=PaperPerformanceSummary)
+    auto_paper: PaperPerformanceSummary = Field(default_factory=PaperPerformanceSummary)
+    expectancy_delta_r: Decimal | None = None
+
+
 class PaperDailyR(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -181,13 +189,14 @@ class PaperAnalyticsOverview(BaseModel):
     account_id: str
     strategy_id: str | None = None
     epoch_id: str | None = None
-    mode: Literal["all", "shadow", "auto_paper"] = "all"
+    mode: Literal["all", "shadow", "auto_paper"] = "shadow"
     start_date: date | None = None
     end_date: date | None = None
     rolling_window: int = 20
     epochs: list[PaperSimulationEpoch] = Field(default_factory=list)
     qualification: V2ProspectiveQualification | None = None
     summary: PaperPerformanceSummary = Field(default_factory=PaperPerformanceSummary)
+    mode_comparison: PaperModeComparison = Field(default_factory=PaperModeComparison)
     equity: list[PaperEquityPoint] = Field(default_factory=list)
     drawdown: list[PaperDrawdownPoint] = Field(default_factory=list)
     daily_r: list[PaperDailyR] = Field(default_factory=list)
@@ -377,6 +386,9 @@ _FUNNEL_STAGES = (
 def _event_stage(event: StrategyEvent) -> int:
     payload = event.payload or {}
     execution = payload.get("execution") if isinstance(payload.get("execution"), dict) else {}
+    explicit = payload.get("lifecycle_stage")
+    if isinstance(explicit, int) and 0 <= explicit <= 8:
+        return explicit
     if event.event_type == "protection" and event.state == "active":
         return 8
     if event.event_type == "entry_order_submitted":
@@ -389,14 +401,29 @@ def _event_stage(event: StrategyEvent) -> int:
         return 5
     if event.state == "entry_ready":
         return 4
-    if event.state in {
-        "pullback_forming",
-        "higher_low",
-        "breakout_pending",
-        "breakout_hold",
-        "structure_ready",
-    } or isinstance(payload.get("features"), dict):
+
+    transitions = {str(item) for item in payload.get("transitions", []) if isinstance(item, str)}
+    if "higher_low_confirmed" in transitions or event.state in {
+        "higher_low_confirmed", "vwap_reclaim", "lower_high_break", "breakout_hold",
+    }:
         return 3
+
+    basic_rejections = {
+        "GAP_BELOW_MINIMUM", "PRICE_OUT_OF_RANGE", "PREMARKET_DOLLAR_VOLUME_LOW",
+        "TOD_RVOL_MISSING", "TOD_RVOL_LOW", "SPREAD_MISSING", "SPREAD_TOO_WIDE",
+    }
+    research_rejections = {
+        "CATALYST_EVIDENCE_REQUIRED", "DILUTION_SUPPLY_RISK", "FLOAT_OUTSIDE_REQUIRED_RANGE",
+    }
+    if event.reason_code in basic_rejections:
+        return 0
+    if event.reason_code in research_rejections:
+        return 1
+    if "qualified_gap" in transitions or event.state in {
+        "qualified_gap", "opening_impulse", "first_pullback", "first_low_confirmed",
+        "bounce_high_confirmed", "second_pullback",
+    }:
+        return 2
     if event.state == "research_reviewed" or event.event_type in {"research_llm", "research_fact"}:
         return 2
     if event.state != "rejected" and event.event_type != "rejection":
@@ -405,11 +432,12 @@ def _event_stage(event: StrategyEvent) -> int:
 
 
 def lifecycle_funnel(events: list[StrategyEvent]) -> list[PaperFunnelStage]:
-    lifecycles: dict[tuple[str, str, str], dict[str, object]] = {}
+    lifecycles: dict[tuple[str, str, str, str], dict[str, object]] = {}
     for event in sorted(events, key=lambda item: (item.observed_at, item.event_id)):
         session = str(event.payload.get("session_date") or event.observed_at.astimezone(_ET).date())
         universe = str(event.payload.get("universe_id") or event.payload.get("universe_source") or "unscoped")
-        key = (session, universe, event.instrument_id)
+        profile = str(event.payload.get("profile_fingerprint") or event.payload.get("strategy_version") or "legacy")
+        key = (profile, session, universe, event.instrument_id)
         lifecycle = lifecycles.setdefault(key, {"rank": 0, "reasons": []})
         lifecycle["rank"] = max(int(lifecycle["rank"]), _event_stage(event))
         if event.reason_code and (
@@ -804,11 +832,16 @@ class TradingPaperAnalytics:
         with self.uow_factory() as uow:
             row = uow.connection.execute(
                 """
-                SELECT COUNT(*)
-                  FROM omnix_trading_strategy_archives
-                 WHERE workspace_id = %s AND account_id = %s
+                SELECT
+                    (SELECT COUNT(*) FROM omnix_trading_strategy_configs
+                      WHERE workspace_id = %s AND account_id = %s AND archived_at IS NOT NULL)
+                  + (SELECT COUNT(*) FROM omnix_trading_strategy_archives
+                      WHERE workspace_id = %s AND account_id = %s)
                 """,
-                (self.context.workspace_id, account_id),
+                (
+                    self.context.workspace_id, account_id,
+                    self.context.workspace_id, account_id,
+                ),
             ).fetchone()
         return int(row[0]) if row is not None else 0
 
@@ -818,7 +851,7 @@ class TradingPaperAnalytics:
         *,
         strategy_id: str | None = None,
         epoch_id: str | None = None,
-        mode: Literal["all", "shadow", "auto_paper"] = "all",
+        mode: Literal["all", "shadow", "auto_paper"] = "shadow",
         start_date: date | None = None,
         end_date: date | None = None,
         rolling_window: int = 20,
@@ -830,27 +863,38 @@ class TradingPaperAnalytics:
             start_date=start_date,
             end_date=end_date,
         )
-        trades: list[PaperAnalyticsTrade] = []
-        if mode in {"all", "auto_paper"}:
-            trades.extend(
-                self._auto_paper_trades(
-                    account_id,
-                    strategy_id=strategy_id,
-                    epoch_id=epoch_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                )
+        auto_trades = self._auto_paper_trades(
+            account_id,
+            strategy_id=strategy_id,
+            epoch_id=epoch_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        shadow_trades = (
+            self._shadow_trades(
+                account_id,
+                strategy_id,
+                start_date=start_date,
+                end_date=end_date,
             )
-        if mode in {"all", "shadow"} and strategy_id:
-            trades.extend(
-                self._shadow_trades(
-                    account_id,
-                    strategy_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                )
-            )
+            if strategy_id
+            else []
+        )
+        if mode == "auto_paper":
+            trades = list(auto_trades)
+        elif mode == "shadow":
+            trades = list(shadow_trades)
+        else:
+            # Retained for API compatibility only. The UI deliberately exposes
+            # the two regimes separately and displays this comparison instead.
+            trades = [*shadow_trades, *auto_trades]
         trades.sort(key=lambda item: (item.exit_time, item.trade_id))
+
+        shadow_summary = performance_summary(shadow_trades)
+        auto_summary = performance_summary(auto_trades)
+        delta = None
+        if shadow_summary.expectancy_r is not None and auto_summary.expectancy_r is not None:
+            delta = auto_summary.expectancy_r - shadow_summary.expectancy_r
 
         daily: dict[date, list[Decimal]] = {}
         for trade in trades:
@@ -877,10 +921,9 @@ class TradingPaperAnalytics:
             for trade in trades
             if trade.mae_r is not None and trade.mfe_r is not None
         ]
-        auto = [trade for trade in trades if trade.source == "auto_paper"]
-        signal_exec = [trade.signal_to_executable_bps for trade in auto if trade.signal_to_executable_bps is not None]
-        fill_slip = [trade.fill_slippage_bps for trade in auto if trade.fill_slippage_bps is not None]
-        shortfall = [trade.implementation_shortfall_bps for trade in auto if trade.implementation_shortfall_bps is not None]
+        signal_exec = [trade.signal_to_executable_bps for trade in auto_trades if trade.signal_to_executable_bps is not None]
+        fill_slip = [trade.fill_slippage_bps for trade in auto_trades if trade.fill_slippage_bps is not None]
+        shortfall = [trade.implementation_shortfall_bps for trade in auto_trades if trade.implementation_shortfall_bps is not None]
         events = self._events(strategy_id, start_date=start_date, end_date=end_date) if strategy_id else []
 
         return PaperAnalyticsOverview(
@@ -894,6 +937,11 @@ class TradingPaperAnalytics:
             epochs=epochs,
             qualification=self._qualification(strategy_id),
             summary=performance_summary(trades),
+            mode_comparison=PaperModeComparison(
+                shadow=shadow_summary,
+                auto_paper=auto_summary,
+                expectancy_delta_r=delta,
+            ),
             equity=equity,
             drawdown=_strategy_drawdown(trades) if trades else _account_drawdown(equity),
             daily_r=daily_r,
@@ -902,12 +950,12 @@ class TradingPaperAnalytics:
             mae_mfe=mae_mfe,
             funnel=lifecycle_funnel(events) if events else [],
             execution=PaperExecutionSummary(
-                trade_count=len(auto),
+                trade_count=len(auto_trades),
                 average_signal_to_executable_bps=_mean(signal_exec),
                 average_fill_slippage_bps=_mean(fill_slip),
                 average_implementation_shortfall_bps=_mean(shortfall),
             ),
-            factors=factor_studies(auto),
+            factors=factor_studies(auto_trades),
             recent_trades=list(reversed(trades[-50:])),
             archived_strategy_count=self._archived_strategy_count(account_id),
         )
@@ -916,6 +964,7 @@ class TradingPaperAnalytics:
 __all__ = [
     "PaperAnalyticsOverview",
     "PaperAnalyticsTrade",
+    "PaperModeComparison",
     "PaperSimulationEpoch",
     "TradingPaperAnalytics",
     "factor_studies",

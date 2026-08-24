@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI
 
 from .gapper_dataset import GapperCandidate
+from .indicators.engine import relative_strength_index
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
@@ -171,6 +172,74 @@ def _paper_observation(execution) -> PaperMarketObservation:
     )
 
 
+_BASIC_MARKET_REJECTIONS = {
+    "GAP_BELOW_MINIMUM",
+    "PRICE_OUT_OF_RANGE",
+    "PREMARKET_DOLLAR_VOLUME_LOW",
+    "TOD_RVOL_MISSING",
+    "TOD_RVOL_LOW",
+    "SPREAD_MISSING",
+    "SPREAD_TOO_WIDE",
+}
+_RESEARCH_SUPPLY_REJECTIONS = {
+    "CATALYST_EVIDENCE_REQUIRED",
+    "DILUTION_SUPPLY_RISK",
+    "FLOAT_OUTSIDE_REQUIRED_RANGE",
+}
+
+
+def _candidate_lifecycle_stage(result: GapPullbackResult) -> int:
+    """Highest lifecycle rank actually proven by this causal evaluation."""
+    transitions = set(result.transitions)
+    if result.state == "entry_ready":
+        return 4
+    if "higher_low_confirmed" in transitions or result.state in {
+        "higher_low_confirmed", "vwap_reclaim", "lower_high_break", "breakout_hold"
+    }:
+        return 3
+    if result.reason_code in _BASIC_MARKET_REJECTIONS:
+        return 0
+    if result.reason_code in _RESEARCH_SUPPLY_REJECTIONS:
+        return 1
+    if "qualified_gap" in transitions or result.state not in {"discovered", "rejected"}:
+        return 2
+    return 0
+
+
+def _rsi_crossed_after_activation(
+    bars,
+    *,
+    period: int,
+    threshold: Decimal,
+    activated_at: datetime,
+    observed_at: datetime,
+) -> bool:
+    """Return true when any finalized post-entry bar confirms the configured RSI cross.
+
+    RSI values use the same shared indicator implementation as the portfolio
+    backtester. Looking across all bars since activation prevents a 30-second
+    monitor from missing a cross that occurred between polling cycles.
+    """
+    session_date = activated_at.astimezone(_ET).date()
+    finalized = sorted(
+        (
+            bar for bar in bars
+            if bar.is_final
+            and bar.end_time <= observed_at
+            and bar.start_time.astimezone(_ET).date() == session_date
+        ),
+        key=lambda bar: bar.start_time,
+    )
+    values = relative_strength_index([bar.close for bar in finalized], period)
+    for index in range(1, len(values)):
+        bar_index = period + index
+        if bar_index >= len(finalized) or finalized[bar_index].end_time <= activated_at:
+            continue
+        if values[index - 1] >= threshold and values[index] < threshold:
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class _EntryProposal:
     candidate: GapperCandidate
@@ -304,8 +373,13 @@ class TradingStrategyMonitor:
                     position = positions.get(protection.instrument_id)
                     if position is not None and position.quantity > 0:
                         activated_at = entry_order.updated_at or entry_order.created_at or datetime.now(timezone.utc)
+                        fill_price = entry_order.average_fill_price
+                        if protection.initial_stop_price is None:
+                            protection.initial_stop_price = protection.stop_price
+                        if fill_price is not None:
+                            protection.mae_price = fill_price if protection.mae_price is None else min(protection.mae_price, fill_price)
+                            protection.mfe_price = fill_price if protection.mfe_price is None else max(protection.mfe_price, fill_price)
                         if config.config.strategy_version == "2.0.0":
-                            fill_price = entry_order.average_fill_price
                             if fill_price is None:
                                 self.last_error = "v2_protection: filled entry missing average_fill_price"
                                 trade_log(
@@ -340,6 +414,9 @@ class TradingStrategyMonitor:
                             # Match the V11 backtester: keep the structural L2 stop,
                             # but anchor R/target to the actual pessimistic fill.
                             protection.target_price = levels.target_price
+                            protection.initial_target_price = levels.target_price
+                        elif protection.initial_target_price is None:
+                            protection.initial_target_price = protection.target_price
                         protection.status = "active"
                         protection.quantity = min(protection.quantity, position.quantity)
                         saved = await asyncio.to_thread(strategy_repository.save_protection, protection)
@@ -443,6 +520,22 @@ class TradingStrategyMonitor:
             if entry_order is not None:
                 activated_at = entry_order.updated_at or entry_order.created_at
 
+            if activated_at is not None and entry_order is not None and entry_order.average_fill_price is not None:
+                mark = execution.last or execution.bid or execution.ask
+                if mark is not None:
+                    range_is_post_entry = (
+                        execution.bar_start_time is not None
+                        and execution.bar_start_time >= activated_at
+                    )
+                    observed_low = execution.low if range_is_post_entry and execution.low is not None else mark
+                    observed_high = execution.high if range_is_post_entry and execution.high is not None else mark
+                    next_mae = observed_low if protection.mae_price is None else min(protection.mae_price, observed_low)
+                    next_mfe = observed_high if protection.mfe_price is None else max(protection.mfe_price, observed_high)
+                    if next_mae != protection.mae_price or next_mfe != protection.mfe_price:
+                        protection.mae_price = next_mae
+                        protection.mfe_price = next_mfe
+                        protection = await asyncio.to_thread(strategy_repository.save_protection, protection)
+
             if (
                 config.config.strategy_version == "2.0.0"
                 and entry_order is not None
@@ -451,7 +544,7 @@ class TradingStrategyMonitor:
             ):
                 entry_price = entry_order.average_fill_price
                 try:
-                    initial_stop = v2_initial_stop_from_target(
+                    initial_stop = protection.initial_stop_price or v2_initial_stop_from_target(
                         config.config,
                         entry_price=entry_price,
                         target_price=protection.target_price,
@@ -534,8 +627,41 @@ class TradingStrategyMonitor:
                     trigger = "protective_stop"
                 elif trigger_kind == "target":
                     trigger = "profit_target"
-                elif (
-                    config.config.strategy_version == "2.0.0"
+
+                if trigger is None and activated_at is not None:
+                    try:
+                        indicator_response = await asyncio.to_thread(
+                            market_service.bars,
+                            protection.instrument_id,
+                            config.config.execution_interval,
+                            240,
+                            binding_id,
+                        )
+                        if _rsi_crossed_after_activation(
+                            indicator_response.bars,
+                            period=config.config.exit_rsi_period,
+                            threshold=config.config.exit_rsi_threshold,
+                            activated_at=activated_at,
+                            observed_at=execution.source_time,
+                        ):
+                            trigger = "rsi"
+                    except Exception as exc:
+                        # Indicator refresh is diagnostic/fail-safe only: static
+                        # stop/target and force-flat protection remain authoritative.
+                        self.last_error = f"protection_rsi: {type(exc).__name__}: {exc}"
+                        trade_log(
+                            "auto_trading",
+                            "protection_rsi_error",
+                            run_id=self.current_run_id,
+                            strategy_id=config.strategy_id,
+                            instrument_id=protection.instrument_id,
+                            error_type=type(exc).__name__,
+                            detail=str(exc),
+                        )
+
+                if (
+                    trigger is None
+                    and config.config.strategy_version == "2.0.0"
                     and activated_at is not None
                     and v2_hold_expired(
                         config.config,
@@ -544,7 +670,7 @@ class TradingStrategyMonitor:
                     )
                 ):
                     trigger = "max_hold"
-                elif force_flat:
+                elif trigger is None and force_flat:
                     trigger = "force_flat"
             if trigger is None:
                 continue
@@ -683,6 +809,13 @@ class TradingStrategyMonitor:
                 payload={
                     "features": result.features.model_dump(mode="json"),
                     "transitions": list(result.transitions),
+                    "lifecycle_stage": _candidate_lifecycle_stage(result),
+                    "strategy_version": config.config.strategy_version,
+                    "profile_fingerprint": (
+                        v2_profile_fingerprint(config.config)
+                        if config.config.strategy_version == "2.0.0"
+                        else config.config.strategy_version
+                    ),
                     "mode": config.mode,
                     "universe_id": universe.universe_id,
                     "structure_interval": config.config.structure_interval,
@@ -1289,6 +1422,11 @@ class TradingStrategyMonitor:
                 entry_order_id=order_id,
                 stop_price=result.signal.stop_price,
                 target_price=result.signal.target_price,
+                initial_stop_price=result.signal.stop_price,
+                initial_target_price=(
+                    None if config.config.strategy_version == "2.0.0"
+                    else result.signal.target_price
+                ),
                 quantity=decision.quantity,
                 status="pending_entry",
             )

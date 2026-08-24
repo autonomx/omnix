@@ -64,6 +64,12 @@ export interface PaperPerformanceSummary {
   max_drawdown_r?: AnalyticsNumeric | null;
 }
 
+export interface PaperModeComparison {
+  shadow: PaperPerformanceSummary;
+  auto_paper: PaperPerformanceSummary;
+  expectancy_delta_r?: AnalyticsNumeric | null;
+}
+
 export interface PaperDailyR {
   session_date: string;
   r_result: AnalyticsNumeric;
@@ -139,6 +145,7 @@ export interface PaperAnalyticsOverview {
   epochs: PaperSimulationEpoch[];
   qualification?: V2ProspectiveQualification | null;
   summary: PaperPerformanceSummary;
+  mode_comparison: PaperModeComparison;
   equity: PaperEquityPoint[];
   drawdown: PaperDrawdownPoint[];
   daily_r: PaperDailyR[];

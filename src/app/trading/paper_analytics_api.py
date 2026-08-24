@@ -40,7 +40,7 @@ def create_trading_paper_analytics_router(
         account_id: str = Query(min_length=1),
         strategy_id: str | None = Query(default=None),
         epoch_id: str | None = Query(default=None),
-        mode: Literal["all", "shadow", "auto_paper"] = Query(default="all"),
+        mode: Literal["all", "shadow", "auto_paper"] = Query(default="shadow"),
         start_date: date | None = Query(default=None),
         end_date: date | None = Query(default=None),
         rolling_window: int = Query(default=20, ge=5, le=200),

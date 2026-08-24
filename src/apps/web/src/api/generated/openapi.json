@@ -9251,7 +9251,7 @@
             "type": "array"
           },
           "mode": {
-            "default": "all",
+            "default": "shadow",
             "enum": [
               "all",
               "shadow",
@@ -9259,6 +9259,9 @@
             ],
             "title": "Mode",
             "type": "string"
+          },
+          "mode_comparison": {
+            "$ref": "#/components/schemas/PaperModeComparison"
           },
           "qualification": {
             "anyOf": [
@@ -10151,6 +10154,30 @@
           "mfe_r"
         ],
         "title": "PaperMaeMfePoint",
+        "type": "object"
+      },
+      "PaperModeComparison": {
+        "properties": {
+          "auto_paper": {
+            "$ref": "#/components/schemas/PaperPerformanceSummary"
+          },
+          "expectancy_delta_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectancy Delta R"
+          },
+          "shadow": {
+            "$ref": "#/components/schemas/PaperPerformanceSummary"
+          }
+        },
+        "title": "PaperModeComparison",
         "type": "object"
       },
       "PaperOrder": {
@@ -13651,9 +13678,57 @@
             ],
             "title": "Exit Order Id"
           },
+          "initial_stop_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Stop Price"
+          },
+          "initial_target_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Target Price"
+          },
           "instrument_id": {
             "title": "Instrument Id",
             "type": "string"
+          },
+          "mae_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae Price"
+          },
+          "mfe_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfe Price"
           },
           "protection_id": {
             "title": "Protection Id",
@@ -17476,6 +17551,29 @@
             ],
             "title": "Active Universe Id"
           },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "archived_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived Reason"
+          },
           "config": {
             "$ref": "#/components/schemas/GapPullbackConfig-Input"
           },
@@ -17571,6 +17669,29 @@
               }
             ],
             "title": "Active Universe Id"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "archived_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived Reason"
           },
           "config": {
             "$ref": "#/components/schemas/GapPullbackConfig-Output"
@@ -23195,7 +23316,7 @@
             "name": "mode",
             "required": false,
             "schema": {
-              "default": "all",
+              "default": "shadow",
               "enum": [
                 "all",
                 "shadow",

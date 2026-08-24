@@ -256,3 +256,20 @@ Default evidence-volume thresholds are 100 labeled OOS examples across at least 
 12. **Strategy UI auditability:** every execution-authorizing v1.1 parameter, daily pipeline phase, candidate decision/rejection, quality score and active protection is inspectable in the Trading Strategies workspace.
 
 Paper or historical results are research evidence, not a profitability guarantee.
+
+
+## Completion and correctness amendments — 2026-08-24
+
+The production strategy catalog now contains persisted `1.0.0`, strict `1.1.0`, reviewed-research-policy `1.2.0`, and frozen prospective `2.0.0` semantics. `2.0.0` remains promotion-gated by prospective SHADOW evidence and explicit operator review.
+
+Final roadmap hardening makes the following contracts release requirements rather than dashboard-only diagnostics:
+
+- **Exit parity:** AUTO PAPER and the portfolio backtester both evaluate the configured causal RSI cross in addition to shared stop/target semantics. V2 retains its separately versioned profit-protection and max-hold rules.
+- **Immutable initial risk:** strategy protections retain the original stop/target geometry even after a V2 protected stop moves. Canonical paper R is computed from that original risk, not the final moved stop.
+- **Prospective excursions:** AUTO PAPER protections persist favorable/adverse price extrema so completed round trips retain MAE/MFE in R.
+- **Typed supply state:** keyword matches alone are not execution-authoritative dilution vetoes. Supply evidence is classified as active, terminated, exhausted, expired, redeemed, withdrawn, or unknown; only a resolved active state becomes a deterministic `dilution_flag`. Unknown/inactive states remain research evidence.
+- **Soft archive:** normal strategy removal is an archive operation (`mode=off`, disabled, immutable `archived_at`). Runs/events/protections remain first-class queryable evidence; hard database deletion is no longer the operator workflow.
+- **Dashboard regime separation:** SHADOW replay and AUTO PAPER performance are selected separately and compared explicitly. They are not pooled into the default expectancy statistic. Lifecycle funnels count one profile/session/universe/instrument lifecycle and advance only on proven deterministic stages.
+- **Risk history:** equity/risk snapshots are emitted when protection state or stop levels change, not only when balances/positions mutate.
+
+The paper strategy dashboard is therefore an evidence console for prospective promotion and implementation-loss measurement; it is not a generic brokerage performance screen and historical/reconstructed results remain research evidence rather than a profitability guarantee.

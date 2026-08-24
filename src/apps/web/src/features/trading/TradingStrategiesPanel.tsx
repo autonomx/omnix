@@ -430,6 +430,10 @@ export function TradingStrategiesPanel() {
 
   const save = async () => {
     if (!draft) return;
+    if (draft.archived_at) {
+      setNotice('Archived strategies are read-only. Create a new strategy to resume execution.');
+      return;
+    }
     if (draft.config.strategy_version === '1.2.0' && !htrPromotionAllowed) {
       setNotice('Strategy 1.2 requires an active reviewed HTR-15 validation artifact. Run HTR-14 validation and explicit promotion review first.');
       return;
@@ -470,22 +474,21 @@ export function TradingStrategiesPanel() {
     }
   };
 
-  const deleteStrategy = async () => {
+  const archiveStrategy = async () => {
     if (!draft || !strategies.some((item) => item.strategy_id === draft.strategy_id)) {
-      setNotice('Save the strategy before deleting it.');
+      setNotice('Save the strategy before archiving it.');
       return;
     }
-    if (!window.confirm(`Delete strategy ${draft.strategy_id}? Strategy events/runs are removed; immutable research universes remain available for audit/backtesting.`)) return;
+    if (draft.archived_at) {
+      setNotice('This strategy is already archived and read-only.');
+      return;
+    }
+    if (!window.confirm(`Archive strategy ${draft.strategy_id}? Execution is disabled, while configs, events, runs, protections and analytics remain reviewable.`)) return;
     setStatus('saving');
     try {
       await tradingStrategyApi.delete(draft);
-      setSelectedId('');
-      setDraft(null);
-      setEvents([]);
-      setProtections([]);
-      setUniverse(null);
-      setNotice(`Deleted strategy ${draft.strategy_id}.`);
       await refresh();
+      setNotice(`Archived ${draft.strategy_id}. Historical evidence remains available in the strategy dashboard.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
       setStatus('error');
@@ -703,11 +706,12 @@ export function TradingStrategiesPanel() {
                 {draft.config.strategy_version === '1.1.0' && htrPromotionAllowed ? <button type="button" onClick={loadReviewedV12}>Load reviewed HTR v1.2</button> : null}
                 <button type="button" onClick={loadFrozenV2}>{draft.config.strategy_version === '2.0.0' ? 'Reload frozen V11 v2' : 'Load frozen V11 v2 shadow'}</button>
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
-                {strategies.some((item) => item.strategy_id === draft.strategy_id) ? <button type="button" className="danger" onClick={() => void deleteStrategy()} disabled={status === 'saving'}>Delete</button> : null}
-                <button type="button" className="primary" onClick={() => void save()} disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : 'Save strategy'}</button>
+                {strategies.some((item) => item.strategy_id === draft.strategy_id) && !draft.archived_at ? <button type="button" className="danger" onClick={() => void archiveStrategy()} disabled={status === 'saving'}>Archive</button> : null}
+                <button type="button" className="primary" onClick={() => void save()} disabled={status === 'saving' || Boolean(draft.archived_at)}>{status === 'saving' ? 'Saving…' : draft.archived_at ? 'Archived' : 'Save strategy'}</button>
               </div>
             </header>
 
+            {draft.archived_at ? <div className="trading-strategy-notice" role="status">Archived {new Date(draft.archived_at).toLocaleString()}. This strategy is read-only; its historical evidence remains selectable in the Paper Strategy Dashboard.</div> : null}
             {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
 
             <TradingStrategyExecutionCredentials />

@@ -17,7 +17,7 @@ export const TRADING_STRATEGY_DEFINITIONS: Record<'gap_pullback_v1', TradingStra
   gap_pullback_v1: {
     kind: 'gap_pullback_v1',
     label: 'Failed Sell-Off / Gap Pullback',
-    version: '1.1.0',
+    version: '2.0.0',
     thesis: 'Do not buy the first sell-off. Wait for seller failure, structural reclaim, quality confirmation, then paper execution.',
     phases: [
       {

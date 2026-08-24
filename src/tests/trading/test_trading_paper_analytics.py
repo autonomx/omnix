@@ -92,3 +92,11 @@ def test_lifecycle_funnel_counts_symbol_session_once_not_raw_events() -> None:
     assert funnel["EXECUTION ELIGIBLE"] == 1
     assert funnel["ORDER SUBMITTED"] == 1
     assert funnel["FILLED"] == 1
+
+
+def test_lifecycle_funnel_rejected_feature_payload_does_not_fake_structure() -> None:
+    event = _event(0, event_type="state", state="rejected", reason="GAP_BELOW_MINIMUM", payload={"features": {"quality_score": 1}, "transitions": ["discovered"]})
+    funnel = {stage.stage: stage.count for stage in lifecycle_funnel([event])}
+    assert funnel["DISCOVERED"] == 1
+    assert funnel["BASIC MARKET FILTER PASS"] == 0
+    assert funnel["STRUCTURE FORMED"] == 0

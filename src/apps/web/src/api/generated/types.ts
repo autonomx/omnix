@@ -6489,10 +6489,11 @@ export interface components {
             mae_mfe?: components["schemas"]["PaperMaeMfePoint"][];
             /**
              * Mode
-             * @default all
+             * @default shadow
              * @enum {string}
              */
             mode: "all" | "shadow" | "auto_paper";
+            mode_comparison?: components["schemas"]["PaperModeComparison"];
             qualification?: components["schemas"]["V2ProspectiveQualification"] | null;
             /** R Distribution */
             r_distribution?: components["schemas"]["PaperRDistributionBucket"][];
@@ -6814,6 +6815,13 @@ export interface components {
             session_date: string;
             /** Trade Id */
             trade_id: string;
+        };
+        /** PaperModeComparison */
+        PaperModeComparison: {
+            auto_paper?: components["schemas"]["PaperPerformanceSummary"];
+            /** Expectancy Delta R */
+            expectancy_delta_r?: string | null;
+            shadow?: components["schemas"]["PaperPerformanceSummary"];
         };
         /** PaperOrder */
         PaperOrder: {
@@ -8265,8 +8273,16 @@ export interface components {
             entry_order_id: string;
             /** Exit Order Id */
             exit_order_id?: string | null;
+            /** Initial Stop Price */
+            initial_stop_price?: string | null;
+            /** Initial Target Price */
+            initial_target_price?: string | null;
             /** Instrument Id */
             instrument_id: string;
+            /** Mae Price */
+            mae_price?: string | null;
+            /** Mfe Price */
+            mfe_price?: string | null;
             /** Protection Id */
             protection_id: string;
             /** Quantity */
@@ -9822,6 +9838,10 @@ export interface components {
             account_id: string;
             /** Active Universe Id */
             active_universe_id?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
+            /** Archived Reason */
+            archived_reason?: string | null;
             config?: components["schemas"]["GapPullbackConfig-Input"];
             /** Created At */
             created_at?: string | null;
@@ -9864,6 +9884,10 @@ export interface components {
             account_id: string;
             /** Active Universe Id */
             active_universe_id?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
+            /** Archived Reason */
+            archived_reason?: string | null;
             config?: components["schemas"]["GapPullbackConfig-Output"];
             /** Created At */
             created_at?: string | null;

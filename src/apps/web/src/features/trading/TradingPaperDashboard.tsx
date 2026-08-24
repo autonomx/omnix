@@ -50,24 +50,26 @@ function timeLabel(value: string): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function linePath(points: Point[], width: number, height: number, padding: number): { path: string; min: number; max: number } {
-  if (!points.length) return { path: '', min: 0, max: 0 };
+function linePath(
+  points: Point[],
+  width: number,
+  height: number,
+  padding: number,
+  domain?: { min: number; max: number },
+): string {
+  if (!points.length) return '';
   const values = points.map((point) => point.y);
-  let min = Math.min(...values);
-  let max = Math.max(...values);
-  if (min === max) {
-    min -= 1;
-    max += 1;
-  }
+  let min = domain?.min ?? Math.min(...values);
+  let max = domain?.max ?? Math.max(...values);
+  if (min === max) { min -= 1; max += 1; }
   const span = max - min;
   const innerWidth = width - padding * 2;
   const innerHeight = height - padding * 2;
-  const coords = points.map((point, index) => {
+  return points.map((point, index) => {
     const x = padding + (points.length <= 1 ? innerWidth / 2 : index / (points.length - 1) * innerWidth);
     const y = padding + (max - point.y) / span * innerHeight;
     return `${index === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-  });
-  return { path: coords.join(' '), min, max };
+  }).join(' ');
 }
 
 function MiniLineChart({
@@ -89,7 +91,7 @@ function MiniLineChart({
   if (min === max) { min -= 1; max += 1; }
   const span = max - min;
   const normalized = points.map((point) => ({ ...point, y: point.y }));
-  const result = linePath(normalized, width, height, padding);
+  const path = linePath(normalized, width, height, padding, { min, max });
   const yFor = (value: number) => padding + (max - value) / span * (height - padding * 2);
   return (
     <svg className="paper-dashboard-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Time series chart">
@@ -100,7 +102,7 @@ function MiniLineChart({
           <text className="reference-label" x={width - padding - 4} y={yFor(reference.value) - 4}>{reference.label}</text>
         </g>
       ))}
-      <path className="series" d={result.path} fill="none" />
+      <path className="series" d={path} fill="none" />
       <text className="axis-label" x={padding} y={14}>{max.toFixed(2)}</text>
       <text className="axis-label" x={padding} y={height - 6}>{min.toFixed(2)}</text>
     </svg>
@@ -220,7 +222,7 @@ export function TradingPaperDashboard() {
   const [accountId, setAccountId] = useState('');
   const [strategyId, setStrategyId] = useState('');
   const [epochId, setEpochId] = useState('');
-  const [mode, setMode] = useState<PaperAnalyticsMode>('all');
+  const [mode, setMode] = useState<PaperAnalyticsMode>('shadow');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [rollingWindow, setRollingWindow] = useState(20);
@@ -334,9 +336,9 @@ export function TradingPaperDashboard() {
 
       <div className="paper-dashboard-filters">
         <label><span>Account</span><select value={accountId} onChange={(event) => selectAccount(event.target.value)}>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.name}</option>)}</select></label>
-        <label><span>Strategy</span><select value={strategyId} onChange={(event) => setStrategyId(event.target.value)}><option value="">Account only</option>{accountStrategies.map((strategy) => <option key={strategy.strategy_id} value={strategy.strategy_id}>{strategy.strategy_id} · v{strategy.strategy_version}</option>)}</select></label>
+        <label><span>Strategy</span><select value={strategyId} onChange={(event) => setStrategyId(event.target.value)}><option value="">Account only</option>{accountStrategies.map((strategy) => <option key={strategy.strategy_id} value={strategy.strategy_id}>{strategy.archived_at ? 'Archived · ' : ''}{strategy.strategy_id} · v{strategy.strategy_version}</option>)}</select></label>
         <label><span>Simulation epoch</span><select value={epochId} onChange={(event) => setEpochId(event.target.value)}><option value="">All epochs</option>{epochs.map((epoch) => <option key={epoch.epoch_id} value={epoch.epoch_id}>{epoch.is_current ? 'Current · ' : ''}Epoch {epoch.ordinal} · {shortDate(epoch.started_at)}</option>)}</select></label>
-        <label><span>Mode</span><select value={mode} onChange={(event) => setMode(event.target.value as PaperAnalyticsMode)}><option value="all">SHADOW + AUTO PAPER</option><option value="shadow">Prospective SHADOW</option><option value="auto_paper">AUTO PAPER</option></select></label>
+        <label><span>Mode</span><select value={mode} onChange={(event) => setMode(event.target.value as PaperAnalyticsMode)}><option value="shadow">Prospective SHADOW</option><option value="auto_paper">AUTO PAPER</option></select></label>
         <label><span>From</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
         <label><span>To</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
         <label><span>Rolling window</span><select value={rollingWindow} onChange={(event) => setRollingWindow(Number(event.target.value))}><option value={20}>20 trades</option><option value={30}>30 trades</option><option value={50}>50 trades</option></select></label>
@@ -368,6 +370,7 @@ export function TradingPaperDashboard() {
               <article className="wide"><header><div><strong>{cumulativeR.length ? 'Cumulative R' : 'Account equity'}</strong><small>{cumulativeR.length ? 'Strategy-normalized performance' : 'Mark-to-market paper account history'}</small></div></header><MiniLineChart points={cumulativeR.length ? cumulativeR : equityPoints} references={cumulativeR.length ? [{ value: 0, label: '0R' }] : []} /></article>
               <article className="wide"><header><div><strong>Underwater drawdown</strong><small>{data.drawdown[0]?.unit === 'R' ? 'Peak-to-trough in R' : 'Peak-to-trough account equity %'}</small></div></header><MiniLineChart points={drawdownPoints} references={[{ value: 0, label: 'peak' }]} /></article>
               <article><header><div><strong>Daily R</strong><small>Click-free session consistency view</small></div></header><DailyBars rows={data.daily_r} /></article>
+              <article><header><div><strong>Regime comparison</strong><small>Never pool SHADOW replay and AUTO PAPER into one promotion statistic</small></div></header><div className="paper-execution-kpis"><Kpi label="SHADOW" value={signed(data.mode_comparison.shadow.expectancy_r, 3, 'R')} detail={`${data.mode_comparison.shadow.trade_count} trades`} /><Kpi label="AUTO PAPER" value={signed(data.mode_comparison.auto_paper.expectancy_r, 3, 'R')} detail={`${data.mode_comparison.auto_paper.trade_count} trades`} /><Kpi label="Implementation delta" value={data.mode_comparison.expectancy_delta_r == null ? '—' : signed(data.mode_comparison.expectancy_delta_r, 3, 'R')} detail="AUTO − SHADOW" /></div></article>
               <article><header><div><strong>Rolling expectancy</strong><small>{rollingWindow}-trade window · +0.20R V2 threshold</small></div></header><MiniLineChart points={rollingPoints} references={[{ value: 0, label: '0R' }, { value: 0.2, label: '+0.20R qualify' }]} /></article>
               <article><header><div><strong>R distribution</strong><small>Outcome shape matters more than win rate alone</small></div></header><Distribution rows={data.r_distribution} /></article>
               <article><header><div><strong>Rolling 90% lower bound</strong><small>Evidence reliability, not just point estimate</small></div></header><MiniLineChart points={lcbPoints} references={[{ value: 0, label: 'must stay > 0R' }]} /></article>

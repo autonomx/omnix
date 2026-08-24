@@ -82,6 +82,8 @@ export type TradingStrategyConfig = {
   config: GapPullbackConfig;
   risk: StrategyRiskProfile;
   enabled: boolean;
+  archived_at?: string | null;
+  archived_reason?: string | null;
   revision: number;
   created_at?: string | null;
   updated_at?: string | null;
@@ -151,6 +153,10 @@ export type StrategyProtection = {
   exit_order_id?: string | null;
   stop_price: string | number;
   target_price: string | number;
+  initial_stop_price?: string | number | null;
+  initial_target_price?: string | number | null;
+  mae_price?: string | number | null;
+  mfe_price?: string | number | null;
   quantity: string | number;
   status: 'pending_entry' | 'active' | 'exit_submitted' | 'closed' | 'cancelled';
   trigger_reason?: string | null;
