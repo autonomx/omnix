@@ -48,6 +48,25 @@ jobs:
           PYCODE
           python /tmp/apply_trading_roadmap_completion.py
 
+      - name: Correct explicit active ATM phrasing
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          from pathlib import Path
+
+          old = "entered into|enters? into|commenced|launched|currently available"
+          new = "entered into|enters? into|enters? (?:an? )?(?:at[- ]the[- ]market|ATM)|commenced|launched|currently available"
+          for name in (
+              'src/app/trading/catalyst_evidence.py',
+              'src/app/trading/research/facts/supply.py',
+          ):
+              path = Path(name)
+              text = path.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'active supply cue patch context missing: {name}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PYCODE
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
