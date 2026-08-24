@@ -1,4 +1,6 @@
+import type { PaperAccountSnapshot, PaperOrder, PaperOrderInput } from './paperTypes';
 import type { BacktestRunResult, FrozenDatasetSnapshot } from './replayTypes';
+import type { MarketBar } from './tradingTypes';
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -17,6 +19,20 @@ function arrayField<T>(payload: unknown, field: string): T[] {
   if (!payload || typeof payload !== 'object') return [];
   const value = (payload as Record<string, unknown>)[field];
   return Array.isArray(value) ? value as T[] : [];
+}
+
+function replayBar(bar: MarketBar) {
+  return {
+    instrument_id: bar.instrument_id,
+    binding_id: bar.binding_id ?? null,
+    start_time: bar.start_time,
+    end_time: bar.end_time,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
+  };
 }
 
 export const tradingReplayApi = {
@@ -70,5 +86,13 @@ export const tradingReplayApi = {
   }),
   backtest: (runId: string) => requestJson<BacktestRunResult>(
     `/api/trading/replay/backtests/${encodeURIComponent(runId)}`,
+  ),
+  advanceExecution: (snapshot: PaperAccountSnapshot, bar: MarketBar) => requestJson<PaperAccountSnapshot>(
+    '/api/trading/replay/execution/advance',
+    { method: 'POST', body: JSON.stringify({ snapshot, bar: replayBar(bar) }) },
+  ),
+  placeExecutionOrder: (snapshot: PaperAccountSnapshot, order: PaperOrderInput, bar: MarketBar) => requestJson<{ snapshot: PaperAccountSnapshot; order: PaperOrder }>(
+    '/api/trading/replay/execution/orders',
+    { method: 'POST', body: JSON.stringify({ snapshot, order, bar: replayBar(bar) }) },
   ),
 };
