@@ -426,7 +426,7 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   if (chartStageBox) {
     await chartStage.click({
       button: 'right',
-      position: { x: chartStageBox.width / 2, y: Math.max(12, chartStageBox.height * 0.2) },
+      position: { x: chartStageBox.width / 2, y: 12 },
       force: true,
     });
   }
