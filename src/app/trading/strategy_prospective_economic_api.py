@@ -17,13 +17,13 @@ from .strategy_prospective_economic import (
     ProspectiveEconomicStatus,
     evaluate_prospective_economic_status,
     holdout_verdict,
-    prospective_economic_profile_fingerprint,
 )
 from .strategy_repository import (
     StrategyEvent,
     TradingStrategyRepository,
     default_strategy_repository,
 )
+from .strategy_v2_qualification import v2_profile_fingerprint
 
 
 class ProspectiveEconomicEvaluationRequest(BaseModel):
@@ -294,6 +294,7 @@ def create_trading_strategy_prospective_economic_router() -> APIRouter:
                 payload={
                     "policy_version": PROSPECTIVE_ECONOMIC_VERSION,
                     "profile_fingerprint": current.profile_fingerprint,
+                    "v2_profile_fingerprint": v2_profile_fingerprint(strategy.config),
                     "pipeline_evidence_fingerprint": current.pipeline_evidence_fingerprint,
                     "approved": True,
                     "review_note": note,
