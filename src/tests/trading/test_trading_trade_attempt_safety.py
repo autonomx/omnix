@@ -98,7 +98,7 @@ def test_trade_attempt_identity_is_stable_per_signal_and_distinct_by_signal_time
     assert first_id != _trade_attempt_id("strategy-2", INSTRUMENT, first)
 
 
-def test_auto_paper_arms_protection_and_persists_risk_before_entry_submission() -> None:
+def test_auto_paper_arms_protection_persists_risk_and_deduplicates_attempt() -> None:
     source = Path("src/app/trading/strategy_monitor.py").read_text()
     entry_block = source.split(
         'order_key = _key(config.strategy_id, trade_attempt_id, "entry")', 1
@@ -111,9 +111,11 @@ def test_auto_paper_arms_protection_and_persists_risk_before_entry_submission() 
     assert arm < submit
     assert 'event_type="risk_decision"' in source
     assert '"trade_attempt_id": trade_attempt_id' in source
+    assert "submitted_attempts" in source
+    assert "trade_attempt_already_submitted" in source
 
 
-def test_trade_attempt_migration_versions_repeat_symbol_correlation() -> None:
+def test_trade_attempt_migration_versions_repeat_symbol_correlation_atomically() -> None:
     migration = Path(
         "src/app/persistence/migrations/0046_trading_trade_attempt_correlation.sql"
     ).read_text()
@@ -125,6 +127,10 @@ def test_trade_attempt_migration_versions_repeat_symbol_correlation() -> None:
         "payload ->> 'trade_attempt_id'",
         "event_type = 'entry_order_submitted'",
         "omnix_trading_correlate_paper_trade_record",
+        "IF event_row.trade_attempt_id IS NOT NULL THEN",
+        "NEW.setup_id := event_row.setup_id",
+        "NEW.trade_intent_id := event_row.trade_intent_id",
+        "NEW.risk_decision_id := event_row.risk_decision_id",
     ):
         assert token in migration
     assert "CREATE TABLE" not in migration
