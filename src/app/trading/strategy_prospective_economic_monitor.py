@@ -134,14 +134,15 @@ def _first_passage(
 def _mark_r(
     bars: list[MarketBar],
     *,
-    entry_time: datetime,
     minutes: int,
     entry: Decimal,
     risk: Decimal,
 ) -> Decimal | None:
-    cutoff = entry_time + timedelta(minutes=minutes)
-    eligible = [bar for bar in bars if bar.end_time <= cutoff]
-    if not eligible:
+    # `bars` contains only full finalized one-minute bars that begin at or after
+    # the signal timestamp. Taking the first N avoids both pre-entry range
+    # contamination and fractional-bar lookahead when a quote arrives mid-minute.
+    eligible = bars[:minutes]
+    if len(eligible) < minutes:
         return None
     return (eligible[-1].close - entry) / risk
 
@@ -375,18 +376,19 @@ class TradingStrategyProspectiveEconomicMonitor:
                     500,
                     binding_id,
                 )
-                bars = sorted(
+                full_bars = sorted(
                     [
                         bar for bar in response.bars
-                        if bar.is_final and entry_time < bar.end_time <= horizon_end
+                        if bar.is_final and bar.start_time >= entry_time
                     ],
                     key=lambda bar: bar.end_time,
                 )
+                bars = full_bars[:PROSPECTIVE_ECONOMIC_HORIZON_MINUTES]
             except Exception as exc:
                 self.last_error = f"{config.strategy_id}/{signal.instrument_id}/outcome: {type(exc).__name__}: {exc}"
                 continue
 
-            complete = bool(bars and bars[-1].end_time >= horizon_end)
+            complete = len(bars) >= PROSPECTIVE_ECONOMIC_HORIZON_MINUTES
             if not complete:
                 # Allow delayed IEX/bar propagation to catch up. After 30 minutes
                 # of grace, persist an explicit incomplete outcome so the missing
@@ -423,12 +425,13 @@ class TradingStrategyProspectiveEconomicMonitor:
                     self.outcome_capture_count += 1
                 continue
 
+            resolution_time = bars[-1].end_time
             passage_05, passage_05_at = _first_passage(bars, entry=entry, risk=risk, target_r=Decimal("0.5"))
             passage_075, passage_075_at = _first_passage(bars, entry=entry, risk=risk, target_r=Decimal("0.75"))
             passage_1, passage_1_at = _first_passage(bars, entry=entry, risk=risk, target_r=Decimal("1"))
-            r15 = _mark_r(bars, entry_time=entry_time, minutes=15, entry=entry, risk=risk)
-            r30 = _mark_r(bars, entry_time=entry_time, minutes=30, entry=entry, risk=risk)
-            r60 = _mark_r(bars, entry_time=entry_time, minutes=60, entry=entry, risk=risk)
+            r15 = _mark_r(bars, minutes=15, entry=entry, risk=risk)
+            r30 = _mark_r(bars, minutes=30, entry=entry, risk=risk)
+            r60 = _mark_r(bars, minutes=60, entry=entry, risk=risk)
             one_r_win = passage_1 == "target"
             if passage_1 == "target":
                 result_60 = Decimal("1")
@@ -445,6 +448,8 @@ class TradingStrategyProspectiveEconomicMonitor:
                 "session_date": entry_time.astimezone(_ET).date().isoformat(),
                 "entry_time": entry_time.isoformat(),
                 "horizon_end": horizon_end.isoformat(),
+                "resolution_time": resolution_time.isoformat(),
+                "horizon_definition": "60 full finalized 1m bars beginning at or after the signal timestamp",
                 "data_complete": True,
                 "matched_signal": True,
                 "bar_count": len(bars),
@@ -470,7 +475,7 @@ class TradingStrategyProspectiveEconomicMonitor:
                 event_type=_OUTCOME_EVENT_TYPE,
                 state="win" if one_r_win else "loss_or_timeout",
                 reason_code="PROSPECTIVE_ECONOMIC_1R_FIRST" if one_r_win else "PROSPECTIVE_ECONOMIC_1R_NOT_FIRST",
-                observed_at=horizon_end,
+                observed_at=resolution_time,
                 payload=payload,
                 identity=(signal.event_id,),
             )
