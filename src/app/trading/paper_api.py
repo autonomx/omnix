@@ -370,11 +370,10 @@ def create_trading_paper_router(
         status_code=201,
     )
     async def place_order(account_id: str, request: PaperOrderRequest):
-        """Submit an exit-only raw order without allowing unmanaged entry exposure.
+        """Accept an order without manufacturing a fill from caller price data.
 
-        New manual long entries must use /risk-orders so quantity, daily loss,
-        open risk, spread, execution eligibility, and protection are server-owned.
-        The raw route remains for reducing an existing long position only.
+        reference_price is reservation-only. A market order remains open until
+        the server-side monitor receives an execution-eligible market observation.
         """
         repository = repository_factory()
         try:
