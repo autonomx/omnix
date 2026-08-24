@@ -87,7 +87,12 @@ def test_journal_reads_existing_canonical_trade_and_lifecycle_events() -> None:
         }],
     )]
     connection = _Connection(rows)
-    context = TenantContext(workspace_id="workspace-1", user_id="user-1")
+    context = TenantContext(
+        workspace_id="workspace-1",
+        user_id="user-1",
+        membership_id="membership-1",
+        roles=frozenset({"owner"}),
+    )
     journal = TradingPaperJournal(context=context, uow_factory=lambda: _Uow(connection))
 
     response = journal.list_entries(
