@@ -26,6 +26,10 @@ from .strategy_repository import (
 from .strategy_v2_qualification import v2_profile_fingerprint
 
 
+_DIAGNOSTIC_EVENT_TYPES = ("prospective_economic_candidate",)
+_ALL_EVIDENCE_EVENT_TYPES = (*PROSPECTIVE_ECONOMIC_EVENT_TYPES, *_DIAGNOSTIC_EVENT_TYPES)
+
+
 class ProspectiveEconomicEvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     review_note: str = Field(min_length=10, max_length=2_000)
@@ -71,14 +75,14 @@ def _events(
     if hasattr(repository, "events_by_types_between"):
         return repository.events_by_types_between(
             strategy_id,
-            event_types=PROSPECTIVE_ECONOMIC_EVENT_TYPES,
+            event_types=_ALL_EVIDENCE_EVENT_TYPES,
             start_time=start,
             end_time=end,
             limit=limit,
         )
     return [
         event for event in repository.recent_events(strategy_id, limit)
-        if event.event_type in PROSPECTIVE_ECONOMIC_EVENT_TYPES
+        if event.event_type in _ALL_EVIDENCE_EVENT_TYPES
         and start <= event.observed_at.astimezone(timezone.utc) < end
     ]
 
