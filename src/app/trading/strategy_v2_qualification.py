@@ -24,12 +24,14 @@ V2_ONE_SIDED_90_Z = Decimal("1.2815515655446004")
 V2_LIVE_MATCH_WINDOW_MINUTES = 10
 V2_QUALIFICATION_VERSION = "v2-prospective-qualification-1"
 V2_REPLAY_VERSION = "v2-shadow-replay-1"
+PROSPECTIVE_ECONOMIC_POLICY_VERSION = "prospective-economic-shadow-v1"
 
 V2_QUALIFICATION_EVENT_TYPES = (
     "shadow_execution",
     "v2_shadow_replay_trade",
     "v2_shadow_replay_session",
     "v2_promotion_review",
+    "prospective_economic_auto_paper_review",
 )
 
 
@@ -66,6 +68,7 @@ class V2ProspectiveQualification(BaseModel):
     max_drawdown_r: Decimal | None = None
     thresholds: V2QualificationThresholds = Field(default_factory=V2QualificationThresholds)
     evidence_fingerprint: str
+    prospective_economic_reviewed: bool = False
     qualified: bool = False
     reviewed: bool = False
     auto_paper_authorized: bool = False
@@ -305,6 +308,15 @@ def evaluate_v2_prospective_qualification(
         max_drawdown_r=drawdown,
     )
 
+    prospective_economic_reviewed = any(
+        event.event_type == "prospective_economic_auto_paper_review"
+        and event.payload.get("policy_version") == PROSPECTIVE_ECONOMIC_POLICY_VERSION
+        and event.payload.get("v2_profile_fingerprint") == expected_profile
+        and event.payload.get("approved") is True
+        and event.payload.get("execution_authority") is False
+        for event in ordered
+    )
+
     reasons: list[str] = []
     profile_match = strategy.config.strategy_version == "2.0.0" and current_profile == expected_profile
     if not profile_match:
@@ -323,9 +335,11 @@ def evaluate_v2_prospective_qualification(
         reasons.append("V2_EXPECTANCY_LCB_NOT_POSITIVE")
     if drawdown is None or drawdown > V2_MAX_DRAWDOWN_R:
         reasons.append("V2_DRAWDOWN_TOO_HIGH")
+    if not prospective_economic_reviewed:
+        reasons.append("V2_PROSPECTIVE_ECONOMIC_PIPELINE_REVIEW_REQUIRED")
 
     qualified = not reasons
-    reviewed = any(
+    legacy_reviewed = any(
         event.event_type == "v2_promotion_review"
         and event.payload.get("qualification_version") == V2_QUALIFICATION_VERSION
         and event.payload.get("profile_fingerprint") == current_profile
@@ -333,6 +347,10 @@ def evaluate_v2_prospective_qualification(
         and event.payload.get("approved") is True
         for event in ordered
     )
+    # The prospective-economic final review is itself an explicit AUTO PAPER
+    # review. Legacy V2 review events remain accepted only for compatibility,
+    # but cannot bypass the new economic-pipeline reason above.
+    reviewed = prospective_economic_reviewed or legacy_reviewed
     if qualified and not reviewed:
         reasons.append("V2_OPERATOR_REVIEW_REQUIRED")
 
@@ -350,6 +368,7 @@ def evaluate_v2_prospective_qualification(
         one_sided_90_lcb_r=lcb,
         max_drawdown_r=drawdown,
         evidence_fingerprint=evidence_fingerprint,
+        prospective_economic_reviewed=prospective_economic_reviewed,
         qualified=qualified,
         reviewed=reviewed,
         auto_paper_authorized=qualified and reviewed,
