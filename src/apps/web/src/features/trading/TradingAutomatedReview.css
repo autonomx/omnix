@@ -143,3 +143,41 @@
   font-size: 11px;
   line-height: 1.4;
 }
+
+:root[data-omnix-appearance='light'] .trading-automated-review {
+  border-color: #d8e0ea;
+  border-left-color: #7d8ea5;
+  background: #fff;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review[data-priority='attention'] {
+  border-left-color: #b97916;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review[data-priority='high'] {
+  border-left-color: #c73f50;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review > header strong,
+:root[data-omnix-appearance='light'] .automated-review-boundary strong,
+:root[data-omnix-appearance='light'] .automated-review-findings strong,
+:root[data-omnix-appearance='light'] .automated-review-prompts > strong {
+  color: #253248;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review > header small,
+:root[data-omnix-appearance='light'] .automated-review-boundary span,
+:root[data-omnix-appearance='light'] .automated-review-findings p,
+:root[data-omnix-appearance='light'] .automated-review-prompts ul {
+  color: #697b91;
+}
+
+:root[data-omnix-appearance='light'] .automated-review-boundary {
+  border-color: #dfe5ec;
+  background: #f7f9fc;
+}
+
+:root[data-omnix-appearance='light'] .automated-review-findings > div {
+  border-color: #e3e8ef;
+  background: #fbfcfe;
+}
