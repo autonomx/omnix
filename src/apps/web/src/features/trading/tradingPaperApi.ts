@@ -6,6 +6,10 @@ import type {
   PaperOrderInput,
   PaperPositionProtection,
   PaperProtectionInput,
+  PaperRiskOrderInput,
+  PaperRiskOrderResult,
+  PaperRiskPreview,
+  PaperRiskPreviewInput,
 } from './paperTypes';
 
 const orderManagementHeaders = { 'X-Omnix-Paper-Order-Management': 'v2' };
@@ -39,6 +43,16 @@ export const tradingPaperApi = {
     }),
   snapshot: (accountId: string) =>
     requestJson<PaperAccountSnapshot>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}`),
+  riskPreview: (accountId: string, input: PaperRiskPreviewInput) =>
+    requestJson<PaperRiskPreview>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/risk-preview`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  placeRiskOrder: (accountId: string, input: PaperRiskOrderInput) =>
+    requestJson<PaperRiskOrderResult>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/risk-orders`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
   placeOrder: (accountId: string, input: PaperOrderInput) =>
     requestJson<PaperOrder>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders`, {
       method: 'POST',
