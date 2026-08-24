@@ -63,6 +63,7 @@ PROSPECTIVE_ECONOMIC_SOAK_MIN_EXPECTANCY_R = Decimal("0")
 PROSPECTIVE_ECONOMIC_SOAK_MAX_DRAWDOWN_R = Decimal("5")
 
 PROSPECTIVE_ECONOMIC_EVENT_TYPES = (
+    "prospective_economic_candidate",
     "prospective_economic_signal",
     "prospective_economic_outcome",
     "prospective_economic_evaluation",
@@ -191,6 +192,10 @@ def prospective_economic_profile_fingerprint(config: TradingStrategyConfigDocume
         "v2_profile_fingerprint": v2_profile_fingerprint(config.config),
         "economic_label": "+1R before -1R within 60 full finalized 1m bars beginning at/after signal; stop wins intrabar ties",
         "mark_to_market": "if neither boundary is hit, close of bar 60 R clipped to [-1,+1]",
+        "evidence_completion_semantics": (
+            "execution_match_rate = completed economic outcomes / all frozen signals; "
+            "execution-ineligible, incomplete and still-pending signals remain in the denominator"
+        ),
         "thresholds": ProspectiveEconomicThresholds().model_dump(mode="json"),
         "holdout_policy": {
             "minimum_trades": PROSPECTIVE_ECONOMIC_HOLDOUT_MIN_TRADES,
@@ -260,8 +265,12 @@ def _metrics(events: list[StrategyEvent], *, after: datetime | None = None) -> P
         matched_outcome_count=len(outcomes),
         distinct_sessions=len(sessions),
         distinct_symbols=len(symbols),
+        # This is intentionally end-to-end evidence completion, not merely quote
+        # eligibility. Missing/incomplete/pending outcomes therefore cannot be
+        # censored out of the denominator and make the prospective sample look
+        # cleaner than the actual frozen signal stream.
         execution_match_rate=(
-            Decimal(len(matched_signals)) / Decimal(len(signals)) if signals else None
+            Decimal(len(outcomes)) / Decimal(len(signals)) if signals else None
         ),
         win_count=len(wins),
         win_rate=Decimal(len(wins)) / Decimal(len(outcomes)) if outcomes else None,
