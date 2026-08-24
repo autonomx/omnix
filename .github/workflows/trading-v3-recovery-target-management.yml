@@ -1,0 +1,163 @@
+name: Trading V3 recovery target management
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/trading-v3-recovery-target-management.yml
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+    steps:
+      - name: Check out exact research head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install targeted trading dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Restore exact 103-session causal cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v2-causal-Linux-extended-32621017259-1
+          fail-on-cache-miss: true
+
+      - name: Recover frozen selector implementation
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import base64, gzip, hashlib, re
+          from pathlib import Path
+          expected = "5c98837cc96ad7c692d45b0bafff6a025f04f52599985cc6e85af734f6917607"
+          workflow = Path(".github/workflows/trading-v3-recovery-precision-search.yml").read_text(encoding="utf-8")
+          match = re.search(r'payload = "([A-Za-z0-9+/=]+)"', workflow)
+          if match is None:
+              raise SystemExit("embedded selector payload not found")
+          payload = match.group(1)
+          for index in range(-1, len(payload)):
+              candidate = payload if index < 0 else payload[:index] + payload[index + 1:]
+              try:
+                  source = gzip.decompress(base64.b64decode(candidate, validate=True))
+              except Exception:
+                  continue
+              if hashlib.sha256(source).hexdigest() == expected:
+                  Path("/tmp/recovery_selector.py").write_bytes(source)
+                  print(f"Recovered frozen selector source sha256={expected}")
+                  break
+          else:
+              raise SystemExit("exact selector source fingerprint not recoverable")
+          PYCODE
+          python -m py_compile /tmp/recovery_selector.py
+
+      - name: Run predeclared target-only management study
+        shell: bash
+        run: |
+          python - <<'PYCODE'
+          import importlib.util
+          import json
+          from datetime import date
+          from decimal import Decimal
+          from pathlib import Path
+
+          from app.trading.strategy_v2_qualification import frozen_v2_config
+          from scripts.run_trading_strategy_backtest import strict_v11_strategy
+          from scripts.run_trading_strategy_liquidity_sweep import _cache_namespace
+          from scripts.run_trading_strategy_v2_extended_exploration import _load_block, _run_variant
+
+          spec = importlib.util.spec_from_file_location("recovery_selector", "/tmp/recovery_selector.py")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          rule = module.Rule((
+              module.Predicate("rebound>=20", "recovery", "recovery_pct", ">=", 20),
+              module.Predicate("retrace>=80", "retracement", "retracement_pct", ">=", 80),
+              module.Predicate("selloff>=15", "selloff", "selloff_pct", ">=", 15),
+              module.Predicate("vol5x>=1.5", "volume_ratio", "volume_ratio5", ">=", 1.5),
+          ))
+          spread = Decimal("150")
+          initial_cash = Decimal("100000")
+          basis_strategy = strict_v11_strategy(minimum_premarket_dollar_volume=Decimal("100000"))
+          namespace, _ = _cache_namespace(basis_strategy, spread)
+          datasets, coverage = _load_block(Path(".cache/trading-liquidity-datasets") / namespace, date(2025,10,1), date(2026,2,27))
+          if int(coverage["covered_sessions"]) != int(coverage["requested_sessions"]):
+              raise SystemExit("complete Oct-Feb causal cache required")
+
+          rows = []
+          base = frozen_v2_config()
+          with module._research_evaluator(module._evaluator_for(rule)):
+              for target in ("1.0", "1.25", "1.5", "2.0"):
+                  config = base.model_copy(update={"reward_multiple": Decimal(target)})
+                  run = _run_variant(datasets, config, initial_cash=initial_cash, spread=spread)
+                  metrics = module._trade_metrics(run)
+                  win = float(metrics.get("win_rate") or 0)
+                  exp = float(metrics.get("expectancy_r") or -999)
+                  lcb = float(metrics.get("one_sided_90_lcb_r") or -999)
+                  dd = float(metrics.get("max_drawdown_r") or 999)
+                  count = int(metrics.get("trade_count") or 0)
+                  gate = count >= 20 and win >= 0.75 and exp >= 0.20 and lcb > 0 and dd <= 5
+                  rows.append({"target_r": target, "development_gate_pass": gate, **metrics, "trades": run.get("trades")})
+
+          passing = [row for row in rows if row["development_gate_pass"]]
+          passing.sort(key=lambda row: (float(row["expectancy_r"]), float(row["win_rate"]), -float(row["max_drawdown_r"])), reverse=True)
+          selected = passing[0] if passing else None
+          payload = {
+              "research_only": True,
+              "production_strategy_changed": False,
+              "execution_authority": False,
+              "provider_calls": 0,
+              "march_holdout_loaded": False,
+              "selector_rule": rule.key,
+              "selector_source_sha256": "5c98837cc96ad7c692d45b0bafff6a025f04f52599985cc6e85af734f6917607",
+              "development_block": ["2025-10-01", "2026-02-27"],
+              "management_axis": "reward_multiple_only",
+              "frozen_stop": "latest five finalized 1m lows minus 15 bps",
+              "frozen_profit_protection": "+0.75R arm -> +0.25R protected stop",
+              "frozen_max_hold_minutes": 60,
+              "tested_targets_r": ["1.0", "1.25", "1.5", "2.0"],
+              "development_gate": {"minimum_trades": 20, "minimum_win_rate": 0.75, "minimum_expectancy_r": 0.20, "one_sided_90_lcb_r": ">0", "maximum_drawdown_r": 5},
+              "variants": rows,
+              "selected_for_future_holdout": None if selected is None else {k:v for k,v in selected.items() if k != "trades"},
+              "holdout_rule": "March remains sealed unless a predeclared development variant passes every gate; no target rescue after holdout inspection.",
+          }
+          out = Path("artifacts/v3-recovery-target-management")
+          out.mkdir(parents=True, exist_ok=True)
+          (out / "results.json").write_text(json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8")
+          lines = ["# V3 frozen-selector target management", "", "Development only; March remains sealed.", "", f"Selector: `{rule.key}`", "", "| Target | Trades | Win rate | Exp R | 90% LCB R | Max DD R | Gate |", "|---:|---:|---:|---:|---:|---:|---|"]
+          for row in rows:
+              lines.append(f"| {row['target_r']}R | {row['trade_count']} | {row['win_rate']} | {row['expectancy_r']} | {row['one_sided_90_lcb_r']} | {row['max_drawdown_r']} | {'PASS' if row['development_gate_pass'] else 'FAIL'} |")
+          lines.extend(["", f"Selected for future holdout: **{selected['target_r'] + 'R' if selected else 'NONE'}**."])
+          (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("\n".join(lines))
+          PYCODE
+
+      - name: Publish summary
+        if: always()
+        run: cat artifacts/v3-recovery-target-management/summary.md >> "${GITHUB_STEP_SUMMARY}" || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-v3-recovery-target-management
+          path: artifacts/v3-recovery-target-management
+          if-no-files-found: warn
+          retention-days: 30
