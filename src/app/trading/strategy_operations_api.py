@@ -1,24 +1,42 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from .paper_monitor import TradingPaperMonitor, trading_paper_monitor_enabled
+from .paper_protection_repository import (
+    TradingPaperProtectionRepository,
+    default_paper_protection_repository,
+)
+from .paper_repository import TradingPaperRepository
+from .paper_runtime_repository import default_runtime_paper_repository
 from .providers.alpaca_iex_status import (
     AlpacaIexStatusMonitor,
     alpaca_iex_status_monitor_enabled,
 )
+from .service import TradingMarketDataService, default_market_data_service
 from .strategy_deep_recovery_monitor import (
     TradingStrategyDeepRecoveryShadowMonitor,
     strategy_deep_recovery_shadow_monitor_enabled,
 )
 from .strategy_monitor import TradingStrategyMonitor, trading_strategy_monitor_enabled
+from .strategy_operations_health import (
+    TradingOperationalHealth,
+    account_risk_health,
+    day_bounds_et,
+    execution_health,
+    operational_health,
+)
 from .strategy_prospective_economic_monitor import (
     TradingStrategyProspectiveEconomicMonitor,
     strategy_prospective_economic_monitor_enabled,
 )
+from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .strategy_universe_archive_monitor import (
     TradingStrategyUniverseArchiveMonitor,
     strategy_universe_archive_monitor_enabled,
@@ -45,6 +63,7 @@ class StrategyOperationsStatus(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     observed_at: datetime
+    paper_monitor: StrategyRuntimeMonitorStatus
     strategy_monitor: StrategyRuntimeMonitorStatus
     deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus
     prospective_economic_monitor: StrategyRuntimeMonitorStatus
@@ -54,12 +73,19 @@ class StrategyOperationsStatus(BaseModel):
     execution_authority: Literal[False] = False
 
 
+RepositoryFactory = Callable[[], TradingPaperRepository]
+ProtectionRepositoryFactory = Callable[[], TradingPaperProtectionRepository]
+StrategyRepositoryFactory = Callable[[], TradingStrategyRepository]
+MarketServiceFactory = Callable[[], TradingMarketDataService]
+
+
 def _monitor_status(
     monitor: object | None,
     *,
     expected_type: type,
     configured_enabled: bool,
     counter_names: tuple[str, ...],
+    interval_attribute: str = "interval_seconds",
 ) -> StrategyRuntimeMonitorStatus:
     registered = isinstance(monitor, expected_type)
     if not registered:
@@ -74,15 +100,44 @@ def _monitor_status(
         name: int(getattr(monitor, name, 0) or 0)
         for name in counter_names
     }
+    raw_interval = getattr(monitor, interval_attribute, None)
     return StrategyRuntimeMonitorStatus(
         configured_enabled=configured_enabled,
         registered=True,
         running=running,
-        interval_seconds=float(getattr(monitor, "interval_seconds", 0.0) or 0.0),
+        interval_seconds=float(raw_interval) if raw_interval is not None else None,
         last_run_at=getattr(monitor, "last_run_at", None),
         last_error=getattr(monitor, "last_error", None),
         counters=counters,
     )
+
+
+def _paper_status(monitor: object | None) -> StrategyRuntimeMonitorStatus:
+    status = _monitor_status(
+        monitor,
+        expected_type=TradingPaperMonitor,
+        configured_enabled=trading_paper_monitor_enabled(),
+        counter_names=(
+            "active_target_count",
+            "active_order_count",
+            "active_protection_count",
+            "quote_count",
+            "rejected_quote_count",
+            "fill_count",
+            "protection_trigger_count",
+        ),
+    )
+    if isinstance(monitor, TradingPaperMonitor):
+        return status.model_copy(
+            update={
+                "interval_seconds": (
+                    float(monitor.active_interval_seconds)
+                    if monitor.active_target_count
+                    else float(monitor.interval_seconds)
+                )
+            }
+        )
+    return status
 
 
 def _alpaca_status(monitor: object | None) -> StrategyRuntimeMonitorStatus:
@@ -111,7 +166,12 @@ def _alpaca_status(monitor: object | None) -> StrategyRuntimeMonitorStatus:
     )
 
 
-def create_trading_strategy_operations_router() -> APIRouter:
+def create_trading_strategy_operations_router(
+    repository_factory: RepositoryFactory = default_runtime_paper_repository,
+    protection_repository_factory: ProtectionRepositoryFactory = default_paper_protection_repository,
+    strategy_repository_factory: StrategyRepositoryFactory = default_strategy_repository,
+    market_service_factory: MarketServiceFactory = default_market_data_service,
+) -> APIRouter:
     router = APIRouter(prefix="/api/trading/strategy-operations", tags=["trading-strategy-operations"])
 
     @router.get("/status", response_model=StrategyOperationsStatus)
@@ -119,6 +179,9 @@ def create_trading_strategy_operations_router() -> APIRouter:
         state = request.app.state
         return StrategyOperationsStatus(
             observed_at=datetime.now(timezone.utc),
+            paper_monitor=_paper_status(
+                getattr(state, "_omnix_trading_paper_monitor", None),
+            ),
             strategy_monitor=_monitor_status(
                 getattr(state, "_omnix_trading_strategy_monitor", None),
                 expected_type=TradingStrategyMonitor,
@@ -163,6 +226,76 @@ def create_trading_strategy_operations_router() -> APIRouter:
                 getattr(state, "_omnix_alpaca_iex_status_monitor", None),
             ),
             execution_authority=False,
+        )
+
+    @router.get("/health", response_model=TradingOperationalHealth)
+    async def strategy_operational_health(
+        account_id: str = Query(min_length=1, max_length=200),
+        instrument_id: str | None = Query(default=None, min_length=3, max_length=200),
+        binding_id: str | None = Query(default=None, max_length=240),
+    ) -> TradingOperationalHealth:
+        observed_at = datetime.now(timezone.utc)
+        repository = repository_factory()
+        protection_repository = protection_repository_factory()
+        strategy_repository = strategy_repository_factory()
+        try:
+            snapshot, manual_protections, configs = await asyncio.gather(
+                asyncio.to_thread(repository.snapshot, account_id),
+                asyncio.to_thread(protection_repository.list, account_id, active_only=True),
+                asyncio.to_thread(strategy_repository.list_configs, active_only=True),
+            )
+        except ValueError as exc:
+            detail = str(exc)
+            status = 404 if "account_not_found" in detail else 422
+            raise HTTPException(status_code=status, detail=detail) from exc
+
+        account_configs = [config for config in configs if config.account_id == account_id]
+        strategy_protections = []
+        for config in account_configs:
+            strategy_protections.extend(
+                await asyncio.to_thread(
+                    strategy_repository.list_protections,
+                    config.strategy_id,
+                    active_only=True,
+                )
+            )
+        start_time, end_time = day_bounds_et(observed_at)
+        daily_realized = await asyncio.to_thread(
+            strategy_repository.daily_paper_pnl,
+            account_id,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        risk = account_risk_health(
+            snapshot=snapshot,
+            manual_protections=manual_protections,
+            strategy_protections=strategy_protections,
+            strategy_configs=account_configs,
+            daily_realized_pnl=daily_realized,
+        )
+
+        observation = None
+        execution_error = None
+        if instrument_id is not None:
+            try:
+                observation = await asyncio.to_thread(
+                    market_service_factory().execution_observation,
+                    instrument_id,
+                    binding_id,
+                )
+            except Exception as exc:
+                execution_error = f"{type(exc).__name__}: {exc}"
+        execution = execution_health(
+            observation,
+            instrument_id=instrument_id,
+            requested_binding_id=binding_id,
+            error=execution_error,
+            observed_at=observed_at,
+        )
+        return operational_health(
+            observed_at=observed_at,
+            risk=risk,
+            execution=execution,
         )
 
     return router
