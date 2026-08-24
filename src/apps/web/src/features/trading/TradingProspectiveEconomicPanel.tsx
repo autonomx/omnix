@@ -238,8 +238,8 @@ export function TradingProspectiveEconomicPanel() {
             <ProgressMetric label="Matched outcomes" value={metrics.matched_outcome_count} required={thresholds.minimum_matched_outcomes} />
             <ProgressMetric label="Distinct sessions" value={metrics.distinct_sessions} required={thresholds.minimum_distinct_sessions} />
             <ProgressMetric label="Distinct symbols" value={metrics.distinct_symbols} required={thresholds.minimum_distinct_symbols} />
-            <Metric label="Execution match" value={pct(metrics.execution_match_rate)} hint={`min ${pct(thresholds.minimum_execution_match_rate)}`} />
-            <p><small>Candidate transitions {candidateTransitions} loaded · signals {metrics.signal_count} · executable {metrics.matched_signal_count} · completed outcomes {metrics.matched_outcome_count}. Candidate diagnostics never enter the promotion metrics or evidence fingerprint. Missing/ineligible execution evidence remains explicit.</small></p>
+            <Metric label="Evidence completion" value={pct(metrics.execution_match_rate)} hint={`min ${pct(thresholds.minimum_execution_match_rate)}`} />
+            <p><small>Candidate transitions {candidateTransitions} loaded · signals {metrics.signal_count} · executable {metrics.matched_signal_count} · completed outcomes {metrics.matched_outcome_count}. Coverage is completed outcomes / all frozen signals, so ineligible, incomplete and pending outcomes stay in the denominator. Candidate diagnostics never enter promotion scoring.</small></p>
           </Step>
 
           <Step
@@ -289,6 +289,7 @@ export function TradingProspectiveEconomicPanel() {
             <ProgressMetric label="Post-holdout sessions" value={status.soak_metrics.distinct_sessions} required={thresholds.soak_minimum_distinct_sessions} />
             <ProgressMetric label="Post-holdout symbols" value={status.soak_metrics.distinct_symbols} required={thresholds.soak_minimum_distinct_symbols} />
             <div className="prospective-economic-inline-metrics">
+              <Metric label="Coverage" value={pct(status.soak_metrics.execution_match_rate)} />
               <Metric label="Win" value={pct(status.soak_metrics.win_rate)} />
               <Metric label="Exp" value={r(status.soak_metrics.expectancy_r)} />
               <Metric label="DD" value={r(status.soak_metrics.max_drawdown_r)} />
