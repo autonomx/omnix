@@ -11110,6 +11110,456 @@
         "title": "PromptTemplate",
         "type": "object"
       },
+      "ProspectiveEconomicAutoPaperReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "review_note": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Review Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_note"
+        ],
+        "title": "ProspectiveEconomicAutoPaperReviewRequest",
+        "type": "object"
+      },
+      "ProspectiveEconomicEvaluationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "review_note": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Review Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_note"
+        ],
+        "title": "ProspectiveEconomicEvaluationRequest",
+        "type": "object"
+      },
+      "ProspectiveEconomicEventListResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "ProspectiveEconomicEventListResponse",
+        "type": "object"
+      },
+      "ProspectiveEconomicHoldoutReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_ref": {
+            "maxLength": 500,
+            "minLength": 8,
+            "title": "Artifact Ref",
+            "type": "string"
+          },
+          "expectancy_r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Expectancy R"
+          },
+          "max_drawdown_r": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Max Drawdown R"
+          },
+          "one_sided_90_lcb_r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Sided 90 Lcb R"
+          },
+          "review_note": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Review Note",
+            "type": "string"
+          },
+          "trade_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Trade Count",
+            "type": "integer"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Win Rate"
+          }
+        },
+        "required": [
+          "trade_count",
+          "win_rate",
+          "expectancy_r",
+          "max_drawdown_r",
+          "artifact_ref",
+          "review_note"
+        ],
+        "title": "ProspectiveEconomicHoldoutReviewRequest",
+        "type": "object"
+      },
+      "ProspectiveEconomicMetrics": {
+        "properties": {
+          "distinct_sessions": {
+            "default": 0,
+            "title": "Distinct Sessions",
+            "type": "integer"
+          },
+          "distinct_symbols": {
+            "default": 0,
+            "title": "Distinct Symbols",
+            "type": "integer"
+          },
+          "execution_match_rate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Match Rate"
+          },
+          "expectancy_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectancy R"
+          },
+          "matched_outcome_count": {
+            "default": 0,
+            "title": "Matched Outcome Count",
+            "type": "integer"
+          },
+          "matched_signal_count": {
+            "default": 0,
+            "title": "Matched Signal Count",
+            "type": "integer"
+          },
+          "max_drawdown_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown R"
+          },
+          "one_sided_90_lcb_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Sided 90 Lcb R"
+          },
+          "signal_count": {
+            "default": 0,
+            "title": "Signal Count",
+            "type": "integer"
+          },
+          "win_count": {
+            "default": 0,
+            "title": "Win Count",
+            "type": "integer"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          }
+        },
+        "title": "ProspectiveEconomicMetrics",
+        "type": "object"
+      },
+      "ProspectiveEconomicStatus": {
+        "properties": {
+          "auto_paper_research_authorized": {
+            "default": false,
+            "title": "Auto Paper Research Authorized",
+            "type": "boolean"
+          },
+          "auto_paper_reviewed": {
+            "default": false,
+            "title": "Auto Paper Reviewed",
+            "type": "boolean"
+          },
+          "evaluation_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Event Id"
+          },
+          "evaluation_passed": {
+            "default": false,
+            "title": "Evaluation Passed",
+            "type": "boolean"
+          },
+          "evaluation_recorded": {
+            "default": false,
+            "title": "Evaluation Recorded",
+            "type": "boolean"
+          },
+          "evidence_fingerprint": {
+            "title": "Evidence Fingerprint",
+            "type": "string"
+          },
+          "holdout_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holdout Event Id"
+          },
+          "holdout_reviewed": {
+            "default": false,
+            "title": "Holdout Reviewed",
+            "type": "boolean"
+          },
+          "holdout_verdict": {
+            "default": "UNOPENED",
+            "enum": [
+              "UNOPENED",
+              "UNDERPOWERED",
+              "FAIL",
+              "ROBUST",
+              "GOLD"
+            ],
+            "title": "Holdout Verdict",
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/ProspectiveEconomicMetrics"
+          },
+          "pipeline_evidence_fingerprint": {
+            "title": "Pipeline Evidence Fingerprint",
+            "type": "string"
+          },
+          "policy_version": {
+            "default": "prospective-economic-shadow-v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "profile_fingerprint": {
+            "title": "Profile Fingerprint",
+            "type": "string"
+          },
+          "quantitative_pass": {
+            "default": false,
+            "title": "Quantitative Pass",
+            "type": "boolean"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "sample_ready": {
+            "default": false,
+            "title": "Sample Ready",
+            "type": "boolean"
+          },
+          "sealed_holdout_unlocked": {
+            "default": false,
+            "title": "Sealed Holdout Unlocked",
+            "type": "boolean"
+          },
+          "soak_metrics": {
+            "$ref": "#/components/schemas/ProspectiveEconomicMetrics"
+          },
+          "soak_passed": {
+            "default": false,
+            "title": "Soak Passed",
+            "type": "boolean"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/ProspectiveEconomicThresholds"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "profile_fingerprint",
+          "metrics",
+          "evidence_fingerprint",
+          "pipeline_evidence_fingerprint"
+        ],
+        "title": "ProspectiveEconomicStatus",
+        "type": "object"
+      },
+      "ProspectiveEconomicThresholds": {
+        "properties": {
+          "holdout_end": {
+            "default": "2026-04-28",
+            "format": "date",
+            "title": "Holdout End",
+            "type": "string"
+          },
+          "holdout_start": {
+            "default": "2026-03-31",
+            "format": "date",
+            "title": "Holdout Start",
+            "type": "string"
+          },
+          "horizon_minutes": {
+            "default": 60,
+            "title": "Horizon Minutes",
+            "type": "integer"
+          },
+          "maximum_drawdown_r": {
+            "default": "5",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Drawdown R",
+            "type": "string"
+          },
+          "minimum_distinct_sessions": {
+            "default": 20,
+            "title": "Minimum Distinct Sessions",
+            "type": "integer"
+          },
+          "minimum_distinct_symbols": {
+            "default": 15,
+            "title": "Minimum Distinct Symbols",
+            "type": "integer"
+          },
+          "minimum_execution_match_rate": {
+            "default": "0.90",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Execution Match Rate",
+            "type": "string"
+          },
+          "minimum_expectancy_r": {
+            "default": "0.20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Expectancy R",
+            "type": "string"
+          },
+          "minimum_matched_outcomes": {
+            "default": 30,
+            "title": "Minimum Matched Outcomes",
+            "type": "integer"
+          },
+          "minimum_win_rate": {
+            "default": "0.65",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Win Rate",
+            "type": "string"
+          },
+          "one_sided_confidence_level": {
+            "default": "0.90",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "One Sided Confidence Level",
+            "type": "string"
+          },
+          "prospective_start": {
+            "default": "2026-08-24",
+            "format": "date",
+            "title": "Prospective Start",
+            "type": "string"
+          },
+          "soak_minimum_distinct_sessions": {
+            "default": 8,
+            "title": "Soak Minimum Distinct Sessions",
+            "type": "integer"
+          },
+          "soak_minimum_distinct_symbols": {
+            "default": 8,
+            "title": "Soak Minimum Distinct Symbols",
+            "type": "integer"
+          },
+          "soak_minimum_matched_outcomes": {
+            "default": 10,
+            "title": "Soak Minimum Matched Outcomes",
+            "type": "integer"
+          }
+        },
+        "title": "ProspectiveEconomicThresholds",
+        "type": "object"
+      },
       "ProviderBinding": {
         "additionalProperties": false,
         "properties": {
@@ -13623,6 +14073,9 @@
             "title": "Observed At",
             "type": "string"
           },
+          "prospective_economic_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
           "strategy_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
@@ -13637,6 +14090,7 @@
           "observed_at",
           "strategy_monitor",
           "deep_recovery_shadow_monitor",
+          "prospective_economic_monitor",
           "universe_archive_monitor",
           "v2_qualification_monitor",
           "alpaca_status_monitor"
@@ -17912,6 +18366,11 @@
           },
           "profile_match": {
             "title": "Profile Match",
+            "type": "boolean"
+          },
+          "prospective_economic_reviewed": {
+            "default": false,
+            "title": "Prospective Economic Reviewed",
             "type": "boolean"
           },
           "prospective_start": {
@@ -25262,6 +25721,258 @@
         "summary": "Recent Events",
         "tags": [
           "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/prospective-economic": {
+      "get": {
+        "operationId": "status_api_trading_strategies__strategy_id__prospective_economic_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectiveEconomicStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "trading-strategy-prospective-economic"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/prospective-economic/auto-paper-review": {
+      "post": {
+        "operationId": "approve_auto_paper_research_gate_api_trading_strategies__strategy_id__prospective_economic_auto_paper_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProspectiveEconomicAutoPaperReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectiveEconomicStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Auto Paper Research Gate",
+        "tags": [
+          "trading-strategy-prospective-economic"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/prospective-economic/evaluate": {
+      "post": {
+        "operationId": "evaluate_once_api_trading_strategies__strategy_id__prospective_economic_evaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProspectiveEconomicEvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectiveEconomicStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Once",
+        "tags": [
+          "trading-strategy-prospective-economic"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/prospective-economic/events": {
+      "get": {
+        "operationId": "evidence_events_api_trading_strategies__strategy_id__prospective_economic_events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectiveEconomicEventListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evidence Events",
+        "tags": [
+          "trading-strategy-prospective-economic"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/prospective-economic/holdout-review": {
+      "post": {
+        "operationId": "review_sealed_holdout_api_trading_strategies__strategy_id__prospective_economic_holdout_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProspectiveEconomicHoldoutReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProspectiveEconomicStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Sealed Holdout",
+        "tags": [
+          "trading-strategy-prospective-economic"
         ]
       }
     },
