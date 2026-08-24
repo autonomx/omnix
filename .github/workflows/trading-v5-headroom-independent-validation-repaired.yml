@@ -25,10 +25,11 @@ jobs:
       OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
       OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
     steps:
-      - name: Check out exact validation head
+      - name: Check out exact validation head with history
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -51,26 +52,46 @@ jobs:
         shell: bash
         run: |
           python - <<'PYCODE'
-          import base64, gzip, hashlib, re
+          import base64
+          import gzip
+          import hashlib
+          import re
+          import subprocess
           from pathlib import Path
+
+          source_commit = "5529cb1bc223aa6f018630792aa5ce5e16c5071f"
           expected = "5c98837cc96ad7c692d45b0bafff6a025f04f52599985cc6e85af734f6917607"
-          text = Path(".github/workflows/trading-v3-recovery-precision-search.yml").read_text(encoding="utf-8")
-          match = re.search(r'payload = "([A-Za-z0-9+/=]+)"', text)
+          historical = subprocess.check_output(
+              [
+                  "git",
+                  "show",
+                  f"{source_commit}:.github/workflows/trading-v3-recovery-precision-search.yml",
+              ],
+              text=True,
+          )
+          match = re.search(r'payload = "([A-Za-z0-9+/=]+)"', historical)
           if match is None:
-              raise SystemExit("embedded selector payload not found")
+              raise SystemExit("historical embedded selector payload not found")
           payload = match.group(1)
-          for index in range(-1, len(payload)):
-              candidate = payload if index < 0 else payload[:index] + payload[index + 1:]
+
+          recovered = None
+          for removed_index in range(len(payload)):
+              candidate = payload[:removed_index] + payload[removed_index + 1:]
               try:
                   source = gzip.decompress(base64.b64decode(candidate, validate=True))
               except Exception:
                   continue
               if hashlib.sha256(source).hexdigest() == expected:
-                  Path("/tmp/recovery_selector.py").write_bytes(source)
-                  print(f"Recovered exact selector source sha256={expected}")
+                  recovered = (removed_index, source)
                   break
-          else:
+          if recovered is None:
               raise SystemExit("exact selector source fingerprint not recoverable")
+
+          removed_index, source = recovered
+          if removed_index != 3382:
+              raise SystemExit(f"unexpected corruption index: {removed_index}")
+          Path("/tmp/recovery_selector.py").write_bytes(source)
+          print(f"Recovered exact selector source sha256={expected}; removed_index={removed_index}")
           PYCODE
           python -m py_compile /tmp/recovery_selector.py scripts/run_trading_strategy_v5_recovery_headroom.py
 
