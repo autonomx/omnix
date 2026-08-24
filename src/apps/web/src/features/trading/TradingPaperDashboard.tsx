@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type { TradingStrategyConfig } from './tradingStrategyTypes';
+import { TradingCommandCenter } from './TradingCommandCenter';
 import {
   tradingPaperAnalyticsApi,
   type AnalyticsNumeric,
@@ -404,7 +405,7 @@ export function TradingPaperDashboard() {
   return (
     <section className="trading-paper-dashboard" aria-label="Paper trading analytics dashboard" data-status={status}>
       <header className="paper-dashboard-header">
-        <div><strong>Paper Trading Analytics</strong><small>Account performance, trade outcomes, strategy evidence and execution quality</small></div>
+        <div><strong>Trading Command Center</strong><small>Daily operations, account performance, strategy evidence and execution quality</small></div>
         <span>{status === 'loading' ? 'Refreshing…' : status === 'error' ? 'Unavailable' : 'Durable analytics'}</span>
       </header>
 
@@ -425,6 +426,8 @@ export function TradingPaperDashboard() {
       </div>
 
       {error ? <div className="paper-dashboard-error" role="status">{error}</div> : null}
+
+      {accountId ? <TradingCommandCenter accountId={accountId} strategyId={strategyId || null} currency={currency} /> : null}
 
       {data ? <>
         <div className="paper-overview-strip">
