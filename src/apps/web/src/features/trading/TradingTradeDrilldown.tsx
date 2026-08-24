@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { TradingAutomatedReview } from './TradingAutomatedReview';
 import {
   tradingPaperAnalyticsApi,
   type AnalyticsNumeric,
@@ -222,6 +223,10 @@ export function TradingTradeDrilldown({
                 </ul>
               ) : <p className="paper-trade-drilldown-empty">No deterministic observations were derivable from the persisted trade.</p>}
             </section>
+
+            <div className="paper-trade-drilldown-review">
+              <TradingAutomatedReview entry={entry} />
+            </div>
 
             <section className="paper-trade-drilldown-section">
               <header><strong>Canonical lifecycle</strong><span>trade-lifecycle-v1</span></header>
