@@ -105,8 +105,8 @@ describe('TradingPositionOverlay', () => {
     })));
   });
 
-  it('reverses a long position into a short position', async () => {
-    paperApi.snapshot.mockResolvedValueOnce({
+  it('capability-gates reverse while paper short positions are unsupported', async () => {
+    paperApi.snapshot.mockResolvedValue({
       positions: [{
         instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
         quantity: '5',
@@ -116,27 +116,14 @@ describe('TradingPositionOverlay', () => {
         unrealized_pnl: '0',
       }],
       open_orders: [],
-    }).mockResolvedValue({
-      positions: [{
-        instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
-        quantity: '-5',
-        average_cost: '75.17',
-        last_price: '75.17',
-        realized_pnl: '0',
-        unrealized_pnl: '0',
-      }],
-      open_orders: [],
     });
-    paperApi.placeOrder.mockResolvedValue({ status: 'filled' });
 
     render(<TradingPositionOverlay adapter={adapter} accountId="paper-1" instrumentId="crypto:BINANCE:spot:SOL-USDT" />);
-    await screen.findByRole('button', { name: 'Reverse paper position' });
-    fireEvent.click(screen.getByRole('button', { name: 'Reverse paper position' }));
-    expect(screen.getByRole('dialog')).toHaveTextContent('Reverse BINANCE:SOLUSDT position?');
-    fireEvent.click(screen.getByRole('button', { name: 'Reverse position' }));
-
-    await waitFor(() => expect(paperApi.placeOrder).toHaveBeenCalledTimes(2));
-    expect(paperApi.placeOrder).toHaveBeenNthCalledWith(1, 'paper-1', expect.objectContaining({ side: 'sell', quantity: '5' }));
-    expect(paperApi.placeOrder).toHaveBeenNthCalledWith(2, 'paper-1', expect.objectContaining({ side: 'sell', quantity: '5' }));
+    const reverse = await screen.findByRole('button', { name: 'Reverse paper position' });
+    expect(reverse).toBeDisabled();
+    expect(reverse).toHaveAttribute('title', 'Reverse requires short-position support');
+    fireEvent.click(reverse);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(paperApi.placeOrder).not.toHaveBeenCalled();
   });
 });
