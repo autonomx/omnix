@@ -55,6 +55,7 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
         "last_error": None,
         "counters": {
             "evaluation_count": 0,
+            "state_transition_count": 0,
             "signal_count": 0,
             "execution_observation_count": 0,
         },
