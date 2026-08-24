@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: trading-historical-alpaca-${{ github.repository }}
+  group: trading-v5-recovery-headroom-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
