@@ -143,6 +143,10 @@ def _decimal(value: object) -> Decimal | None:
         return None
 
 
+def _coalesce_decimal(value: Decimal | None, default: Decimal) -> Decimal:
+    return default if value is None else value
+
+
 def _sample_stdev(values: list[Decimal]) -> Decimal | None:
     if len(values) < 2:
         return None
@@ -291,11 +295,11 @@ def _sample_ready(metrics: ProspectiveEconomicMetrics) -> bool:
 def _quantitative_pass(metrics: ProspectiveEconomicMetrics) -> bool:
     return (
         _sample_ready(metrics)
-        and (metrics.execution_match_rate or Decimal("0")) >= PROSPECTIVE_ECONOMIC_MIN_EXECUTION_MATCH_RATE
-        and (metrics.win_rate or Decimal("0")) >= PROSPECTIVE_ECONOMIC_MIN_WIN_RATE
-        and (metrics.expectancy_r or Decimal("-999")) >= PROSPECTIVE_ECONOMIC_MIN_EXPECTANCY_R
-        and (metrics.one_sided_90_lcb_r or Decimal("-999")) > 0
-        and (metrics.max_drawdown_r or Decimal("999")) <= PROSPECTIVE_ECONOMIC_MAX_DRAWDOWN_R
+        and _coalesce_decimal(metrics.execution_match_rate, Decimal("0")) >= PROSPECTIVE_ECONOMIC_MIN_EXECUTION_MATCH_RATE
+        and _coalesce_decimal(metrics.win_rate, Decimal("0")) >= PROSPECTIVE_ECONOMIC_MIN_WIN_RATE
+        and _coalesce_decimal(metrics.expectancy_r, Decimal("-999")) >= PROSPECTIVE_ECONOMIC_MIN_EXPECTANCY_R
+        and _coalesce_decimal(metrics.one_sided_90_lcb_r, Decimal("-999")) > 0
+        and _coalesce_decimal(metrics.max_drawdown_r, Decimal("999")) <= PROSPECTIVE_ECONOMIC_MAX_DRAWDOWN_R
     )
 
 
@@ -350,10 +354,10 @@ def _soak_pass(metrics: ProspectiveEconomicMetrics) -> bool:
         metrics.matched_outcome_count >= PROSPECTIVE_ECONOMIC_SOAK_MIN_MATCHED_OUTCOMES
         and metrics.distinct_sessions >= PROSPECTIVE_ECONOMIC_SOAK_MIN_DISTINCT_SESSIONS
         and metrics.distinct_symbols >= PROSPECTIVE_ECONOMIC_SOAK_MIN_DISTINCT_SYMBOLS
-        and (metrics.execution_match_rate or Decimal("0")) >= PROSPECTIVE_ECONOMIC_SOAK_MIN_EXECUTION_MATCH_RATE
-        and (metrics.win_rate or Decimal("0")) >= PROSPECTIVE_ECONOMIC_SOAK_MIN_WIN_RATE
-        and (metrics.expectancy_r or Decimal("-999")) > PROSPECTIVE_ECONOMIC_SOAK_MIN_EXPECTANCY_R
-        and (metrics.max_drawdown_r or Decimal("999")) <= PROSPECTIVE_ECONOMIC_SOAK_MAX_DRAWDOWN_R
+        and _coalesce_decimal(metrics.execution_match_rate, Decimal("0")) >= PROSPECTIVE_ECONOMIC_SOAK_MIN_EXECUTION_MATCH_RATE
+        and _coalesce_decimal(metrics.win_rate, Decimal("0")) >= PROSPECTIVE_ECONOMIC_SOAK_MIN_WIN_RATE
+        and _coalesce_decimal(metrics.expectancy_r, Decimal("-999")) > PROSPECTIVE_ECONOMIC_SOAK_MIN_EXPECTANCY_R
+        and _coalesce_decimal(metrics.max_drawdown_r, Decimal("999")) <= PROSPECTIVE_ECONOMIC_SOAK_MAX_DRAWDOWN_R
     )
 
 
