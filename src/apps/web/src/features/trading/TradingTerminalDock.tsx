@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
+import { TradingPaperDashboard } from './TradingPaperDashboard';
 import type { TradingAlert } from './tradingTypes';
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
@@ -9,7 +10,7 @@ import './TradingTerminalDockMinimize.css';
 import './TradingTerminalDockLight.css';
 import './TradingTerminalDockData.css';
 
-type DockTab = 'positions' | 'orders' | 'history' | 'balance' | 'journal';
+type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal';
 type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected';
 type AccountModal = 'create' | 'settings' | null;
 type CommissionType = 'Percent' | 'Fixed';
@@ -27,6 +28,7 @@ type CreateAccountDraft = PaperAccountSettings & { name: string; balance: string
 type DockPosition = PaperAccountSnapshot['positions'][number] & { pending?: boolean; pendingSide?: 'buy' | 'sell'; pendingOrderId?: string };
 
 const tabs: Array<{ id: DockTab; label: string }> = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'positions', label: 'Positions' }, { id: 'orders', label: 'Orders' },
   { id: 'history', label: 'Order history' }, { id: 'balance', label: 'Balance history' },
   { id: 'journal', label: 'Trading journal' },
@@ -374,13 +376,14 @@ export function TradingTerminalDock({
         </header>
 
         {!minimized ? <>
-          <div className="trading-dock-summary" aria-label="Paper trading account summary">
+          {tab !== 'dashboard' ? <div className="trading-dock-summary" aria-label="Paper trading account summary">
             {[['Account balance', accountBalance, activeAccount?.base_currency], ['Equity', equity, activeAccount?.base_currency], ['Realized PnL', realizedPnl, activeAccount?.base_currency], ['Unrealized PnL', unrealizedPnl, activeAccount?.base_currency], ['Account margin', accountMargin, activeAccount?.base_currency], ['Available funds', Number(baseBalance?.available ?? 0), activeAccount?.base_currency], ['Orders margin', ordersMargin, activeAccount?.base_currency], ['Margin buffer', marginBuffer, '%']].map(([label, value, suffix]) => <div key={String(label)} className="trading-dock-summary-item"><span>{label}</span><strong className={label === 'Realized PnL' || label === 'Unrealized PnL' ? signedClass(value as number) : undefined}>{displayedSnapshot ? number(value as number) : '—'}{displayedSnapshot && suffix ? <small> {suffix}</small> : null}</strong></div>)}
-          </div>
+          </div> : null}
           <nav className="trading-dock-tabs" role="tablist" aria-label="Paper trading activity">{tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => { setTab(item.id); if (item.id === 'history' && !historyFilters.some((filter) => filter.id === orderFilter)) setOrderFilter('all'); }}>{item.id === 'positions' && displayedPositions.length > 0 ? `${item.label} ${displayedPositions.length}` : item.label}</button>)}</nav>
           {tab === 'orders' || tab === 'history' ? <nav className="trading-order-filters" role="tablist" aria-label="Order status filters">{(tab === 'orders' ? orderFilters : historyFilters).map((filter) => <button key={filter.id} type="button" role="tab" aria-selected={orderFilter === filter.id} onClick={() => setOrderFilter(filter.id)}>{filter.label}<small>{orderCounts[filter.id]}</small></button>)}</nav> : null}
-          <div className={`trading-dock-content${tab === 'history' ? ' trading-dock-content-history' : ''}`} role="tabpanel" tabIndex={0}>
-            {!displayedSnapshot ? <div className="trading-dock-empty"><strong>No paper account</strong><span>Select an account above or create one to begin simulation.</span><button type="button" onClick={() => { setCreateDraft(defaultCreateDraft()); setModal('create'); }}>Create account</button></div> : null}
+          <div className={`trading-dock-content${tab === 'history' ? ' trading-dock-content-history' : ''}${tab === 'dashboard' ? ' trading-dock-content-dashboard' : ''}`} role="tabpanel" tabIndex={0}>
+            {tab !== 'dashboard' && !displayedSnapshot ? <div className="trading-dock-empty"><strong>No paper account</strong><span>Select an account above or create one to begin simulation.</span><button type="button" onClick={() => { setCreateDraft(defaultCreateDraft()); setModal('create'); }}>Create account</button></div> : null}
+            {tab === 'dashboard' ? <TradingPaperDashboard /> : null}
             {displayedSnapshot && tab === 'positions' ? (
               <div className="trading-dock-table-scroll">
                 <table className="trading-positions-table"><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Avg fill price</th><th>Take profit</th><th>Stop loss</th><th>Last price</th><th>Unrealized PnL ↑</th><th>Unrealized PnL %</th><th aria-label="Actions" /></tr></thead><tbody>
