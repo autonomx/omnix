@@ -207,15 +207,15 @@ describe('VoiceWorkspace', () => {
       const createCall = fetchMock.mock.calls.find(
         ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
       );
-      expect(createCall?.[1]?.body).toContain('\"module\":\"voice\"');
-      expect(createCall?.[1]?.body).toContain('\"type\":\"tts.synthesize\"');
-      expect(createCall?.[1]?.body).toContain('\"resource_class\":\"gpu:tts\"');
-      expect(createCall?.[1]?.body).toContain('\"provider_id\":\"faster-qwen3-tts\"');
-      expect(createCall?.[1]?.body).toContain('\"language\":\"English\"');
-      expect(createCall?.[1]?.body).toContain('\"voice_id\":\"resources/voice_clones/jinx2.wav\"');
-      expect(createCall?.[1]?.body).toContain('\"speed\":1.25');
-      expect(createCall?.[1]?.body).toContain('\"audio_effects\":[\"Compression\"]');
-      expect(createCall?.[1]?.body).toContain('\"character_voice_assignments\"');
+      expect(createCall?.[1]?.body).toContain('"module":"voice"');
+      expect(createCall?.[1]?.body).toContain('"type":"tts.synthesize"');
+      expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
+      expect(createCall?.[1]?.body).toContain('"provider_id":"faster-qwen3-tts"');
+      expect(createCall?.[1]?.body).toContain('"language":"English"');
+      expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/jinx2.wav"');
+      expect(createCall?.[1]?.body).toContain('"speed":1.25');
+      expect(createCall?.[1]?.body).toContain('"audio_effects":["Compression"]');
+      expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete jinx2' }));
