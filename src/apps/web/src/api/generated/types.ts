@@ -1680,6 +1680,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/paper-analytics/epochs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Epochs */
+        get: operations["list_epochs_api_trading_paper_analytics_epochs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/paper-analytics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview */
+        get: operations["overview_api_trading_paper_analytics_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/paper/accounts": {
         parameters: {
             query?: never;
@@ -6425,6 +6459,121 @@ export interface components {
             /** Recent Ledger */
             recent_ledger: components["schemas"]["PaperLedgerEntry"][];
         };
+        /** PaperAnalyticsOverview */
+        PaperAnalyticsOverview: {
+            /** Account Id */
+            account_id: string;
+            /**
+             * Archived Strategy Count
+             * @default 0
+             */
+            archived_strategy_count: number;
+            /** Daily R */
+            daily_r?: components["schemas"]["PaperDailyR"][];
+            /** Drawdown */
+            drawdown?: components["schemas"]["PaperDrawdownPoint"][];
+            /** End Date */
+            end_date?: string | null;
+            /** Epoch Id */
+            epoch_id?: string | null;
+            /** Epochs */
+            epochs?: components["schemas"]["PaperSimulationEpoch"][];
+            /** Equity */
+            equity?: components["schemas"]["PaperEquityPoint"][];
+            execution?: components["schemas"]["PaperExecutionSummary"];
+            /** Factors */
+            factors?: components["schemas"]["PaperFactorStudy"][];
+            /** Funnel */
+            funnel?: components["schemas"]["PaperFunnelStage"][];
+            /** Mae Mfe */
+            mae_mfe?: components["schemas"]["PaperMaeMfePoint"][];
+            /**
+             * Mode
+             * @default all
+             * @enum {string}
+             */
+            mode: "all" | "shadow" | "auto_paper";
+            qualification?: components["schemas"]["V2ProspectiveQualification"] | null;
+            /** R Distribution */
+            r_distribution?: components["schemas"]["PaperRDistributionBucket"][];
+            /** Recent Trades */
+            recent_trades?: components["schemas"]["PaperAnalyticsTrade"][];
+            /** Rolling Expectancy */
+            rolling_expectancy?: components["schemas"]["PaperRollingExpectancyPoint"][];
+            /**
+             * Rolling Window
+             * @default 20
+             */
+            rolling_window: number;
+            /** Start Date */
+            start_date?: string | null;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            summary?: components["schemas"]["PaperPerformanceSummary"];
+        };
+        /** PaperAnalyticsTrade */
+        PaperAnalyticsTrade: {
+            /**
+             * Entry Time
+             * Format: date-time
+             */
+            entry_time: string;
+            /** Epoch Id */
+            epoch_id?: string | null;
+            /** Exit Reason */
+            exit_reason?: string | null;
+            /**
+             * Exit Time
+             * Format: date-time
+             */
+            exit_time: string;
+            /** Fill Slippage Bps */
+            fill_slippage_bps?: string | null;
+            /** Implementation Shortfall Bps */
+            implementation_shortfall_bps?: string | null;
+            /** Initial Stop */
+            initial_stop?: string | null;
+            /** Initial Target */
+            initial_target?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Mae R */
+            mae_r?: string | null;
+            /** Mfe R */
+            mfe_r?: string | null;
+            /** Profile Fingerprint */
+            profile_fingerprint?: string | null;
+            /** Quantity */
+            quantity?: string | null;
+            /** R Result */
+            r_result: string;
+            /** Realized Pnl */
+            realized_pnl?: string | null;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Setup Features */
+            setup_features?: {
+                [key: string]: unknown;
+            };
+            /** Signal To Executable Bps */
+            signal_to_executable_bps?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "auto_paper" | "shadow_replay";
+            /** Strategy Id */
+            strategy_id: string;
+            /** Strategy Version */
+            strategy_version?: string | null;
+            /** Trade Id */
+            trade_id: string;
+            /** Universe Id */
+            universe_id?: string | null;
+        };
         /** PaperBalance */
         PaperBalance: {
             /** Available */
@@ -6436,6 +6585,60 @@ export interface components {
              * @default 0
              */
             reserved: string;
+        };
+        /** PaperDailyR */
+        PaperDailyR: {
+            /** R Result */
+            r_result: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Trade Count */
+            trade_count: number;
+        };
+        /** PaperDrawdownPoint */
+        PaperDrawdownPoint: {
+            /** Drawdown */
+            drawdown: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "R" | "percent";
+        };
+        /** PaperEpochListResponse */
+        PaperEpochListResponse: {
+            /** Epochs */
+            epochs: components["schemas"]["PaperSimulationEpoch"][];
+        };
+        /** PaperEquityPoint */
+        PaperEquityPoint: {
+            /** Cash */
+            cash: string;
+            /** Epoch Id */
+            epoch_id: string;
+            /** Equity */
+            equity: string;
+            /** Gross Exposure */
+            gross_exposure: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Realized Pnl */
+            realized_pnl: string;
+            /** Risk At Stop */
+            risk_at_stop: string;
+            /** Unrealized Pnl */
+            unrealized_pnl: string;
         };
         /**
          * PaperExecutionPolicy
@@ -6484,6 +6687,38 @@ export interface components {
              */
             stop_slippage_bps: number | string;
         };
+        /** PaperExecutionSummary */
+        PaperExecutionSummary: {
+            /** Average Fill Slippage Bps */
+            average_fill_slippage_bps?: string | null;
+            /** Average Implementation Shortfall Bps */
+            average_implementation_shortfall_bps?: string | null;
+            /** Average Signal To Executable Bps */
+            average_signal_to_executable_bps?: string | null;
+            /**
+             * Trade Count
+             * @default 0
+             */
+            trade_count: number;
+        };
+        /** PaperFactorBucket */
+        PaperFactorBucket: {
+            /** Count */
+            count: number;
+            /** Expectancy R */
+            expectancy_r: string;
+            /** Label */
+            label: string;
+            /** Win Rate */
+            win_rate: string;
+        };
+        /** PaperFactorStudy */
+        PaperFactorStudy: {
+            /** Buckets */
+            buckets: components["schemas"]["PaperFactorBucket"][];
+            /** Factor */
+            factor: string;
+        };
         /** PaperFill */
         PaperFill: {
             /** Commission */
@@ -6516,6 +6751,22 @@ export interface components {
              */
             source_time: string;
         };
+        /** PaperFunnelStage */
+        PaperFunnelStage: {
+            /** Conversion From Previous */
+            conversion_from_previous?: string | null;
+            /** Count */
+            count: number;
+            /**
+             * Dominant Drop Count
+             * @default 0
+             */
+            dominant_drop_count: number;
+            /** Dominant Drop Reason */
+            dominant_drop_reason?: string | null;
+            /** Stage */
+            stage: string;
+        };
         /** PaperLedgerEntry */
         PaperLedgerEntry: {
             /** Amount */
@@ -6541,6 +6792,28 @@ export interface components {
             payload?: {
                 [key: string]: unknown;
             };
+        };
+        /** PaperMaeMfePoint */
+        PaperMaeMfePoint: {
+            /** Exit Reason */
+            exit_reason?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Mae R */
+            mae_r: string;
+            /** Mfe R */
+            mfe_r: string;
+            /** R Result */
+            r_result: string;
+            /** Risk Dollars */
+            risk_dollars?: string | null;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Trade Id */
+            trade_id: string;
         };
         /** PaperOrder */
         PaperOrder: {
@@ -6626,6 +6899,41 @@ export interface components {
             /** Stop Price */
             stop_price?: number | string | null;
         };
+        /** PaperPerformanceSummary */
+        PaperPerformanceSummary: {
+            /** Average Mae R */
+            average_mae_r?: string | null;
+            /** Average Mfe R */
+            average_mfe_r?: string | null;
+            /** Expectancy R */
+            expectancy_r?: string | null;
+            /**
+             * Losses
+             * @default 0
+             */
+            losses: number;
+            /** Max Drawdown R */
+            max_drawdown_r?: string | null;
+            /** Profit Factor */
+            profit_factor?: string | null;
+            /**
+             * Total R
+             * @default 0
+             */
+            total_r: string;
+            /**
+             * Trade Count
+             * @default 0
+             */
+            trade_count: number;
+            /** Win Rate */
+            win_rate?: string | null;
+            /**
+             * Wins
+             * @default 0
+             */
+            wins: number;
+        };
         /** PaperPosition */
         PaperPosition: {
             /** Average Cost */
@@ -6703,6 +7011,17 @@ export interface components {
             /** Take Profit */
             take_profit?: number | string | null;
         };
+        /** PaperRDistributionBucket */
+        PaperRDistributionBucket: {
+            /** Count */
+            count: number;
+            /** Label */
+            label: string;
+            /** Maximum R */
+            maximum_r?: string | null;
+            /** Minimum R */
+            minimum_r?: string | null;
+        };
         /** PaperResetRequest */
         PaperResetRequest: {
             /**
@@ -6710,6 +7029,42 @@ export interface components {
              * @default 100000
              */
             initial_cash: number | string;
+        };
+        /** PaperRollingExpectancyPoint */
+        PaperRollingExpectancyPoint: {
+            /** Expectancy R */
+            expectancy_r: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** One Sided 90 Lcb R */
+            one_sided_90_lcb_r?: string | null;
+            /** Sample Size */
+            sample_size: number;
+        };
+        /** PaperSimulationEpoch */
+        PaperSimulationEpoch: {
+            /** Account Id */
+            account_id: string;
+            /** End Reason */
+            end_reason?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Epoch Id */
+            epoch_id: string;
+            /** Initial Cash */
+            initial_cash: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Ordinal */
+            ordinal: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
         };
         /** PersistenceInventory */
         PersistenceInventory: {
@@ -13471,6 +13826,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BounceModelArtifact"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_epochs_api_trading_paper_analytics_epochs_get: {
+        parameters: {
+            query: {
+                account_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperEpochListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_trading_paper_analytics_overview_get: {
+        parameters: {
+            query: {
+                account_id: string;
+                strategy_id?: string | null;
+                epoch_id?: string | null;
+                mode?: "all" | "shadow" | "auto_paper";
+                start_date?: string | null;
+                end_date?: string | null;
+                rolling_window?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperAnalyticsOverview"];
                 };
             };
             /** @description Validation Error */

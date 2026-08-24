@@ -9164,6 +9164,395 @@
         "title": "PaperAccountSnapshot",
         "type": "object"
       },
+      "PaperAnalyticsOverview": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "archived_strategy_count": {
+            "default": 0,
+            "title": "Archived Strategy Count",
+            "type": "integer"
+          },
+          "daily_r": {
+            "items": {
+              "$ref": "#/components/schemas/PaperDailyR"
+            },
+            "title": "Daily R",
+            "type": "array"
+          },
+          "drawdown": {
+            "items": {
+              "$ref": "#/components/schemas/PaperDrawdownPoint"
+            },
+            "title": "Drawdown",
+            "type": "array"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "epoch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epoch Id"
+          },
+          "epochs": {
+            "items": {
+              "$ref": "#/components/schemas/PaperSimulationEpoch"
+            },
+            "title": "Epochs",
+            "type": "array"
+          },
+          "equity": {
+            "items": {
+              "$ref": "#/components/schemas/PaperEquityPoint"
+            },
+            "title": "Equity",
+            "type": "array"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/PaperExecutionSummary"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/PaperFactorStudy"
+            },
+            "title": "Factors",
+            "type": "array"
+          },
+          "funnel": {
+            "items": {
+              "$ref": "#/components/schemas/PaperFunnelStage"
+            },
+            "title": "Funnel",
+            "type": "array"
+          },
+          "mae_mfe": {
+            "items": {
+              "$ref": "#/components/schemas/PaperMaeMfePoint"
+            },
+            "title": "Mae Mfe",
+            "type": "array"
+          },
+          "mode": {
+            "default": "all",
+            "enum": [
+              "all",
+              "shadow",
+              "auto_paper"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "qualification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/V2ProspectiveQualification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "r_distribution": {
+            "items": {
+              "$ref": "#/components/schemas/PaperRDistributionBucket"
+            },
+            "title": "R Distribution",
+            "type": "array"
+          },
+          "recent_trades": {
+            "items": {
+              "$ref": "#/components/schemas/PaperAnalyticsTrade"
+            },
+            "title": "Recent Trades",
+            "type": "array"
+          },
+          "rolling_expectancy": {
+            "items": {
+              "$ref": "#/components/schemas/PaperRollingExpectancyPoint"
+            },
+            "title": "Rolling Expectancy",
+            "type": "array"
+          },
+          "rolling_window": {
+            "default": 20,
+            "title": "Rolling Window",
+            "type": "integer"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/PaperPerformanceSummary"
+          }
+        },
+        "required": [
+          "account_id"
+        ],
+        "title": "PaperAnalyticsOverview",
+        "type": "object"
+      },
+      "PaperAnalyticsTrade": {
+        "properties": {
+          "entry_time": {
+            "format": "date-time",
+            "title": "Entry Time",
+            "type": "string"
+          },
+          "epoch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epoch Id"
+          },
+          "exit_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Reason"
+          },
+          "exit_time": {
+            "format": "date-time",
+            "title": "Exit Time",
+            "type": "string"
+          },
+          "fill_slippage_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill Slippage Bps"
+          },
+          "implementation_shortfall_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Implementation Shortfall Bps"
+          },
+          "initial_stop": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Stop"
+          },
+          "initial_target": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Target"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "mae_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae R"
+          },
+          "mfe_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfe R"
+          },
+          "profile_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Fingerprint"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "r_result": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "R Result",
+            "type": "string"
+          },
+          "realized_pnl": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Realized Pnl"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "setup_features": {
+            "additionalProperties": true,
+            "title": "Setup Features",
+            "type": "object"
+          },
+          "signal_to_executable_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal To Executable Bps"
+          },
+          "source": {
+            "enum": [
+              "auto_paper",
+              "shadow_replay"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Version"
+          },
+          "trade_id": {
+            "title": "Trade Id",
+            "type": "string"
+          },
+          "universe_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Universe Id"
+          }
+        },
+        "required": [
+          "trade_id",
+          "source",
+          "strategy_id",
+          "instrument_id",
+          "session_date",
+          "entry_time",
+          "exit_time",
+          "r_result"
+        ],
+        "title": "PaperAnalyticsTrade",
+        "type": "object"
+      },
       "PaperBalance": {
         "additionalProperties": false,
         "properties": {
@@ -9188,6 +9577,131 @@
           "available"
         ],
         "title": "PaperBalance",
+        "type": "object"
+      },
+      "PaperDailyR": {
+        "properties": {
+          "r_result": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "R Result",
+            "type": "string"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "trade_count": {
+            "title": "Trade Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_date",
+          "r_result",
+          "trade_count"
+        ],
+        "title": "PaperDailyR",
+        "type": "object"
+      },
+      "PaperDrawdownPoint": {
+        "properties": {
+          "drawdown": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Drawdown",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "R",
+              "percent"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observed_at",
+          "drawdown",
+          "unit"
+        ],
+        "title": "PaperDrawdownPoint",
+        "type": "object"
+      },
+      "PaperEpochListResponse": {
+        "properties": {
+          "epochs": {
+            "items": {
+              "$ref": "#/components/schemas/PaperSimulationEpoch"
+            },
+            "title": "Epochs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "epochs"
+        ],
+        "title": "PaperEpochListResponse",
+        "type": "object"
+      },
+      "PaperEquityPoint": {
+        "properties": {
+          "cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Cash",
+            "type": "string"
+          },
+          "epoch_id": {
+            "title": "Epoch Id",
+            "type": "string"
+          },
+          "equity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Equity",
+            "type": "string"
+          },
+          "gross_exposure": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Gross Exposure",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "realized_pnl": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Realized Pnl",
+            "type": "string"
+          },
+          "risk_at_stop": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Risk At Stop",
+            "type": "string"
+          },
+          "unrealized_pnl": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unrealized Pnl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "epoch_id",
+          "observed_at",
+          "cash",
+          "equity",
+          "realized_pnl",
+          "unrealized_pnl",
+          "gross_exposure",
+          "risk_at_stop"
+        ],
+        "title": "PaperEquityPoint",
         "type": "object"
       },
       "PaperExecutionPolicy": {
@@ -9281,6 +9795,104 @@
         "title": "PaperExecutionPolicy",
         "type": "object"
       },
+      "PaperExecutionSummary": {
+        "properties": {
+          "average_fill_slippage_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Fill Slippage Bps"
+          },
+          "average_implementation_shortfall_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Implementation Shortfall Bps"
+          },
+          "average_signal_to_executable_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Signal To Executable Bps"
+          },
+          "trade_count": {
+            "default": 0,
+            "title": "Trade Count",
+            "type": "integer"
+          }
+        },
+        "title": "PaperExecutionSummary",
+        "type": "object"
+      },
+      "PaperFactorBucket": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "expectancy_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expectancy R",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "win_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Win Rate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "count",
+          "expectancy_r",
+          "win_rate"
+        ],
+        "title": "PaperFactorBucket",
+        "type": "object"
+      },
+      "PaperFactorStudy": {
+        "properties": {
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/PaperFactorBucket"
+            },
+            "title": "Buckets",
+            "type": "array"
+          },
+          "factor": {
+            "title": "Factor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "factor",
+          "buckets"
+        ],
+        "title": "PaperFactorStudy",
+        "type": "object"
+      },
       "PaperFill": {
         "additionalProperties": false,
         "properties": {
@@ -9347,6 +9959,52 @@
           "idempotency_key"
         ],
         "title": "PaperFill",
+        "type": "object"
+      },
+      "PaperFunnelStage": {
+        "properties": {
+          "conversion_from_previous": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversion From Previous"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "dominant_drop_count": {
+            "default": 0,
+            "title": "Dominant Drop Count",
+            "type": "integer"
+          },
+          "dominant_drop_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dominant Drop Reason"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "count"
+        ],
+        "title": "PaperFunnelStage",
         "type": "object"
       },
       "PaperLedgerEntry": {
@@ -9428,6 +10086,71 @@
           "idempotency_key"
         ],
         "title": "PaperLedgerEntry",
+        "type": "object"
+      },
+      "PaperMaeMfePoint": {
+        "properties": {
+          "exit_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Reason"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "mae_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mae R",
+            "type": "string"
+          },
+          "mfe_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mfe R",
+            "type": "string"
+          },
+          "r_result": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "R Result",
+            "type": "string"
+          },
+          "risk_dollars": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Dollars"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "trade_id": {
+            "title": "Trade Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trade_id",
+          "instrument_id",
+          "session_date",
+          "r_result",
+          "mae_r",
+          "mfe_r"
+        ],
+        "title": "PaperMaeMfePoint",
         "type": "object"
       },
       "PaperOrder": {
@@ -9724,6 +10447,105 @@
         "title": "PaperOrderRequest",
         "type": "object"
       },
+      "PaperPerformanceSummary": {
+        "properties": {
+          "average_mae_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Mae R"
+          },
+          "average_mfe_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Mfe R"
+          },
+          "expectancy_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectancy R"
+          },
+          "losses": {
+            "default": 0,
+            "title": "Losses",
+            "type": "integer"
+          },
+          "max_drawdown_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown R"
+          },
+          "profit_factor": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profit Factor"
+          },
+          "total_r": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total R",
+            "type": "string"
+          },
+          "trade_count": {
+            "default": 0,
+            "title": "Trade Count",
+            "type": "integer"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          },
+          "wins": {
+            "default": 0,
+            "title": "Wins",
+            "type": "integer"
+          }
+        },
+        "title": "PaperPerformanceSummary",
+        "type": "object"
+      },
       "PaperPosition": {
         "additionalProperties": false,
         "properties": {
@@ -9998,6 +10820,48 @@
         "title": "PaperProtectionUpsert",
         "type": "object"
       },
+      "PaperRDistributionBucket": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "maximum_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum R"
+          },
+          "minimum_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum R"
+          }
+        },
+        "required": [
+          "label",
+          "count"
+        ],
+        "title": "PaperRDistributionBucket",
+        "type": "object"
+      },
       "PaperResetRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10017,6 +10881,106 @@
           }
         },
         "title": "PaperResetRequest",
+        "type": "object"
+      },
+      "PaperRollingExpectancyPoint": {
+        "properties": {
+          "expectancy_r": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expectancy R",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "one_sided_90_lcb_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Sided 90 Lcb R"
+          },
+          "sample_size": {
+            "title": "Sample Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "observed_at",
+          "sample_size",
+          "expectancy_r"
+        ],
+        "title": "PaperRollingExpectancyPoint",
+        "type": "object"
+      },
+      "PaperSimulationEpoch": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "end_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Reason"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "epoch_id": {
+            "title": "Epoch Id",
+            "type": "string"
+          },
+          "initial_cash": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Initial Cash",
+            "type": "string"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "epoch_id",
+          "ordinal",
+          "initial_cash",
+          "started_at",
+          "is_current"
+        ],
+        "title": "PaperSimulationEpoch",
         "type": "object"
       },
       "PersistenceInventory": {
@@ -22134,6 +23098,185 @@
         "summary": "Get Bounce Model",
         "tags": [
           "trading-models"
+        ]
+      }
+    },
+    "/api/trading/paper-analytics/epochs": {
+      "get": {
+        "operationId": "list_epochs_api_trading_paper_analytics_epochs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperEpochListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Epochs",
+        "tags": [
+          "trading-paper-analytics"
+        ]
+      }
+    },
+    "/api/trading/paper-analytics/overview": {
+      "get": {
+        "operationId": "overview_api_trading_paper_analytics_overview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "strategy_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strategy Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "epoch_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Epoch Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "shadow",
+                "auto_paper"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rolling_window",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 5,
+              "title": "Rolling Window",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperAnalyticsOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Overview",
+        "tags": [
+          "trading-paper-analytics"
         ]
       }
     },
