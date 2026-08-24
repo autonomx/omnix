@@ -10,6 +10,7 @@ from app.trading.paper_api import create_trading_paper_router
 
 
 INSTRUMENT = "equity:NYSE:TEST"
+HEADERS = {"X-Omnix-Paper-Order-Management": "v2"}
 
 
 class Repo:
@@ -89,7 +90,10 @@ def _client(repo: Repo) -> TestClient:
 
 def test_cancel_order_is_server_authoritative() -> None:
     repo = Repo()
-    response = _client(repo).delete("/api/trading/paper/accounts/paper-1/orders/old")
+    response = _client(repo).delete(
+        "/api/trading/paper/accounts/paper-1/orders/old",
+        headers=HEADERS,
+    )
     assert response.status_code == 200
     assert response.json()["status"] == "cancelled"
     assert repo.orders["old"].status == "cancelled"
@@ -99,6 +103,7 @@ def test_replace_cancels_old_before_submitting_new_identity() -> None:
     repo = Repo()
     response = _client(repo).post(
         "/api/trading/paper/accounts/paper-1/orders/old/replace",
+        headers=HEADERS,
         json={
             "replacement": {
                 "order_id": "new",
@@ -126,6 +131,7 @@ def test_replace_failure_never_resurrects_cancelled_order() -> None:
     repo.fail_replacement = True
     response = _client(repo).post(
         "/api/trading/paper/accounts/paper-1/orders/old/replace",
+        headers=HEADERS,
         json={
             "replacement": {
                 "order_id": "new",
