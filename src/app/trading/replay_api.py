@@ -9,7 +9,16 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from .backtest import BacktestRequest, BacktestRunResult, run_backtest
+from .paper import PaperAccountSnapshot
 from .replay import FrozenDatasetSnapshot, freeze_bars_response
+from .replay_execution import (
+    ReplayAdvanceRequest,
+    ReplayOrderRequest,
+    ReplayOrderResult,
+    advance_replay_snapshot,
+    detached_replay_snapshot,
+    place_replay_order,
+)
 from .replay_repository import TradingReplayRepository
 from .replay_runtime_repository import default_runtime_replay_repository
 from .service import TradingMarketDataService, default_market_data_service
@@ -129,5 +138,39 @@ def create_trading_replay_router(
         if result is None:
             raise HTTPException(status_code=404, detail="backtest_not_found")
         return result
+
+    # Detached replay execution is an internal UI-to-server simulator bridge.
+    # Keep runtime validation while avoiding a second public SDK surface for
+    # mutable simulator snapshots.
+    @router.post(
+        "/execution/detach",
+        response_model=PaperAccountSnapshot,
+        include_in_schema=False,
+    )
+    async def detach_replay_account(request: ReplayAdvanceRequest):
+        """Detach a production snapshot into replay-only state without creating fills."""
+        return detached_replay_snapshot(request.snapshot)
+
+    @router.post(
+        "/execution/advance",
+        response_model=PaperAccountSnapshot,
+        include_in_schema=False,
+    )
+    async def advance_execution(request: ReplayAdvanceRequest):
+        """Advance detached replay state through paper-execution-v2.
+
+        The browser no longer owns fill semantics. Historical bars are normalized
+        into bookless execution observations and evaluated by the same paper
+        execution policy used by server paper trading/backtests.
+        """
+        return advance_replay_snapshot(request.snapshot, request.bar)
+
+    @router.post(
+        "/execution/orders",
+        response_model=ReplayOrderResult,
+        include_in_schema=False,
+    )
+    async def place_execution_order(request: ReplayOrderRequest):
+        return place_replay_order(request.snapshot, request.order, request.bar)
 
     return router

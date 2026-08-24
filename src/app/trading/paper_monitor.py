@@ -37,11 +37,21 @@ def trading_paper_monitor_enabled() -> bool:
 
 
 def _interval_seconds() -> float:
+    """Idle account scan cadence; active execution uses a separate fast cadence."""
     try:
         value = float(os.environ.get("OMNIX_TRADING_PAPER_INTERVAL_SECONDS", "15"))
     except ValueError:
         value = 15.0
     return max(5.0, value)
+
+
+def _active_interval_seconds() -> float:
+    """Fallback polling cadence while any order/protection needs execution evidence."""
+    try:
+        value = float(os.environ.get("OMNIX_TRADING_PAPER_ACTIVE_INTERVAL_SECONDS", "1"))
+    except ValueError:
+        value = 1.0
+    return max(0.25, min(5.0, value))
 
 
 def _protection_key(protection: PaperPositionProtection, trigger: str) -> str:
@@ -64,8 +74,6 @@ def _paper_observation(execution: ExecutionObservation) -> PaperMarketObservatio
         ask_size=execution.ask_size,
         high=execution.high,
         low=execution.low,
-        # Only interval volume is a valid historical-volume fallback. Cumulative
-        # daily volume must never be interpreted as executable liquidity.
         volume=execution.bar_volume,
         bar_start_time=execution.bar_start_time,
         source_time=execution.source_time,
@@ -80,10 +88,10 @@ def _paper_observation(execution: ExecutionObservation) -> PaperMarketObservatio
 class TradingPaperMonitor:
     """Server-authoritative paper execution and OCO protection monitor.
 
-    Market-data errors and ineligible/stale observations fail closed. The
-    monitor never falls back to an order's caller supplied reference price.
-    Stop-loss/take-profit state is persisted in PostgreSQL and whichever side
-    triggers first submits one paper-only close order, disabling the other side.
+    Idle accounts are scanned conservatively, but once an order or protection is
+    active the execution dispatcher switches to a tight polling fallback. This
+    intentionally does *not* accelerate strategy signal evaluation: only already
+    authorized paper orders/protections consume the fast cadence.
     """
 
     def __init__(
@@ -93,22 +101,37 @@ class TradingPaperMonitor:
         protection_repository_factory: Callable[[], TradingPaperProtectionRepository] = default_paper_protection_repository,
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         interval_seconds: float | None = None,
+        active_interval_seconds: float | None = None,
     ) -> None:
         self.repository_factory = repository_factory
         self.protection_repository_factory = protection_repository_factory
         self.market_service_factory = market_service_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
+        self.active_interval_seconds = active_interval_seconds or _active_interval_seconds()
         self._task: asyncio.Task[None] | None = None
+        self._wake_event: asyncio.Event | None = None
         self.last_error: str | None = None
         self.last_run_at: datetime | None = None
+        self.last_execution_observation_at: datetime | None = None
+        self.last_observation_age_ms: float | None = None
+        self.max_observation_age_ms = 0.0
         self.quote_count = 0
         self.rejected_quote_count = 0
         self.fill_count = 0
         self.protection_trigger_count = 0
+        self.active_target_count = 0
+        self.active_order_count = 0
+        self.active_protection_count = 0
 
     def start(self) -> None:
         if self._task is None:
+            self._wake_event = asyncio.Event()
             self._task = asyncio.create_task(self._run_loop())
+
+    def wake(self) -> None:
+        """Wake the dispatcher early when server-side activity changes."""
+        if self._wake_event is not None:
+            self._wake_event.set()
 
     async def stop(self) -> None:
         task = self._task
@@ -117,6 +140,7 @@ class TradingPaperMonitor:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+        self._wake_event = None
 
     async def _reconcile_protection(
         self,
@@ -273,16 +297,20 @@ class TradingPaperMonitor:
             expected_revision=protection.revision,
         )
         self.protection_trigger_count += 1
+        self.wake()
 
     async def run_once(self) -> int:
         repository = self.repository_factory()
         protections = self.protection_repository_factory()
         accounts = await asyncio.to_thread(repository.list_accounts, 100)
         targets: dict[tuple[str, str | None], set[str]] = defaultdict(set)
+        active_orders = 0
+        active_protections = 0
         for account in accounts:
             if not account.enabled:
                 continue
             snapshot = await asyncio.to_thread(repository.snapshot, account.account_id)
+            active_orders += len(snapshot.open_orders)
             for order in snapshot.open_orders:
                 targets[(order.instrument_id, order.binding_id)].add(account.account_id)
             try:
@@ -293,8 +321,13 @@ class TradingPaperMonitor:
                 )
             except ValueError:
                 account_protections = []
+            active_protections += len(account_protections)
             for protection in account_protections:
                 targets[(protection.instrument_id, protection.binding_id)].add(account.account_id)
+
+        self.active_order_count = active_orders
+        self.active_protection_count = active_protections
+        self.active_target_count = len(targets)
 
         service = self.market_service_factory()
         filled = 0
@@ -308,6 +341,14 @@ class TradingPaperMonitor:
                     requested_binding,
                 )
                 self.quote_count += 1
+                now = datetime.now(timezone.utc)
+                age_ms = max(
+                    0.0,
+                    (now - execution.source_time.astimezone(timezone.utc)).total_seconds() * 1000.0,
+                )
+                self.last_execution_observation_at = execution.source_time.astimezone(timezone.utc)
+                self.last_observation_age_ms = age_ms
+                self.max_observation_age_ms = max(self.max_observation_age_ms, age_ms)
                 if not execution.execution_eligible:
                     self.rejected_quote_count += 1
                     self.last_error = (
@@ -331,7 +372,6 @@ class TradingPaperMonitor:
                     )
             except Exception as exc:
                 self.last_error = f"{type(exc).__name__}: {exc}"
-                # Fail closed. No reference-price or synthetic observation path.
                 continue
         self.fill_count += filled
         self.last_run_at = datetime.now(timezone.utc)
@@ -341,9 +381,23 @@ class TradingPaperMonitor:
         return {
             "enabled": trading_paper_monitor_enabled(),
             "running": self._task is not None,
-            "interval_seconds": self.interval_seconds,
+            "idle_interval_seconds": self.interval_seconds,
+            "active_interval_seconds": self.active_interval_seconds,
+            "current_interval_seconds": (
+                self.active_interval_seconds if self.active_target_count else self.interval_seconds
+            ),
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
+            "last_execution_observation_at": (
+                self.last_execution_observation_at.isoformat()
+                if self.last_execution_observation_at
+                else None
+            ),
+            "last_observation_age_ms": self.last_observation_age_ms,
+            "max_observation_age_ms": self.max_observation_age_ms,
+            "active_target_count": self.active_target_count,
+            "active_order_count": self.active_order_count,
+            "active_protection_count": self.active_protection_count,
             "quote_count": self.quote_count,
             "rejected_quote_count": self.rejected_quote_count,
             "fill_count": self.fill_count,
@@ -351,7 +405,20 @@ class TradingPaperMonitor:
             "fail_closed": True,
             "reference_price_fallback": False,
             "server_authoritative_protection": True,
+            "adaptive_execution_cadence": True,
         }
+
+    async def _sleep_until_next_cycle(self) -> None:
+        delay = self.active_interval_seconds if self.active_target_count else self.interval_seconds
+        event = self._wake_event
+        if event is None:
+            await asyncio.sleep(delay)
+            return
+        event.clear()
+        try:
+            await asyncio.wait_for(event.wait(), timeout=delay)
+        except TimeoutError:
+            pass
 
     async def _run_loop(self) -> None:
         while True:
@@ -359,7 +426,7 @@ class TradingPaperMonitor:
                 await self.run_once()
             except Exception as exc:
                 self.last_error = f"{type(exc).__name__}: {exc}"
-            await asyncio.sleep(self.interval_seconds)
+            await self._sleep_until_next_cycle()
 
 
 def register_trading_paper_monitor(gateway: FastAPI) -> TradingPaperMonitor:

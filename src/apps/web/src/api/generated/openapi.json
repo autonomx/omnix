@@ -1,6 +1,122 @@
 {
   "components": {
     "schemas": {
+      "AccountRiskHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "active_protection_count": {
+            "title": "Active Protection Count",
+            "type": "integer"
+          },
+          "buying_power": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Buying Power",
+            "type": "string"
+          },
+          "daily_loss_limit_dollars": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Daily Loss Limit Dollars",
+            "type": "string"
+          },
+          "daily_loss_remaining": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Daily Loss Remaining",
+            "type": "string"
+          },
+          "daily_realized_pnl": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Daily Realized Pnl",
+            "type": "string"
+          },
+          "equity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Equity",
+            "type": "string"
+          },
+          "max_daily_loss_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max Daily Loss Pct",
+            "type": "string"
+          },
+          "max_open_risk_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Max Open Risk Pct",
+            "type": "string"
+          },
+          "open_order_count": {
+            "title": "Open Order Count",
+            "type": "integer"
+          },
+          "open_risk_dollars": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open Risk Dollars",
+            "type": "string"
+          },
+          "open_risk_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open Risk Pct",
+            "type": "string"
+          },
+          "policy_source": {
+            "enum": [
+              "active_strategy",
+              "paper_default"
+            ],
+            "title": "Policy Source",
+            "type": "string"
+          },
+          "position_count": {
+            "title": "Position Count",
+            "type": "integer"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "healthy",
+              "degraded",
+              "blocked",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "unprotected_exposure_count": {
+            "title": "Unprotected Exposure Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "account_id",
+          "policy_source",
+          "equity",
+          "buying_power",
+          "open_risk_dollars",
+          "open_risk_pct",
+          "max_open_risk_pct",
+          "daily_realized_pnl",
+          "daily_loss_limit_dollars",
+          "daily_loss_remaining",
+          "max_daily_loss_pct",
+          "unprotected_exposure_count",
+          "position_count",
+          "open_order_count",
+          "active_protection_count"
+        ],
+        "title": "AccountRiskHealth",
+        "type": "object"
+      },
       "AdjustmentMode": {
         "enum": [
           "raw",
@@ -4507,6 +4623,163 @@
           "workers"
         ],
         "title": "DiagnosticsPayload",
+        "type": "object"
+      },
+      "ExecutionHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "execution_eligible": {
+            "default": false,
+            "title": "Execution Eligible",
+            "type": "boolean"
+          },
+          "freshness_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Mode"
+          },
+          "halted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Halted"
+          },
+          "instrument_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument Id"
+          },
+          "observation_age_ms": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Age Ms"
+          },
+          "policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Version"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "requested_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Binding Id"
+          },
+          "resolved_binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Binding Id"
+          },
+          "session": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session"
+          },
+          "source_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Time"
+          },
+          "spread_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spread Bps"
+          },
+          "state": {
+            "enum": [
+              "healthy",
+              "degraded",
+              "blocked",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ExecutionHealth",
         "type": "object"
       },
       "ExecutionObservation": {
@@ -11010,6 +11283,512 @@
         "title": "PaperSimulationEpoch",
         "type": "object"
       },
+      "PaperTradeJournalEntry": {
+        "description": "Read-only journal projection of the canonical AUTO PAPER trade record.",
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "automatic_observations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Automatic Observations",
+            "type": "array"
+          },
+          "average_entry_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Entry Price",
+            "type": "string"
+          },
+          "average_exit_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Average Exit Price",
+            "type": "string"
+          },
+          "entry_fill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Entry Fill Ids",
+            "type": "array"
+          },
+          "entry_order_id": {
+            "title": "Entry Order Id",
+            "type": "string"
+          },
+          "entry_signal_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Signal Event Id"
+          },
+          "entry_time": {
+            "format": "date-time",
+            "title": "Entry Time",
+            "type": "string"
+          },
+          "epoch_id": {
+            "title": "Epoch Id",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PaperTradeJournalEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "execution_features": {
+            "additionalProperties": true,
+            "title": "Execution Features",
+            "type": "object"
+          },
+          "exit_fill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exit Fill Ids",
+            "type": "array"
+          },
+          "exit_order_id": {
+            "title": "Exit Order Id",
+            "type": "string"
+          },
+          "exit_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Reason"
+          },
+          "exit_time": {
+            "format": "date-time",
+            "title": "Exit Time",
+            "type": "string"
+          },
+          "fill_slippage_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill Slippage Bps"
+          },
+          "holding_seconds": {
+            "title": "Holding Seconds",
+            "type": "integer"
+          },
+          "implementation_shortfall_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Implementation Shortfall Bps"
+          },
+          "initial_risk_dollars": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Risk Dollars"
+          },
+          "initial_stop": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Stop"
+          },
+          "initial_target": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Target"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "mae_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae R"
+          },
+          "mfe_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfe R"
+          },
+          "outcome": {
+            "enum": [
+              "win",
+              "loss",
+              "flat"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "profile_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Fingerprint"
+          },
+          "protection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection Id"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "r_result": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R Result"
+          },
+          "realized_pnl": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Realized Pnl",
+            "type": "string"
+          },
+          "review_state": {
+            "title": "Review State",
+            "type": "string"
+          },
+          "risk_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Decision Id"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "setup_features": {
+            "additionalProperties": true,
+            "title": "Setup Features",
+            "type": "object"
+          },
+          "setup_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Id"
+          },
+          "signal_to_executable_bps": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal To Executable Bps"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Revision"
+          },
+          "strategy_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Run Id"
+          },
+          "strategy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Version"
+          },
+          "trade_id": {
+            "title": "Trade Id",
+            "type": "string"
+          },
+          "trade_intent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Intent Id"
+          },
+          "universe_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Universe Id"
+          }
+        },
+        "required": [
+          "trade_id",
+          "account_id",
+          "epoch_id",
+          "strategy_id",
+          "instrument_id",
+          "session_date",
+          "entry_time",
+          "exit_time",
+          "holding_seconds",
+          "entry_order_id",
+          "exit_order_id",
+          "lifecycle_state",
+          "review_state",
+          "average_entry_price",
+          "average_exit_price",
+          "quantity",
+          "realized_pnl",
+          "outcome"
+        ],
+        "title": "PaperTradeJournalEntry",
+        "type": "object"
+      },
+      "PaperTradeJournalEvent": {
+        "properties": {
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_type",
+          "state",
+          "observed_at"
+        ],
+        "title": "PaperTradeJournalEvent",
+        "type": "object"
+      },
+      "PaperTradeJournalResponse": {
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "string"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/PaperTradeJournalEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "epoch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epoch Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "strategy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Id"
+          }
+        },
+        "required": [
+          "account_id"
+        ],
+        "title": "PaperTradeJournalResponse",
+        "type": "object"
+      },
       "PersistenceInventory": {
         "properties": {
           "diagnostics": {
@@ -14073,6 +14852,9 @@
             "title": "Observed At",
             "type": "string"
           },
+          "paper_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
           "prospective_economic_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
@@ -14088,6 +14870,7 @@
         },
         "required": [
           "observed_at",
+          "paper_monitor",
           "strategy_monitor",
           "deep_recovery_shadow_monitor",
           "prospective_economic_monitor",
@@ -16955,6 +17738,66 @@
           "immutable_fingerprint"
         ],
         "title": "TradingFactSet",
+        "type": "object"
+      },
+      "TradingOperationalHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_order_placement_enabled": {
+            "const": false,
+            "default": false,
+            "title": "Ai Order Placement Enabled",
+            "type": "boolean"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionHealth"
+          },
+          "live_broker_enabled": {
+            "const": false,
+            "default": false,
+            "title": "Live Broker Enabled",
+            "type": "boolean"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "paper_only": {
+            "const": true,
+            "default": true,
+            "title": "Paper Only",
+            "type": "boolean"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "risk": {
+            "$ref": "#/components/schemas/AccountRiskHealth"
+          },
+          "state": {
+            "enum": [
+              "healthy",
+              "degraded",
+              "blocked",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observed_at",
+          "state",
+          "risk",
+          "execution"
+        ],
+        "title": "TradingOperationalHealth",
         "type": "object"
       },
       "TradingResearchAuditView": {
@@ -23724,6 +24567,127 @@
         ]
       }
     },
+    "/api/trading/paper-analytics/journal": {
+      "get": {
+        "operationId": "journal_api_trading_paper_analytics_journal_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "strategy_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strategy Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "epoch_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Epoch Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperTradeJournalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Journal",
+        "tags": [
+          "trading-paper-analytics"
+        ]
+      }
+    },
     "/api/trading/paper-analytics/overview": {
       "get": {
         "operationId": "overview_api_trading_paper_analytics_overview_get",
@@ -26223,6 +27187,85 @@
         "summary": "Review V2 Qualification",
         "tags": [
           "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategy-operations/health": {
+      "get": {
+        "operationId": "strategy_operational_health_api_trading_strategy_operations_health_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instrument_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 3,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instrument Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "binding_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingOperationalHealth"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Strategy Operational Health",
+        "tags": [
+          "trading-strategy-operations"
         ]
       }
     },

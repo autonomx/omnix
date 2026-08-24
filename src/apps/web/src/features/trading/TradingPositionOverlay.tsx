@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
-import type { PaperPosition, PaperSide } from './paperTypes';
+import type { PaperOrder, PaperPosition, PaperSide } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
 import { placeReplayOrder } from './replayTrading';
 import { useTradingReplayStore } from './tradingReplayStore';
@@ -171,13 +171,17 @@ export function TradingPositionOverlay({
 
   const openAction = (nextAction: PositionAction) => {
     if (!position || position.pending || quantity <= 0) return;
+    if (nextAction === 'reverse' && !isShort) {
+      setActionError('Reverse is unavailable while the paper engine is long-only. Close the position first.');
+      return;
+    }
     setActionQuantity(String(quantity));
     setPartialClose(false);
     setActionError(null);
     setAction(nextAction);
   };
 
-  const submitMarketOrder = async (side: PaperSide, orderQuantity: number, label: string) => {
+  const submitMarketOrder = async (side: PaperSide, orderQuantity: number, label: string): Promise<PaperOrder> => {
     if ((!accountId && !replayMode) || !position || !Number.isFinite(orderQuantity) || orderQuantity <= 0) {
       throw new Error('Enter a valid position quantity.');
     }
@@ -185,11 +189,10 @@ export function TradingPositionOverlay({
     if (!Number.isFinite(referencePrice) || referencePrice <= 0) {
       throw new Error('A current paper price is required to close this position.');
     }
-    const now = new Date().toISOString();
     const orderId = `paper-overlay-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     if (replayMode) {
       if (!replaySnapshot || !replayBar) throw new Error('Select a replay bar before trading.');
-      const result = placeReplayOrder(replaySnapshot, {
+      const result = await placeReplayOrder(replaySnapshot, {
         order_id: orderId,
         instrument_id: instrumentId,
         binding_id: null,
@@ -203,9 +206,9 @@ export function TradingPositionOverlay({
       }, replayBar);
       setReplaySnapshot(result.snapshot);
       if (result.order.status === 'rejected') throw new Error(result.order.rejection_reason ?? 'Replay order rejected.');
-      return;
+      return result.order;
     }
-    const order = await tradingPaperApi.placeOrder(accountId!, {
+    return tradingPaperApi.placeOrder(accountId!, {
       order_id: orderId,
       instrument_id: instrumentId,
       binding_id: null,
@@ -217,21 +220,29 @@ export function TradingPositionOverlay({
       reference_price: String(referencePrice),
       idempotency_key: orderId,
     });
-    if (order.status === 'open') {
-      await tradingPaperApi.processObservation(accountId!, {
-        instrument_id: instrumentId,
-        binding_id: null,
-        provider: 'paper-reference',
-        price: String(referencePrice),
-        source_time: now,
-        evaluated_at: now,
-      });
+  };
+
+  const waitForTerminalOrder = async (orderId: string): Promise<{ order: PaperOrder; snapshot: Awaited<ReturnType<typeof tradingPaperApi.snapshot>> }> => {
+    if (!accountId) throw new Error('Paper account is unavailable.');
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      const snapshot = await tradingPaperApi.snapshot(accountId);
+      const order = (snapshot.order_history ?? []).find((item) => item.order_id === orderId);
+      if (order?.status === 'filled' || order?.status === 'rejected' || order?.status === 'cancelled') {
+        return { order, snapshot };
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
     }
+    throw new Error('Close order is still awaiting server execution. Protection remains active.');
   };
 
   const confirmAction = async () => {
     if (!action || !position || (!accountId && !replayMode)) return;
-    const closeQuantity = action === 'close' && partialClose ? Number(actionQuantity) : quantity;
+    if (action === 'reverse') {
+      setActionError('Reverse requires short-position support and is intentionally disabled in the current long-only paper engine.');
+      return;
+    }
+    const closeQuantity = partialClose ? Number(actionQuantity) : quantity;
     if (!Number.isFinite(closeQuantity) || closeQuantity <= 0 || closeQuantity > quantity) {
       setActionError('Enter a partial quantity no greater than the open position.');
       return;
@@ -239,10 +250,22 @@ export function TradingPositionOverlay({
     setActionStatus('saving');
     setActionError(null);
     try {
-      await submitMarketOrder(positionSide, closeQuantity, 'close');
-      if (action === 'reverse') await submitMarketOrder(positionSide, quantity, 'reverse');
-      if (!replayMode) writePaperPositionProtection(accountId!, instrumentId, { takeProfit: null, stopLoss: null });
-      const nextSnapshot = replayMode ? useTradingReplayStore.getState().snapshot : await tradingPaperApi.snapshot(accountId!);
+      const submitted = await submitMarketOrder(positionSide, closeQuantity, 'close');
+      let nextSnapshot = replayMode ? useTradingReplayStore.getState().snapshot : null;
+      if (!replayMode) {
+        const terminal = submitted.status === 'filled'
+          ? { order: submitted, snapshot: await tradingPaperApi.snapshot(accountId!) }
+          : await waitForTerminalOrder(submitted.order_id);
+        if (terminal.order.status !== 'filled') {
+          throw new Error(`Close order ${terminal.order.status}. Protection remains active.`);
+        }
+        nextSnapshot = terminal.snapshot;
+        const remaining = terminal.snapshot.positions.find((item) => item.instrument_id === instrumentId && Number(item.quantity) !== 0);
+        if (!remaining) {
+          await tradingPaperApi.clearProtection(accountId!, instrumentId).catch(() => null);
+          writePaperPositionProtection(accountId!, instrumentId, { takeProfit: null, stopLoss: null });
+        }
+      }
       const nextPosition = nextSnapshot?.positions.find((item) => item.instrument_id === instrumentId && Number(item.quantity) !== 0);
       setPosition(nextPosition ?? null);
       setAction(null);
@@ -332,7 +355,7 @@ export function TradingPositionOverlay({
         <span className="trading-position-entry-price">{priceLabel(entryPrice)}</span>
       </div>
       <div className="trading-position-controls" style={{ top: entryY }} onPointerDown={(event) => event.stopPropagation()}>
-        <button type="button" className="trading-position-direction" aria-label="Reverse paper position" title="Reverse position" disabled={position.pending || actionStatus === 'saving'} onClick={() => openAction('reverse')}>↕</button>
+        <button type="button" className="trading-position-direction" aria-label="Reverse paper position" title="Reverse requires short-position support" disabled={position.pending || actionStatus === 'saving' || !isShort} onClick={() => openAction('reverse')}>↕</button>
         {position.pending ? <span className="trading-position-working">Working</span> : null}
         <button type="button" className={`trading-position-protection trading-position-tp${currentProtection.takeProfit !== null ? ' is-set' : ''}`} title="Drag to add Take profit" aria-label="Drag to add Take profit" onPointerDown={startDrag('takeProfit')}>TP{currentProtection.takeProfit !== null ? ` ${priceLabel(currentProtection.takeProfit)}` : ''}</button>
         <button type="button" className={`trading-position-protection trading-position-sl${currentProtection.stopLoss !== null ? ' is-set' : ''}`} title="Drag to add Stop loss" aria-label="Drag to add Stop loss" onPointerDown={startDrag('stopLoss')}>SL{currentProtection.stopLoss !== null ? ` ${priceLabel(currentProtection.stopLoss)}` : ''}</button>
@@ -341,6 +364,7 @@ export function TradingPositionOverlay({
         <button type="button" className="trading-position-close" aria-label="Close paper position" title="Close position" disabled={position.pending || actionStatus === 'saving'} onClick={() => openAction('close')}>×</button>
         {draft ? <span className="trading-position-edit-actions"><button type="button" onClick={discardDraft}>Discard</button><button type="button" onClick={confirmDraft}>Confirm</button></span> : null}
       </div>
+      {actionError && !action ? <div className="trading-position-action-error" role="alert">{actionError}</div> : null}
       {action ? (
         <div className="trading-position-action-backdrop" role="presentation">
           <section className="trading-position-action-dialog" role="dialog" aria-modal="true" aria-labelledby="trading-position-action-title">
@@ -354,9 +378,9 @@ export function TradingPositionOverlay({
                 <label className="trading-position-partial"><input type="checkbox" checked={partialClose} onChange={(event) => setPartialClose(event.target.checked)} /> Partial close</label>
                 {partialClose ? <label className="trading-position-partial-quantity">Quantity<input aria-label="Partial close quantity" inputMode="decimal" value={actionQuantity} onChange={(event) => setActionQuantity(event.target.value)} /></label> : null}
               </>
-            ) : <p>Are you sure you want to reverse {displayMarket(instrumentId)} position?</p>}
+            ) : <p>Reverse is currently unavailable because the paper engine is long-only.</p>}
             {actionError ? <div className="trading-position-action-error" role="alert">{actionError}</div> : null}
-            <footer><button type="button" onClick={() => setAction(null)} disabled={actionStatus === 'saving'}>Cancel</button><button type="button" className="primary" onClick={() => void confirmAction()} disabled={actionStatus === 'saving'}>{actionStatus === 'saving' ? 'Saving…' : action === 'close' ? 'Close position' : 'Reverse position'}</button></footer>
+            <footer><button type="button" onClick={() => setAction(null)} disabled={actionStatus === 'saving'}>Cancel</button><button type="button" className="primary" onClick={() => void confirmAction()} disabled={actionStatus === 'saving' || action === 'reverse'}>{actionStatus === 'saving' ? 'Saving…' : action === 'close' ? 'Close position' : 'Reverse unavailable'}</button></footer>
           </section>
         </div>
       ) : null}

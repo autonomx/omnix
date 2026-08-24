@@ -82,6 +82,79 @@ class TradingPaperProtectionRepository:
             raise ValueError("paper_protection_not_found")
         return _protection(row)
 
+    def arm_pending_entry(
+        self,
+        account_id: str,
+        request: PaperProtectionUpsert,
+    ) -> PaperPositionProtection:
+        """Persist protection intent before the corresponding entry can execute.
+
+        The entry order is deliberately allowed to be absent at this point. The
+        paper monitor treats such a pending row as inert until the server order
+        exists, which removes the fill-before-protection race while remaining
+        fail-closed if the process stops between the two writes.
+        """
+        if not request.entry_order_id:
+            raise ValueError("paper_protection_pending_entry_requires_order_id")
+        with self.uow_factory() as uow:
+            account = uow.connection.execute(
+                """
+                SELECT enabled
+                  FROM omnix_trading_paper_accounts
+                 WHERE workspace_id = %s AND account_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, account_id),
+            ).fetchone()
+            if account is None:
+                raise ValueError(f"paper_account_not_found: {account_id}")
+            if not bool(account[0]):
+                raise ValueError(f"paper_account_disabled: {account_id}")
+
+            existing = uow.connection.execute(
+                f"""
+                SELECT {_COLUMNS}
+                  FROM omnix_trading_paper_protections
+                 WHERE workspace_id = %s AND account_id = %s AND instrument_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, account_id, request.instrument_id),
+            ).fetchone()
+            if existing is not None and str(existing[7]) == "exit_submitted":
+                raise ValueError("paper_protection_exit_already_submitted")
+
+            row = uow.connection.execute(
+                f"""
+                INSERT INTO omnix_trading_paper_protections (
+                    workspace_id, account_id, instrument_id, binding_id,
+                    entry_order_id, take_profit, stop_loss, status,
+                    exit_order_id, trigger_reason
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending_entry', NULL, 'entry_armed')
+                ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
+                   SET binding_id = EXCLUDED.binding_id,
+                       entry_order_id = EXCLUDED.entry_order_id,
+                       take_profit = EXCLUDED.take_profit,
+                       stop_loss = EXCLUDED.stop_loss,
+                       status = 'pending_entry',
+                       exit_order_id = NULL,
+                       trigger_reason = 'entry_armed',
+                       revision = omnix_trading_paper_protections.revision + 1,
+                       updated_at = CURRENT_TIMESTAMP
+                RETURNING {_COLUMNS}
+                """,
+                (
+                    self.context.workspace_id,
+                    account_id,
+                    request.instrument_id,
+                    request.binding_id,
+                    request.entry_order_id,
+                    request.take_profit,
+                    request.stop_loss,
+                ),
+            ).fetchone()
+            uow.commit()
+        return _protection(row)
+
     def upsert(
         self,
         account_id: str,

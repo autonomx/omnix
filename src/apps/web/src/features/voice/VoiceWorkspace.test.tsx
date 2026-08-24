@@ -20,7 +20,7 @@ function renderVoice() {
   }
 
   return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+    <MantineProvider theme={omnixTheme} defaultColorScheme="dark" env="test">
       <QueryClientProvider client={queryClient}>
         <VoiceWorkspace module={module} />
       </QueryClientProvider>

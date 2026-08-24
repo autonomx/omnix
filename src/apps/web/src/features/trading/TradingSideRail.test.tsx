@@ -59,4 +59,27 @@ describe('TradingSideRail', () => {
     expect(onSelectTab).toHaveBeenCalledWith('paper');
     expect(onToggle).toHaveBeenCalledOnce();
   });
+
+  it('exposes Symbol Intelligence and Automatic Journal while the right panel is collapsed', () => {
+    const onSelectTab = vi.fn();
+    const onToggle = vi.fn();
+
+    render(
+      <TradingSideRail
+        activeTab="watchlist"
+        collapsed
+        onSelectTab={onSelectTab}
+        onToggle={onToggle}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Symbol Intelligence' }));
+    expect(onSelectTab).toHaveBeenLastCalledWith('intelligence');
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    onToggle.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Automatic Journal' }));
+    expect(onSelectTab).toHaveBeenLastCalledWith('journal');
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
 });

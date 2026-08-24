@@ -6,7 +6,13 @@ import type {
   PaperOrderInput,
   PaperPositionProtection,
   PaperProtectionInput,
+  PaperRiskOrderInput,
+  PaperRiskOrderResult,
+  PaperRiskPreview,
+  PaperRiskPreviewInput,
 } from './paperTypes';
+
+const orderManagementHeaders = { 'X-Omnix-Paper-Order-Management': 'v2' };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -37,11 +43,31 @@ export const tradingPaperApi = {
     }),
   snapshot: (accountId: string) =>
     requestJson<PaperAccountSnapshot>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}`),
+  riskPreview: (accountId: string, input: PaperRiskPreviewInput) =>
+    requestJson<PaperRiskPreview>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/risk-preview`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+  placeRiskOrder: (accountId: string, input: PaperRiskOrderInput) =>
+    requestJson<PaperRiskOrderResult>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/risk-orders`,
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
   placeOrder: (accountId: string, input: PaperOrderInput) =>
     requestJson<PaperOrder>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  cancelOrder: (accountId: string, orderId: string) =>
+    requestJson<PaperOrder>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}`,
+      { method: 'DELETE', headers: orderManagementHeaders },
+    ),
+  replaceOrder: (accountId: string, orderId: string, replacement: PaperOrderInput) =>
+    requestJson<{ cancelled: PaperOrder; replacement: PaperOrder }>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}/replace`,
+      { method: 'POST', headers: orderManagementHeaders, body: JSON.stringify({ replacement }) },
+    ),
   /** @deprecated Browser observations are deliberately non-authoritative. */
   processObservation: async (_accountId: string, _input: unknown) => ({ fills: [] as unknown[] }),
   protections: async (accountId: string) => {

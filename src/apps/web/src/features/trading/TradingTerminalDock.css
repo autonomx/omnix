@@ -1,5 +1,5 @@
 .trading-terminal-dock{position:relative;display:block;min-height:280px;overflow:visible;border-top:1px solid rgba(123,158,188,.18);background:#07101b;color:#d8e3ed}
-.trading-terminal-dock.is-fullscreen{position:fixed;z-index:1400;inset:0;width:100vw;height:100vh;min-height:100vh;overflow:hidden;border:0;background:#07101b;box-shadow:0 0 0 1px rgba(22,136,255,.35),0 24px 80px rgba(0,0,0,.55)}
+.trading-terminal-dock.is-fullscreen{position:absolute;z-index:8;inset:0;width:auto;height:auto;min-height:0;overflow:hidden;border:0;background:#07101b;box-shadow:0 0 0 1px rgba(22,136,255,.35),0 24px 80px rgba(0,0,0,.55)}
 .trading-terminal-dock.is-fullscreen .trading-dock-main{height:100%;min-height:0}
 .trading-terminal-dock.is-fullscreen .trading-dock-content{min-height:0}
 .trading-terminal-dock.is-fullscreen .trading-dock-content-dashboard{height:auto;min-height:0}

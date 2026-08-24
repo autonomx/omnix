@@ -1697,6 +1697,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/paper-analytics/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal */
+        get: operations["journal_api_trading_paper_analytics_journal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/paper-analytics/overview": {
         parameters: {
             query?: never;
@@ -2427,6 +2444,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategy-operations/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Strategy Operational Health */
+        get: operations["strategy_operational_health_api_trading_strategy_operations_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/strategy-operations/status": {
         parameters: {
             query?: never;
@@ -2573,6 +2607,52 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountRiskHealth */
+        AccountRiskHealth: {
+            /** Account Id */
+            account_id: string;
+            /** Active Protection Count */
+            active_protection_count: number;
+            /** Buying Power */
+            buying_power: string;
+            /** Daily Loss Limit Dollars */
+            daily_loss_limit_dollars: string;
+            /** Daily Loss Remaining */
+            daily_loss_remaining: string;
+            /** Daily Realized Pnl */
+            daily_realized_pnl: string;
+            /** Equity */
+            equity: string;
+            /** Max Daily Loss Pct */
+            max_daily_loss_pct: string;
+            /** Max Open Risk Pct */
+            max_open_risk_pct: string;
+            /** Open Order Count */
+            open_order_count: number;
+            /** Open Risk Dollars */
+            open_risk_dollars: string;
+            /** Open Risk Pct */
+            open_risk_pct: string;
+            /**
+             * Policy Source
+             * @enum {string}
+             */
+            policy_source: "active_strategy" | "paper_default";
+            /** Position Count */
+            position_count: number;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "healthy" | "degraded" | "blocked" | "unknown";
+            /** Unprotected Exposure Count */
+            unprotected_exposure_count: number;
+        };
         /**
          * AdjustmentMode
          * @enum {string}
@@ -4514,6 +4594,46 @@ export interface components {
             /** Status */
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
+        };
+        /** ExecutionHealth */
+        ExecutionHealth: {
+            /**
+             * Execution Eligible
+             * @default false
+             */
+            execution_eligible: boolean;
+            /** Freshness Mode */
+            freshness_mode?: string | null;
+            /** Halted */
+            halted?: boolean | null;
+            /** Instrument Id */
+            instrument_id?: string | null;
+            /** Observation Age Ms */
+            observation_age_ms?: string | null;
+            /** Policy Version */
+            policy_version?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Requested Binding Id */
+            requested_binding_id?: string | null;
+            /** Resolved Binding Id */
+            resolved_binding_id?: string | null;
+            /** Session */
+            session?: string | null;
+            /** Source Time */
+            source_time?: string | null;
+            /** Spread Bps */
+            spread_bps?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "healthy" | "degraded" | "blocked" | "unknown";
         };
         /**
          * ExecutionObservation
@@ -7159,6 +7279,151 @@ export interface components {
              */
             started_at: string;
         };
+        /**
+         * PaperTradeJournalEntry
+         * @description Read-only journal projection of the canonical AUTO PAPER trade record.
+         */
+        PaperTradeJournalEntry: {
+            /** Account Id */
+            account_id: string;
+            /** Automatic Observations */
+            automatic_observations?: string[];
+            /** Average Entry Price */
+            average_entry_price: string;
+            /** Average Exit Price */
+            average_exit_price: string;
+            /** Entry Fill Ids */
+            entry_fill_ids?: string[];
+            /** Entry Order Id */
+            entry_order_id: string;
+            /** Entry Signal Event Id */
+            entry_signal_event_id?: string | null;
+            /**
+             * Entry Time
+             * Format: date-time
+             */
+            entry_time: string;
+            /** Epoch Id */
+            epoch_id: string;
+            /** Events */
+            events?: components["schemas"]["PaperTradeJournalEvent"][];
+            /** Execution Features */
+            execution_features?: {
+                [key: string]: unknown;
+            };
+            /** Exit Fill Ids */
+            exit_fill_ids?: string[];
+            /** Exit Order Id */
+            exit_order_id: string;
+            /** Exit Reason */
+            exit_reason?: string | null;
+            /**
+             * Exit Time
+             * Format: date-time
+             */
+            exit_time: string;
+            /** Fill Slippage Bps */
+            fill_slippage_bps?: string | null;
+            /** Holding Seconds */
+            holding_seconds: number;
+            /** Implementation Shortfall Bps */
+            implementation_shortfall_bps?: string | null;
+            /** Initial Risk Dollars */
+            initial_risk_dollars?: string | null;
+            /** Initial Stop */
+            initial_stop?: string | null;
+            /** Initial Target */
+            initial_target?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Lifecycle State */
+            lifecycle_state: string;
+            /** Mae R */
+            mae_r?: string | null;
+            /** Mfe R */
+            mfe_r?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "win" | "loss" | "flat";
+            /** Profile Fingerprint */
+            profile_fingerprint?: string | null;
+            /** Protection Id */
+            protection_id?: string | null;
+            /** Quantity */
+            quantity: string;
+            /** R Result */
+            r_result?: string | null;
+            /** Realized Pnl */
+            realized_pnl: string;
+            /** Review State */
+            review_state: string;
+            /** Risk Decision Id */
+            risk_decision_id?: string | null;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Session Id */
+            session_id?: string | null;
+            /** Setup Features */
+            setup_features?: {
+                [key: string]: unknown;
+            };
+            /** Setup Id */
+            setup_id?: string | null;
+            /** Signal To Executable Bps */
+            signal_to_executable_bps?: string | null;
+            /** Strategy Id */
+            strategy_id: string;
+            /** Strategy Revision */
+            strategy_revision?: number | null;
+            /** Strategy Run Id */
+            strategy_run_id?: string | null;
+            /** Strategy Version */
+            strategy_version?: string | null;
+            /** Trade Id */
+            trade_id: string;
+            /** Trade Intent Id */
+            trade_intent_id?: string | null;
+            /** Universe Id */
+            universe_id?: string | null;
+        };
+        /** PaperTradeJournalEvent */
+        PaperTradeJournalEvent: {
+            /** Event Id */
+            event_id: string;
+            /** Event Type */
+            event_type: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Reason Code */
+            reason_code?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /** State */
+            state: string;
+        };
+        /** PaperTradeJournalResponse */
+        PaperTradeJournalResponse: {
+            /** Account Id */
+            account_id: string;
+            /** End Date */
+            end_date?: string | null;
+            /** Entries */
+            entries?: components["schemas"]["PaperTradeJournalEntry"][];
+            /** Epoch Id */
+            epoch_id?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** Strategy Id */
+            strategy_id?: string | null;
+        };
         /** PersistenceInventory */
         PersistenceInventory: {
             /** Diagnostics */
@@ -8579,6 +8844,7 @@ export interface components {
              * Format: date-time
              */
             observed_at: string;
+            paper_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             prospective_economic_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
@@ -9700,6 +9966,44 @@ export interface components {
              * @default []
              */
             unresolved_facts: string[];
+        };
+        /** TradingOperationalHealth */
+        TradingOperationalHealth: {
+            /**
+             * Ai Order Placement Enabled
+             * @default false
+             * @constant
+             */
+            ai_order_placement_enabled: false;
+            execution: components["schemas"]["ExecutionHealth"];
+            /**
+             * Live Broker Enabled
+             * @default false
+             * @constant
+             */
+            live_broker_enabled: false;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Paper Only
+             * @default true
+             * @constant
+             */
+            paper_only: true;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            risk: components["schemas"]["AccountRiskHealth"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "healthy" | "degraded" | "blocked" | "unknown";
         };
         /** TradingResearchAuditView */
         TradingResearchAuditView: {
@@ -14220,6 +14524,42 @@ export interface operations {
             };
         };
     };
+    journal_api_trading_paper_analytics_journal_get: {
+        parameters: {
+            query: {
+                account_id: string;
+                strategy_id?: string | null;
+                epoch_id?: string | null;
+                start_date?: string | null;
+                end_date?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperTradeJournalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     overview_api_trading_paper_analytics_overview_get: {
         parameters: {
             query: {
@@ -15896,6 +16236,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["V2ProspectiveQualification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    strategy_operational_health_api_trading_strategy_operations_health_get: {
+        parameters: {
+            query: {
+                account_id: string;
+                instrument_id?: string | null;
+                binding_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingOperationalHealth"];
                 };
             };
             /** @description Validation Error */

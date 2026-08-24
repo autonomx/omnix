@@ -136,6 +136,47 @@ describe('TradingWatchlist add symbol', () => {
     expect(bars).not.toHaveBeenCalled();
   });
 
+  it('keeps the last known values visible when returning to the watchlist', async () => {
+    const instruments = [apple];
+    let resolveRefresh: (value: { price: string }) => void = () => undefined;
+    const refreshQuote = new Promise<{ price: string }>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    vi.spyOn(tradingApi, 'documents').mockResolvedValue([record]);
+    vi.spyOn(tradingApi, 'quote')
+      .mockResolvedValueOnce({ price: '100' })
+      .mockImplementationOnce(() => refreshQuote);
+    vi.spyOn(tradingApi, 'bars').mockResolvedValue({
+      bars: [{ open: '100', close: '100', start_time: '2026-01-01T00:00:00Z' }],
+      binding: { supported_intervals: ['1m', '5m'] },
+    } as unknown as BarsResponse);
+
+    const view = render(
+      <TradingWatchlist
+        instruments={instruments}
+        activeInstrumentId={apple.instrument_id}
+        interval="1m"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText('100.00')).toBeInTheDocument();
+
+    view.unmount();
+    render(
+      <TradingWatchlist
+        instruments={instruments}
+        activeInstrumentId={apple.instrument_id}
+        interval="5m"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText('100.00')).toBeInTheDocument();
+    resolveRefresh({ price: '105' });
+    await waitFor(() => expect(screen.getByText('105.00')).toBeInTheDocument());
+  });
+
   it('reorders symbols immediately with the row arrows and persists the new order', async () => {
     const orderedRecord = {
       ...record,

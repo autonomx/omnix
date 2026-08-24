@@ -1,9 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaperAccountSnapshot } from './paperTypes';
 import { advanceReplaySnapshot, createReplaySnapshot, placeReplayOrder } from './replayTrading';
 import type { MarketBar } from './tradingTypes';
 
+const replayApi = vi.hoisted(() => ({
+  advanceExecution: vi.fn(),
+  placeExecutionOrder: vi.fn(),
+}));
+
+vi.mock('./tradingReplayApi', () => ({ tradingReplayApi: replayApi }));
+
 const bar = (close: string, high = close, low = close): MarketBar => ({
+  instrument_id: 'equity:NYSE:TEST',
+  interval: '1h',
   start_time: '2024-01-02T10:00:00Z',
   end_time: '2024-01-02T11:00:00Z',
   open: close,
@@ -19,7 +28,7 @@ const bar = (close: string, high = close, low = close): MarketBar => ({
   provider_sequence: null,
   ingestion_revision: 1,
   received_at: '2024-01-02T11:00:01Z',
-} as MarketBar);
+});
 
 const snapshot = (): PaperAccountSnapshot => ({
   account: {
@@ -39,7 +48,9 @@ const snapshot = (): PaperAccountSnapshot => ({
 });
 
 describe('replay trading', () => {
-  it('detaches replay cash and history from the paper account snapshot', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('detaches replay cash and history without making a fill decision', () => {
     const source = snapshot();
     const replay = createReplaySnapshot(source);
 
@@ -48,32 +59,39 @@ describe('replay trading', () => {
     expect(source.order_history).toHaveLength(1);
   });
 
-  it('fills market orders at the current replay bar and leaves the source unchanged', () => {
+  it('delegates market execution to the server kernel', async () => {
     const source = createReplaySnapshot(snapshot());
-    const result = placeReplayOrder(source, {
+    const executed = {
+      ...source,
+      positions: [{
+        instrument_id: 'equity:NYSE:TEST', quantity: '2', reserved_quantity: '0',
+        average_cost: '101.101', realized_pnl: '0', last_price: '101.101', unrealized_pnl: '0',
+      }],
+    };
+    replayApi.placeExecutionOrder.mockResolvedValue({
+      snapshot: executed,
+      order: {
+        account_id: 'paper-1', order_id: 'replay-order-1', instrument_id: 'equity:NYSE:TEST',
+        side: 'buy', order_type: 'market', quantity: '2', status: 'filled', filled_quantity: '2',
+        average_fill_price: '101.101', reference_price: '101', idempotency_key: 'replay-order-1',
+      },
+    });
+
+    const result = await placeReplayOrder(source, {
       order_id: 'replay-order-1', instrument_id: 'equity:NYSE:TEST', binding_id: null,
       side: 'buy', order_type: 'market', quantity: '2', limit_price: null, stop_price: null,
       reference_price: '101', idempotency_key: 'replay-order-1',
     }, bar('101'));
 
-    expect(result.order).toMatchObject({ status: 'filled', average_fill_price: '101', filled_quantity: '2' });
-    expect(result.snapshot.positions[0]).toMatchObject({ quantity: '2', average_cost: '101' });
-    expect(result.snapshot.order_history).toHaveLength(1);
-    expect(source.order_history).toEqual([]);
+    expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(source, expect.any(Object), expect.objectContaining({ close: '101' }));
+    expect(result.order.average_fill_price).toBe('101.101');
   });
 
-  it('holds a limit order until a later replay candle reaches it', () => {
+  it('delegates bar advancement to the server kernel', async () => {
     const source = createReplaySnapshot(snapshot());
-    const placed = placeReplayOrder(source, {
-      order_id: 'replay-order-2', instrument_id: 'equity:NYSE:TEST', binding_id: null,
-      side: 'buy', order_type: 'limit', quantity: '2', limit_price: '90', stop_price: null,
-      reference_price: null, idempotency_key: 'replay-order-2',
-    }, bar('100'));
+    replayApi.advanceExecution.mockResolvedValue(source);
 
-    expect(placed.order.status).toBe('open');
-    expect(placed.snapshot.open_orders).toHaveLength(1);
-    const advanced = advanceReplaySnapshot(placed.snapshot, bar('92', '95', '89'));
-    expect(advanced.open_orders).toEqual([]);
-    expect(advanced.order_history?.[0]).toMatchObject({ status: 'filled', average_fill_price: '90' });
+    await expect(advanceReplaySnapshot(source, bar('92', '95', '89'))).resolves.toBe(source);
+    expect(replayApi.advanceExecution).toHaveBeenCalledWith(source, expect.objectContaining({ low: '89' }));
   });
 });

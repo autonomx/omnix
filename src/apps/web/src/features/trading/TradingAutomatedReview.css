@@ -1,0 +1,183 @@
+.trading-automated-review {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #26344a;
+  border-left: 3px solid #51647e;
+  border-radius: 8px;
+  background: #0e1725;
+}
+
+.trading-automated-review[data-priority='attention'] {
+  border-left-color: #e0a64f;
+}
+
+.trading-automated-review[data-priority='high'] {
+  border-left-color: #ef6677;
+}
+
+.trading-automated-review > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trading-automated-review > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.trading-automated-review > header strong {
+  color: #e4edf9;
+  font-size: 13px;
+}
+
+.trading-automated-review > header small {
+  color: #76859b;
+  font-size: 10px;
+}
+
+.trading-automated-review > header > span {
+  padding: 3px 7px;
+  border: 1px solid #34445d;
+  border-radius: 999px;
+  color: #9fb0c7;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.trading-automated-review[data-priority='attention'] > header > span {
+  border-color: rgba(224, 166, 79, 0.45);
+  color: #efc476;
+}
+
+.trading-automated-review[data-priority='high'] > header > span {
+  border-color: rgba(239, 102, 119, 0.45);
+  color: #ff93a0;
+}
+
+.automated-review-boundary {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid #273750;
+  border-radius: 6px;
+  background: #111d2d;
+}
+
+.automated-review-boundary strong {
+  color: #b6c6da;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.automated-review-boundary span {
+  color: #8c9bb0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.automated-review-findings {
+  display: grid;
+  gap: 6px;
+}
+
+.automated-review-findings > div {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 7px;
+  padding: 8px 9px;
+  border: 1px solid #202d41;
+  border-radius: 6px;
+  background: #0c1522;
+}
+
+.automated-review-findings > div > span {
+  color: #8292a8;
+  font-weight: 800;
+  text-align: center;
+}
+
+.automated-review-findings > div[data-severity='attention'] > span {
+  color: #e0a64f;
+}
+
+.automated-review-findings > div[data-severity='high'] > span {
+  color: #ef6677;
+}
+
+.automated-review-findings > div > div {
+  display: grid;
+  gap: 2px;
+}
+
+.automated-review-findings strong,
+.automated-review-prompts > strong {
+  color: #b9c8dc;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.automated-review-findings p {
+  margin: 0;
+  color: #8f9db1;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.automated-review-prompts {
+  display: grid;
+  gap: 5px;
+}
+
+.automated-review-prompts ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: #95a4b8;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review {
+  border-color: #d8e0ea;
+  border-left-color: #7d8ea5;
+  background: #fff;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review[data-priority='attention'] {
+  border-left-color: #b97916;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review[data-priority='high'] {
+  border-left-color: #c73f50;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review > header strong,
+:root[data-omnix-appearance='light'] .automated-review-boundary strong,
+:root[data-omnix-appearance='light'] .automated-review-findings strong,
+:root[data-omnix-appearance='light'] .automated-review-prompts > strong {
+  color: #253248;
+}
+
+:root[data-omnix-appearance='light'] .trading-automated-review > header small,
+:root[data-omnix-appearance='light'] .automated-review-boundary span,
+:root[data-omnix-appearance='light'] .automated-review-findings p,
+:root[data-omnix-appearance='light'] .automated-review-prompts ul {
+  color: #697b91;
+}
+
+:root[data-omnix-appearance='light'] .automated-review-boundary {
+  border-color: #dfe5ec;
+  background: #f7f9fc;
+}
+
+:root[data-omnix-appearance='light'] .automated-review-findings > div {
+  border-color: #e3e8ef;
+  background: #fbfcfe;
+}

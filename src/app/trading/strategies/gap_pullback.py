@@ -460,6 +460,19 @@ def evaluate_gap_pullback(
             }
         )
 
+    signal_index = breakout_idx + (
+        active.breakout_hold_bars if active.require_breakout_hold else 0
+    )
+    if signal_index != len(regular) - 1:
+        return _result(
+            candidate,
+            "breakout_hold" if active.require_breakout_hold else "lower_high_break",
+            "BREAKOUT_ALREADY_PASSED",
+            transitions,
+            features,
+            regular,
+        )
+
     quality_score = _quality_total(features)
     if quality_score < active.minimum_quality_score:
         transitions.append("rejected")
