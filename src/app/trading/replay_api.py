@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from .backtest import BacktestRequest, BacktestRunResult, run_backtest
+from .paper import PaperAccountSnapshot
 from .replay import FrozenDatasetSnapshot, freeze_bars_response
 from .replay_execution import (
     ReplayAdvanceRequest,
@@ -138,12 +139,12 @@ def create_trading_replay_router(
             raise HTTPException(status_code=404, detail="backtest_not_found")
         return result
 
-    @router.post("/execution/detach")
+    @router.post("/execution/detach", response_model=PaperAccountSnapshot)
     async def detach_replay_account(request: ReplayAdvanceRequest):
         """Detach a production snapshot into replay-only state without creating fills."""
         return detached_replay_snapshot(request.snapshot)
 
-    @router.post("/execution/advance")
+    @router.post("/execution/advance", response_model=PaperAccountSnapshot)
     async def advance_execution(request: ReplayAdvanceRequest):
         """Advance detached replay state through paper-execution-v2.
 
