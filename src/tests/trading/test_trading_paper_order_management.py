@@ -5,7 +5,13 @@ from decimal import Decimal
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.trading.paper import PaperAccount, PaperAccountSnapshot, PaperBalance, PaperOrder
+from app.trading.paper import (
+    PaperAccount,
+    PaperAccountSnapshot,
+    PaperBalance,
+    PaperOrder,
+    PaperPosition,
+)
 from app.trading.paper_api import create_trading_paper_router
 
 
@@ -21,16 +27,24 @@ class Repo:
             base_currency="USD",
             commission_bps=Decimal("0"),
         )
+        self.position = PaperPosition(
+            instrument_id=INSTRUMENT,
+            quantity=Decimal("5"),
+            reserved_quantity=Decimal("1"),
+            average_cost=Decimal("10"),
+            realized_pnl=Decimal("0"),
+            last_price=Decimal("10"),
+        )
         self.orders: dict[str, PaperOrder] = {
             "old": PaperOrder(
                 account_id="paper-1",
                 order_id="old",
                 instrument_id=INSTRUMENT,
                 binding_id=None,
-                side="buy",
+                side="sell",
                 order_type="limit",
                 quantity=Decimal("1"),
-                limit_price=Decimal("10"),
+                limit_price=Decimal("11"),
                 idempotency_key="old",
             )
         }
@@ -41,10 +55,11 @@ class Repo:
 
     def snapshot(self, account_id):
         history = list(self.orders.values())
+        positions = [self.position] if self.position.quantity != 0 else []
         return PaperAccountSnapshot(
             account=self.account,
             balances=[PaperBalance(currency="USD", available=Decimal("1000"))],
-            positions=[],
+            positions=positions,
             open_orders=[order for order in history if order.status == "open"],
             order_history=history,
             recent_fills=[],
@@ -88,6 +103,23 @@ def _client(repo: Repo) -> TestClient:
     return TestClient(app)
 
 
+def _replacement(*, side: str = "sell", quantity: str = "2") -> dict[str, object]:
+    return {
+        "replacement": {
+            "order_id": "new",
+            "instrument_id": INSTRUMENT,
+            "binding_id": None,
+            "side": side,
+            "order_type": "limit",
+            "quantity": quantity,
+            "limit_price": "10.5",
+            "stop_price": None,
+            "reference_price": None,
+            "idempotency_key": "new",
+        }
+    }
+
+
 def test_cancel_order_is_server_authoritative() -> None:
     repo = Repo()
     response = _client(repo).delete(
@@ -99,25 +131,67 @@ def test_cancel_order_is_server_authoritative() -> None:
     assert repo.orders["old"].status == "cancelled"
 
 
-def test_replace_cancels_old_before_submitting_new_identity() -> None:
+def test_raw_http_order_cannot_create_new_exposure() -> None:
+    repo = Repo()
+    response = _client(repo).post(
+        "/api/trading/paper/accounts/paper-1/orders",
+        json={
+            "order_id": "raw-entry",
+            "instrument_id": INSTRUMENT,
+            "binding_id": None,
+            "side": "buy",
+            "order_type": "market",
+            "quantity": "1",
+            "reference_price": "10",
+            "idempotency_key": "raw-entry",
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "paper_entry_requires_server_risk_authority"
+    assert "raw-entry" not in repo.orders
+
+
+def test_raw_http_sell_is_limited_to_unreserved_long_quantity() -> None:
+    repo = Repo()
+    response = _client(repo).post(
+        "/api/trading/paper/accounts/paper-1/orders",
+        json={
+            "order_id": "exit-too-large",
+            "instrument_id": INSTRUMENT,
+            "binding_id": None,
+            "side": "sell",
+            "order_type": "market",
+            "quantity": "5",
+            "reference_price": "10",
+            "idempotency_key": "exit-too-large",
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "paper_entry_requires_server_risk_authority"
+
+    allowed = _client(repo).post(
+        "/api/trading/paper/accounts/paper-1/orders",
+        json={
+            "order_id": "exit-allowed",
+            "instrument_id": INSTRUMENT,
+            "binding_id": None,
+            "side": "sell",
+            "order_type": "market",
+            "quantity": "4",
+            "reference_price": "10",
+            "idempotency_key": "exit-allowed",
+        },
+    )
+    assert allowed.status_code == 201
+    assert allowed.json()["order_id"] == "exit-allowed"
+
+
+def test_replace_cancels_old_before_submitting_new_exit_identity() -> None:
     repo = Repo()
     response = _client(repo).post(
         "/api/trading/paper/accounts/paper-1/orders/old/replace",
         headers=HEADERS,
-        json={
-            "replacement": {
-                "order_id": "new",
-                "instrument_id": INSTRUMENT,
-                "binding_id": None,
-                "side": "buy",
-                "order_type": "limit",
-                "quantity": "2",
-                "limit_price": "9.5",
-                "stop_price": None,
-                "reference_price": None,
-                "idempotency_key": "new",
-            }
-        },
+        json=_replacement(),
     )
     assert response.status_code == 200
     assert response.json()["cancelled"]["order_id"] == "old"
@@ -126,26 +200,26 @@ def test_replace_cancels_old_before_submitting_new_identity() -> None:
     assert repo.orders["new"].status == "open"
 
 
+def test_replace_rejects_entry_bypass_before_cancelling_old_order() -> None:
+    repo = Repo()
+    response = _client(repo).post(
+        "/api/trading/paper/accounts/paper-1/orders/old/replace",
+        headers=HEADERS,
+        json=_replacement(side="buy", quantity="1"),
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "paper_order_replacement_requires_server_risk_authority"
+    assert repo.orders["old"].status == "open"
+    assert "new" not in repo.orders
+
+
 def test_replace_failure_never_resurrects_cancelled_order() -> None:
     repo = Repo()
     repo.fail_replacement = True
     response = _client(repo).post(
         "/api/trading/paper/accounts/paper-1/orders/old/replace",
         headers=HEADERS,
-        json={
-            "replacement": {
-                "order_id": "new",
-                "instrument_id": INSTRUMENT,
-                "binding_id": None,
-                "side": "buy",
-                "order_type": "limit",
-                "quantity": "1000",
-                "limit_price": "50",
-                "stop_price": None,
-                "reference_price": None,
-                "idempotency_key": "new",
-            }
-        },
+        json=_replacement(),
     )
     assert response.status_code == 409
     assert "replacement_failed_after_cancel" in response.json()["detail"]
