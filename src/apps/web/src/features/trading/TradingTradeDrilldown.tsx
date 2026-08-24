@@ -145,14 +145,20 @@ export function TradingTradeDrilldown({
     <div className="paper-trade-drilldown-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <aside className="paper-trade-drilldown" role="dialog" aria-modal="true" aria-label={`Trade drill-down for ${symbol(trade.instrument_id)}`}>
+      <aside
+        className="paper-trade-drilldown"
+        role="dialog"
+        aria-modal="true"
+        aria-busy={status === 'loading'}
+        aria-label={`Trade drill-down for ${symbol(trade.instrument_id)}`}
+      >
         <header className="paper-trade-drilldown-header">
           <div>
             <span className={trade.source === 'auto_paper' ? 'auto' : 'shadow'}>{trade.source === 'auto_paper' ? 'AUTO PAPER' : 'SHADOW'}</span>
             <strong>{symbol(trade.instrument_id)} trade evidence</strong>
             <small>{trade.session_date} · {time(trade.entry_time)} → {time(trade.exit_time)}</small>
           </div>
-          <button type="button" aria-label="Close trade drill-down" onClick={onClose}>×</button>
+          <button type="button" autoFocus aria-label="Close trade drill-down" onClick={onClose}>×</button>
         </header>
 
         <section className="paper-trade-drilldown-summary">
@@ -188,7 +194,7 @@ export function TradingTradeDrilldown({
           </>
         ) : null}
 
-        {status === 'loading' ? <div className="paper-trade-drilldown-loading">Resolving canonical lifecycle evidence…</div> : null}
+        {status === 'loading' ? <div className="paper-trade-drilldown-loading" role="status">Resolving canonical lifecycle evidence…</div> : null}
         {status === 'missing' ? (
           <section className="paper-trade-drilldown-notice warning">
             <strong>Canonical detail not found</strong>
