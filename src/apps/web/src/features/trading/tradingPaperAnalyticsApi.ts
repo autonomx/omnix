@@ -134,6 +134,72 @@ export interface PaperFactorStudy {
   buckets: PaperFactorBucket[];
 }
 
+export interface PaperTradeJournalEvent {
+  event_id: string;
+  run_id?: string | null;
+  event_type: string;
+  state: string;
+  reason_code?: string | null;
+  observed_at: string;
+}
+
+export interface PaperTradeJournalEntry {
+  trade_id: string;
+  account_id: string;
+  epoch_id: string;
+  strategy_id: string;
+  strategy_version?: string | null;
+  strategy_revision?: number | null;
+  strategy_run_id?: string | null;
+  profile_fingerprint?: string | null;
+  universe_id?: string | null;
+  instrument_id: string;
+  session_date: string;
+  entry_time: string;
+  exit_time: string;
+  holding_seconds: number;
+  entry_signal_event_id?: string | null;
+  entry_order_id: string;
+  exit_order_id: string;
+  entry_fill_ids: string[];
+  exit_fill_ids: string[];
+  session_id?: string | null;
+  setup_id?: string | null;
+  trade_intent_id?: string | null;
+  risk_decision_id?: string | null;
+  protection_id?: string | null;
+  lifecycle_state: string;
+  review_state: string;
+  average_entry_price: AnalyticsNumeric;
+  average_exit_price: AnalyticsNumeric;
+  quantity: AnalyticsNumeric;
+  initial_risk_dollars?: AnalyticsNumeric | null;
+  initial_stop?: AnalyticsNumeric | null;
+  initial_target?: AnalyticsNumeric | null;
+  realized_pnl: AnalyticsNumeric;
+  r_result?: AnalyticsNumeric | null;
+  mae_r?: AnalyticsNumeric | null;
+  mfe_r?: AnalyticsNumeric | null;
+  signal_to_executable_bps?: AnalyticsNumeric | null;
+  fill_slippage_bps?: AnalyticsNumeric | null;
+  implementation_shortfall_bps?: AnalyticsNumeric | null;
+  exit_reason?: string | null;
+  setup_features: Record<string, unknown>;
+  execution_features: Record<string, unknown>;
+  outcome: 'win' | 'loss' | 'flat';
+  automatic_observations: string[];
+  events: PaperTradeJournalEvent[];
+}
+
+export interface PaperTradeJournalResponse {
+  account_id: string;
+  strategy_id?: string | null;
+  epoch_id?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  entries: PaperTradeJournalEntry[];
+}
+
 export interface PaperAnalyticsOverview {
   account_id: string;
   strategy_id?: string | null;
@@ -169,6 +235,15 @@ export interface PaperAnalyticsFilters {
   rollingWindow?: number;
 }
 
+export interface PaperJournalFilters {
+  accountId: string;
+  strategyId?: string | null;
+  epochId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  limit?: number;
+}
+
 async function requestJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { accept: 'application/json' } });
   const payload = await response.json().catch(() => ({}));
@@ -192,6 +267,16 @@ function query(filters: PaperAnalyticsFilters): string {
   return params.toString();
 }
 
+function journalQuery(filters: PaperJournalFilters): string {
+  const params = new URLSearchParams({ account_id: filters.accountId });
+  if (filters.strategyId) params.set('strategy_id', filters.strategyId);
+  if (filters.epochId) params.set('epoch_id', filters.epochId);
+  if (filters.startDate) params.set('start_date', filters.startDate);
+  if (filters.endDate) params.set('end_date', filters.endDate);
+  if (filters.limit) params.set('limit', String(filters.limit));
+  return params.toString();
+}
+
 export const tradingPaperAnalyticsApi = {
   epochs: async (accountId: string) => {
     const payload = await requestJson<{ epochs?: PaperSimulationEpoch[] }>(
@@ -201,4 +286,6 @@ export const tradingPaperAnalyticsApi = {
   },
   overview: (filters: PaperAnalyticsFilters) =>
     requestJson<PaperAnalyticsOverview>(`/api/trading/paper-analytics/overview?${query(filters)}`),
+  journal: (filters: PaperJournalFilters) =>
+    requestJson<PaperTradeJournalResponse>(`/api/trading/paper-analytics/journal?${journalQuery(filters)}`),
 };
