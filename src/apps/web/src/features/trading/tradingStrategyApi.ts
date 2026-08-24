@@ -25,6 +25,7 @@ export type StrategyRuntimeMonitorStatus = {
 export type TradingStrategyOperationsStatus = {
   observed_at: string;
   strategy_monitor: StrategyRuntimeMonitorStatus;
+  deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus;
   universe_archive_monitor: StrategyRuntimeMonitorStatus;
   v2_qualification_monitor: StrategyRuntimeMonitorStatus;
   alpaca_status_monitor: StrategyRuntimeMonitorStatus;
