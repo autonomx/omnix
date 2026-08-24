@@ -92,6 +92,7 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.evaluation_count = 0
+        self.state_transition_count = 0
         self.signal_count = 0
         self.execution_observation_count = 0
 
@@ -144,31 +145,30 @@ class TradingStrategyDeepRecoveryShadowMonitor:
             ),
         )
 
-    async def _existing_signal_symbols(
+    async def _day_events(
         self,
         repository: TradingStrategyRepository,
         config: TradingStrategyConfigDocument,
         *,
         day_start: datetime,
         day_end: datetime,
-    ) -> set[str]:
+    ) -> list[StrategyEvent]:
+        event_types = (_STATE_EVENT_TYPE, _SIGNAL_EVENT_TYPE)
         if hasattr(repository, "events_by_types_between"):
-            events = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 repository.events_by_types_between,
                 config.strategy_id,
-                event_types=(_SIGNAL_EVENT_TYPE,),
+                event_types=event_types,
                 start_time=day_start,
                 end_time=day_end,
                 limit=10_000,
             )
-        else:
-            events = await asyncio.to_thread(repository.recent_events, config.strategy_id, 10_000)
-            events = [
-                event for event in events
-                if event.event_type == _SIGNAL_EVENT_TYPE
-                and day_start <= event.observed_at.astimezone(timezone.utc) < day_end
-            ]
-        return {event.instrument_id for event in events}
+        events = await asyncio.to_thread(repository.recent_events, config.strategy_id, 10_000)
+        return [
+            event for event in events
+            if event.event_type in event_types
+            and day_start <= event.observed_at.astimezone(timezone.utc) < day_end
+        ]
 
     async def _universe(
         self,
@@ -217,13 +217,25 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         if universe is None or universe.session_date != today_et:
             return 0
 
-        emitted = 0
-        signaled = await self._existing_signal_symbols(
+        day_events = await self._day_events(
             repository,
             config,
             day_start=day_start,
             day_end=day_end,
         )
+        signaled = {
+            event.instrument_id for event in day_events
+            if event.event_type == _SIGNAL_EVENT_TYPE
+        }
+        latest_states: dict[str, StrategyEvent] = {}
+        for event in day_events:
+            if event.event_type != _STATE_EVENT_TYPE:
+                continue
+            prior = latest_states.get(event.instrument_id)
+            if prior is None or event.observed_at > prior.observed_at:
+                latest_states[event.instrument_id] = event
+
+        emitted = 0
         for candidate in universe.candidates:
             try:
                 response = await asyncio.to_thread(
@@ -263,17 +275,39 @@ class TradingStrategyDeepRecoveryShadowMonitor:
                 "finalized_bar_count": len(finalized),
                 "execution_authority": False,
             }
-            await self._append_event(
-                repository,
-                config,
-                instrument_id=candidate.instrument_id,
-                event_type=_STATE_EVENT_TYPE,
-                state=evaluation.state,
-                reason_code=evaluation.reason_code,
-                observed_at=observed_at,
-                payload=state_payload,
-                identity=(observed_at.astimezone(timezone.utc).isoformat(), evaluation.state, evaluation.reason_code),
+            prior_state = latest_states.get(candidate.instrument_id)
+            state_changed = (
+                prior_state is None
+                or prior_state.state != evaluation.state
+                or prior_state.reason_code != evaluation.reason_code
             )
+            if state_changed:
+                persisted_state = await self._append_event(
+                    repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type=_STATE_EVENT_TYPE,
+                    state=evaluation.state,
+                    reason_code=evaluation.reason_code,
+                    observed_at=observed_at,
+                    payload=state_payload,
+                    identity=(observed_at.astimezone(timezone.utc).isoformat(), evaluation.state, evaluation.reason_code),
+                )
+                if persisted_state:
+                    self.state_transition_count += 1
+                    latest_states[candidate.instrument_id] = StrategyEvent(
+                        strategy_id=config.strategy_id,
+                        event_id="shadow-state-cache",
+                        run_id=None,
+                        instrument_id=candidate.instrument_id,
+                        event_type=_STATE_EVENT_TYPE,
+                        state=evaluation.state,
+                        reason_code=evaluation.reason_code,
+                        observed_at=observed_at,
+                        idempotency_key="shadow-state-cache",
+                        payload=state_payload,
+                    )
+
             if not evaluation.signal_ready or candidate.instrument_id in signaled:
                 continue
 
@@ -375,6 +409,7 @@ class TradingStrategyDeepRecoveryShadowMonitor:
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
             "evaluation_count": self.evaluation_count,
+            "state_transition_count": self.state_transition_count,
             "signal_count": self.signal_count,
             "execution_observation_count": self.execution_observation_count,
             "setup_id": DEEP_RECOVERY_SETUP_ID,
