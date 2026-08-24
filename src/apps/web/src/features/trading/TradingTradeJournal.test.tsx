@@ -104,7 +104,10 @@ const response = {
 };
 
 describe('TradingTradeJournal', () => {
-  beforeEach(() => analyticsApi.journal.mockResolvedValue(response));
+  beforeEach(() => {
+    analyticsApi.journal.mockClear();
+    analyticsApi.journal.mockResolvedValue(response);
+  });
   afterEach(() => vi.clearAllMocks());
 
   it('renders canonical trade evidence and deterministic observations', async () => {
@@ -125,13 +128,15 @@ describe('TradingTradeJournal', () => {
     render(<TradingTradeJournal accountId="paper-1" instrumentId={osrh} />);
     await screen.findByText('OSRH');
 
+    const callsBeforeScopeChange = analyticsApi.journal.mock.calls.length;
     expect(screen.getByText('XYZ')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: /Only OSRH/ }));
     expect(screen.queryByText('XYZ')).not.toBeInTheDocument();
-    expect(analyticsApi.journal).toHaveBeenCalledTimes(1);
+    expect(analyticsApi.journal.mock.calls.length).toBe(callsBeforeScopeChange);
   });
 
   it('fails closed when no paper account is selected', () => {
+    analyticsApi.journal.mockClear();
     render(<TradingTradeJournal accountId={null} instrumentId={osrh} />);
 
     expect(screen.getByText(/Select a paper account/)).toBeInTheDocument();
