@@ -38,12 +38,24 @@ describe('Live2D character renderer helpers', () => {
   });
 
   it('uses the pinned local model entry path for bundled catalog models', () => {
-    expect(live2dModelUrl('character-live2d:open-llm-vtuber-mao-pro')).toBe(
-      '/api/character-live2d/assets/character-live2d%3Aopen-llm-vtuber-mao-pro/runtime/mao_pro.model3.json',
-    );
-    expect(live2dModelUrl('character-live2d:open-llm-vtuber-shizuku')).toContain(
-      '/runtime/shizuku.model3.json',
-    );
+    const expectedEntryPaths = {
+      'open-llm-vtuber-mao-pro': 'runtime/mao_pro.model3.json',
+      'open-llm-vtuber-shizuku': 'runtime/shizuku.model3.json',
+      'live2d-sample-haru': 'runtime/haru.model3.json',
+      'live2d-sample-hiyori-pro': 'runtime/hiyori_pro_t11.model3.json',
+      'live2d-sample-epsilon-pro': 'runtime/Epsilon.model3.json',
+      'live2d-sample-chitose': 'runtime/chitose.model3.json',
+      'live2d-sample-koharu': 'runtime/koharu.model3.json',
+      'live2d-sample-haruto': 'runtime/haruto.model3.json',
+      'live2d-sample-tororo': 'runtime/tororo.model3.json',
+      'live2d-sample-hijiki': 'runtime/hijiki.model3.json',
+    };
+
+    Object.entries(expectedEntryPaths).forEach(([modelId, entryPath]) => {
+      expect(live2dModelUrl(`character-live2d:${modelId}`)).toBe(
+        `/api/character-live2d/assets/${encodeURIComponent(`character-live2d:${modelId}`)}/${entryPath}`,
+      );
+    });
   });
 
   it('recognizes only rigged Live2D avatar packs', () => {

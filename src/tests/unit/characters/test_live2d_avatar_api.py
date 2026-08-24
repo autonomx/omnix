@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import json
+import zipfile
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -91,7 +94,7 @@ def test_live2d_catalog_activation_serving_and_sprite_restore(tmp_path: Path) ->
 
     catalog = client.get("/api/characters/maya/live2d-models")
     assert catalog.status_code == 200
-    assert len(catalog.json()["models"]) == 2
+    assert len(catalog.json()["models"]) == 10
     assert catalog.json()["runtime_installed"] is False
 
     rejected = client.post(
@@ -135,3 +138,68 @@ def test_live2d_catalog_activation_serving_and_sprite_restore(tmp_path: Path) ->
     restored_pack = restored.json()["avatar_pack"]
     assert restored_pack["renderer"] == "sprite"
     assert restored_pack["base_asset_id"] == sprite_pack.base_asset_id
+
+
+def test_live2d_archive_catalog_entry_is_hash_pinned_and_extracts_runtime_only(
+    tmp_path: Path,
+) -> None:
+    model_json = json.dumps(
+        {
+            "Version": 3,
+            "FileReferences": {
+                "Moc": "sample.moc3",
+                "Textures": ["textures/texture_00.png"],
+                "Motions": {"Idle": [{"File": "motions/idle.motion3.json"}]},
+            },
+        }
+    ).encode()
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w") as archive:
+        archive.writestr("sample/runtime/sample.model3.json", model_json)
+        archive.writestr("sample/runtime/sample.moc3", b"MOC3")
+        archive.writestr("sample/runtime/textures/texture_00.png", b"PNG")
+        archive.writestr("sample/runtime/motions/idle.motion3.json", b"{}")
+        archive.writestr("sample/source/large-authoring-file.cmo3", b"NOT INSTALLED")
+    archive_bytes = archive_buffer.getvalue()
+    archive_url = "https://example.com/sample.zip"
+
+    def download(url: str) -> bytes:
+        if url == archive_url:
+            return archive_bytes
+        if url.endswith(".js"):
+            return b"window.__live2d_test__ = true;"
+        raise AssertionError(f"unexpected download: {url}")
+
+    assets = SharedAssetStore(tmp_path / "assets.json")
+    service = CharacterLive2DAvatarService(
+        asset_store_factory=lambda: assets,
+        data_root=tmp_path / "live2d",
+        download_bytes=download,
+    )
+    entry = {
+        "id": "live2d-sample-test",
+        "name": "Sample",
+        "description": "Test model",
+        "preview_url": "https://example.com/sample.png",
+        "repository": "Live2D/Cubism Sample Data",
+        "revision": f"sha256:{hashlib.sha256(archive_bytes).hexdigest()}",
+        "entry_path": "live2d-models/sample/runtime/sample.model3.json",
+        "source_url": "https://example.com/source",
+        "model_license_url": "https://example.com/model-license",
+        "runtime_license_url": "https://example.com/runtime-license",
+        "license_summary": "Terms apply.",
+        "mouth_parameter_ids": ["ParamMouthOpenY"],
+        "mouth_form_parameter_ids": ["ParamMouthForm"],
+        "archive_url": archive_url,
+        "archive_sha256": hashlib.sha256(archive_bytes).hexdigest(),
+        "archive_entry_path": "sample/runtime/sample.model3.json",
+    }
+
+    asset, downloaded = service._ensure_model_asset(entry)
+
+    assert downloaded is True
+    assert Path(asset.storage_path).is_file()
+    model_root = Path(asset.metadata["root_path"])
+    assert (model_root / "runtime/sample.moc3").read_bytes() == b"MOC3"
+    assert (model_root / "runtime/textures/texture_00.png").read_bytes() == b"PNG"
+    assert not (model_root / "source/large-authoring-file.cmo3").exists()

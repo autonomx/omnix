@@ -118,6 +118,14 @@ const RUNTIME_SCRIPTS = [
 const MODEL_ENTRY_PATHS: Record<string, string> = {
   'character-live2d:open-llm-vtuber-mao-pro': 'runtime/mao_pro.model3.json',
   'character-live2d:open-llm-vtuber-shizuku': 'runtime/shizuku.model3.json',
+  'character-live2d:live2d-sample-haru': 'runtime/haru.model3.json',
+  'character-live2d:live2d-sample-hiyori-pro': 'runtime/hiyori_pro_t11.model3.json',
+  'character-live2d:live2d-sample-epsilon-pro': 'runtime/Epsilon.model3.json',
+  'character-live2d:live2d-sample-chitose': 'runtime/chitose.model3.json',
+  'character-live2d:live2d-sample-koharu': 'runtime/koharu.model3.json',
+  'character-live2d:live2d-sample-haruto': 'runtime/haruto.model3.json',
+  'character-live2d:live2d-sample-tororo': 'runtime/tororo.model3.json',
+  'character-live2d:live2d-sample-hijiki': 'runtime/hijiki.model3.json',
 };
 // The sample rigs use different amounts of transparent canvas padding. Keep
 // the visible character at a comparable size when the shared 100% zoom is

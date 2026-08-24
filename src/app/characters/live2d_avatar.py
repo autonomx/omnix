@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
+import io
 import mimetypes
 import posixpath
 import ssl
 import urllib.request
+import zipfile
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -36,6 +40,57 @@ _RUNTIME_FILES = {
     ),
     "cubism4.min.js": "https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js",
 }
+_CATALOG_INTERNAL_KEYS = {
+    "entry_path",
+    "mouth_parameter_ids",
+    "mouth_form_parameter_ids",
+    "archive_url",
+    "archive_sha256",
+    "archive_entry_path",
+}
+
+_LIVE2D_SAMPLE_MODEL_LICENSE_URL = "https://www.live2d.com/en/learn/sample/model-terms/"
+_LIVE2D_RUNTIME_LICENSE_URL = (
+    "https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html"
+)
+_LIVE2D_SAMPLE_LICENSE_SUMMARY = (
+    "Live2D sample data. Separate Live2D terms apply; commercial rights depend on "
+    "user or organization classification."
+)
+
+
+def _official_sample_entry(
+    *,
+    model_id: str,
+    name: str,
+    description: str,
+    preview_url: str,
+    source_url: str,
+    entry_path: str,
+    archive_url: str,
+    archive_sha256: str,
+    archive_entry_path: str,
+    mouth_parameter_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": model_id,
+        "name": name,
+        "description": description,
+        "preview_url": preview_url,
+        "repository": "Live2D/Cubism Sample Data",
+        "revision": f"sha256:{archive_sha256}",
+        "entry_path": entry_path,
+        "source_url": source_url,
+        "model_license_url": _LIVE2D_SAMPLE_MODEL_LICENSE_URL,
+        "runtime_license_url": _LIVE2D_RUNTIME_LICENSE_URL,
+        "license_summary": _LIVE2D_SAMPLE_LICENSE_SUMMARY,
+        "mouth_parameter_ids": mouth_parameter_ids
+        or ["PARAM_MOUTH_OPEN_Y", "ParamMouthOpenY", "ParamA"],
+        "mouth_form_parameter_ids": ["PARAM_MOUTH_FORM", "ParamMouthForm"],
+        "archive_url": archive_url,
+        "archive_sha256": archive_sha256,
+        "archive_entry_path": archive_entry_path,
+    }
 
 _MODEL_CATALOG: tuple[dict[str, Any], ...] = (
     {
@@ -68,6 +123,95 @@ _MODEL_CATALOG: tuple[dict[str, Any], ...] = (
         "mouth_parameter_ids": ["PARAM_MOUTH_OPEN_Y", "ParamMouthOpenY", "ParamA"],
         "mouth_form_parameter_ids": ["PARAM_MOUTH_FORM", "ParamMouthForm"],
     },
+    _official_sample_entry(
+        model_id="live2d-sample-haru",
+        name="Haru",
+        description="Full-featured avatar with idle and gesture motions, physics, pose, blink, and lip-sync.",
+        preview_url="https://www.live2d.com/wp-content/uploads/2026/06/sample-img-haru.jpg",
+        source_url="https://www.live2d.com/en/learn/sample/haru/",
+        entry_path="live2d-models/haru/runtime/haru.model3.json",
+        archive_url="https://cubism.live2d.com/sample-data/bin/haru/haru_ja.zip",
+        archive_sha256="3686daa9ed014d0d56c623ef66ba85132fbee3558d2e3e34a154d833c86cebdd",
+        archive_entry_path="runtime/haru.model3.json",
+    ),
+    _official_sample_entry(
+        model_id="live2d-sample-hiyori-pro",
+        name="Hiyori Momose (PRO)",
+        description="Standard Cubism avatar with idle and gesture motions, physics, pose, blink, and lip-sync.",
+        preview_url="https://www.live2d.com/wp-content/uploads/2026/06/sample-img-hiyori.jpg",
+        source_url="https://www.live2d.com/en/learn/sample/momose-hiyori/",
+        entry_path="live2d-models/hiyori/runtime/hiyori_pro_t11.model3.json",
+        archive_url="https://cubism.live2d.com/sample-data/bin/hiyori/hiyori_en.zip",
+        archive_sha256="1e4254d561f2a151562aa67036d78e17e4ffee08869b8ce10ab6052a05e2b3a4",
+        archive_entry_path="hiyori_pro/runtime/hiyori_pro_t11.model3.json",
+        mouth_parameter_ids=["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "ParamA"],
+    ),
+    _official_sample_entry(
+        model_id="live2d-sample-epsilon-pro",
+        name="Epsilon (PRO)",
+        description="Cubism 4 avatar with idle and gesture motions, expressions, physics, blink, and lip-sync.",
+        preview_url="https://www.live2d.com/wp-content/uploads/2026/06/sample-img-epsillon.jpg",
+        source_url="https://www.live2d.com/en/learn/sample/epsilon/",
+        entry_path="live2d-models/epsilon/runtime/Epsilon.model3.json",
+        archive_url="https://cubism.live2d.com/sample-data/bin/epsilon/epsilon_ja.zip",
+        archive_sha256="a2e4d747bb0fca4f5920637ac8acc350b08c46e3275344a273cb9c37d405f9e1",
+        archive_entry_path="epsilon_pro/runtime/Epsilon.model3.json",
+    ),
+    _official_sample_entry(
+        model_id="live2d-sample-chitose",
+        name="Chitose",
+        description="Male avatar with idle and gesture motions, expressions, physics, pose, blink, and lip-sync.",
+        preview_url="https://www.live2d.com/wp-content/uploads/2026/06/sample-img-chitose.jpg",
+        source_url="https://www.live2d.com/en/learn/sample/chitose/",
+        entry_path="live2d-models/chitose/runtime/chitose.model3.json",
+        archive_url="https://cubism.live2d.com/sample-data/bin/chitose/chitose_ja.zip",
+        archive_sha256="8b3feeb65c79452ec64e02dc1776b2c56dee87d44f109be39fef8599e573285b",
+        archive_entry_path="runtime/chitose.model3.json",
+    ),
+    _official_sample_entry(
+        model_id="live2d-sample-koharu",
+        name="Koharu",
+        description="Chibi girl avatar with idle motion, animated props and effects, physics, blink, and lip-sync.",
+        preview_url="https://www.live2d.com/wp-content/uploads/2026/06/sample-img-SD.png",
+        source_url="https://www.live2d.com/en/learn/sample/koharu-haruto/",
+        entry_path="live2d-models/koharu/runtime/koharu.model3.json",
+        archive_url="https://cubism.live2d.com/sample-data/bin/koharu_haruto/koharu_haruto_ja.zip",
+        archive_sha256="a0f677361ea94d8266e3c195ecdc6251e9e49529174315af0640e8eb5d170594",
+        archive_entry_path="koharu/runtime/koharu.model3.json",
+    ),
+    _official_sample_entry(
+        model_id="live2d-sample-haruto",
+        name="Haruto",
+        description="Chibi boy avatar with idle motion, animated props and effects, physics, blink, and lip-sync.",
+        preview_url="https://www.live2d.com/wp-content/uploads/2026/06/sample-img-SD.png",
+        source_url="https://www.live2d.com/en/learn/sample/koharu-haruto/",
+        entry_path="live2d-models/haruto/runtime/haruto.model3.json",
+        archive_url="https://cubism.live2d.com/sample-data/bin/koharu_haruto/koharu_haruto_ja.zip",
+        archive_sha256="a0f677361ea94d8266e3c195ecdc6251e9e49529174315af0640e8eb5d170594",
+        archive_entry_path="haruto/runtime/haruto.model3.json",
+    ),
+    _official_sample_entry(
+        model_id="live2d-sample-tororo",
+        name="Tororo",
+        description="White cat avatar with idle and gesture motions, physics, pose, blink, and lip-sync.",
+        preview_url="https://www.live2d.com/wp-content/uploads/2026/06/sample-img-th.png",
+        source_url="https://www.live2d.com/en/learn/sample/tororo-hijiki/",
+        entry_path="live2d-models/tororo/runtime/tororo.model3.json",
+        archive_url="https://cubism.live2d.com/sample-data/bin/tororo_hijiki/tororo_hijiki_ja.zip",
+        archive_sha256="401cf1596180d7f4752ebac653f01b8c05ff88b56bb84706389c0c105aff1dd8",
+        archive_entry_path="tororo/runtime/tororo.model3.json",
+    ),
+    _official_sample_entry(
+        model_id="live2d-sample-hijiki",
+        name="Hijiki",
+        description="Black cat avatar with idle and gesture motions, physics, pose, blink, and lip-sync.",
+        preview_url="https://www.live2d.com/wp-content/uploads/2026/06/sample-img-th.png",
+        source_url="https://www.live2d.com/en/learn/sample/tororo-hijiki/",
+        entry_path="live2d-models/hijiki/runtime/hijiki.model3.json",
+        archive_url="https://cubism.live2d.com/sample-data/bin/tororo_hijiki/tororo_hijiki_ja.zip",
+        archive_sha256="401cf1596180d7f4752ebac653f01b8c05ff88b56bb84706389c0c105aff1dd8",
+        archive_entry_path="hijiki/runtime/hijiki.model3.json",
+    ),
 )
 
 
@@ -143,7 +287,11 @@ class CharacterLive2DAvatarService:
             installed = bool(asset and Path(asset.storage_path).is_file())
             models.append(
                 Live2DModelCatalogItem(
-                    **{key: value for key, value in entry.items() if key not in {"entry_path", "mouth_parameter_ids", "mouth_form_parameter_ids"}},
+                    **{
+                        key: value
+                        for key, value in entry.items()
+                        if key not in _CATALOG_INTERNAL_KEYS
+                    },
                     installed=installed,
                     selected=bool(current and current.renderer == "live2d" and current.rig_asset_id == asset_id),
                 )
@@ -237,19 +385,10 @@ class CharacterLive2DAvatarService:
         model_root = self.models_root / entry["id"]
         entry_relative = _model_relative_path(entry)
         entry_target = model_root / entry_relative
-        entry_bytes = self._write_remote_file(_raw_model_url(entry, entry_relative), entry_target)
-        try:
-            model_json = json.loads(entry_bytes.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ValueError(f"invalid Live2D model descriptor for {entry['id']}") from exc
-
-        entry_dir = PurePosixPath(entry_relative).parent
-        for referenced_path in _model_references(model_json):
-            resolved_relative = _safe_relative_path(str(entry_dir / referenced_path))
-            self._write_remote_file(
-                _raw_model_url(entry, resolved_relative),
-                model_root / resolved_relative,
-            )
+        if entry.get("archive_url"):
+            self._write_archive_model(entry, model_root, entry_relative)
+        else:
+            self._write_remote_model(entry, model_root, entry_relative)
 
         now = _utcnow()
         asset = AssetRecord(
@@ -273,12 +412,92 @@ class CharacterLive2DAvatarService:
                 "mouth_form_parameter_ids": list(entry["mouth_form_parameter_ids"]),
                 "runtime_files": list(_RUNTIME_FILES),
                 "previous_packs": {},
+                **(
+                    {
+                        "archive_url": entry["archive_url"],
+                        "archive_sha256": entry["archive_sha256"],
+                    }
+                    if entry.get("archive_url")
+                    else {}
+                ),
             },
             created_at=now,
-            compat={"source_project": "Open-LLM-VTuber", "source_revision": entry["revision"]},
+            compat={
+                "source_project": entry["repository"],
+                "source_revision": entry["revision"],
+            },
         )
         asset_store.upsert_asset(asset)
         return asset, True
+
+    def _write_remote_model(
+        self,
+        entry: dict[str, Any],
+        model_root: Path,
+        entry_relative: str,
+    ) -> bytes:
+        entry_target = model_root / entry_relative
+        entry_bytes = self._write_remote_file(
+            _raw_model_url(entry, entry_relative),
+            entry_target,
+        )
+        try:
+            model_json = json.loads(entry_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"invalid Live2D model descriptor for {entry['id']}") from exc
+        entry_dir = PurePosixPath(entry_relative).parent
+        for referenced_path in _model_references(model_json):
+            resolved_relative = _safe_relative_path(str(entry_dir / referenced_path))
+            self._write_remote_file(
+                _raw_model_url(entry, resolved_relative),
+                model_root / resolved_relative,
+            )
+        return entry_bytes
+
+    def _write_archive_model(
+        self,
+        entry: dict[str, Any],
+        model_root: Path,
+        entry_relative: str,
+    ) -> bytes:
+        archive_url = str(entry["archive_url"])
+        archive_bytes = self.download_bytes(archive_url)
+        if len(archive_bytes) > MAX_LIVE2D_FILE_BYTES:
+            raise ValueError(f"Live2D download exceeds {MAX_LIVE2D_FILE_BYTES} bytes: {archive_url}")
+        expected_hash = str(entry["archive_sha256"]).lower()
+        actual_hash = hashlib.sha256(archive_bytes).hexdigest()
+        if not hmac.compare_digest(actual_hash, expected_hash):
+            raise ValueError(f"Live2D archive checksum mismatch for {entry['id']}")
+
+        archive_entry = _safe_relative_path(str(entry["archive_entry_path"]))
+        try:
+            with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+                members = _safe_zip_members(archive)
+                entry_bytes = _read_zip_member(archive, members, archive_entry)
+                try:
+                    model_json = json.loads(entry_bytes.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ValueError(
+                        f"invalid Live2D model descriptor for {entry['id']}"
+                    ) from exc
+
+                self._write_local_file(model_root / entry_relative, entry_bytes)
+                archive_entry_dir = PurePosixPath(archive_entry).parent
+                target_entry_dir = PurePosixPath(entry_relative).parent
+                for referenced_path in _model_references(model_json):
+                    archive_reference = _safe_relative_path(
+                        str(archive_entry_dir / referenced_path)
+                    )
+                    target_reference = _safe_relative_path(
+                        str(target_entry_dir / referenced_path)
+                    )
+                    self._write_local_file(
+                        model_root / target_reference,
+                        _read_zip_member(archive, members, archive_reference),
+                    )
+        except zipfile.BadZipFile as exc:
+            raise ValueError(f"invalid Live2D archive for {entry['id']}") from exc
+        return entry_bytes
 
     def _ensure_runtime(self) -> None:
         for filename, url in _RUNTIME_FILES.items():
@@ -292,11 +511,16 @@ class CharacterLive2DAvatarService:
         data = self.download_bytes(url)
         if len(data) > MAX_LIVE2D_FILE_BYTES:
             raise ValueError(f"Live2D download exceeds {MAX_LIVE2D_FILE_BYTES} bytes: {url}")
+        self._write_local_file(target, data)
+        return data
+
+    def _write_local_file(self, target: Path, data: bytes) -> None:
+        if target.is_file():
+            return
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(f"{target.suffix}.partial")
         temporary.write_bytes(data)
         temporary.replace(target)
-        return data
 
     def _remember_previous_pack(
         self,
@@ -431,6 +655,41 @@ def _safe_relative_path(value: str) -> str:
     if normalized in {"", "."} or ".." in path.parts:
         raise ValueError(f"unsafe Live2D asset path: {value}")
     return path.as_posix()
+
+
+def _safe_zip_members(archive: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
+    members: dict[str, zipfile.ZipInfo] = {}
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        normalized = _safe_relative_path(info.filename)
+        if normalized in members:
+            raise ValueError(f"duplicate Live2D archive member: {normalized}")
+        if info.flag_bits & 0x1:
+            raise ValueError(f"encrypted Live2D archive member: {normalized}")
+        if info.file_size > MAX_LIVE2D_FILE_BYTES:
+            raise ValueError(
+                f"Live2D archive member exceeds {MAX_LIVE2D_FILE_BYTES} bytes: {normalized}"
+            )
+        members[normalized] = info
+    return members
+
+
+def _read_zip_member(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relative_path: str,
+) -> bytes:
+    normalized = _safe_relative_path(relative_path)
+    info = members.get(normalized)
+    if info is None:
+        raise ValueError(f"Live2D archive member not found: {normalized}")
+    data = archive.read(info)
+    if len(data) > MAX_LIVE2D_FILE_BYTES:
+        raise ValueError(
+            f"Live2D archive member exceeds {MAX_LIVE2D_FILE_BYTES} bytes: {normalized}"
+        )
+    return data
 
 
 def _model_references(model_json: dict[str, Any]) -> list[str]:
