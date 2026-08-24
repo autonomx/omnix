@@ -24,7 +24,7 @@ function arrayField<T>(payload: unknown, field: string): T[] {
 function replayBar(bar: MarketBar) {
   return {
     instrument_id: bar.instrument_id,
-    binding_id: bar.binding_id ?? null,
+    binding_id: null,
     start_time: bar.start_time,
     end_time: bar.end_time,
     open: bar.open,
