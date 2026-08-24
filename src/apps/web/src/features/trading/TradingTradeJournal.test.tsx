@@ -121,17 +121,23 @@ describe('TradingTradeJournal', () => {
     expect(screen.getByText(/entry-fill-1/)).toBeInTheDocument();
     expect(screen.getByText(/setup-12345/)).toBeInTheDocument();
     expect(screen.getByText('entry order submitted')).toBeInTheDocument();
+    expect(screen.getByText(/Operator gate unchanged/)).toBeInTheDocument();
     expect(screen.getByText(/Read-only projection/)).toBeInTheDocument();
   });
 
-  it('can scope the journal to the selected symbol without changing server evidence', async () => {
+  it('can scope the journal to the selected symbol without changing server evidence or retaining an out-of-scope detail', async () => {
     render(<TradingTradeJournal accountId="paper-1" instrumentId={osrh} />);
     await screen.findByText('OSRH');
 
+    fireEvent.click(screen.getByRole('button', { name: /XYZ/ }));
+    expect(screen.getByRole('article', { name: /Journal detail for XYZ/ })).toBeInTheDocument();
+
     const callsBeforeScopeChange = analyticsApi.journal.mock.calls.length;
-    expect(screen.getByText('XYZ')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: /Only OSRH/ }));
+
     expect(screen.queryByText('XYZ')).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: /Journal detail for XYZ/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('article', { name: /Journal detail for OSRH/ })).toBeInTheDocument();
     expect(analyticsApi.journal.mock.calls.length).toBe(callsBeforeScopeChange);
   });
 
