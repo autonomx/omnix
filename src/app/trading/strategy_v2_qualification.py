@@ -339,7 +339,7 @@ def evaluate_v2_prospective_qualification(
         reasons.append("V2_PROSPECTIVE_ECONOMIC_PIPELINE_REVIEW_REQUIRED")
 
     qualified = not reasons
-    legacy_reviewed = any(
+    reviewed = any(
         event.event_type == "v2_promotion_review"
         and event.payload.get("qualification_version") == V2_QUALIFICATION_VERSION
         and event.payload.get("profile_fingerprint") == current_profile
@@ -347,10 +347,6 @@ def evaluate_v2_prospective_qualification(
         and event.payload.get("approved") is True
         for event in ordered
     )
-    # The prospective-economic final review is itself an explicit AUTO PAPER
-    # review. Legacy V2 review events remain accepted only for compatibility,
-    # but cannot bypass the new economic-pipeline reason above.
-    reviewed = prospective_economic_reviewed or legacy_reviewed
     if qualified and not reviewed:
         reasons.append("V2_OPERATOR_REVIEW_REQUIRED")
 
