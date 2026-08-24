@@ -18,6 +18,7 @@ import type {
 
 const DEEP_RECOVERY_EVENT_TYPES = new Set(['deep_recovery_state', 'deep_recovery_shadow']);
 const PROSPECTIVE_ECONOMIC_EVENT_TYPES = new Set([
+  'prospective_economic_candidate',
   'prospective_economic_signal',
   'prospective_economic_outcome',
   'prospective_economic_evaluation',
