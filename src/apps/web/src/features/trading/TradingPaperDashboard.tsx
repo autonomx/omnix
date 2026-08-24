@@ -3,11 +3,13 @@ import { tradingPaperApi } from './tradingPaperApi';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type { TradingStrategyConfig } from './tradingStrategyTypes';
 import { TradingCommandCenter } from './TradingCommandCenter';
+import { TradingTradeDrilldown } from './TradingTradeDrilldown';
 import {
   tradingPaperAnalyticsApi,
   type AnalyticsNumeric,
   type PaperAnalyticsMode,
   type PaperAnalyticsOverview,
+  type PaperAnalyticsTrade,
   type PaperSimulationEpoch,
 } from './tradingPaperAnalyticsApi';
 import './TradingPaperDashboard.css';
@@ -284,6 +286,7 @@ export function TradingPaperDashboard() {
   const [rollingWindow, setRollingWindow] = useState(20);
   const [tab, setTab] = useState<DashboardTab>('overview');
   const [data, setData] = useState<PaperAnalyticsOverview | null>(null);
+  const [selectedTrade, setSelectedTrade] = useState<PaperAnalyticsTrade | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -339,6 +342,10 @@ export function TradingPaperDashboard() {
     });
     return () => { alive = false; };
   }, [accountId, strategyId, epochId, mode, startDate, endDate, rollingWindow]);
+
+  useEffect(() => {
+    setSelectedTrade(null);
+  }, [accountId, strategyId, epochId, mode, startDate, endDate]);
 
   const selectAccount = (next: string) => {
     setAccountId(next);
@@ -450,7 +457,7 @@ export function TradingPaperDashboard() {
           </div>
 
           <div className="paper-overview-lower">
-            <article className="paper-panel-card recent-trades-card"><header><div><strong>Recent trades</strong><small>Canonical AUTO PAPER and prospective SHADOW outcomes</small></div><span>{tradeRows.length} shown</span></header><div className="paper-trades-table"><table><thead><tr><th>Time</th><th>Symbol</th><th>Mode</th><th>Qty</th><th>P&L</th><th>R-mult</th><th>Outcome</th><th>Exit</th></tr></thead><tbody>{tradeRows.slice(0, 8).map((trade) => <tr key={`${trade.source}-${trade.trade_id}`}><td>{compactTime(trade.entry_time)}</td><td><strong>{symbol(trade.instrument_id)}</strong></td><td>{trade.source === 'shadow_replay' ? 'SHADOW' : 'AUTO'}</td><td>{trade.quantity ?? '—'}</td><td className={Number(trade.realized_pnl ?? 0) < 0 ? 'negative' : 'positive'}>{trade.realized_pnl == null ? '—' : money(trade.realized_pnl, currency, true)}</td><td className={Number(trade.r_result) < 0 ? 'negative' : 'positive'}>{signed(trade.r_result, 2, 'R')}</td><td><span className={Number(trade.r_result) >= 0 ? 'trade-outcome win' : 'trade-outcome loss'}>{Number(trade.r_result) >= 0 ? 'Win' : 'Loss'}</span></td><td>{trade.exit_reason ?? '—'}</td></tr>)}{!tradeRows.length ? <tr><td colSpan={8}>No completed trades in this filter.</td></tr> : null}</tbody></table></div></article>
+            <article className="paper-panel-card recent-trades-card"><header><div><strong>Recent trades</strong><small>Canonical AUTO PAPER and prospective SHADOW outcomes · drill into retained evidence</small></div><span>{tradeRows.length} shown</span></header><div className="paper-trades-table"><table><thead><tr><th>Time</th><th>Symbol</th><th>Mode</th><th>Qty</th><th>P&L</th><th>R-mult</th><th>Outcome</th><th>Exit</th><th>Detail</th></tr></thead><tbody>{tradeRows.slice(0, 8).map((trade) => <tr key={`${trade.source}-${trade.trade_id}`}><td>{compactTime(trade.entry_time)}</td><td><strong>{symbol(trade.instrument_id)}</strong></td><td>{trade.source === 'shadow_replay' ? 'SHADOW' : 'AUTO'}</td><td>{trade.quantity ?? '—'}</td><td className={Number(trade.realized_pnl ?? 0) < 0 ? 'negative' : 'positive'}>{trade.realized_pnl == null ? '—' : money(trade.realized_pnl, currency, true)}</td><td className={Number(trade.r_result) < 0 ? 'negative' : 'positive'}>{signed(trade.r_result, 2, 'R')}</td><td><span className={Number(trade.r_result) >= 0 ? 'trade-outcome win' : 'trade-outcome loss'}>{Number(trade.r_result) >= 0 ? 'Win' : 'Loss'}</span></td><td>{trade.exit_reason ?? '—'}</td><td><button type="button" className="paper-trade-view-button" aria-label={`View ${symbol(trade.instrument_id)} trade evidence`} onClick={() => setSelectedTrade(trade)}>View</button></td></tr>)}{!tradeRows.length ? <tr><td colSpan={9}>No completed trades in this filter.</td></tr> : null}</tbody></table></div></article>
             <article className="paper-panel-card insights-card"><header><div><strong>Strategy / execution insights</strong><small>Filtered evidence; sample-derived metrics are shown only when the trade sample is complete</small></div></header><div className="paper-insight-grid"><Insight icon="↗" label="Profit factor" value={fixed(summary?.profit_factor, 2)} /><Insight icon="◉" label="Sharpe ratio" value={sharpe === null ? '—' : sharpe.toFixed(2)} detail="Daily R annualized" /><Insight icon="↗" label="Sortino ratio" value={sortino === null ? '—' : sortino.toFixed(2)} detail="Daily R annualized" /><Insight icon="↟" label="Avg win" value={averageWin === null ? '—' : signed(averageWin, 2, 'R')} /><Insight icon="↡" label="Avg loss" value={averageLoss === null ? '—' : signed(averageLoss, 2, 'R')} /><Insight icon="↗" label="Payoff ratio" value={payoffRatio === null ? '—' : payoffRatio.toFixed(2)} /><Insight icon="Σ" label="Avg trade" value={signed(summary?.expectancy_r, 3, 'R')} /><Insight icon="◷" label="Trade duration" value={durationLabel(averageDuration)} /><Insight icon="▲" label="Profitability" value={pct(summary?.win_rate, 2)} /></div></article>
           </div>
 
@@ -476,6 +483,10 @@ export function TradingPaperDashboard() {
           <article className="wide"><header><div><strong>Simulation history</strong><small>Reset starts a new immutable epoch instead of erasing evidence</small></div></header><div className="paper-epochs">{epochs.map((epoch) => <div key={epoch.epoch_id} data-current={epoch.is_current ? 'true' : 'false'}><strong>Epoch {epoch.ordinal}</strong><span>{epoch.is_current ? 'CURRENT' : epoch.end_reason?.replaceAll('_', ' ') ?? 'closed'}</span><small>Initial {money(epoch.initial_cash, currency)} · {timeLabel(epoch.started_at)}{epoch.ended_at ? ` → ${timeLabel(epoch.ended_at)}` : ''}</small></div>)}</div></article>
         </div> : null}
       </> : <div className="paper-dashboard-empty">{status === 'loading' ? 'Loading durable paper analytics…' : 'No analytics available.'}</div>}
+
+      {selectedTrade && accountId ? (
+        <TradingTradeDrilldown trade={selectedTrade} accountId={accountId} currency={currency} onClose={() => setSelectedTrade(null)} />
+      ) : null}
     </section>
   );
 }
