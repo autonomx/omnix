@@ -16,6 +16,11 @@ type WatchlistPayload = { name: string; instrumentIds: string[] };
 type QuoteSnapshot = { price: string | null; changePercent: number | null };
 type ChangeSort = 'manual' | 'desc' | 'asc';
 
+// The side-panel tabs unmount the watchlist when another tab is selected. Keep
+// the latest values at module scope so returning to the watchlist can render
+// them immediately while the next refresh is in flight.
+const watchlistQuoteCache: Record<string, QuoteSnapshot> = {};
+
 const fallbackIntervals = ['1mo', '1w', '1d', '12h', '8h', '6h', '4h', '2h', '1h', '30m', '15m', '5m', '3m', '1m'];
 
 function fallbackIntervalCandidates(interval: string): string[] {
@@ -160,7 +165,7 @@ export function TradingWatchlist({
   const [records, setRecords] = useState<TradingDocument[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [status, setStatus] = useState<'loading' | 'saved' | 'saving' | 'conflict' | 'error'>('loading');
-  const [quotes, setQuotes] = useState<Record<string, QuoteSnapshot>>({});
+  const [quotes, setQuotes] = useState<Record<string, QuoteSnapshot>>(() => ({ ...watchlistQuoteCache }));
   const [changeSort, setChangeSort] = useState<ChangeSort>('manual');
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
@@ -240,7 +245,6 @@ export function TradingWatchlist({
     const instrumentIds = instrumentIdsKey ? instrumentIdsKey.split('\u0000') : [];
     let cancelled = false;
     if (instrumentIds.length === 0) {
-      setQuotes({});
       return () => { cancelled = true; };
     }
 
@@ -262,7 +266,25 @@ export function TradingWatchlist({
           next[instrumentId] = { price: null, changePercent: null };
         }
       }));
-      if (!cancelled) setQuotes(next);
+      if (!cancelled) {
+        setQuotes((current) => {
+          const merged = { ...current };
+          for (const [instrumentId, snapshot] of Object.entries(next)) {
+            // Keep the last known snapshot when a refresh fails. A symbol that
+            // has never produced a quote still renders the normal placeholder.
+            if (snapshot.price === null && snapshot.changePercent === null) {
+              const cached = watchlistQuoteCache[instrumentId] ?? current[instrumentId];
+              if (cached) {
+                merged[instrumentId] = cached;
+                continue;
+              }
+            }
+            watchlistQuoteCache[instrumentId] = snapshot;
+            merged[instrumentId] = snapshot;
+          }
+          return merged;
+        });
+      }
     })();
 
     return () => { cancelled = true; };

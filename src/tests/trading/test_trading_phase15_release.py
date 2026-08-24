@@ -114,7 +114,7 @@ def test_all_trading_product_routes_are_registered_in_openapi() -> None:
     }
     assert required <= paths
 
-    gateway = Path("src/app/gateway/trading_routes.py").read_text()
+    gateway = Path("src/app/gateway/trading_routes.py").read_text(encoding="utf-8")
     for registration in (
         "create_trading_router",
         "create_trading_execution_router",
@@ -174,7 +174,7 @@ def test_backtest_artifact_is_checksummed_and_corruption_is_detected(
 
 def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
     trading_source = "\n".join(
-        path.read_text()
+        path.read_text(encoding="utf-8")
         for path in Path("src/app/trading").glob("*.py")
     ).lower()
     for forbidden in (
@@ -186,7 +186,7 @@ def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
     ):
         assert forbidden not in trading_source
 
-    research = Path("src/app/trading/research.py").read_text().lower()
+    research = Path("src/app/trading/research.py").read_text(encoding="utf-8").lower()
     for forbidden in (
         "place_order",
         "create_alert",
@@ -198,7 +198,7 @@ def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
     ):
         assert forbidden not in research
 
-    strategy_monitor = Path("src/app/trading/strategy_monitor.py").read_text()
+    strategy_monitor = Path("src/app/trading/strategy_monitor.py").read_text(encoding="utf-8")
     assert '"live_broker_enabled": False' in strategy_monitor
     assert '"ai_order_placement_enabled": False' in strategy_monitor
     assert "bounce_model" not in strategy_monitor.lower()
@@ -208,7 +208,7 @@ def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
 def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -> None:
     side_panel = Path(
         "src/apps/web/src/features/trading/TradingSidePanel.tsx"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert 'role="tablist"' in side_panel
     assert 'role="tab"' in side_panel
     assert 'aria-selected=' in side_panel
@@ -244,7 +244,7 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
 
 
 def test_legal_operator_and_roadmap_review_records_are_present() -> None:
-    notices = Path("THIRD_PARTY_NOTICES.md").read_text()
+    notices = Path("THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
     assert "TradingView Lightweight Charts" in notices
     assert "Apache License 2.0" in notices
     assert "tradingview-mcp" in notices
@@ -252,7 +252,7 @@ def test_legal_operator_and_roadmap_review_records_are_present() -> None:
 
     review = Path(
         "docs/plans/omnix_trading_terminal_roadmap_review.md"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "Code-complete" in review
     assert "Release-certified" in review
     assert "environment certification pending" in review
@@ -260,13 +260,13 @@ def test_legal_operator_and_roadmap_review_records_are_present() -> None:
 
     certification = Path(
         "docs/architecture/OMNIX_TRADING_RELEASE_CERTIFICATION.md"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "Pending environment run" in certification
     assert "PR #1488 remains draft" in certification
 
     operations = Path(
         "docs/architecture/OMNIX_TRADING_OPERATIONS.md"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "Provider outage procedure" in operations
     assert "Corrupt or missing artifact" in operations
     assert "Rollback" in operations
@@ -276,14 +276,14 @@ def test_legal_operator_and_roadmap_review_records_are_present() -> None:
 
     strategy_plan = Path(
         "docs/plans/omnix_gap_pullback_automation.md"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "Don't predict the bottom" in strategy_plan
     assert "prefix invariance" in strategy_plan.lower()
     assert "shadow-only" in strategy_plan.lower()
 
     security = Path(
         "docs/architecture/OMNIX_TRADING_SECURITY_LEGAL.md"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "does not provide live brokerage execution" in security
     assert "Market-data rights" in security
 
@@ -291,14 +291,14 @@ def test_legal_operator_and_roadmap_review_records_are_present() -> None:
 def test_release_migrations_preserve_integrity_evidence() -> None:
     sequencing = Path(
         "src/app/persistence/migrations/0024_trading_backtest_bar_indices.sql"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "signal_bar_index IS NULL AND fill_bar_index IS NULL" in sequencing
     assert "fill_bar_index = signal_bar_index + 1" in sequencing
     assert "trade_index * 2" not in sequencing
 
     artifacts = Path(
         "src/app/persistence/migrations/0025_trading_backtest_artifacts.sql"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     for column in (
         "win_rate_percent",
         "exposure_percent",
@@ -312,7 +312,7 @@ def test_release_migrations_preserve_integrity_evidence() -> None:
 
     strategy = Path(
         "src/app/persistence/migrations/0038_trading_strategy_automation.sql"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     for table in (
         "omnix_trading_strategy_configs",
         "omnix_trading_strategy_events",
@@ -324,11 +324,11 @@ def test_release_migrations_preserve_integrity_evidence() -> None:
 
     paper_protection = Path(
         "src/app/persistence/migrations/0039_trading_paper_protections.sql"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_paper_protections" in paper_protection
 
     model_artifacts = Path(
         "src/app/persistence/migrations/0040_trading_model_artifacts.sql"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "CREATE TABLE IF NOT EXISTS omnix_trading_model_artifacts" in model_artifacts
     assert "CHECK (shadow_only = TRUE)" in model_artifacts
