@@ -103,7 +103,7 @@ _REDEEMED = re.compile(r"\bredeemed\b", re.I)
 _WITHDRAWN = re.compile(r"\bwithdrawn\b", re.I)
 _ACTIVE = re.compile(
     r"\b(?:active|remains? available|outstanding|effective|may sell|may issue|may offer|"
-    r"entered into|enters? into|enters? (?:an? )?(?:at[- ]the[- ]market|ATM)|commenced|launched|currently available)\b",
+    r"entered into|enters? into|(?:entered|enters?) (?:an? )?(?:at[- ]the[- ]market|ATM)|commenced|launched|currently available)\b",
     re.I,
 )
 
