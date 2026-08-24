@@ -252,6 +252,10 @@
 .trade-outcome { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; border-radius: 999px; padding: 4px 7px; font-size: 8px; font-weight: 700; }
 .trade-outcome.win { background: rgba(47, 184, 121, .1); color: var(--pd-green); }
 .trade-outcome.loss { background: rgba(236, 75, 93, .1); color: var(--pd-red); }
+.paper-order-references-card { margin-bottom: 10px; }
+.paper-order-status { color: var(--pd-muted); font-size: 8px; font-weight: 700; }
+.paper-order-status.status-filled { color: var(--pd-green); }
+.paper-order-status.status-rejected { color: var(--pd-red); }
 
 .paper-insight-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .paper-insight { display: grid; grid-template-columns: 29px minmax(0, 1fr); gap: 8px; min-height: 72px; align-items: center; padding: 10px 12px; border-right: 1px solid var(--pd-line-soft); border-bottom: 1px solid var(--pd-line-soft); }

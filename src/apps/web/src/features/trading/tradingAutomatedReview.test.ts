@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PaperTradeJournalEntry } from './tradingPaperAnalyticsApi';
-import { deriveAutomatedTradeReview } from './tradingAutomatedReview';
+import { deriveAutomatedTradeReview } from './deriveAutomatedTradeReview';
 
 function entry(overrides: Partial<PaperTradeJournalEntry> = {}): PaperTradeJournalEntry {
   return {

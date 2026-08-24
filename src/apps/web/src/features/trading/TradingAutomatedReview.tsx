@@ -1,5 +1,5 @@
 import type { PaperTradeJournalEntry } from './tradingPaperAnalyticsApi';
-import { deriveAutomatedTradeReview } from './tradingAutomatedReview';
+import { deriveAutomatedTradeReview } from './deriveAutomatedTradeReview';
 import './TradingAutomatedReview.css';
 
 function label(value: string): string {

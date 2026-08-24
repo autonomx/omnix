@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
+import type { PaperAccountSnapshot, PaperOrder } from './paperTypes';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type { TradingStrategyConfig } from './tradingStrategyTypes';
 import { TradingCommandCenter } from './TradingCommandCenter';
@@ -17,6 +18,17 @@ import './TradingPaperDashboard.css';
 type DashboardTab = 'overview' | 'diagnostics' | 'execution';
 type Point = { x: number; y: number; label?: string };
 type DailyPerformanceRow = { date: string; value: number };
+type ManualPaperPerformance = {
+  tradeCount: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  profitFactor: number | null;
+  totalPnl: number;
+  bestPnl: number | null;
+  worstPnl: number | null;
+  daily: DailyPerformanceRow[];
+};
 
 function numeric(value: AnalyticsNumeric | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null;
@@ -64,6 +76,46 @@ function timeLabel(value: string): string {
 function compactTime(value: string): string {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function paperOrderTime(order: PaperOrder): string {
+  const value = order.updated_at ?? order.created_at;
+  return value ? compactTime(value) : '—';
+}
+
+function manualPaperPerformance(
+  snapshot: PaperAccountSnapshot | null,
+  startDate: string,
+  endDate: string,
+): ManualPaperPerformance {
+  const realized = (snapshot?.recent_ledger ?? []).flatMap((entry) => {
+    if (entry.entry_type !== 'realized_pnl') return [];
+    const amount = Number(entry.amount);
+    if (!Number.isFinite(amount)) return [];
+    const parsedDate = entry.created_at ? new Date(entry.created_at) : null;
+    const date = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString().slice(0, 10) : null;
+    if ((startDate && (!date || date < startDate)) || (endDate && (!date || date > endDate))) return [];
+    return [{ amount, date }];
+  });
+  const wins = realized.filter((item) => item.amount > 0).length;
+  const losses = realized.filter((item) => item.amount < 0).length;
+  const grossProfit = realized.filter((item) => item.amount > 0).reduce((total, item) => total + item.amount, 0);
+  const grossLoss = Math.abs(realized.filter((item) => item.amount < 0).reduce((total, item) => total + item.amount, 0));
+  const dailyByDate = new Map<string, number>();
+  for (const item of realized) {
+    if (item.date) dailyByDate.set(item.date, (dailyByDate.get(item.date) ?? 0) + item.amount);
+  }
+  return {
+    tradeCount: realized.length,
+    wins,
+    losses,
+    winRate: realized.length ? wins / realized.length : null,
+    profitFactor: grossLoss > 0 ? grossProfit / grossLoss : null,
+    totalPnl: realized.reduce((total, item) => total + item.amount, 0),
+    bestPnl: realized.length ? Math.max(...realized.map((item) => item.amount)) : null,
+    worstPnl: realized.length ? Math.min(...realized.map((item) => item.amount)) : null,
+    daily: [...dailyByDate.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([date, value]) => ({ date, value })),
+  };
 }
 
 function durationLabel(milliseconds: number | null): string {
@@ -273,6 +325,21 @@ function Insight({ icon, label, value, detail }: { icon: string; label: string; 
   return <div className="paper-insight"><span aria-hidden="true">{icon}</span><div><small>{label}</small><strong>{value}</strong>{detail ? <em>{detail}</em> : null}</div></div>;
 }
 
+function PaperOrderReferences({ orders }: { orders: PaperOrder[] }) {
+  return (
+    <article className="paper-panel-card paper-order-references-card">
+      <header>
+        <div><strong>Paper order references</strong><small>Direct account activity, including manual fills and rejected orders. These are not canonical strategy trade records.</small></div>
+        <span>{orders.length} shown</span>
+      </header>
+      <div className="paper-trades-table"><table><thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Status</th><th>Fill price</th><th>Order reference</th></tr></thead><tbody>
+        {orders.map((order) => <tr key={order.order_id}><td>{paperOrderTime(order)}</td><td><strong>{symbol(order.instrument_id)}</strong></td><td>{order.side.toUpperCase()}</td><td>{Number(order.filled_quantity) > 0 ? order.filled_quantity : order.quantity}</td><td><span className={`paper-order-status status-${order.status}`}>{order.status.toUpperCase()}</span></td><td>{order.average_fill_price ?? '—'}</td><td><code title={order.order_id}>{order.order_id}</code></td></tr>)}
+        {!orders.length ? <tr><td colSpan={7}>No paper orders have been recorded for this account.</td></tr> : null}
+      </tbody></table></div>
+    </article>
+  );
+}
+
 export function TradingPaperDashboard() {
   const [accounts, setAccounts] = useState<Array<{ account_id: string; name: string; currency: string }>>([]);
   const [strategies, setStrategies] = useState<TradingStrategyConfig[]>([]);
@@ -280,12 +347,13 @@ export function TradingPaperDashboard() {
   const [accountId, setAccountId] = useState('');
   const [strategyId, setStrategyId] = useState('');
   const [epochId, setEpochId] = useState('');
-  const [mode, setMode] = useState<PaperAnalyticsMode>('shadow');
+  const [mode, setMode] = useState<PaperAnalyticsMode>('auto_paper');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [rollingWindow, setRollingWindow] = useState(20);
   const [tab, setTab] = useState<DashboardTab>('overview');
   const [data, setData] = useState<PaperAnalyticsOverview | null>(null);
+  const [paperSnapshot, setPaperSnapshot] = useState<PaperAccountSnapshot | null>(null);
   const [selectedTrade, setSelectedTrade] = useState<PaperAnalyticsTrade | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -311,6 +379,27 @@ export function TradingPaperDashboard() {
   }, []);
 
   const accountStrategies = useMemo(() => strategies.filter((strategy) => strategy.account_id === accountId), [accountId, strategies]);
+
+  useEffect(() => {
+    if (!accountId) {
+      setPaperSnapshot(null);
+      return;
+    }
+    let alive = true;
+    const refresh = () => {
+      void tradingPaperApi.snapshot(accountId).then((snapshot) => {
+        if (alive) setPaperSnapshot(snapshot);
+      }).catch(() => {
+        if (alive) setPaperSnapshot(null);
+      });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [accountId]);
 
   useEffect(() => {
     if (!accountId) { setEpochs([]); setEpochId(''); return; }
@@ -369,7 +458,7 @@ export function TradingPaperDashboard() {
     return <section className="trading-paper-dashboard"><div className="paper-dashboard-empty"><strong>Paper trading dashboard</strong><span>Create a paper account to begin collecting durable analytics.</span></div></section>;
   }
 
-  const summary = data?.summary;
+  let summary = data?.summary;
   const selectedAccount = accounts.find((account) => account.account_id === accountId);
   const currency = selectedAccount?.currency ?? 'USD';
   const selectedEpoch = epochs.find((epoch) => epoch.epoch_id === epochId) ?? epochs.find((epoch) => epoch.is_current) ?? epochs[0];
@@ -386,6 +475,30 @@ export function TradingPaperDashboard() {
   const sharpe = sampleSharpe(dailyValues);
   const sortino = sampleSortino(dailyValues);
   const tradeRows = data?.recent_trades ?? [];
+  const paperOrderRows = useMemo(
+    () => [...(paperSnapshot?.order_history ?? [])]
+      .sort((left, right) => new Date(right.updated_at ?? right.created_at ?? 0).getTime() - new Date(left.updated_at ?? left.created_at ?? 0).getTime())
+      .slice(0, 8),
+    [paperSnapshot?.order_history],
+  );
+  const manualPerformance = useMemo(
+    () => manualPaperPerformance(paperSnapshot, startDate, endDate),
+    [endDate, paperSnapshot, startDate],
+  );
+  const usingManualPerformance = mode === 'auto_paper'
+    && tradeRows.length === 0
+    && manualPerformance.tradeCount > 0;
+  if (usingManualPerformance && summary) {
+    summary = {
+      ...summary,
+      trade_count: manualPerformance.tradeCount,
+      wins: manualPerformance.wins,
+      losses: manualPerformance.losses,
+      win_rate: manualPerformance.winRate,
+      profit_factor: manualPerformance.profitFactor,
+      expectancy_r: null,
+    };
+  }
   const completeTradeSample = Boolean(summary && tradeRows.length === summary.trade_count);
   const tradeRs = tradeRows.map((trade) => Number(trade.r_result)).filter(Number.isFinite);
   const winners = tradeRs.filter((value) => value > 0);
@@ -400,12 +513,13 @@ export function TradingPaperDashboard() {
   const hasCompleteDollarPnl = Boolean(summary && tradeRows.length === summary.trade_count && tradeRows.every((trade) => trade.realized_pnl != null));
   const dailyPerformance = useMemo<DailyPerformanceRow[]>(() => {
     if (!data) return [];
+    if (usingManualPerformance) return manualPerformance.daily;
     if (!hasCompleteDollarPnl) return data.daily_r.map((row) => ({ date: row.session_date, value: Number(row.r_result) }));
     const byDate = new Map<string, number>();
     for (const trade of data.recent_trades) byDate.set(trade.session_date, (byDate.get(trade.session_date) ?? 0) + Number(trade.realized_pnl ?? 0));
     return [...byDate.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([date, value]) => ({ date, value }));
-  }, [data, hasCompleteDollarPnl]);
-  const dailyUnit: 'R' | 'USD' = hasCompleteDollarPnl ? 'USD' : 'R';
+  }, [data, hasCompleteDollarPnl, manualPerformance.daily, usingManualPerformance]);
+  const dailyUnit: 'R' | 'USD' = usingManualPerformance || hasCompleteDollarPnl ? 'USD' : 'R';
   const drawdownUnit = data?.drawdown[0]?.unit ?? 'R';
   const maxDrawdown = drawdownPoints.length ? Math.min(...drawdownPoints.map((point) => point.y)) : null;
 
@@ -455,6 +569,8 @@ export function TradingPaperDashboard() {
             <article className="paper-chart-card win-card"><header><div><strong>Win vs loss</strong><small>Completed filtered trades</small></div><span>{pct(summary?.win_rate)}</span></header><WinLossDonut wins={summary?.wins ?? 0} losses={summary?.losses ?? 0} /><footer><div><small>Best trade</small><strong className="positive">{bestTrade ? signed(bestTrade.r_result, 2, 'R') : '—'}</strong></div><div><small>Worst trade</small><strong className="negative">{worstTrade ? signed(worstTrade.r_result, 2, 'R') : '—'}</strong></div></footer></article>
             <article className="paper-chart-card drawdown-card"><header><div><strong>Drawdown</strong><small>Peak-to-trough {drawdownUnit === 'percent' ? 'equity' : 'strategy R'}</small></div><span>All time</span></header><LineChart points={drawdownPoints} references={[{ value: 0, label: 'peak' }]} tone="danger" formatAxis={(value) => `${value.toFixed(2)}${drawdownUnit === 'percent' ? '%' : 'R'}`} /></article>
           </div>
+
+          <PaperOrderReferences orders={paperOrderRows} />
 
           <div className="paper-overview-lower">
             <article className="paper-panel-card recent-trades-card"><header><div><strong>Recent trades</strong><small>Canonical AUTO PAPER and prospective SHADOW outcomes · drill into retained evidence</small></div><span>{tradeRows.length} shown</span></header><div className="paper-trades-table"><table><thead><tr><th>Time</th><th>Symbol</th><th>Mode</th><th>Qty</th><th>P&L</th><th>R-mult</th><th>Outcome</th><th>Exit</th><th>Detail</th></tr></thead><tbody>{tradeRows.slice(0, 8).map((trade) => <tr key={`${trade.source}-${trade.trade_id}`}><td>{compactTime(trade.entry_time)}</td><td><strong>{symbol(trade.instrument_id)}</strong></td><td>{trade.source === 'shadow_replay' ? 'SHADOW' : 'AUTO'}</td><td>{trade.quantity ?? '—'}</td><td className={Number(trade.realized_pnl ?? 0) < 0 ? 'negative' : 'positive'}>{trade.realized_pnl == null ? '—' : money(trade.realized_pnl, currency, true)}</td><td className={Number(trade.r_result) < 0 ? 'negative' : 'positive'}>{signed(trade.r_result, 2, 'R')}</td><td><span className={Number(trade.r_result) >= 0 ? 'trade-outcome win' : 'trade-outcome loss'}>{Number(trade.r_result) >= 0 ? 'Win' : 'Loss'}</span></td><td>{trade.exit_reason ?? '—'}</td><td><button type="button" className="paper-trade-view-button" aria-label={`View ${symbol(trade.instrument_id)} trade evidence`} onClick={() => setSelectedTrade(trade)}>View</button></td></tr>)}{!tradeRows.length ? <tr><td colSpan={9}>No completed trades in this filter.</td></tr> : null}</tbody></table></div></article>
