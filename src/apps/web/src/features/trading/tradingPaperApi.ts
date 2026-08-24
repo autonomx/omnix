@@ -8,6 +8,8 @@ import type {
   PaperProtectionInput,
 } from './paperTypes';
 
+const orderManagementHeaders = { 'X-Omnix-Paper-Order-Management': 'v2' };
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -45,12 +47,12 @@ export const tradingPaperApi = {
   cancelOrder: (accountId: string, orderId: string) =>
     requestJson<PaperOrder>(
       `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', headers: orderManagementHeaders },
     ),
   replaceOrder: (accountId: string, orderId: string, replacement: PaperOrderInput) =>
     requestJson<{ cancelled: PaperOrder; replacement: PaperOrder }>(
       `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/orders/${encodeURIComponent(orderId)}/replace`,
-      { method: 'POST', body: JSON.stringify({ replacement }) },
+      { method: 'POST', headers: orderManagementHeaders, body: JSON.stringify({ replacement }) },
     ),
   /** @deprecated Browser observations are deliberately non-authoritative. */
   processObservation: async (_accountId: string, _input: unknown) => ({ fills: [] as unknown[] }),
