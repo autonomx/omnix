@@ -20,9 +20,10 @@ const mocks = vi.hoisted(() => {
     stop: vi.fn(async () => undefined),
     isClosed: vi.fn(() => false),
   };
+  const recordSpy = vi.fn();
   const reporter = {
     traceId: 'live-call:s1:ordering-regression',
-    record: vi.fn(),
+    record: recordSpy,
     flush: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
   };
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => {
     cueControl,
     session,
     reporter,
+    recordSpy,
     createSession: vi.fn(async () => session),
     createReporter: vi.fn(() => reporter),
     createTraceId: vi.fn(() => 'live-call:s1:ordering-regression'),
@@ -123,7 +125,8 @@ beforeEach(() => {
   mocks.session.setStartPolicy.mockReset();
   mocks.session.stop.mockReset().mockResolvedValue(undefined);
   mocks.session.isClosed.mockReset().mockReturnValue(false);
-  mocks.reporter.record.mockReset();
+  mocks.recordSpy.mockReset();
+  mocks.reporter.record = mocks.recordSpy;
   mocks.reporter.close.mockReset().mockResolvedValue(undefined);
   mocks.createSession.mockReset().mockResolvedValue(mocks.session);
   mocks.createReporter.mockReset().mockReturnValue(mocks.reporter);
@@ -153,7 +156,7 @@ describe('live voice phrase ordering regression', () => {
     await response.text();
 
     await waitFor(() => expect(mocks.session.enqueueCue).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.reporter.record).toHaveBeenCalledWith(
+    await waitFor(() => expect(mocks.recordSpy).toHaveBeenCalledWith(
       'phrase_queued',
       expect.objectContaining({ phrase_index: 1 }),
       'controller',

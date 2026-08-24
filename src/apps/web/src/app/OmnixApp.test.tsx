@@ -24,7 +24,7 @@ describe('OmnixApp', () => {
     document.documentElement.dataset.omnixAppearancePreference = '';
   });
 
-  it('renders the shared app shell and all module entrypoints', async () => {
+  it('renders the shared app shell and curated primary sidebar entrypoints', async () => {
     renderApp();
 
     expect((await screen.findAllByLabelText('Omnix')).length).toBeGreaterThan(0);
@@ -36,12 +36,13 @@ describe('OmnixApp', () => {
     expect(screen.getByRole('link', { name: 'Storyteller' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Podcast' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Voice Studio' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Voice Cloning' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Voice Cloning' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'STT' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Image Generation' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Providers' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Models' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Jobs / Runs' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Trading' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Providers' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Models' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Jobs / Runs' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Assets' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Reports' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();

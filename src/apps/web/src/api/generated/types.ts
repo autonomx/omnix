@@ -1221,6 +1221,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/catalysts/classify-shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Classify Shadow */
+        post: operations["classify_shadow_api_trading_catalysts_classify_shadow_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/catalysts/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture */
+        post: operations["capture_api_trading_catalysts_evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/catalysts/evidence/{instrument_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Evidence */
+        get: operations["list_evidence_api_trading_catalysts_evidence__instrument_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/currency-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Currency Rate */
+        get: operations["currency_rate_api_trading_currency_rates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/diagnostics": {
         parameters: {
             query?: never;
@@ -1270,6 +1338,177 @@ export interface paths {
         post?: never;
         /** Archive Trading Drawing */
         delete: operations["archive_trading_drawing_api_trading_drawings__record_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/execution/observation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Observation */
+        get: operations["observation_api_trading_execution_observation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/execution/providers/alpaca-iex/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Alpaca Iex Credentials */
+        get: operations["alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_get"];
+        /** Update Alpaca Iex Credentials */
+        put: operations["update_alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attribution */
+        get: operations["attribution_api_trading_hermes_research_attribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit */
+        get: operations["audit_api_trading_hermes_research_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/policy-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Policy Status */
+        get: operations["policy_status_api_trading_hermes_research_policy_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start */
+        post: operations["start_api_trading_hermes_research_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/traces/{trace_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace */
+        get: operations["trace_api_trading_hermes_research_traces__trace_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate */
+        post: operations["validate_api_trading_hermes_research_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/validation/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Validation */
+        post: operations["review_validation_api_trading_hermes_research_validation_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/hermes-research/validation/{policy_version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Validation */
+        get: operations["validation_api_trading_hermes_research_validation__policy_version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1329,6 +1568,152 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/market-data/providers/coinmarketcap/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Coinmarketcap Credentials */
+        get: operations["coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_get"];
+        /** Update Coinmarketcap Credentials */
+        put: operations["update_coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/models/bounce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Bounce Models */
+        get: operations["list_bounce_models_api_trading_models_bounce_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/models/bounce/score-shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Score Bounce Shadow
+         * @description Score only. The result is persisted for evaluation but cannot authorize an order.
+         */
+        post: operations["score_bounce_shadow_api_trading_models_bounce_score_shadow_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/models/bounce/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Train Bounce Model
+         * @description Fit and persist a transparent logistic artifact; never change execution.
+         */
+        post: operations["train_bounce_model_api_trading_models_bounce_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/models/bounce/validate-shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Bounce Shadow
+         * @description Evaluate locked artifacts on dated OOS examples; never gate paper orders.
+         */
+        post: operations["validate_bounce_shadow_api_trading_models_bounce_validate_shadow_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/models/bounce/{model_version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Bounce Model */
+        get: operations["get_bounce_model_api_trading_models_bounce__model_version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/paper-analytics/epochs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Epochs */
+        get: operations["list_epochs_api_trading_paper_analytics_epochs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/paper-analytics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview */
+        get: operations["overview_api_trading_paper_analytics_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/paper/accounts": {
         parameters: {
             query?: never;
@@ -1365,23 +1750,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/trading/paper/accounts/{account_id}/observations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Process Observation */
-        post: operations["process_observation_api_trading_paper_accounts__account_id__observations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/trading/paper/accounts/{account_id}/orders": {
         parameters: {
             query?: never;
@@ -1391,7 +1759,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Place Order */
+        /**
+         * Place Order
+         * @description Accept an order without manufacturing a fill from caller price data.
+         *
+         *     reference_price is reservation-only. A market order remains open until
+         *     the server-side monitor receives an execution-eligible market observation.
+         */
         post: operations["place_order_api_trading_paper_accounts__account_id__orders_post"];
         delete?: never;
         options?: never;
@@ -1399,18 +1773,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/trading/paper/accounts/{account_id}/orders/{order_id}": {
+    "/api/trading/paper/accounts/{account_id}/protections": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Protections */
+        get: operations["list_protections_api_trading_paper_accounts__account_id__protections_get"];
+        /** Upsert Protection */
+        put: operations["upsert_protection_api_trading_paper_accounts__account_id__protections_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/paper/accounts/{account_id}/protections/{instrument_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Protection */
+        get: operations["get_protection_api_trading_paper_accounts__account_id__protections__instrument_id__get"];
         put?: never;
         post?: never;
-        /** Cancel Order */
-        delete: operations["cancel_order_api_trading_paper_accounts__account_id__orders__order_id__delete"];
+        /** Clear Protection */
+        delete: operations["clear_protection_api_trading_paper_accounts__account_id__protections__instrument_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1674,6 +2067,383 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Strategies */
+        get: operations["list_strategies_api_trading_strategies_get"];
+        put?: never;
+        /** Create Strategy */
+        post: operations["create_strategy_api_trading_strategies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/backtest/gap-pullback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Backtest Gap Pullback */
+        post: operations["backtest_gap_pullback_api_trading_strategies_backtest_gap_pullback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/evaluate/gap-pullback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate Strategy */
+        post: operations["evaluate_strategy_api_trading_strategies_evaluate_gap_pullback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/universes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save Universe */
+        post: operations["save_universe_api_trading_strategies_universes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/universes/discover-yahoo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discover Yahoo Universe */
+        post: operations["discover_yahoo_universe_api_trading_strategies_universes_discover_yahoo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/universes/freeze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Freeze Universe */
+        post: operations["freeze_universe_api_trading_strategies_universes_freeze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/universes/{universe_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Universe */
+        get: operations["get_universe_api_trading_strategies_universes__universe_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Strategy */
+        get: operations["get_strategy_api_trading_strategies__strategy_id__get"];
+        /** Update Strategy */
+        put: operations["update_strategy_api_trading_strategies__strategy_id__put"];
+        post?: never;
+        /** Delete Strategy */
+        delete: operations["delete_strategy_api_trading_strategies__strategy_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/backtest/range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Backtest Strategy Range */
+        post: operations["backtest_strategy_range_api_trading_strategies__strategy_id__backtest_range_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/backtest/range/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Backtest Range Progress */
+        get: operations["get_backtest_range_progress_api_trading_strategies__strategy_id__backtest_range__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent Events */
+        get: operations["recent_events_api_trading_strategies__strategy_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/prospective-economic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_trading_strategies__strategy_id__prospective_economic_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/prospective-economic/auto-paper-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Auto Paper Research Gate */
+        post: operations["approve_auto_paper_research_gate_api_trading_strategies__strategy_id__prospective_economic_auto_paper_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/prospective-economic/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate Once */
+        post: operations["evaluate_once_api_trading_strategies__strategy_id__prospective_economic_evaluate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/prospective-economic/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence Events */
+        get: operations["evidence_events_api_trading_strategies__strategy_id__prospective_economic_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/prospective-economic/holdout-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Sealed Holdout */
+        post: operations["review_sealed_holdout_api_trading_strategies__strategy_id__prospective_economic_holdout_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/protections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Protections */
+        get: operations["protections_api_trading_strategies__strategy_id__protections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/research/capture-yahoo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture Yahoo Research */
+        post: operations["capture_yahoo_research_api_trading_strategies__strategy_id__research_capture_yahoo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/research/llm-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Llm Research */
+        post: operations["run_llm_research_api_trading_strategies__strategy_id__research_llm_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/v2/qualification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get V2 Qualification */
+        get: operations["get_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/v2/qualification/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review V2 Qualification */
+        post: operations["review_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategy-operations/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Strategy Operations Status */
+        get: operations["strategy_operations_status_api_trading_strategy_operations_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/watchlists": {
         parameters: {
             query?: never;
@@ -1808,6 +2578,55 @@ export interface components {
          * @enum {string}
          */
         AdjustmentMode: "raw" | "split_adjusted" | "dividend_adjusted";
+        /** AlpacaIexCredentialStatus */
+        AlpacaIexCredentialStatus: {
+            /** Api Key Editable */
+            api_key_editable: boolean;
+            /**
+             * Api Key Id Masked
+             * @default
+             */
+            api_key_id_masked: string;
+            /**
+             * Api Key Source
+             * @enum {string}
+             */
+            api_key_source: "environment" | "os_protected_store" | "missing";
+            /** Configured */
+            configured: boolean;
+            /**
+             * Provider
+             * @default alpaca_iex
+             * @constant
+             */
+            provider: "alpaca_iex";
+            /** Secret Key Editable */
+            secret_key_editable: boolean;
+            /**
+             * Secret Key Source
+             * @enum {string}
+             */
+            secret_key_source: "environment" | "os_protected_store" | "missing";
+            /** Storage */
+            storage: string;
+        };
+        /** AlpacaIexCredentialUpdate */
+        AlpacaIexCredentialUpdate: {
+            /** Api Key Id */
+            api_key_id?: string | null;
+            /**
+             * Clear Api Key Id
+             * @default false
+             */
+            clear_api_key_id: boolean;
+            /**
+             * Clear Secret Key
+             * @default false
+             */
+            clear_secret_key: boolean;
+            /** Secret Key */
+            secret_key?: string | null;
+        };
         /**
          * AssetClass
          * @enum {string}
@@ -2557,12 +3376,381 @@ export interface components {
         /** BarsResponse */
         BarsResponse: {
             /** Bars */
-            bars: components["schemas"]["MarketBar"][];
+            bars: components["schemas"]["MarketBar-Output"][];
             binding: components["schemas"]["ProviderBinding"];
             instrument: components["schemas"]["CanonicalInstrument"];
             /** Interval */
             interval: string;
             provenance: components["schemas"]["DatasetProvenance"];
+        };
+        /** BounceFeatureVector */
+        "BounceFeatureVector-Input": {
+            /** Atr Pct */
+            atr_pct: number | string;
+            /** Breakout Volume Ratio */
+            breakout_volume_ratio: number | string;
+            /**
+             * Catalyst Negative
+             * @default 0
+             */
+            catalyst_negative: number | string;
+            /**
+             * Catalyst Positive
+             * @default 0
+             */
+            catalyst_positive: number | string;
+            /**
+             * Dilution Flag
+             * @default 0
+             */
+            dilution_flag: number | string;
+            /** Float Shares Log10 */
+            float_shares_log10?: number | string | null;
+            /** Gap Pct */
+            gap_pct: number | string;
+            /** Hod Distance Pct */
+            hod_distance_pct: number | string;
+            /** L2 Over L1 */
+            l2_over_l1: number | string;
+            /** Market Cap Log10 */
+            market_cap_log10?: number | string | null;
+            /** Minutes Since Open */
+            minutes_since_open: number | string;
+            /** Opening Impulse Pct */
+            opening_impulse_pct: number | string;
+            /** Premarket Dollar Volume Log10 */
+            premarket_dollar_volume_log10: number | string;
+            /** Pullback Depth Pct */
+            pullback_depth_pct: number | string;
+            /** Pullback Volume Ratio */
+            pullback_volume_ratio: number | string;
+            /** Spread Bps */
+            spread_bps: number | string;
+            /** Tod Rvol */
+            tod_rvol: number | string;
+            /** Vwap Distance Pct */
+            vwap_distance_pct: number | string;
+            /** Vwap Slope Pct */
+            vwap_slope_pct: number | string;
+        };
+        /** BounceFeatureVector */
+        "BounceFeatureVector-Output": {
+            /** Atr Pct */
+            atr_pct: string;
+            /** Breakout Volume Ratio */
+            breakout_volume_ratio: string;
+            /**
+             * Catalyst Negative
+             * @default 0
+             */
+            catalyst_negative: string;
+            /**
+             * Catalyst Positive
+             * @default 0
+             */
+            catalyst_positive: string;
+            /**
+             * Dilution Flag
+             * @default 0
+             */
+            dilution_flag: string;
+            /** Float Shares Log10 */
+            float_shares_log10?: string | null;
+            /** Gap Pct */
+            gap_pct: string;
+            /** Hod Distance Pct */
+            hod_distance_pct: string;
+            /** L2 Over L1 */
+            l2_over_l1: string;
+            /** Market Cap Log10 */
+            market_cap_log10?: string | null;
+            /** Minutes Since Open */
+            minutes_since_open: string;
+            /** Opening Impulse Pct */
+            opening_impulse_pct: string;
+            /** Premarket Dollar Volume Log10 */
+            premarket_dollar_volume_log10: string;
+            /** Pullback Depth Pct */
+            pullback_depth_pct: string;
+            /** Pullback Volume Ratio */
+            pullback_volume_ratio: string;
+            /** Spread Bps */
+            spread_bps: string;
+            /** Tod Rvol */
+            tod_rvol: string;
+            /** Vwap Distance Pct */
+            vwap_distance_pct: string;
+            /** Vwap Slope Pct */
+            vwap_slope_pct: string;
+        };
+        /**
+         * BounceModelArtifact
+         * @description Versioned, auditable logistic-regression artifact kept shadow-only.
+         */
+        BounceModelArtifact: {
+            /** Coefficients */
+            coefficients: {
+                [key: string]: string;
+            };
+            /** Feature Means */
+            feature_means: {
+                [key: string]: string;
+            };
+            /**
+             * Feature Names
+             * @default [
+             *       "gap_pct",
+             *       "premarket_dollar_volume_log10",
+             *       "tod_rvol",
+             *       "float_shares_log10",
+             *       "market_cap_log10",
+             *       "spread_bps",
+             *       "opening_impulse_pct",
+             *       "hod_distance_pct",
+             *       "pullback_depth_pct",
+             *       "pullback_volume_ratio",
+             *       "l2_over_l1",
+             *       "vwap_distance_pct",
+             *       "vwap_slope_pct",
+             *       "breakout_volume_ratio",
+             *       "atr_pct",
+             *       "minutes_since_open",
+             *       "catalyst_positive",
+             *       "catalyst_negative",
+             *       "dilution_flag"
+             *     ]
+             */
+            feature_names: string[];
+            /** Feature Scales */
+            feature_scales: {
+                [key: string]: string;
+            };
+            /** Fingerprint */
+            fingerprint: string;
+            /** Intercept */
+            intercept: string;
+            /** Iterations */
+            iterations: number;
+            /** L2 Penalty */
+            l2_penalty: string;
+            /**
+             * Label Definition
+             * @default P(+2R before -1R within 90 minutes)
+             * @constant
+             */
+            label_definition: "P(+2R before -1R within 90 minutes)";
+            /** Learning Rate */
+            learning_rate: string;
+            /**
+             * Model Id
+             * @default gap_pullback_logistic
+             * @constant
+             */
+            model_id: "gap_pullback_logistic";
+            /** Model Version */
+            model_version: string;
+            /** Positive Examples */
+            positive_examples: number;
+            /**
+             * Shadow Only
+             * @default true
+             * @constant
+             */
+            shadow_only: true;
+            /**
+             * Trained At
+             * Format: date-time
+             */
+            trained_at: string;
+            /** Training Examples */
+            training_examples: number;
+            /** Training Log Loss */
+            training_log_loss: string;
+        };
+        /** BounceModelListResponse */
+        BounceModelListResponse: {
+            /** Models */
+            models: components["schemas"]["BounceModelArtifact"][];
+        };
+        /** BounceModelScore */
+        BounceModelScore: {
+            features: components["schemas"]["BounceFeatureVector-Output"];
+            /** Fingerprint */
+            fingerprint: string;
+            /**
+             * Label Definition
+             * @default P(+2R before -1R within 90 minutes)
+             */
+            label_definition: string;
+            /**
+             * Model Id
+             * @default gap_pullback_logistic
+             */
+            model_id: string;
+            /**
+             * Model Version
+             * @default 1.0.0-baseline
+             */
+            model_version: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Probability */
+            probability: string;
+            /**
+             * Shadow Only
+             * @default true
+             */
+            shadow_only: boolean;
+        };
+        /** BounceModelScoreRequest */
+        BounceModelScoreRequest: {
+            features: components["schemas"]["BounceFeatureVector-Input"];
+            /** Instrument Id */
+            instrument_id: string;
+            /** Model Version */
+            model_version?: string | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at?: string;
+            /** Score Id */
+            score_id: string;
+            /** Strategy Id */
+            strategy_id?: string | null;
+        };
+        /** BounceModelTrainRequest */
+        BounceModelTrainRequest: {
+            /** Examples */
+            examples: components["schemas"]["BounceTrainingExample"][];
+            /**
+             * Iterations
+             * @default 800
+             */
+            iterations: number;
+            /**
+             * L2 Penalty
+             * @default 0.001
+             */
+            l2_penalty: number | string;
+            /**
+             * Learning Rate
+             * @default 0.05
+             */
+            learning_rate: number | string;
+            /** Model Version */
+            model_version: string;
+            /** Trained At */
+            trained_at?: string | null;
+        };
+        /**
+         * BounceModelValidateRequest
+         * @description Out-of-sample validation request; validation remains shadow-only.
+         */
+        BounceModelValidateRequest: {
+            /** Examples */
+            examples: components["schemas"]["BounceValidationExample"][];
+            /**
+             * Minimum Examples
+             * @default 100
+             */
+            minimum_examples: number;
+            /**
+             * Minimum Sessions
+             * @default 20
+             */
+            minimum_sessions: number;
+            /** Model Version */
+            model_version: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at?: string;
+        };
+        /** BounceTrainingExample */
+        BounceTrainingExample: {
+            features: components["schemas"]["BounceFeatureVector-Input"];
+            /**
+             * Label
+             * @enum {integer}
+             */
+            label: 0 | 1;
+        };
+        /**
+         * BounceValidationExample
+         * @description Out-of-sample labeled example tied to an immutable trading session.
+         */
+        BounceValidationExample: {
+            features: components["schemas"]["BounceFeatureVector-Input"];
+            /** Label */
+            label: number;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /**
+         * BounceValidationMetrics
+         * @description Transparent OOS metrics; this is research evidence, never an execution gate.
+         */
+        BounceValidationMetrics: {
+            /** Artifact Fingerprint */
+            artifact_fingerprint: string;
+            /** Baseline Log Loss */
+            baseline_log_loss: string;
+            /** Brier Score */
+            brier_score: string;
+            /** Calibration Bins */
+            calibration_bins: components["schemas"]["CalibrationBin"][];
+            /** Evidence Volume Sufficient */
+            evidence_volume_sufficient: boolean;
+            /** Examples */
+            examples: number;
+            /** Expected Calibration Error */
+            expected_calibration_error: string;
+            /** Log Loss */
+            log_loss: string;
+            /** Log Loss Improvement */
+            log_loss_improvement: string;
+            /** Mean Probability */
+            mean_probability: string;
+            /** Minimum Examples Required */
+            minimum_examples_required: number;
+            /** Minimum Sessions Required */
+            minimum_sessions_required: number;
+            /** Model Id */
+            model_id: string;
+            /** Model Version */
+            model_version: string;
+            /** Positive Rate */
+            positive_rate: string;
+            /** Positives */
+            positives: number;
+            /** Sessions */
+            sessions: number;
+            /**
+             * Shadow Only
+             * @default true
+             */
+            shadow_only: boolean;
+        };
+        /** CalibrationBin */
+        CalibrationBin: {
+            /** Count */
+            count: number;
+            /** Lower */
+            lower: string;
+            /** Mean Probability */
+            mean_probability: string;
+            /** Observed Rate */
+            observed_rate: string;
+            /** Upper */
+            upper: string;
         };
         /** CancelJobRequest */
         CancelJobRequest: {
@@ -2625,6 +3813,210 @@ export interface components {
             venue: string;
             /** Venue Symbol */
             venue_symbol: string;
+        };
+        /** CatalystClassificationRequest */
+        CatalystClassificationRequest: {
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Instrument Id */
+            instrument_id: string;
+            /** Model */
+            model?: string | null;
+        };
+        /**
+         * CatalystEvidence
+         * @description Timestamped immutable evidence; never a naked bullish/bearish flag.
+         */
+        CatalystEvidence: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Content */
+            content: string;
+            /**
+             * Dilution Flags
+             * @default []
+             */
+            dilution_flags: string[];
+            /** Evidence Id */
+            evidence_id: string;
+            /** Facts */
+            facts?: {
+                [key: string]: unknown;
+            };
+            /** Headline */
+            headline?: string | null;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Source Locator */
+            source_locator: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "sec" | "company" | "news" | "manual";
+            /** Text Hash */
+            text_hash: string;
+        };
+        /** CatalystEvidenceCaptureRequest */
+        CatalystEvidenceCaptureRequest: {
+            /** Evidence Id */
+            evidence_id: string;
+            /** Facts */
+            facts?: {
+                [key: string]: unknown;
+            };
+            /** Headline */
+            headline?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Raw Text */
+            raw_text: string;
+            /** Source Locator */
+            source_locator: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "sec" | "company" | "news" | "manual";
+        };
+        /** CatalystEvidenceListResponse */
+        CatalystEvidenceListResponse: {
+            /** Evidence */
+            evidence: components["schemas"]["CatalystEvidence"][];
+        };
+        /** CatalystFactSet */
+        CatalystFactSet: {
+            /**
+             * Catalyst Type
+             * @default unknown
+             */
+            catalyst_type: string;
+            /**
+             * Company Release Present
+             * @default false
+             */
+            company_release_present: boolean;
+            /**
+             * Extractor Version
+             * @default catalyst-parser-1
+             */
+            extractor_version: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Official Filing Present
+             * @default false
+             */
+            official_filing_present: boolean;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Primary Confirmed
+             * @default false
+             */
+            primary_confirmed: boolean;
+            /**
+             * Same Day
+             * @default false
+             */
+            same_day: boolean;
+            /**
+             * Schema Version
+             * @default catalyst-facts-1
+             */
+            schema_version: string;
+            /**
+             * Source Count Primary
+             * @default 0
+             */
+            source_count_primary: number;
+            /**
+             * Source Count Secondary
+             * @default 0
+             */
+            source_count_secondary: number;
+            /**
+             * Source Evidence Ids
+             * @default []
+             */
+            source_evidence_ids: string[];
+            /** Source Published At */
+            source_published_at?: string | null;
+            /**
+             * Unresolved
+             * @default true
+             */
+            unresolved: boolean;
+        };
+        /**
+         * CatalystShadowClassification
+         * @description Read-only classifier output. It is not an execution authorization.
+         */
+        CatalystShadowClassification: {
+            /**
+             * Catalyst Class
+             * @default unknown
+             * @enum {string}
+             */
+            catalyst_class: "earnings" | "regulatory" | "contract_partnership" | "financing" | "corporate_action" | "clinical" | "legal" | "other" | "unknown";
+            /** Classifier Id */
+            classifier_id: string;
+            /** Classifier Version */
+            classifier_version: string;
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+            /**
+             * Dilution Risk
+             * @default unknown
+             * @enum {string}
+             */
+            dilution_risk: "none_seen" | "possible" | "explicit" | "unknown";
+            /**
+             * Directional Bias
+             * @default unknown
+             * @enum {string}
+             */
+            directional_bias: "positive" | "negative" | "mixed" | "unknown";
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /**
+             * Novelty
+             * @default unclear
+             * @enum {string}
+             */
+            novelty: "new" | "recycled" | "unclear";
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /**
+             * Shadow Only
+             * @default true
+             * @constant
+             */
+            shadow_only: true;
         };
         /** ChatMessage */
         ChatMessage: {
@@ -2871,6 +4263,41 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** CoinMarketCapCredentialStatus */
+        CoinMarketCapCredentialStatus: {
+            /** Api Key Editable */
+            api_key_editable: boolean;
+            /**
+             * Api Key Masked
+             * @default
+             */
+            api_key_masked: string;
+            /**
+             * Api Key Source
+             * @enum {string}
+             */
+            api_key_source: "environment" | "os_protected_store" | "missing";
+            /** Configured */
+            configured: boolean;
+            /**
+             * Provider
+             * @default coinmarketcap
+             * @constant
+             */
+            provider: "coinmarketcap";
+            /** Storage */
+            storage: string;
+        };
+        /** CoinMarketCapCredentialUpdate */
+        CoinMarketCapCredentialUpdate: {
+            /** Api Key */
+            api_key?: string | null;
+            /**
+             * Clear Api Key
+             * @default false
+             */
+            clear_api_key: boolean;
+        };
         /** CompatibilityHandoffPayload */
         CompatibilityHandoffPayload: {
             /**
@@ -2997,6 +4424,21 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** CurrencyRateResponse */
+        CurrencyRateResponse: {
+            /** Base Currency */
+            base_currency: string;
+            /** Freshness Mode */
+            freshness_mode: string;
+            /** Provider */
+            provider: string;
+            /** Quote Currency */
+            quote_currency: string;
+            /** Rate */
+            rate: number;
+            /** Received At */
+            received_at: string;
+        };
         /** DatasetListResponse */
         DatasetListResponse: {
             /** Datasets */
@@ -3072,6 +4514,79 @@ export interface components {
             /** Status */
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
+        };
+        /**
+         * ExecutionObservation
+         * @description Normalized observation accepted by the shared paper/backtest execution layer.
+         */
+        ExecutionObservation: {
+            /** Ask */
+            ask?: string | null;
+            /** Ask Size */
+            ask_size?: string | null;
+            /** Bar Start Time */
+            bar_start_time?: string | null;
+            /** Bar Volume */
+            bar_volume?: string | null;
+            /** Bid */
+            bid?: string | null;
+            /** Bid Size */
+            bid_size?: string | null;
+            /** Binding Id */
+            binding_id: string;
+            /** Cumulative Volume */
+            cumulative_volume?: string | null;
+            /**
+             * Execution Eligible
+             * @default false
+             */
+            execution_eligible: boolean;
+            /**
+             * Freshness Mode
+             * @default unknown
+             * @enum {string}
+             */
+            freshness_mode: "live" | "polled" | "delayed" | "cached" | "fallback" | "unknown";
+            /** Halted */
+            halted?: boolean | null;
+            /** High */
+            high?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Last */
+            last: string;
+            /** Low */
+            low?: string | null;
+            /**
+             * Policy Version
+             * @default execution-data-v1
+             */
+            policy_version: string;
+            /** Provider */
+            provider: string;
+            /** Provider Sequence */
+            provider_sequence?: number | null;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at?: string;
+            /**
+             * Rejection Reasons
+             * @default []
+             */
+            rejection_reasons: string[];
+            /**
+             * Session
+             * @default unknown
+             * @enum {string}
+             */
+            session: "extended_pre" | "regular" | "extended_post" | "closed" | "unknown";
+            /**
+             * Source Time
+             * Format: date-time
+             */
+            source_time: string;
         };
         /** FailJobRequest */
         FailJobRequest: {
@@ -3211,6 +4726,1106 @@ export interface components {
              */
             source_as_of: string;
         };
+        /** GapPullbackBacktestCandidateDecision */
+        GapPullbackBacktestCandidateDecision: {
+            /**
+             * Decision At
+             * Format: date-time
+             */
+            decision_at: string;
+            /** Discovery Rank */
+            discovery_rank?: number | null;
+            /** Entry Time */
+            entry_time?: string | null;
+            /** Exit Time */
+            exit_time?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Quality Score */
+            quality_score?: number | null;
+            /** Rejection Reason */
+            rejection_reason?: string | null;
+            /**
+             * Selected Trade
+             * @default false
+             */
+            selected_trade: boolean;
+            /** State */
+            state: string;
+            /**
+             * Triggered
+             * @default false
+             */
+            triggered: boolean;
+        };
+        /** GapPullbackBacktestRequest */
+        GapPullbackBacktestRequest: {
+            /**
+             * Assumed Spread Bps
+             * @default 40
+             */
+            assumed_spread_bps: number | string;
+            /** Bars By Instrument */
+            bars_by_instrument: {
+                [key: string]: components["schemas"]["MarketBar-Input"][];
+            };
+            config?: components["schemas"]["GapPullbackConfig-Input"];
+            execution_policy?: components["schemas"]["PaperExecutionPolicy"];
+            /**
+             * Initial Cash
+             * @default 100000
+             */
+            initial_cash: number | string;
+            /**
+             * Max Concurrent Positions
+             * @default 3
+             */
+            max_concurrent_positions: number;
+            /**
+             * Max Hold Minutes
+             * @description Legacy compatibility field; indicator-based exits do not use elapsed time.
+             * @default 390
+             */
+            max_hold_minutes: number;
+            risk_profile?: components["schemas"]["StrategyRiskProfile-Input"];
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            universe: components["schemas"]["GapperUniverseSnapshot-Input"];
+        };
+        /** GapPullbackBacktestResult */
+        GapPullbackBacktestResult: {
+            /**
+             * Candidate Decisions
+             * @default []
+             */
+            candidate_decisions: components["schemas"]["GapPullbackBacktestCandidateDecision"][];
+            /** Dataset Fingerprint */
+            dataset_fingerprint: string;
+            /** Execution Policy Version */
+            execution_policy_version: string;
+            /** Initial Cash */
+            initial_cash: string;
+            risk_policy: components["schemas"]["StrategyRiskProfile-Output"];
+            /**
+             * Strategy Id
+             * @default gap_pullback_v1
+             */
+            strategy_id: string;
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             */
+            strategy_version: string;
+            summary: components["schemas"]["GapPullbackBacktestSummary"];
+            /** Trades */
+            trades: components["schemas"]["GapPullbackBacktestTrade"][];
+        };
+        /** GapPullbackBacktestSummary */
+        GapPullbackBacktestSummary: {
+            /** Average Entry Slippage Bps */
+            average_entry_slippage_bps: string;
+            /** Average Exit Slippage Bps */
+            average_exit_slippage_bps: string;
+            /** Average Hold Minutes */
+            average_hold_minutes: string;
+            /** Average Mae R */
+            average_mae_r: string;
+            /** Average Mfe R */
+            average_mfe_r: string;
+            /** Candidate Count */
+            candidate_count: number;
+            /** Candidate To Trade Rate */
+            candidate_to_trade_rate: string;
+            /** Candidate To Trigger Rate */
+            candidate_to_trigger_rate: string;
+            /** Entry Execution Rejection Count */
+            entry_execution_rejection_count: number;
+            /** Exit Execution Rejection Count */
+            exit_execution_rejection_count: number;
+            /** Expectancy R */
+            expectancy_r: string;
+            /** Expectancy R Ci95 High */
+            expectancy_r_ci95_high?: string | null;
+            /** Expectancy R Ci95 Low */
+            expectancy_r_ci95_low?: string | null;
+            /** Indicator Exit Count */
+            indicator_exit_count: number;
+            /** Invalid Risk Count */
+            invalid_risk_count: number;
+            /** Loss Count */
+            loss_count: number;
+            /** No Next Bar Count */
+            no_next_bar_count: number;
+            /** Partial Entry Count */
+            partial_entry_count: number;
+            /** Portfolio Capacity Rejection Count */
+            portfolio_capacity_rejection_count: number;
+            /** Profit Factor */
+            profit_factor: string | null;
+            /**
+             * Research Rejection Count
+             * @default 0
+             */
+            research_rejection_count: number;
+            /** Research Rejection Reasons */
+            research_rejection_reasons?: {
+                [key: string]: number;
+            };
+            /** Risk Rejection Count */
+            risk_rejection_count: number;
+            /** Risk Rejection Reasons */
+            risk_rejection_reasons?: {
+                [key: string]: number;
+            };
+            /** Stop Count */
+            stop_count: number;
+            /** Target Count */
+            target_count: number;
+            /** Trade Count */
+            trade_count: number;
+            /** Trades Per Day */
+            trades_per_day: string;
+            /** Trigger Count */
+            trigger_count: number;
+            /** Trigger To Trade Rate */
+            trigger_to_trade_rate: string;
+            /** Win Count */
+            win_count: number;
+            /** Win Rate */
+            win_rate: string;
+        };
+        /** GapPullbackBacktestTrade */
+        GapPullbackBacktestTrade: {
+            /** Discovery Rank */
+            discovery_rank?: number | null;
+            /** Entry Bar Index */
+            entry_bar_index: number;
+            /** Entry Fill Quantity */
+            entry_fill_quantity: string;
+            /** Entry Price */
+            entry_price: string;
+            /** Entry Slippage Bps */
+            entry_slippage_bps: string;
+            /**
+             * Entry Time
+             * Format: date-time
+             */
+            entry_time: string;
+            /**
+             * Execution Interval
+             * @default 1m
+             */
+            execution_interval: string;
+            /** Exit Price */
+            exit_price: string;
+            /**
+             * Exit Reason
+             * @enum {string}
+             */
+            exit_reason: "stop" | "target" | "rsi" | "time" | "eod";
+            /** Exit Slippage Bps */
+            exit_slippage_bps: string;
+            /**
+             * Exit Time
+             * Format: date-time
+             */
+            exit_time: string;
+            /** Hold Minutes */
+            hold_minutes: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Mae R */
+            mae_r: string;
+            /** Mfe R */
+            mfe_r: string;
+            /** Pnl Per Share */
+            pnl_per_share: string;
+            /**
+             * Quality Score
+             * @default 0
+             */
+            quality_score: number;
+            /** R Multiple */
+            r_multiple: string;
+            /** Requested Quantity */
+            requested_quantity: string;
+            /** Signal Entry Price */
+            signal_entry_price: string;
+            /** Signal Risk Per Share */
+            signal_risk_per_share: string;
+            /** Stop Price */
+            stop_price: string;
+            /**
+             * Structure Interval
+             * @default 1m
+             */
+            structure_interval: string;
+            /** Target Price */
+            target_price: string;
+            /** Trigger Bar Index */
+            trigger_bar_index: number;
+        };
+        /**
+         * GapPullbackConfig
+         * @description Versioned deterministic definition for gap_pullback_v1.
+         *
+         *     Version 1.0 defaults remain permissive for persisted compatibility. The
+         *     Trading UI creates 1.1.0 strategy instances with the stricter failed-selloff
+         *     research/quality defaults explicitly populated and fully configurable.
+         *
+         *     Version 1.2.0 reserves the same market-structure semantics for a separately
+         *     validated HTR research-policy gate. It is fail-closed until a reviewed HTR-14
+         *     validation artifact explicitly permits promotion; 1.0/1.1 semantics do not
+         *     change when HTR code evolves.
+         *
+         *     Version 2.0.0 is a separately versioned gap-as-impulse failed-selloff
+         *     definition. It waits for a causal L1 -> B1 -> higher-L2 sequence and a
+         *     direct B1/VWAP break. The v2-only fields below are ignored by all 1.x
+         *     evaluators so persisted 1.x behavior remains unchanged.
+         */
+        "GapPullbackConfig-Input": {
+            /**
+             * Allow Missing Tod Rvol
+             * @default false
+             */
+            allow_missing_tod_rvol: boolean;
+            /**
+             * Auto Archive Daily Universe
+             * @default true
+             */
+            auto_archive_daily_universe: boolean;
+            /**
+             * Breakout Hold Bars
+             * @default 1
+             */
+            breakout_hold_bars: number;
+            /**
+             * Breakout Hold Tolerance Bps
+             * @default 25
+             */
+            breakout_hold_tolerance_bps: number | string;
+            /**
+             * Breakout Volume Ratio
+             * @default 1.25
+             */
+            breakout_volume_ratio: number | string;
+            /**
+             * Entry Start Et
+             * Format: time
+             * @default 09:35:00
+             */
+            entry_start_et: string;
+            /**
+             * Execution Interval
+             * @default 1m
+             * @enum {string}
+             */
+            execution_interval: "1m" | "5m";
+            /**
+             * Exit Rsi Period
+             * @default 14
+             */
+            exit_rsi_period: number;
+            /**
+             * Exit Rsi Threshold
+             * @default 50
+             */
+            exit_rsi_threshold: number | string;
+            /**
+             * Float Preference Mode
+             * @default ignore
+             * @enum {string}
+             */
+            float_preference_mode: "ignore" | "score" | "require";
+            /**
+             * Higher Low Buffer Bps
+             * @default 20
+             */
+            higher_low_buffer_bps: number | string;
+            /**
+             * Last Entry Et
+             * Format: time
+             * @default 11:30:00
+             */
+            last_entry_et: string;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price: number | string;
+            /**
+             * Maximum Spread Bps
+             * @default 150
+             */
+            maximum_spread_bps: number | string;
+            /**
+             * Minimum Gap Pct
+             * @default 20
+             */
+            minimum_gap_pct: number | string;
+            /**
+             * Minimum Premarket Dollar Volume
+             * @default 1000000
+             */
+            minimum_premarket_dollar_volume: number | string;
+            /**
+             * Minimum Price
+             * @default 0.50
+             */
+            minimum_price: number | string;
+            /**
+             * Minimum Quality Score
+             * @default 0
+             */
+            minimum_quality_score: number;
+            /**
+             * Minimum Tod Rvol
+             * @default 2
+             */
+            minimum_tod_rvol: number | string;
+            /**
+             * Opening Impulse Min Pct
+             * @default 8
+             */
+            opening_impulse_min_pct: number | string;
+            /**
+             * Pivot Left Bars
+             * @default 2
+             */
+            pivot_left_bars: number;
+            /**
+             * Pivot Right Bars
+             * @default 2
+             */
+            pivot_right_bars: number;
+            /**
+             * Preferred Float Max Shares
+             * @default 30000000
+             */
+            preferred_float_max_shares: number | string;
+            /**
+             * Preferred Float Min Shares
+             * @default 2000000
+             */
+            preferred_float_min_shares: number | string;
+            /**
+             * Pullback Max Pct
+             * @default 35
+             */
+            pullback_max_pct: number | string;
+            /**
+             * Pullback Min Pct
+             * @default 3
+             */
+            pullback_min_pct: number | string;
+            /**
+             * Pullback Volume Max Ratio
+             * @default 5
+             */
+            pullback_volume_max_ratio: number | string;
+            /**
+             * Reject Dilution Flags
+             * @default []
+             */
+            reject_dilution_flags: string[];
+            /**
+             * Require Breakout Hold
+             * @default false
+             */
+            require_breakout_hold: boolean;
+            /**
+             * Require Catalyst Evidence
+             * @default false
+             */
+            require_catalyst_evidence: boolean;
+            /**
+             * Reward Multiple
+             * @default 2
+             */
+            reward_multiple: number | string;
+            /**
+             * Stop Buffer Bps
+             * @default 15
+             */
+            stop_buffer_bps: number | string;
+            /**
+             * Strategy Id
+             * @default gap_pullback_v1
+             * @constant
+             */
+            strategy_id: "gap_pullback_v1";
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             * @enum {string}
+             */
+            strategy_version: "1.0.0" | "1.1.0" | "1.2.0" | "2.0.0";
+            /**
+             * Structure Interval
+             * @default 1m
+             * @enum {string}
+             */
+            structure_interval: "1m" | "5m";
+            /**
+             * Universe Archive Grace Minutes
+             * @default 10
+             */
+            universe_archive_grace_minutes: number;
+            /**
+             * Universe Discovery Count
+             * @default 50
+             */
+            universe_discovery_count: number;
+            /**
+             * Universe Scan Time Et
+             * Format: time
+             * @default 09:20:00
+             */
+            universe_scan_time_et: string;
+            /**
+             * V2 Max Hold Minutes
+             * @default 60
+             */
+            v2_max_hold_minutes: number;
+            /**
+             * V2 Maximum L2 To Signal Minutes
+             * @default 8
+             */
+            v2_maximum_l2_to_signal_minutes: number;
+            /**
+             * V2 Minimum Breakout Volume Ratio
+             * @default 0
+             */
+            v2_minimum_breakout_volume_ratio: number | string;
+            /**
+             * V2 Minimum L1 To B1 Minutes
+             * @default 4
+             */
+            v2_minimum_l1_to_b1_minutes: number;
+            /**
+             * V2 Profit Protection Trigger R
+             * @default 0.75
+             */
+            v2_profit_protection_trigger_r: number | string | null;
+            /**
+             * V2 Protected Stop R
+             * @default 0.25
+             */
+            v2_protected_stop_r: number | string;
+            /**
+             * V2 Recovery Min Pct
+             * @default 5
+             */
+            v2_recovery_min_pct: number | string;
+            /**
+             * V2 Second Pullback Min Pct
+             * @default 2
+             */
+            v2_second_pullback_min_pct: number | string;
+            /**
+             * Volume Lookback Bars
+             * @default 10
+             */
+            volume_lookback_bars: number;
+        };
+        /**
+         * GapPullbackConfig
+         * @description Versioned deterministic definition for gap_pullback_v1.
+         *
+         *     Version 1.0 defaults remain permissive for persisted compatibility. The
+         *     Trading UI creates 1.1.0 strategy instances with the stricter failed-selloff
+         *     research/quality defaults explicitly populated and fully configurable.
+         *
+         *     Version 1.2.0 reserves the same market-structure semantics for a separately
+         *     validated HTR research-policy gate. It is fail-closed until a reviewed HTR-14
+         *     validation artifact explicitly permits promotion; 1.0/1.1 semantics do not
+         *     change when HTR code evolves.
+         *
+         *     Version 2.0.0 is a separately versioned gap-as-impulse failed-selloff
+         *     definition. It waits for a causal L1 -> B1 -> higher-L2 sequence and a
+         *     direct B1/VWAP break. The v2-only fields below are ignored by all 1.x
+         *     evaluators so persisted 1.x behavior remains unchanged.
+         */
+        "GapPullbackConfig-Output": {
+            /**
+             * Allow Missing Tod Rvol
+             * @default false
+             */
+            allow_missing_tod_rvol: boolean;
+            /**
+             * Auto Archive Daily Universe
+             * @default true
+             */
+            auto_archive_daily_universe: boolean;
+            /**
+             * Breakout Hold Bars
+             * @default 1
+             */
+            breakout_hold_bars: number;
+            /**
+             * Breakout Hold Tolerance Bps
+             * @default 25
+             */
+            breakout_hold_tolerance_bps: string;
+            /**
+             * Breakout Volume Ratio
+             * @default 1.25
+             */
+            breakout_volume_ratio: string;
+            /**
+             * Entry Start Et
+             * Format: time
+             * @default 09:35:00
+             */
+            entry_start_et: string;
+            /**
+             * Execution Interval
+             * @default 1m
+             * @enum {string}
+             */
+            execution_interval: "1m" | "5m";
+            /**
+             * Exit Rsi Period
+             * @default 14
+             */
+            exit_rsi_period: number;
+            /**
+             * Exit Rsi Threshold
+             * @default 50
+             */
+            exit_rsi_threshold: string;
+            /**
+             * Float Preference Mode
+             * @default ignore
+             * @enum {string}
+             */
+            float_preference_mode: "ignore" | "score" | "require";
+            /**
+             * Higher Low Buffer Bps
+             * @default 20
+             */
+            higher_low_buffer_bps: string;
+            /**
+             * Last Entry Et
+             * Format: time
+             * @default 11:30:00
+             */
+            last_entry_et: string;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price: string;
+            /**
+             * Maximum Spread Bps
+             * @default 150
+             */
+            maximum_spread_bps: string;
+            /**
+             * Minimum Gap Pct
+             * @default 20
+             */
+            minimum_gap_pct: string;
+            /**
+             * Minimum Premarket Dollar Volume
+             * @default 1000000
+             */
+            minimum_premarket_dollar_volume: string;
+            /**
+             * Minimum Price
+             * @default 0.50
+             */
+            minimum_price: string;
+            /**
+             * Minimum Quality Score
+             * @default 0
+             */
+            minimum_quality_score: number;
+            /**
+             * Minimum Tod Rvol
+             * @default 2
+             */
+            minimum_tod_rvol: string;
+            /**
+             * Opening Impulse Min Pct
+             * @default 8
+             */
+            opening_impulse_min_pct: string;
+            /**
+             * Pivot Left Bars
+             * @default 2
+             */
+            pivot_left_bars: number;
+            /**
+             * Pivot Right Bars
+             * @default 2
+             */
+            pivot_right_bars: number;
+            /**
+             * Preferred Float Max Shares
+             * @default 30000000
+             */
+            preferred_float_max_shares: string;
+            /**
+             * Preferred Float Min Shares
+             * @default 2000000
+             */
+            preferred_float_min_shares: string;
+            /**
+             * Pullback Max Pct
+             * @default 35
+             */
+            pullback_max_pct: string;
+            /**
+             * Pullback Min Pct
+             * @default 3
+             */
+            pullback_min_pct: string;
+            /**
+             * Pullback Volume Max Ratio
+             * @default 5
+             */
+            pullback_volume_max_ratio: string;
+            /**
+             * Reject Dilution Flags
+             * @default []
+             */
+            reject_dilution_flags: string[];
+            /**
+             * Require Breakout Hold
+             * @default false
+             */
+            require_breakout_hold: boolean;
+            /**
+             * Require Catalyst Evidence
+             * @default false
+             */
+            require_catalyst_evidence: boolean;
+            /**
+             * Reward Multiple
+             * @default 2
+             */
+            reward_multiple: string;
+            /**
+             * Stop Buffer Bps
+             * @default 15
+             */
+            stop_buffer_bps: string;
+            /**
+             * Strategy Id
+             * @default gap_pullback_v1
+             * @constant
+             */
+            strategy_id: "gap_pullback_v1";
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             * @enum {string}
+             */
+            strategy_version: "1.0.0" | "1.1.0" | "1.2.0" | "2.0.0";
+            /**
+             * Structure Interval
+             * @default 1m
+             * @enum {string}
+             */
+            structure_interval: "1m" | "5m";
+            /**
+             * Universe Archive Grace Minutes
+             * @default 10
+             */
+            universe_archive_grace_minutes: number;
+            /**
+             * Universe Discovery Count
+             * @default 50
+             */
+            universe_discovery_count: number;
+            /**
+             * Universe Scan Time Et
+             * Format: time
+             * @default 09:20:00
+             */
+            universe_scan_time_et: string;
+            /**
+             * V2 Max Hold Minutes
+             * @default 60
+             */
+            v2_max_hold_minutes: number;
+            /**
+             * V2 Maximum L2 To Signal Minutes
+             * @default 8
+             */
+            v2_maximum_l2_to_signal_minutes: number;
+            /**
+             * V2 Minimum Breakout Volume Ratio
+             * @default 0
+             */
+            v2_minimum_breakout_volume_ratio: string;
+            /**
+             * V2 Minimum L1 To B1 Minutes
+             * @default 4
+             */
+            v2_minimum_l1_to_b1_minutes: number;
+            /**
+             * V2 Profit Protection Trigger R
+             * @default 0.75
+             */
+            v2_profit_protection_trigger_r: string | null;
+            /**
+             * V2 Protected Stop R
+             * @default 0.25
+             */
+            v2_protected_stop_r: string;
+            /**
+             * V2 Recovery Min Pct
+             * @default 5
+             */
+            v2_recovery_min_pct: string;
+            /**
+             * V2 Second Pullback Min Pct
+             * @default 2
+             */
+            v2_second_pullback_min_pct: string;
+            /**
+             * Volume Lookback Bars
+             * @default 10
+             */
+            volume_lookback_bars: number;
+        };
+        /** GapPullbackFeatures */
+        GapPullbackFeatures: {
+            /** B1 */
+            b1?: string | null;
+            /** Breakout Hold Bars */
+            breakout_hold_bars?: number | null;
+            /** Breakout Volume Ratio */
+            breakout_volume_ratio?: string | null;
+            /**
+             * Catalyst Evidence Count
+             * @default 0
+             */
+            catalyst_evidence_count: number;
+            /**
+             * Catalyst Score
+             * @default 0
+             */
+            catalyst_score: number;
+            /**
+             * Dilution Flags
+             * @default []
+             */
+            dilution_flags: string[];
+            /** Float Shares */
+            float_shares?: string | null;
+            /** Gap Pct */
+            gap_pct: string;
+            /** Impulse Average Volume */
+            impulse_average_volume?: string | null;
+            /** L1 */
+            l1?: string | null;
+            /** L1 To B1 Minutes */
+            l1_to_b1_minutes?: number | null;
+            /** L2 */
+            l2?: string | null;
+            /** L2 To Signal Minutes */
+            l2_to_signal_minutes?: number | null;
+            /** Minutes Since Open */
+            minutes_since_open?: number | null;
+            /** Opening Impulse Pct */
+            opening_impulse_pct?: string | null;
+            /**
+             * Opening Structure Score
+             * @default 0
+             */
+            opening_structure_score: number;
+            /** Pullback Depth Pct */
+            pullback_depth_pct?: string | null;
+            /**
+             * Pullback Quality Score
+             * @default 0
+             */
+            pullback_quality_score: number;
+            /** Pullback Selling Average Volume */
+            pullback_selling_average_volume?: string | null;
+            /** Pullback Volume Ratio */
+            pullback_volume_ratio?: string | null;
+            /**
+             * Quality Score
+             * @default 0
+             */
+            quality_score: number;
+            /**
+             * Reclaim Break Score
+             * @default 0
+             */
+            reclaim_break_score: number;
+            /** Second Pullback Depth Pct */
+            second_pullback_depth_pct?: string | null;
+            /** Session Vwap */
+            session_vwap?: string | null;
+            /** Spread Bps */
+            spread_bps?: string | null;
+            /**
+             * Supply Score
+             * @default 0
+             */
+            supply_score: number;
+            /** Tod Rvol */
+            tod_rvol?: string | null;
+            /** Vwap Distance Pct */
+            vwap_distance_pct?: string | null;
+        };
+        /** GapPullbackResult */
+        GapPullbackResult: {
+            /** Evaluated Bar Count */
+            evaluated_bar_count: number;
+            features: components["schemas"]["GapPullbackFeatures"];
+            /** Instrument Id */
+            instrument_id: string;
+            /** Reason Code */
+            reason_code: string;
+            signal?: components["schemas"]["StrategySignal"] | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "breakout_hold" | "entry_ready" | "rejected" | "expired";
+            /** Transitions */
+            transitions: ("discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "breakout_hold" | "entry_ready" | "rejected" | "expired")[];
+        };
+        /**
+         * GapperCandidate
+         * @description Point-in-time candidate evidence used by research/backtests and paper runs.
+         *
+         *     `previous_close` is always the split/corporate-action-normalized close in the
+         *     same share basis as `premarket_price`. When raw evidence is available it is
+         *     preserved separately with the adjustment factor so the gap can be audited.
+         *
+         *     `observed_at` records when the candidate snapshot itself was observable.
+         *     `evidence_observed_at` can additionally timestamp fields sourced from separate
+         *     requests. Freeze validation rejects any timestamp later than the universe
+         *     evaluation time so historical universes cannot silently absorb future facts.
+         */
+        "GapperCandidate-Input": {
+            /** Binding Id */
+            binding_id?: string | null;
+            /**
+             * Catalyst Evidence Ids
+             * @default []
+             */
+            catalyst_evidence_ids: string[];
+            /**
+             * Corporate Action Evidence Ids
+             * @default []
+             */
+            corporate_action_evidence_ids: string[];
+            /**
+             * Dilution Flags
+             * @default []
+             */
+            dilution_flags: string[];
+            /** Discovery Rank */
+            discovery_rank?: number | null;
+            /** Evidence Observed At */
+            evidence_observed_at?: {
+                [key: string]: string;
+            };
+            /** Float Shares */
+            float_shares?: number | string | null;
+            /** Gap Pct */
+            gap_pct: number | string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Market Cap */
+            market_cap?: number | string | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /**
+             * Premarket Dollar Volume
+             * @default 0
+             */
+            premarket_dollar_volume: number | string;
+            /** Premarket Price */
+            premarket_price: number | string;
+            /**
+             * Premarket Volume
+             * @default 0
+             */
+            premarket_volume: number | string;
+            /** Previous Close */
+            previous_close: number | string;
+            /** Raw Previous Close */
+            raw_previous_close?: number | string | null;
+            /**
+             * Split Adjustment Factor
+             * @default 1
+             */
+            split_adjustment_factor: number | string;
+            /** Spread Bps */
+            spread_bps?: number | string | null;
+            /** Tod Rvol */
+            tod_rvol?: number | string | null;
+        };
+        /**
+         * GapperCandidate
+         * @description Point-in-time candidate evidence used by research/backtests and paper runs.
+         *
+         *     `previous_close` is always the split/corporate-action-normalized close in the
+         *     same share basis as `premarket_price`. When raw evidence is available it is
+         *     preserved separately with the adjustment factor so the gap can be audited.
+         *
+         *     `observed_at` records when the candidate snapshot itself was observable.
+         *     `evidence_observed_at` can additionally timestamp fields sourced from separate
+         *     requests. Freeze validation rejects any timestamp later than the universe
+         *     evaluation time so historical universes cannot silently absorb future facts.
+         */
+        "GapperCandidate-Output": {
+            /** Binding Id */
+            binding_id?: string | null;
+            /**
+             * Catalyst Evidence Ids
+             * @default []
+             */
+            catalyst_evidence_ids: string[];
+            /**
+             * Corporate Action Evidence Ids
+             * @default []
+             */
+            corporate_action_evidence_ids: string[];
+            /**
+             * Dilution Flags
+             * @default []
+             */
+            dilution_flags: string[];
+            /** Discovery Rank */
+            discovery_rank?: number | null;
+            /** Evidence Observed At */
+            evidence_observed_at?: {
+                [key: string]: string;
+            };
+            /** Float Shares */
+            float_shares?: string | null;
+            /** Gap Pct */
+            gap_pct: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Market Cap */
+            market_cap?: string | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /**
+             * Premarket Dollar Volume
+             * @default 0
+             */
+            premarket_dollar_volume: string;
+            /** Premarket Price */
+            premarket_price: string;
+            /**
+             * Premarket Volume
+             * @default 0
+             */
+            premarket_volume: string;
+            /** Previous Close */
+            previous_close: string;
+            /** Raw Previous Close */
+            raw_previous_close?: string | null;
+            /**
+             * Split Adjustment Factor
+             * @default 1
+             */
+            split_adjustment_factor: string;
+            /** Spread Bps */
+            spread_bps?: string | null;
+            /** Tod Rvol */
+            tod_rvol?: string | null;
+        };
+        /** GapperUniverseFreezeRequest */
+        GapperUniverseFreezeRequest: {
+            /** Candidates */
+            candidates: components["schemas"]["GapperCandidate-Input"][];
+            /**
+             * Discovery Source
+             * @default import
+             * @enum {string}
+             */
+            discovery_source: "manual" | "import" | "scanner" | "provider";
+            /**
+             * Evaluation Time
+             * Format: date-time
+             */
+            evaluation_time: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Universe Id */
+            universe_id: string;
+        };
+        /**
+         * GapperUniverseSnapshot
+         * @description Immutable daily candidate universe, including eventual failures/fades.
+         *
+         *     An empty candidate tuple is valid only when produced by a trusted archival
+         *     path that explicitly records a completed morning scan with zero qualifying
+         *     names. Interactive/manual freeze endpoints keep requiring at least one name.
+         */
+        "GapperUniverseSnapshot-Input": {
+            /** Candidates */
+            candidates: components["schemas"]["GapperCandidate-Input"][];
+            /**
+             * Discovery Source
+             * @enum {string}
+             */
+            discovery_source: "manual" | "import" | "scanner" | "provider";
+            /**
+             * Evaluation Time
+             * Format: date-time
+             */
+            evaluation_time: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Source Fingerprint */
+            source_fingerprint: string;
+            /** Universe Id */
+            universe_id: string;
+        };
+        /**
+         * GapperUniverseSnapshot
+         * @description Immutable daily candidate universe, including eventual failures/fades.
+         *
+         *     An empty candidate tuple is valid only when produced by a trusted archival
+         *     path that explicitly records a completed morning scan with zero qualifying
+         *     names. Interactive/manual freeze endpoints keep requiring at least one name.
+         */
+        "GapperUniverseSnapshot-Output": {
+            /** Candidates */
+            candidates: components["schemas"]["GapperCandidate-Output"][];
+            /**
+             * Discovery Source
+             * @enum {string}
+             */
+            discovery_source: "manual" | "import" | "scanner" | "provider";
+            /**
+             * Evaluation Time
+             * Format: date-time
+             */
+            evaluation_time: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Source Fingerprint */
+            source_fingerprint: string;
+            /** Universe Id */
+            universe_id: string;
+        };
         /** GatewayHealth */
         GatewayHealth: {
             /**
@@ -3314,6 +5929,39 @@ export interface components {
          * @enum {string}
          */
         InstrumentType: "spot" | "perpetual" | "equity" | "index";
+        /** IssuerIdentity */
+        IssuerIdentity: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Cik */
+            cik?: string | null;
+            /**
+             * Confidence
+             * @default 1
+             */
+            confidence: string;
+            /** Exchange */
+            exchange?: string | null;
+            /** Identity Id */
+            identity_id: string;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Legal Name */
+            legal_name?: string | null;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /** Source */
+            source: string;
+            /** Source Available At */
+            source_available_at?: string | null;
+            /** Symbol */
+            symbol: string;
+        };
         /** JobError */
         JobError: {
             /** Code */
@@ -3529,7 +6177,65 @@ export interface components {
             success: boolean;
         };
         /** MarketBar */
-        MarketBar: {
+        "MarketBar-Input": {
+            /** @default raw */
+            adjustment_mode: components["schemas"]["AdjustmentMode"];
+            /** Close */
+            close: number | string;
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /** High */
+            high: number | string;
+            /**
+             * Ingestion Revision
+             * @default 1
+             */
+            ingestion_revision: number;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Interval */
+            interval: string;
+            /**
+             * Is Final
+             * @default true
+             */
+            is_final: boolean;
+            /** Low */
+            low: number | string;
+            /** Open */
+            open: number | string;
+            /** Provider */
+            provider: string;
+            /** Provider Event Id */
+            provider_event_id?: string | null;
+            /** Provider Sequence */
+            provider_sequence?: number | null;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at?: string;
+            /**
+             * Session
+             * @default regular
+             */
+            session: string;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /**
+             * Volume
+             * @default 0
+             */
+            volume: number | string;
+        };
+        /** MarketBar */
+        "MarketBar-Output": {
             /** @default raw */
             adjustment_mode: components["schemas"]["AdjustmentMode"];
             /** Close */
@@ -3726,6 +6432,50 @@ export interface components {
              */
             strategy_id: "sma_cross";
         };
+        /** NoveltyShadowAnnotation */
+        NoveltyShadowAnnotation: {
+            /** Annotation Id */
+            annotation_id: string;
+            /** Catalyst Class */
+            catalyst_class: string;
+            /** Confidence */
+            confidence: string;
+            /**
+             * Conflict Summary
+             * @default
+             */
+            conflict_summary: string;
+            /** Evidence Ids */
+            evidence_ids: string[];
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Novelty
+             * @enum {string}
+             */
+            novelty: "new" | "incremental" | "recycled" | "uncertain";
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /**
+             * Relevance
+             * @enum {string}
+             */
+            relevance: "high" | "medium" | "low" | "uncertain";
+            /**
+             * Shadow Only
+             * @default true
+             * @constant
+             */
+            shadow_only: true;
+        };
         /** PaperAccount */
         PaperAccount: {
             /** Account Id */
@@ -3785,12 +6535,130 @@ export interface components {
             balances: components["schemas"]["PaperBalance"][];
             /** Open Orders */
             open_orders: components["schemas"]["PaperOrder"][];
+            /** Order History */
+            order_history?: components["schemas"]["PaperOrder"][];
             /** Positions */
             positions: components["schemas"]["PaperPosition"][];
             /** Recent Fills */
             recent_fills: components["schemas"]["PaperFill"][];
             /** Recent Ledger */
             recent_ledger: components["schemas"]["PaperLedgerEntry"][];
+        };
+        /** PaperAnalyticsOverview */
+        PaperAnalyticsOverview: {
+            /** Account Id */
+            account_id: string;
+            /**
+             * Archived Strategy Count
+             * @default 0
+             */
+            archived_strategy_count: number;
+            /** Daily R */
+            daily_r?: components["schemas"]["PaperDailyR"][];
+            /** Drawdown */
+            drawdown?: components["schemas"]["PaperDrawdownPoint"][];
+            /** End Date */
+            end_date?: string | null;
+            /** Epoch Id */
+            epoch_id?: string | null;
+            /** Epochs */
+            epochs?: components["schemas"]["PaperSimulationEpoch"][];
+            /** Equity */
+            equity?: components["schemas"]["PaperEquityPoint"][];
+            execution?: components["schemas"]["PaperExecutionSummary"];
+            /** Factors */
+            factors?: components["schemas"]["PaperFactorStudy"][];
+            /** Funnel */
+            funnel?: components["schemas"]["PaperFunnelStage"][];
+            /** Mae Mfe */
+            mae_mfe?: components["schemas"]["PaperMaeMfePoint"][];
+            /**
+             * Mode
+             * @default shadow
+             * @enum {string}
+             */
+            mode: "all" | "shadow" | "auto_paper";
+            mode_comparison?: components["schemas"]["PaperModeComparison"];
+            qualification?: components["schemas"]["V2ProspectiveQualification"] | null;
+            /** R Distribution */
+            r_distribution?: components["schemas"]["PaperRDistributionBucket"][];
+            /** Recent Trades */
+            recent_trades?: components["schemas"]["PaperAnalyticsTrade"][];
+            /** Rolling Expectancy */
+            rolling_expectancy?: components["schemas"]["PaperRollingExpectancyPoint"][];
+            /**
+             * Rolling Window
+             * @default 20
+             */
+            rolling_window: number;
+            /** Start Date */
+            start_date?: string | null;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            summary?: components["schemas"]["PaperPerformanceSummary"];
+        };
+        /** PaperAnalyticsTrade */
+        PaperAnalyticsTrade: {
+            /**
+             * Entry Time
+             * Format: date-time
+             */
+            entry_time: string;
+            /** Epoch Id */
+            epoch_id?: string | null;
+            /** Exit Reason */
+            exit_reason?: string | null;
+            /**
+             * Exit Time
+             * Format: date-time
+             */
+            exit_time: string;
+            /** Fill Slippage Bps */
+            fill_slippage_bps?: string | null;
+            /** Implementation Shortfall Bps */
+            implementation_shortfall_bps?: string | null;
+            /** Initial Stop */
+            initial_stop?: string | null;
+            /** Initial Target */
+            initial_target?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Mae R */
+            mae_r?: string | null;
+            /** Mfe R */
+            mfe_r?: string | null;
+            /** Profile Fingerprint */
+            profile_fingerprint?: string | null;
+            /** Quantity */
+            quantity?: string | null;
+            /** R Result */
+            r_result: string;
+            /** Realized Pnl */
+            realized_pnl?: string | null;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Setup Features */
+            setup_features?: {
+                [key: string]: unknown;
+            };
+            /** Signal To Executable Bps */
+            signal_to_executable_bps?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "auto_paper" | "shadow_replay";
+            /** Strategy Id */
+            strategy_id: string;
+            /** Strategy Version */
+            strategy_version?: string | null;
+            /** Trade Id */
+            trade_id: string;
+            /** Universe Id */
+            universe_id?: string | null;
         };
         /** PaperBalance */
         PaperBalance: {
@@ -3803,6 +6671,139 @@ export interface components {
              * @default 0
              */
             reserved: string;
+        };
+        /** PaperDailyR */
+        PaperDailyR: {
+            /** R Result */
+            r_result: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Trade Count */
+            trade_count: number;
+        };
+        /** PaperDrawdownPoint */
+        PaperDrawdownPoint: {
+            /** Drawdown */
+            drawdown: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "R" | "percent";
+        };
+        /** PaperEpochListResponse */
+        PaperEpochListResponse: {
+            /** Epochs */
+            epochs: components["schemas"]["PaperSimulationEpoch"][];
+        };
+        /** PaperEquityPoint */
+        PaperEquityPoint: {
+            /** Cash */
+            cash: string;
+            /** Epoch Id */
+            epoch_id: string;
+            /** Equity */
+            equity: string;
+            /** Gross Exposure */
+            gross_exposure: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Realized Pnl */
+            realized_pnl: string;
+            /** Risk At Stop */
+            risk_at_stop: string;
+            /** Unrealized Pnl */
+            unrealized_pnl: string;
+        };
+        /**
+         * PaperExecutionPolicy
+         * @description Deterministic, pessimistic paper-fill assumptions shared with backtests.
+         */
+        PaperExecutionPolicy: {
+            /**
+             * Latency Ms
+             * @default 250
+             */
+            latency_ms: number;
+            /**
+             * Max Observation Age Seconds
+             * @default 5
+             */
+            max_observation_age_seconds: number | string;
+            /**
+             * Max Volume Participation Pct
+             * @default 0.10
+             */
+            max_volume_participation_pct: number | string;
+            /**
+             * Policy Version
+             * @default paper-execution-v2
+             * @constant
+             */
+            policy_version: "paper-execution-v2";
+            /**
+             * Reject Halted
+             * @default true
+             */
+            reject_halted: boolean;
+            /**
+             * Require Execution Eligible
+             * @default true
+             */
+            require_execution_eligible: boolean;
+            /**
+             * Slippage Bps
+             * @default 10
+             */
+            slippage_bps: number | string;
+            /**
+             * Stop Slippage Bps
+             * @default 25
+             */
+            stop_slippage_bps: number | string;
+        };
+        /** PaperExecutionSummary */
+        PaperExecutionSummary: {
+            /** Average Fill Slippage Bps */
+            average_fill_slippage_bps?: string | null;
+            /** Average Implementation Shortfall Bps */
+            average_implementation_shortfall_bps?: string | null;
+            /** Average Signal To Executable Bps */
+            average_signal_to_executable_bps?: string | null;
+            /**
+             * Trade Count
+             * @default 0
+             */
+            trade_count: number;
+        };
+        /** PaperFactorBucket */
+        PaperFactorBucket: {
+            /** Count */
+            count: number;
+            /** Expectancy R */
+            expectancy_r: string;
+            /** Label */
+            label: string;
+            /** Win Rate */
+            win_rate: string;
+        };
+        /** PaperFactorStudy */
+        PaperFactorStudy: {
+            /** Buckets */
+            buckets: components["schemas"]["PaperFactorBucket"][];
+            /** Factor */
+            factor: string;
         };
         /** PaperFill */
         PaperFill: {
@@ -3836,15 +6837,28 @@ export interface components {
              */
             source_time: string;
         };
-        /** PaperFillListResponse */
-        PaperFillListResponse: {
-            /** Fills */
-            fills: components["schemas"]["PaperFill"][];
+        /** PaperFunnelStage */
+        PaperFunnelStage: {
+            /** Conversion From Previous */
+            conversion_from_previous?: string | null;
+            /** Count */
+            count: number;
+            /**
+             * Dominant Drop Count
+             * @default 0
+             */
+            dominant_drop_count: number;
+            /** Dominant Drop Reason */
+            dominant_drop_reason?: string | null;
+            /** Stage */
+            stage: string;
         };
         /** PaperLedgerEntry */
         PaperLedgerEntry: {
             /** Amount */
             amount: string;
+            /** Created At */
+            created_at?: string | null;
             /** Currency */
             currency: string;
             /**
@@ -3865,30 +6879,34 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /** PaperMarketObservation */
-        PaperMarketObservation: {
-            /** Binding Id */
-            binding_id?: string | null;
-            /**
-             * Evaluated At
-             * Format: date-time
-             */
-            evaluated_at?: string;
-            /** High */
-            high?: number | string | null;
+        /** PaperMaeMfePoint */
+        PaperMaeMfePoint: {
+            /** Exit Reason */
+            exit_reason?: string | null;
             /** Instrument Id */
             instrument_id: string;
-            /** Low */
-            low?: number | string | null;
-            /** Price */
-            price: number | string;
-            /** Provider */
-            provider?: string | null;
+            /** Mae R */
+            mae_r: string;
+            /** Mfe R */
+            mfe_r: string;
+            /** R Result */
+            r_result: string;
+            /** Risk Dollars */
+            risk_dollars?: string | null;
             /**
-             * Source Time
-             * Format: date-time
+             * Session Date
+             * Format: date
              */
-            source_time: string;
+            session_date: string;
+            /** Trade Id */
+            trade_id: string;
+        };
+        /** PaperModeComparison */
+        PaperModeComparison: {
+            auto_paper?: components["schemas"]["PaperPerformanceSummary"];
+            /** Expectancy Delta R */
+            expectancy_delta_r?: string | null;
+            shadow?: components["schemas"]["PaperPerformanceSummary"];
         };
         /** PaperOrder */
         PaperOrder: {
@@ -3920,6 +6938,8 @@ export interface components {
             order_type: "market" | "limit" | "stop";
             /** Quantity */
             quantity: string;
+            /** Reference Price */
+            reference_price?: string | null;
             /** Rejection Reason */
             rejection_reason?: string | null;
             /**
@@ -3962,6 +6982,8 @@ export interface components {
             order_type: "market" | "limit" | "stop";
             /** Quantity */
             quantity: number | string;
+            /** Reference Price */
+            reference_price?: number | string | null;
             /**
              * Side
              * @enum {string}
@@ -3969,6 +6991,41 @@ export interface components {
             side: "buy" | "sell";
             /** Stop Price */
             stop_price?: number | string | null;
+        };
+        /** PaperPerformanceSummary */
+        PaperPerformanceSummary: {
+            /** Average Mae R */
+            average_mae_r?: string | null;
+            /** Average Mfe R */
+            average_mfe_r?: string | null;
+            /** Expectancy R */
+            expectancy_r?: string | null;
+            /**
+             * Losses
+             * @default 0
+             */
+            losses: number;
+            /** Max Drawdown R */
+            max_drawdown_r?: string | null;
+            /** Profit Factor */
+            profit_factor?: string | null;
+            /**
+             * Total R
+             * @default 0
+             */
+            total_r: string;
+            /**
+             * Trade Count
+             * @default 0
+             */
+            trade_count: number;
+            /** Win Rate */
+            win_rate?: string | null;
+            /**
+             * Wins
+             * @default 0
+             */
+            wins: number;
         };
         /** PaperPosition */
         PaperPosition: {
@@ -3993,6 +7050,71 @@ export interface components {
              */
             unrealized_pnl: string;
         };
+        /** PaperPositionProtection */
+        PaperPositionProtection: {
+            /** Account Id */
+            account_id: string;
+            /** Binding Id */
+            binding_id?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Entry Order Id */
+            entry_order_id?: string | null;
+            /** Exit Order Id */
+            exit_order_id?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled";
+            /** Stop Loss */
+            stop_loss?: string | null;
+            /** Take Profit */
+            take_profit?: string | null;
+            /** Trigger Reason */
+            trigger_reason?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** PaperProtectionListResponse */
+        PaperProtectionListResponse: {
+            /** Protections */
+            protections: components["schemas"]["PaperPositionProtection"][];
+        };
+        /**
+         * PaperProtectionUpsert
+         * @description Server-authoritative OCO-style stop/target protection for a paper position.
+         */
+        PaperProtectionUpsert: {
+            /** Binding Id */
+            binding_id?: string | null;
+            /** Entry Order Id */
+            entry_order_id?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Stop Loss */
+            stop_loss?: number | string | null;
+            /** Take Profit */
+            take_profit?: number | string | null;
+        };
+        /** PaperRDistributionBucket */
+        PaperRDistributionBucket: {
+            /** Count */
+            count: number;
+            /** Label */
+            label: string;
+            /** Maximum R */
+            maximum_r?: string | null;
+            /** Minimum R */
+            minimum_r?: string | null;
+        };
         /** PaperResetRequest */
         PaperResetRequest: {
             /**
@@ -4000,6 +7122,42 @@ export interface components {
              * @default 100000
              */
             initial_cash: number | string;
+        };
+        /** PaperRollingExpectancyPoint */
+        PaperRollingExpectancyPoint: {
+            /** Expectancy R */
+            expectancy_r: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** One Sided 90 Lcb R */
+            one_sided_90_lcb_r?: string | null;
+            /** Sample Size */
+            sample_size: number;
+        };
+        /** PaperSimulationEpoch */
+        PaperSimulationEpoch: {
+            /** Account Id */
+            account_id: string;
+            /** End Reason */
+            end_reason?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Epoch Id */
+            epoch_id: string;
+            /** Initial Cash */
+            initial_cash: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Ordinal */
+            ordinal: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
         };
         /** PersistenceInventory */
         PersistenceInventory: {
@@ -4050,6 +7208,241 @@ export interface components {
             variables?: string[];
             /** Version */
             version: string;
+        };
+        /** ProspectiveEconomicAutoPaperReviewRequest */
+        ProspectiveEconomicAutoPaperReviewRequest: {
+            /** Review Note */
+            review_note: string;
+        };
+        /** ProspectiveEconomicEvaluationRequest */
+        ProspectiveEconomicEvaluationRequest: {
+            /** Review Note */
+            review_note: string;
+        };
+        /** ProspectiveEconomicEventListResponse */
+        ProspectiveEconomicEventListResponse: {
+            /** Events */
+            events: components["schemas"]["StrategyEvent"][];
+        };
+        /** ProspectiveEconomicHoldoutReviewRequest */
+        ProspectiveEconomicHoldoutReviewRequest: {
+            /** Artifact Ref */
+            artifact_ref: string;
+            /** Expectancy R */
+            expectancy_r: number | string;
+            /** Max Drawdown R */
+            max_drawdown_r: number | string;
+            /** One Sided 90 Lcb R */
+            one_sided_90_lcb_r?: number | string | null;
+            /** Review Note */
+            review_note: string;
+            /** Trade Count */
+            trade_count: number;
+            /** Win Rate */
+            win_rate: number | string;
+        };
+        /** ProspectiveEconomicMetrics */
+        ProspectiveEconomicMetrics: {
+            /**
+             * Distinct Sessions
+             * @default 0
+             */
+            distinct_sessions: number;
+            /**
+             * Distinct Symbols
+             * @default 0
+             */
+            distinct_symbols: number;
+            /** Execution Match Rate */
+            execution_match_rate?: string | null;
+            /** Expectancy R */
+            expectancy_r?: string | null;
+            /**
+             * Matched Outcome Count
+             * @default 0
+             */
+            matched_outcome_count: number;
+            /**
+             * Matched Signal Count
+             * @default 0
+             */
+            matched_signal_count: number;
+            /** Max Drawdown R */
+            max_drawdown_r?: string | null;
+            /** One Sided 90 Lcb R */
+            one_sided_90_lcb_r?: string | null;
+            /**
+             * Signal Count
+             * @default 0
+             */
+            signal_count: number;
+            /**
+             * Win Count
+             * @default 0
+             */
+            win_count: number;
+            /** Win Rate */
+            win_rate?: string | null;
+        };
+        /** ProspectiveEconomicStatus */
+        ProspectiveEconomicStatus: {
+            /**
+             * Auto Paper Research Authorized
+             * @default false
+             */
+            auto_paper_research_authorized: boolean;
+            /**
+             * Auto Paper Reviewed
+             * @default false
+             */
+            auto_paper_reviewed: boolean;
+            /** Evaluation Event Id */
+            evaluation_event_id?: string | null;
+            /**
+             * Evaluation Passed
+             * @default false
+             */
+            evaluation_passed: boolean;
+            /**
+             * Evaluation Recorded
+             * @default false
+             */
+            evaluation_recorded: boolean;
+            /** Evidence Fingerprint */
+            evidence_fingerprint: string;
+            /** Holdout Event Id */
+            holdout_event_id?: string | null;
+            /**
+             * Holdout Reviewed
+             * @default false
+             */
+            holdout_reviewed: boolean;
+            /**
+             * Holdout Verdict
+             * @default UNOPENED
+             * @enum {string}
+             */
+            holdout_verdict: "UNOPENED" | "UNDERPOWERED" | "FAIL" | "ROBUST" | "GOLD";
+            metrics: components["schemas"]["ProspectiveEconomicMetrics"];
+            /** Pipeline Evidence Fingerprint */
+            pipeline_evidence_fingerprint: string;
+            /**
+             * Policy Version
+             * @default prospective-economic-shadow-v1
+             */
+            policy_version: string;
+            /** Profile Fingerprint */
+            profile_fingerprint: string;
+            /**
+             * Quantitative Pass
+             * @default false
+             */
+            quantitative_pass: boolean;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /**
+             * Sample Ready
+             * @default false
+             */
+            sample_ready: boolean;
+            /**
+             * Sealed Holdout Unlocked
+             * @default false
+             */
+            sealed_holdout_unlocked: boolean;
+            soak_metrics?: components["schemas"]["ProspectiveEconomicMetrics"];
+            /**
+             * Soak Passed
+             * @default false
+             */
+            soak_passed: boolean;
+            /** Strategy Id */
+            strategy_id: string;
+            thresholds?: components["schemas"]["ProspectiveEconomicThresholds"];
+        };
+        /** ProspectiveEconomicThresholds */
+        ProspectiveEconomicThresholds: {
+            /**
+             * Holdout End
+             * Format: date
+             * @default 2026-04-28
+             */
+            holdout_end: string;
+            /**
+             * Holdout Start
+             * Format: date
+             * @default 2026-03-31
+             */
+            holdout_start: string;
+            /**
+             * Horizon Minutes
+             * @default 60
+             */
+            horizon_minutes: number;
+            /**
+             * Maximum Drawdown R
+             * @default 5
+             */
+            maximum_drawdown_r: string;
+            /**
+             * Minimum Distinct Sessions
+             * @default 20
+             */
+            minimum_distinct_sessions: number;
+            /**
+             * Minimum Distinct Symbols
+             * @default 15
+             */
+            minimum_distinct_symbols: number;
+            /**
+             * Minimum Execution Match Rate
+             * @default 0.90
+             */
+            minimum_execution_match_rate: string;
+            /**
+             * Minimum Expectancy R
+             * @default 0.20
+             */
+            minimum_expectancy_r: string;
+            /**
+             * Minimum Matched Outcomes
+             * @default 30
+             */
+            minimum_matched_outcomes: number;
+            /**
+             * Minimum Win Rate
+             * @default 0.65
+             */
+            minimum_win_rate: string;
+            /**
+             * One Sided Confidence Level
+             * @default 0.90
+             */
+            one_sided_confidence_level: string;
+            /**
+             * Prospective Start
+             * Format: date
+             * @default 2026-08-24
+             */
+            prospective_start: string;
+            /**
+             * Soak Minimum Distinct Sessions
+             * @default 8
+             */
+            soak_minimum_distinct_sessions: number;
+            /**
+             * Soak Minimum Distinct Symbols
+             * @default 8
+             */
+            soak_minimum_distinct_symbols: number;
+            /**
+             * Soak Minimum Matched Outcomes
+             * @default 10
+             */
+            soak_minimum_matched_outcomes: number;
         };
         /** ProviderBinding */
         ProviderBinding: {
@@ -4113,7 +7506,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "ready" | "degraded" | "unavailable";
+            status: "ready" | "degraded" | "unavailable" | "unconfigured";
         };
         /** ProviderFacadePayload */
         ProviderFacadePayload: {
@@ -4402,6 +7795,60 @@ export interface components {
             /** Reports */
             reports?: components["schemas"]["ReportArtifact"][];
         };
+        /** ResearchActionRecord */
+        ResearchActionRecord: {
+            /** Action Id */
+            action_id: string;
+            /** Args */
+            args?: {
+                [key: string]: unknown;
+            };
+            /** Completed At */
+            completed_at?: string | null;
+            /** Error Code */
+            error_code?: string | null;
+            /**
+             * Evidence Ids
+             * @default []
+             */
+            evidence_ids: string[];
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "sec_find_filings" | "sec_extract_filing" | "company_find_releases" | "company_extract_release" | "web_search" | "web_extract" | "evaluate" | "stop";
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Result Summary */
+            result_summary?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "proposed" | "completed" | "failed" | "blocked" | "timed_out";
+            /** Step */
+            step: number;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            /** Trace Id */
+            trace_id: string;
+        };
         /** ResearchBudgetStatus */
         ResearchBudgetStatus: {
             /** Deep Max Extracts */
@@ -4435,6 +7882,86 @@ export interface components {
              * @default 0
              */
             total_legacy_requests: number;
+        };
+        /** ResearchCoverage */
+        ResearchCoverage: {
+            /**
+             * Atm
+             * @default unchecked
+             * @enum {string}
+             */
+            atm: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Company Ir
+             * @default unchecked
+             * @enum {string}
+             */
+            company_ir: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Convertibles
+             * @default unchecked
+             * @enum {string}
+             */
+            convertibles: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Prior News Novelty
+             * @default unchecked
+             * @enum {string}
+             */
+            prior_news_novelty: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Recent News
+             * @default unchecked
+             * @enum {string}
+             */
+            recent_news: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Resale Registration
+             * @default unchecked
+             * @enum {string}
+             */
+            resale_registration: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Sec
+             * @default unchecked
+             * @enum {string}
+             */
+            sec: "unchecked" | "complete" | "failed" | "unresolved";
+            /**
+             * Warrants
+             * @default unchecked
+             * @enum {string}
+             */
+            warrants: "unchecked" | "complete" | "failed" | "unresolved";
+        };
+        /** ResearchPolicyDecision */
+        ResearchPolicyDecision: {
+            /** Allowed */
+            allowed: boolean;
+            /** Authoritative */
+            authoritative: boolean;
+            /** Policy Version */
+            policy_version: string;
+            /** Reason Code */
+            reason_code: string;
+            /**
+             * Score Adjustment
+             * @default 0
+             */
+            score_adjustment: number;
+        };
+        /** ResearchPolicyStatus */
+        ResearchPolicyStatus: {
+            decision: components["schemas"]["ResearchPolicyDecision"];
+            /**
+             * Decision At
+             * Format: date-time
+             */
+            decision_at: string;
+            features?: components["schemas"]["StrategyResearchFeatures"] | null;
+            /** Strategy Version */
+            strategy_version: string;
+            validation?: components["schemas"]["ResearchValidationReport"] | null;
         };
         /** ResearchProviderStatus */
         ResearchProviderStatus: {
@@ -4509,6 +8036,8 @@ export interface components {
                 [key: string]: unknown;
             };
             provider: components["schemas"]["ResearchProviderStatus"];
+            /** Provider Chain */
+            provider_chain?: components["schemas"]["ResearchProviderStatus"][];
             release: components["schemas"]["ResearchReleaseStatus"];
             retention: components["schemas"]["ResearchRetentionStatus"];
         };
@@ -4541,6 +8070,39 @@ export interface components {
             /** Resolved Binding Id */
             resolved_binding_id: string;
         };
+        /** ResearchValidationReport */
+        ResearchValidationReport: {
+            /** Exact Sample Size */
+            exact_sample_size: number;
+            /**
+             * Feature Results
+             * @default []
+             */
+            feature_results: components["schemas"]["ValidationFeatureResult"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /** Policy Version */
+            policy_version: string;
+            /**
+             * Promotion Allowed
+             * @default false
+             */
+            promotion_allowed: boolean;
+            /** Sample Size */
+            sample_size: number;
+            /** Validation Id */
+            validation_id: string;
+        };
         /**
          * ResourceClass
          * @enum {string}
@@ -4563,6 +8125,27 @@ export interface components {
              * @default none
              */
             policy: string;
+        };
+        /** ReviewValidationInput */
+        ReviewValidationInput: {
+            /** Approved Recommendations */
+            approved_recommendations: {
+                [key: string]: "observe_only" | "score_only" | "soft_gate" | "hard_gate";
+            };
+            /**
+             * Confirm Execution Authority
+             * @constant
+             */
+            confirm_execution_authority: true;
+            /**
+             * Policy Version
+             * @default trading-research-1
+             */
+            policy_version: string;
+            /** Review Note */
+            review_note: string;
+            /** Source Validation Id */
+            source_validation_id: string;
         };
         /** RpgFeatureOptions */
         RpgFeatureOptions: {
@@ -4852,6 +8435,45 @@ export interface components {
              */
             success: boolean;
         };
+        /** StartTradingResearchInput */
+        StartTradingResearchInput: {
+            /**
+             * Deadline Seconds
+             * @default 45
+             */
+            deadline_seconds: number;
+            /** Decision Context At */
+            decision_context_at?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Max Extracts
+             * @default 8
+             */
+            max_extracts: number;
+            /**
+             * Max Queries
+             * @default 5
+             */
+            max_queries: number;
+            /**
+             * Max Sources
+             * @default 20
+             */
+            max_sources: number;
+            /**
+             * Max Steps
+             * @default 8
+             */
+            max_steps: number;
+            /**
+             * Run Shadow Ai
+             * @default true
+             */
+            run_shadow_ai: boolean;
+            /** Strategy Id */
+            strategy_id?: string | null;
+        };
         /** StateHashRequest */
         StateHashRequest: {
             /** State */
@@ -4867,6 +8489,746 @@ export interface components {
             hash: string;
             /** Source */
             source: string;
+        };
+        /** StrategyCatalystCaptureRequest */
+        StrategyCatalystCaptureRequest: {
+            /**
+             * Lookback Hours
+             * @default 72
+             */
+            lookback_hours: number;
+            /**
+             * Max Items Per Candidate
+             * @default 8
+             */
+            max_items_per_candidate: number;
+        };
+        /** StrategyCatalystCaptureResponse */
+        StrategyCatalystCaptureResponse: {
+            /** Candidates With Evidence */
+            candidates_with_evidence: number;
+            /** Errors */
+            errors?: {
+                [key: string]: string;
+            };
+            /** Evidence Count */
+            evidence_count: number;
+            strategy: components["schemas"]["TradingStrategyConfigDocument-Output"];
+            universe: components["schemas"]["GapperUniverseSnapshot-Output"];
+        };
+        /** StrategyConfigListResponse */
+        StrategyConfigListResponse: {
+            /** Strategies */
+            strategies: components["schemas"]["TradingStrategyConfigDocument-Output"][];
+        };
+        /** StrategyEvaluationRequest */
+        StrategyEvaluationRequest: {
+            /** Bars */
+            bars?: components["schemas"]["MarketBar-Input"][];
+            /** Candidate */
+            candidate: {
+                [key: string]: unknown;
+            };
+            config?: components["schemas"]["GapPullbackConfig-Input"];
+        };
+        /** StrategyEvent */
+        StrategyEvent: {
+            /** Event Id */
+            event_id: string;
+            /** Event Type */
+            event_type: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Reason Code */
+            reason_code?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /** State */
+            state: string;
+            /** Strategy Id */
+            strategy_id: string;
+        };
+        /** StrategyEventListResponse */
+        StrategyEventListResponse: {
+            /** Events */
+            events: components["schemas"]["StrategyEvent"][];
+        };
+        /** StrategyOperationsStatus */
+        StrategyOperationsStatus: {
+            alpaca_status_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            deep_recovery_shadow_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            /**
+             * Execution Authority
+             * @default false
+             * @constant
+             */
+            execution_authority: false;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            prospective_economic_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            v2_qualification_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+        };
+        /** StrategyProtection */
+        StrategyProtection: {
+            /** Account Id */
+            account_id: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Entry Order Id */
+            entry_order_id: string;
+            /** Exit Order Id */
+            exit_order_id?: string | null;
+            /** Initial Stop Price */
+            initial_stop_price?: string | null;
+            /** Initial Target Price */
+            initial_target_price?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Mae Price */
+            mae_price?: string | null;
+            /** Mfe Price */
+            mfe_price?: string | null;
+            /** Protection Id */
+            protection_id: string;
+            /** Quantity */
+            quantity: string;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /**
+             * Status
+             * @default pending_entry
+             * @enum {string}
+             */
+            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled";
+            /** Stop Price */
+            stop_price: string;
+            /** Strategy Id */
+            strategy_id: string;
+            /** Target Price */
+            target_price: string;
+            /** Trigger Reason */
+            trigger_reason?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** StrategyProtectionListResponse */
+        StrategyProtectionListResponse: {
+            /** Protections */
+            protections: components["schemas"]["StrategyProtection"][];
+        };
+        /** StrategyRangeBacktestAcceptedResponse */
+        StrategyRangeBacktestAcceptedResponse: {
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @default queued
+             * @constant
+             */
+            status: "queued";
+            /** Total Sessions */
+            total_sessions: number;
+        };
+        /** StrategyRangeBacktestDay */
+        StrategyRangeBacktestDay: {
+            /**
+             * Candidate Count
+             * @default 0
+             */
+            candidate_count: number;
+            /** Detail */
+            detail?: string | null;
+            /** Ending Cash */
+            ending_cash: string;
+            /** Fidelity */
+            fidelity?: string | null;
+            /**
+             * Fidelity Warnings
+             * @default []
+             */
+            fidelity_warnings: string[];
+            /**
+             * Pnl
+             * @default 0
+             */
+            pnl: string;
+            result?: components["schemas"]["GapPullbackBacktestResult"] | null;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Starting Cash */
+            starting_cash: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "backtested" | "no_candidates" | "missing_universe" | "data_unavailable" | "error";
+            /**
+             * Strategy Fidelity Adjustments
+             * @default []
+             */
+            strategy_fidelity_adjustments: string[];
+            /**
+             * Trade Count
+             * @default 0
+             */
+            trade_count: number;
+            /**
+             * Trigger Count
+             * @default 0
+             */
+            trigger_count: number;
+            /** Universe Evaluation Time */
+            universe_evaluation_time?: string | null;
+            /** Universe Id */
+            universe_id?: string | null;
+            /** Universe Origin */
+            universe_origin?: ("captured" | "reconstructed") | null;
+        };
+        /** StrategyRangeBacktestProgressResponse */
+        StrategyRangeBacktestProgressResponse: {
+            /** Completed Sessions */
+            completed_sessions: number;
+            /** Current Session */
+            current_session?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Percent */
+            percent: number;
+            result?: components["schemas"]["StrategyRangeBacktestResult"] | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed";
+            /** Strategy Id */
+            strategy_id: string;
+            /** Total Sessions */
+            total_sessions: number;
+        };
+        /** StrategyRangeBacktestRequest */
+        StrategyRangeBacktestRequest: {
+            /**
+             * Assumed Spread Bps
+             * @default 40
+             */
+            assumed_spread_bps: number | string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Initial Cash
+             * @default 100000
+             */
+            initial_cash: number | string;
+            /**
+             * Max Hold Minutes
+             * @description Legacy compatibility field; indicator-based exits do not use elapsed time.
+             * @default 390
+             */
+            max_hold_minutes: number;
+            /**
+             * Max Sessions
+             * @default 60
+             */
+            max_sessions: number;
+            /**
+             * Reconstruction Max Age Days
+             * @default 30
+             */
+            reconstruction_max_age_days: number;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Universe Cutoff Et */
+            universe_cutoff_et?: string | null;
+            /**
+             * Universe Mode
+             * @default captured_or_reconstructed
+             * @enum {string}
+             */
+            universe_mode: "captured_only" | "captured_or_reconstructed" | "reconstructed_only";
+            /** Universe Scan Time Et */
+            universe_scan_time_et?: string | null;
+        };
+        /** StrategyRangeBacktestResult */
+        StrategyRangeBacktestResult: {
+            /** Candidate Count */
+            candidate_count: number;
+            /** Covered Sessions */
+            covered_sessions: number;
+            /** Data Unavailable Sessions */
+            data_unavailable_sessions: number;
+            /** Days */
+            days: components["schemas"]["StrategyRangeBacktestDay"][];
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Ending Cash */
+            ending_cash: string;
+            /** Error Sessions */
+            error_sessions: number;
+            /** Exact Sessions */
+            exact_sessions: number;
+            /** Expectancy R */
+            expectancy_r: string | null;
+            /** Initial Cash */
+            initial_cash: string;
+            /** Loss Count */
+            loss_count: number;
+            /** Missing Universe Sessions */
+            missing_universe_sessions: number;
+            /** No Candidate Sessions */
+            no_candidate_sessions: number;
+            /** Pnl */
+            pnl: string | null;
+            /**
+             * Point In Time Universes Required
+             * @default true
+             * @constant
+             */
+            point_in_time_universes_required: true;
+            /** Reconstructed Sessions */
+            reconstructed_sessions: number;
+            /**
+             * Reconstruction Is Approximate
+             * @default true
+             * @constant
+             */
+            reconstruction_is_approximate: true;
+            /** Requested Trading Sessions */
+            requested_trading_sessions: number;
+            /**
+             * Result Quality
+             * @enum {string}
+             */
+            result_quality: "exact" | "mixed" | "approximate" | "unavailable";
+            /** Return Pct */
+            return_pct: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Strategy Id */
+            strategy_id: string;
+            /** Strategy Kind */
+            strategy_kind: string;
+            /** Strategy Version */
+            strategy_version: string;
+            /** Trade Count */
+            trade_count: number;
+            /** Trigger Count */
+            trigger_count: number;
+            /**
+             * Universe Cutoff Et
+             * Format: time
+             */
+            universe_cutoff_et: string;
+            /**
+             * Universe Mode
+             * @enum {string}
+             */
+            universe_mode: "captured_only" | "captured_or_reconstructed" | "reconstructed_only";
+            /**
+             * Universe Scan Time Et
+             * Format: time
+             */
+            universe_scan_time_et: string;
+            /** Win Count */
+            win_count: number;
+        };
+        /** StrategyResearchFeatures */
+        StrategyResearchFeatures: {
+            /** Catalyst Age Minutes */
+            catalyst_age_minutes?: number | null;
+            /**
+             * Catalyst Fresh
+             * @default false
+             */
+            catalyst_fresh: boolean;
+            /**
+             * Catalyst Same Day
+             * @default false
+             */
+            catalyst_same_day: boolean;
+            /**
+             * Decision At
+             * Format: date-time
+             */
+            decision_at: string;
+            /** Fact Set Id */
+            fact_set_id: string;
+            /** Feature Id */
+            feature_id: string;
+            /** Immediate Supply Risk */
+            immediate_supply_risk?: boolean | null;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Primary Catalyst Confirmed
+             * @default false
+             */
+            primary_catalyst_confirmed: boolean;
+            /**
+             * Projection Version
+             * @default research-features-1
+             */
+            projection_version: string;
+            /**
+             * Research Policy Version
+             * @default trading-research-1-shadow
+             */
+            research_policy_version: string;
+            /**
+             * Research Status
+             * @default unavailable
+             * @enum {string}
+             */
+            research_status: "complete" | "partial" | "timed_out" | "failed" | "unavailable";
+            /**
+             * Source Authority Sufficient
+             * @default false
+             */
+            source_authority_sufficient: boolean;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            /**
+             * Supply Resolution Status
+             * @default unresolved
+             * @enum {string}
+             */
+            supply_resolution_status: "clear" | "risk_found" | "unresolved";
+            /**
+             * Unresolved Supply
+             * @default true
+             */
+            unresolved_supply: boolean;
+        };
+        /** StrategyResearchReview */
+        StrategyResearchReview: {
+            classification?: components["schemas"]["CatalystShadowClassification"] | null;
+            /** Detail */
+            detail?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "reviewed" | "missing_evidence" | "error";
+        };
+        /** StrategyResearchReviewRequest */
+        StrategyResearchReviewRequest: {
+            /** Model */
+            model?: string | null;
+        };
+        /** StrategyResearchReviewResponse */
+        StrategyResearchReviewResponse: {
+            /** Reviews */
+            reviews: components["schemas"]["StrategyResearchReview"][];
+            /**
+             * Shadow Only
+             * @default true
+             * @constant
+             */
+            shadow_only: true;
+            /** Strategy Id */
+            strategy_id: string;
+            /** Universe Id */
+            universe_id: string;
+        };
+        /** StrategyRiskProfile */
+        "StrategyRiskProfile-Input": {
+            /**
+             * Entry Start Et
+             * Format: time
+             * @default 09:35:00
+             */
+            entry_start_et: string;
+            /**
+             * Force Flat Et
+             * Format: time
+             * @default 15:55:00
+             */
+            force_flat_et: string;
+            /**
+             * Kill Switch
+             * @default false
+             */
+            kill_switch: boolean;
+            /**
+             * Last Entry Et
+             * Format: time
+             * @default 11:30:00
+             */
+            last_entry_et: string;
+            /**
+             * Max Daily Loss Pct
+             * @default 1.5
+             */
+            max_daily_loss_pct: number | string;
+            /**
+             * Max Open Risk Pct
+             * @default 1.0
+             */
+            max_open_risk_pct: number | string;
+            /**
+             * Max Positions
+             * @default 3
+             */
+            max_positions: number;
+            /**
+             * Max Spread Bps
+             * @default 150
+             */
+            max_spread_bps: number | string;
+            /**
+             * Max Trade Value
+             * @default 25000
+             */
+            max_trade_value: number | string;
+            /**
+             * Max Trades Per Day
+             * @default 5
+             */
+            max_trades_per_day: number;
+            /**
+             * One Trade Per Symbol Per Day
+             * @default true
+             */
+            one_trade_per_symbol_per_day: boolean;
+            /**
+             * Risk Per Trade Pct
+             * @default 0.35
+             */
+            risk_per_trade_pct: number | string;
+        };
+        /** StrategyRiskProfile */
+        "StrategyRiskProfile-Output": {
+            /**
+             * Entry Start Et
+             * Format: time
+             * @default 09:35:00
+             */
+            entry_start_et: string;
+            /**
+             * Force Flat Et
+             * Format: time
+             * @default 15:55:00
+             */
+            force_flat_et: string;
+            /**
+             * Kill Switch
+             * @default false
+             */
+            kill_switch: boolean;
+            /**
+             * Last Entry Et
+             * Format: time
+             * @default 11:30:00
+             */
+            last_entry_et: string;
+            /**
+             * Max Daily Loss Pct
+             * @default 1.5
+             */
+            max_daily_loss_pct: string;
+            /**
+             * Max Open Risk Pct
+             * @default 1.0
+             */
+            max_open_risk_pct: string;
+            /**
+             * Max Positions
+             * @default 3
+             */
+            max_positions: number;
+            /**
+             * Max Spread Bps
+             * @default 150
+             */
+            max_spread_bps: string;
+            /**
+             * Max Trade Value
+             * @default 25000
+             */
+            max_trade_value: string;
+            /**
+             * Max Trades Per Day
+             * @default 5
+             */
+            max_trades_per_day: number;
+            /**
+             * One Trade Per Symbol Per Day
+             * @default true
+             */
+            one_trade_per_symbol_per_day: boolean;
+            /**
+             * Risk Per Trade Pct
+             * @default 0.35
+             */
+            risk_per_trade_pct: string;
+        };
+        /** StrategyRuntimeMonitorStatus */
+        StrategyRuntimeMonitorStatus: {
+            /** Configured Enabled */
+            configured_enabled: boolean;
+            /** Counters */
+            counters?: {
+                [key: string]: number;
+            };
+            /** Interval Seconds */
+            interval_seconds?: number | null;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Run At */
+            last_run_at?: string | null;
+            /** Registered */
+            registered: boolean;
+            /** Running */
+            running: boolean;
+        };
+        /** StrategySignal */
+        StrategySignal: {
+            /** Entry Price */
+            entry_price: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Quality Score
+             * @default 0
+             */
+            quality_score: number;
+            /** Reason Code */
+            reason_code: string;
+            /** Risk Per Share */
+            risk_per_share: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "discovered" | "qualified_gap" | "opening_impulse" | "first_pullback" | "first_low_confirmed" | "bounce_high_confirmed" | "second_pullback" | "higher_low_confirmed" | "vwap_reclaim" | "lower_high_break" | "breakout_hold" | "entry_ready" | "rejected" | "expired";
+            /** Stop Price */
+            stop_price: string;
+            /** Target Price */
+            target_price: string;
+        };
+        /** SupplyFact */
+        SupplyFact: {
+            /**
+             * Confidence
+             * @default 0.5
+             */
+            confidence: string;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Exercise Status */
+            exercise_status?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Extractor Version
+             * @default supply-parser-1
+             */
+            extractor_version: string;
+            /** Fact Id */
+            fact_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /** Registration Status */
+            registration_status?: string | null;
+            /** Remaining Capacity Usd */
+            remaining_capacity_usd?: string | null;
+            /**
+             * Resolution Status
+             * @default unresolved
+             * @enum {string}
+             */
+            resolution_status: "resolved" | "partial" | "unresolved";
+            /**
+             * Schema Version
+             * @default supply-facts-1
+             */
+            schema_version: string;
+            /** Shares */
+            shares?: string | null;
+            /** Source Evidence Ids */
+            source_evidence_ids: string[];
+            /**
+             * Status
+             * @default unknown
+             * @enum {string}
+             */
+            status: "active" | "terminated" | "exhausted" | "expired" | "redeemed" | "exercisable" | "locked" | "withdrawn" | "unknown";
+            /** Strike Price */
+            strike_price?: string | null;
+            /**
+             * Supply Type
+             * @enum {string}
+             */
+            supply_type: "atm" | "warrant" | "registered_offering" | "resale_registration" | "convertible" | "shelf_registration" | "equity_line";
+        };
+        /** SupplyMetrics */
+        SupplyMetrics: {
+            /** Immediate Supply Risk */
+            immediate_supply_risk?: boolean | null;
+            /** In The Money Warrant Pct Float */
+            in_the_money_warrant_pct_float?: string | null;
+            /** Potential Dilution Pct Float */
+            potential_dilution_pct_float?: string | null;
+            /** Registered Resale Pct Float */
+            registered_resale_pct_float?: string | null;
+            /** Remaining Atm Pct Market Cap */
+            remaining_atm_pct_market_cap?: string | null;
+            /**
+             * Supply Resolution Status
+             * @default unresolved
+             * @enum {string}
+             */
+            supply_resolution_status: "clear" | "risk_found" | "unresolved";
         };
         /** TradingAlert */
         TradingAlert: {
@@ -5023,7 +9385,7 @@ export interface components {
              */
             fast_period: number;
             /** Indicator Id */
-            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap") | null;
+            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap" | "stochastic-rsi") | null;
             /**
              * Lookback Bars
              * @default 1
@@ -5081,7 +9443,7 @@ export interface components {
              */
             fast_period: number;
             /** Indicator Id */
-            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap") | null;
+            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap" | "stochastic-rsi") | null;
             /**
              * Lookback Bars
              * @default 1
@@ -5238,6 +9600,308 @@ export interface components {
             status: string;
             /** Updated At */
             updated_at?: string | null;
+        };
+        /** TradingEvidence */
+        TradingEvidence: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Content */
+            content: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Evidence Id */
+            evidence_id: string;
+            /** Evidence Type */
+            evidence_type: string;
+            /**
+             * Extraction Status
+             * @default snippet
+             * @enum {string}
+             */
+            extraction_status: "metadata" | "snippet" | "completed" | "failed";
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Issuer Identity Id */
+            issuer_identity_id?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Source Authority Tier
+             * @enum {integer}
+             */
+            source_authority_tier: 1 | 2 | 3 | 4;
+            /** Source Available At */
+            source_available_at?: string | null;
+            /** Source Locator */
+            source_locator: string;
+            /** Source Published At */
+            source_published_at?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "sec" | "company_ir" | "news" | "web" | "manual";
+            /** Title */
+            title?: string | null;
+        };
+        /** TradingFactSet */
+        TradingFactSet: {
+            catalyst: components["schemas"]["CatalystFactSet"];
+            completeness?: components["schemas"]["ResearchCoverage"];
+            /**
+             * Evidence Ids
+             * @default []
+             */
+            evidence_ids: string[];
+            /**
+             * Extractor Version
+             * @default trading-extractors-1
+             */
+            extractor_version: string;
+            /** Fact Set Id */
+            fact_set_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /** Report Id */
+            report_id?: string | null;
+            /**
+             * Schema Version
+             * @default trading-facts-1
+             */
+            schema_version: string;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            /**
+             * Supply
+             * @default []
+             */
+            supply: components["schemas"]["SupplyFact"][];
+            supply_metrics?: components["schemas"]["SupplyMetrics"];
+            /**
+             * Unresolved Facts
+             * @default []
+             */
+            unresolved_facts: string[];
+        };
+        /** TradingResearchAuditView */
+        TradingResearchAuditView: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Evidence
+             * @default []
+             */
+            evidence: components["schemas"]["TradingEvidence"][];
+            fact_set?: components["schemas"]["TradingFactSet"] | null;
+            features?: components["schemas"]["StrategyResearchFeatures"] | null;
+            /**
+             * Hermes Actions
+             * @default []
+             */
+            hermes_actions: components["schemas"]["ResearchActionRecord"][];
+            identity?: components["schemas"]["IssuerIdentity"] | null;
+            /** Instrument Id */
+            instrument_id: string;
+            latest_report?: components["schemas"]["TradingResearchReport"] | null;
+            /**
+             * Report Timeline
+             * @default []
+             */
+            report_timeline: components["schemas"]["TradingResearchReport"][];
+            shadow?: components["schemas"]["NoveltyShadowAnnotation"] | null;
+        };
+        /** TradingResearchCoordinatorResult */
+        TradingResearchCoordinatorResult: {
+            fact_set: components["schemas"]["TradingFactSet"];
+            features: components["schemas"]["StrategyResearchFeatures"];
+            /** Planner Backend */
+            planner_backend: string;
+            report: components["schemas"]["TradingResearchReport"];
+            request: components["schemas"]["TradingResearchRequest"];
+            /** Trace Id */
+            trace_id: string;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** TradingResearchReport */
+        TradingResearchReport: {
+            /**
+             * Catalyst Status
+             * @default unresolved
+             * @enum {string}
+             */
+            catalyst_status: "confirmed" | "probable" | "unresolved" | "absent";
+            /**
+             * Contract Version
+             * @default trading-research-1
+             */
+            contract_version: string;
+            coverage?: components["schemas"]["ResearchCoverage"];
+            /**
+             * Evidence Cutoff At
+             * Format: date-time
+             */
+            evidence_cutoff_at: string;
+            /** Hermes Trace Id */
+            hermes_trace_id?: string | null;
+            /** Immutable Fingerprint */
+            immutable_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Omnix Known At */
+            omnix_known_at?: string | null;
+            /**
+             * Planner Backend
+             * @default local
+             */
+            planner_backend: string;
+            /** Report Id */
+            report_id: string;
+            /** Report Version */
+            report_version: number;
+            /** Research Completed At */
+            research_completed_at?: string | null;
+            /**
+             * Research Started At
+             * Format: date-time
+             */
+            research_started_at: string;
+            /**
+             * Research Status
+             * @default partial
+             * @enum {string}
+             */
+            research_status: "complete" | "partial" | "timed_out" | "failed";
+            /**
+             * Source Evidence Ids
+             * @default []
+             */
+            source_evidence_ids: string[];
+            /** Stop Reason */
+            stop_reason?: string | null;
+            /** Strategy Id */
+            strategy_id?: string | null;
+            /**
+             * Supply Status
+             * @default unresolved
+             * @enum {string}
+             */
+            supply_status: "clear" | "risk_found" | "unresolved";
+            /**
+             * Unresolved Facts
+             * @default []
+             */
+            unresolved_facts: string[];
+        };
+        /** TradingResearchRequest */
+        TradingResearchRequest: {
+            /**
+             * Allowed Operations
+             * @default [
+             *       "sec_find_filings",
+             *       "sec_extract_filing",
+             *       "company_find_releases",
+             *       "company_extract_release",
+             *       "web_search",
+             *       "web_extract",
+             *       "evaluate",
+             *       "stop"
+             *     ]
+             */
+            allowed_operations: ("sec_find_filings" | "sec_extract_filing" | "company_find_releases" | "company_extract_release" | "web_search" | "web_extract" | "evaluate" | "stop")[];
+            /**
+             * Contract Version
+             * @default trading-research-1
+             * @constant
+             */
+            contract_version: "trading-research-1";
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /**
+             * Decision Context At
+             * Format: date-time
+             */
+            decision_context_at: string;
+            /**
+             * Evidence Cutoff At
+             * Format: date-time
+             */
+            evidence_cutoff_at: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Issuer Identity Id */
+            issuer_identity_id?: string | null;
+            /**
+             * Known Filings
+             * @default []
+             */
+            known_filings: string[];
+            /**
+             * Known Headlines
+             * @default []
+             */
+            known_headlines: string[];
+            /**
+             * Max Extracts
+             * @default 8
+             */
+            max_extracts: number;
+            /**
+             * Max Queries
+             * @default 5
+             */
+            max_queries: number;
+            /**
+             * Max Sources
+             * @default 20
+             */
+            max_sources: number;
+            /**
+             * Max Steps
+             * @default 8
+             */
+            max_steps: number;
+            /**
+             * Objectives
+             * @default []
+             */
+            objectives: string[];
+            /** Request Id */
+            request_id: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Strategy Id */
+            strategy_id?: string | null;
         };
         /** TradingScannerDefinition */
         "TradingScannerDefinition-Input": {
@@ -5489,6 +10153,98 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /** TradingStrategyConfigDocument */
+        "TradingStrategyConfigDocument-Input": {
+            /** Account Id */
+            account_id: string;
+            /** Active Universe Id */
+            active_universe_id?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
+            /** Archived Reason */
+            archived_reason?: string | null;
+            config?: components["schemas"]["GapPullbackConfig-Input"];
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Mode
+             * @default off
+             * @enum {string}
+             */
+            mode: "off" | "shadow" | "auto_paper";
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            risk?: components["schemas"]["StrategyRiskProfile-Input"];
+            /** Strategy Id */
+            strategy_id: string;
+            /**
+             * Strategy Kind
+             * @default gap_pullback_v1
+             * @constant
+             */
+            strategy_kind: "gap_pullback_v1";
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             */
+            strategy_version: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** TradingStrategyConfigDocument */
+        "TradingStrategyConfigDocument-Output": {
+            /** Account Id */
+            account_id: string;
+            /** Active Universe Id */
+            active_universe_id?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
+            /** Archived Reason */
+            archived_reason?: string | null;
+            config?: components["schemas"]["GapPullbackConfig-Output"];
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Mode
+             * @default off
+             * @enum {string}
+             */
+            mode: "off" | "shadow" | "auto_paper";
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            risk?: components["schemas"]["StrategyRiskProfile-Output"];
+            /** Strategy Id */
+            strategy_id: string;
+            /**
+             * Strategy Kind
+             * @default gap_pullback_v1
+             * @constant
+             */
+            strategy_kind: "gap_pullback_v1";
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             */
+            strategy_version: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
         /** TrendlineAlertPoint */
         "TrendlineAlertPoint-Input": {
             /** Price */
@@ -5514,6 +10270,126 @@ export interface components {
          * @enum {string}
          */
         UsageScope: "personal_local" | "internal" | "external_display" | "licensed";
+        /** V2ProspectiveQualification */
+        V2ProspectiveQualification: {
+            /**
+             * Auto Paper Authorized
+             * @default false
+             */
+            auto_paper_authorized: boolean;
+            /** Current Profile Fingerprint */
+            current_profile_fingerprint: string;
+            /** Distinct Sessions */
+            distinct_sessions: number;
+            /** Distinct Symbols */
+            distinct_symbols: number;
+            /** Evidence Fingerprint */
+            evidence_fingerprint: string;
+            /** Execution Match Rate */
+            execution_match_rate?: string | null;
+            /** Expectancy R */
+            expectancy_r?: string | null;
+            /** Expected Profile Fingerprint */
+            expected_profile_fingerprint: string;
+            /** Matched Eligible Trade Count */
+            matched_eligible_trade_count: number;
+            /** Max Drawdown R */
+            max_drawdown_r?: string | null;
+            /** One Sided 90 Lcb R */
+            one_sided_90_lcb_r?: string | null;
+            /** Profile Match */
+            profile_match: boolean;
+            /**
+             * Prospective Economic Reviewed
+             * @default false
+             */
+            prospective_economic_reviewed: boolean;
+            /**
+             * Prospective Start
+             * Format: date
+             * @default 2026-08-24
+             */
+            prospective_start: string;
+            /**
+             * Qualification Version
+             * @default v2-prospective-qualification-1
+             */
+            qualification_version: string;
+            /**
+             * Qualified
+             * @default false
+             */
+            qualified: boolean;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Replay Trade Count */
+            replay_trade_count: number;
+            /**
+             * Reviewed
+             * @default false
+             */
+            reviewed: boolean;
+            /** Strategy Id */
+            strategy_id: string;
+            thresholds?: components["schemas"]["V2QualificationThresholds"];
+        };
+        /** V2QualificationReviewRequest */
+        V2QualificationReviewRequest: {
+            /** Review Note */
+            review_note: string;
+        };
+        /** V2QualificationThresholds */
+        V2QualificationThresholds: {
+            /**
+             * Live Match Window Minutes
+             * @default 10
+             */
+            live_match_window_minutes: number;
+            /**
+             * Maximum Drawdown R
+             * @default 5
+             */
+            maximum_drawdown_r: string;
+            /**
+             * Minimum Distinct Sessions
+             * @default 15
+             */
+            minimum_distinct_sessions: number;
+            /**
+             * Minimum Distinct Symbols
+             * @default 10
+             */
+            minimum_distinct_symbols: number;
+            /**
+             * Minimum Execution Match Rate
+             * @default 0.90
+             */
+            minimum_execution_match_rate: string;
+            /**
+             * Minimum Expectancy R
+             * @default 0.20
+             */
+            minimum_expectancy_r: string;
+            /**
+             * Minimum Matched Trades
+             * @default 20
+             */
+            minimum_matched_trades: number;
+            /**
+             * One Sided Confidence Level
+             * @default 0.90
+             */
+            one_sided_confidence_level: string;
+            /**
+             * Prospective Start
+             * Format: date
+             * @default 2026-08-24
+             */
+            prospective_start: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -5526,6 +10402,56 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ValidationFeatureResult */
+        ValidationFeatureResult: {
+            /** Confidence Interval High */
+            confidence_interval_high?: string | null;
+            /** Confidence Interval Low */
+            confidence_interval_low?: string | null;
+            /** Exact Sample Size */
+            exact_sample_size: number;
+            /** Feature */
+            feature: string;
+            /** In Sample Effect R */
+            in_sample_effect_r?: string | null;
+            /** Out Of Sample Effect R */
+            out_of_sample_effect_r?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Recommendation
+             * @default observe_only
+             * @enum {string}
+             */
+            recommendation: "observe_only" | "score_only" | "soft_gate" | "hard_gate";
+            /** Sample Size */
+            sample_size: number;
+            /** Win Probability Delta */
+            win_probability_delta?: string | null;
+        };
+        /** ValidationInput */
+        ValidationInput: {
+            /**
+             * Minimum Exact Sample
+             * @default 50
+             */
+            minimum_exact_sample: number;
+            /**
+             * Minimum Sample
+             * @default 100
+             */
+            minimum_sample: number;
+            /**
+             * Policy Version
+             * @default trading-research-1
+             */
+            policy_version: string;
+            /** Strategy Id */
+            strategy_id?: string | null;
         };
         /** WorkerHealth */
         WorkerHealth: {
@@ -5656,6 +10582,36 @@ export interface components {
              * @default allowed
              */
             small_json_payloads: string;
+        };
+        /** YahooGapperDiscoveryRequest */
+        YahooGapperDiscoveryRequest: {
+            /**
+             * Count
+             * @default 30
+             */
+            count: number;
+            /**
+             * Evaluation Time
+             * Format: date-time
+             */
+            evaluation_time?: string;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price: number | string;
+            /**
+             * Minimum Gap Pct
+             * @default 20
+             */
+            minimum_gap_pct: number | string;
+            /**
+             * Minimum Price
+             * @default 0.50
+             */
+            minimum_price: number | string;
+            /** Universe Id */
+            universe_id: string;
         };
     };
     responses: never;
@@ -8161,6 +13117,137 @@ export interface operations {
             };
         };
     };
+    classify_shadow_api_trading_catalysts_classify_shadow_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalystClassificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalystShadowClassification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_api_trading_catalysts_evidence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalystEvidenceCaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalystEvidence"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_evidence_api_trading_catalysts_evidence__instrument_id__get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                instrument_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalystEvidenceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    currency_rate_api_trading_currency_rates_get: {
+        parameters: {
+            query: {
+                base_currency: string;
+                quote_currency: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrencyRateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     diagnostics_api_trading_diagnostics_get: {
         parameters: {
             query?: never;
@@ -8333,6 +13420,352 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TradingDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observation_api_trading_execution_observation_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+                binding_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionObservation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlpacaIexCredentialStatus"];
+                };
+            };
+        };
+    };
+    update_alpaca_iex_credentials_api_trading_execution_providers_alpaca_iex_credentials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlpacaIexCredentialUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlpacaIexCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attribution_api_trading_hermes_research_attribution_get: {
+        parameters: {
+            query?: {
+                strategy_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_api_trading_hermes_research_audit_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+                as_of?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingResearchAuditView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    policy_status_api_trading_hermes_research_policy_status_get: {
+        parameters: {
+            query: {
+                instrument_id: string;
+                strategy_version?: string;
+                decision_at?: string | null;
+                policy_version?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchPolicyStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_trading_hermes_research_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartTradingResearchInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingResearchCoordinatorResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trace_api_trading_hermes_research_traces__trace_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchActionRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_api_trading_hermes_research_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchValidationReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_validation_api_trading_hermes_research_validation_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewValidationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchValidationReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validation_api_trading_hermes_research_validation__policy_version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchValidationReport"] | null;
                 };
             };
             /** @description Validation Error */
@@ -8542,6 +13975,288 @@ export interface operations {
             };
         };
     };
+    coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoinMarketCapCredentialStatus"];
+                };
+            };
+        };
+    };
+    update_coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoinMarketCapCredentialUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoinMarketCapCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_bounce_models_api_trading_models_bounce_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BounceModelListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    score_bounce_shadow_api_trading_models_bounce_score_shadow_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BounceModelScoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BounceModelScore"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    train_bounce_model_api_trading_models_bounce_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BounceModelTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BounceModelArtifact"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_bounce_shadow_api_trading_models_bounce_validate_shadow_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BounceModelValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BounceValidationMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bounce_model_api_trading_models_bounce__model_version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BounceModelArtifact"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_epochs_api_trading_paper_analytics_epochs_get: {
+        parameters: {
+            query: {
+                account_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperEpochListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_trading_paper_analytics_overview_get: {
+        parameters: {
+            query: {
+                account_id: string;
+                strategy_id?: string | null;
+                epoch_id?: string | null;
+                mode?: "all" | "shadow" | "auto_paper";
+                start_date?: string | null;
+                end_date?: string | null;
+                rolling_window?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperAnalyticsOverview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_accounts_api_trading_paper_accounts_get: {
         parameters: {
             query?: {
@@ -8670,41 +14385,6 @@ export interface operations {
             };
         };
     };
-    process_observation_api_trading_paper_accounts__account_id__observations_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                account_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PaperMarketObservation"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaperFillListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     place_order_api_trading_paper_accounts__account_id__orders_post: {
         parameters: {
             query?: never;
@@ -8740,13 +14420,14 @@ export interface operations {
             };
         };
     };
-    cancel_order_api_trading_paper_accounts__account_id__orders__order_id__delete: {
+    list_protections_api_trading_paper_accounts__account_id__protections_get: {
         parameters: {
-            query?: never;
+            query?: {
+                active_only?: boolean;
+            };
             header?: never;
             path: {
                 account_id: string;
-                order_id: string;
             };
             cookie?: never;
         };
@@ -8758,7 +14439,106 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaperOrder"];
+                    "application/json": components["schemas"]["PaperProtectionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_protection_api_trading_paper_accounts__account_id__protections_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaperProtectionUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperPositionProtection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_protection_api_trading_paper_accounts__account_id__protections__instrument_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+                instrument_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperPositionProtection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_protection_api_trading_paper_accounts__account_id__protections__instrument_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+                instrument_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperPositionProtection"];
                 };
             };
             /** @description Validation Error */
@@ -9328,6 +15108,823 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_strategies_api_trading_strategies_get: {
+        parameters: {
+            query?: {
+                active_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyConfigListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_strategy_api_trading_strategies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradingStrategyConfigDocument-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingStrategyConfigDocument-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backtest_gap_pullback_api_trading_strategies_backtest_gap_pullback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GapPullbackBacktestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GapPullbackBacktestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evaluate_strategy_api_trading_strategies_evaluate_gap_pullback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StrategyEvaluationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GapPullbackResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_universe_api_trading_strategies_universes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GapperUniverseSnapshot-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GapperUniverseSnapshot-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discover_yahoo_universe_api_trading_strategies_universes_discover_yahoo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YahooGapperDiscoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GapperUniverseSnapshot-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    freeze_universe_api_trading_strategies_universes_freeze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GapperUniverseFreezeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GapperUniverseSnapshot-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_universe_api_trading_strategies_universes__universe_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                universe_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GapperUniverseSnapshot-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_strategy_api_trading_strategies__strategy_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingStrategyConfigDocument-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_strategy_api_trading_strategies__strategy_id__put: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradingStrategyConfigDocument-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradingStrategyConfigDocument-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_strategy_api_trading_strategies__strategy_id__delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": number;
+            };
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backtest_strategy_range_api_trading_strategies__strategy_id__backtest_range_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StrategyRangeBacktestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyRangeBacktestAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_backtest_range_progress_api_trading_strategies__strategy_id__backtest_range__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyRangeBacktestProgressResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recent_events_api_trading_strategies__strategy_id__events_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyEventListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    status_api_trading_strategies__strategy_id__prospective_economic_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProspectiveEconomicStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_auto_paper_research_gate_api_trading_strategies__strategy_id__prospective_economic_auto_paper_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProspectiveEconomicAutoPaperReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProspectiveEconomicStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evaluate_once_api_trading_strategies__strategy_id__prospective_economic_evaluate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProspectiveEconomicEvaluationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProspectiveEconomicStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_events_api_trading_strategies__strategy_id__prospective_economic_events_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProspectiveEconomicEventListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_sealed_holdout_api_trading_strategies__strategy_id__prospective_economic_holdout_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProspectiveEconomicHoldoutReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProspectiveEconomicStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    protections_api_trading_strategies__strategy_id__protections_get: {
+        parameters: {
+            query?: {
+                active_only?: boolean;
+            };
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProtectionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_yahoo_research_api_trading_strategies__strategy_id__research_capture_yahoo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StrategyCatalystCaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyCatalystCaptureResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_llm_research_api_trading_strategies__strategy_id__research_llm_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StrategyResearchReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyResearchReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ProspectiveQualification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2QualificationReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ProspectiveQualification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    strategy_operations_status_api_trading_strategy_operations_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyOperationsStatus"];
                 };
             };
         };

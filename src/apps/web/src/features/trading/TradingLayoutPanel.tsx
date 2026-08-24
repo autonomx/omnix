@@ -84,7 +84,7 @@ export function TradingLayoutPanel({
               checked={links[key]}
               onChange={(event) => onSetLink(key, event.target.checked)}
             />
-            <span>{key === 'visibleRange' ? 'Visible range' : key}</span>
+            <span>{key === 'visibleRange' ? 'Link visible range' : key}</span>
           </label>
         ))}
       </fieldset>

@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.trading.cache import TradingMarketDataCache
 from app.trading.api import create_trading_router
 from app.trading.catalog import (
     POLICIES,
@@ -17,6 +18,7 @@ from app.trading.catalog import (
 )
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar
 from app.trading.providers.errors import ProviderUnavailableError
+from app.trading.providers.equity import YahooEquityProvider
 from app.trading.providers.registry import ProviderRegistry
 from app.trading.service import TradingMarketDataService
 
@@ -107,10 +109,12 @@ def registry_with_fixtures() -> ProviderRegistry:
 
 def test_equity_bindings_preserve_one_canonical_instrument() -> None:
     bindings = bindings_for_instrument(AAPL)
-    assert {item.provider for item in bindings} == {"yahoo", "stooq"}
+    assert {item.provider for item in bindings} == {"yahoo", "alpaca_iex", "stooq"}
     assert {item.instrument_id for item in bindings} == {AAPL}
     assert POLICIES["yahoo"].is_official_api is False
     assert POLICIES["yahoo"].usage_scope.value == "personal_local"
+    assert POLICIES["alpaca_iex"].is_official_api is True
+    assert POLICIES["alpaca_iex"].authentication_required is True
     assert next(item for item in bindings if item.provider == "yahoo").adjustment_capabilities == ("raw",)
 
 
@@ -177,6 +181,31 @@ def test_provider_routes_forward_binding_and_expose_policy() -> None:
     assert response.json()["binding"]["provider"] == "stooq"
 
 
+def test_provider_status_rehydrates_symbols_saved_in_workspace() -> None:
+    persisted = "equity:NASDAQ:RESTARTCAP"
+
+    class PersistedRepository:
+        def list(self, record_type: str, *, limit: int = 100) -> list[dict[str, object]]:
+            if record_type != "workspace":
+                return []
+            return [{"payload": {"charts": [{"instrumentId": persisted}]}}]
+
+    registry = registry_with_fixtures()
+    service = TradingMarketDataService(registry=registry)
+    app = FastAPI()
+    app.include_router(
+        create_trading_router(
+            repository_factory=lambda: PersistedRepository(),
+            market_service_factory=lambda: service,
+        )
+    )
+
+    payload = TestClient(app).get("/api/trading/providers/status").json()
+    yahoo = next(item for item in payload["providers"] if item["provider"] == "yahoo")
+    binding_ids = {item["binding_id"] for item in yahoo["bindings"]}
+    assert f"yahoo:historical_polling:{persisted}" in binding_ids
+
+
 def test_non_websocket_binding_is_rejected_by_stream_boundary() -> None:
     registry = registry_with_fixtures()
     service = TradingMarketDataService(registry=registry)
@@ -198,3 +227,41 @@ def test_binding_validation_rejects_cross_instrument_binding() -> None:
     assert foreign is not None
     with pytest.raises(ValueError, match="invalid provider binding"):
         registry.resolve_binding(bitcoin, foreign.binding_id)
+
+
+def test_yahoo_discards_malformed_ohlc_rows() -> None:
+    class YahooRuntime:
+        session = None
+
+        def get(self, _url: str, **_kwargs):
+            class Response:
+                def json(self):
+                    return {
+                        "chart": {
+                            "result": [{
+                                "timestamp": [1_754_000_000, 1_754_086_400],
+                                "indicators": {
+                                    "quote": [{
+                                        "open": ["5.20", "5.00"],
+                                        "high": ["5.16", "5.10"],
+                                        "low": ["5.00", "4.90"],
+                                        "close": ["5.10", "5.05"],
+                                        "volume": [100, 200],
+                                    }],
+                                },
+                            }],
+                        },
+                    }
+
+            return Response()
+
+    provider = YahooEquityProvider(
+        runtime=YahooRuntime(),  # type: ignore[arg-type]
+        cache=TradingMarketDataCache(cache_dir=None),
+    )
+
+    response = provider.get_bars(AAPL, "1d", 10)
+
+    assert len(response.bars) == 1
+    assert response.bars[0].open == Decimal("5.00")
+    assert response.bars[0].high == Decimal("5.10")

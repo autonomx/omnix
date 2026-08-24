@@ -1,7 +1,8 @@
-import { useEffect, useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { TradingChartPanel } from './TradingChartPanel';
 import { TradingChartSynchronization } from './chart/chartSynchronization';
 import { useTradingStore, type TradingLayout } from './tradingStore';
+import type { CoreIndicatorId } from './indicators/coreIndicators';
 
 export function tradingGridColumns(layout: TradingLayout, chartCount: number): number {
   const forced = {
@@ -14,7 +15,17 @@ export function tradingGridColumns(layout: TradingLayout, chartCount: number): n
   return Math.max(1, Math.min(4, Math.ceil(Math.sqrt(Math.max(1, chartCount)))));
 }
 
-export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string | null }) {
+export function TradingChartGrid({
+  paperAccountId,
+  onOpenSymbolSearch,
+  onOpenPineScript,
+  onOpenMarketDataSettings,
+}: {
+  paperAccountId?: string | null;
+  onOpenSymbolSearch: (chartId: string) => void;
+  onOpenPineScript: (id: CoreIndicatorId) => void;
+  onOpenMarketDataSettings?: () => void;
+}) {
   const layout = useTradingStore((state) => state.layout);
   const charts = useTradingStore((state) => state.charts);
   const activeChartId = useTradingStore((state) => state.activeChartId);
@@ -26,9 +37,12 @@ export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string |
   const toggleIndicatorVisibility = useTradingStore((state) => state.toggleIndicatorVisibility);
   const updateIndicator = useTradingStore((state) => state.updateIndicator);
   const moveIndicator = useTradingStore((state) => state.moveIndicator);
+  const [focusedChartId, setFocusedChartId] = useState<string | null>(null);
   const synchronization = useMemo(() => new TradingChartSynchronization(), []);
   const columns = tradingGridColumns(layout, charts.length);
   const style = { '--trading-grid-columns': columns } as CSSProperties;
+  const focusedChart = focusedChartId === null ? null : charts.find((chart) => chart.chartId === focusedChartId) ?? null;
+  const visibleCharts = focusedChart ? [focusedChart] : charts;
 
   useEffect(() => {
     synchronization.setLinks({ crosshair: links.crosshair, visibleRange: links.visibleRange });
@@ -36,23 +50,40 @@ export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string |
 
   useEffect(() => () => synchronization.dispose(), [synchronization]);
 
+  useEffect(() => {
+    if (focusedChartId !== null && !charts.some((chart) => chart.chartId === focusedChartId)) setFocusedChartId(null);
+  }, [charts, focusedChartId]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && focusedChartId !== null) setFocusedChartId(null);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [focusedChartId]);
+
   return (
     <section
-      className={`trading-chart-grid layout-${layout}`}
+      className={`trading-chart-grid layout-${layout}${focusedChart ? ' is-chart-focus-mode' : ''}`}
       style={style}
       aria-label={`${charts.length}-chart Trading layout with ${columns} column${columns === 1 ? '' : 's'}`}
     >
-      {charts.map((chart) => (
+      {visibleCharts.map((chart) => (
         <div key={chart.chartId} className="trading-chart-grid-cell">
           <TradingChartPanel
             chartId={chart.chartId}
+            chartNumber={charts.findIndex((item) => item.chartId === chart.chartId) + 1}
             instrumentId={chart.instrumentId}
             bindingId={chart.bindingId}
             interval={chart.interval}
             chartType={chart.chartType}
             indicators={chart.indicators}
+            comparisons={chart.comparisons ?? []}
             active={chart.chartId === activeChartId}
+            chartFocusMode={focusedChart?.chartId === chart.chartId}
+            onChartFocusChange={(focused) => setFocusedChartId(focused ? chart.chartId : null)}
             onActivate={() => setActiveChart(chart.chartId)}
+            onOpenSymbolSearch={() => onOpenSymbolSearch(chart.chartId)}
             onChangeInterval={(interval) => updateChart(chart.chartId, { interval })}
             onChangeChartType={(chartType) => updateChart(chart.chartId, { chartType })}
             onToggleIndicator={(id) => toggleIndicator(chart.chartId, id)}
@@ -60,6 +91,9 @@ export function TradingChartGrid({ paperAccountId }: { paperAccountId?: string |
             onToggleIndicatorVisibility={(id) => toggleIndicatorVisibility(chart.chartId, id)}
             onUpdateIndicator={(id, patch) => updateIndicator(chart.chartId, id, patch)}
             onMoveIndicator={(id, direction) => moveIndicator(chart.chartId, id, direction)}
+            onUpdateComparisons={(comparisons) => updateChart(chart.chartId, { comparisons })}
+            onOpenPineScript={(id) => { setActiveChart(chart.chartId); onOpenPineScript(id); }}
+            onOpenMarketDataSettings={onOpenMarketDataSettings}
             synchronization={synchronization}
             paperAccountId={paperAccountId}
           />

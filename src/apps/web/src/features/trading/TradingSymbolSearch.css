@@ -28,7 +28,13 @@
 .trading-symbol-search-results li:focus-within{position:relative;z-index:1;outline:2px solid #2e78be;outline-offset:-2px}
 .trading-symbol-search-results li>button{display:grid!important;width:100%;grid-template-columns:34px 112px minmax(220px,1fr) 190px;align-items:center;gap:10px;padding:11px 24px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#16202a!important;text-align:left;box-shadow:none!important}
 .trading-symbol-search-results li>button:hover{background:#f3f7fc!important}
+.trading-symbol-search-formula-result{border-bottom:1px solid #e5e8eb;background:#f8fbff}
+.trading-symbol-search-formula-result>button{display:grid!important;width:100%;grid-template-columns:34px 112px minmax(220px,1fr) 190px;align-items:center;gap:10px;padding:14px 24px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#16202a!important;text-align:left;box-shadow:none!important}
+.trading-symbol-search-formula-result>button:hover:not(:disabled){background:#eef6ff!important}
+.trading-symbol-search-formula-result>button:disabled{cursor:not-allowed;opacity:.68}
+.trading-symbol-search-formula-result>p{margin:0;padding:0 24px 12px;color:#b14e58;font-size:12px}
 .trading-symbol-search-avatar{display:grid;place-items:center;width:29px;height:29px;border-radius:50%;background:#485ca0;color:#fff;font-size:15px;font-weight:700}
+.trading-symbol-search-avatar.formula{background:#2164e8;font-size:12px}
 .trading-symbol-search-avatar.equity{background:#246e86;font-size:13px}
 .trading-symbol-search-symbol,.trading-symbol-search-description,.trading-symbol-search-exchange{display:grid;gap:3px;min-width:0}
 .trading-symbol-search-symbol strong{color:#2164e8;font-size:16px;font-weight:500}
@@ -42,7 +48,7 @@
 .trading-symbol-search-empty strong{color:#303943;font-size:15px}
 .trading-symbol-search-empty p{margin:5px 0 0;font-size:12px}
 .trading-symbol-search-footer{display:flex;justify-content:space-between;gap:10px;padding:11px 24px;border-top:1px solid #e4e7ea;background:#f7f8f9;color:#7c858e;font-size:11px}
-@media(max-width:700px){.trading-symbol-search-overlay{padding:0}.trading-symbol-search-dialog{max-height:100vh;height:100vh;border:0;border-radius:0}.trading-symbol-search-header{padding:17px 16px 14px}.trading-symbol-search-form{margin:0 16px}.trading-symbol-search-categories{padding:16px 16px 12px}.trading-symbol-search-result-heading{grid-template-columns:128px minmax(150px,1fr) 96px;padding:8px 16px}.trading-symbol-search-results li>button{grid-template-columns:30px 88px minmax(150px,1fr) 96px;padding:11px 16px!important}.trading-symbol-search-footer{padding:10px 16px}.trading-symbol-search-footer span:last-child{display:none}.trading-symbol-search-shortcut{display:none}}
+@media(max-width:700px){.trading-symbol-search-overlay{padding:0}.trading-symbol-search-dialog{max-height:100vh;height:100vh;border:0;border-radius:0}.trading-symbol-search-header{padding:17px 16px 14px}.trading-symbol-search-form{margin:0 16px}.trading-symbol-search-categories{padding:16px 16px 12px}.trading-symbol-search-result-heading{grid-template-columns:128px minmax(150px,1fr) 96px;padding:8px 16px}.trading-symbol-search-results li>button,.trading-symbol-search-formula-result>button{grid-template-columns:30px 88px minmax(150px,1fr) 96px;padding:11px 16px!important}.trading-symbol-search-footer{padding:10px 16px}.trading-symbol-search-footer span:last-child{display:none}.trading-symbol-search-shortcut{display:none}}
 .trading-workspace .trading-symbol-search-categories button{border:0;background:#eef0f2;color:#20252b}
 .trading-workspace .trading-symbol-search-categories button:hover{background:#e2e6e9}
 .trading-workspace .trading-symbol-search-categories button.active{background:#303235;color:#fff}

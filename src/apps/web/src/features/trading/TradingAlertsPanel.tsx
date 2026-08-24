@@ -5,6 +5,7 @@ import {
   chartAlertCreateInput,
   chartAlertUpdateInput,
   expirationTimestamp,
+  formatAlertThreshold,
   notifyTradingAlertsChanged,
 } from './tradingChartAlerts';
 import { tradingApi } from './tradingApi';
@@ -13,6 +14,7 @@ import type {
   TradingAlertCondition,
   TradingAlertTrigger,
 } from './tradingTypes';
+import { useTradingAlertMutations } from './useTradingAlerts';
 import './TradingChartAlertOverlay.css';
 import './TradingAlertsPanel.css';
 import './TradingAlertTooltip.css';
@@ -39,6 +41,7 @@ const indicatorLabels: Record<string, string> = {
   macd: 'MACD',
   rsi: 'RSI',
   sma: 'SMA',
+  'stochastic-rsi': 'Stoch RSI',
   vwap: 'VWAP',
 };
 
@@ -77,12 +80,12 @@ function alertTitle(alert: TradingAlert): string {
   if (indicatorId) {
     const indicator = indicatorLabels[indicatorId] ?? indicatorId.toUpperCase();
     const period = alert.parameters.period ?? 14;
-    return `${indicator} (${period}) ${directionLabel(alert.condition_type)} ${alert.threshold}`;
+    return `${indicator} (${period}) ${directionLabel(alert.condition_type)} ${formatAlertThreshold(alert.threshold)}`;
   }
   if (alert.condition_type.startsWith('price_')) {
-    return `${symbol} ${directionLabel(alert.condition_type)} ${alert.threshold}`;
+    return `${symbol} ${directionLabel(alert.condition_type)} ${formatAlertThreshold(alert.threshold)}`;
   }
-  return `${symbol} ${conditionLabel(alert.condition_type)} ${alert.threshold}`;
+  return `${symbol} ${conditionLabel(alert.condition_type)} ${formatAlertThreshold(alert.threshold)}`;
 }
 
 function alertStatus(alert: TradingAlert): { label: string; className: string } {
@@ -149,7 +152,7 @@ function editorForAlert(alert: TradingAlert): TradingAlertEditorState {
     x: 0,
     y: 0,
     condition: alert.condition_type,
-    threshold: alert.threshold,
+    threshold: formatAlertThreshold(alert.threshold),
     expiresAt: localDateTime(alert.expires_at),
     expiration: alert.expires_at ? '1d' : 'never',
     triggerPolicy: alert.parameters.trigger_policy
@@ -184,6 +187,7 @@ export function TradingAlertsPanel({
   const [listMenuOpen, setListMenuOpen] = useState(false);
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ alert: TradingAlert; top: number; right: number } | null>(null);
+  const sharedAlertMutations = useTradingAlertMutations();
 
   const refresh = async () => {
     try {
@@ -206,11 +210,21 @@ export function TradingAlertsPanel({
     return () => window.removeEventListener('omnix:trading-alerts-changed', changed);
   }, []);
 
-  const runMutation = async (mutation: () => Promise<unknown>) => {
+  const runMutation = async (mutation: () => Promise<unknown>, removedAlertId?: string) => {
     setStatus('saving');
     try {
       await mutation();
+      if (removedAlertId) {
+        // Chart overlays use the shared React Query alert cache while this panel
+        // keeps its own presentation state. Remove from both synchronously after
+        // the server mutation succeeds so an archived alert cannot remain drawn
+        // until the next 10s polling cycle.
+        sharedAlertMutations.remove(removedAlertId);
+        setAlerts((current) => current.filter((alert) => alert.alert_id !== removedAlertId));
+        setTooltip((current) => current?.alert.alert_id === removedAlertId ? null : current);
+      }
       notifyTradingAlertsChanged();
+      await sharedAlertMutations.refresh();
       await refresh();
       setEditor(null);
       setRowMenuId(null);
@@ -280,8 +294,11 @@ export function TradingAlertsPanel({
       return;
     }
     await runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, {
-      threshold: String(threshold),
+      threshold: formatAlertThreshold(threshold),
       condition_type: editor.condition,
+      indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
+      period: Number(editor.period) || 14,
+      lookback_bars: Number(editor.lookback) || 1,
       expires_at: editor.expiresAt ? isoDateTime(editor.expiresAt) : expirationTimestamp(editor.expiration),
       trigger_policy: editor.triggerPolicy,
       message: editor.message,
@@ -310,6 +327,7 @@ export function TradingAlertsPanel({
       notificationChannels: editor.notifications,
     });
     input.condition_type = editor.condition;
+    input.threshold = formatAlertThreshold(threshold);
     input.parameters = {
       ...input.parameters,
       indicator_id: editor.condition.startsWith('indicator_') ? editor.indicator : null,
@@ -391,7 +409,7 @@ export function TradingAlertsPanel({
                         <div className="trading-alert-options-menu" role="menu">
                           <button type="button" role="menuitem" onClick={() => openEdit(alert)}>Edit alert</button>
                           <button type="button" role="menuitem" onClick={() => void runMutation(() => tradingApi.updateAlert(alert, chartAlertUpdateInput(alert, { enabled: !alert.enabled })))}>{alert.enabled ? 'Disable alert' : 'Enable alert'}</button>
-                          <button type="button" role="menuitem" onClick={() => void runMutation(() => tradingApi.archiveAlert(alert))}>Delete alert</button>
+                          <button type="button" role="menuitem" onClick={() => void runMutation(() => tradingApi.archiveAlert(alert), alert.alert_id)}>Delete alert</button>
                         </div>
                       ) : null}
                     </div>
@@ -448,7 +466,7 @@ export function TradingAlertsPanel({
                 {group.items.map((trigger) => {
                   const alert = alertById.get(trigger.alert_id);
                   const symbol = symbolForInstrumentId(trigger.instrument_id);
-                  const title = alert ? alertTitle(alert) : `${symbol} ${conditionLabel(trigger.condition_type)} ${trigger.threshold}`;
+                  const title = alert ? alertTitle(alert) : `${symbol} ${conditionLabel(trigger.condition_type)} ${formatAlertThreshold(trigger.threshold)}`;
                   return (
                     <li key={trigger.trigger_id}>
                       <span className="trading-alert-symbol-badge" aria-hidden="true">{symbol.slice(0, 1)}</span>
@@ -472,8 +490,6 @@ export function TradingAlertsPanel({
             onChange={(patch) => setEditor((current) => current ? { ...current, ...patch } : current)}
             onSubmit={() => void (editor.mode === 'create' ? createAlert() : saveEditor())}
             onClose={() => setEditor(null)}
-            onToggle={editor.mode === 'edit' && dialogAlert ? () => void runMutation(() => tradingApi.updateAlert(dialogAlert, chartAlertUpdateInput(dialogAlert, { enabled: !dialogAlert.enabled }))) : undefined}
-            onArchive={editor.mode === 'edit' && dialogAlert ? () => void runMutation(() => tradingApi.archiveAlert(dialogAlert)) : undefined}
           />
         </div>
       ) : null}

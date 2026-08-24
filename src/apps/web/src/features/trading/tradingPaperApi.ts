@@ -4,7 +4,8 @@ import type {
   PaperAccountSnapshot,
   PaperOrder,
   PaperOrderInput,
-  PaperMarketObservationInput,
+  PaperPositionProtection,
+  PaperProtectionInput,
 } from './paperTypes';
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,11 +42,30 @@ export const tradingPaperApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  processObservation: (accountId: string, input: PaperMarketObservationInput) =>
-    requestJson<{ fills: unknown[] }>(`/api/trading/paper/accounts/${encodeURIComponent(accountId)}/observations`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
+  /** @deprecated Browser observations are deliberately non-authoritative. */
+  processObservation: async (_accountId: string, _input: unknown) => ({ fills: [] as unknown[] }),
+  protections: async (accountId: string) => {
+    const payload = await requestJson<{ protections?: PaperPositionProtection[] }>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections?active_only=true`,
+    );
+    return Array.isArray(payload.protections) ? payload.protections : [];
+  },
+  protection: async (accountId: string, instrumentId: string) => {
+    const payload = await requestJson<{ protections?: PaperPositionProtection[] }>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections?active_only=true`,
+    );
+    return payload.protections?.find((item) => item.instrument_id === instrumentId) ?? null;
+  },
+  setProtection: (accountId: string, input: PaperProtectionInput) =>
+    requestJson<PaperPositionProtection>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections`,
+      { method: 'PUT', body: JSON.stringify(input) },
+    ),
+  clearProtection: (accountId: string, instrumentId: string) =>
+    requestJson<PaperPositionProtection>(
+      `/api/trading/paper/accounts/${encodeURIComponent(accountId)}/protections/${encodeURIComponent(instrumentId)}`,
+      { method: 'DELETE' },
+    ),
   resetAccount: (account: PaperAccount, initialCash: string) =>
     requestJson<PaperAccountSnapshot>(
       `/api/trading/paper/accounts/${encodeURIComponent(account.account_id)}/reset`,

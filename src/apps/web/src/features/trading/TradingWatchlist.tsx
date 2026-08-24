@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tradingApi } from './tradingApi';
 import { binanceInstrumentIdFor } from './cryptoInstrumentDefaults';
-import type { CanonicalInstrument, TradingDocument } from './tradingTypes';
-import { tradingIntervalMinutes } from './tradingIntervals';
+import type { CanonicalInstrument, ProviderBinding, TradingDocument } from './tradingTypes';
+import { isIntervalAvailable, tradingIntervalMinutes } from './tradingIntervals';
 import { percentChangeFromBars, percentChangeFromLookback } from './tradingWatchlistChange';
 import {
   formatWatchlistPrice,
   watchlistDisplaySymbol,
   watchlistLogoIdentity,
 } from './tradingWatchlistPresentation';
+import { TradingWatchlistSymbolPicker } from './TradingWatchlistSymbolPicker';
 import './TradingWatchlist.css';
 
 type WatchlistPayload = { name: string; instrumentIds: string[] };
 type QuoteSnapshot = { price: string | null; changePercent: number | null };
+type ChangeSort = 'manual' | 'desc' | 'asc';
 
 const fallbackIntervals = ['1mo', '1w', '1d', '12h', '8h', '6h', '4h', '2h', '1h', '30m', '15m', '5m', '3m', '1m'];
 
@@ -36,9 +38,13 @@ async function intervalChange(
   interval: string,
   quotePrice: string | null | undefined,
   directBars: Awaited<ReturnType<typeof tradingApi.bars>> | null,
+  supportedIntervals?: readonly string[],
 ): Promise<{ price: string | null; changePercent: number | null }> {
   const directHistory = directBars?.bars ?? [];
   const directPrice = quotePrice ?? directHistory.at(-1)?.close?.toString() ?? null;
+  if (supportedIntervals && !isIntervalAvailable(interval, supportedIntervals)) {
+    return { price: directPrice, changePercent: null };
+  }
   const directIntervalIsNative = directBars?.binding.supported_intervals.includes(interval) ?? false;
   const directChange = directIntervalIsNative
     ? percentChangeFromBars(quotePrice, directHistory)
@@ -131,33 +137,60 @@ function defaultWatchlistInstrumentIds(instruments: CanonicalInstrument[]): stri
   return [...equities, ...crypto];
 }
 
+function mergeInstruments(
+  current: readonly CanonicalInstrument[],
+  next: CanonicalInstrument,
+): CanonicalInstrument[] {
+  return [...new Map([...current, next].map((instrument) => [instrument.instrument_id, instrument])).values()];
+}
+
 export function TradingWatchlist({
   instruments,
   activeInstrumentId,
   interval,
+  providerBindings = [],
   onSelect,
 }: {
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
   interval: string;
+  providerBindings?: readonly ProviderBinding[];
   onSelect: (instrumentId: string) => void;
 }) {
   const [records, setRecords] = useState<TradingDocument[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [status, setStatus] = useState<'loading' | 'saved' | 'saving' | 'conflict' | 'error'>('loading');
   const [quotes, setQuotes] = useState<Record<string, QuoteSnapshot>>({});
+  const [changeSort, setChangeSort] = useState<ChangeSort>('manual');
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [symbolPickerOpen, setSymbolPickerOpen] = useState(false);
+  const [discoveredInstruments, setDiscoveredInstruments] = useState<CanonicalInstrument[]>([]);
   const selected = records.find((record) => record.record_id === selectedId) ?? records[0] ?? null;
   const current = payload(selected);
   const normalizedInstrumentIds = useMemo(
     () => [...new Set(current.instrumentIds.map(binanceInstrumentIdFor))],
     [current.instrumentIds],
   );
+  const normalizedActiveInstrumentId = activeInstrumentId
+    ? binanceInstrumentIdFor(activeInstrumentId)
+    : '';
   const instrumentIdsKey = normalizedInstrumentIds.join('\u0000');
-  const instrumentById = useMemo(
-    () => new Map(instruments.map((instrument) => [instrument.instrument_id, instrument])),
-    [instruments],
+  const catalogInstruments = useMemo(
+    () => [...new Map([...instruments, ...discoveredInstruments].map((instrument) => [instrument.instrument_id, instrument])).values()],
+    [discoveredInstruments, instruments],
   );
+  const instrumentById = useMemo(
+    () => new Map(catalogInstruments.map((instrument) => [instrument.instrument_id, instrument])),
+    [catalogInstruments],
+  );
+  const bindingIntervalsByInstrument = useMemo(() => {
+    const bindingsByInstrument = new Map<string, readonly string[]>();
+    for (const binding of providerBindings) {
+      if (!binding.supported_intervals.length || bindingsByInstrument.has(binding.instrument_id)) continue;
+      bindingsByInstrument.set(binding.instrument_id, binding.supported_intervals);
+    }
+    return bindingsByInstrument;
+  }, [providerBindings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,23 +207,22 @@ export function TradingWatchlist({
         const defaultRecord = next.find((record) => record.record_id === 'default');
         if (defaultRecord) {
           const defaultPayload = payload(defaultRecord);
-          const orderedInstrumentIds = defaultWatchlistInstrumentIds(instruments);
-          const availableIds = new Set(orderedInstrumentIds);
+          // Built-in symbols are only seed data for a newly created watchlist.
+          // Re-adding them here would resurrect symbols the user deliberately
+          // removed after a reload or server restart.
           const migratedIds = [...new Set(defaultPayload.instrumentIds.map(binanceInstrumentIdFor))];
-          const retainedIds = migratedIds.filter((instrumentId) => !availableIds.has(instrumentId));
-          const mergedIds = [...orderedInstrumentIds, ...retainedIds];
-          const hasChanged = mergedIds.length !== defaultPayload.instrumentIds.length
-            || mergedIds.some((instrumentId, index) => instrumentId !== defaultPayload.instrumentIds[index]);
+          const hasChanged = migratedIds.length !== defaultPayload.instrumentIds.length
+            || migratedIds.some((instrumentId, index) => instrumentId !== defaultPayload.instrumentIds[index]);
           if (hasChanged) {
             try {
               const updated = await tradingApi.updateDocument('watchlists', defaultRecord, {
                 ...defaultPayload,
-                instrumentIds: mergedIds,
+                instrumentIds: migratedIds,
               });
               next = next.map((record) => record.record_id === updated.record_id ? updated : record);
             } catch {
               next = next.map((record) => record.record_id === defaultRecord.record_id
-                ? { ...record, payload: { ...record.payload, instrumentIds: mergedIds } }
+                ? { ...record, payload: { ...record.payload, instrumentIds: migratedIds } }
                 : record);
             }
           }
@@ -215,12 +247,17 @@ export function TradingWatchlist({
     void (async () => {
       const next: Record<string, QuoteSnapshot> = {};
       await Promise.all(instrumentIds.map(async (instrumentId) => {
+        const supportedIntervals = bindingIntervalsByInstrument.get(instrumentId);
         try {
+          const quotePromise = tradingApi.quote(instrumentId).catch(() => null);
+          const barsPromise = supportedIntervals && !isIntervalAvailable(interval, supportedIntervals)
+            ? Promise.resolve(null)
+            : tradingApi.bars(instrumentId, interval, 2).catch(() => null);
           const [quote, bars] = await Promise.all([
-            tradingApi.quote(instrumentId).catch(() => null),
-            tradingApi.bars(instrumentId, interval, 2).catch(() => null),
+            quotePromise,
+            barsPromise,
           ]);
-          next[instrumentId] = await intervalChange(instrumentId, interval, quote?.price, bars);
+          next[instrumentId] = await intervalChange(instrumentId, interval, quote?.price, bars, supportedIntervals);
         } catch {
           next[instrumentId] = { price: null, changePercent: null };
         }
@@ -231,19 +268,60 @@ export function TradingWatchlist({
     return () => { cancelled = true; };
   }, [instrumentIdsKey, interval]);
 
+  const displayedInstrumentIds = useMemo(() => {
+    if (changeSort === 'manual') return normalizedInstrumentIds;
+    return normalizedInstrumentIds
+      .map((instrumentId, index) => ({
+        instrumentId,
+        index,
+        changePercent: quotes[instrumentId]?.changePercent,
+      }))
+      .sort((left, right) => {
+        const leftChange = left.changePercent;
+        const rightChange = right.changePercent;
+        if (leftChange == null && rightChange == null) return left.index - right.index;
+        if (leftChange == null) return 1;
+        if (rightChange == null) return -1;
+        if (leftChange === rightChange) return left.index - right.index;
+        return changeSort === 'desc' ? rightChange - leftChange : leftChange - rightChange;
+      })
+      .map(({ instrumentId }) => instrumentId);
+  }, [changeSort, normalizedInstrumentIds, quotes]);
+
   const replace = (record: TradingDocument) => {
     setRecords((items) => items.map((item) => item.record_id === record.record_id ? record : item));
   };
 
-  const save = async (nextPayload: WatchlistPayload) => {
-    if (!selected) return;
+  const save = async (
+  nextPayload: WatchlistPayload,
+  rollbackRecord?: TradingDocument,
+  recordOverride?: TradingDocument,
+  conflictRetryCount = 0,
+) => {
+    const record = recordOverride ?? selected;
+    if (!record) return;
     setStatus('saving');
     try {
-      const next = await tradingApi.updateDocument('watchlists', selected, nextPayload as unknown as Record<string, unknown>);
+      const next = await tradingApi.updateDocument('watchlists', record, nextPayload as unknown as Record<string, unknown>);
       replace(next);
       setStatus('saved');
     } catch (error) {
-      setStatus(error instanceof Error && error.message.includes('(409)') ? 'conflict' : 'error');
+      const isConflict = error instanceof Error && error.message.includes('(409)');
+      if (conflictRetryCount < 3 && isConflict) {
+        try {
+          const latest = (await tradingApi.documents('watchlists'))
+            .find((item) => item.record_id === record.record_id);
+          if (latest) {
+            replace(latest);
+            await save(nextPayload, rollbackRecord, latest, conflictRetryCount + 1);
+            return;
+          }
+        } catch {
+          // Fall through to the normal conflict state when the latest record cannot be loaded.
+        }
+      }
+      if (rollbackRecord) replace(rollbackRecord);
+      setStatus(isConflict ? 'conflict' : 'error');
     }
   };
 
@@ -277,9 +355,11 @@ export function TradingWatchlist({
     }
   };
 
-  const addActive = () => {
-    if (!activeInstrumentId || normalizedInstrumentIds.includes(activeInstrumentId)) return;
-    void save({ ...current, instrumentIds: [...normalizedInstrumentIds, activeInstrumentId] });
+  const addInstrument = async (instrument: CanonicalInstrument) => {
+    const instrumentId = binanceInstrumentIdFor(instrument.instrument_id);
+    setDiscoveredInstruments((items) => mergeInstruments(items, instrument));
+    if (!selected || normalizedInstrumentIds.includes(instrumentId) || status === 'saving') return;
+    await save({ ...current, instrumentIds: [...normalizedInstrumentIds, instrumentId] });
   };
 
   const rename = () => {
@@ -291,9 +371,15 @@ export function TradingWatchlist({
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= normalizedInstrumentIds.length) return;
+    if (!selected) return;
     const next = [...normalizedInstrumentIds];
     [next[index], next[target]] = [next[target], next[index]];
-    void save({ ...current, instrumentIds: next });
+    const rollbackRecord = selected;
+    replace({
+      ...selected,
+      payload: { ...selected.payload, ...current, instrumentIds: next },
+    });
+    void save({ ...current, instrumentIds: next }, rollbackRecord);
   };
 
   return (
@@ -302,7 +388,15 @@ export function TradingWatchlist({
         <select value={selected?.record_id ?? ''} onChange={(event) => setSelectedId(event.target.value)} aria-label="Watchlist">
           {records.map((record) => <option key={record.record_id} value={record.record_id}>{payload(record).name}</option>)}
         </select>
-        <button type="button" onClick={addActive} disabled={!activeInstrumentId} aria-label="Add active instrument" title="Add active instrument">+</button>
+        <button
+          type="button"
+          onClick={() => setSymbolPickerOpen(true)}
+          disabled={!selected || status === 'loading' || status === 'saving'}
+          aria-label="Add symbol to watchlist"
+          title="Add symbol to watchlist"
+        >
+          +
+        </button>
         <div className="trading-watchlist-options">
           <button
             type="button"
@@ -322,18 +416,28 @@ export function TradingWatchlist({
           ) : null}
         </div>
       </div>
-      <div className="trading-watchlist-columns" aria-hidden="true">
+      <div className="trading-watchlist-columns">
         <span>Symbol</span>
         <span>Last</span>
-        <span title={`Change over ${interval}`}>Chg%</span>
+        <button
+          type="button"
+          className="trading-watchlist-change-sort"
+          aria-label={changeSort === 'manual' ? 'Sort watchlist by change percentage descending' : changeSort === 'desc' ? 'Sort watchlist by change percentage ascending' : 'Clear watchlist change percentage sort'}
+          aria-pressed={changeSort !== 'manual'}
+          title={`Change over ${interval}. Click to sort.`}
+          onClick={() => setChangeSort((current) => current === 'manual' ? 'desc' : current === 'desc' ? 'asc' : 'manual')}
+        >
+          <span>Chg%</span>
+          <span aria-hidden="true">{changeSort === 'desc' ? '↓' : changeSort === 'asc' ? '↑' : '↕'}</span>
+        </button>
       </div>
       <ul>
-        {normalizedInstrumentIds.map((instrumentId, index) => {
+        {displayedInstrumentIds.map((instrumentId, index) => {
           const instrument = instrumentById.get(instrumentId);
           const symbol = watchlistDisplaySymbol(instrument?.display_symbol, instrumentId);
           const quote = quotes[instrumentId];
           return (
-            <li key={instrumentId} className={instrumentId === activeInstrumentId ? 'active' : undefined}>
+            <li key={instrumentId} className={instrumentId === normalizedActiveInstrumentId ? 'active' : undefined}>
               <button type="button" onClick={() => onSelect(binanceInstrumentIdFor(instrumentId))} aria-label={`Select ${symbol}`}>
                 <TradingWatchlistLogo symbol={symbol} instrumentId={instrumentId} />
                 <strong>{symbol}</strong>
@@ -342,9 +446,9 @@ export function TradingWatchlist({
               <span className={`trading-watchlist-change${quote?.changePercent != null ? (quote.changePercent >= 0 ? ' positive' : ' negative') : ''}`}>
                 {formatChange(quote?.changePercent)}
               </span>
-              <span className="trading-watchlist-row-actions">
-                <button type="button" onClick={() => move(index, -1)} aria-label={`Move ${symbol} up`}>↑</button>
-                <button type="button" onClick={() => move(index, 1)} aria-label={`Move ${symbol} down`}>↓</button>
+              <span className={`trading-watchlist-row-actions${changeSort === 'manual' ? '' : ' is-sorted'}`}>
+                <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`Move ${symbol} up`} title="Move up">↑</button>
+                <button type="button" onClick={() => move(index, 1)} disabled={index === normalizedInstrumentIds.length - 1} aria-label={`Move ${symbol} down`} title="Move down">↓</button>
                 <button type="button" onClick={() => void save({ ...current, instrumentIds: normalizedInstrumentIds.filter((id) => id !== instrumentId) })} aria-label={`Remove ${symbol}`}>×</button>
               </span>
             </li>
@@ -352,6 +456,14 @@ export function TradingWatchlist({
         })}
       </ul>
       <span className="trading-watchlist-status" aria-live="polite">{status}</span>
+      <TradingWatchlistSymbolPicker
+        open={symbolPickerOpen}
+        instruments={catalogInstruments}
+        selectedInstrumentIds={normalizedInstrumentIds}
+        busy={status === 'saving'}
+        onAdd={addInstrument}
+        onClose={() => setSymbolPickerOpen(false)}
+      />
     </section>
   );
 }

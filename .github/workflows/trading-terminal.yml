@@ -22,9 +22,11 @@ on:
       - "src/app/persistence/migrations/*_trading_*.sql"
       - "src/tests/trading/**"
       - "docs/architecture/ADR-0004-omnix-trading-terminal.md"
+      - "docs/architecture/ADR-0005-trading-hermes-research-causality.md"
       - "docs/architecture/OMNIX_TRADING_**"
       - "docs/plans/omnix_trading_terminal_roadmap.md"
       - "docs/plans/omnix_trading_terminal_roadmap_review.md"
+      - "docs/plans/omnix_trading_hermes_research_roadmap.md"
       - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
@@ -73,7 +75,10 @@ jobs:
       - name: Trading TypeScript typecheck
         run: npm --workspace @omnix/web run typecheck:trading
       - name: Install Trading browser
-        run: npx playwright install --with-deps chromium
+        # The hosted Ubuntu runner already carries Chromium runtime libraries.
+        # Avoid apt-based --with-deps here: it is redundant and can hang on a
+        # transient package-mirror lock, preventing the actual Trading gates.
+        run: npx playwright install chromium
       - name: Trading Playwright smoke
         run: npm --workspace @omnix/web run test:e2e:trading
       - name: Upload Trading Playwright report

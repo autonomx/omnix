@@ -3,11 +3,9 @@ import { createTheme } from '@mantine/core';
 export const omnixTheme = createTheme({
   primaryColor: 'cyan',
   defaultRadius: 'sm',
-  fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  fontFamily: 'var(--omnix-font-family)',
   headings: {
-    fontFamily:
-      'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: 'var(--omnix-font-family)',
     fontWeight: '700',
   },
   colors: {

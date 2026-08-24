@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingChartAdapter } from './chart/chartAdapter';
 import type { PaperPosition, PaperSide } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';
+import { placeReplayOrder } from './replayTrading';
+import { useTradingReplayStore } from './tradingReplayStore';
+import { useTradingStore } from './tradingStore';
 import {
   PAPER_POSITION_PROTECTION_EVENT,
   readPaperPositionProtection,
@@ -57,12 +60,31 @@ export function TradingPositionOverlay({
   const [partialClose, setPartialClose] = useState(false);
   const [actionQuantity, setActionQuantity] = useState('');
   const [viewport, setViewport] = useState({ width: 0, height: 0, revision: 0 });
+  const replayMode = useTradingStore((state) => state.replayMode);
+  const replayBar = useTradingReplayStore((state) => state.bar);
+  const replaySnapshot = useTradingReplayStore((state) => state.snapshot);
+  const setReplaySnapshot = useTradingReplayStore((state) => state.setSnapshot);
 
   useEffect(() => {
-    setProtection(accountId ? readPaperPositionProtection(accountId, instrumentId) : { takeProfit: null, stopLoss: null });
+    setProtection(replayMode ? { takeProfit: null, stopLoss: null } : accountId ? readPaperPositionProtection(accountId, instrumentId) : { takeProfit: null, stopLoss: null });
     setDraft(null);
     setAction(null);
     setActionError(null);
+    if (replayMode) {
+      const filledPosition = replaySnapshot?.positions.find((item) => item.instrument_id === instrumentId && Number(item.quantity) !== 0);
+      const workingOrder = replaySnapshot?.open_orders.find((item) => item.instrument_id === instrumentId && Number(item.quantity) > 0);
+      setPosition(filledPosition ?? (workingOrder ? {
+        instrument_id: workingOrder.instrument_id,
+        quantity: workingOrder.quantity,
+        average_cost: workingOrder.reference_price ?? workingOrder.limit_price ?? workingOrder.stop_price ?? '',
+        realized_pnl: '0',
+        last_price: workingOrder.reference_price ?? workingOrder.limit_price ?? workingOrder.stop_price ?? null,
+        unrealized_pnl: '0',
+        pending: true,
+        pendingSide: workingOrder.side,
+      } : null));
+      return;
+    }
     if (!accountId) {
       setPosition(null);
       return;
@@ -105,7 +127,7 @@ export function TradingPositionOverlay({
       window.clearInterval(timer);
       window.removeEventListener(PAPER_POSITION_PROTECTION_EVENT, changed);
     };
-  }, [accountId, instrumentId]);
+  }, [accountId, instrumentId, replayMode, replaySnapshot]);
 
   useEffect(() => {
     if (!adapter) return;
@@ -156,7 +178,7 @@ export function TradingPositionOverlay({
   };
 
   const submitMarketOrder = async (side: PaperSide, orderQuantity: number, label: string) => {
-    if (!accountId || !position || !Number.isFinite(orderQuantity) || orderQuantity <= 0) {
+    if ((!accountId && !replayMode) || !position || !Number.isFinite(orderQuantity) || orderQuantity <= 0) {
       throw new Error('Enter a valid position quantity.');
     }
     const referencePrice = Number(position.last_price ?? position.average_cost);
@@ -165,7 +187,25 @@ export function TradingPositionOverlay({
     }
     const now = new Date().toISOString();
     const orderId = `paper-overlay-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const order = await tradingPaperApi.placeOrder(accountId, {
+    if (replayMode) {
+      if (!replaySnapshot || !replayBar) throw new Error('Select a replay bar before trading.');
+      const result = placeReplayOrder(replaySnapshot, {
+        order_id: orderId,
+        instrument_id: instrumentId,
+        binding_id: null,
+        side,
+        order_type: 'market',
+        quantity: String(orderQuantity),
+        limit_price: null,
+        stop_price: null,
+        reference_price: String(referencePrice),
+        idempotency_key: orderId,
+      }, replayBar);
+      setReplaySnapshot(result.snapshot);
+      if (result.order.status === 'rejected') throw new Error(result.order.rejection_reason ?? 'Replay order rejected.');
+      return;
+    }
+    const order = await tradingPaperApi.placeOrder(accountId!, {
       order_id: orderId,
       instrument_id: instrumentId,
       binding_id: null,
@@ -178,7 +218,7 @@ export function TradingPositionOverlay({
       idempotency_key: orderId,
     });
     if (order.status === 'open') {
-      await tradingPaperApi.processObservation(accountId, {
+      await tradingPaperApi.processObservation(accountId!, {
         instrument_id: instrumentId,
         binding_id: null,
         provider: 'paper-reference',
@@ -190,7 +230,7 @@ export function TradingPositionOverlay({
   };
 
   const confirmAction = async () => {
-    if (!action || !position || !accountId) return;
+    if (!action || !position || (!accountId && !replayMode)) return;
     const closeQuantity = action === 'close' && partialClose ? Number(actionQuantity) : quantity;
     if (!Number.isFinite(closeQuantity) || closeQuantity <= 0 || closeQuantity > quantity) {
       setActionError('Enter a partial quantity no greater than the open position.');
@@ -201,9 +241,9 @@ export function TradingPositionOverlay({
     try {
       await submitMarketOrder(positionSide, closeQuantity, 'close');
       if (action === 'reverse') await submitMarketOrder(positionSide, quantity, 'reverse');
-      writePaperPositionProtection(accountId, instrumentId, { takeProfit: null, stopLoss: null });
-      const snapshot = await tradingPaperApi.snapshot(accountId);
-      const nextPosition = snapshot.positions.find((item) => item.instrument_id === instrumentId && Number(item.quantity) !== 0);
+      if (!replayMode) writePaperPositionProtection(accountId!, instrumentId, { takeProfit: null, stopLoss: null });
+      const nextSnapshot = replayMode ? useTradingReplayStore.getState().snapshot : await tradingPaperApi.snapshot(accountId!);
+      const nextPosition = nextSnapshot?.positions.find((item) => item.instrument_id === instrumentId && Number(item.quantity) !== 0);
       setPosition(nextPosition ?? null);
       setAction(null);
     } catch (error) {
@@ -247,7 +287,7 @@ export function TradingPositionOverlay({
     const next = { ...protection, [draft.level]: draft.value };
     setProtection(next);
     setDraft(null);
-    writePaperPositionProtection(accountId, instrumentId, next);
+    if (!replayMode) writePaperPositionProtection(accountId, instrumentId, next);
   };
 
   const discardDraft = () => setDraft(null);

@@ -5,8 +5,10 @@ import { migrateSettingsDocument } from './settingsMerge';
 import {
   commitAppearanceSettings,
   loadStoredAppearancePreferences,
+  normalizeTextScale,
   OMNIX_APPEARANCE_CHANGE_EVENT,
   OMNIX_APPEARANCE_MODE_STORAGE_KEY,
+  OMNIX_TEXT_SCALE_STORAGE_KEY,
   OMNIX_THEME_STORAGE_KEY,
 } from './appearanceEffects';
 
@@ -17,10 +19,13 @@ describe('appearance theme effects', () => {
     document.documentElement.removeAttribute('data-omnix-appearance-preference');
     document.documentElement.removeAttribute('data-omnix-theme');
     document.documentElement.removeAttribute('data-omnix-density');
+    document.documentElement.removeAttribute('data-omnix-text-scale');
+    document.documentElement.style.removeProperty('font-size');
+    document.documentElement.style.removeProperty('--omnix-text-scale');
     document.documentElement.classList.remove('omnix-reduce-motion');
   });
 
-  it('applies, persists, and announces a selected theme', () => {
+  it('applies, persists, and announces appearance and text scale', () => {
     const listener = vi.fn();
     window.addEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, listener);
 
@@ -28,32 +33,47 @@ describe('appearance theme effects', () => {
       mode: 'light',
       theme: 'graphite',
       density: 'compact',
+      textScale: 115,
       reduceMotion: true,
     });
 
-    expect(detail).toEqual({ mode: 'light', resolvedMode: 'light', theme: 'graphite' });
+    expect(detail).toEqual({ mode: 'light', resolvedMode: 'light', theme: 'graphite', textScale: 115 });
     expect(document.documentElement.dataset.omnixAppearance).toBe('light');
     expect(document.documentElement.dataset.omnixTheme).toBe('graphite');
     expect(document.documentElement.dataset.omnixDensity).toBe('compact');
+    expect(document.documentElement.dataset.omnixTextScale).toBe('115');
+    expect(document.documentElement.style.fontSize).toBe('115%');
+    expect(document.documentElement.style.getPropertyValue('--omnix-text-scale')).toBe('1.15');
     expect(document.documentElement.classList.contains('omnix-reduce-motion')).toBe(true);
     expect(window.localStorage.getItem(OMNIX_APPEARANCE_MODE_STORAGE_KEY)).toBe('light');
     expect(window.localStorage.getItem(OMNIX_THEME_STORAGE_KEY)).toBe('graphite');
+    expect(window.localStorage.getItem(OMNIX_TEXT_SCALE_STORAGE_KEY)).toBe('115');
     expect(listener).toHaveBeenCalledTimes(1);
 
     window.removeEventListener(OMNIX_APPEARANCE_CHANGE_EVENT, listener);
   });
 
-  it('loads stored mode and theme preferences', () => {
+  it('loads stored mode, theme, and text scale preferences', () => {
     window.localStorage.setItem(OMNIX_APPEARANCE_MODE_STORAGE_KEY, 'dark');
     window.localStorage.setItem(OMNIX_THEME_STORAGE_KEY, 'evergreen');
+    window.localStorage.setItem(OMNIX_TEXT_SCALE_STORAGE_KEY, '125');
 
-    expect(loadStoredAppearancePreferences()).toEqual({ mode: 'dark', theme: 'evergreen' });
+    expect(loadStoredAppearancePreferences()).toEqual({ mode: 'dark', theme: 'evergreen', textScale: 125 });
   });
 
-  it('falls back to Aurora when an older profile has no theme', () => {
+  it('clamps and snaps text scaling to the supported accessibility range', () => {
+    expect(normalizeTextScale(76)).toBe(80);
+    expect(normalizeTextScale(112)).toBe(110);
+    expect(normalizeTextScale(113)).toBe(115);
+    expect(normalizeTextScale(146)).toBe(140);
+    expect(normalizeTextScale('not-a-number')).toBe(100);
+  });
+
+  it('falls back to Aurora and 100 percent text when an older profile has neither', () => {
     const migrated = migrateSettingsDocument({ appearance: { mode: 'light' } });
 
     expect(migrated.appearance.mode).toBe('light');
     expect(migrated.appearance.theme).toBe('aurora');
+    expect(migrated.appearance.textScale).toBe(100);
   });
 });

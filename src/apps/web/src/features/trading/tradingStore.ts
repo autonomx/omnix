@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
 import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInstance } from './indicators/coreIndicators';
+import type { TradingComparison } from './tradingComparisons';
 
 export type TradingLayout = 'auto' | 'columns-1' | 'columns-2' | 'columns-3' | 'columns-4';
 export const MIN_TRADING_CHARTS = 1;
@@ -14,6 +15,7 @@ export type TradingChartState = {
   interval: string;
   chartType: TradingChartType;
   indicators: CoreIndicatorInstance[];
+  comparisons?: TradingComparison[];
 };
 export type TradingIndicatorMove = 'up' | 'down';
 export type TradingLinkState = {
@@ -31,6 +33,7 @@ type TradingWorkspaceState = {
   layout: TradingLayout;
   activeChartId: string;
   replayMode: boolean;
+  replaySessionId: number;
   drawingTool: DrawingTool;
   drawingSnapMode: DrawingSnapMode;
   charts: TradingChartState[];
@@ -40,6 +43,7 @@ type TradingWorkspaceState = {
   setLayout: (layout: TradingLayout) => void;
   setActiveChart: (chartId: string) => void;
   setReplayMode: (enabled: boolean) => void;
+  restartReplaySession: () => void;
   addChart: () => void;
   removeChart: (chartId?: string) => void;
   setChartCount: (count: number) => void;
@@ -100,6 +104,7 @@ function initialChart(): TradingChartState {
     interval: '1h',
     chartType: 'candlestick',
     indicators: defaultTradingIndicators(),
+    comparisons: [],
   };
 }
 
@@ -115,6 +120,7 @@ function copyChart(source: TradingChartState, chartId: string): TradingChartStat
     ...source,
     chartId,
     indicators: source.indicators.map((indicator) => ({ ...indicator })),
+    comparisons: (source.comparisons ?? []).map((comparison) => ({ ...comparison })),
   };
 }
 
@@ -127,17 +133,21 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   layout: 'auto',
   activeChartId: 'chart-1',
   replayMode: false,
+  replaySessionId: 0,
   drawingTool: 'cursor',
   drawingSnapMode: 'ohlc',
   charts: [initialChart()],
-  links: { instrument: false, interval: false, crosshair: true, visibleRange: true },
+  links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
   panels: { right: true, bottom: true },
   favoriteInstrumentIds: [],
   setLayout: (layout) => set({ layout }),
   setActiveChart: (activeChartId) => set((state) => (
     state.charts.some((chart) => chart.chartId === activeChartId) ? { activeChartId } : state
   )),
-  setReplayMode: (replayMode) => set({ replayMode }),
+  setReplayMode: (replayMode) => set((state) => replayMode
+    ? { replayMode: true, replaySessionId: state.replaySessionId + 1 }
+    : { replayMode: false }),
+  restartReplaySession: () => set((state) => ({ replaySessionId: state.replaySessionId + 1 })),
   addChart: () => set((state) => {
     if (state.charts.length >= MAX_TRADING_CHARTS) return state;
     const source = state.charts.find((chart) => chart.chartId === state.activeChartId) ?? state.charts[0] ?? initialChart();

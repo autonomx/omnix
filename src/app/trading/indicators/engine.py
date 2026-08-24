@@ -73,6 +73,43 @@ def relative_strength_index(values: Iterable[Decimal | float | int | str], perio
     return result
 
 
+def stochastic_rsi(
+    values: Iterable[Decimal | float | int | str],
+    period: int,
+    smoothing: int = 3,
+    signal: int = 3,
+) -> list[tuple[Decimal, Decimal]]:
+    """Return Stoch RSI %K/%D pairs using the web indicator's calculation."""
+    clean_period = _period(period)
+    clean_smoothing = _period(smoothing)
+    clean_signal = _period(signal)
+    rsi_values = relative_strength_index(values, clean_period)
+    if len(rsi_values) < clean_period:
+        return []
+
+    raw: list[Decimal] = []
+    for index in range(len(rsi_values) - clean_period + 1):
+        window = rsi_values[index : index + clean_period]
+        minimum = min(window)
+        maximum = max(window)
+        current = rsi_values[index + clean_period - 1]
+        raw.append(
+            Decimal("50")
+            if maximum == minimum
+            else max(
+                Decimal("0"),
+                min(Decimal("100"), (current - minimum) / (maximum - minimum) * Decimal("100")),
+            )
+        )
+
+    k_values = simple_moving_average(raw, clean_smoothing)
+    d_values = simple_moving_average(k_values, clean_signal)
+    return [
+        (k_values[index + clean_signal - 1], value)
+        for index, value in enumerate(d_values)
+    ]
+
+
 def bollinger_bands(
     values: Iterable[Decimal | float | int | str],
     period: int,

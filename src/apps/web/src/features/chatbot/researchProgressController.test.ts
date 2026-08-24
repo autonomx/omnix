@@ -78,7 +78,7 @@ function researchSession(): ChatSession {
         },
       },
     ],
-  } as ChatSession;
+  } as unknown as ChatSession;
 }
 
 describe('research progress restoration', () => {

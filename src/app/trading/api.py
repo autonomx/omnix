@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.persistence.errors import RevisionConflict
 
+from .catalog import bindings_for_instrument
 from .instrument_catalog_service import ProviderBackedInstrumentCatalog, default_instrument_catalog
 from .models import BarsResponse, CanonicalInstrument, ProviderBinding, ProviderPolicy
 from .repositories import TradingDocumentRepository, default_trading_repository
@@ -38,7 +39,7 @@ class ProviderDescriptor(BaseModel):
     provider: str
     display_name: str
     enabled: bool
-    status: Literal["ready", "degraded", "unavailable"]
+    status: Literal["ready", "degraded", "unavailable", "unconfigured"]
     policy: ProviderPolicy
     bindings: list[ProviderBinding]
     runtime: ProviderRuntimeStatus = Field(default_factory=ProviderRuntimeStatus)
@@ -118,6 +119,58 @@ def _stream_payload(update: StreamingBarUpdate) -> dict[str, Any]:
     return {"type": "bar", "bar": payload}
 
 
+_INSTRUMENT_ID_KEYS = frozenset({"instrument_id", "instrument_ids", "instrumentId", "instrumentIds"})
+
+
+def _persisted_instrument_ids(value: object, key: str | None = None) -> set[str]:
+    """Find canonical instrument IDs in persisted Trading document payloads."""
+    if key in _INSTRUMENT_ID_KEYS:
+        if isinstance(value, str):
+            return set() if value.startswith("formula:") else {value}
+        if isinstance(value, list):
+            return {
+                item
+                for item in value
+                if isinstance(item, str) and not item.startswith("formula:")
+            }
+        return set()
+    if isinstance(value, dict):
+        nested_ids: set[str] = set()
+        for child_key, child_value in value.items():
+            nested_ids.update(_persisted_instrument_ids(child_value, str(child_key)))
+        return nested_ids
+    if isinstance(value, list):
+        list_ids: set[str] = set()
+        for item in value:
+            list_ids.update(_persisted_instrument_ids(item))
+        return list_ids
+    return set()
+
+
+def _rehydrate_persisted_bindings(
+    repository_factory: Callable[[], TradingDocumentRepository],
+) -> None:
+    """Make saved symbols available to provider capability descriptors after restart.
+
+    Dynamic catalog entries are process-local, while workspace/watchlist documents
+    are persisted.  The chart path already rehydrates a symbol on demand; doing
+    the same before returning provider status keeps the interval menu and chart
+    path in sync on a fresh process.
+    """
+    instrument_ids: set[str] = set()
+    for record_type in ("workspace", "watchlist", "drawing", "indicator_preset"):
+        try:
+            records = repository_factory().list(record_type, limit=500)
+        except Exception:
+            # Provider status should remain available when persistence is
+            # temporarily unavailable; chart requests can still rehydrate on use.
+            continue
+        for record in records:
+            instrument_ids.update(_persisted_instrument_ids(record.get("payload")))
+    for instrument_id in instrument_ids:
+        bindings_for_instrument(instrument_id)
+
+
 def create_trading_router(
     repository_factory: Callable[[], TradingDocumentRepository] = default_trading_repository,
     market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
@@ -127,6 +180,7 @@ def create_trading_router(
 
     @router.get("/providers", response_model=ProviderStatusResponse)
     async def providers() -> ProviderStatusResponse:
+        _rehydrate_persisted_bindings(repository_factory)
         descriptors = [
             ProviderDescriptor.model_validate(item)
             for item in market_service_factory().provider_descriptors()

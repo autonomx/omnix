@@ -61,7 +61,7 @@ def test_limit_and_stop_orders_use_observation_high_low_not_close_only() -> None
     assert sell_limit.should_fill is True
     assert sell_limit.fill_price == Decimal("100")
 
-    # Stop triggers are likewise based on the full observed range.
+    # Stop triggers use the full range and pessimistic stop slippage.
     buy_stop = paper_fill_decision(
         _order("stop", "buy"),
         _range_observation(price="98", high="101", low="97"),
@@ -72,8 +72,8 @@ def test_limit_and_stop_orders_use_observation_high_low_not_close_only() -> None
     )
     assert buy_stop.should_fill is True
     assert sell_stop.should_fill is True
-    assert buy_stop.fill_price == Decimal("100")
-    assert sell_stop.fill_price == Decimal("100")
+    assert buy_stop.fill_price == Decimal("100.2500")
+    assert sell_stop.fill_price == Decimal("99.7500")
 
 
 def test_buying_power_reservation_is_deterministic_and_conservative() -> None:

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { TradingChartAdapter } from '../chart/chartAdapter';
+import type { CoreIndicatorId } from '../indicators/coreIndicators';
 import { tradingIntervalMinutes } from '../tradingIntervals';
 import {
   DEFAULT_DRAWING_STYLE,
@@ -9,6 +10,7 @@ import {
   type DrawingTool,
   type TradingDrawing,
 } from './drawingCommands';
+import type { TradingAlertIndicatorId } from '../tradingTypes';
 import './TradingDrawingMeasurement.css';
 
 const twoPointTools = new Set<DrawingTool>([
@@ -27,6 +29,8 @@ export type ChartAlertPlacement = DrawingPoint & {
   x: number;
   y: number;
   source: 'tool' | 'context-menu';
+  indicatorId?: TradingAlertIndicatorId;
+  indicatorPeriod?: number;
   drawingId?: string;
   drawingTool?: DrawingTool;
   trendlinePoints?: DrawingPoint[];
@@ -90,6 +94,10 @@ function translatedPoints(points: DrawingPoint[], preview: TranslationPreview | 
   }));
 }
 
+function setSvgAttribute(element: SVGElement | null, name: string, value: number | string): void {
+  element?.setAttribute(name, String(value));
+}
+
 export function TradingDrawingOverlay({
   adapter,
   instrumentId,
@@ -120,8 +128,8 @@ export function TradingDrawingOverlay({
   onTranslateDrawing: (id: string, from: DrawingPoint, to: DrawingPoint) => void;
   onRemove: (id: string) => void;
   onToolComplete?: () => void;
-  onAlertAtPoint?: (placement: ChartAlertPlacement) => void;
-  onContextMenu?: (placement: ChartAlertPlacement) => void;
+  onAlertAtPoint?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
+  onContextMenu?: (placement: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draftStart, setDraftStart] = useState<DrawingPoint | null>(null);
@@ -129,8 +137,157 @@ export function TradingDrawingOverlay({
   const [handlePreview, setHandlePreview] = useState<HandlePreview | null>(null);
   const [translationPreview, setTranslationPreview] = useState<TranslationPreview | null>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0, revision: 0 });
+  const drawingsRef = useRef(drawings);
+  const handlePreviewRef = useRef(handlePreview);
+  const translationPreviewRef = useRef(translationPreview);
+  drawingsRef.current = drawings;
+  handlePreviewRef.current = handlePreview;
+  translationPreviewRef.current = translationPreview;
 
-  useEffect(() => {
+  const refreshProjection = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg || !adapter) return;
+    const bounds = svg.getBoundingClientRect();
+    const width = bounds.width || svg.clientWidth;
+    const height = bounds.height || svg.clientHeight;
+    const currentHandlePreview = handlePreviewRef.current;
+    const currentTranslationPreview = translationPreviewRef.current;
+
+    for (const group of svg.querySelectorAll<SVGGElement>('[data-drawing-id]')) {
+      const drawing = drawingsRef.current.find((item) => item.drawingId === group.dataset.drawingId);
+      if (!drawing) continue;
+      const rawPoints = translatedPoints(drawing.points, currentTranslationPreview, drawing.drawingId).map((point, index) => (
+        currentHandlePreview?.drawingId === drawing.drawingId && currentHandlePreview.index === index
+          ? currentHandlePreview.point
+          : point
+      ));
+      const points = rawPoints.map((point) => adapter.projectDrawingPoint(point));
+      const first = points[0];
+      const second = points[1];
+      if (!first) continue;
+
+      for (const pointElement of group.querySelectorAll<SVGElement>('[data-drawing-point-index]')) {
+        const index = Number(pointElement.dataset.drawingPointIndex);
+        const point = points[index];
+        if (!point) continue;
+        setSvgAttribute(pointElement, 'cx', point.x);
+        setSvgAttribute(pointElement, 'cy', point.y);
+      }
+
+      for (const line of group.querySelectorAll<SVGLineElement>('[data-drawing-geometry="horizontal"]')) {
+        setSvgAttribute(line, 'y1', first.y);
+        setSvgAttribute(line, 'y2', first.y);
+      }
+      for (const line of group.querySelectorAll<SVGLineElement>('[data-drawing-geometry="vertical"]')) {
+        setSvgAttribute(line, 'x1', first.x);
+        setSvgAttribute(line, 'x2', first.x);
+      }
+      if (second) {
+        const segment = group.querySelector<SVGLineElement>('[data-drawing-geometry="segment"]');
+        if (segment) {
+          setSvgAttribute(segment, 'x1', first.x);
+          setSvgAttribute(segment, 'y1', first.y);
+          setSvgAttribute(segment, 'x2', second.x);
+          setSvgAttribute(segment, 'y2', second.y);
+        }
+
+        const ray = group.querySelector<SVGLineElement>('[data-drawing-geometry="ray"]');
+        if (ray) {
+          const dx = second.x - first.x;
+          const targetX = dx >= 0 ? width : 0;
+          const target = Math.abs(dx) < 0.0001
+            ? { x: first.x, y: second.y >= first.y ? height : 0 }
+            : { x: targetX, y: first.y + (second.y - first.y) / dx * (targetX - first.x) };
+          setSvgAttribute(ray, 'x1', first.x);
+          setSvgAttribute(ray, 'y1', first.y);
+          setSvgAttribute(ray, 'x2', target.x);
+          setSvgAttribute(ray, 'y2', target.y);
+        }
+
+        const rectangle = group.querySelector<SVGRectElement>('[data-drawing-geometry="rectangle"]');
+        if (rectangle) {
+          setSvgAttribute(rectangle, 'x', Math.min(first.x, second.x));
+          setSvgAttribute(rectangle, 'y', Math.min(first.y, second.y));
+          setSvgAttribute(rectangle, 'width', Math.abs(second.x - first.x));
+          setSvgAttribute(rectangle, 'height', Math.abs(second.y - first.y));
+        }
+
+        const circle = group.querySelector<SVGEllipseElement>('[data-drawing-geometry="circle"]');
+        if (circle) {
+          const radius = Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2;
+          setSvgAttribute(circle, 'cx', (first.x + second.x) / 2);
+          setSvgAttribute(circle, 'cy', (first.y + second.y) / 2);
+          setSvgAttribute(circle, 'rx', radius);
+          setSvgAttribute(circle, 'ry', radius);
+        }
+
+        const ellipse = group.querySelector<SVGEllipseElement>('[data-drawing-geometry="ellipse"]');
+        if (ellipse) {
+          setSvgAttribute(ellipse, 'cx', (first.x + second.x) / 2);
+          setSvgAttribute(ellipse, 'cy', (first.y + second.y) / 2);
+          setSvgAttribute(ellipse, 'rx', Math.abs(second.x - first.x) / 2);
+          setSvgAttribute(ellipse, 'ry', Math.abs(second.y - first.y) / 2);
+        }
+
+        for (const line of group.querySelectorAll<SVGLineElement>('[data-drawing-fibonacci-line]')) {
+          const level = Number(line.dataset.drawingFibonacciLine);
+          const y = first.y + (second.y - first.y) * level;
+          setSvgAttribute(line, 'x1', Math.min(first.x, second.x));
+          setSvgAttribute(line, 'x2', Math.max(first.x, second.x));
+          setSvgAttribute(line, 'y1', y);
+          setSvgAttribute(line, 'y2', y);
+        }
+        for (const label of group.querySelectorAll<SVGTextElement>('[data-drawing-fibonacci-label]')) {
+          const level = Number(label.dataset.drawingFibonacciLabel);
+          const y = first.y + (second.y - first.y) * level;
+          setSvgAttribute(label, 'x', Math.max(first.x, second.x) + 4);
+          setSvgAttribute(label, 'y', y - 2);
+        }
+      }
+
+      const text = group.querySelector<SVGTextElement>('[data-drawing-geometry="text"]');
+      if (text) {
+        setSvgAttribute(text, 'x', first.x);
+        setSvgAttribute(text, 'y', first.y);
+      }
+
+      if (drawing.toolType === 'measurement' && second && rawPoints[0] && rawPoints[1]) {
+        const visual = measurementVisual(first, second, rawPoints[0], rawPoints[1], interval);
+        const area = group.querySelector<SVGRectElement>('[data-drawing-measurement="area"]');
+        setSvgAttribute(area, 'x', visual.left);
+        setSvgAttribute(area, 'y', visual.top);
+        setSvgAttribute(area, 'width', visual.width);
+        setSvgAttribute(area, 'height', visual.height);
+        const top = group.querySelector<SVGLineElement>('[data-drawing-measurement="top"]');
+        const bottom = group.querySelector<SVGLineElement>('[data-drawing-measurement="bottom"]');
+        const axis = group.querySelector<SVGLineElement>('[data-drawing-measurement="axis"]');
+        for (const line of [top, bottom]) {
+          setSvgAttribute(line, 'x1', visual.left);
+          setSvgAttribute(line, 'x2', visual.left + visual.width);
+        }
+        setSvgAttribute(top, 'y1', visual.top);
+        setSvgAttribute(top, 'y2', visual.top);
+        setSvgAttribute(bottom, 'y1', visual.top + visual.height);
+        setSvgAttribute(bottom, 'y2', visual.top + visual.height);
+        setSvgAttribute(axis, 'x1', visual.centerX);
+        setSvgAttribute(axis, 'x2', visual.centerX);
+        setSvgAttribute(axis, 'y1', visual.top);
+        setSvgAttribute(axis, 'y2', visual.top + visual.height);
+        const arrow = group.querySelector<SVGPathElement>('[data-drawing-measurement="arrow"]');
+        setSvgAttribute(arrow, 'd', `M ${visual.centerX - 7} ${visual.top + 8} L ${visual.centerX} ${visual.top} L ${visual.centerX + 7} ${visual.top + 8}`);
+        const labelRect = group.querySelector<SVGRectElement>('[data-drawing-measurement="label-rect"]');
+        setSvgAttribute(labelRect, 'x', visual.centerX - visual.labelWidth / 2);
+        setSvgAttribute(labelRect, 'y', visual.labelTop);
+        setSvgAttribute(labelRect, 'width', visual.labelWidth);
+        const label = group.querySelector<SVGTextElement>('[data-drawing-measurement="label"]');
+        setSvgAttribute(label, 'x', visual.centerX);
+        setSvgAttribute(label, 'y', visual.labelTop + 19);
+        if (label) label.textContent = visual.label;
+      }
+    }
+  }, [adapter, interval]);
+
+  useLayoutEffect(() => {
     if (!adapter) return;
     let frame: number | null = null;
     let pointerActive = false;
@@ -141,8 +298,11 @@ export function TradingDrawingOverlay({
         setViewport((value) => ({ ...value, revision: value.revision + 1 }));
       });
     };
-    const visibleRange = adapter.onVisibleRange(invalidate);
-    const crosshair = adapter.onCrosshair(invalidate);
+    // Project directly into the already-mounted SVG during the chart viewport
+    // callback. Waiting for React to reconcile a revision leaves the overlay one
+    // or more frames behind Lightweight Charts while the user is dragging.
+    const viewportChange = adapter.onViewportChange(refreshProjection);
+    const crosshair = adapter.onCrosshair(() => invalidate());
     const stage = svgRef.current?.parentElement;
     const insideStage = (target: EventTarget | null) => target instanceof Node && Boolean(stage?.contains(target));
     const pointerDown = (event: PointerEvent) => {
@@ -171,8 +331,9 @@ export function TradingDrawingOverlay({
       }));
     });
     if (svgRef.current) resize.observe(svgRef.current);
+    refreshProjection();
     return () => {
-      visibleRange();
+      viewportChange();
       crosshair();
       window.removeEventListener('pointerdown', pointerDown);
       window.removeEventListener('pointermove', pointerMove);
@@ -180,7 +341,7 @@ export function TradingDrawingOverlay({
       if (frame !== null) window.cancelAnimationFrame(frame);
       resize.disconnect();
     };
-  }, [adapter]);
+  }, [adapter, refreshProjection]);
 
   const pointFromClient = (clientX: number, clientY: number): (DrawingPoint & { x: number; y: number }) | null => {
     const svg = svgRef.current;
@@ -221,7 +382,15 @@ export function TradingDrawingOverlay({
     const point = pointFromEvent(event);
     if (!point) return;
     if (tool === 'alert') {
-      onAlertAtPoint?.({ ...point, source: 'tool' });
+      const indicatorId = adapter?.indicatorPaneIdAtClientY(event.clientY) ?? undefined;
+      const indicatorValue = indicatorId === undefined
+        ? null
+        : adapter?.indicatorValueFromClientY(indicatorId, event.clientY);
+      onAlertAtPoint?.({
+        ...point,
+        ...(indicatorValue !== null && indicatorValue !== undefined ? { price: indicatorValue } : {}),
+        source: 'tool',
+      }, indicatorId);
       onToolComplete?.();
       return;
     }
@@ -256,13 +425,18 @@ export function TradingDrawingOverlay({
       : null;
     const drawingId = target?.dataset.drawingId;
     const drawing = drawingId ? drawings.find((item) => item.drawingId === drawingId) : undefined;
+    const indicatorId = adapter?.indicatorPaneIdAtClientY(event.clientY) ?? undefined;
+    const indicatorValue = indicatorId === undefined
+      ? null
+      : adapter?.indicatorValueFromClientY(indicatorId, event.clientY);
     onChartContextMenu?.({
       ...point,
+      ...(indicatorValue !== null && indicatorValue !== undefined ? { price: indicatorValue } : {}),
       source: 'context-menu',
       drawingId: drawing?.drawingId,
       drawingTool: drawing?.toolType,
       trendlinePoints: drawing?.toolType === 'trend-line' ? drawing.points.slice(0, 2) : undefined,
-    });
+    }, indicatorId);
   };
 
   const onWheel = (event: React.WheelEvent<SVGSVGElement>) => {
@@ -355,6 +529,7 @@ export function TradingDrawingOverlay({
       <g className="trading-measurement" data-selected={selected}>
         <rect
           className="trading-measurement-area"
+          data-drawing-measurement="area"
           x={visual.left}
           y={visual.top}
           width={visual.width}
@@ -362,18 +537,18 @@ export function TradingDrawingOverlay({
           fill={color}
           fillOpacity=".14"
         />
-        <line className="trading-measurement-edge" stroke={color} x1={visual.left} x2={visual.left + visual.width} y1={visual.top} y2={visual.top} />
-        <line className="trading-measurement-edge" stroke={color} x1={visual.left} x2={visual.left + visual.width} y1={visual.top + visual.height} y2={visual.top + visual.height} />
-        <line className="trading-measurement-axis" stroke={color} x1={visual.centerX} x2={visual.centerX} y1={visual.top} y2={visual.top + visual.height} />
-        <path className="trading-measurement-arrow" stroke={color} d={`M ${visual.centerX - 7} ${visual.top + 8} L ${visual.centerX} ${visual.top} L ${visual.centerX + 7} ${visual.top + 8}`} />
+        <line data-drawing-measurement="top" className="trading-measurement-edge" stroke={color} x1={visual.left} x2={visual.left + visual.width} y1={visual.top} y2={visual.top} />
+        <line data-drawing-measurement="bottom" className="trading-measurement-edge" stroke={color} x1={visual.left} x2={visual.left + visual.width} y1={visual.top + visual.height} y2={visual.top + visual.height} />
+        <line data-drawing-measurement="axis" className="trading-measurement-axis" stroke={color} x1={visual.centerX} x2={visual.centerX} y1={visual.top} y2={visual.top + visual.height} />
+        <path data-drawing-measurement="arrow" className="trading-measurement-arrow" stroke={color} d={`M ${visual.centerX - 7} ${visual.top + 8} L ${visual.centerX} ${visual.top} L ${visual.centerX + 7} ${visual.top + 8}`} />
         <g className="trading-measurement-label">
-          <rect x={visual.centerX - visual.labelWidth / 2} y={visual.labelTop} width={visual.labelWidth} height="30" rx="5" />
-          <text x={visual.centerX} y={visual.labelTop + 19} textAnchor="middle">{visual.label}</text>
+          <rect data-drawing-measurement="label-rect" x={visual.centerX - visual.labelWidth / 2} y={visual.labelTop} width={visual.labelWidth} height="30" rx="5" />
+          <text data-drawing-measurement="label" x={visual.centerX} y={visual.labelTop + 19} textAnchor="middle">{visual.label}</text>
         </g>
         {editable ? (
           <>
-            <circle className="trading-measurement-handle" cx={first.x} cy={first.y} r="6" onPointerDown={drawing ? dragHandle(drawing, 0) : undefined} />
-            <circle className="trading-measurement-handle" cx={second.x} cy={second.y} r="6" onPointerDown={drawing ? dragHandle(drawing, 1) : undefined} />
+            <circle data-drawing-point-index="0" className="trading-measurement-handle" cx={first.x} cy={first.y} r="6" onPointerDown={drawing ? dragHandle(drawing, 0) : undefined} />
+            <circle data-drawing-point-index="1" className="trading-measurement-handle" cx={second.x} cy={second.y} r="6" onPointerDown={drawing ? dragHandle(drawing, 1) : undefined} />
           </>
         ) : null}
       </g>
@@ -435,26 +610,26 @@ export function TradingDrawingOverlay({
                 </marker>
               </defs>
             ) : null}
-            {drawing.toolType === 'dot' ? <circle className={`drawing-dot${selected ? ' selected' : ''}`} cx={first.x} cy={first.y} r={selected ? 5 : 4} fill={style.color} stroke={selected ? '#ffd43b' : style.color} strokeWidth={style.lineWidth} /> : null}
-            {drawing.toolType === 'horizontal-line' ? <line {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /> : null}
-            {drawing.toolType === 'horizontal-ray' ? <line {...lineProps} x1={first.x} x2="100%" y1={first.y} y2={first.y} /> : null}
-            {drawing.toolType === 'vertical-line' ? <line {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /> : null}
-            {drawing.toolType === 'crossline' ? <><line {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /><line {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /></> : null}
+            {drawing.toolType === 'dot' ? <circle data-drawing-point-index="0" className={`drawing-dot${selected ? ' selected' : ''}`} cx={first.x} cy={first.y} r={selected ? 5 : 4} fill={style.color} stroke={selected ? '#ffd43b' : style.color} strokeWidth={style.lineWidth} /> : null}
+            {drawing.toolType === 'horizontal-line' ? <line data-drawing-geometry="horizontal" {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /> : null}
+            {drawing.toolType === 'horizontal-ray' ? <line data-drawing-geometry="horizontal" {...lineProps} x1={first.x} x2="100%" y1={first.y} y2={first.y} /> : null}
+            {drawing.toolType === 'vertical-line' ? <line data-drawing-geometry="vertical" {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /> : null}
+            {drawing.toolType === 'crossline' ? <><line data-drawing-geometry="horizontal" {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /><line data-drawing-geometry="vertical" {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /></> : null}
             {drawing.toolType === 'trend-line' || drawing.toolType === 'arrow' ? (
-              second ? <line {...lineProps} markerEnd={drawing.toolType === 'arrow' ? `url(#${arrowMarkerId})` : undefined} x1={first.x} y1={first.y} x2={second.x} y2={second.y} /> : null
+              second ? <line data-drawing-geometry="segment" {...lineProps} markerEnd={drawing.toolType === 'arrow' ? `url(#${arrowMarkerId})` : undefined} x1={first.x} y1={first.y} x2={second.x} y2={second.y} /> : null
             ) : null}
             {measurement ? renderMeasurement(measurement, measurementColor, first, second!, drawing) : null}
-            {ray ? <line {...lineProps} x1={first.x} y1={first.y} x2={ray.x} y2={ray.y} /> : null}
-            {drawing.toolType === 'rectangle' && second ? <rect {...lineProps} x={Math.min(first.x, second.x)} y={Math.min(first.y, second.y)} width={Math.abs(second.x - first.x)} height={Math.abs(second.y - first.y)} fill={`${style.color}20`} /> : null}
-            {drawing.toolType === 'circle' && second ? <ellipse {...lineProps} cx={(first.x + second.x) / 2} cy={(first.y + second.y) / 2} rx={Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2} ry={Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2} fill={`${style.color}20`} /> : null}
-            {drawing.toolType === 'ellipse' && second ? <ellipse {...lineProps} cx={(first.x + second.x) / 2} cy={(first.y + second.y) / 2} rx={Math.abs(second.x - first.x) / 2} ry={Math.abs(second.y - first.y) / 2} fill={`${style.color}20`} /> : null}
+            {ray ? <line data-drawing-geometry="ray" {...lineProps} x1={first.x} y1={first.y} x2={ray.x} y2={ray.y} /> : null}
+            {drawing.toolType === 'rectangle' && second ? <rect data-drawing-geometry="rectangle" {...lineProps} x={Math.min(first.x, second.x)} y={Math.min(first.y, second.y)} width={Math.abs(second.x - first.x)} height={Math.abs(second.y - first.y)} fill={`${style.color}20`} /> : null}
+            {drawing.toolType === 'circle' && second ? <ellipse data-drawing-geometry="circle" {...lineProps} cx={(first.x + second.x) / 2} cy={(first.y + second.y) / 2} rx={Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2} ry={Math.max(Math.abs(second.x - first.x), Math.abs(second.y - first.y)) / 2} fill={`${style.color}20`} /> : null}
+            {drawing.toolType === 'ellipse' && second ? <ellipse data-drawing-geometry="ellipse" {...lineProps} cx={(first.x + second.x) / 2} cy={(first.y + second.y) / 2} rx={Math.abs(second.x - first.x) / 2} ry={Math.abs(second.y - first.y) / 2} fill={`${style.color}20`} /> : null}
             {drawing.toolType === 'fibonacci' && second ? fibonacciLevels.map((level) => {
               const y = first.y + (second.y - first.y) * level;
-              return <g key={level}><line {...lineProps} x1={Math.min(first.x, second.x)} x2={Math.max(first.x, second.x)} y1={y} y2={y} /><text x={Math.max(first.x, second.x) + 4} y={y - 2}>{level}</text></g>;
+              return <g key={level}><line data-drawing-fibonacci-line={level} {...lineProps} x1={Math.min(first.x, second.x)} x2={Math.max(first.x, second.x)} y1={y} y2={y} /><text data-drawing-fibonacci-label={level} x={Math.max(first.x, second.x) + 4} y={y - 2}>{level}</text></g>;
             }) : null}
-            {drawing.toolType === 'text' ? <text className={selected ? 'selected' : undefined} x={first.x} y={first.y} fill={style.color}>{drawing.text || 'Market note'}</text> : null}
-            {drawing.toolType === 'arrow' && second ? <circle className="drawing-hit-target" cx={second.x} cy={second.y} r="11" /> : null}
-            {selected && !drawing.locked && drawing.toolType !== 'measurement' ? points.map((point, index) => point ? <circle key={index} cx={point.x} cy={point.y} r="6" onPointerDown={dragHandle(drawing, index)} /> : null) : null}
+            {drawing.toolType === 'text' ? <text data-drawing-geometry="text" className={selected ? 'selected' : undefined} x={first.x} y={first.y} fill={style.color}>{drawing.text || 'Market note'}</text> : null}
+            {drawing.toolType === 'arrow' && second ? <circle data-drawing-point-index="1" className="drawing-hit-target" cx={second.x} cy={second.y} r="11" /> : null}
+            {selected && !drawing.locked && drawing.toolType !== 'measurement' ? points.map((point, index) => point ? <circle data-drawing-point-index={index} key={index} cx={point.x} cy={point.y} r="6" onPointerDown={dragHandle(drawing, index)} /> : null) : null}
           </g>
         );
       })}

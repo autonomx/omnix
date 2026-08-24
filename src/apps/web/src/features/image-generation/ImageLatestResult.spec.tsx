@@ -30,11 +30,11 @@ describe('ImageLatestResult', () => {
     expect(region).toHaveAttribute('aria-atomic', 'true');
     expect(screen.getByRole('img', { name: 'Night harbor' })).toHaveAttribute(
       'src',
-      '/api/assets/image%3Anight/file',
+      '/api/assets/image%3Anight/file?preview=true',
     );
     expect(screen.getByRole('link', { name: 'Open Night harbor in a new tab' })).toHaveAttribute(
       'href',
-      '/api/assets/image%3Anight/file',
+      '/api/assets/image%3Anight/file?preview=true',
     );
     expect(screen.getByRole('link', { name: 'Download Night harbor' })).toHaveAttribute(
       'href',
@@ -52,7 +52,7 @@ describe('ImageLatestResult', () => {
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByTestId('image-preview-loader')).toHaveAttribute(
       'src',
-      '/api/assets/image%3Anight/file',
+      '/api/assets/image%3Anight/file?preview=true',
     );
     expect(screen.getByLabelText('Image zoom level')).toHaveTextContent('100%');
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));

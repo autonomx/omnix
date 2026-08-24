@@ -16,6 +16,9 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+_MESSAGE_PAGE_SIZE = 500
+
+
 class PostgresChatRepositoryAdapter:
     """Compatibility implementation for the current ChatStore contract.
 
@@ -34,12 +37,7 @@ class PostgresChatRepositoryAdapter:
         with unit_of_work(self.database) as work:
             records = work.chats.list_sessions(self.context, limit=200)
             for record in records:
-                messages = work.chats.list_messages(
-                    self.context,
-                    record["id"],
-                    limit=500,
-                    after_position=-1,
-                )
+                messages = self._list_all_messages(work, record["id"])
                 sessions.append(self._to_session(record, messages))
             work.rollback()
         return sessions
@@ -109,12 +107,7 @@ class PostgresChatRepositoryAdapter:
                             session.id,
                         ),
                     )
-                    stored_messages = work.chats.list_messages(
-                        self.context,
-                        session.id,
-                        limit=500,
-                        after_position=-1,
-                    )
+                    stored_messages = self._list_all_messages(work, session.id)
 
                 stored_ids = [message["id"] for message in stored_messages]
                 requested_prefix = [message.id for message in session.messages[: len(stored_ids)]]
@@ -141,6 +134,29 @@ class PostgresChatRepositoryAdapter:
                         },
                     )
             work.commit()
+
+    def _list_all_messages(self, work: Any, session_id: str) -> list[dict[str, Any]]:
+        """Load the full append-only transcript instead of truncating at 500 rows."""
+        messages: list[dict[str, Any]] = []
+        after_position = -1
+        while True:
+            page = work.chats.list_messages(
+                self.context,
+                session_id,
+                limit=_MESSAGE_PAGE_SIZE,
+                after_position=after_position,
+            )
+            if not page:
+                return messages
+            messages.extend(page)
+            next_position = int(page[-1]["position"])
+            if next_position <= after_position:
+                raise RuntimeError(
+                    f"Chat message pagination did not advance for session {session_id}"
+                )
+            after_position = next_position
+            if len(page) < _MESSAGE_PAGE_SIZE:
+                return messages
 
     def update_delivery_metadata(
         self,

@@ -22,7 +22,26 @@ type PreservedChatSessionRequest = CreateChatSessionRequest & {
   transcript_policy: 'persistent' | 'temporary' | 'none';
 };
 
+type SessionSelectionSnapshot = Pick<ChatSession,
+  | 'id'
+  | 'provider_id'
+  | 'model_id'
+  | 'interaction_mode'
+  | 'character_id'
+  | 'voice_asset_id'
+  | 'read_memory'
+  | 'write_memory'
+  | 'shared_memory_access'
+  | 'transcript_policy'
+>;
+
+type SessionSelectionEventDetail = {
+  sessionId?: unknown;
+  session?: Partial<SessionSelectionSnapshot>;
+};
+
 let selectedSessionId: string | null = null;
+let selectedSessionSnapshot: SessionSelectionSnapshot | null = null;
 
 type AnyWindow = Window & Record<string, unknown>;
 
@@ -70,8 +89,8 @@ function patchSendMessage(): void {
 }
 
 export function preservedNewChatRequest(
-  session: ChatSession,
-  interaction: SessionInteraction,
+  session: Pick<ChatSession, 'provider_id' | 'model_id'>,
+  interaction: Pick<SessionInteraction, 'interaction_mode' | 'character_id' | 'voice_asset_id' | 'read_memory' | 'write_memory' | 'shared_memory_access' | 'transcript_policy'>,
 ): PreservedChatSessionRequest {
   return {
     title: 'New chat',
@@ -114,11 +133,16 @@ export async function startBlankChat(): Promise<ChatSession> {
     transcript_policy: 'persistent',
   };
   if (selectedSessionId) {
-    const [session, interaction] = await Promise.all([
-      omnixApiClient.getChatSession(selectedSessionId),
-      characterClient.session(selectedSessionId),
-    ]);
-    request = preservedNewChatRequest(session, interaction);
+    const snapshot = selectedSessionSnapshot?.id === selectedSessionId ? selectedSessionSnapshot : null;
+    if (snapshot && hasInteractionSettings(snapshot)) {
+      request = preservedNewChatRequest(snapshot, snapshot);
+    } else {
+      const [session, interaction] = await Promise.all([
+        omnixApiClient.getChatSession(selectedSessionId),
+        characterClient.session(selectedSessionId),
+      ]);
+      request = preservedNewChatRequest(session, interaction);
+    }
   }
 
   const session = await omnixApiClient.createChatSession(request);
@@ -126,6 +150,7 @@ export async function startBlankChat(): Promise<ChatSession> {
   if (!sessionId) throw new Error('New chat response did not include a session id.');
 
   selectedSessionId = sessionId;
+  selectedSessionSnapshot = session;
   window.dispatchEvent(new CustomEvent(LIVE_VOICE_STOP_EVENT));
   clearMessageComposer();
   window.dispatchEvent(new CustomEvent(CHAT_SESSION_CREATED_EVENT, { detail: { session } }));
@@ -180,12 +205,36 @@ export function installSessionTools(): void {
   if (w[INSTALLED_KEY]) return;
   w[INSTALLED_KEY] = true;
   window.addEventListener(SESSION_SELECTED_EVENT, (event) => {
-    selectedSessionId = (event as CustomEvent<{ sessionId?: string | null }>).detail?.sessionId ?? null;
+    const detail = (event as CustomEvent<SessionSelectionEventDetail>).detail;
+    const nextSessionId = typeof detail?.sessionId === 'string' ? detail.sessionId.trim() : '';
+    selectedSessionId = nextSessionId || null;
+    const snapshot = detail?.session;
+    selectedSessionSnapshot = snapshot && snapshot.id === nextSessionId && hasInteractionSettings(snapshot)
+      ? snapshot as SessionSelectionSnapshot
+      : selectedSessionSnapshot?.id === nextSessionId ? selectedSessionSnapshot : null;
   });
   patchSessionList();
   patchSendMessage();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchButtons, { once: true });
   else watchButtons();
+}
+
+function hasInteractionSettings(
+  session: Partial<SessionSelectionSnapshot>,
+): session is SessionSelectionSnapshot {
+  const interactionModeValid = session.interaction_mode === 'system' || session.interaction_mode === 'character';
+  const characterSelectionValid = session.interaction_mode === 'system'
+    ? !session.character_id
+    : typeof session.character_id === 'string' && session.character_id.trim().length > 0;
+  return Boolean(
+    typeof session.id === 'string'
+      && interactionModeValid
+      && characterSelectionValid
+      && typeof session.read_memory === 'boolean'
+      && typeof session.write_memory === 'boolean'
+      && (session.shared_memory_access === 'none' || session.shared_memory_access === 'read_only')
+      && (session.transcript_policy === 'persistent' || session.transcript_policy === 'temporary' || session.transcript_policy === 'none'),
+  );
 }
 
 initializeChatResponseMetricsController();

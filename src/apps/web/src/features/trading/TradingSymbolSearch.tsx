@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanonicalInstrument } from './tradingTypes';
+import type { TradingFormula } from './tradingFormula';
 import './TradingSymbolSearch.css';
 
 export type SymbolSearchCategory =
@@ -13,6 +14,12 @@ export type SymbolSearchCategory =
   | 'bonds'
   | 'economy'
   | 'options';
+
+export type TradingFormulaSearchPreview = {
+  formula: TradingFormula;
+  unresolvedSymbols: string[];
+  loading?: boolean;
+};
 
 type CategoryDefinition = {
   id: SymbolSearchCategory;
@@ -75,6 +82,11 @@ function instrumentMatches(instrument: CanonicalInstrument, query: string): bool
 }
 
 function instrumentName(instrument: CanonicalInstrument): string {
+  if (instrument.venue === 'CRYPTOCAP') {
+    return instrument.display_symbol.endsWith('.D')
+      ? `Market Cap ${instrument.display_symbol.slice(0, -2)} Dominance, %`
+      : `Crypto Market Cap ${instrument.display_symbol}`;
+  }
   if (instrument.asset_class === 'crypto') {
     const base = currencyNames[instrument.base_currency ?? ''] ?? instrument.base_currency ?? instrument.display_symbol;
     const quote = currencyNames[instrument.quote_currency ?? ''] ?? instrument.quote_currency ?? 'USD';
@@ -84,6 +96,7 @@ function instrumentName(instrument: CanonicalInstrument): string {
 }
 
 function instrumentTypeLabel(instrument: CanonicalInstrument): string {
+  if (instrument.venue === 'CRYPTOCAP') return 'index crypto';
   if (instrument.asset_class === 'crypto') {
     return instrument.instrument_type === 'perpetual' ? 'perpetual crypto' : 'spot crypto';
   }
@@ -112,8 +125,10 @@ export function TradingSymbolSearch({
   instruments,
   activeInstrumentId,
   loading,
+  formulaPreview,
   onQueryChange,
   onSelect,
+  onSelectFormula,
   onClose,
 }: {
   open: boolean;
@@ -121,8 +136,10 @@ export function TradingSymbolSearch({
   instruments: readonly CanonicalInstrument[];
   activeInstrumentId: string;
   loading?: boolean;
+  formulaPreview?: TradingFormulaSearchPreview | null;
   onQueryChange: (query: string) => void;
   onSelect: (instrument: CanonicalInstrument) => void;
+  onSelectFormula?: () => void;
   onClose: () => void;
 }) {
   const [category, setCategory] = useState<SymbolSearchCategory>('all');
@@ -140,6 +157,7 @@ export function TradingSymbolSearch({
 
   const results = useMemo(() => {
     const normalizedQuery = query.trim().toUpperCase();
+    if (formulaPreview) return [];
     return uniqueInstruments(instruments)
       .filter((instrument) => categoryMatches(instrument, category) && instrumentMatches(instrument, query))
       .sort((left, right) => {
@@ -150,7 +168,7 @@ export function TradingSymbolSearch({
         const rightExact = rightSymbol === normalizedQuery ? 0 : rightSymbol.startsWith(normalizedQuery) ? 1 : 2;
         return leftExact - rightExact || leftSymbol.localeCompare(rightSymbol) || left.venue.localeCompare(right.venue);
       });
-  }, [category, instruments, query]);
+  }, [category, formulaPreview, instruments, query]);
 
   if (!open) return null;
 
@@ -183,7 +201,10 @@ export function TradingSymbolSearch({
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Escape') onClose();
-              if (event.key === 'Enter' && results[0]) onSelect(results[0]);
+              if (event.key === 'Enter') {
+                if (formulaPreview && !formulaPreview.loading) onSelectFormula?.();
+                else if (results[0]) onSelect(results[0]);
+              }
             }}
           />
           {query ? (
@@ -212,7 +233,33 @@ export function TradingSymbolSearch({
             <span>Description</span>
             <span>Exchange</span>
           </div>
-          {results.length ? (
+          {formulaPreview ? (
+            <div className="trading-symbol-search-formula-result">
+              <button
+                type="button"
+                disabled={Boolean(formulaPreview.loading) || !onSelectFormula}
+                onClick={onSelectFormula}
+                aria-label={`Create arithmetic chart ${formulaPreview.formula.expression}`}
+              >
+                <span className="trading-symbol-search-avatar formula" aria-hidden="true">ƒx</span>
+                <span className="trading-symbol-search-symbol">
+                  <strong>{formulaPreview.formula.expression}</strong>
+                  <small>{formulaPreview.formula.symbols.length} symbol{formulaPreview.formula.symbols.length === 1 ? '' : 's'}</small>
+                </span>
+                <span className="trading-symbol-search-description">
+                  <strong>Arithmetic chart</strong>
+                  <small>{formulaPreview.loading ? 'Resolving symbols…' : 'Derived from aligned market data'}</small>
+                </span>
+                <span className="trading-symbol-search-exchange">
+                  <small>{formulaPreview.unresolvedSymbols.length ? 'Resolve on chart' : 'Ready'}</small>
+                  <strong>{formulaPreview.unresolvedSymbols.length ? formulaPreview.unresolvedSymbols.join(', ') : 'Derived'}</strong>
+                </span>
+              </button>
+              {formulaPreview.unresolvedSymbols.length ? (
+                <p>Could not resolve: {formulaPreview.unresolvedSymbols.join(', ')}</p>
+              ) : null}
+            </div>
+          ) : results.length ? (
             <ul className="trading-symbol-search-results" role="listbox" aria-label="Symbol search results">
               {results.map((instrument) => (
                 <li key={instrument.instrument_id} role="option" aria-selected={instrument.instrument_id === activeInstrumentId}>
@@ -244,7 +291,7 @@ export function TradingSymbolSearch({
         </div>
 
         <footer className="trading-symbol-search-footer">
-          <span>{loading ? 'Searching instrument catalog…' : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}</span>
+          <span>{loading ? 'Searching instrument catalog…' : formulaPreview ? '1 result' : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}</span>
           <span>Search by symbol, name, or exchange</span>
         </footer>
       </section>

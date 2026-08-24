@@ -20,7 +20,7 @@ describe('latest image result', () => {
   });
 
   it('builds encoded URLs', () => {
-    expect(imageAssetUrl('image:test')).toBe('/api/assets/image%3Atest/file');
+    expect(imageAssetUrl('image:test')).toBe('/api/assets/image%3Atest/file?preview=true');
     expect(imageAssetUrl('image:test', true)).toBe('/api/assets/image%3Atest/file?download=true');
   });
 });

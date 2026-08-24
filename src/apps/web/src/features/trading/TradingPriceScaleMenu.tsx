@@ -83,15 +83,22 @@ export function TradingPriceScaleMenu({
   onChange,
   onClose,
   onSettings,
+  rightOffset,
+  rightOffsetOptions,
+  onRightOffsetChange,
 }: {
   adapter: TradingChartAdapter;
   state: TradingPriceScaleMenuState;
   onChange: (patch: Partial<TradingPriceScaleMenuState>) => void;
   onClose: () => void;
   onSettings: () => void;
+  rightOffset?: number;
+  rightOffsetOptions?: readonly number[];
+  onRightOffsetChange?: (offset: number) => void;
 }) {
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [linesOpen, setLinesOpen] = useState(false);
+  const [rightOffsetOpen, setRightOffsetOpen] = useState(false);
 
   useEffect(() => {
     const close = () => onClose();
@@ -164,6 +171,29 @@ export function TradingPriceScaleMenu({
       <MenuRow checked={!state.autoScale} onClick={() => setAutoScale(!state.autoScale)}>
         Lock price to bar ratio <small>0.0068</small>
       </MenuRow>
+      {onRightOffsetChange ? (
+        <>
+          <MenuRow submenu expanded={rightOffsetOpen} onClick={() => setRightOffsetOpen((value) => !value)}>
+            Right margin <small>{rightOffset === 0 ? 'None' : String(rightOffset) + ' bars'}</small>
+          </MenuRow>
+          {rightOffsetOpen ? (
+            <div className="trading-price-scale-submenu" role="menu" aria-label="Chart right margin">
+              {(rightOffsetOptions ?? [0, 5, 10, 20, 50]).map((offset) => (
+                <MenuRow
+                  key={offset}
+                  checked={rightOffset === offset}
+                  onClick={() => {
+                    onRightOffsetChange(offset);
+                    setRightOffsetOpen(false);
+                  }}
+                >
+                  {offset === 0 ? 'None' : String(offset) + ' bars'}
+                </MenuRow>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
       <MenuRow checked={state.scalePriceOnly} onClick={() => setScalePriceOnly(!state.scalePriceOnly)}>
         Scale price chart only
       </MenuRow>

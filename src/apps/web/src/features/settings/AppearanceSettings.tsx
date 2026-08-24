@@ -1,19 +1,32 @@
 import { useEffect } from 'react';
 import { OMNIX_THEME_PRESETS } from '../../design/appearanceThemes';
-import { commitAppearanceSettings } from './appearanceEffects';
+import {
+  commitAppearanceSettings,
+  DEFAULT_OMNIX_TEXT_SCALE,
+  MAX_OMNIX_TEXT_SCALE,
+  MIN_OMNIX_TEXT_SCALE,
+  OMNIX_TEXT_SCALE_STEP,
+  normalizeTextScale,
+} from './appearanceEffects';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
+import './AppearanceTextScale.css';
 
 export function AppearanceSettings() {
   const { state, dispatch } = useSettingsProfileContext();
   const value = state.draft.appearance;
   useEffect(() => { commitAppearanceSettings(value); }, [value]);
+
+  const updateTextScale = (next: number) => {
+    dispatch({ type: 'update', path: 'appearance.textScale', value: normalizeTextScale(next) });
+  };
+
   return (
     <div className="settings-category-panel">
       <div className="settings-category-title-row">
         <p className="eyebrow">Settings category</p>
         <h2>Appearance & Accessibility</h2>
-        <p>Choose an Omnix palette, light level, density, motion, and caption preferences.</p>
+        <p>Choose an Omnix palette, light level, text size, density, motion, and caption preferences.</p>
       </div>
       <SettingsSection title="Theme palette" scope="local">
         <div className="settings-theme-grid" role="radiogroup" aria-label="Omnix theme palette">
@@ -56,7 +69,50 @@ export function AppearanceSettings() {
               <option value="compact">Compact</option>
             </select>
           </SettingsField>
+          <SettingsField label="Text size">
+            <div className="settings-text-scale-control">
+              <button
+                type="button"
+                aria-label="Decrease app text size"
+                title="Decrease app text size"
+                disabled={value.textScale <= MIN_OMNIX_TEXT_SCALE}
+                onClick={() => updateTextScale(value.textScale - OMNIX_TEXT_SCALE_STEP)}
+              >
+                A−
+              </button>
+              <input
+                id="omnix-text-scale"
+                type="range"
+                min={MIN_OMNIX_TEXT_SCALE}
+                max={MAX_OMNIX_TEXT_SCALE}
+                step={OMNIX_TEXT_SCALE_STEP}
+                value={value.textScale}
+                aria-label="App text size"
+                aria-valuetext={`${value.textScale}%`}
+                onChange={(event) => updateTextScale(Number(event.currentTarget.value))}
+              />
+              <button
+                type="button"
+                aria-label="Increase app text size"
+                title="Increase app text size"
+                disabled={value.textScale >= MAX_OMNIX_TEXT_SCALE}
+                onClick={() => updateTextScale(value.textScale + OMNIX_TEXT_SCALE_STEP)}
+              >
+                A+
+              </button>
+              <output htmlFor="omnix-text-scale">{value.textScale}%</output>
+              <button
+                type="button"
+                className="settings-text-scale-reset"
+                disabled={value.textScale === DEFAULT_OMNIX_TEXT_SCALE}
+                onClick={() => updateTextScale(DEFAULT_OMNIX_TEXT_SCALE)}
+              >
+                Reset
+              </button>
+            </div>
+          </SettingsField>
         </div>
+        <p className="settings-text-scale-help">Changes apply immediately across Omnix and are saved on this device. 100% is the default browser text scale.</p>
       </SettingsSection>
       <SettingsSection title="Accessibility" scope="local">
         <div className="settings-toggle-list">

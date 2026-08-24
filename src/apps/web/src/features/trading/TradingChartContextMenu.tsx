@@ -11,6 +11,7 @@ function displayPrice(value: number): string {
 export function TradingChartContextMenu({
   point,
   symbol,
+  indicatorContext,
   drawingCount,
   indicatorCount,
   cursorLocked,
@@ -30,6 +31,7 @@ export function TradingChartContextMenu({
 }: {
   point: ChartAlertPlacement;
   symbol: string;
+  indicatorContext: boolean;
   drawingCount: number;
   indicatorCount: number;
   cursorLocked: boolean;
@@ -38,7 +40,7 @@ export function TradingChartContextMenu({
   onReset: () => void;
   onCopyPrice: () => void;
   onPastePrice: () => void;
-  onAddAlert: () => void;
+  onAddAlert: (() => void) | null;
   onToggleCursor: () => void;
   onToggleTable: () => void;
   onObjectTree: () => void;
@@ -50,14 +52,18 @@ export function TradingChartContextMenu({
   const [templateOpen, setTemplateOpen] = useState(false);
 
   useEffect(() => {
-    const close = () => onClose();
+    const close = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.trading-chart-context-menu')) return;
+      onClose();
+    };
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
-    window.addEventListener('pointerdown', close, { once: true });
+    document.addEventListener('pointerdown', close, true);
     window.addEventListener('keydown', keydown);
     return () => {
-      window.removeEventListener('pointerdown', close);
+      document.removeEventListener('pointerdown', close, true);
       window.removeEventListener('keydown', keydown);
     };
   }, [onClose]);
@@ -76,11 +82,11 @@ export function TradingChartContextMenu({
       onPointerDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <button type="button" role="menuitem" onClick={action(onReset)}>↻ <span>Reset chart view</span><kbd>Alt + R</kbd></button>
-      <button type="button" role="menuitem" onClick={action(onCopyPrice)}>⧉ <span>Copy price {displayPrice(point.price)}</span></button>
+      <button type="button" role="menuitem" onClick={action(onReset)}>↻ <span>Reset {indicatorContext ? `${symbol} pane` : 'chart'} view</span><kbd>Alt + R</kbd></button>
+      <button type="button" role="menuitem" onClick={action(onCopyPrice)}>⧉ <span>Copy {indicatorContext ? 'value' : 'price'} {displayPrice(point.price)}</span></button>
       <button type="button" role="menuitem" onClick={action(onPastePrice)}>▣ <span>Paste</span><kbd>Ctrl + V</kbd></button>
       <div className="trading-context-menu-separator" />
-      <button type="button" role="menuitem" onClick={action(onAddAlert)}>◷ <span>Add alert on {symbol} at {displayPrice(point.price)}</span><kbd>Alt + A</kbd></button>
+      <button type="button" role="menuitem" disabled={!onAddAlert} onClick={onAddAlert ? action(onAddAlert) : undefined}>◷ <span>{onAddAlert ? `Add alert on ${symbol} at ${displayPrice(point.price)}` : `Alerts unavailable for ${symbol}`}</span>{onAddAlert ? <kbd>Alt + A</kbd> : null}</button>
       <button type="button" role="menuitemcheckbox" aria-checked={cursorLocked} onClick={action(onToggleCursor)}>⌖ <span>Lock vertical cursor line by time</span></button>
       <div className="trading-context-menu-separator" />
       <button type="button" role="menuitemcheckbox" aria-checked={tableVisible} onClick={action(onToggleTable)}>▤ <span>Table view</span></button>

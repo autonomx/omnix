@@ -5,6 +5,8 @@ import type {
   TradingAlertNotificationChannel,
   TradingAlertTriggerPolicy,
 } from './tradingTypes';
+import { formatAlertThreshold } from './tradingChartAlerts';
+import './TradingChartAlertOpaque.css';
 
 export type TradingAlertEditorState = {
   mode: 'create' | 'edit';
@@ -160,6 +162,7 @@ export function TradingAlertDialog({
                 value={editor.threshold}
                 placeholder={Number.isFinite(latestPrice) ? String(latestPrice) : 'Value'}
                 onChange={(event) => onChange({ threshold: event.target.value })}
+                onBlur={(event) => onChange({ threshold: formatAlertThreshold(event.target.value) })}
               />
             </div>
           )}
@@ -169,7 +172,7 @@ export function TradingAlertDialog({
           {isIndicator ? (
             <div className="trading-alert-condition-row">
               <select aria-label="Alert indicator" value={editor.indicator} onChange={(event) => onChange({ indicator: event.target.value as TradingAlertIndicatorId })}>
-                {['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'vwap'].map((item) => <option key={item}>{item.toUpperCase()}</option>)}
+                {['sma', 'ema', 'rsi', 'macd', 'bollinger', 'atr', 'vwap', 'stochastic-rsi'].map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}
               </select>
               <input aria-label="Alert indicator period" inputMode="numeric" value={editor.period} onChange={(event) => onChange({ period: event.target.value })} />
             </div>

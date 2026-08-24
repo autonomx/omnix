@@ -12,7 +12,7 @@ import { SettingsActionHeader } from './SettingsActionHeader';
 import { SettingsCategoryPanel } from './SettingsCategoryPanel';
 import { SettingsCategoryRail } from './SettingsCategoryRail';
 import { SettingsProfileProvider } from './SettingsProfileProvider';
-import { SETTINGS_CATEGORIES } from './settingsRegistry';
+import { isSettingsCategoryId, SETTINGS_CATEGORIES } from './settingsRegistry';
 import { SettingsStatusRail } from './SettingsStatusRail';
 import type { SettingsCategoryId } from './settingsTypes';
 import './SettingsControlCenter.css';
@@ -20,13 +20,32 @@ import './SettingsComponents.css';
 import './SettingsResponsive.css';
 
 export function SettingsControlCenter() {
-  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>('ai-providers');
+  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>(() => {
+    const requested = new URLSearchParams(window.location.search).get('category');
+    return requested && isSettingsCategoryId(requested) ? requested : 'ai-providers';
+  });
   const [query, setQuery] = useState('');
   const mainRef = useRef<HTMLElement | null>(null);
   const initialCategory = useRef(true);
   const categoryIndex = SETTINGS_CATEGORIES.findIndex((item) => item.id === activeCategory);
   const category = SETTINGS_CATEGORIES[categoryIndex] ?? SETTINGS_CATEGORIES[0]!;
-  const content = categoryIndex === 0 ? <OverviewSettings /> : categoryIndex === 3 ? <><ModelSettings /><CatalogPanel /></> : categoryIndex === 6 ? <NarrativeSettings /> : categoryIndex === 7 ? <RpgDefaultsSettings /> : categoryIndex === 8 ? <ImageSpeechSettings /> : categoryIndex === 9 ? <ServicesSettings /> : categoryIndex === 10 ? <OperationsSettings /> : categoryIndex === 11 ? <OperationsSettings view="runtime" /> : <SettingsCategoryPanel categoryId={activeCategory} />;
+  const content = activeCategory === 'overview'
+    ? <OverviewSettings />
+    : activeCategory === 'models-runtime'
+      ? <><ModelSettings /><CatalogPanel /></>
+      : activeCategory === 'storyteller-podcast'
+        ? <NarrativeSettings />
+        : activeCategory === 'rpg'
+          ? <RpgDefaultsSettings />
+          : activeCategory === 'images-speech-input'
+            ? <ImageSpeechSettings />
+            : activeCategory === 'tools-integrations'
+              ? <ServicesSettings />
+              : activeCategory === 'jobs-assets-storage'
+                ? <OperationsSettings />
+                : activeCategory === 'diagnostics-developer'
+                  ? <OperationsSettings view="runtime" />
+                  : <SettingsCategoryPanel categoryId={activeCategory} />;
   useEffect(() => {
     if (initialCategory.current) {
       initialCategory.current = false;

@@ -16,7 +16,7 @@
     "test:e2e:trading": "playwright test tests/e2e/trading-terminal.spec.ts --project=chromium",
     "typecheck": "tsc -b",
     "typecheck:trading": "tsc -p tsconfig.trading.json",
-    "api:schema": "python ../../../scripts/export_gateway_openapi.py src/api/generated/openapi.json",
+    "api:schema": "python ../../../scripts/export_gateway_openapi.py src/apps/web/src/api/generated/openapi.json",
     "api:types": "openapi-typescript src/api/generated/openapi.json -o src/api/generated/types.ts",
     "api:generate": "npm run api:schema && npm run api:types",
     "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated/openapi.json src/api/generated/types.ts"
@@ -42,9 +42,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
-    "jsdom": "^26.1.0",
     "openapi-typescript": "^7.13.0",
-    "react-devtools": "^7.0.1",
     "typescript": "^5.9.0",
     "vite": "^7.2.0",
     "vitest": "^4.1.0"

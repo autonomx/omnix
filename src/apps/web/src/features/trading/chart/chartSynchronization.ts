@@ -20,7 +20,7 @@ type RegisteredChart = {
 
 export class TradingChartSynchronization {
   private readonly charts = new Map<string, RegisteredChart>();
-  private links: ChartSynchronizationLinks = { crosshair: true, visibleRange: true };
+  private links: ChartSynchronizationLinks = { crosshair: true, visibleRange: false };
   private applyingCrosshair = false;
   private applyingRange = false;
 

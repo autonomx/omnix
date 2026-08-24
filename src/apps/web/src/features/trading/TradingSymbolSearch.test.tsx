@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { TradingSymbolSearch } from './TradingSymbolSearch';
 import type { CanonicalInstrument } from './tradingTypes';
+import { parseTradingFormula } from './tradingFormula';
 
 const crypto: CanonicalInstrument = {
   instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
@@ -82,5 +83,52 @@ describe('TradingSymbolSearch', () => {
 
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Search symbols' }), { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('offers a resolved arithmetic chart and accepts Enter', () => {
+    const onSelectFormula = vi.fn();
+    const formula = parseTradingFormula('BTCUSDT / ETHUSDT');
+    if (!formula) throw new Error('test formula did not parse');
+    render(
+      <TradingSymbolSearch
+        open
+        query="BTCUSDT / ETHUSDT"
+        instruments={[crypto, stock]}
+        activeInstrumentId={crypto.instrument_id}
+        formulaPreview={{ formula, unresolvedSymbols: [] }}
+        onQueryChange={vi.fn()}
+        onSelect={vi.fn()}
+        onSelectFormula={onSelectFormula}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Create arithmetic chart BTCUSDT / ETHUSDT' })).toBeEnabled();
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Search symbols' }), { key: 'Enter' });
+    expect(onSelectFormula).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an arithmetic chart selectable when a leg needs chart-time resolution', () => {
+    const onSelectFormula = vi.fn();
+    const formula = parseTradingFormula('(TOTAL3-USDT) / BTC');
+    if (!formula) throw new Error('test formula did not parse');
+    render(
+      <TradingSymbolSearch
+        open
+        query="(TOTAL3-USDT) / BTC"
+        instruments={[crypto, stock]}
+        activeInstrumentId={crypto.instrument_id}
+        formulaPreview={{ formula, unresolvedSymbols: ['TOTAL3-USDT'] }}
+        onQueryChange={vi.fn()}
+        onSelect={vi.fn()}
+        onSelectFormula={onSelectFormula}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const result = screen.getByRole('button', { name: 'Create arithmetic chart (TOTAL3-USDT) / BTC' });
+    expect(result).toBeEnabled();
+    fireEvent.click(result);
+    expect(onSelectFormula).toHaveBeenCalledTimes(1);
   });
 });

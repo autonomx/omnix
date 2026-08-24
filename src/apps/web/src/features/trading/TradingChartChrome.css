@@ -1,4 +1,48 @@
 /* Keep the chart chrome inside the header instead of floating over the plot. */
+.trading-chart-symbol-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  padding: 1px 3px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.trading-chart-symbol-trigger:hover {
+  background: rgba(22, 136, 255, 0.14);
+}
+
+.trading-chart-symbol-trigger span {
+  color: #6faeff;
+  font-size: 10px;
+}
+
+.trading-workspace .trading-chart-title-row .trading-compare-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(116, 151, 181, .35);
+  border-radius: 50%;
+  background: transparent;
+  padding: 0;
+  color: #9eb0c1;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.trading-workspace .trading-chart-title-row .trading-compare-trigger:hover,
+.trading-workspace .trading-chart-title-row .trading-compare-trigger:focus-visible {
+  border-color: #1688ff;
+  background: rgba(22, 136, 255, .14);
+  color: #70baff;
+}
+
 .trading-chart-header .trading-drawing-manager {
   top: 5px;
   right: 118px;

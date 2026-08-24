@@ -10,6 +10,7 @@ const paperApi = vi.hoisted(() => ({
 }));
 
 vi.mock('./tradingPaperApi', () => ({ tradingPaperApi: paperApi }));
+vi.mock('./TradingPaperDashboard', () => ({ TradingPaperDashboard: () => <div>Paper trading dashboard view</div> }));
 
 import { TradingTerminalDock } from './TradingTerminalDock';
 
@@ -44,6 +45,36 @@ describe('TradingTerminalDock', () => {
       screen.getByRole('button', { name: 'Restore paper trading panel' }).click();
     });
     expect(screen.getByText('No paper account')).toBeInTheDocument();
+  });
+
+  it('opens the dedicated dashboard from the paper trading dock', async () => {
+    render(<TradingTerminalDock instrumentId="crypto:BINANCE:spot:BTC-USDT" bindingId={null} />);
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Restore paper trading panel' }).click();
+    });
+    await act(async () => {
+      screen.getByRole('tab', { name: 'Dashboard' }).click();
+    });
+
+    expect(screen.getByText('Paper trading dashboard view')).toBeInTheDocument();
+    expect(screen.queryByText('No paper account')).not.toBeInTheDocument();
+  });
+
+  it('toggles the paper trading dock into fullscreen mode', async () => {
+    render(<TradingTerminalDock instrumentId="crypto:BINANCE:spot:BTC-USDT" bindingId={null} />);
+
+    const dock = screen.getByRole('region', { name: 'Paper trading activity' });
+    const fullscreen = screen.getByRole('button', { name: 'Fullscreen paper trading panel' });
+    expect(dock).not.toHaveClass('is-fullscreen');
+
+    await act(async () => fullscreen.click());
+    expect(dock).toHaveClass('is-fullscreen');
+    expect(screen.getByRole('button', { name: 'Exit fullscreen paper trading panel' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Minimize paper trading panel' })).toHaveAttribute('aria-expanded', 'true');
+
+    await act(async () => screen.getByRole('button', { name: 'Exit fullscreen paper trading panel' }).click());
+    expect(dock).not.toHaveClass('is-fullscreen');
   });
 
   it('projects a working order into the open positions view', async () => {

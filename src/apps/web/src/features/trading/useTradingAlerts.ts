@@ -55,7 +55,13 @@ export function useTradingAlertMutations() {
     });
   };
 
-  return { refresh, replace };
+  const remove = (alertId: string) => {
+    queryClient.setQueryData<TradingAlert[]>(TRADING_ALERTS_QUERY_KEY, (current = []) => (
+      current.filter((alert) => alert.alert_id !== alertId)
+    ));
+  };
+
+  return { refresh, replace, remove };
 }
 
 export function useTradingAlertTriggers(options: { poll?: boolean } = {}) {

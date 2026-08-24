@@ -5,6 +5,7 @@ from .engine import (
     exponential_moving_average,
     relative_strength_index,
     simple_moving_average,
+    stochastic_rsi,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "simple_moving_average",
     "exponential_moving_average",
     "relative_strength_index",
+    "stochastic_rsi",
 ]

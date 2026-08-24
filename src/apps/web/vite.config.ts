@@ -58,6 +58,22 @@ function reactDevtoolsStandalonePlugin(): PluginOption {
   };
 }
 
+function scalableTypographyPostcssPlugin() {
+  return {
+    postcssPlugin: 'omnix-scalable-typography',
+    Declaration(declaration: { prop: string; value: string }) {
+      if (declaration.prop.toLowerCase() !== 'font-size' || !declaration.value.includes('px')) return;
+      declaration.value = declaration.value.replace(/(-?\d*\.?\d+)px\b/gu, (match, rawValue: string) => {
+        const pixels = Number(rawValue);
+        if (!Number.isFinite(pixels)) return match;
+        const rem = pixels / 16;
+        const normalized = Number(rem.toFixed(6));
+        return `${normalized}rem`;
+      });
+    },
+  };
+}
+
 function resolveGitSha(): string {
   const configured = process.env.VITE_GIT_SHA?.trim();
   if (configured) return configured;
@@ -132,6 +148,11 @@ export default defineConfig(({ command, mode }) => {
       : []),
     react(),
   ],
+  css: {
+    postcss: {
+      plugins: [scalableTypographyPostcssPlugin()],
+    },
+  },
   server: {
     port: 5173,
     proxy: {

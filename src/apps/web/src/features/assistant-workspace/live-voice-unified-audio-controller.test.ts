@@ -182,7 +182,7 @@ describe('live voice unified audio controller', () => {
       mocks.reporter,
       expect.objectContaining({ sessionScoped: true }),
     );
-    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(3));
     expect(mocks.session.setStartPolicy).toHaveBeenCalledTimes(1);
     expect(mocks.session.setStartPolicy).toHaveBeenCalledWith(expect.objectContaining({
       minimumBufferedSpeechMs: 400,
@@ -194,16 +194,23 @@ describe('live voice unified audio controller', () => {
     );
     expect(mocks.session.enqueueOutputPhrase).toHaveBeenNthCalledWith(
       1,
-      'Hello there. This first phrase is ready for speech.',
+      'Hello there.',
       0,
       expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),
       {},
     );
     expect(mocks.session.enqueueOutputPhrase).toHaveBeenNthCalledWith(
       2,
-      'The second phrase should enter the same continuous queue.',
+      'This first phrase is ready for speech.',
       1,
       expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 1 }),
+      {},
+    );
+    expect(mocks.session.enqueueOutputPhrase).toHaveBeenNthCalledWith(
+      3,
+      'The second phrase should enter the same continuous queue.',
+      2,
+      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 2 }),
       {},
     );
     expect(mocks.recordSpy).toHaveBeenCalledWith(
@@ -216,10 +223,10 @@ describe('live voice unified audio controller', () => {
       expect.objectContaining({ sample_rate: 48_000, source: 'fallback' }),
       'controller',
     );
-    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.session.waitForOutputItem).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(mocks.reporter.close).toHaveBeenCalledWith(
       'turn_finished',
-      expect.objectContaining({ phrases: 2, text_chunks: 2, assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
+      expect.objectContaining({ phrases: 3, text_chunks: 2, assistant_turn_id: 'assistant-turn:t1', turn_kind: 'response' }),
     ));
     expect(document.querySelector<HTMLElement>('.assistant-voice-orb')?.dataset.voiceMode).toBe('listening');
   });
@@ -287,12 +294,21 @@ describe('live voice unified audio controller', () => {
     await waitFor(() => expect(
       fetchMock.mock.calls.some(([input]) => requestPath(input).endsWith('/live-call/greeting/stream')),
     ).toBe(true));
-    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledWith(
-      'Hey there! How is your day going?',
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(2));
+    expect(mocks.session.enqueueOutputPhrase).toHaveBeenNthCalledWith(
+      1,
+      'Hey there!',
       0,
       expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 0 }),
       {},
-    ));
+    );
+    expect(mocks.session.enqueueOutputPhrase).toHaveBeenNthCalledWith(
+      2,
+      'How is your day going?',
+      1,
+      expect.objectContaining({ generationEpoch: expect.any(Number), outputOrder: 1 }),
+      {},
+    );
     expect(mocks.recordSpy).toHaveBeenCalledWith(
       'turn_intercepted',
       expect.objectContaining({ turn_kind: 'greeting', request_path: '/api/chat/sessions/s1/live-call/greeting/stream' }),
@@ -321,7 +337,7 @@ describe('live voice unified audio controller', () => {
     await window.fetch('/api/chat/sessions/s1/live-call/runtime');
     window.dispatchEvent(new CustomEvent('omnix:assistant-live-voice-call-connected'));
 
-    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.session.enqueueOutputPhrase).toHaveBeenCalledTimes(2));
     const greetingCall = fetchMock.mock.calls.find(([input]) => requestPath(input).endsWith('/live-call/greeting/stream'));
     const signal = greetingCall?.[1]?.signal as AbortSignal;
     expect(signal.aborted).toBe(false);

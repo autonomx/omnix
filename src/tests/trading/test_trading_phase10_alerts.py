@@ -69,10 +69,10 @@ class FakeAlertRepository:
         current = self.alerts[alert_id]
         if current.revision != expected_revision:
             raise RevisionConflict("stale alert")
+        self.alerts.pop(alert_id)
         archived = current.model_copy(
             update={"enabled": False, "revision": current.revision + 1}
         )
-        self.alerts[alert_id] = archived
         return archived
 
     def list_triggers(self, limit: int = 200):
@@ -387,3 +387,4 @@ def test_alert_routes_support_revisioned_policy_and_trigger_history() -> None:
     )
     assert archived.status_code == 200
     assert archived.json()["enabled"] is False
+    assert client.get("/api/trading/alerts").json()["alerts"] == []

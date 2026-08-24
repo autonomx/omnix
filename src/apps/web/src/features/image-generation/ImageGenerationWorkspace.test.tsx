@@ -195,14 +195,14 @@ describe('image job synchronization helpers', () => {
         status: 'running',
         output_refs: [{ type: 'image', asset_id: 'asset-ignored' }],
       },
-    ] as JobRecord[];
+    ] as unknown as JobRecord[];
 
     expect(completedImageAssetIds(jobs)).toEqual(['asset-one', 'asset-two']);
   });
 
   it('polls only while an image job is active', () => {
-    const active = { jobs: [{ status: 'running' }] } as JobListResponse;
-    const completed = { jobs: [{ status: 'completed' }] } as JobListResponse;
+    const active = { jobs: [{ status: 'running' }] } as unknown as JobListResponse;
+    const completed = { jobs: [{ status: 'completed' }] } as unknown as JobListResponse;
 
     expect(hasActiveImageJobs(active)).toBe(true);
     expect(hasActiveImageJobs(completed)).toBe(false);

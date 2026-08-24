@@ -1,0 +1,43 @@
+name: Trading strategy dataset export
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-frozen-datasets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact workflow head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Restore immutable trading datasets
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: trading-liquidity-datasets-v1-${{ runner.os }}-dataset-export-${{ github.run_id }}
+          restore-keys: |
+            trading-liquidity-datasets-v1-${{ runner.os }}-
+
+      - name: Verify complete frozen dataset
+        shell: bash
+        run: |
+          count="$(find .cache/trading-liquidity-datasets -type f -name 'session-*.json' 2>/dev/null | wc -l | tr -d ' ')"
+          echo "Frozen session datasets: ${count}"
+          if [[ "${count}" -lt 10 ]]; then
+            echo "::error::Expected the 10 fingerprint-verified frozen sessions. This export is cache-only and will not call Alpaca."
+            exit 2
+          fi
+
+      - name: Upload frozen datasets
+        uses: actions/upload-artifact@v4
+        with:
+          name: trading-frozen-datasets-2026-08-10_2026-08-21
+          path: .cache/trading-liquidity-datasets
+          if-no-files-found: error
+          retention-days: 30

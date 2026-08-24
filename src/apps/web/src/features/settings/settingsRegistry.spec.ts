@@ -5,7 +5,7 @@ import type { SettingDefinition, SettingsCategoryDefinition } from './settingsTy
 describe('settings registry', () => {
   it('defines the complete category navigation in stable order', () => {
     const categories = sortedSettingsCategories();
-    expect(categories).toHaveLength(12);
+    expect(categories).toHaveLength(13);
     expect(categories[0]?.id).toBe('overview');
     expect(categories.at(-1)?.id).toBe('diagnostics-developer');
     expect(categories.every((category, index) => index === 0 || category.order >= categories[index - 1]!.order)).toBe(true);
@@ -14,6 +14,7 @@ describe('settings registry', () => {
   it('accepts the built-in registry', () => {
     expect(validateSettingsRegistry()).toEqual([]);
     expect(settingsByCategory('ai-providers').map((setting) => setting.key)).toContain('global.providers.llm');
+    expect(settingsByCategory('trading-market-data').map((setting) => setting.key)).toContain('trading.marketData.coinmarketcap');
     expect(isSettingsCategoryId('voice-audio')).toBe(true);
     expect(isSettingsCategoryId('billing')).toBe(false);
   });

@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -68,7 +69,12 @@ class FrozenDatasetSnapshot(BaseModel):
             raise ValueError("frozen dataset bars must share one interval")
         if tuple(sorted(self.bars, key=lambda bar: bar.start_time)) != self.bars:
             raise ValueError("frozen dataset bars must be ordered")
-        gaps = dataset_gaps(self.bars, self.interval)
+        gaps = dataset_gaps(
+            self.bars,
+            self.interval,
+            session_calendar=self.session_calendar,
+            exchange_timezone=self.exchange_timezone,
+        )
         if gaps and self.gap_policy == "fail":
             raise ValueError(f"frozen dataset contains {len(gaps)} gap(s)")
         expected = frozen_dataset_fingerprint(
@@ -113,16 +119,62 @@ def interval_seconds(interval: str) -> int:
         raise ValueError(f"unsupported replay interval: {interval}") from exc
 
 
+def _is_continuous_calendar(session_calendar: str) -> bool:
+    normalized = session_calendar.strip().lower()
+    return normalized in {"24x7", "24/7", "continuous", "crypto"}
+
+
+def _non_continuous_boundary_is_expected(
+    previous: FrozenBar,
+    current: FrozenBar,
+    *,
+    interval: str,
+    exchange_timezone: str,
+) -> bool:
+    """Identify exchange closures without pretending they are missing bars.
+
+    Intraday data is only expected to be contiguous inside the same dated
+    session. Daily/monthly bars represent exchange sessions, so non-contiguous
+    wall-clock dates are expected rather than data holes. Missing-session audits
+    require a point-in-time exchange calendar dataset and belong upstream of the
+    generic replay container.
+    """
+    zone = ZoneInfo(exchange_timezone or "UTC")
+    previous_local = previous.start_time.astimezone(zone)
+    current_local = current.start_time.astimezone(zone)
+    if interval in {"1d", "1mo"}:
+        return previous_local.date() != current_local.date()
+    if previous_local.date() != current_local.date():
+        return True
+    if previous.session != current.session:
+        return True
+    return False
+
+
 def dataset_gaps(
     bars: tuple[FrozenBar, ...] | list[FrozenBar],
     interval: str,
+    *,
+    session_calendar: str = "24x7",
+    exchange_timezone: str = "UTC",
 ) -> list[tuple[datetime, datetime]]:
+    """Return actual missing-bar boundaries, not normal exchange closures."""
     expected = timedelta(seconds=interval_seconds(interval))
-    return [
-        (previous.end_time, current.start_time)
-        for previous, current in zip(bars, bars[1:])
-        if current.start_time - previous.start_time != expected
-    ]
+    gaps: list[tuple[datetime, datetime]] = []
+    continuous = _is_continuous_calendar(session_calendar)
+    for previous, current in zip(bars, bars[1:]):
+        delta = current.start_time - previous.start_time
+        if delta == expected:
+            continue
+        if not continuous and _non_continuous_boundary_is_expected(
+            previous,
+            current,
+            interval=interval,
+            exchange_timezone=exchange_timezone,
+        ):
+            continue
+        gaps.append((previous.end_time, current.start_time))
+    return gaps
 
 
 def frozen_dataset_fingerprint(

@@ -4,6 +4,25 @@ export const CORE_INDICATOR_FORMULA_VERSION = 'omnix-indicators-v2';
 
 export type IndicatorPoint = { time: string; value: number };
 export type IndicatorLineStyle = 'solid' | 'dotted' | 'dashed' | 'large-dashed' | 'sparse-dotted';
+export type IndicatorPaneScale = {
+  min: number;
+  max: number;
+  band?: { from: number; to: number; color: string };
+  levels: readonly { value: number; lineStyle: IndicatorLineStyle }[];
+};
+export type VolumeProfileBin = {
+  low: number;
+  high: number;
+  volume: number;
+};
+export type VolumeProfileData = {
+  bins: readonly VolumeProfileBin[];
+  poc: number;
+  pocIndex: number;
+  valueAreaHigh: number;
+  valueAreaLow: number;
+  maxVolume: number;
+};
 export type CoreIndicatorStyle = {
   plots?: Record<string, boolean>;
   colors?: Record<string, string>;
@@ -32,6 +51,7 @@ export type IndicatorOutput = {
   labelsOnPriceScale?: boolean;
   valuesInStatusLine?: boolean;
   inputsInStatusLine?: boolean;
+  volumeProfile?: VolumeProfileData;
 };
 export type CoreIndicatorId =
   | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap'
@@ -65,6 +85,34 @@ export function indicatorUsesSeparatePane(id: CoreIndicatorId): boolean {
     || id === 'macd-dema'
     || id === 'rsi-divergence'
     || id === 'stochastic-rsi';
+}
+
+export function indicatorPaneScale(id: CoreIndicatorId): IndicatorPaneScale | null {
+  if (id === 'rsi') {
+    return {
+      min: 0,
+      max: 100,
+      band: { from: 30, to: 70, color: '#74c0fc' },
+      levels: [
+        { value: 30, lineStyle: 'dashed' },
+        { value: 50, lineStyle: 'dotted' },
+        { value: 70, lineStyle: 'dashed' },
+      ],
+    };
+  }
+  if (id === 'stochastic-rsi') {
+    return {
+      min: 0,
+      max: 100,
+      band: { from: 20, to: 80, color: '#74c0fc' },
+      levels: [
+        { value: 20, lineStyle: 'dashed' },
+        { value: 50, lineStyle: 'dotted' },
+        { value: 80, lineStyle: 'dashed' },
+      ],
+    };
+  }
+  return null;
 }
 
 function closes(bars: readonly MarketBar[]): number[] {
@@ -312,7 +360,7 @@ function fairValueGapPoints(bars: readonly MarketBar[]): { upper: IndicatorPoint
   return { upper, lower };
 }
 
-function volumeProfileLevels(bars: readonly MarketBar[], period: number): { poc: number; valueAreaHigh: number; valueAreaLow: number } | null {
+function volumeProfileData(bars: readonly MarketBar[], period: number): VolumeProfileData | null {
   validatePeriod(period);
   const window = bars.slice(Math.max(0, bars.length - period));
   if (!window.length) return null;
@@ -328,6 +376,7 @@ function volumeProfileLevels(bars: readonly MarketBar[], period: number): { poc:
     volumes[index] += Math.max(0, Number(bar.volume));
   });
   const pocIndex = volumes.indexOf(Math.max(...volumes));
+  const maxVolume = volumes[pocIndex] ?? 0;
   const totalVolume = volumes.reduce((sum, value) => sum + value, 0);
   let included = volumes[pocIndex] ?? 0;
   let left = pocIndex;
@@ -344,9 +393,16 @@ function volumeProfileLevels(bars: readonly MarketBar[], period: number): { poc:
     } else break;
   }
   return {
+    bins: volumes.map((volume, index) => ({
+      low: low + index * width,
+      high: low + (index + 1) * width,
+      volume,
+    })),
     poc: low + (pocIndex + 0.5) * width,
+    pocIndex,
     valueAreaHigh: low + (right + 1) * width,
     valueAreaLow: low + left * width,
+    maxVolume,
   };
 }
 
@@ -513,14 +569,15 @@ function calculateIndicatorOutputs(
       const window = rsi.slice(index, index + period);
       const minimum = Math.min(...window);
       const maximum = Math.max(...window);
-      return maximum === minimum ? 0.5 : (value - minimum) / (maximum - minimum);
+      return maximum === minimum ? 50 : Math.max(0, Math.min(100, (value - minimum) / (maximum - minimum) * 100));
     });
     const k = simpleMovingAverage(raw, smoothing);
     const d = simpleMovingAverage(k, signal);
     const start = period + period - 1 + smoothing - 1 + signal - 1;
+    const bounded = (value: number) => Math.max(0, Math.min(100, value));
     return [
-      { key: 'stochastic-rsi:k', title: 'Stoch RSI %K', pane: 1, kind: 'line', points: points(bars, start, d.length ? k.slice(signal - 1) : []) },
-      { key: 'stochastic-rsi:d', title: 'Stoch RSI %D', pane: 1, kind: 'line', points: points(bars, start, d) },
+      { key: 'stochastic-rsi:k', title: 'Stoch RSI %K', pane: 1, kind: 'line', points: points(bars, start, d.length ? k.slice(signal - 1).map(bounded) : []) },
+      { key: 'stochastic-rsi:d', title: 'Stoch RSI %D', pane: 1, kind: 'line', points: points(bars, start, d.map(bounded)) },
     ];
   }
   if (instance.id === 'swing-liquidity') {
@@ -531,13 +588,13 @@ function calculateIndicatorOutputs(
     ];
   }
   if (instance.id === 'volume-profile') {
-    const profile = volumeProfileLevels(bars, instance.period || 100);
+    const profile = volumeProfileData(bars, instance.period || 100);
     if (!profile) return [];
     const times = bars.map((bar) => bar.start_time);
     return [
-      { key: 'volume-profile:poc', title: 'POC', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.poc })) },
-      { key: 'volume-profile:value-area-high', title: 'VAH', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.valueAreaHigh })) },
-      { key: 'volume-profile:value-area-low', title: 'VAL', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.valueAreaLow })) },
+      { key: 'volume-profile:poc', title: 'POC', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.poc })), volumeProfile: profile },
+      { key: 'volume-profile:value-area-high', title: 'VAH', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.valueAreaHigh })), volumeProfile: profile },
+      { key: 'volume-profile:value-area-low', title: 'VAL', pane: 0, kind: 'line', points: times.map((time) => ({ time, value: profile.valueAreaLow })), volumeProfile: profile },
     ];
   }
   const anchorIndex = instance.anchorTime
