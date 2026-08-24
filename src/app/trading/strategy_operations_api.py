@@ -141,6 +141,7 @@ def create_trading_strategy_operations_router() -> APIRouter:
                 expected_type=TradingStrategyProspectiveEconomicMonitor,
                 configured_enabled=strategy_prospective_economic_monitor_enabled(),
                 counter_names=(
+                    "candidate_capture_count",
                     "signal_capture_count",
                     "outcome_capture_count",
                     "incomplete_outcome_count",
