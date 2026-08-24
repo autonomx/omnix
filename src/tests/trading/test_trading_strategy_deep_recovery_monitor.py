@@ -190,6 +190,11 @@ def test_deep_recovery_monitor_persists_one_shadow_signal_with_no_execution_auth
     assert asyncio.run(monitor.run_once()) == 1
     assert asyncio.run(monitor.run_once()) == 0
 
+    states = [event for event in repository.events if event.event_type == "deep_recovery_state"]
+    assert len(states) == 1
+    assert states[0].state == "signal_ready"
+    assert monitor.state_transition_count == 1
+
     signals = [event for event in repository.events if event.event_type == "deep_recovery_shadow"]
     assert len(signals) == 1
     signal = signals[0]
