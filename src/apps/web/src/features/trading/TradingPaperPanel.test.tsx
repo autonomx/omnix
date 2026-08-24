@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const paperApi = vi.hoisted(() => ({
@@ -11,11 +11,17 @@ const paperApi = vi.hoisted(() => ({
   archiveAccount: vi.fn(),
 }));
 
+const replayApi = vi.hoisted(() => ({
+  advanceExecution: vi.fn(),
+  placeExecutionOrder: vi.fn(),
+}));
+
 const tradingApi = vi.hoisted(() => ({
   quote: vi.fn(),
 }));
 
 vi.mock('./tradingPaperApi', () => ({ tradingPaperApi: paperApi }));
+vi.mock('./tradingReplayApi', () => ({ tradingReplayApi: replayApi }));
 vi.mock('./tradingApi', () => ({ tradingApi }));
 
 import { TradingPaperPanel } from './TradingPaperPanel';
@@ -31,22 +37,44 @@ const account = {
   revision: 1,
 };
 
+const accountSnapshot = () => ({
+  account,
+  balances: [{ currency: 'USD', available: '0', reserved: '100000' }],
+  positions: [],
+  open_orders: [],
+  order_history: [],
+  recent_fills: [],
+  recent_ledger: [],
+});
+
 describe('TradingPaperPanel', () => {
   beforeEach(() => {
     useTradingStore.setState({ replayMode: false, replaySessionId: 0 });
     useTradingReplayStore.getState().clear();
     paperApi.accounts.mockResolvedValue([account]);
-    paperApi.snapshot.mockResolvedValue({
-      account,
-      balances: [{ currency: 'USD', available: '0', reserved: '100000' }],
-      positions: [],
-      open_orders: [],
-      recent_fills: [],
-      recent_ledger: [],
-    });
+    paperApi.snapshot.mockResolvedValue(accountSnapshot());
     tradingApi.quote.mockResolvedValue({ price: '75.61', bid: '75.60', ask: '75.62' });
     paperApi.processObservation.mockResolvedValue({ fills: [] });
     paperApi.placeOrder.mockRejectedValue(new Error('Paper Trading request failed (422): insufficient_paper_cash'));
+    replayApi.advanceExecution.mockImplementation(async (snapshot) => snapshot);
+    replayApi.placeExecutionOrder.mockImplementation(async (snapshot, order) => {
+      const filled = {
+        account_id: snapshot.account.account_id,
+        ...order,
+        status: 'filled',
+        filled_quantity: order.quantity,
+        average_fill_price: '101.35125',
+        reserved_cash: '0',
+      };
+      return {
+        snapshot: {
+          ...snapshot,
+          order_history: [...(snapshot.order_history ?? []), filled],
+          open_orders: [],
+        },
+        order: filled,
+      };
+    });
   });
 
   afterEach(() => {
@@ -84,7 +112,7 @@ describe('TradingPaperPanel', () => {
     expect(confirmation).toHaveTextContent('Buy 3');
   });
 
-  it('immediately observes an accepted market order that is still open', async () => {
+  it('leaves an accepted open market order to server-authoritative execution', async () => {
     paperApi.placeOrder.mockResolvedValue({ status: 'open', reference_price: '75.62' });
 
     render(<TradingPaperPanel instrumentId="crypto:BINANCE:spot:SOL-USDT" bindingId={null} />);
@@ -93,15 +121,15 @@ describe('TradingPaperPanel', () => {
     fireEvent.change(quantity, { target: { value: '3' } });
     fireEvent.click(screen.getByRole('button', { name: /Buy 3 SOL\/USDT MARKET/ }));
 
-    await screen.findByRole('status');
-    expect(paperApi.processObservation).toHaveBeenCalledWith('paper-1', expect.objectContaining({
+    expect(await screen.findByRole('status')).toHaveTextContent('Market order submitted on');
+    expect(paperApi.placeOrder).toHaveBeenCalledWith('paper-1', expect.objectContaining({
       instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
-      provider: 'paper-reference',
-      price: '75.62',
+      reference_price: '75.62',
     }));
+    expect(paperApi.processObservation).not.toHaveBeenCalled();
   });
 
-  it('uses the replay bar price without creating a persisted paper order', async () => {
+  it('uses the replay bar through the shared server kernel without creating a persisted paper order', async () => {
     useTradingStore.setState({ replayMode: true, replaySessionId: 7 });
     useTradingReplayStore.getState().setBar({
       instrument_id: 'crypto:BINANCE:spot:SOL-USDT', interval: '1h',
@@ -122,9 +150,14 @@ describe('TradingPaperPanel', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Market order executed on');
     expect(paperApi.placeOrder).not.toHaveBeenCalled();
     expect(paperApi.processObservation).not.toHaveBeenCalled();
-    expect(useTradingReplayStore.getState().snapshot?.order_history).toHaveLength(1);
+    expect(replayApi.placeExecutionOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ account: expect.objectContaining({ account_id: 'paper-1' }) }),
+      expect.objectContaining({ quantity: '1', reference_price: '101.25' }),
+      expect.objectContaining({ close: '101.25' }),
+    );
+    await waitFor(() => expect(useTradingReplayStore.getState().snapshot?.order_history).toHaveLength(1));
     expect(useTradingReplayStore.getState().snapshot?.order_history?.[0]).toMatchObject({
-      status: 'filled', average_fill_price: '101.25',
+      status: 'filled', average_fill_price: '101.35125',
     });
   });
 });
