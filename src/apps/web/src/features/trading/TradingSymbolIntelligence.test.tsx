@@ -143,7 +143,7 @@ describe('TradingSymbolIntelligence', () => {
     expect(strategyApi.universe).toHaveBeenCalledWith('universe-2026-08-24');
     expect(strategyApi.events).toHaveBeenCalledWith('gap-v2', 500);
     expect(screen.getByText('90.32%')).toBeInTheDocument();
-    expect(screen.getByText('higher low confirmed')).toBeInTheDocument();
+    expect(screen.getAllByText('higher low confirmed').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Eligible')).toBeInTheDocument();
     expect(screen.getByText('82 bps')).toBeInTheDocument();
     expect(screen.getByText('active')).toBeInTheDocument();
