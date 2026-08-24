@@ -1852,10 +1852,19 @@ export function selectFreshChatSession<T extends { id?: string; message_count?: 
 ): T {
   if (!mutationSession) return queriedSession;
   if (!queriedSession) return mutationSession;
-  if (mutationSession.id !== queriedSession.id) return mutationSession;
+  // A mutation result remains available after the user switches sessions.
+  // It must never replace the newly selected session, even when it is newer.
+  if (mutationSession.id !== queriedSession.id) return queriedSession;
   const mutationCount = mutationSession.message_count ?? mutationSession.messages?.length ?? 0;
   const queryCount = queriedSession.message_count ?? queriedSession.messages?.length ?? 0;
-  return queryCount > mutationCount ? queriedSession : mutationSession;
+  if (queryCount !== mutationCount) return queryCount > mutationCount ? queriedSession : mutationSession;
+
+  // Some responses carry the total message_count but only a partial messages
+  // projection. When the reported counts tie, prefer the snapshot that can
+  // actually render more of the transcript.
+  const mutationMessageLength = mutationSession.messages?.length ?? 0;
+  const queryMessageLength = queriedSession.messages?.length ?? 0;
+  return queryMessageLength >= mutationMessageLength ? queriedSession : mutationSession;
 }
 
 function AssistantWorkspaceView({ activeView, assistantSettings, selectedSessionId, chatProviders, enabledToolCount, initialToolConnectionMessage, initialToolId, modelLabel, onResetAssistantSettings, onSessionResolved, onShowTools, onStartLiveCall, onUpdateAssistantSettings, providerLabel, runtimeConfig, settingsStatus, speechInputLabel, toolExecutionRows, ttsOutputLabel, voiceProfiles, voiceProfilesLoading }: { activeView: Exclude<AssistantView, 'chats'>; assistantSettings: AssistantSettings; selectedSessionId: string | null; chatProviders: ReturnType<typeof chatCapableProviders>; enabledToolCount: number; initialToolConnectionMessage: string | null; initialToolId: string | null; modelLabel: string; onResetAssistantSettings: () => void; onSessionResolved: (sessionId: string) => void; onShowTools: () => void; onStartLiveCall: () => void | Promise<void>; onUpdateAssistantSettings: (settings: AssistantSettings) => void; providerLabel: string; runtimeConfig: AssistantWorkspaceRuntimeConfig; settingsStatus: string | null; speechInputLabel: string; toolExecutionRows: number; ttsOutputLabel: string; voiceProfiles: VoiceProfileAsset[]; voiceProfilesLoading: boolean }) {
