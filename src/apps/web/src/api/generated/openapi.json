@@ -5541,6 +5541,7 @@
               "stop",
               "target",
               "rsi",
+              "time",
               "eod"
             ],
             "title": "Exit Reason",
@@ -5655,7 +5656,7 @@
       },
       "GapPullbackConfig-Input": {
         "additionalProperties": false,
-        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.\n\nVersion 1.2.0 reserves the same market-structure semantics for a separately\nvalidated HTR research-policy gate. It is fail-closed until a reviewed HTR-14\nvalidation artifact explicitly permits promotion; 1.0/1.1 semantics do not\nchange when HTR code evolves.",
+        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.\n\nVersion 1.2.0 reserves the same market-structure semantics for a separately\nvalidated HTR research-policy gate. It is fail-closed until a reviewed HTR-14\nvalidation artifact explicitly permits promotion; 1.0/1.1 semantics do not\nchange when HTR code evolves.\n\nVersion 2.0.0 is a separately versioned gap-as-impulse failed-selloff\ndefinition. It waits for a causal L1 -> B1 -> higher-L2 sequence and a\ndirect B1/VWAP break. The v2-only fields below are ignored by all 1.x\nevaluators so persisted 1.x behavior remains unchanged.",
         "properties": {
           "allow_missing_tod_rvol": {
             "default": false,
@@ -6018,7 +6019,8 @@
             "enum": [
               "1.0.0",
               "1.1.0",
-              "1.2.0"
+              "1.2.0",
+              "2.0.0"
             ],
             "title": "Strategy Version",
             "type": "string"
@@ -6052,6 +6054,105 @@
             "title": "Universe Scan Time Et",
             "type": "string"
           },
+          "v2_max_hold_minutes": {
+            "default": 60,
+            "maximum": 390.0,
+            "minimum": 1.0,
+            "title": "V2 Max Hold Minutes",
+            "type": "integer"
+          },
+          "v2_maximum_l2_to_signal_minutes": {
+            "default": 8,
+            "maximum": 390.0,
+            "minimum": 1.0,
+            "title": "V2 Maximum L2 To Signal Minutes",
+            "type": "integer"
+          },
+          "v2_minimum_breakout_volume_ratio": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "V2 Minimum Breakout Volume Ratio"
+          },
+          "v2_minimum_l1_to_b1_minutes": {
+            "default": 4,
+            "maximum": 120.0,
+            "minimum": 0.0,
+            "title": "V2 Minimum L1 To B1 Minutes",
+            "type": "integer"
+          },
+          "v2_profit_protection_trigger_r": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 20.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "0.75",
+            "title": "V2 Profit Protection Trigger R"
+          },
+          "v2_protected_stop_r": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.25",
+            "title": "V2 Protected Stop R"
+          },
+          "v2_recovery_min_pct": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "5",
+            "title": "V2 Recovery Min Pct"
+          },
+          "v2_second_pullback_min_pct": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "2",
+            "title": "V2 Second Pullback Min Pct"
+          },
           "volume_lookback_bars": {
             "default": 10,
             "maximum": 100.0,
@@ -6065,7 +6166,7 @@
       },
       "GapPullbackConfig-Output": {
         "additionalProperties": false,
-        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.\n\nVersion 1.2.0 reserves the same market-structure semantics for a separately\nvalidated HTR research-policy gate. It is fail-closed until a reviewed HTR-14\nvalidation artifact explicitly permits promotion; 1.0/1.1 semantics do not\nchange when HTR code evolves.",
+        "description": "Versioned deterministic definition for gap_pullback_v1.\n\nVersion 1.0 defaults remain permissive for persisted compatibility. The\nTrading UI creates 1.1.0 strategy instances with the stricter failed-selloff\nresearch/quality defaults explicitly populated and fully configurable.\n\nVersion 1.2.0 reserves the same market-structure semantics for a separately\nvalidated HTR research-policy gate. It is fail-closed until a reviewed HTR-14\nvalidation artifact explicitly permits promotion; 1.0/1.1 semantics do not\nchange when HTR code evolves.\n\nVersion 2.0.0 is a separately versioned gap-as-impulse failed-selloff\ndefinition. It waits for a causal L1 -> B1 -> higher-L2 sequence and a\ndirect B1/VWAP break. The v2-only fields below are ignored by all 1.x\nevaluators so persisted 1.x behavior remains unchanged.",
         "properties": {
           "allow_missing_tod_rvol": {
             "default": false,
@@ -6280,7 +6381,8 @@
             "enum": [
               "1.0.0",
               "1.1.0",
-              "1.2.0"
+              "1.2.0",
+              "2.0.0"
             ],
             "title": "Strategy Version",
             "type": "string"
@@ -6312,6 +6414,64 @@
             "default": "09:20:00",
             "format": "time",
             "title": "Universe Scan Time Et",
+            "type": "string"
+          },
+          "v2_max_hold_minutes": {
+            "default": 60,
+            "maximum": 390.0,
+            "minimum": 1.0,
+            "title": "V2 Max Hold Minutes",
+            "type": "integer"
+          },
+          "v2_maximum_l2_to_signal_minutes": {
+            "default": 8,
+            "maximum": 390.0,
+            "minimum": 1.0,
+            "title": "V2 Maximum L2 To Signal Minutes",
+            "type": "integer"
+          },
+          "v2_minimum_breakout_volume_ratio": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "V2 Minimum Breakout Volume Ratio",
+            "type": "string"
+          },
+          "v2_minimum_l1_to_b1_minutes": {
+            "default": 4,
+            "maximum": 120.0,
+            "minimum": 0.0,
+            "title": "V2 Minimum L1 To B1 Minutes",
+            "type": "integer"
+          },
+          "v2_profit_protection_trigger_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "0.75",
+            "title": "V2 Profit Protection Trigger R"
+          },
+          "v2_protected_stop_r": {
+            "default": "0.25",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "V2 Protected Stop R",
+            "type": "string"
+          },
+          "v2_recovery_min_pct": {
+            "default": "5",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "V2 Recovery Min Pct",
+            "type": "string"
+          },
+          "v2_second_pullback_min_pct": {
+            "default": "2",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "V2 Second Pullback Min Pct",
             "type": "string"
           },
           "volume_lookback_bars": {
@@ -6424,6 +6584,17 @@
             ],
             "title": "L1"
           },
+          "l1_to_b1_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L1 To B1 Minutes"
+          },
           "l2": {
             "anyOf": [
               {
@@ -6435,6 +6606,17 @@
               }
             ],
             "title": "L2"
+          },
+          "l2_to_signal_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "L2 To Signal Minutes"
           },
           "minutes_since_open": {
             "anyOf": [
@@ -6522,6 +6704,18 @@
             "minimum": 0.0,
             "title": "Reclaim Break Score",
             "type": "integer"
+          },
+          "second_pullback_depth_pct": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Second Pullback Depth Pct"
           },
           "session_vwap": {
             "anyOf": [
@@ -12435,6 +12629,46 @@
         "title": "StrategyEventListResponse",
         "type": "object"
       },
+      "StrategyOperationsStatus": {
+        "properties": {
+          "alpaca_status_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
+          "deep_recovery_shadow_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
+          "execution_authority": {
+            "const": false,
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "strategy_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
+          "universe_archive_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
+          "v2_qualification_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          }
+        },
+        "required": [
+          "observed_at",
+          "strategy_monitor",
+          "deep_recovery_shadow_monitor",
+          "universe_archive_monitor",
+          "v2_qualification_monitor",
+          "alpaca_status_monitor"
+        ],
+        "title": "StrategyOperationsStatus",
+        "type": "object"
+      },
       "StrategyProtection": {
         "additionalProperties": false,
         "properties": {
@@ -13557,6 +13791,70 @@
           }
         },
         "title": "StrategyRiskProfile",
+        "type": "object"
+      },
+      "StrategyRuntimeMonitorStatus": {
+        "properties": {
+          "configured_enabled": {
+            "title": "Configured Enabled",
+            "type": "boolean"
+          },
+          "counters": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counters",
+            "type": "object"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "registered": {
+            "title": "Registered",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "configured_enabled",
+          "registered",
+          "running"
+        ],
+        "title": "StrategyRuntimeMonitorStatus",
         "type": "object"
       },
       "StrategySignal": {
@@ -16460,6 +16758,220 @@
         ],
         "title": "UsageScope",
         "type": "string"
+      },
+      "V2ProspectiveQualification": {
+        "properties": {
+          "auto_paper_authorized": {
+            "default": false,
+            "title": "Auto Paper Authorized",
+            "type": "boolean"
+          },
+          "current_profile_fingerprint": {
+            "title": "Current Profile Fingerprint",
+            "type": "string"
+          },
+          "distinct_sessions": {
+            "minimum": 0.0,
+            "title": "Distinct Sessions",
+            "type": "integer"
+          },
+          "distinct_symbols": {
+            "minimum": 0.0,
+            "title": "Distinct Symbols",
+            "type": "integer"
+          },
+          "evidence_fingerprint": {
+            "title": "Evidence Fingerprint",
+            "type": "string"
+          },
+          "execution_match_rate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Match Rate"
+          },
+          "expectancy_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectancy R"
+          },
+          "expected_profile_fingerprint": {
+            "title": "Expected Profile Fingerprint",
+            "type": "string"
+          },
+          "matched_eligible_trade_count": {
+            "minimum": 0.0,
+            "title": "Matched Eligible Trade Count",
+            "type": "integer"
+          },
+          "max_drawdown_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown R"
+          },
+          "one_sided_90_lcb_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Sided 90 Lcb R"
+          },
+          "profile_match": {
+            "title": "Profile Match",
+            "type": "boolean"
+          },
+          "prospective_start": {
+            "default": "2026-08-24",
+            "format": "date",
+            "title": "Prospective Start",
+            "type": "string"
+          },
+          "qualification_version": {
+            "default": "v2-prospective-qualification-1",
+            "title": "Qualification Version",
+            "type": "string"
+          },
+          "qualified": {
+            "default": false,
+            "title": "Qualified",
+            "type": "boolean"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "replay_trade_count": {
+            "minimum": 0.0,
+            "title": "Replay Trade Count",
+            "type": "integer"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/V2QualificationThresholds"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "expected_profile_fingerprint",
+          "current_profile_fingerprint",
+          "profile_match",
+          "replay_trade_count",
+          "matched_eligible_trade_count",
+          "distinct_sessions",
+          "distinct_symbols",
+          "evidence_fingerprint"
+        ],
+        "title": "V2ProspectiveQualification",
+        "type": "object"
+      },
+      "V2QualificationReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "review_note": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Review Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_note"
+        ],
+        "title": "V2QualificationReviewRequest",
+        "type": "object"
+      },
+      "V2QualificationThresholds": {
+        "properties": {
+          "live_match_window_minutes": {
+            "default": 10,
+            "title": "Live Match Window Minutes",
+            "type": "integer"
+          },
+          "maximum_drawdown_r": {
+            "default": "5",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Drawdown R",
+            "type": "string"
+          },
+          "minimum_distinct_sessions": {
+            "default": 15,
+            "title": "Minimum Distinct Sessions",
+            "type": "integer"
+          },
+          "minimum_distinct_symbols": {
+            "default": 10,
+            "title": "Minimum Distinct Symbols",
+            "type": "integer"
+          },
+          "minimum_execution_match_rate": {
+            "default": "0.90",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Execution Match Rate",
+            "type": "string"
+          },
+          "minimum_expectancy_r": {
+            "default": "0.20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Expectancy R",
+            "type": "string"
+          },
+          "minimum_matched_trades": {
+            "default": 20,
+            "title": "Minimum Matched Trades",
+            "type": "integer"
+          },
+          "one_sided_confidence_level": {
+            "default": "0.90",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "One Sided Confidence Level",
+            "type": "string"
+          },
+          "prospective_start": {
+            "default": "2026-08-24",
+            "format": "date",
+            "title": "Prospective Start",
+            "type": "string"
+          }
+        },
+        "title": "V2QualificationThresholds",
+        "type": "object"
       },
       "ValidationError": {
         "properties": {
@@ -23658,6 +24170,121 @@
         "summary": "Run Llm Research",
         "tags": [
           "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/v2/qualification": {
+      "get": {
+        "operationId": "get_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ProspectiveQualification"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get V2 Qualification",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/v2/qualification/review": {
+      "post": {
+        "operationId": "review_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2QualificationReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ProspectiveQualification"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review V2 Qualification",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategy-operations/status": {
+      "get": {
+        "operationId": "strategy_operations_status_api_trading_strategy_operations_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyOperationsStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Strategy Operations Status",
+        "tags": [
+          "trading-strategy-operations"
         ]
       }
     },

@@ -53,8 +53,11 @@ class FakeRuntime:
         for days_back in range(5, 0, -1):
             prior = self.session_date - timedelta(days=days_back)
             if prior.weekday() < 5:
-                bars.append({"t": f"{prior.isoformat()}T13:20:00Z", "c": 8, "v": 100})
-        bars.append({"t": f"{self.session_date.isoformat()}T13:20:00Z", "c": 10.4, "v": 600})
+                bars.append({"t": f"{prior.isoformat()}T13:19:00Z", "c": 8, "v": 100})
+        bars.append({"t": f"{self.session_date.isoformat()}T13:19:00Z", "c": 10.4, "v": 600})
+        # Alpaca timestamps minute bars at their start. This 09:20 ET bar is
+        # not complete at a 09:20 scan and must be causally invisible.
+        bars.append({"t": f"{self.session_date.isoformat()}T13:20:00Z", "c": 99, "v": 999999})
         return FakeResponse({"bars": {"ABC": bars}, "next_page_token": None})
 
 
@@ -93,10 +96,74 @@ def test_recent_alpaca_reconstruction_builds_explicit_approximate_universe_witho
     candidate = result.snapshot.candidates[0]
     assert candidate.instrument_id == "equity:NASDAQ:ABC"
     assert candidate.gap_pct == Decimal("30.0")
+    assert candidate.premarket_price == Decimal("10.4")
+    assert candidate.premarket_volume == Decimal("600")
+    assert candidate.tod_rvol == Decimal("6")
     assert candidate.spread_bps == Decimal("40")
     assert candidate.catalyst_evidence_ids == ()
     assert result.warnings
 
+
+
+def test_seed_scan_batches_one_thousand_symbols_without_changing_data_contract(monkeypatch) -> None:
+    session_date = date(2026, 8, 18)
+    symbols = [f"S{index:04d}" for index in range(1001)]
+
+    class BatchRuntime:
+        def __init__(self):
+            self.minute_seed_requests: list[tuple[str, ...]] = []
+
+        def get(self, url, *, params=None, headers=None, timeout=None, cancellation=None):
+            if url.endswith("/v2/assets"):
+                return FakeResponse([
+                    {"symbol": symbol, "exchange": "NASDAQ", "status": "active", "tradable": True}
+                    for symbol in symbols
+                ])
+            assert url.endswith("/v2/stocks/bars")
+            requested = tuple(str(params["symbols"]).split(","))
+            if params["timeframe"] == "1Day":
+                prior = session_date - timedelta(days=1)
+                return FakeResponse({
+                    "bars": {
+                        symbol: [{"t": f"{prior.isoformat()}T20:00:00Z", "o": 10, "c": 10}]
+                        for symbol in requested
+                    },
+                    "next_page_token": None,
+                })
+            self.minute_seed_requests.append(requested)
+            return FakeResponse({"bars": {}, "next_page_token": None})
+
+    monkeypatch.setattr(
+        reconstruction,
+        "alpaca_iex_auth_headers",
+        lambda: {"APCA-API-KEY-ID": "test-key", "APCA-API-SECRET-KEY": "test-secret"},
+    )
+    runtime = BatchRuntime()
+    config = GapPullbackConfig(
+        strategy_version="1.1.0",
+        minimum_gap_pct=Decimal("20"),
+        minimum_premarket_dollar_volume=Decimal("0"),
+        minimum_tod_rvol=Decimal("0"),
+        universe_discovery_count=10,
+    )
+
+    result = reconstruction.AlpacaHistoricalGapperReconstructor(
+        start_date=session_date,
+        end_date=session_date,
+        config=config,
+        assumed_spread_bps=Decimal("40"),
+        max_age_days=30,
+        clock=datetime(2026, 8, 19, 16, 0, tzinfo=timezone.utc),
+        runtime=runtime,
+    )(
+        session_date=session_date,
+        scan_time=time(9, 20),
+    )
+
+    assert result.snapshot is None
+    assert result.fidelity == "reconstructed_current_listings_iex"
+    assert [len(batch) for batch in runtime.minute_seed_requests] == [1000, 1]
+    assert reconstruction._SCAN_SEED_CHUNK_SIZE == 1000
 
 def test_reconstructed_strategy_config_relaxes_only_unavailable_historical_evidence() -> None:
     config = GapPullbackConfig(

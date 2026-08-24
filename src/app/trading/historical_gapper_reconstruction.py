@@ -26,6 +26,10 @@ _DEFAULT_TRADING_URL = "https://paper-api.alpaca.markets"
 _ALLOWED_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA"}
 _SYMBOL = re.compile(r"^[A-Z0-9.\-]+$")
 _SCAN_SEED_LOOKBACK_MINUTES = 15
+# A 15-minute seed window yields at most 15 one-minute bars per symbol.
+# 1,000-symbol batches remain bounded by Alpaca pagination while reducing
+# request count versus the old 200-symbol batching.
+_SCAN_SEED_CHUNK_SIZE = 1000
 
 
 @dataclass(frozen=True)
@@ -224,7 +228,8 @@ def _scan_seed_symbols(
             if observed is None or close is None or close <= 0:
                 continue
             local = observed.astimezone(_ET)
-            if local.date() != session_date or local.timetz().replace(tzinfo=None) > scan_time:
+            completed = local + timedelta(minutes=1)
+            if local.date() != session_date or completed.timetz().replace(tzinfo=None) > scan_time:
                 continue
             if latest is None or observed > latest[0]:
                 latest = (observed, close)
@@ -265,7 +270,8 @@ def _minute_candidate(
             continue
         local = timestamp.astimezone(_ET)
         clock = local.timetz().replace(tzinfo=None)
-        if clock < _PREMARKET_OPEN or clock > scan_time:
+        completed_clock = (local + timedelta(minutes=1)).timetz().replace(tzinfo=None)
+        if clock < _PREMARKET_OPEN or completed_clock > scan_time:
             continue
         if local.date() > session_date:
             continue
@@ -418,8 +424,8 @@ class AlpacaHistoricalGapperReconstructor:
             list(previous_close),
             timeframe="1Min",
             start=seed_start,
-            end=scan_at + timedelta(minutes=1),
-            chunk_size=200,
+            end=scan_at,
+            chunk_size=_SCAN_SEED_CHUNK_SIZE,
         )
         seed_symbols = _scan_seed_symbols(
             scan_window,
@@ -452,7 +458,7 @@ class AlpacaHistoricalGapperReconstructor:
             seed_symbols,
             timeframe="1Min",
             start=minute_start,
-            end=scan_at + timedelta(minutes=1),
+            end=scan_at,
             chunk_size=25,
         )
         candidates: list[GapperCandidate] = []

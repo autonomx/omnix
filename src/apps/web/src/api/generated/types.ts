@@ -2274,6 +2274,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategies/{strategy_id}/v2/qualification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get V2 Qualification */
+        get: operations["get_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/v2/qualification/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review V2 Qualification */
+        post: operations["review_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategy-operations/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Strategy Operations Status */
+        get: operations["strategy_operations_status_api_trading_strategy_operations_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/watchlists": {
         parameters: {
             query?: never;
@@ -4760,7 +4811,7 @@ export interface components {
              * Exit Reason
              * @enum {string}
              */
-            exit_reason: "stop" | "target" | "rsi" | "eod";
+            exit_reason: "stop" | "target" | "rsi" | "time" | "eod";
             /** Exit Slippage Bps */
             exit_slippage_bps: string;
             /**
@@ -4815,6 +4866,11 @@ export interface components {
          *     validated HTR research-policy gate. It is fail-closed until a reviewed HTR-14
          *     validation artifact explicitly permits promotion; 1.0/1.1 semantics do not
          *     change when HTR code evolves.
+         *
+         *     Version 2.0.0 is a separately versioned gap-as-impulse failed-selloff
+         *     definition. It waits for a causal L1 -> B1 -> higher-L2 sequence and a
+         *     direct B1/VWAP break. The v2-only fields below are ignored by all 1.x
+         *     evaluators so persisted 1.x behavior remains unchanged.
          */
         "GapPullbackConfig-Input": {
             /**
@@ -4992,7 +5048,7 @@ export interface components {
              * @default 1.0.0
              * @enum {string}
              */
-            strategy_version: "1.0.0" | "1.1.0" | "1.2.0";
+            strategy_version: "1.0.0" | "1.1.0" | "1.2.0" | "2.0.0";
             /**
              * Structure Interval
              * @default 1m
@@ -5016,6 +5072,46 @@ export interface components {
              */
             universe_scan_time_et: string;
             /**
+             * V2 Max Hold Minutes
+             * @default 60
+             */
+            v2_max_hold_minutes: number;
+            /**
+             * V2 Maximum L2 To Signal Minutes
+             * @default 8
+             */
+            v2_maximum_l2_to_signal_minutes: number;
+            /**
+             * V2 Minimum Breakout Volume Ratio
+             * @default 0
+             */
+            v2_minimum_breakout_volume_ratio: number | string;
+            /**
+             * V2 Minimum L1 To B1 Minutes
+             * @default 4
+             */
+            v2_minimum_l1_to_b1_minutes: number;
+            /**
+             * V2 Profit Protection Trigger R
+             * @default 0.75
+             */
+            v2_profit_protection_trigger_r: number | string | null;
+            /**
+             * V2 Protected Stop R
+             * @default 0.25
+             */
+            v2_protected_stop_r: number | string;
+            /**
+             * V2 Recovery Min Pct
+             * @default 5
+             */
+            v2_recovery_min_pct: number | string;
+            /**
+             * V2 Second Pullback Min Pct
+             * @default 2
+             */
+            v2_second_pullback_min_pct: number | string;
+            /**
              * Volume Lookback Bars
              * @default 10
              */
@@ -5033,6 +5129,11 @@ export interface components {
          *     validated HTR research-policy gate. It is fail-closed until a reviewed HTR-14
          *     validation artifact explicitly permits promotion; 1.0/1.1 semantics do not
          *     change when HTR code evolves.
+         *
+         *     Version 2.0.0 is a separately versioned gap-as-impulse failed-selloff
+         *     definition. It waits for a causal L1 -> B1 -> higher-L2 sequence and a
+         *     direct B1/VWAP break. The v2-only fields below are ignored by all 1.x
+         *     evaluators so persisted 1.x behavior remains unchanged.
          */
         "GapPullbackConfig-Output": {
             /**
@@ -5210,7 +5311,7 @@ export interface components {
              * @default 1.0.0
              * @enum {string}
              */
-            strategy_version: "1.0.0" | "1.1.0" | "1.2.0";
+            strategy_version: "1.0.0" | "1.1.0" | "1.2.0" | "2.0.0";
             /**
              * Structure Interval
              * @default 1m
@@ -5233,6 +5334,46 @@ export interface components {
              * @default 09:20:00
              */
             universe_scan_time_et: string;
+            /**
+             * V2 Max Hold Minutes
+             * @default 60
+             */
+            v2_max_hold_minutes: number;
+            /**
+             * V2 Maximum L2 To Signal Minutes
+             * @default 8
+             */
+            v2_maximum_l2_to_signal_minutes: number;
+            /**
+             * V2 Minimum Breakout Volume Ratio
+             * @default 0
+             */
+            v2_minimum_breakout_volume_ratio: string;
+            /**
+             * V2 Minimum L1 To B1 Minutes
+             * @default 4
+             */
+            v2_minimum_l1_to_b1_minutes: number;
+            /**
+             * V2 Profit Protection Trigger R
+             * @default 0.75
+             */
+            v2_profit_protection_trigger_r: string | null;
+            /**
+             * V2 Protected Stop R
+             * @default 0.25
+             */
+            v2_protected_stop_r: string;
+            /**
+             * V2 Recovery Min Pct
+             * @default 5
+             */
+            v2_recovery_min_pct: string;
+            /**
+             * V2 Second Pullback Min Pct
+             * @default 2
+             */
+            v2_second_pullback_min_pct: string;
             /**
              * Volume Lookback Bars
              * @default 10
@@ -5270,8 +5411,12 @@ export interface components {
             impulse_average_volume?: string | null;
             /** L1 */
             l1?: string | null;
+            /** L1 To B1 Minutes */
+            l1_to_b1_minutes?: number | null;
             /** L2 */
             l2?: string | null;
+            /** L2 To Signal Minutes */
+            l2_to_signal_minutes?: number | null;
             /** Minutes Since Open */
             minutes_since_open?: number | null;
             /** Opening Impulse Pct */
@@ -5302,6 +5447,8 @@ export interface components {
              * @default 0
              */
             reclaim_break_score: number;
+            /** Second Pullback Depth Pct */
+            second_pullback_depth_pct?: string | null;
             /** Session Vwap */
             session_vwap?: string | null;
             /** Spread Bps */
@@ -7739,6 +7886,25 @@ export interface components {
             /** Events */
             events: components["schemas"]["StrategyEvent"][];
         };
+        /** StrategyOperationsStatus */
+        StrategyOperationsStatus: {
+            alpaca_status_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            deep_recovery_shadow_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            /**
+             * Execution Authority
+             * @default false
+             * @constant
+             */
+            execution_authority: false;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            v2_qualification_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+        };
         /** StrategyProtection */
         StrategyProtection: {
             /** Account Id */
@@ -8249,6 +8415,25 @@ export interface components {
              * @default 0.35
              */
             risk_per_trade_pct: string;
+        };
+        /** StrategyRuntimeMonitorStatus */
+        StrategyRuntimeMonitorStatus: {
+            /** Configured Enabled */
+            configured_enabled: boolean;
+            /** Counters */
+            counters?: {
+                [key: string]: number;
+            };
+            /** Interval Seconds */
+            interval_seconds?: number | null;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Run At */
+            last_run_at?: string | null;
+            /** Registered */
+            registered: boolean;
+            /** Running */
+            running: boolean;
         };
         /** StrategySignal */
         StrategySignal: {
@@ -9390,6 +9575,121 @@ export interface components {
          * @enum {string}
          */
         UsageScope: "personal_local" | "internal" | "external_display" | "licensed";
+        /** V2ProspectiveQualification */
+        V2ProspectiveQualification: {
+            /**
+             * Auto Paper Authorized
+             * @default false
+             */
+            auto_paper_authorized: boolean;
+            /** Current Profile Fingerprint */
+            current_profile_fingerprint: string;
+            /** Distinct Sessions */
+            distinct_sessions: number;
+            /** Distinct Symbols */
+            distinct_symbols: number;
+            /** Evidence Fingerprint */
+            evidence_fingerprint: string;
+            /** Execution Match Rate */
+            execution_match_rate?: string | null;
+            /** Expectancy R */
+            expectancy_r?: string | null;
+            /** Expected Profile Fingerprint */
+            expected_profile_fingerprint: string;
+            /** Matched Eligible Trade Count */
+            matched_eligible_trade_count: number;
+            /** Max Drawdown R */
+            max_drawdown_r?: string | null;
+            /** One Sided 90 Lcb R */
+            one_sided_90_lcb_r?: string | null;
+            /** Profile Match */
+            profile_match: boolean;
+            /**
+             * Prospective Start
+             * Format: date
+             * @default 2026-08-24
+             */
+            prospective_start: string;
+            /**
+             * Qualification Version
+             * @default v2-prospective-qualification-1
+             */
+            qualification_version: string;
+            /**
+             * Qualified
+             * @default false
+             */
+            qualified: boolean;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Replay Trade Count */
+            replay_trade_count: number;
+            /**
+             * Reviewed
+             * @default false
+             */
+            reviewed: boolean;
+            /** Strategy Id */
+            strategy_id: string;
+            thresholds?: components["schemas"]["V2QualificationThresholds"];
+        };
+        /** V2QualificationReviewRequest */
+        V2QualificationReviewRequest: {
+            /** Review Note */
+            review_note: string;
+        };
+        /** V2QualificationThresholds */
+        V2QualificationThresholds: {
+            /**
+             * Live Match Window Minutes
+             * @default 10
+             */
+            live_match_window_minutes: number;
+            /**
+             * Maximum Drawdown R
+             * @default 5
+             */
+            maximum_drawdown_r: string;
+            /**
+             * Minimum Distinct Sessions
+             * @default 15
+             */
+            minimum_distinct_sessions: number;
+            /**
+             * Minimum Distinct Symbols
+             * @default 10
+             */
+            minimum_distinct_symbols: number;
+            /**
+             * Minimum Execution Match Rate
+             * @default 0.90
+             */
+            minimum_execution_match_rate: string;
+            /**
+             * Minimum Expectancy R
+             * @default 0.20
+             */
+            minimum_expectancy_r: string;
+            /**
+             * Minimum Matched Trades
+             * @default 20
+             */
+            minimum_matched_trades: number;
+            /**
+             * One Sided Confidence Level
+             * @default 0.90
+             */
+            one_sided_confidence_level: string;
+            /**
+             * Prospective Start
+             * Format: date
+             * @default 2026-08-24
+             */
+            prospective_start: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -14602,6 +14902,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ProspectiveQualification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_v2_qualification_api_trading_strategies__strategy_id__v2_qualification_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2QualificationReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ProspectiveQualification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    strategy_operations_status_api_trading_strategy_operations_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyOperationsStatus"];
                 };
             };
         };

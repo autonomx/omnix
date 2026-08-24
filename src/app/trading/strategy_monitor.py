@@ -29,6 +29,20 @@ from .strategy_repository import (
 )
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
+from .strategy_shadow_execution import observe_shadow_execution
+from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_v2_qualification import (
+    V2_PROSPECTIVE_START,
+    V2_QUALIFICATION_EVENT_TYPES,
+    evaluate_v2_prospective_qualification,
+    v2_profile_fingerprint,
+)
+from .strategy_v2_management import (
+    v2_active_stop_for_prior_high,
+    v2_hold_expired,
+    v2_initial_stop_from_target,
+    v2_management_levels,
+)
 from .strategy_timeframes import proposal_priority, resample_final_bars
 from .trade_logging import trade_log
 
@@ -57,6 +71,35 @@ def _interval_seconds() -> float:
 
 def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
+
+
+def _v2_qualification_events(
+    repository: TradingStrategyRepository,
+    strategy_id: str,
+    *,
+    now: datetime,
+) -> list[StrategyEvent]:
+    start = datetime(
+        V2_PROSPECTIVE_START.year,
+        V2_PROSPECTIVE_START.month,
+        V2_PROSPECTIVE_START.day,
+        tzinfo=timezone.utc,
+    )
+    end = now.astimezone(timezone.utc) + timedelta(seconds=1)
+    if hasattr(repository, "events_by_types_between"):
+        return repository.events_by_types_between(
+            strategy_id,
+            event_types=V2_QUALIFICATION_EVENT_TYPES,
+            start_time=start,
+            end_time=end,
+            limit=20_000,
+        )
+    return [
+        event
+        for event in repository.recent_events(strategy_id, 20_000)
+        if event.event_type in V2_QUALIFICATION_EVENT_TYPES
+        and start <= event.observed_at.astimezone(timezone.utc) < end
+    ]
 
 
 def _run_id(prefix: str, observed_at: datetime) -> str:
@@ -260,9 +303,65 @@ class TradingStrategyMonitor:
                 if entry_order is not None and entry_order.status == "filled":
                     position = positions.get(protection.instrument_id)
                     if position is not None and position.quantity > 0:
+                        activated_at = entry_order.updated_at or entry_order.created_at or datetime.now(timezone.utc)
+                        if config.config.strategy_version == "2.0.0":
+                            fill_price = entry_order.average_fill_price
+                            if fill_price is None:
+                                self.last_error = "v2_protection: filled entry missing average_fill_price"
+                                trade_log(
+                                    "auto_trading",
+                                    "v2_protection_activation_deferred",
+                                    run_id=self.current_run_id,
+                                    strategy_id=config.strategy_id,
+                                    instrument_id=protection.instrument_id,
+                                    entry_order_id=entry_order.order_id,
+                                    reason="missing_average_fill_price",
+                                )
+                                continue
+                            try:
+                                levels = v2_management_levels(
+                                    config.config,
+                                    entry_price=fill_price,
+                                    initial_stop=protection.stop_price,
+                                )
+                            except ValueError as exc:
+                                self.last_error = f"v2_protection: {exc}"
+                                trade_log(
+                                    "auto_trading",
+                                    "v2_protection_activation_deferred",
+                                    run_id=self.current_run_id,
+                                    strategy_id=config.strategy_id,
+                                    instrument_id=protection.instrument_id,
+                                    entry_order_id=entry_order.order_id,
+                                    reason="invalid_fill_anchored_risk",
+                                    detail=str(exc),
+                                )
+                                continue
+                            # Match the V11 backtester: keep the structural L2 stop,
+                            # but anchor R/target to the actual pessimistic fill.
+                            protection.target_price = levels.target_price
                         protection.status = "active"
                         protection.quantity = min(protection.quantity, position.quantity)
-                        await asyncio.to_thread(strategy_repository.save_protection, protection)
+                        saved = await asyncio.to_thread(strategy_repository.save_protection, protection)
+                        if config.config.strategy_version == "2.0.0":
+                            await self._event(
+                                strategy_repository,
+                                config,
+                                instrument_id=protection.instrument_id,
+                                event_type="protection",
+                                state="active",
+                                reason_code="V2_PROTECTION_ANCHORED_TO_FILL",
+                                observed_at=activated_at,
+                                payload={
+                                    "entry_fill_price": str(entry_order.average_fill_price),
+                                    "initial_stop": str(saved.stop_price),
+                                    "target_price": str(saved.target_price),
+                                    "reward_multiple": str(config.config.reward_multiple),
+                                    "profit_protection_trigger_r": str(config.config.v2_profit_protection_trigger_r),
+                                    "protected_stop_r": str(config.config.v2_protected_stop_r),
+                                    "max_hold_minutes": config.config.v2_max_hold_minutes,
+                                },
+                            )
                 elif entry_order is not None and entry_order.status in {"rejected", "cancelled"}:
                     protection.status = "cancelled"
                     protection.trigger_reason = f"entry_{entry_order.status}"
@@ -340,12 +439,90 @@ class TradingStrategyMonitor:
                 )
                 continue
             trigger = None
-            if force_flat:
+            activated_at = None
+            if entry_order is not None:
+                activated_at = entry_order.updated_at or entry_order.created_at
+
+            if (
+                config.config.strategy_version == "2.0.0"
+                and entry_order is not None
+                and entry_order.average_fill_price is not None
+                and activated_at is not None
+            ):
+                entry_price = entry_order.average_fill_price
+                try:
+                    initial_stop = v2_initial_stop_from_target(
+                        config.config,
+                        entry_price=entry_price,
+                        target_price=protection.target_price,
+                    )
+                    response = await asyncio.to_thread(
+                        market_service.bars,
+                        protection.instrument_id,
+                        "1m",
+                        240,
+                        binding_id,
+                    )
+                    finalized = [
+                        bar
+                        for bar in response.bars
+                        if bar.is_final
+                        and bar.end_time > activated_at
+                        and bar.end_time <= execution.source_time
+                    ]
+                    prior_high = max(
+                        [entry_price, *(bar.high for bar in finalized)],
+                    )
+                    desired_stop = v2_active_stop_for_prior_high(
+                        config.config,
+                        entry_price=entry_price,
+                        initial_stop=initial_stop,
+                        prior_finalized_high=prior_high,
+                    )
+                    if desired_stop > protection.stop_price:
+                        old_stop = protection.stop_price
+                        protection.stop_price = desired_stop
+                        protection.trigger_reason = "profit_protection_armed"
+                        protection = await asyncio.to_thread(
+                            strategy_repository.save_protection, protection
+                        )
+                        await self._event(
+                            strategy_repository,
+                            config,
+                            instrument_id=protection.instrument_id,
+                            event_type="protection",
+                            state="active",
+                            reason_code="V2_PROFIT_PROTECTION_ARMED",
+                            observed_at=execution.source_time,
+                            payload={
+                                "old_stop": str(old_stop),
+                                "new_stop": str(protection.stop_price),
+                                "entry_fill_price": str(entry_price),
+                                "prior_finalized_high": str(prior_high),
+                                "trigger_r": str(config.config.v2_profit_protection_trigger_r),
+                                "protected_stop_r": str(config.config.v2_protected_stop_r),
+                                "finalized_bar_count_since_entry": len(finalized),
+                            },
+                        )
+                except Exception as exc:
+                    # Static structural protection remains active if the optional
+                    # profit-protection evidence cannot be refreshed this cycle.
+                    self.last_error = f"v2_protection_management: {type(exc).__name__}: {exc}"
+                    trade_log(
+                        "auto_trading",
+                        "v2_protection_management_error",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        instrument_id=protection.instrument_id,
+                        error_type=type(exc).__name__,
+                        detail=str(exc),
+                    )
+
+            if config.config.strategy_version != "2.0.0" and force_flat:
+                # Preserve the original 1.x contract exactly: once force-flat
+                # time is reached, EOD liquidation wins over stop/target checks.
                 trigger = "force_flat"
             else:
-                activated_at = None
-                if entry_order is not None:
-                    activated_at = entry_order.updated_at or entry_order.created_at
                 trigger_kind = paper_protection_trigger(
                     is_long=True,
                     stop_price=protection.stop_price,
@@ -357,6 +534,18 @@ class TradingStrategyMonitor:
                     trigger = "protective_stop"
                 elif trigger_kind == "target":
                     trigger = "profit_target"
+                elif (
+                    config.config.strategy_version == "2.0.0"
+                    and activated_at is not None
+                    and v2_hold_expired(
+                        config.config,
+                        activated_at=activated_at,
+                        observed_at=execution.source_time,
+                    )
+                ):
+                    trigger = "max_hold"
+                elif force_flat:
+                    trigger = "force_flat"
             if trigger is None:
                 continue
             quantity = min(protection.quantity, position.quantity)
@@ -634,38 +823,86 @@ class TradingStrategyMonitor:
             paper_repository,
             market_service,
         )
-        if config.mode == "off" or not config.enabled or not config.active_universe_id:
+        if config.mode == "off" or not config.enabled:
             trade_log(
                 "auto_trading",
                 "strategy_cycle_skipped",
                 run_id=self.current_run_id,
                 strategy_id=config.strategy_id,
-                reason=(
-                    "mode_off"
-                    if config.mode == "off"
-                    else "disabled"
-                    if not config.enabled
-                    else "no_active_universe"
-                ),
+                reason="mode_off" if config.mode == "off" else "disabled",
             )
             return
 
         now_utc = datetime.now(timezone.utc)
+        if config.mode == "auto_paper" and config.config.strategy_version == "2.0.0":
+            qualification_events = await asyncio.to_thread(
+                _v2_qualification_events,
+                strategy_repository,
+                config.strategy_id,
+                now=now_utc,
+            )
+            qualification = await asyncio.to_thread(
+                evaluate_v2_prospective_qualification,
+                config,
+                qualification_events,
+            )
+            if not qualification.auto_paper_authorized:
+                trade_log(
+                    "auto_trading",
+                    "v2_auto_paper_qualification_blocked",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    profile_fingerprint=qualification.current_profile_fingerprint,
+                    evidence_fingerprint=qualification.evidence_fingerprint,
+                    reason_codes=qualification.reason_codes,
+                    matched_eligible_trade_count=qualification.matched_eligible_trade_count,
+                    execution_match_rate=qualification.execution_match_rate,
+                    expectancy_r=qualification.expectancy_r,
+                    one_sided_90_lcb_r=qualification.one_sided_90_lcb_r,
+                    max_drawdown_r=qualification.max_drawdown_r,
+                    execution_authority=False,
+                )
+                return
         now_et = now_utc.astimezone(_ET)
         today_et = now_et.date()
         day_start_et = datetime(today_et.year, today_et.month, today_et.day, tzinfo=_ET)
         day_end_et = day_start_et + timedelta(days=1)
 
-        universe = await asyncio.to_thread(
-            strategy_repository.get_universe,
-            config.active_universe_id,
-        )
+        universe_source = "active_universe"
+        if config.active_universe_id is not None:
+            universe = await asyncio.to_thread(
+                strategy_repository.get_universe,
+                config.active_universe_id,
+            )
+        else:
+            universe = await asyncio.to_thread(
+                resolve_v2_shadow_archive,
+                config,
+                strategy_repository,
+                now=now_utc,
+            )
+            universe_source = "auto_archive_shadow"
+            if universe is None:
+                trade_log(
+                    "auto_trading",
+                    "strategy_cycle_skipped",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    reason=(
+                        "v2_shadow_archive_not_ready"
+                        if config.mode == "shadow" and config.config.strategy_version == "2.0.0"
+                        else "no_active_universe"
+                    ),
+                )
+                return
+
         trade_log(
             "auto_trading",
             "universe_loaded",
             run_id=self.current_run_id,
             strategy_id=config.strategy_id,
             universe_id=universe.universe_id,
+            runtime_universe_source=universe_source,
             session_date=universe.session_date,
             evaluation_time=universe.evaluation_time,
             discovery_source=universe.discovery_source,
@@ -698,6 +935,101 @@ class TradingStrategyMonitor:
             market_service,
             universe,
         )
+        if config.mode == "shadow" and proposals:
+            for proposal in proposals:
+                candidate = proposal.candidate
+                result = proposal.result
+                assert result.signal is not None
+                try:
+                    evidence = await asyncio.to_thread(
+                        observe_shadow_execution,
+                        market_service,
+                        instrument_id=candidate.instrument_id,
+                        binding_id=candidate.binding_id,
+                    )
+                except Exception as exc:
+                    payload = {
+                        "strategy_version": config.config.strategy_version,
+                        "mode": "shadow",
+                        "universe_id": universe.universe_id,
+                        "universe_source": universe_source,
+                        "profile_fingerprint": (
+                            v2_profile_fingerprint(config.config)
+                            if config.config.strategy_version == "2.0.0"
+                            else None
+                        ),
+                        "signal": result.signal.model_dump(mode="json"),
+                        "features": result.features.model_dump(mode="json"),
+                        "error_type": type(exc).__name__,
+                        "detail": str(exc),
+                        "execution_authority": False,
+                    }
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="shadow_execution",
+                        state=result.state,
+                        reason_code="SHADOW_EXECUTION_UNAVAILABLE",
+                        observed_at=proposal.observed_at,
+                        payload=payload,
+                    )
+                    trade_log(
+                        "auto_trading",
+                        "shadow_execution_unavailable",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        instrument_id=candidate.instrument_id,
+                        **payload,
+                    )
+                    continue
+
+                payload = {
+                    "strategy_version": config.config.strategy_version,
+                    "mode": "shadow",
+                    "universe_id": universe.universe_id,
+                    "universe_source": universe_source,
+                    "profile_fingerprint": (
+                        v2_profile_fingerprint(config.config)
+                        if config.config.strategy_version == "2.0.0"
+                        else None
+                    ),
+                    "signal": result.signal.model_dump(mode="json"),
+                    "features": result.features.model_dump(mode="json"),
+                    "execution": evidence.execution,
+                    "execution_authority": False,
+                }
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="shadow_execution",
+                    state=result.state,
+                    reason_code=evidence.reason_code,
+                    observed_at=proposal.observed_at,
+                    payload=payload,
+                )
+                trade_log(
+                    "auto_trading",
+                    "shadow_execution_observation",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    instrument_id=candidate.instrument_id,
+                    reason_code=evidence.reason_code,
+                    **payload,
+                )
+
+            trade_log(
+                "auto_trading",
+                "strategy_cycle_no_entry_work",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                mode=config.mode,
+                proposal_count=len(proposals),
+                shadow_execution_observed=True,
+            )
+            return
+
         if config.mode != "auto_paper" or not proposals:
             trade_log(
                 "auto_trading",
@@ -747,16 +1079,27 @@ class TradingStrategyMonitor:
             active_only=True,
         )
         protected_symbols = {item.instrument_id for item in protections}
-        open_risk = sum(
-            (
-                item.quantity
-                * (item.target_price - item.stop_price)
-                / (config.config.reward_multiple + Decimal("1"))
-                for item in protections
-                if item.status in {"pending_entry", "active"}
-            ),
-            Decimal("0"),
-        )
+        positions_by_instrument = {position.instrument_id: position for position in snapshot.positions}
+        open_risk = Decimal("0")
+        for item in protections:
+            if item.status not in {"pending_entry", "active"}:
+                continue
+            position = positions_by_instrument.get(item.instrument_id)
+            if (
+                config.config.strategy_version == "2.0.0"
+                and item.status == "active"
+                and position is not None
+            ):
+                # After V2 profit protection moves above entry, remaining downside
+                # risk is zero rather than the old target/stop geometric estimate.
+                per_share_risk = max(Decimal("0"), position.average_cost - item.stop_price)
+            else:
+                per_share_risk = max(
+                    Decimal("0"),
+                    (item.target_price - item.stop_price)
+                    / (config.config.reward_multiple + Decimal("1")),
+                )
+            open_risk += item.quantity * per_share_risk
         trade_log(
             "auto_trading",
             "portfolio_risk_context",

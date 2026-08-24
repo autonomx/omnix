@@ -5,7 +5,7 @@ import json
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -31,6 +31,7 @@ from .strategy_research_policy import apply_research_policy_to_quality
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from .strategy_risk import size_strategy_entry
+from .strategy_v2_management import v2_active_stop_for_prior_high, v2_management_levels
 from .strategy_timeframes import proposal_priority, resample_final_bars
 
 
@@ -90,7 +91,7 @@ class GapPullbackBacktestTrade(BaseModel):
     exit_slippage_bps: Decimal
     stop_price: Decimal
     target_price: Decimal
-    exit_reason: Literal["stop", "target", "rsi", "eod"]
+    exit_reason: Literal["stop", "target", "rsi", "time", "eod"]
     pnl_per_share: Decimal
     r_multiple: Decimal
     mfe_r: Decimal
@@ -384,7 +385,20 @@ def _find_trade(
             trigger_bar_index=trigger_index,
             rejection_reason="invalid_risk_distance",
         )
-    target = entry + risk * config.reward_multiple
+    management = None
+    horizon: datetime | None = None
+    if config.strategy_version == "2.0.0":
+        management = v2_management_levels(
+            config,
+            entry_price=entry,
+            initial_stop=stop,
+        )
+        target = management.target_price
+        horizon = entry_bar.start_time + timedelta(minutes=management.max_hold_minutes)
+    else:
+        target = entry + risk * config.reward_multiple
+    if management is not None:
+        horizon = entry_bar.start_time + timedelta(minutes=management.max_hold_minutes)
     max_high = entry
     min_low = entry
 
@@ -399,12 +413,22 @@ def _find_trade(
     exit_price: Decimal | None = None
     exit_time: datetime | None = None
     exit_reference: Decimal | None = None
-    exit_reason: Literal["stop", "target", "rsi", "eod"] | None = None
+    exit_reason: Literal["stop", "target", "rsi", "time", "eod"] | None = None
     last_exit_rejection: str | None = None
     rsi_exit_requested = False
 
     for index in range(entry_index, len(execution_bars)):
         bar = execution_bars[index]
+        # V11 management is causal: a bar may arm the protected stop only after
+        # it is finalized, so the stop selected here uses prior bars' max high.
+        active_stop = stop
+        if management is not None:
+            active_stop = v2_active_stop_for_prior_high(
+                config,
+                entry_price=entry,
+                initial_stop=stop,
+                prior_finalized_high=max_high,
+            )
         max_high = max(max_high, bar.high)
         min_low = min(min_low, bar.low)
         observation = _bar_observation(
@@ -416,7 +440,7 @@ def _find_trade(
         )
         trigger = paper_protection_trigger(
             is_long=True,
-            stop_price=stop,
+            stop_price=active_stop,
             target_price=target,
             observation=observation,
             activated_at=entry_bar.start_time,
@@ -430,7 +454,7 @@ def _find_trade(
                 side="sell",
                 order_type="stop",
                 quantity=entry_quantity,
-                stop_price=stop,
+                stop_price=active_stop,
                 idempotency_key=f"stop:{candidate.instrument_id}:{index}",
             )
             decision = paper_fill_decision(stop_order, observation, policy)
@@ -442,7 +466,7 @@ def _find_trade(
             ):
                 exit_price = decision.fill_price
                 exit_time = bar.end_time
-                exit_reference = stop
+                exit_reference = active_stop
                 exit_reason = "stop"
                 break
             last_exit_rejection = f"exit_execution:{decision.reason}"
@@ -502,6 +526,29 @@ def _find_trade(
                 exit_time = bar.end_time
                 exit_reference = bar.close
                 exit_reason = "rsi"
+                break
+            last_exit_rejection = f"exit_execution:{decision.reason}"
+
+        if horizon is not None and bar.end_time >= horizon:
+            decision = _exit_market_decision(
+                candidate=candidate,
+                bar=bar,
+                quantity=entry_quantity,
+                policy=policy,
+                assumed_spread_bps=assumed_spread_bps,
+                price=bar.close,
+                order_suffix="time",
+            )
+            if (
+                decision.should_fill
+                and decision.fill_price is not None
+                and decision.fill_quantity is not None
+                and decision.fill_quantity >= entry_quantity
+            ):
+                exit_price = decision.fill_price
+                exit_time = bar.end_time
+                exit_reference = bar.close
+                exit_reason = "time"
                 break
             last_exit_rejection = f"exit_execution:{decision.reason}"
 

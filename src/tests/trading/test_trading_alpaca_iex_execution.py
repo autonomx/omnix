@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -15,7 +15,12 @@ NOW = datetime(2026, 8, 18, 14, 0, 0, 300000, tzinfo=timezone.utc)
 
 
 class _FixtureResponse:
+    def __init__(self, payload=None):
+        self.payload = payload
+
     def json(self):
+        if self.payload is not None:
+            return self.payload
         return {
             "latestQuote": {
                 "t": "2026-08-18T14:00:00.100000Z",
@@ -44,11 +49,14 @@ class _FixtureResponse:
 class _FixtureRuntime:
     session = object()
 
-    def __init__(self):
+    def __init__(self, *, historical_payload=None):
         self.calls: list[tuple[str, dict[str, object]]] = []
+        self.historical_payload = historical_payload
 
     def get(self, url, **kwargs):
         self.calls.append((url, kwargs))
+        if url.endswith("/bars") and self.historical_payload is not None:
+            return _FixtureResponse(self.historical_payload)
         return _FixtureResponse()
 
 
@@ -62,6 +70,17 @@ def _provider(runtime=None) -> AlpacaIexExecutionProvider:
         runtime=runtime or _FixtureRuntime(),
         clock=lambda: NOW,
     )
+
+
+def _raw_bar(start: datetime, close: Decimal) -> dict[str, object]:
+    return {
+        "t": start.isoformat().replace("+00:00", "Z"),
+        "o": str(close - Decimal("0.01")),
+        "h": str(close + Decimal("0.02")),
+        "l": str(close - Decimal("0.02")),
+        "c": str(close),
+        "v": 10000,
+    }
 
 
 def test_alpaca_iex_snapshot_produces_execution_eligible_book(monkeypatch) -> None:
@@ -98,6 +117,73 @@ def test_alpaca_iex_snapshot_produces_execution_eligible_book(monkeypatch) -> No
         "APCA-API-KEY-ID": "paper-key",
         "APCA-API-SECRET-KEY": "paper-secret",
     }
+
+
+def test_alpaca_iex_indicator_history_starts_at_0400_et_and_excludes_open_bar(monkeypatch) -> None:
+    _credentials(monkeypatch)
+    cutoff = datetime(2026, 8, 18, 13, 35, 30, tzinfo=timezone.utc)
+    payload = {
+        "bars": [
+            _raw_bar(datetime(2026, 8, 18, 7, 59, tzinfo=timezone.utc), Decimal("9.90")),
+            _raw_bar(datetime(2026, 8, 18, 8, 0, tzinfo=timezone.utc), Decimal("10.00")),
+            _raw_bar(datetime(2026, 8, 18, 13, 34, tzinfo=timezone.utc), Decimal("10.50")),
+            _raw_bar(datetime(2026, 8, 18, 13, 35, tzinfo=timezone.utc), Decimal("10.60")),
+        ]
+    }
+    runtime = _FixtureRuntime(historical_payload=payload)
+    provider = _provider(runtime)
+
+    bars = provider.indicator_bars_as_of("equity:NASDAQ:AAPL", as_of=cutoff)
+
+    assert [bar.start_time for bar in bars] == [
+        datetime(2026, 8, 18, 8, 0, tzinfo=timezone.utc),
+        datetime(2026, 8, 18, 13, 34, tzinfo=timezone.utc),
+    ]
+    assert bars[0].session == "extended_pre"
+    assert bars[-1].session == "regular"
+    assert all(bar.is_final and bar.end_time <= cutoff for bar in bars)
+    assert all(bar.provider == "alpaca_iex" for bar in bars)
+
+    url, request = runtime.calls[0]
+    assert url.endswith("/v2/stocks/AAPL/bars")
+    assert request["params"] == {
+        "timeframe": "1Min",
+        "start": "2026-08-18T08:00:00Z",
+        "end": "2026-08-18T13:35:30Z",
+        "adjustment": "raw",
+        "feed": "iex",
+        "sort": "asc",
+        "limit": 1000,
+    }
+    assert request["headers"] == {
+        "APCA-API-KEY-ID": "paper-key",
+        "APCA-API-SECRET-KEY": "paper-secret",
+    }
+
+
+def test_registry_indicator_history_uses_execution_iex_binding_for_yahoo_request(monkeypatch) -> None:
+    _credentials(monkeypatch)
+    cutoff = datetime(2026, 8, 18, 13, 35, 30, tzinfo=timezone.utc)
+    runtime = _FixtureRuntime(
+        historical_payload={
+            "bars": [
+                _raw_bar(cutoff - timedelta(minutes=2), Decimal("10.00")),
+            ]
+        }
+    )
+    provider = _provider(runtime)
+    registry = ProviderRegistry(factories={"alpaca_iex": lambda: provider})
+    yahoo_binding = "yahoo:historical_polling:equity:NASDAQ:AAPL"
+
+    bars = registry.execution_indicator_bars(
+        "equity:NASDAQ:AAPL",
+        yahoo_binding,
+        as_of=cutoff,
+    )
+
+    assert len(bars) == 1
+    assert bars[0].provider == "alpaca_iex"
+    assert runtime.calls[0][0].endswith("/v2/stocks/AAPL/bars")
 
 
 def test_alpaca_iex_fails_closed_without_credentials(monkeypatch) -> None:

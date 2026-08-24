@@ -1,0 +1,158 @@
+name: Trading strategy liquidity sweep
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Start date (YYYY-MM-DD); blank uses lookback"
+        required: false
+        default: ""
+        type: string
+      end_date:
+        description: "End date (YYYY-MM-DD); blank uses yesterday ET"
+        required: false
+        default: ""
+        type: string
+      lookback_days:
+        description: "Calendar-day lookback when start date is blank"
+        required: false
+        default: "14"
+        type: string
+      initial_cash:
+        description: "Initial paper cash"
+        required: false
+        default: "100000"
+        type: string
+      assumed_spread_bps:
+        description: "Historical assumed spread in basis points"
+        required: false
+        default: "40"
+        type: string
+      max_hold_minutes:
+        description: "Maximum hold time in minutes"
+        required: false
+        default: "90"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trading-historical-alpaca-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  liquidity-sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: "src:."
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      OMNIX_ALPACA_API_KEY_ID: ${{ secrets.OMNIX_ALPACA_API_KEY_ID }}
+      OMNIX_ALPACA_API_SECRET_KEY: ${{ secrets.OMNIX_ALPACA_API_SECRET_KEY }}
+      START_DATE: ${{ github.event.inputs.start_date || '' }}
+      END_DATE: ${{ github.event.inputs.end_date || '' }}
+      LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || '14' }}
+      INITIAL_CASH: ${{ github.event.inputs.initial_cash || '100000' }}
+      ASSUMED_SPREAD_BPS: ${{ github.event.inputs.assumed_spread_bps || '40' }}
+      MAX_HOLD_MINUTES: ${{ github.event.inputs.max_hold_minutes || '90' }}
+    steps:
+      - name: Check out exact workflow head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Report Alpaca credential availability
+        shell: bash
+        run: |
+          if [[ -n "${OMNIX_ALPACA_API_KEY_ID}" && -n "${OMNIX_ALPACA_API_SECRET_KEY}" ]]; then
+            echo "Alpaca credentials are available for cache misses."
+          else
+            echo "::warning::Alpaca credentials are unavailable. Fully cached replays can still run, but any missing historical session will fail closed."
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backtest dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi httpx pydantic requests python-multipart pillow websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Build dataset cache key
+        id: dataset-cache-key
+        shell: bash
+        run: |
+          et_date="$(TZ=America/New_York date +%F)"
+          echo "key=trading-liquidity-datasets-v1-${RUNNER_OS}-${et_date}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore frozen historical datasets
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: ${{ steps.dataset-cache-key.outputs.key }}
+          restore-keys: |
+            trading-liquidity-datasets-v1-${{ runner.os }}-
+
+      - name: Populate audited frozen datasets
+        shell: bash
+        run: |
+          mkdir -p .cache/trading-liquidity-datasets
+          python scripts/populate_trading_strategy_dataset_cache_from_manifest.py \
+            --manifest scripts/data/trading-liquidity-sweep-candidate-manifest-2026-08-08_2026-08-21.json \
+            --dataset-cache-dir .cache/trading-liquidity-datasets \
+            --assumed-spread-bps "${ASSUMED_SPREAD_BPS}" \
+            --minimum-premarket-dollar-volume 250000
+
+      - name: Run strict v1.1 liquidity sweep
+        shell: bash
+        run: |
+          args=(
+            --lookback-days "${LOOKBACK_DAYS}"
+            --initial-cash "${INITIAL_CASH}"
+            --assumed-spread-bps "${ASSUMED_SPREAD_BPS}"
+            --max-hold-minutes "${MAX_HOLD_MINUTES}"
+            --reconstruction-max-age-days 30
+            --max-sessions 60
+            --thresholds "250000,500000,1000000,2000000,5000000,10000000"
+            --dataset-cache-dir .cache/trading-liquidity-datasets
+            --output-dir artifacts/liquidity-sweep
+            --require-covered-session
+          )
+          if [[ -n "${START_DATE}" ]]; then
+            args+=(--start-date "${START_DATE}")
+          fi
+          if [[ -n "${END_DATE}" ]]; then
+            args+=(--end-date "${END_DATE}")
+          fi
+          python scripts/run_trading_strategy_liquidity_sweep_resilient.py "${args[@]}"
+
+      - name: Save frozen historical datasets
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/trading-liquidity-datasets
+          key: ${{ steps.dataset-cache-key.outputs.key }}
+
+      - name: Publish sweep summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/liquidity-sweep/summary.md ]]; then
+            cat artifacts/liquidity-sweep/summary.md >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "# Premarket liquidity sensitivity sweep" >> "${GITHUB_STEP_SUMMARY}"
+            echo "Sweep result files were not produced." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload sweep evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquidity-sweep-comparison
+          path: artifacts/liquidity-sweep
+          if-no-files-found: warn
+          retention-days: 30

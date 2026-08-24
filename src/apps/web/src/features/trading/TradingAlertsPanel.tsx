@@ -14,6 +14,7 @@ import type {
   TradingAlertCondition,
   TradingAlertTrigger,
 } from './tradingTypes';
+import { useTradingAlertMutations } from './useTradingAlerts';
 import './TradingChartAlertOverlay.css';
 import './TradingAlertsPanel.css';
 import './TradingAlertTooltip.css';
@@ -186,6 +187,7 @@ export function TradingAlertsPanel({
   const [listMenuOpen, setListMenuOpen] = useState(false);
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ alert: TradingAlert; top: number; right: number } | null>(null);
+  const sharedAlertMutations = useTradingAlertMutations();
 
   const refresh = async () => {
     try {
@@ -213,10 +215,16 @@ export function TradingAlertsPanel({
     try {
       await mutation();
       if (removedAlertId) {
+        // Chart overlays use the shared React Query alert cache while this panel
+        // keeps its own presentation state. Remove from both synchronously after
+        // the server mutation succeeds so an archived alert cannot remain drawn
+        // until the next 10s polling cycle.
+        sharedAlertMutations.remove(removedAlertId);
         setAlerts((current) => current.filter((alert) => alert.alert_id !== removedAlertId));
         setTooltip((current) => current?.alert.alert_id === removedAlertId ? null : current);
       }
       notifyTradingAlertsChanged();
+      await sharedAlertMutations.refresh();
       await refresh();
       setEditor(null);
       setRowMenuId(null);
@@ -482,8 +490,6 @@ export function TradingAlertsPanel({
             onChange={(patch) => setEditor((current) => current ? { ...current, ...patch } : current)}
             onSubmit={() => void (editor.mode === 'create' ? createAlert() : saveEditor())}
             onClose={() => setEditor(null)}
-            onToggle={editor.mode === 'edit' && dialogAlert ? () => void runMutation(() => tradingApi.updateAlert(dialogAlert, chartAlertUpdateInput(dialogAlert, { enabled: !dialogAlert.enabled }))) : undefined}
-            onArchive={editor.mode === 'edit' && dialogAlert ? () => void runMutation(() => tradingApi.archiveAlert(dialogAlert), dialogAlert.alert_id) : undefined}
           />
         </div>
       ) : null}

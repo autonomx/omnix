@@ -7,7 +7,7 @@ export type BacktestResultQuality = 'exact' | 'mixed' | 'approximate' | 'unavail
 
 export type GapPullbackConfig = {
   strategy_id: 'gap_pullback_v1';
-  strategy_version: '1.0.0' | '1.1.0' | '1.2.0';
+  strategy_version: '1.0.0' | '1.1.0' | '1.2.0' | '2.0.0';
   structure_interval: StrategyBarInterval;
   execution_interval: StrategyBarInterval;
   universe_scan_time_et?: string;
@@ -39,6 +39,16 @@ export type GapPullbackConfig = {
   breakout_hold_bars: number;
   breakout_hold_tolerance_bps: string | number;
   minimum_quality_score: number;
+  // Version 2.0.0-only fields. Backend defaults populate these on persisted
+  // documents, but they stay optional here so literal 1.x presets remain valid.
+  v2_recovery_min_pct?: string | number;
+  v2_second_pullback_min_pct?: string | number;
+  v2_minimum_l1_to_b1_minutes?: number;
+  v2_maximum_l2_to_signal_minutes?: number;
+  v2_minimum_breakout_volume_ratio?: string | number;
+  v2_profit_protection_trigger_r?: string | number | null;
+  v2_protected_stop_r?: string | number;
+  v2_max_hold_minutes?: number;
   stop_buffer_bps: string | number;
   reward_multiple: string | number;
   exit_rsi_period: number;
@@ -147,6 +157,41 @@ export type StrategyProtection = {
   revision: number;
 };
 
+export type V2QualificationThresholds = {
+  prospective_start: string;
+  minimum_matched_trades: number;
+  minimum_distinct_sessions: number;
+  minimum_distinct_symbols: number;
+  minimum_execution_match_rate: string | number;
+  minimum_expectancy_r: string | number;
+  one_sided_confidence_level: string | number;
+  maximum_drawdown_r: string | number;
+  live_match_window_minutes: number;
+};
+
+export type V2ProspectiveQualification = {
+  strategy_id: string;
+  qualification_version: string;
+  prospective_start: string;
+  expected_profile_fingerprint: string;
+  current_profile_fingerprint: string;
+  profile_match: boolean;
+  replay_trade_count: number;
+  matched_eligible_trade_count: number;
+  distinct_sessions: number;
+  distinct_symbols: number;
+  execution_match_rate?: string | number | null;
+  expectancy_r?: string | number | null;
+  one_sided_90_lcb_r?: string | number | null;
+  max_drawdown_r?: string | number | null;
+  thresholds: V2QualificationThresholds;
+  evidence_fingerprint: string;
+  qualified: boolean;
+  reviewed: boolean;
+  auto_paper_authorized: boolean;
+  reason_codes: string[];
+};
+
 export type CatalystShadowClassification = {
   classifier_id: string;
   classifier_version: string;
@@ -196,7 +241,7 @@ export type GapPullbackBacktestTrade = {
   entry_fill_quantity: string | number;
   stop_price: string | number;
   target_price: string | number;
-  exit_reason: 'stop' | 'target' | 'rsi' | 'eod';
+  exit_reason: 'stop' | 'target' | 'rsi' | 'time' | 'eod';
   pnl_per_share: string | number;
   r_multiple: string | number;
   mfe_r: string | number;

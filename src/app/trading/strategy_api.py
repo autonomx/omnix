@@ -5,7 +5,7 @@ import hashlib
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 
@@ -42,6 +42,13 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
+from .strategy_v2_qualification import (
+    V2_PROSPECTIVE_START,
+    V2_QUALIFICATION_EVENT_TYPES,
+    V2_QUALIFICATION_VERSION,
+    V2ProspectiveQualification,
+    evaluate_v2_prospective_qualification,
+)
 from .trade_logging import trade_log
 
 
@@ -73,6 +80,11 @@ class StrategyRangeBacktestProgressResponse(BaseModel):
     current_session: date | None = None
     error: str | None = None
     result: StrategyRangeBacktestResult | None = None
+
+
+class V2QualificationReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    review_note: str = Field(min_length=10, max_length=2_000)
 
 
 class StrategyEvaluationRequest(BaseModel):
@@ -299,6 +311,50 @@ def _backtest_run_id(prefix: str, *parts: object) -> str:
     return f"{prefix}-{observed_at.strftime('%Y%m%dT%H%M%S.%fZ')}-{digest}"
 
 
+def _v2_qualification_events(
+    repository: TradingStrategyRepository,
+    strategy_id: str,
+    *,
+    now: datetime | None = None,
+) -> list[StrategyEvent]:
+    observed = now or datetime.now(timezone.utc)
+    start = datetime(
+        V2_PROSPECTIVE_START.year,
+        V2_PROSPECTIVE_START.month,
+        V2_PROSPECTIVE_START.day,
+        tzinfo=timezone.utc,
+    )
+    end = observed.astimezone(timezone.utc) + timedelta(seconds=1)
+    if hasattr(repository, "events_by_types_between"):
+        return repository.events_by_types_between(
+            strategy_id,
+            event_types=V2_QUALIFICATION_EVENT_TYPES,
+            start_time=start,
+            end_time=end,
+            limit=20_000,
+        )
+    return [
+        event
+        for event in repository.recent_events(strategy_id, 20_000)
+        if event.event_type in V2_QUALIFICATION_EVENT_TYPES
+        and start <= event.observed_at.astimezone(timezone.utc) < end
+    ]
+
+
+def _require_v2_auto_paper_authorized(
+    document: TradingStrategyConfigDocument,
+    repository: TradingStrategyRepository,
+) -> None:
+    if document.mode != "auto_paper" or document.config.strategy_version != "2.0.0":
+        return
+    qualification = evaluate_v2_prospective_qualification(
+        document,
+        _v2_qualification_events(repository, document.strategy_id),
+    )
+    if not qualification.auto_paper_authorized:
+        raise ValueError("v2_auto_paper_requires_reviewed_prospective_qualification")
+
+
 def _bar_coverage(bars_by_instrument: dict[str, list[MarketBar]]) -> dict[str, dict[str, object]]:
     coverage: dict[str, dict[str, object]] = {}
     for instrument_id, bars in sorted(bars_by_instrument.items()):
@@ -442,7 +498,9 @@ def create_trading_strategy_router(
     @router.post("", response_model=TradingStrategyConfigDocument, status_code=201)
     async def create_strategy(document: TradingStrategyConfigDocument):
         try:
-            return await asyncio.to_thread(repository_factory().create_config, document)
+            repository = repository_factory()
+            _require_v2_auto_paper_authorized(document, repository)
+            return await asyncio.to_thread(repository.create_config, document)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -624,6 +682,76 @@ def create_trading_strategy_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @router.get("/{strategy_id}/v2/qualification", response_model=V2ProspectiveQualification)
+    async def get_v2_qualification(strategy_id: str) -> V2ProspectiveQualification:
+        try:
+            repository = repository_factory()
+            strategy = await asyncio.to_thread(repository.get_config, strategy_id)
+            if strategy.config.strategy_version != "2.0.0":
+                raise ValueError("v2_qualification_requires_strategy_version_2_0_0")
+            events = await asyncio.to_thread(_v2_qualification_events, repository, strategy_id)
+            return await asyncio.to_thread(evaluate_v2_prospective_qualification, strategy, events)
+        except ValueError as exc:
+            status = 404 if str(exc) == "strategy_config_not_found" else 422
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @router.post("/{strategy_id}/v2/qualification/review", response_model=V2ProspectiveQualification)
+    async def review_v2_qualification(
+        strategy_id: str,
+        request: V2QualificationReviewRequest,
+    ) -> V2ProspectiveQualification:
+        try:
+            note = " ".join(request.review_note.split()).strip()
+            if len(note) < 10:
+                raise ValueError("v2_qualification_review_note_too_short")
+            repository = repository_factory()
+            strategy = await asyncio.to_thread(repository.get_config, strategy_id)
+            if strategy.config.strategy_version != "2.0.0":
+                raise ValueError("v2_qualification_requires_strategy_version_2_0_0")
+            events = await asyncio.to_thread(_v2_qualification_events, repository, strategy_id)
+            qualification = await asyncio.to_thread(
+                evaluate_v2_prospective_qualification, strategy, events
+            )
+            if qualification.auto_paper_authorized:
+                return qualification
+            if not qualification.qualified:
+                raise ValueError("v2_prospective_qualification_not_met")
+            observed_at = datetime.now(timezone.utc)
+            raw = "|".join((
+                "v2-promotion-review",
+                strategy_id,
+                qualification.current_profile_fingerprint,
+                qualification.evidence_fingerprint,
+            ))
+            idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            review_event = StrategyEvent(
+                strategy_id=strategy_id,
+                event_id=idem[:32],
+                instrument_id=f"strategy:{strategy_id}",
+                event_type="v2_promotion_review",
+                state="qualification_reviewed",
+                reason_code="V2_PROMOTION_REVIEW_APPROVED",
+                observed_at=observed_at,
+                idempotency_key=idem,
+                payload={
+                    "qualification_version": V2_QUALIFICATION_VERSION,
+                    "profile_fingerprint": qualification.current_profile_fingerprint,
+                    "evidence_fingerprint": qualification.evidence_fingerprint,
+                    "approved": True,
+                    "review_note": note,
+                    "execution_authority": False,
+                },
+            )
+            await asyncio.to_thread(repository.append_event, review_event)
+            return await asyncio.to_thread(
+                evaluate_v2_prospective_qualification,
+                strategy,
+                [*events, review_event],
+            )
+        except ValueError as exc:
+            status = 404 if str(exc) == "strategy_config_not_found" else 422
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
     @router.get("/{strategy_id}", response_model=TradingStrategyConfigDocument)
     async def get_strategy(strategy_id: str):
         try:
@@ -634,8 +762,10 @@ def create_trading_strategy_router(
     @router.put("/{strategy_id}", response_model=TradingStrategyConfigDocument)
     async def update_strategy(strategy_id: str, document: TradingStrategyConfigDocument, if_match: int = Header(alias="If-Match", ge=1)):
         try:
+            repository = repository_factory()
+            _require_v2_auto_paper_authorized(document, repository)
             return await asyncio.to_thread(
-                repository_factory().update_config,
+                repository.update_config,
                 strategy_id,
                 document,
                 expected_revision=if_match,

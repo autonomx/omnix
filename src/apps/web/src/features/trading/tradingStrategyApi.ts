@@ -10,8 +10,29 @@ import type {
   StrategyRangeBacktestResult,
   StrategyResearchReviewResponse,
   TradingStrategyConfig,
+  V2ProspectiveQualification,
   YahooGapperDiscoveryInput,
 } from './tradingStrategyTypes';
+
+export type StrategyRuntimeMonitorStatus = {
+  configured_enabled: boolean;
+  registered: boolean;
+  running: boolean;
+  interval_seconds: number | null;
+  last_run_at: string | null;
+  last_error: string | null;
+  counters: Record<string, number>;
+};
+
+export type TradingStrategyOperationsStatus = {
+  observed_at: string;
+  strategy_monitor: StrategyRuntimeMonitorStatus;
+  deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus;
+  universe_archive_monitor: StrategyRuntimeMonitorStatus;
+  v2_qualification_monitor: StrategyRuntimeMonitorStatus;
+  alpaca_status_monitor: StrategyRuntimeMonitorStatus;
+  execution_authority: false;
+};
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -73,6 +94,17 @@ export const tradingStrategyApi = {
     );
     return Array.isArray(payload.protections) ? payload.protections : [];
   },
+  operationsStatus: () =>
+    requestJson<TradingStrategyOperationsStatus>('/api/trading/strategy-operations/status'),
+  v2Qualification: (strategyId: string) =>
+    requestJson<V2ProspectiveQualification>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/v2/qualification`,
+    ),
+  reviewV2Qualification: (strategyId: string, reviewNote: string) =>
+    requestJson<V2ProspectiveQualification>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/v2/qualification/review`,
+      { method: 'POST', body: JSON.stringify({ review_note: reviewNote }) },
+    ),
   discoverYahooUniverse: (input: YahooGapperDiscoveryInput) => requestJson<GapperUniverse>(
     '/api/trading/strategies/universes/discover-yahoo',
     { method: 'POST', body: JSON.stringify(input) },

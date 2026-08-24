@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from app.trading.cache import TradingMarketDataCache
@@ -13,7 +14,7 @@ from app.trading.execution import (
     assess_execution_observation,
     execution_observation_from_quote,
 )
-from app.trading.models import BarsResponse, ProviderBinding
+from app.trading.models import BarsResponse, MarketBar, ProviderBinding
 
 from .additional_crypto import AdditionalCryptoProvider
 from .aggregation import (
@@ -263,6 +264,37 @@ class ProviderRegistry:
             provider=binding.provider,
         )
         return assess_execution_observation(observation, policy)
+
+    def execution_indicator_bars(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        as_of: datetime,
+        cancellation: threading.Event | None = None,
+    ) -> list[MarketBar]:
+        """Return causal indicator history from the authoritative execution feed.
+
+        This deliberately follows execution binding resolution rather than chart
+        history resolution. Equity strategies therefore use Alpaca IEX evidence
+        even when their persisted/chart binding is Yahoo or Stooq.
+        """
+
+        requested = self.resolve_binding(instrument_id, binding_id)
+        binding = self.resolve_execution_binding(instrument_id, requested.binding_id)
+        provider = self.provider(binding.provider)
+        method = getattr(provider, "indicator_bars_as_of", None)
+        if not callable(method):
+            raise ValueError(
+                f"execution provider does not support indicator history: {binding.provider}"
+            )
+        if self._supports_cancellation(method):
+            return method(
+                instrument_id,
+                as_of=as_of,
+                cancellation=cancellation,
+            )
+        return method(instrument_id, as_of=as_of)
 
     def currency_rate(
         self,

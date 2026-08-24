@@ -15,6 +15,7 @@ import type {
   StrategyProtection,
   StrategyResearchReview,
   TradingStrategyConfig,
+  V2ProspectiveQualification,
 } from './tradingStrategyTypes';
 import './TradingStrategiesPanel.css';
 import './TradingStrategyEnhancements.css';
@@ -58,6 +59,59 @@ const strictV11Config = (): GapPullbackConfig => ({
   minimum_quality_score: 7,
   stop_buffer_bps: '15',
   reward_multiple: '2',
+  exit_rsi_period: 14,
+  exit_rsi_threshold: '50',
+  entry_start_et: '09:35:00',
+  last_entry_et: '11:30:00',
+});
+
+const frozenV2Config = (): GapPullbackConfig => ({
+  strategy_id: 'gap_pullback_v1',
+  strategy_version: '2.0.0',
+  structure_interval: '1m',
+  execution_interval: '1m',
+  universe_scan_time_et: '09:20:00',
+  auto_archive_daily_universe: true,
+  universe_archive_grace_minutes: 10,
+  universe_discovery_count: 50,
+  minimum_gap_pct: '20',
+  minimum_price: '0.50',
+  maximum_price: '20',
+  minimum_premarket_dollar_volume: '100000',
+  minimum_tod_rvol: '3',
+  allow_missing_tod_rvol: false,
+  maximum_spread_bps: '150',
+  preferred_float_min_shares: '2000000',
+  preferred_float_max_shares: '30000000',
+  float_preference_mode: 'ignore',
+  // The V11 reconstructed evidence did not contain point-in-time catalyst or
+  // dilution data. Keep those visible for research, but do not pretend the
+  // historical edge validated them as deterministic execution gates.
+  require_catalyst_evidence: false,
+  reject_dilution_flags: [],
+  opening_impulse_min_pct: '0',
+  pullback_min_pct: '8',
+  pullback_max_pct: '25',
+  pullback_volume_max_ratio: '5',
+  higher_low_buffer_bps: '50',
+  breakout_volume_ratio: '1.25',
+  pivot_left_bars: 1,
+  pivot_right_bars: 1,
+  volume_lookback_bars: 5,
+  require_breakout_hold: false,
+  breakout_hold_bars: 1,
+  breakout_hold_tolerance_bps: '25',
+  minimum_quality_score: 0,
+  v2_recovery_min_pct: '5',
+  v2_second_pullback_min_pct: '2',
+  v2_minimum_l1_to_b1_minutes: 4,
+  v2_maximum_l2_to_signal_minutes: 8,
+  v2_minimum_breakout_volume_ratio: '0',
+  v2_profit_protection_trigger_r: '0.75',
+  v2_protected_stop_r: '0.25',
+  v2_max_hold_minutes: 60,
+  stop_buffer_bps: '15',
+  reward_multiple: '1.5',
   exit_rsi_period: 14,
   exit_rsi_threshold: '50',
   entry_start_et: '09:35:00',
@@ -202,6 +256,9 @@ export function TradingStrategiesPanel() {
   const [freezing, setFreezing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [htrPromotionAllowed, setHtrPromotionAllowed] = useState(false);
+  const [v2Qualification, setV2Qualification] = useState<V2ProspectiveQualification | null>(null);
+  const [v2ReviewNote, setV2ReviewNote] = useState('');
+  const [v2Reviewing, setV2Reviewing] = useState(false);
 
   const selected = useMemo(
     () => strategies.find((item) => item.strategy_id === selectedId) ?? null,
@@ -272,6 +329,23 @@ export function TradingStrategiesPanel() {
   }, [selected?.strategy_id, selected?.revision]);
 
   useEffect(() => {
+    let alive = true;
+    if (!selected || selected.config.strategy_version !== '2.0.0') {
+      setV2Qualification(null);
+      return () => { alive = false; };
+    }
+    void tradingStrategyApi.v2Qualification(selected.strategy_id).then((qualification) => {
+      if (alive) setV2Qualification(qualification);
+    }).catch((error) => {
+      if (alive) {
+        setV2Qualification(null);
+        setNotice(error instanceof Error ? error.message : String(error));
+      }
+    });
+    return () => { alive = false; };
+  }, [selected?.strategy_id, selected?.revision, selected?.config.strategy_version]);
+
+  useEffect(() => {
     if (!selected) return;
     setDraft(structuredClone(selected));
     setResearchReviews([]);
@@ -291,6 +365,8 @@ export function TradingStrategiesPanel() {
     setUniverse(null);
     setUniverseJson('');
     setResearchReviews([]);
+    setV2Qualification(null);
+    setV2ReviewNote('');
     setSelectedCandidates(new Set());
     setDraft(defaultStrategy(accounts[0].account_id));
     setNotice(null);
@@ -316,10 +392,50 @@ export function TradingStrategiesPanel() {
     setNotice('Loaded gap_pullback_v1 1.2.0. Market-structure defaults remain the strict v1.1 baseline; only the reviewed trading-research-1 policy becomes authoritative. Review and save explicitly.');
   };
 
+  const loadFrozenV2 = () => {
+    if (!draft) return;
+    const config = frozenV2Config();
+    setDraft({
+      ...draft,
+      strategy_version: '2.0.0',
+      mode: 'shadow',
+      active_universe_id: null,
+      config,
+      risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
+    });
+    setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode and cleared any selected universe so qualification uses the strategy-owned raw morning archive. Structure: 1m L1→B1→higher-L2, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Evidence is mixed: the 58-session revealed sample was positive, the April/May frozen block produced only two positive trades, and the older March/April stress block produced 5 trades at -0.546R expectancy. Keep 2.0 in prospective SHADOW until captured live evidence is reviewed; do not promote from historical reconstruction alone.');
+  };
+
+  const reviewV2Qualification = async () => {
+    if (!selected || selected.config.strategy_version !== '2.0.0') return;
+    const note = v2ReviewNote.trim();
+    if (note.length < 10) {
+      setNotice('V2 prospective promotion review requires an audit note of at least 10 characters.');
+      return;
+    }
+    setV2Reviewing(true);
+    try {
+      const qualification = await tradingStrategyApi.reviewV2Qualification(selected.strategy_id, note);
+      setV2Qualification(qualification);
+      setV2ReviewNote('');
+      setNotice(qualification.auto_paper_authorized
+        ? 'V2 prospective evidence review recorded. AUTO PAPER is now authorized for this exact evidence/profile snapshot; future evidence changes require a new review.'
+        : 'V2 review recorded, but AUTO PAPER remains blocked by the server qualification policy.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setV2Reviewing(false);
+    }
+  };
+
   const save = async () => {
     if (!draft) return;
     if (draft.config.strategy_version === '1.2.0' && !htrPromotionAllowed) {
       setNotice('Strategy 1.2 requires an active reviewed HTR-15 validation artifact. Run HTR-14 validation and explicit promotion review first.');
+      return;
+    }
+    if (draft.config.strategy_version === '2.0.0' && draft.mode === 'auto_paper' && !v2Qualification?.auto_paper_authorized) {
+      setNotice('Strategy 2.0 AUTO PAPER is fail-closed until the frozen prospective qualification floors pass and the exact evidence snapshot receives an explicit review.');
       return;
     }
     if (!draft.account_id) {
@@ -585,6 +701,7 @@ export function TradingStrategiesPanel() {
               <div className="trading-strategy-header-actions">
                 {draft.config.strategy_version === '1.0.0' ? <button type="button" onClick={upgradeToStrictV11}>Load v1.1 baseline</button> : null}
                 {draft.config.strategy_version === '1.1.0' && htrPromotionAllowed ? <button type="button" onClick={loadReviewedV12}>Load reviewed HTR v1.2</button> : null}
+                <button type="button" onClick={loadFrozenV2}>{draft.config.strategy_version === '2.0.0' ? 'Reload frozen V11 v2' : 'Load frozen V11 v2 shadow'}</button>
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
                 {strategies.some((item) => item.strategy_id === draft.strategy_id) ? <button type="button" className="danger" onClick={() => void deleteStrategy()} disabled={status === 'saving'}>Delete</button> : null}
                 <button type="button" className="primary" onClick={() => void save()} disabled={status === 'saving'}>{status === 'saving' ? 'Saving…' : 'Save strategy'}</button>
@@ -596,11 +713,47 @@ export function TradingStrategiesPanel() {
             <TradingStrategyExecutionCredentials />
 
             <section className="trading-strategy-overview">
-              <div><strong>{definition.thesis}</strong><small>Higher low + VWAP reclaim + lower-high break remain mandatory. Structure and execution timeframes are separate, and simultaneous entry-ready names use quality score before scan rank.</small></div>
+              <div><strong>{draft.config.strategy_version === '2.0.0' ? 'Frozen V11 gap-as-impulse / failed-selloff profile' : definition.thesis}</strong><small>{draft.config.strategy_version === '2.0.0' ? 'Prospective profile: confirmed L1 → B1 → higher L2, base ≥4 minutes, L2→breakout ≤8 minutes, direct B1/VWAP break, fill-anchored 1.5R target and causal +0.75R→+0.25R protection. Reconstructed history is not a profitability guarantee.' : 'Higher low + VWAP reclaim + lower-high break remain mandatory. Structure and execution timeframes are separate, and simultaneous entry-ready names use quality score before scan rank.'}</small></div>
               <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
-                {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>)}
+                {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => {
+                  const v2AutoBlocked = mode === 'auto_paper' && draft.config.strategy_version === '2.0.0' && !v2Qualification?.auto_paper_authorized;
+                  return <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} disabled={v2AutoBlocked} title={v2AutoBlocked ? 'Requires reviewed prospective V2 qualification' : undefined} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>;
+                })}
               </div>
             </section>
+
+            {draft.config.strategy_version === '2.0.0' ? (
+              <section className="trading-config-block" aria-label="V2 prospective qualification">
+                <header>
+                  <strong>Prospective AUTO PAPER qualification</strong>
+                  <small>Frozen Aug 24+ policy · raw morning archive + live eligible SHADOW signal + post-session Alpaca IEX replay</small>
+                </header>
+                {v2Qualification ? (
+                  <>
+                    <div className="trading-strategy-grid">
+                      <div><strong>Profile</strong><small>{v2Qualification.profile_match ? 'Exact frozen V2 profile' : 'Mismatch — reload frozen V11 v2'}</small></div>
+                      <div><strong>Matched trades</strong><small>{v2Qualification.matched_eligible_trade_count} / {v2Qualification.thresholds.minimum_matched_trades}</small></div>
+                      <div><strong>Distinct sessions</strong><small>{v2Qualification.distinct_sessions} / {v2Qualification.thresholds.minimum_distinct_sessions}</small></div>
+                      <div><strong>Distinct symbols</strong><small>{v2Qualification.distinct_symbols} / {v2Qualification.thresholds.minimum_distinct_symbols}</small></div>
+                      <div><strong>Execution match</strong><small>{v2Qualification.execution_match_rate == null ? 'N/A' : `${(Number(v2Qualification.execution_match_rate) * 100).toFixed(1)}%`} · min {(Number(v2Qualification.thresholds.minimum_execution_match_rate) * 100).toFixed(0)}%</small></div>
+                      <div><strong>Expectancy</strong><small>{v2Qualification.expectancy_r == null ? 'N/A' : `${Number(v2Qualification.expectancy_r).toFixed(3)}R`} · min +{Number(v2Qualification.thresholds.minimum_expectancy_r).toFixed(2)}R</small></div>
+                      <div><strong>90% lower bound</strong><small>{v2Qualification.one_sided_90_lcb_r == null ? 'N/A' : `${Number(v2Qualification.one_sided_90_lcb_r).toFixed(3)}R`} · must be &gt; 0R</small></div>
+                      <div><strong>Max drawdown</strong><small>{v2Qualification.max_drawdown_r == null ? 'N/A' : `${Number(v2Qualification.max_drawdown_r).toFixed(3)}R`} · max {Number(v2Qualification.thresholds.maximum_drawdown_r).toFixed(1)}R</small></div>
+                    </div>
+                    <p><small>Profile <code>{v2Qualification.current_profile_fingerprint.slice(0, 12)}</code> · evidence <code>{v2Qualification.evidence_fingerprint.slice(0, 12)}</code> · replay trades {v2Qualification.replay_trade_count}. {v2Qualification.reason_codes.length ? `Blocking: ${v2Qualification.reason_codes.join(', ')}` : 'All quantitative floors pass.'}</small></p>
+                    <p><strong>{v2Qualification.auto_paper_authorized ? 'AUTO PAPER authorized' : v2Qualification.qualified ? 'Quantitatively qualified — explicit review required' : 'Prospective qualification in progress'}</strong></p>
+                    {v2Qualification.qualified && !v2Qualification.reviewed ? (
+                      <div className="trading-strategy-grid">
+                        <label className="wide-field"><span>Promotion review note<small>binds approval to this exact evidence fingerprint</small></span><textarea value={v2ReviewNote} onChange={(event) => setV2ReviewNote(event.target.value)} placeholder="Review the prospective sample, execution coverage, drawdown and edge before approving AUTO PAPER." /></label>
+                        <button type="button" onClick={() => void reviewV2Qualification()} disabled={v2Reviewing || v2ReviewNote.trim().length < 10}>{v2Reviewing ? 'Recording review…' : 'Approve exact V2 evidence snapshot'}</button>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <p><small>Save the frozen V2 profile in SHADOW mode first. Qualification begins with the prospective epoch on 2026-08-24; historical reconstruction cannot unlock AUTO PAPER.</small></p>
+                )}
+              </section>
+            ) : null}
 
             <section className="trading-strategy-pipeline">
               <header><div><strong>Daily strategy phases</strong><small>Scan → research → LLM review → deterministic setup → select → paper trade.</small></div></header>
@@ -666,6 +819,23 @@ export function TradingStrategiesPanel() {
                     <label><span>Volume lookback bars</span><input type="number" min="2" max="100" value={draft.config.volume_lookback_bars} onChange={(event) => setConfig('volume_lookback_bars', Number(event.target.value))} /></label>
                   </div>
                 </div>
+
+                {draft.config.strategy_version === '2.0.0' ? (
+                  <div className="trading-config-block">
+                    <header><strong>V2. Frozen timing & management</strong><small>V11 causal profile; edit only when deliberately creating a new strategy version/experiment</small></header>
+                    <div className="trading-strategy-grid">
+                      <ConfigNumber label="L1→B1 recovery minimum" suffix="%" step="0.5" value={draft.config.v2_recovery_min_pct ?? '5'} onChange={(value) => setConfigNumber('v2_recovery_min_pct', value)} />
+                      <ConfigNumber label="Second pullback minimum" suffix="%" step="0.5" value={draft.config.v2_second_pullback_min_pct ?? '2'} onChange={(value) => setConfigNumber('v2_second_pullback_min_pct', value)} />
+                      <label><span>L1→B1 minimum<small>finalized 1m bars</small></span><input type="number" min="0" max="120" value={draft.config.v2_minimum_l1_to_b1_minutes ?? 4} onChange={(event) => setConfig('v2_minimum_l1_to_b1_minutes', Number(event.target.value))} /></label>
+                      <label><span>L2→signal maximum<small>finalized 1m bars</small></span><input type="number" min="1" max="390" value={draft.config.v2_maximum_l2_to_signal_minutes ?? 8} onChange={(event) => setConfig('v2_maximum_l2_to_signal_minutes', Number(event.target.value))} /></label>
+                      <ConfigNumber label="V2 breakout volume minimum" suffix="× prior 5" step="0.1" value={draft.config.v2_minimum_breakout_volume_ratio ?? '0'} onChange={(value) => setConfigNumber('v2_minimum_breakout_volume_ratio', value)} />
+                      <ConfigNumber label="Profit-protection trigger" suffix="R" step="0.05" value={draft.config.v2_profit_protection_trigger_r ?? '0.75'} onChange={(value) => setConfigNumber('v2_profit_protection_trigger_r', value)} />
+                      <ConfigNumber label="Protected stop" suffix="R" step="0.05" value={draft.config.v2_protected_stop_r ?? '0.25'} onChange={(value) => setConfigNumber('v2_protected_stop_r', value)} />
+                      <label><span>Maximum hold<small>minutes after fill</small></span><input type="number" min="1" max="390" value={draft.config.v2_max_hold_minutes ?? 60} onChange={(event) => setConfig('v2_max_hold_minutes', Number(event.target.value))} /></label>
+                    </div>
+                    <small>Profit protection is armed only by a prior finalized execution bar; a bar cannot tighten its own stop.</small>
+                  </div>
+                ) : null}
 
                 <div className="trading-config-block">
                   <header><strong>4. Breakout confirmation & quality</strong><small>0–10 ranking/gating model</small></header>
