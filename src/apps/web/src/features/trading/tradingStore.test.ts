@@ -92,6 +92,24 @@ describe('Trading multi-chart store', () => {
     expect(useTradingStore.getState().favoriteInstrumentIds).toEqual([]);
   });
 
+  it('keeps chart sessions independent across tabs', () => {
+    useTradingStore.getState().setChartCount(1);
+    useTradingStore.getState().updateChart('chart-1', { instrumentId: 'spy', interval: '1d' });
+    const secondTabId = useTradingStore.getState().addTab('Swing Research');
+    expect(secondTabId).toBe('tab-2');
+    expect(useTradingStore.getState().tabs).toHaveLength(2);
+
+    useTradingStore.getState().updateChart(useTradingStore.getState().activeChartId, { instrumentId: 'eth' });
+    useTradingStore.getState().setActiveTab('tab-1');
+    expect(useTradingStore.getState().tabs[0].name).toBe('Main Session');
+    expect(useTradingStore.getState().charts[0].instrumentId).toBe('spy');
+
+    useTradingStore.getState().setActiveTab(secondTabId!);
+    expect(useTradingStore.getState().charts[0].instrumentId).toBe('eth');
+    useTradingStore.getState().renameTab(secondTabId!, 'ETH Day');
+    expect(useTradingStore.getState().tabs[1].name).toBe('ETH Day');
+  });
+
   it('hides selected overlays without deleting them', () => {
     const store = useTradingStore.getState();
     store.toggleIndicatorVisibility('chart-1', 'sma');

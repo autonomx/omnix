@@ -1,0 +1,167 @@
+.trading-session-tabs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px minmax(180px, max-content);
+  align-items: stretch;
+  min-height: 42px;
+  border-bottom: 1px solid rgba(117, 151, 181, .14);
+  background: linear-gradient(180deg, #07131f, #06101a);
+  overflow: hidden;
+}
+
+.trading-session-tabs-scroll {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.trading-session-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.trading-session-tab {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  border-right: 1px solid rgba(117, 151, 181, .12);
+}
+
+.trading-session-tab > [role='tab'] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 148px;
+  max-width: 230px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #8195a9;
+  font-size: 11px;
+  text-align: left;
+}
+
+.trading-session-tab > [role='tab']:hover,
+.trading-session-tab.active > [role='tab'] {
+  background: rgba(17, 101, 160, .17);
+  color: #deebf4;
+}
+
+.trading-session-tab.active > [role='tab'] {
+  box-shadow: inset 0 -2px #1e9bff;
+}
+
+.trading-session-tab-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border: 2px solid #7790a7;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.trading-session-tab.active .trading-session-tab-dot {
+  border-color: #62b9ff;
+  background: #62b9ff;
+  box-shadow: 0 0 10px rgba(98, 185, 255, .65);
+}
+
+.trading-session-tab-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trading-session-tab-state {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #2dd492;
+  box-shadow: 0 0 8px rgba(45, 212, 146, .6);
+}
+
+.trading-session-tab-close {
+  align-self: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 5px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  color: #73889c !important;
+  font-size: 17px !important;
+  line-height: 1;
+}
+
+.trading-session-tab-close:hover:not(:disabled) {
+  background: rgba(255, 103, 115, .13) !important;
+  color: #ff858b !important;
+}
+
+.trading-session-tab-close:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.trading-session-tab-divider {
+  position: absolute;
+  top: 9px;
+  right: -1px;
+  height: 24px;
+  border-right: 1px solid rgba(117, 151, 181, .12);
+}
+
+.trading-session-tab-add {
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  justify-self: center;
+  flex: 0 0 30px;
+  margin: 0;
+  padding: 0 !important;
+  border-color: rgba(40, 163, 255, .32) !important;
+  background: rgba(14, 80, 127, .18) !important;
+  color: #71c3ff !important;
+  font-size: 18px !important;
+  line-height: 1;
+}
+
+.trading-session-tab-add:hover:not(:disabled) {
+  border-color: #2c9fff !important;
+  background: rgba(27, 133, 207, .28) !important;
+}
+
+.trading-session-tab-hint {
+  align-self: center;
+  min-width: 0;
+  margin-left: 4px;
+  overflow: hidden;
+  color: #587084;
+  font-size: 9px;
+  letter-spacing: .01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .trading-session-tabs {
+    grid-template-columns: minmax(0, 1fr) 46px;
+  }
+
+  .trading-session-tab-hint {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .trading-session-tab > [role='tab'] {
+    min-width: 116px;
+  }
+}

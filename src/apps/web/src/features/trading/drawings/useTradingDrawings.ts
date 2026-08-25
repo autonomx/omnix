@@ -30,6 +30,7 @@ type DrawingSnapshot = {
 
 type DrawingEntry = DrawingSnapshot & {
   instrumentId: string;
+  scopeId?: string;
   record: TradingDocument | null;
   timer: ReturnType<typeof setTimeout> | null;
   listeners: Set<() => void>;
@@ -39,15 +40,18 @@ type DrawingEntry = DrawingSnapshot & {
 
 const entries = new Map<string, DrawingEntry>();
 
-function recordId(instrumentId: string): string {
-  return `instrument-${instrumentId.replace(/[^a-zA-Z0-9._-]+/g, '-')}`;
+function recordId(instrumentId: string, scopeId?: string): string {
+  const scope = scopeId ? `${scopeId}-` : '';
+  return `${scope}instrument-${instrumentId.replace(/[^a-zA-Z0-9._-]+/g, '-')}`;
 }
 
-function entryFor(instrumentId: string): DrawingEntry {
-  const existing = entries.get(instrumentId);
+function entryFor(instrumentId: string, scopeId?: string): DrawingEntry {
+  const entryKey = `${scopeId ?? 'global'}:${instrumentId}`;
+  const existing = entries.get(entryKey);
   if (existing) return existing;
   const created: DrawingEntry = {
     instrumentId,
+    scopeId,
     state: emptyDrawingState(),
     status: 'loading',
     serverState: null,
@@ -57,7 +61,7 @@ function entryFor(instrumentId: string): DrawingEntry {
     loadPromise: null,
     loaded: false,
   };
-  entries.set(instrumentId, created);
+  entries.set(entryKey, created);
   return created;
 }
 
@@ -84,7 +88,7 @@ async function loadEntry(entry: DrawingEntry): Promise<void> {
     emit(entry);
     try {
       const records = await tradingApi.documents('drawings');
-      const record = records.find((item) => item.record_id === recordId(entry.instrumentId)) ?? null;
+      const record = records.find((item) => item.record_id === recordId(entry.instrumentId, entry.scopeId)) ?? null;
       entry.record = record;
       entry.state = replaceDrawings(drawingsFrom(record, entry.instrumentId));
       entry.serverState = null;
@@ -111,7 +115,7 @@ async function saveEntry(entry: DrawingEntry): Promise<void> {
   try {
     const saved = entry.record
       ? await tradingApi.updateDocument('drawings', entry.record, payload(entry))
-      : await tradingApi.createDocument('drawings', recordId(entry.instrumentId), payload(entry));
+      : await tradingApi.createDocument('drawings', recordId(entry.instrumentId, entry.scopeId), payload(entry));
     entry.record = saved;
     entry.serverState = null;
     entry.status = 'saved';
@@ -120,7 +124,7 @@ async function saveEntry(entry: DrawingEntry): Promise<void> {
     const conflict = error instanceof Error && error.message.includes('(409)');
     if (conflict) {
       const records = await tradingApi.documents('drawings').catch(() => []);
-      const latest = records.find((item) => item.record_id === recordId(entry.instrumentId)) ?? null;
+      const latest = records.find((item) => item.record_id === recordId(entry.instrumentId, entry.scopeId)) ?? null;
       entry.record = latest ?? entry.record;
       entry.serverState = latest ? replaceDrawings(drawingsFrom(latest, entry.instrumentId)) : emptyDrawingState();
       entry.status = 'conflict';
@@ -157,8 +161,8 @@ async function resolveConflict(entry: DrawingEntry, resolution: 'reload' | 'over
   await saveEntry(entry);
 }
 
-export function useTradingDrawings(instrumentId: string) {
-  const entry = entryFor(instrumentId);
+export function useTradingDrawings(instrumentId: string, scopeId?: string) {
+  const entry = entryFor(instrumentId, scopeId);
   const [current, setCurrent] = useState<DrawingSnapshot>(() => snapshot(entry));
 
   useEffect(() => {

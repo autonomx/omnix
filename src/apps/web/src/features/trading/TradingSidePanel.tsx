@@ -30,6 +30,7 @@ const tabs: Array<{ id: TradingSideTab; label: string }> = [
 ];
 
 export function TradingSidePanel({
+  sessionId,
   instruments,
   activeInstrumentId,
   bindingId,
@@ -60,6 +61,7 @@ export function TradingSidePanel({
   onSetSnapMode,
   onOpenResearch,
 }: {
+  sessionId?: string;
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
   bindingId: string | null;
@@ -100,6 +102,7 @@ export function TradingSidePanel({
     return (
       <aside className="trading-side-panel trading-object-side-panel" aria-label="Trading object tree and data window">
         <TradingObjectPanel
+          sessionId={sessionId}
           instruments={instruments}
           activeInstrumentId={activeInstrumentId}
           bindingId={bindingId}

@@ -78,20 +78,37 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       links: state.links,
       panels: state.panels,
       favoriteInstrumentIds: state.favoriteInstrumentIds,
+      activeTabId: state.activeTabId,
+      tabs: state.tabs,
     });
   }, [activeName]);
 
   const hydrate = useCallback((value: unknown): boolean => {
     const payload = parseTradingWorkspace(value);
     if (!payload) return false;
-    applyingRef.current = true;
-    useTradingStore.setState({
+    const tabs = payload.tabs ?? [{
+      tabId: 'tab-1',
+      name: 'Main Session',
       layout: payload.layout,
       activeChartId: payload.activeChartId,
-      replayMode: false,
       charts: payload.charts,
       links: payload.links,
       panels: payload.panels,
+    }];
+    const activeTabId = payload.activeTabId && tabs.some((tab) => tab.tabId === payload.activeTabId)
+      ? payload.activeTabId
+      : tabs[0].tabId;
+    const activeTab = tabs.find((tab) => tab.tabId === activeTabId) ?? tabs[0];
+    applyingRef.current = true;
+    useTradingStore.setState({
+      activeTabId,
+      tabs,
+      layout: activeTab.layout,
+      activeChartId: activeTab.activeChartId,
+      replayMode: false,
+      charts: activeTab.charts,
+      links: activeTab.links,
+      panels: activeTab.panels,
       favoriteInstrumentIds: payload.favoriteInstrumentIds,
     });
     applyingRef.current = false;

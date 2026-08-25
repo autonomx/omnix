@@ -560,3 +560,50 @@ test('right panel exposes TradingView-style Object tree and Data window views', 
   await expect(objectPanel).toContainText('Close');
   await expect(objectPanel).toContainText('Relative Strength Index (14)');
 });
+
+test('chart session tabs isolate symbols and can be closed', async ({ page }) => {
+  await installTradingMocks(page);
+  await page.goto('/trading');
+
+  const tabs = page.getByRole('tablist', { name: 'Independent chart sessions' });
+  await expect(tabs.getByRole('tab')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Create chart session tab' }).click();
+  await expect(tabs.getByRole('tab')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Open symbol search' }).click();
+  const symbolSearch = page.getByRole('dialog', { name: 'Symbol search' });
+  await symbolSearch.getByRole('textbox', { name: 'Search symbols' }).fill('ETH');
+  await symbolSearch.getByRole('button', { name: /ETHUSDT/ }).click();
+  await expect(page.locator('.trading-chart-panel').first()).toContainText('ETHUSDT');
+
+  const sessionTabs = tabs.getByRole('tab');
+  await sessionTabs.nth(0).click();
+  await expect(page.locator('.trading-chart-panel').first()).toContainText('BTCUSDT');
+  await sessionTabs.nth(1).click();
+  await expect(page.locator('.trading-chart-panel').first()).toContainText('ETHUSDT');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await tabs.getByRole('button', { name: /Close ETHUSDT chart session/ }).click();
+  await expect(tabs.getByRole('tab')).toHaveCount(1);
+});
+
+test('chart layout picker applies TradingView-style templates', async ({ page }) => {
+  await installTradingMocks(page);
+  await page.goto('/trading');
+
+  await page.getByRole('button', { name: 'Open chart layout menu' }).click();
+  const layoutMenu = page.getByRole('menu', { name: 'Chart layouts' });
+  await expect(layoutMenu).toBeVisible();
+  await expect(layoutMenu.getByRole('switch', { name: 'Sync Symbol' })).toBeVisible();
+  await layoutMenu.getByRole('switch', { name: 'Sync Symbol' }).click();
+  await expect(layoutMenu.getByRole('switch', { name: 'Sync Symbol' })).toHaveAttribute('aria-checked', 'true');
+  await expect(layoutMenu.getByRole('menuitemradio', { name: /2 charts · Columns/ })).toBeVisible();
+  await layoutMenu.getByRole('menuitemradio', { name: /2 charts · Columns/ }).click();
+  await expect(page.locator('.trading-chart-grid')).toHaveClass(/layout-columns-2/);
+  await expect(page.locator('.trading-chart-grid-cell')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Open chart layout menu' }).click();
+  await page.getByRole('menu', { name: 'Chart layouts' }).getByRole('menuitemradio', { name: /3 charts · Main left/ }).click();
+  await expect(page.locator('.trading-chart-grid')).toHaveClass(/layout-main-left-3/);
+  await expect(page.locator('.trading-chart-grid-cell')).toHaveCount(3);
+});

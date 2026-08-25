@@ -16,9 +16,11 @@ import { TradingTerminalDock } from './TradingTerminalDock';
 import { TradingSymbolSearch, type TradingFormulaSearchPreview } from './TradingSymbolSearch';
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
 import { TradingDrawingTools } from './TradingDrawingTools';
+import { TradingSessionTabs } from './TradingSessionTabs';
 import { tradingApi } from './tradingApi';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
 import { TradingChartTypeMenu } from './TradingChartTypeMenu';
+import { TradingChartLayoutPicker } from './TradingChartLayoutPicker';
 import { useTradingWorkspacePersistence } from './persistence/useTradingWorkspacePersistence';
 import { buildTradingWorkspaceExport, downloadTradingWorkspaceExport } from './tradingExport';
 import { preferredCryptoInstrument } from './cryptoInstrumentDefaults';
@@ -30,6 +32,7 @@ import {
 } from './tradingIntervals';
 import {
   MAX_TRADING_CHARTS,
+  MAX_TRADING_TABS,
   MIN_TRADING_CHARTS,
   useTradingStore,
   type TradingLayout,
@@ -51,6 +54,8 @@ import './TradingChartPan.css';
 import './TradingChartChrome.css';
 import './TradingTypography.css';
 import './TradingToolFullscreen.css';
+import './TradingSessionTabs.css';
+import './TradingChartLayoutPicker.css';
 
 const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'auto', label: 'Auto grid' },
@@ -105,6 +110,8 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const providers = useQuery({ queryKey: ['trading', 'providers'], queryFn: tradingApi.providers });
   const instruments = useQuery({ queryKey: ['trading', 'instruments'], queryFn: () => tradingApi.instruments() });
   const layout = useTradingStore((state) => state.layout);
+  const tabs = useTradingStore((state) => state.tabs);
+  const activeTabId = useTradingStore((state) => state.activeTabId);
   const charts = useTradingStore((state) => state.charts);
   const activeChartId = useTradingStore((state) => state.activeChartId);
   const replayMode = useTradingStore((state) => state.replayMode);
@@ -114,6 +121,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const panels = useTradingStore((state) => state.panels);
   const favoriteInstrumentIds = useTradingStore((state) => state.favoriteInstrumentIds);
   const setLayout = useTradingStore((state) => state.setLayout);
+  const setActiveTab = useTradingStore((state) => state.setActiveTab);
+  const addTab = useTradingStore((state) => state.addTab);
+  const removeTab = useTradingStore((state) => state.removeTab);
   const setChartCount = useTradingStore((state) => state.setChartCount);
   const addChart = useTradingStore((state) => state.addChart);
   const removeChart = useTradingStore((state) => state.removeChart);
@@ -343,6 +353,25 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     if (window.confirm(`Delete ${persistence.activeWorkspaceName}?`)) void persistence.deleteWorkspace();
   };
 
+  const createTab = () => {
+    addTab();
+  };
+
+  const sessionTabLabel = (tab: (typeof tabs)[number]) => {
+    const chart = tab.charts.find((item) => item.chartId === tab.activeChartId) ?? tab.charts[0];
+    if (!chart) return tab.name;
+    const instrument = (instruments.data ?? []).find((item) => item.instrument_id === chart.instrumentId);
+    return instrument?.display_symbol
+      ?? tradingFormulaDisplaySymbol(chart.instrumentId)
+      ?? chart.instrumentId.split(':').at(-1)?.replace('-', '/')
+      ?? tab.name;
+  };
+
+  const closeTabSession = (tab: (typeof tabs)[number]) => {
+    if (tabs.length <= 1) return;
+    if (window.confirm(`Close ${sessionTabLabel(tab)}?`)) removeTab(tab.tabId);
+  };
+
   const openSymbolSearch = (chartId = activeChartId) => {
     const targetChart = charts.find((chart) => chart.chartId === chartId) ?? activeChart;
     const targetInstrument = (instruments.data ?? []).find((instrument) => instrument.instrument_id === targetChart.instrumentId);
@@ -404,13 +433,17 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
         <div className="trading-layout-switcher" role="group" aria-label="Chart count and grid">
           <button type="button" onClick={() => removeChart()} disabled={charts.length <= MIN_TRADING_CHARTS} aria-label="Remove active chart">−</button>
-          <select aria-label="Number of charts" value={charts.length} onChange={(event) => setChartCount(Number(event.target.value))}>
-            {Array.from({ length: MAX_TRADING_CHARTS }, (_, index) => index + 1).map((count) => (
-              <option key={count} value={count}>{count} chart{count === 1 ? '' : 's'}</option>
-            ))}
-          </select>
+          <TradingChartLayoutPicker
+            chartCount={charts.length}
+            maximumChartCount={MAX_TRADING_CHARTS}
+            layout={layout}
+            links={links}
+            onSetChartCount={setChartCount}
+            onSetLayout={setLayout}
+            onSetLink={setLink}
+          />
           <button type="button" onClick={addChart} disabled={charts.length >= MAX_TRADING_CHARTS} aria-label="Add chart">+</button>
-          <select aria-label="Grid columns" value={layout} onChange={(event) => setLayout(event.target.value as TradingLayout)}>
+          <select aria-label="Grid columns" value={gridOptions.some((option) => option.id === layout) ? layout : 'auto'} onChange={(event) => setLayout(event.target.value as TradingLayout)}>
             {gridOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </div>
@@ -564,6 +597,16 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </section>
       </header>
 
+      <TradingSessionTabs
+        tabs={tabs}
+        activeTabId={activeTabId}
+        canAdd={tabs.length < MAX_TRADING_TABS}
+        getTabLabel={sessionTabLabel}
+        onSelect={setActiveTab}
+        onAdd={createTab}
+        onClose={closeTabSession}
+      />
+
       <TradingSymbolSearch
         open={symbolSearchOpen}
         query={symbolQuery}
@@ -630,6 +673,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <div className={`trading-right-dock ${panels.right ? 'is-expanded' : 'is-collapsed'}`}>
             {panels.right ? (
               <TradingSidePanel
+                sessionId={activeTabId}
                 instruments={visibleInstruments}
                 activeInstrumentId={activeChart.instrumentId}
                 bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}

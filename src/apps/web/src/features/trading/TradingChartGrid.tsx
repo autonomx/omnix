@@ -5,6 +5,8 @@ import { useTradingStore, type TradingLayout } from './tradingStore';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
 
 export function tradingGridColumns(layout: TradingLayout, chartCount: number): number {
+  if (layout === 'rows-2' || layout === 'rows-3' || layout === 'rows-4') return 1;
+  if (layout === 'main-left-3' || layout === 'main-right-3' || layout === 'main-top-3' || layout === 'main-bottom-3') return 2;
   const forced = {
     'columns-1': 1,
     'columns-2': 2,
@@ -28,6 +30,7 @@ export function TradingChartGrid({
 }) {
   const layout = useTradingStore((state) => state.layout);
   const charts = useTradingStore((state) => state.charts);
+  const activeTabId = useTradingStore((state) => state.activeTabId);
   const activeChartId = useTradingStore((state) => state.activeChartId);
   const links = useTradingStore((state) => state.links);
   const setActiveChart = useTradingStore((state) => state.setActiveChart);
@@ -55,6 +58,10 @@ export function TradingChartGrid({
   }, [charts, focusedChartId]);
 
   useEffect(() => {
+    setFocusedChartId(null);
+  }, [activeTabId]);
+
+  useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && focusedChartId !== null) setFocusedChartId(null);
     };
@@ -71,6 +78,8 @@ export function TradingChartGrid({
       {visibleCharts.map((chart) => (
         <div key={chart.chartId} className="trading-chart-grid-cell">
           <TradingChartPanel
+            key={`${activeTabId}:${chart.chartId}`}
+            sessionId={activeTabId}
             chartId={chart.chartId}
             chartNumber={charts.findIndex((item) => item.chartId === chart.chartId) + 1}
             instrumentId={chart.instrumentId}

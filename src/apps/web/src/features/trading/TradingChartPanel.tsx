@@ -272,6 +272,7 @@ async function comparisonBars(
 }
 
 export function TradingChartPanel({
+  sessionId,
   chartId,
   chartNumber,
   instrumentId,
@@ -298,6 +299,7 @@ export function TradingChartPanel({
   synchronization,
   paperAccountId,
 }: {
+  sessionId?: string;
   chartId: string;
   chartNumber: number;
   instrumentId: string;
@@ -351,7 +353,7 @@ export function TradingChartPanel({
   const restartReplaySession = useTradingStore((state) => state.restartReplaySession);
   const setReplayBar = useTradingReplayStore((state) => state.setBar);
   const clearReplayState = useTradingReplayStore((state) => state.clear);
-  const drawings = useTradingDrawings(instrumentId);
+  const drawings = useTradingDrawings(instrumentId, sessionId);
   const selectedDrawing = drawings.state.drawings.find((drawing) => drawing.drawingId === drawings.state.selectedId) ?? null;
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
   const [streamStatus, setStreamStatus] = useState<TradingStreamStatus | 'replay'>('connecting');

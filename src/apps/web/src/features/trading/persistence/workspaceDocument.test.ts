@@ -24,6 +24,20 @@ describe('Trading workspace document', () => {
     expect(parseTradingWorkspace(serialized)).toEqual(serialized);
   });
 
+  it('round trips independent chart session tabs when present', () => {
+    const serialized = serializeTradingWorkspace({
+      ...state,
+      activeTabId: 'tab-2',
+      tabs: [
+        { tabId: 'tab-1', name: 'Main Session', layout: 'auto', activeChartId: 'chart-1', charts: state.charts.slice(0, 1).map((chart) => ({ ...chart, bindingId: null, indicators: [] })), links: state.links, panels: state.panels },
+        { tabId: 'tab-2', name: 'Swing Research', layout: 'columns-2', activeChartId: 'chart-2', charts: state.charts.slice(1).map((chart) => ({ ...chart, bindingId: null, indicators: [] })), links: state.links, panels: state.panels },
+      ],
+    });
+    expect(serialized.activeTabId).toBe('tab-2');
+    expect(serialized.tabs?.map((tab) => tab.name)).toEqual(['Main Session', 'Swing Research']);
+    expect(parseTradingWorkspace(serialized)).toEqual(serialized);
+  });
+
   it('migrates fixed version-one layouts without exposing hidden charts', () => {
     const migrated = parseTradingWorkspace({
       schemaVersion: 1,

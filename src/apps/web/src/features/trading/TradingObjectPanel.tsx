@@ -134,6 +134,7 @@ function TrashIcon() {
 function TradingObjectTree({
   instrument,
   instrumentId,
+  sessionId,
   interval,
   indicators,
   onSetIndicators,
@@ -141,12 +142,13 @@ function TradingObjectTree({
 }: {
   instrument?: CanonicalInstrument;
   instrumentId: string;
+  sessionId?: string;
   interval: string;
   indicators: CoreIndicatorInstance[];
   onSetIndicators: (indicators: CoreIndicatorInstance[]) => void;
   onOpenPineScript: (id: CoreIndicatorId) => void;
 }) {
-  const drawings = useTradingDrawings(instrumentId);
+  const drawings = useTradingDrawings(instrumentId, sessionId);
   const [chartExpanded, setChartExpanded] = useState(true);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState(true);
   const symbol = displaySymbol(instrument, instrumentId);
@@ -311,6 +313,7 @@ function TradingDataWindow({
 }
 
 export function TradingObjectPanel({
+  sessionId,
   instruments,
   activeInstrumentId,
   bindingId,
@@ -319,6 +322,7 @@ export function TradingObjectPanel({
   onSetIndicators,
   onOpenPineScript,
 }: {
+  sessionId?: string;
   instruments: CanonicalInstrument[];
   activeInstrumentId: string;
   bindingId: string | null;
@@ -335,7 +339,7 @@ export function TradingObjectPanel({
         <button type="button" role="tab" aria-selected={view === 'object-tree'} onClick={() => setView('object-tree')}>Object tree</button>
         <button type="button" role="tab" aria-selected={view === 'data-window'} onClick={() => setView('data-window')}>Data window</button>
       </nav>
-      {view === 'object-tree' ? <TradingObjectTree instrument={instrument} instrumentId={activeInstrumentId} interval={interval} indicators={indicators} onSetIndicators={onSetIndicators} onOpenPineScript={onOpenPineScript} /> : null}
+      {view === 'object-tree' ? <TradingObjectTree instrument={instrument} instrumentId={activeInstrumentId} sessionId={sessionId} interval={interval} indicators={indicators} onSetIndicators={onSetIndicators} onOpenPineScript={onOpenPineScript} /> : null}
       {view === 'data-window' ? <TradingDataWindow instrument={instrument} instrumentId={activeInstrumentId} bindingId={bindingId} interval={interval} indicators={indicators} /> : null}
     </div>
   );
