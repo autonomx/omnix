@@ -100,6 +100,28 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
             </div>
           </div>
         ) : null}
+        {providers.llm === 'chatgpt_codex' ? (
+          <div className="provider-config-group">
+            <h4>ChatGPT Plus (Codex)</h4>
+            <div className="settings-form-grid">
+              <SettingsField label="Model">
+                <input value={configs.chatgptCodex.model} onChange={updateString(dispatch, 'providerConfigs.chatgptCodex.model')} placeholder="gpt-5.6-sol" />
+                <small>Uses the model available to your ChatGPT account through Codex, not OpenAI API billing.</small>
+              </SettingsField>
+              <SettingsField label="Reasoning effort">
+                <input value={configs.chatgptCodex.reasoningEffort} onChange={updateString(dispatch, 'providerConfigs.chatgptCodex.reasoningEffort')} placeholder="medium" />
+              </SettingsField>
+              <SettingsField label="Codex executable">
+                <input value={configs.chatgptCodex.codexPath} onChange={updateString(dispatch, 'providerConfigs.chatgptCodex.codexPath')} placeholder="codex" />
+                <small>Authentication stays in Codex. Run <code>codex login</code> and choose Sign in with ChatGPT; Omnix never stores the OAuth token.</small>
+              </SettingsField>
+              <SettingsField label="Transport">
+                <input value={configs.chatgptCodex.transport} readOnly />
+                <small>Uses the persistent local Codex app-server stdio transport.</small>
+              </SettingsField>
+            </div>
+          </div>
+        ) : null}
         {providers.llm === 'llamacpp' ? (
           <div className="provider-config-group">
             <h4>llama.cpp</h4>
