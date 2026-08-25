@@ -30,8 +30,6 @@ const omnixIndicatorDefinitions: IndicatorDefinition[] = [
   { id: 'ideal-bb', name: 'IDEAL BB with MA (With Alerts)', author: 'rautadarsh123', boosts: '9.9 K', section: 'technicals', kind: 'indicator', available: true },
   { id: 'log-macd', name: 'Logarithmic Moving Average Convergence Divergence', author: 'chemmist', boosts: '882', section: 'technicals', kind: 'indicator', available: true },
   { id: 'macd-dema', name: 'MACD DEMA', author: 'ToFFF', boosts: '6.5 K', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'rsi-divergence', name: 'RSI Divergence', author: 'Shizaru', boosts: '19.2 K', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'stochastic-rsi', name: 'Stochastic RSI', author: 'TradingView community', boosts: 'Community', section: 'technicals', kind: 'indicator', available: true },
   { id: 'swing-liquidity', name: 'Swing Levels and Liquidity - By Leviathan', author: 'LeviathanCapital', boosts: '11.2 K', section: 'technicals', kind: 'indicator', available: true },
   { id: 'volume-profile', name: 'Volume Profile', author: 'kv4coins', boosts: '23.3 K', section: 'technicals', kind: 'profile', available: true },
 ];
@@ -147,7 +145,9 @@ export function TradingIndicatorManager({
       if (tab === 'strategies') return false;
       if (tab === 'patterns' && definition.kind !== 'pattern') return false;
       if (tab === 'profiles' && definition.kind !== 'profile') return false;
-      if (tab === 'indicators' && definition.kind !== 'indicator') return false;
+      // Preserve the existing one-click Volume Profile path while also exposing
+      // the dedicated Profiles tab. Pattern studies stay isolated in Patterns.
+      if (tab === 'indicators' && definition.kind === 'pattern') return false;
       if (section === 'favorites' && !favoriteIds.has(definition.id)) return false;
       if (section !== 'favorites' && section !== 'technicals') return false;
       return !normalizedQuery || definition.name.toLowerCase().includes(normalizedQuery);
