@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
 import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInstance } from './indicators/coreIndicators';
+import { isAutoChartPatternId } from './indicators/autoPatterns';
 import type { TradingComparison } from './tradingComparisons';
 
 export type TradingLayout = 'auto' | 'columns-1' | 'columns-2' | 'columns-3' | 'columns-4';
@@ -72,7 +73,9 @@ export const defaultTradingIndicators = (): CoreIndicatorInstance[] => [
 ];
 
 function newIndicatorInstance(id: CoreIndicatorId, period?: number): CoreIndicatorInstance {
-  const defaults: CoreIndicatorInstance = id === 'death-cross' || id === 'golden-cross'
+  const defaults: CoreIndicatorInstance = isAutoChartPatternId(id)
+    ? { id, period: 3, enabled: true, visible: true, style: { labelsOnPriceScale: false, valuesInStatusLine: false, inputsInStatusLine: false } }
+    : id === 'death-cross' || id === 'golden-cross'
     ? { id, period: 50, fastPeriod: 50, slowPeriod: 200, enabled: true, visible: true }
     : id === 'bull-market-band'
       ? { id, period: 20, fastPeriod: 20, slowPeriod: 21, enabled: true, visible: true }
