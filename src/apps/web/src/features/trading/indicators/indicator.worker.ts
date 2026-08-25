@@ -1,19 +1,46 @@
 /// <reference lib="webworker" />
 
-import { indicatorOutputs, type IndicatorOutput } from './coreIndicators';
+import {
+  indicatorDefaultBackgroundColor,
+  indicatorOutputs,
+  type CoreIndicatorInstance,
+  type IndicatorOutput,
+} from './coreIndicators';
 import { calculateTradingViewBuiltInOutputs, isTradingViewBuiltInId } from './tradingViewBuiltIns';
 import type { IndicatorWorkerRequest, IndicatorWorkerResponse } from './indicatorWorkerProtocol';
 
 const workerScope: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
+
+function styleOutputs(outputs: IndicatorOutput[], indicator: CoreIndicatorInstance): IndicatorOutput[] {
+  if (!isTradingViewBuiltInId(indicator.id)) return outputs;
+  return outputs
+    .map((output) => ({
+      ...output,
+      visible: indicator.style?.plots?.[output.key] !== false,
+      color: indicator.style?.colors?.[output.key] ?? output.color,
+      lineStyle: indicator.style?.lineStyles?.[output.key] ?? output.lineStyle,
+      lineWidth: indicator.style?.lineWidth ?? output.lineWidth,
+      backgroundVisible: indicator.style?.backgroundVisible !== false,
+      backgroundColor: indicator.style?.backgroundColor ?? output.backgroundColor ?? indicatorDefaultBackgroundColor(indicator.id),
+      precision: indicator.style?.precision ?? output.precision,
+      labelsOnPriceScale: indicator.style?.labelsOnPriceScale ?? output.labelsOnPriceScale ?? false,
+      valuesInStatusLine: indicator.style?.valuesInStatusLine ?? output.valuesInStatusLine,
+      inputsInStatusLine: indicator.style?.inputsInStatusLine ?? output.inputsInStatusLine,
+    }))
+    .filter((output) => output.visible !== false);
+}
 
 workerScope.addEventListener('message', (event: MessageEvent<IndicatorWorkerRequest>) => {
   const request = event.data;
   try {
     const outputs = request.indicators
       .filter((indicator) => indicator.enabled && indicator.visible !== false)
-      .flatMap((indicator) => isTradingViewBuiltInId(indicator.id)
-        ? calculateTradingViewBuiltInOutputs(request.bars, indicator) as IndicatorOutput[]
-        : indicatorOutputs(request.bars, indicator));
+      .flatMap((indicator) => {
+        const raw = isTradingViewBuiltInId(indicator.id)
+          ? calculateTradingViewBuiltInOutputs(request.bars, indicator) as IndicatorOutput[]
+          : indicatorOutputs(request.bars, indicator);
+        return styleOutputs(raw, indicator);
+      });
     const response: IndicatorWorkerResponse = { requestId: request.requestId, outputs };
     workerScope.postMessage(response);
   } catch (error) {
