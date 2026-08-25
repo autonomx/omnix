@@ -18,6 +18,7 @@ describe('TradingIndicatorManager filters', () => {
 
     fireEvent.change(categoryFilter, { target: { value: 'on-chain' } });
     expect(screen.getByText('Active addresses with contracts')).toBeTruthy();
+    expect(screen.getByText('Hash Rate')).toBeTruthy();
     expect(screen.queryByText('Relative Strength Index (RSI)')).toBeNull();
 
     fireEvent.change(categoryFilter, { target: { value: 'all' } });
@@ -25,8 +26,13 @@ describe('TradingIndicatorManager filters', () => {
     expect(screen.getByText('Analyst price forecast')).toBeTruthy();
     expect(screen.queryByText('Active addresses with contracts')).toBeNull();
 
-    fireEvent.change(availabilityFilter, { target: { value: 'data-required' } });
+    fireEvent.change(availabilityFilter, { target: { value: 'ready' } });
     expect(screen.getByText('Analyst price forecast')).toBeTruthy();
+    expect(screen.getByText('Dividend Yield')).toBeTruthy();
+
+    fireEvent.change(availabilityFilter, { target: { value: 'data-required' } });
+    expect(screen.queryByText('Analyst price forecast')).toBeNull();
+    expect(screen.getByText('Advance/Decline Line')).toBeTruthy();
     expect(screen.queryByText('Relative Strength Index (RSI)')).toBeNull();
   });
 
@@ -36,6 +42,7 @@ describe('TradingIndicatorManager filters', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fundamentals' }));
 
     expect(screen.getByText('Analyst price forecast')).toBeTruthy();
+    expect(screen.getByText('Price target - indicator')).toBeTruthy();
     expect(screen.queryByText('Relative Strength Index (RSI)')).toBeNull();
   });
 });
