@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -10,6 +11,27 @@ from .metric_data import (
     TradingMetricDataService,
     default_metric_data_service,
 )
+
+
+def _normalize_metric_units(response: MarketMetricResponse) -> MarketMetricResponse:
+    """Normalize provider-native units to the units exposed by the chart metric."""
+    if response.metric != "binance.premium":
+        return response
+    return response.model_copy(
+        update={
+            "series": [
+                series.model_copy(
+                    update={
+                        "points": [
+                            point.model_copy(update={"value": point.value * Decimal("100")})
+                            for point in series.points
+                        ]
+                    }
+                )
+                for series in response.series
+            ]
+        }
+    )
 
 
 def create_trading_metric_router(
@@ -26,12 +48,14 @@ def create_trading_metric_router(
         end_time: datetime | None = Query(default=None),
     ) -> MarketMetricResponse:
         try:
-            return metric_service_factory().metric(
-                instrument_id,
-                metric,
-                interval,
-                limit,
-                end_time=end_time,
+            return _normalize_metric_units(
+                metric_service_factory().metric(
+                    instrument_id,
+                    metric,
+                    interval,
+                    limit,
+                    end_time=end_time,
+                )
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
