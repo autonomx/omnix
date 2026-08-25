@@ -1,5 +1,6 @@
 import type { MarketBar } from '../tradingTypes';
 import { indicatorOutputs, type CoreIndicatorInstance, type IndicatorOutput } from './coreIndicators';
+import { calculateTradingViewBuiltInOutputs, isTradingViewBuiltInId } from './tradingViewBuiltIns';
 import type { IndicatorWorkerRequest, IndicatorWorkerResponse } from './indicatorWorkerProtocol';
 
 type PendingRequest = {
@@ -11,6 +12,13 @@ type WorkerFactory = () => Worker;
 
 function defaultWorkerFactory(): Worker {
   return new Worker(new URL('./indicator.worker.ts', import.meta.url), { type: 'module' });
+}
+
+function calculateOutputs(bars: readonly MarketBar[], indicator: CoreIndicatorInstance): IndicatorOutput[] {
+  if (isTradingViewBuiltInId(indicator.id)) {
+    return calculateTradingViewBuiltInOutputs(bars, indicator) as IndicatorOutput[];
+  }
+  return indicatorOutputs(bars, indicator);
 }
 
 export class TradingIndicatorScheduler {
@@ -43,7 +51,7 @@ export class TradingIndicatorScheduler {
       return Promise.resolve().then(() => {
         const outputs = clonedIndicators
           .filter((indicator) => indicator.enabled && indicator.visible !== false)
-          .flatMap((indicator) => indicatorOutputs(clonedBars, indicator));
+          .flatMap((indicator) => calculateOutputs(clonedBars, indicator));
         return requestId === this.latestRequestId && !this.destroyed ? outputs : null;
       });
     }
