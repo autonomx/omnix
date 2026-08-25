@@ -6,6 +6,10 @@ from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query
 
+from .fundamental_metric_data import (
+    YahooAnalystMetricAdapter,
+    default_yahoo_analyst_metric_adapter,
+)
 from .metric_data import (
     MarketMetricResponse,
     TradingMetricDataService,
@@ -36,6 +40,7 @@ def _normalize_metric_units(response: MarketMetricResponse) -> MarketMetricRespo
 
 def create_trading_metric_router(
     metric_service_factory: Callable[[], TradingMetricDataService] = default_metric_data_service,
+    yahoo_analyst_factory: Callable[[], YahooAnalystMetricAdapter] = default_yahoo_analyst_metric_adapter,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading", tags=["trading"])
 
@@ -52,15 +57,24 @@ def create_trading_metric_router(
         end_time: datetime | None = Query(default=None),
     ) -> MarketMetricResponse:
         try:
-            return _normalize_metric_units(
-                metric_service_factory().metric(
+            if metric in {"yahoo.analyst_price_forecast", "yahoo.price_target"}:
+                response = yahoo_analyst_factory().analyst_targets(
+                    instrument_id,
+                    interval,
+                    limit,
+                    end_time=end_time,
+                )
+                if metric == "yahoo.price_target":
+                    response = response.model_copy(update={"metric": metric})
+            else:
+                response = metric_service_factory().metric(
                     instrument_id,
                     metric,
                     interval,
                     limit,
                     end_time=end_time,
                 )
-            )
+            return _normalize_metric_units(response)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
