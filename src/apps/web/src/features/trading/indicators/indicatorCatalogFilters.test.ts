@@ -26,12 +26,24 @@ describe('indicator catalog filters', () => {
       markets: ['crypto'],
       category: 'on-chain',
     });
+    expect(classifyIndicatorCatalogEntry('Difficulty', 'indicator')).toEqual({
+      markets: ['crypto'],
+      category: 'on-chain',
+    });
+    expect(classifyIndicatorCatalogEntry('Mean block size in bytes', 'indicator')).toEqual({
+      markets: ['crypto'],
+      category: 'on-chain',
+    });
     expect(classifyIndicatorCatalogEntry('Open Interest', 'indicator')).toEqual({
       markets: ['derivatives'],
       category: 'derivatives',
     });
     expect(classifyIndicatorCatalogEntry('Understanding crypto open interest', 'indicator')).toEqual({
       markets: ['crypto', 'derivatives'],
+      category: 'derivatives',
+    });
+    expect(classifyIndicatorCatalogEntry('Mark price', 'indicator')).toEqual({
+      markets: ['derivatives'],
       category: 'derivatives',
     });
   });
