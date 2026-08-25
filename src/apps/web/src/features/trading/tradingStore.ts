@@ -3,6 +3,11 @@ import type { TradingChartType } from './chart/chartAdapter';
 import type { DrawingSnapMode, DrawingTool } from './drawings/drawingCommands';
 import { indicatorUsesSeparatePane, type CoreIndicatorId, type CoreIndicatorInstance } from './indicators/coreIndicators';
 import { isAutoChartPatternId } from './indicators/autoPatterns';
+import {
+  isTradingViewBuiltInId,
+  tradingViewBuiltInDefaultPeriod,
+  tradingViewBuiltInUsesSeparatePane,
+} from './indicators/tradingViewBuiltIns';
 import type { TradingComparison } from './tradingComparisons';
 
 export type TradingLayout = 'auto' | 'columns-1' | 'columns-2' | 'columns-3' | 'columns-4';
@@ -72,9 +77,17 @@ export const defaultTradingIndicators = (): CoreIndicatorInstance[] => [
   { id: 'vwap', period: 1, anchorTime: null, enabled: false },
 ];
 
+function usesSeparatePane(id: CoreIndicatorId): boolean {
+  return isTradingViewBuiltInId(id)
+    ? tradingViewBuiltInUsesSeparatePane(id)
+    : indicatorUsesSeparatePane(id);
+}
+
 function newIndicatorInstance(id: CoreIndicatorId, period?: number): CoreIndicatorInstance {
   const defaults: CoreIndicatorInstance = isAutoChartPatternId(id)
     ? { id, period: 3, enabled: true, visible: true, style: { labelsOnPriceScale: false, valuesInStatusLine: false, inputsInStatusLine: false } }
+    : isTradingViewBuiltInId(id)
+      ? { id, period: tradingViewBuiltInDefaultPeriod(id) ?? 20, enabled: true, visible: true }
     : id === 'death-cross' || id === 'golden-cross'
     ? { id, period: 50, fastPeriod: 50, slowPeriod: 200, enabled: true, visible: true }
     : id === 'bull-market-band'
@@ -243,8 +256,8 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   })),
   moveIndicator: (chartId, id, direction) => set((state) => ({
     charts: state.charts.map((chart) => {
-      if (chart.chartId !== chartId || !indicatorUsesSeparatePane(id)) return chart;
-      const paneIndicators = chart.indicators.filter((indicator) => indicatorUsesSeparatePane(indicator.id) && indicator.enabled);
+      if (chart.chartId !== chartId || !usesSeparatePane(id)) return chart;
+      const paneIndicators = chart.indicators.filter((indicator) => usesSeparatePane(indicator.id) && indicator.enabled);
       const currentIndex = paneIndicators.findIndex((indicator) => indicator.id === id);
       if (currentIndex < 0) return chart;
       const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
@@ -253,7 +266,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
       [nextPaneIndicators[currentIndex], nextPaneIndicators[targetIndex]] = [nextPaneIndicators[targetIndex], nextPaneIndicators[currentIndex]];
       let paneIndex = 0;
       const indicators = chart.indicators.map((indicator) => {
-        if (!indicatorUsesSeparatePane(indicator.id) || !indicator.enabled) return indicator;
+        if (!usesSeparatePane(indicator.id) || !indicator.enabled) return indicator;
         const next = nextPaneIndicators[paneIndex];
         paneIndex += 1;
         return next ?? indicator;
