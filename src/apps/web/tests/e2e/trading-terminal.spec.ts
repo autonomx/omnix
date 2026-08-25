@@ -397,11 +397,11 @@ test('Trading terminal smoke covers flexible layout, saved workspaces, drawings,
   }
   await expect.poll(() => state.drawingWrites).toBeGreaterThan(0);
 
-  // Changing Chart 2 to ETH makes Chart 2 active by design. Exercise the
-  // alert tool against that actual active-chart contract instead of assuming
-  // the workspace silently switches back to BTC.
-  await page.getByRole('button', { name: 'Place price alert' }).click();
-  await overlay.click({ position: { x: 180, y: 100 } });
+  // Changing Chart 2 to ETH makes Chart 2 active by design. Create the alert
+  // from the Alerts panel; the chart toolbar no longer exposes a direct alert
+  // placement button.
+  await expect(page.getByRole('button', { name: 'Place price alert' })).toHaveCount(0);
+  await sidePanel.getByRole('button', { name: 'Add alert' }).click();
   await expect(page.getByRole('dialog', { name: /Create alert on ETHUSDT/ })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Alert trigger' })).toHaveValue('every_time');
   await expect(page.getByRole('checkbox', { name: 'App' })).toBeChecked();
