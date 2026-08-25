@@ -138,9 +138,7 @@ class ProviderRegistry:
             
         providers_list = []
         for name, provider_class in self._providers.items():
-            # Create a temporary instance to get metadata (without config for now)
             try:
-                # Get class-level attributes
                 info = {
                     "name": name,
                     "display_name": getattr(provider_class, "provider_display_name", name),
@@ -152,6 +150,37 @@ class ProviderRegistry:
                 print(f"Error getting info for provider {name}: {e}")
                 
         return providers_list
+
+    @staticmethod
+    def _chatgpt_codex_config(base: ProviderConfig) -> ProviderConfig:
+        """Resolve non-secret Codex settings from the typed settings profile.
+
+        ``shared.get_provider`` predates this provider and falls through to the
+        LM Studio config branch for provider ids it does not know. Normalizing
+        here keeps the legacy factory compatible without ever treating ChatGPT
+        subscription auth as an API-key provider.
+        """
+        try:
+            from app.shared import load_settings
+
+            settings = load_settings()
+            profile = settings.get("settings_control_center", {})
+            provider_configs = profile.get("providerConfigs", {}) if isinstance(profile, dict) else {}
+            codex = provider_configs.get("chatgptCodex", {}) if isinstance(provider_configs, dict) else {}
+            codex = codex if isinstance(codex, dict) else {}
+        except Exception:
+            codex = {}
+        return ProviderConfig(
+            provider_type="chatgpt_codex",
+            model=str(codex.get("model") or "gpt-5.6-sol"),
+            timeout=base.timeout,
+            max_retries=base.max_retries,
+            extra_params={
+                "reasoning_effort": str(codex.get("reasoningEffort") or "medium"),
+                "codex_path": str(codex.get("codexPath") or "codex"),
+                "transport": str(codex.get("transport") or "app_server"),
+            },
+        )
     
     def create_provider(
         self,
@@ -204,6 +233,9 @@ class ProviderRegistry:
         else:
             # Use empty config, provider should provide defaults
             final_config = ProviderConfig(provider_type=provider_name)
+
+        if provider_name == "chatgpt_codex":
+            final_config = self._chatgpt_codex_config(final_config)
             
         try:
             provider_instance = provider_class(config=final_config)
