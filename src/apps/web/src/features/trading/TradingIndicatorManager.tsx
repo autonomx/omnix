@@ -129,7 +129,7 @@ export function TradingIndicatorManager({
       if (tab === 'strategies') return false;
       if (tab === 'patterns' && definition.kind !== 'pattern') return false;
       if (tab === 'profiles' && definition.kind !== 'profile') return false;
-      if (tab === 'indicators' && definition.kind !== 'indicator') return false;
+      if (tab === 'indicators' && definition.kind === 'pattern') return false;
       if (section === 'favorites' && !favoriteIds.has(definition.id)) return false;
       if (section !== 'favorites' && section !== 'technicals') return false;
       return !normalizedQuery || definition.name.toLowerCase().includes(normalizedQuery);
