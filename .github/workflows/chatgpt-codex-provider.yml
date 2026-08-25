@@ -67,3 +67,6 @@ jobs:
 
       - name: Web typecheck
         run: npm --workspace @omnix/web run typecheck
+
+      - name: Codex settings adapter regression
+        run: npm --workspace @omnix/web run test -- --run src/features/settings/settingsApi.spec.ts
