@@ -1,8 +1,9 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
+import { AUTO_CHART_PATTERN_DEFINITIONS, isAutoChartPatternId } from './indicators/autoPatterns';
 
-type PickerTab = 'all' | 'indicators' | 'strategies';
+type PickerTab = 'indicators' | 'strategies' | 'profiles' | 'patterns';
 type PickerSection = 'favorites' | 'my-scripts' | 'technicals' | 'fundamentals' | 'top' | 'trending';
 
 type IndicatorDefinition = {
@@ -11,29 +12,41 @@ type IndicatorDefinition = {
   author: string;
   boosts: string;
   section: 'technicals';
+  kind: 'indicator' | 'profile' | 'pattern';
 };
 
-const indicatorDefinitions: IndicatorDefinition[] = [
-  { id: 'atr', name: 'Average True Range', author: 'Omnix', boosts: 'Built-in', section: 'technicals' },
-  { id: 'bollinger', name: 'Bollinger Bands', author: 'Omnix', boosts: 'Built-in', section: 'technicals' },
-  { id: 'bull-market-band', name: 'Bull Market Support Band (20w SMA, 21w EMA)', author: 'zkdev', boosts: '5.3 K', section: 'technicals' },
-  { id: 'death-cross', name: 'Death Cross - 200 MA / 50 Cross Checker', author: 'MexPayne', boosts: '879', section: 'technicals' },
-  { id: 'ema', name: 'Exponential Moving Average', author: 'Omnix', boosts: 'Built-in', section: 'technicals' },
-  { id: 'ema-stack', name: 'EMA 9, 21, 50, 200', author: 'edufelarcon', boosts: '756', section: 'technicals' },
-  { id: 'fair-value-gap', name: 'Fair Value Gap [LuxAlgo]', author: 'LuxAlgo', boosts: '24.5 K', section: 'technicals' },
-  { id: 'golden-cross', name: 'Golden Cross', author: 'MichMexTrade', boosts: '229', section: 'technicals' },
-  { id: 'ideal-bb', name: 'IDEAL BB with MA (With Alerts)', author: 'rautadarsh123', boosts: '9.9 K', section: 'technicals' },
-  { id: 'log-macd', name: 'Logarithmic Moving Average Convergence Divergence', author: 'chemmist', boosts: '882', section: 'technicals' },
-  { id: 'macd-dema', name: 'MACD DEMA', author: 'ToFFF', boosts: '6.5 K', section: 'technicals' },
-  { id: 'macd', name: 'Moving Average Convergence Divergence', author: 'Omnix', boosts: 'Built-in', section: 'technicals' },
-  { id: 'rsi', name: 'Relative Strength Index', author: 'Omnix', boosts: 'Built-in', section: 'technicals' },
-  { id: 'rsi-divergence', name: 'RSI Divergence', author: 'Shizaru', boosts: '19.2 K', section: 'technicals' },
-  { id: 'sma', name: 'Simple Moving Average', author: 'Omnix', boosts: 'Built-in', section: 'technicals' },
-  { id: 'stochastic-rsi', name: 'Stochastic RSI', author: 'TradingView community', boosts: 'Community', section: 'technicals' },
-  { id: 'swing-liquidity', name: 'Swing Levels and Liquidity - By Leviathan', author: 'LeviathanCapital', boosts: '11.2 K', section: 'technicals' },
-  { id: 'volume-profile', name: 'Volume Profile', author: 'kv4coins', boosts: '23.3 K', section: 'technicals' },
-  { id: 'vwap', name: 'Volume Weighted Average Price', author: 'Omnix', boosts: 'Built-in', section: 'technicals' },
+const technicalIndicatorDefinitions: IndicatorDefinition[] = [
+  { id: 'atr', name: 'Average True Range', author: 'Omnix', boosts: 'Built-in', section: 'technicals', kind: 'indicator' },
+  { id: 'bollinger', name: 'Bollinger Bands', author: 'Omnix', boosts: 'Built-in', section: 'technicals', kind: 'indicator' },
+  { id: 'bull-market-band', name: 'Bull Market Support Band (20w SMA, 21w EMA)', author: 'zkdev', boosts: '5.3 K', section: 'technicals', kind: 'indicator' },
+  { id: 'death-cross', name: 'Death Cross - 200 MA / 50 Cross Checker', author: 'MexPayne', boosts: '879', section: 'technicals', kind: 'indicator' },
+  { id: 'ema', name: 'Exponential Moving Average', author: 'Omnix', boosts: 'Built-in', section: 'technicals', kind: 'indicator' },
+  { id: 'ema-stack', name: 'EMA 9, 21, 50, 200', author: 'edufelarcon', boosts: '756', section: 'technicals', kind: 'indicator' },
+  { id: 'fair-value-gap', name: 'Fair Value Gap [LuxAlgo]', author: 'LuxAlgo', boosts: '24.5 K', section: 'technicals', kind: 'indicator' },
+  { id: 'golden-cross', name: 'Golden Cross', author: 'MichMexTrade', boosts: '229', section: 'technicals', kind: 'indicator' },
+  { id: 'ideal-bb', name: 'IDEAL BB with MA (With Alerts)', author: 'rautadarsh123', boosts: '9.9 K', section: 'technicals', kind: 'indicator' },
+  { id: 'log-macd', name: 'Logarithmic Moving Average Convergence Divergence', author: 'chemmist', boosts: '882', section: 'technicals', kind: 'indicator' },
+  { id: 'macd-dema', name: 'MACD DEMA', author: 'ToFFF', boosts: '6.5 K', section: 'technicals', kind: 'indicator' },
+  { id: 'macd', name: 'Moving Average Convergence Divergence', author: 'Omnix', boosts: 'Built-in', section: 'technicals', kind: 'indicator' },
+  { id: 'rsi', name: 'Relative Strength Index', author: 'Omnix', boosts: 'Built-in', section: 'technicals', kind: 'indicator' },
+  { id: 'rsi-divergence', name: 'RSI Divergence', author: 'Shizaru', boosts: '19.2 K', section: 'technicals', kind: 'indicator' },
+  { id: 'sma', name: 'Simple Moving Average', author: 'Omnix', boosts: 'Built-in', section: 'technicals', kind: 'indicator' },
+  { id: 'stochastic-rsi', name: 'Stochastic RSI', author: 'TradingView community', boosts: 'Community', section: 'technicals', kind: 'indicator' },
+  { id: 'swing-liquidity', name: 'Swing Levels and Liquidity - By Leviathan', author: 'LeviathanCapital', boosts: '11.2 K', section: 'technicals', kind: 'indicator' },
+  { id: 'volume-profile', name: 'Volume Profile', author: 'kv4coins', boosts: '23.3 K', section: 'technicals', kind: 'profile' },
+  { id: 'vwap', name: 'Volume Weighted Average Price', author: 'Omnix', boosts: 'Built-in', section: 'technicals', kind: 'indicator' },
 ];
+
+const patternDefinitions: IndicatorDefinition[] = AUTO_CHART_PATTERN_DEFINITIONS.map((definition) => ({
+  id: definition.id,
+  name: definition.name,
+  author: 'Omnix',
+  boosts: 'Built-in',
+  section: 'technicals',
+  kind: 'pattern',
+}));
+
+const indicatorDefinitions: IndicatorDefinition[] = [...technicalIndicatorDefinitions, ...patternDefinitions];
 
 const sectionGroups: Array<{ label: string; sections: Array<{ id: PickerSection; label: string; icon: string }> }> = [
   {
@@ -61,15 +74,16 @@ const sectionGroups: Array<{ label: string; sections: Array<{ id: PickerSection;
 
 function indicatorPeriod(indicators: readonly CoreIndicatorInstance[], id: CoreIndicatorId): number {
   return indicators.find((indicator) => indicator.id === id)?.period
-    ?? (id === 'rsi' || id === 'atr' || id === 'rsi-divergence' || id === 'stochastic-rsi' ? 14
-      : id === 'macd' || id === 'log-macd' || id === 'macd-dema' ? 9
-        : id === 'death-cross' || id === 'golden-cross' ? 50
-          : id === 'ema-stack' ? 9
-            : id === 'volume-profile' ? 100
-              : id === 'swing-liquidity' ? 5
-                : id === 'fair-value-gap' ? 3
-                  : id === 'ideal-bb' ? 120
-                    : 20);
+    ?? (isAutoChartPatternId(id) ? 3
+      : id === 'rsi' || id === 'atr' || id === 'rsi-divergence' || id === 'stochastic-rsi' ? 14
+        : id === 'macd' || id === 'log-macd' || id === 'macd-dema' ? 9
+          : id === 'death-cross' || id === 'golden-cross' ? 50
+            : id === 'ema-stack' ? 9
+              : id === 'volume-profile' ? 100
+                : id === 'swing-liquidity' ? 5
+                  : id === 'fair-value-gap' ? 3
+                    : id === 'ideal-bb' ? 120
+                      : 20);
 }
 
 export function TradingIndicatorManager({
@@ -84,8 +98,8 @@ export function TradingIndicatorManager({
   const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState<PickerTab>('all');
-  const [section, setSection] = useState<PickerSection>('favorites');
+  const [tab, setTab] = useState<PickerTab>('indicators');
+  const [section, setSection] = useState<PickerSection>('technicals');
   const [favoriteIds, setFavoriteIds] = useState<Set<CoreIndicatorId>>(
     () => new Set(indicatorDefinitions.map((definition) => definition.id)),
   );
@@ -113,6 +127,9 @@ export function TradingIndicatorManager({
     const normalizedQuery = query.trim().toLowerCase();
     return indicatorDefinitions.filter((definition) => {
       if (tab === 'strategies') return false;
+      if (tab === 'patterns' && definition.kind !== 'pattern') return false;
+      if (tab === 'profiles' && definition.kind !== 'profile') return false;
+      if (tab === 'indicators' && definition.kind !== 'indicator') return false;
       if (section === 'favorites' && !favoriteIds.has(definition.id)) return false;
       if (section !== 'favorites' && section !== 'technicals') return false;
       return !normalizedQuery || definition.name.toLowerCase().includes(normalizedQuery);
@@ -133,6 +150,14 @@ export function TradingIndicatorManager({
     setOpen(false);
     triggerRef.current?.focus();
   };
+
+  const emptyCopy = tab === 'strategies'
+    ? ['No strategies available yet', 'Strategy templates will appear here as they are added.']
+    : tab === 'profiles'
+      ? ['No profiles found', 'Try another search or category.']
+      : tab === 'patterns'
+        ? ['No chart patterns found', 'Try another search or category.']
+        : ['No indicators found', 'Try another search or category.'];
 
   const picker = open && typeof document !== 'undefined' ? createPortal(
     <div className="trading-indicator-picker-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
@@ -170,14 +195,14 @@ export function TradingIndicatorManager({
 
           <main className="trading-indicator-picker-results">
             <div className="trading-indicator-picker-tabs" role="tablist" aria-label="Indicator types">
-              {(['all', 'indicators', 'strategies'] as PickerTab[]).map((item) => (
+              {(['indicators', 'strategies', 'profiles', 'patterns'] as PickerTab[]).map((item) => (
                 <button key={item} type="button" role="tab" aria-selected={tab === item} className={tab === item ? 'active' : undefined} onClick={() => setTab(item)}>
                   {item[0].toUpperCase() + item.slice(1)}
                 </button>
               ))}
             </div>
             <div className="trading-indicator-picker-columns" aria-hidden="true"><span>NAME</span><span>AUTHOR</span><span>BOOSTS</span></div>
-            <div className="trading-indicator-picker-list" role="group" aria-label="Technical indicators">
+            <div className="trading-indicator-picker-list" role="group" aria-label={tab === 'patterns' ? 'Auto chart patterns' : 'Technical indicators'}>
               {filteredDefinitions.map((definition) => {
                 const period = indicatorPeriod(indicators, definition.id);
                 const enabled = enabledById.get(definition.id) ?? false;
@@ -197,8 +222,8 @@ export function TradingIndicatorManager({
               })}
               {filteredDefinitions.length === 0 ? (
                 <div className="trading-indicator-picker-empty">
-                  <strong>{tab === 'strategies' ? 'No strategies available yet' : 'No indicators found'}</strong>
-                  <span>{tab === 'strategies' ? 'Strategy templates will appear here as they are added.' : 'Try another search or category.'}</span>
+                  <strong>{emptyCopy[0]}</strong>
+                  <span>{emptyCopy[1]}</span>
                 </div>
               ) : null}
             </div>
