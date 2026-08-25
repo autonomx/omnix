@@ -26,6 +26,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.catalyst_api import create_trading_catalyst_router
     from app.trading.execution_api import create_trading_execution_router
     from app.trading.hermes_research_api import create_trading_hermes_research_router
+    from app.trading.metric_api import create_trading_metric_router
     from app.trading.model_api import create_trading_model_router
     from app.trading.market_data_api import create_trading_market_data_router
     from app.trading.paper_analytics_api import create_trading_paper_analytics_router
@@ -47,6 +48,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.strategy_v2_qualification_monitor import register_trading_strategy_v2_qualification_monitor
 
     gateway.include_router(create_trading_router())
+    gateway.include_router(create_trading_metric_router())
     gateway.include_router(create_trading_execution_router())
     gateway.include_router(create_trading_alert_router())
     gateway.include_router(create_trading_scanner_router())
