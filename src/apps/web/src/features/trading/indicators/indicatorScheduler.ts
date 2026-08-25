@@ -5,6 +5,7 @@ import {
   type CoreIndicatorInstance,
   type IndicatorOutput,
 } from './coreIndicators';
+import { calculateExternalIndicatorOutputs, isExternalIndicatorId } from './externalIndicatorData';
 import { calculateTradingViewBuiltInOutputs, isTradingViewBuiltInId } from './tradingViewBuiltIns';
 import type { IndicatorWorkerRequest, IndicatorWorkerResponse } from './indicatorWorkerProtocol';
 
@@ -20,7 +21,8 @@ function defaultWorkerFactory(): Worker {
 }
 
 function styleOutputs(outputs: IndicatorOutput[], indicator: CoreIndicatorInstance): IndicatorOutput[] {
-  if (!isTradingViewBuiltInId(indicator.id)) return outputs;
+  const id = String(indicator.id);
+  if (!isTradingViewBuiltInId(id)) return outputs;
   return outputs
     .map((output) => ({
       ...output,
@@ -39,8 +41,9 @@ function styleOutputs(outputs: IndicatorOutput[], indicator: CoreIndicatorInstan
 }
 
 function calculateOutputs(bars: readonly MarketBar[], indicator: CoreIndicatorInstance): IndicatorOutput[] {
-  const outputs = isTradingViewBuiltInId(indicator.id)
-    ? calculateTradingViewBuiltInOutputs(bars, indicator) as IndicatorOutput[]
+  const id = String(indicator.id);
+  const outputs = isTradingViewBuiltInId(id)
+    ? calculateTradingViewBuiltInOutputs(bars, { ...indicator, id }) as IndicatorOutput[]
     : indicatorOutputs(bars, indicator);
   return styleOutputs(outputs, indicator);
 }
@@ -69,18 +72,32 @@ export class TradingIndicatorScheduler {
     if (this.destroyed) return Promise.resolve(null);
     const requestId = ++this.latestRequestId;
     const clonedBars = bars.map((bar) => ({ ...bar }));
-    const clonedIndicators = indicators.map((indicator) => ({ ...indicator }));
+    const activeIndicators = indicators
+      .filter((indicator) => indicator.enabled && indicator.visible !== false)
+      .map((indicator) => ({ ...indicator }));
+    const externalIndicators = activeIndicators.filter((indicator) => isExternalIndicatorId(String(indicator.id)));
+    const localIndicators = activeIndicators.filter((indicator) => !isExternalIndicatorId(String(indicator.id)));
+
+    const externalPromise = Promise.all(
+      externalIndicators.map((indicator) => calculateExternalIndicatorOutputs(clonedBars, indicator)),
+    ).then((groups) => groups.flat());
 
     if (!this.worker) {
-      return Promise.resolve().then(() => {
-        const outputs = clonedIndicators
-          .filter((indicator) => indicator.enabled && indicator.visible !== false)
-          .flatMap((indicator) => calculateOutputs(clonedBars, indicator));
-        return requestId === this.latestRequestId && !this.destroyed ? outputs : null;
-      });
+      const localPromise = Promise.resolve().then(() => (
+        localIndicators.flatMap((indicator) => calculateOutputs(clonedBars, indicator))
+      ));
+      return Promise.all([localPromise, externalPromise]).then(([local, external]) => (
+        requestId === this.latestRequestId && !this.destroyed ? [...local, ...external] : null
+      ));
     }
 
-    return new Promise<IndicatorOutput[] | null>((resolve, reject) => {
+    if (localIndicators.length === 0) {
+      return externalPromise.then((external) => (
+        requestId === this.latestRequestId && !this.destroyed ? external : null
+      ));
+    }
+
+    const localPromise = new Promise<IndicatorOutput[] | null>((resolve, reject) => {
       for (const [pendingId, pending] of this.pending) {
         if (pendingId < requestId) {
           pending.resolve(null);
@@ -91,9 +108,14 @@ export class TradingIndicatorScheduler {
       const request: IndicatorWorkerRequest = {
         requestId,
         bars: clonedBars,
-        indicators: clonedIndicators,
+        indicators: localIndicators,
       };
       this.worker?.postMessage(request);
+    });
+
+    return Promise.all([localPromise, externalPromise]).then(([local, external]) => {
+      if (local === null || requestId !== this.latestRequestId || this.destroyed) return null;
+      return [...local, ...external];
     });
   }
 
