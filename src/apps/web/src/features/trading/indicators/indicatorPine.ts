@@ -1,6 +1,6 @@
 import type { CoreIndicatorId, CoreIndicatorInstance } from './coreIndicators';
 
-const indicatorPineTitles: Record<CoreIndicatorId, string> = {
+const indicatorPineTitles: Partial<Record<CoreIndicatorId, string>> = {
   sma: 'Simple Moving Average',
   ema: 'Exponential Moving Average',
   rsi: 'Relative Strength Index',
@@ -26,7 +26,7 @@ function script(lines: string[]): string {
   return lines.join('\n');
 }
 
-const indicatorPineTemplates: Record<CoreIndicatorId, string> = {
+const indicatorPineTemplates: Partial<Record<CoreIndicatorId, string>> = {
   sma: script([
     '//@version=6',
     'indicator("Simple Moving Average", shorttitle="SMA", overlay=true)',
@@ -241,7 +241,7 @@ function pineNumber(value: number | undefined, fallback: number): string {
 }
 
 export function indicatorPineTitle(id: CoreIndicatorId): string {
-  return indicatorPineTitles[id];
+  return indicatorPineTitles[id] ?? id.split('-').map((part) => part[0]?.toUpperCase() + part.slice(1)).join(' ');
 }
 
 export function indicatorPineSource(indicator: CoreIndicatorInstance): string {
@@ -249,13 +249,21 @@ export function indicatorPineSource(indicator: CoreIndicatorInstance): string {
   const fast = pineNumber(indicator.fastPeriod, 12);
   const slow = pineNumber(indicator.slowPeriod, 26);
   const signal = pineNumber(indicator.signalPeriod, 9);
-  return indicatorPineTemplates[indicator.id]
+  const template = indicatorPineTemplates[indicator.id];
+  if (!template) {
+    return script([
+      '//@version=6',
+      `// ${indicatorPineTitle(indicator.id)} is implemented by the Omnix deterministic chart-pattern engine.`,
+      '// It is a native study and does not currently have a Pine-equivalent source template.',
+    ]);
+  }
+  return template
     .replaceAll('{{PERIOD}}', period)
     .replaceAll('{{FAST}}', fast)
     .replaceAll('{{SLOW}}', slow)
     .replaceAll('{{SIGNAL}}', signal);
 }
 
-export function allIndicatorPineSources(): Readonly<Record<CoreIndicatorId, string>> {
+export function allIndicatorPineSources(): Readonly<Partial<Record<CoreIndicatorId, string>>> {
   return indicatorPineTemplates;
 }
