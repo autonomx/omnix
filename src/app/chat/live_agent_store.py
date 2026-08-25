@@ -102,13 +102,13 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                     persist_route=lambda: _persist_route(
                         self,
                         session.id,
-                        user_message.id,
+                        user_message,
                         decision,
                     ),
                 )
                 return
 
-            _persist_route(self, session.id, user_message.id, decision)
+            _persist_route(self, session.id, user_message, decision)
             if decision.automatic:
                 try:
                     response = plan_live_agent_proposal(
@@ -148,7 +148,7 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                         persist_route=lambda fallback_error=fallback_error: _persist_route(
                             self,
                             session.id,
-                            user_message.id,
+                            user_message,
                             fallback,
                             error=fallback_error,
                         ),
@@ -313,11 +313,32 @@ def _provider_with_route(
 def _persist_route(
     store,
     session_id: str,
-    message_id: str,
+    user_message: ChatMessage,
     decision: LiveAgentRouteDecision,
     *,
     error: str | None = None,
 ) -> None:
+    message_id = user_message.id
+    patch: dict[str, object] = {
+        "live_agent_route": decision.model_dump(mode="json"),
+        "agent_mode": decision.route == "agent_plan",
+        "dry_run": decision.route == "agent_plan",
+    }
+    if error:
+        patch["live_agent_fallback_error"] = error[:500]
+    # The provider-completion boundary must not load and rewrite every chat just
+    # to annotate the accepted user turn. Keep the in-flight message aligned
+    # with the targeted PostgreSQL write so terminal persistence keeps the same
+    # metadata without delaying the final stream event.
+    user_message.metadata.update(patch)
+    targeted_update = getattr(store, "update_user_message_metadata", None)
+    if callable(targeted_update):
+        targeted_update(
+            session_id=session_id,
+            message_id=message_id,
+            metadata=patch,
+        )
+        return
     sessions = store._load_sessions()
     for index, session in enumerate(sessions):
         if session.id != session_id:
@@ -325,11 +346,7 @@ def _persist_route(
         for message in session.messages:
             if message.id != message_id:
                 continue
-            message.metadata["live_agent_route"] = decision.model_dump(mode="json")
-            message.metadata["agent_mode"] = decision.route == "agent_plan"
-            message.metadata["dry_run"] = decision.route == "agent_plan"
-            if error:
-                message.metadata["live_agent_fallback_error"] = error[:500]
+            message.metadata.update(patch)
             break
         sessions[index] = session
         store._save_sessions(sessions)

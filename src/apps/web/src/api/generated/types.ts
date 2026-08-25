@@ -416,6 +416,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/providers/chatgpt-codex/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Chatgpt Codex Auth Status */
+        get: operations["chatgpt_codex_auth_status_api_providers_chatgpt_codex_auth_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/chatgpt-codex/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chatgpt Codex Login */
+        post: operations["chatgpt_codex_login_api_providers_chatgpt_codex_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/providers/refresh": {
         parameters: {
             query?: never;
@@ -4342,6 +4376,35 @@ export interface components {
             ok: boolean;
             /** Reason */
             reason?: string | null;
+        };
+        /** CodexAuthStatus */
+        CodexAuthStatus: {
+            /** Auth Mode */
+            auth_mode?: string | null;
+            /**
+             * Authenticated
+             * @default false
+             */
+            authenticated: boolean;
+            /** Cli Version */
+            cli_version?: string | null;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /**
+             * Installed
+             * @default false
+             */
+            installed: boolean;
+            /** Pid */
+            pid?: number | null;
+            /**
+             * Started
+             * @default false
+             */
+            started: boolean;
         };
         /** CoinMarketCapCredentialStatus */
         CoinMarketCapCredentialStatus: {
@@ -11703,6 +11766,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderFacadePayload"];
+                };
+            };
+        };
+    };
+    chatgpt_codex_auth_status_api_providers_chatgpt_codex_auth_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodexAuthStatus"];
+                };
+            };
+        };
+    };
+    chatgpt_codex_login_api_providers_chatgpt_codex_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodexAuthStatus"];
                 };
             };
         };

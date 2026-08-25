@@ -64,6 +64,7 @@ class ChatGPTCodexProviderConfig(BaseModel):
 
     model: str = "gpt-5.6-sol"
     reasoning_effort: str = Field("medium", alias="reasoningEffort")
+    fast_mode: bool = Field(False, alias="fastMode")
     codex_path: str = Field("codex", alias="codexPath")
     transport: str = "app_server"
 

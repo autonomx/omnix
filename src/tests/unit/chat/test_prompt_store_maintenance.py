@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from app import shared
 from app.chat import prompt_store
+from app.gateway import memory_job_offload
 from app.chat.models import CreateChatSessionRequest, SendChatMessageRequest
 
 
@@ -37,6 +38,7 @@ def test_post_turn_maintenance_failure_does_not_fail_completed_chat(
         raise RuntimeError("PostgreSQL operation failed")
 
     monkeypatch.setattr(prompt_store, "enqueue_memory_suggestion_job", unavailable)
+    monkeypatch.setattr(memory_job_offload, "enqueue_memory_suggestion_job", unavailable)
     monkeypatch.setattr(prompt_store, "enqueue_compaction_job", unavailable)
     store = prompt_store.ChatSessionStore(tmp_path / "chat.json")
     session = store.create_session(

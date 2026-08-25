@@ -1,7 +1,10 @@
 """Unit coverage for the ChatGPT subscription-backed Codex provider."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.providers import ChatGPTCodexProvider, ChatMessage, ProviderConfig, ProviderRegistry
+import app.providers.chatgpt_codex_provider as codex_module
 
 
 def _provider(**kwargs) -> ChatGPTCodexProvider:
@@ -11,6 +14,7 @@ def _provider(**kwargs) -> ChatGPTCodexProvider:
         extra_params={
             "codex_path": kwargs.pop("codex_path", "codex"),
             "reasoning_effort": kwargs.pop("reasoning_effort", "medium"),
+            "fast_mode": kwargs.pop("fast_mode", False),
             "transport": "app_server",
         },
         **kwargs,
@@ -25,6 +29,7 @@ def test_provider_requires_no_openai_api_key():
         assert provider.requires_api_key() is False
         assert provider.config.model == "gpt-5.6-sol"
         assert provider.reasoning_effort == "medium"
+        assert provider.fast_mode is False
     finally:
         provider.close()
 
@@ -51,6 +56,16 @@ def test_auth_status_recognizes_chatgpt_login(monkeypatch):
     assert status["cli_version"] == "codex-cli 0.test"
 
 
+def test_resolver_finds_vscode_codex_bundle_when_not_on_path(monkeypatch, tmp_path):
+    executable = tmp_path / ".vscode" / "extensions" / "openai.chatgpt-26.818.41705-win32-x64" / "bin" / "windows-x86_64" / "codex.exe"
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    monkeypatch.setattr(codex_module.shutil, "which", lambda _value: None)
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
+
+    assert ChatGPTCodexProvider._resolve_executable("codex") == str(executable)
+
+
 def test_registry_resolves_typed_codex_profile_instead_of_lmstudio_config(monkeypatch):
     monkeypatch.setattr(
         "app.shared.load_settings",
@@ -60,6 +75,7 @@ def test_registry_resolves_typed_codex_profile_instead_of_lmstudio_config(monkey
                     "chatgptCodex": {
                         "model": "gpt-test-subscription-model",
                         "reasoningEffort": "high",
+                        "fastMode": True,
                         "codexPath": "C:/tools/codex.exe",
                         "transport": "app_server",
                     }
@@ -82,6 +98,7 @@ def test_registry_resolves_typed_codex_profile_instead_of_lmstudio_config(monkey
         assert provider.config.provider_type == "chatgpt_codex"
         assert provider.config.model == "gpt-test-subscription-model"
         assert provider.reasoning_effort == "high"
+        assert provider.fast_mode is True
         assert provider.codex_path == "C:/tools/codex.exe"
         assert provider.config.api_key is None
     finally:
@@ -128,6 +145,62 @@ def test_non_streaming_completion_uses_app_server_events(monkeypatch):
     assert response.content == "Hello from Plus"
     assert response.model == "gpt-5.6-sol"
     assert response.usage == {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}
+
+
+def test_fast_mode_uses_codex_fast_service_tier(monkeypatch):
+    provider = _provider(fast_mode=True, reasoning_effort="none")
+    events = iter([
+        {"method": "item/agentMessage/delta", "params": {"delta": "Fast"}},
+        {"method": "turn/completed", "params": {"turn": {}}},
+    ])
+    turn_params = {}
+
+    monkeypatch.setattr(provider, "_ensure_app_server", lambda: None)
+    monkeypatch.setattr(provider, "_start_thread", lambda **_kwargs: "thread-fast")
+
+    def fake_request(method, params, **_kwargs):
+        if method == "turn/start":
+            turn_params.update(params)
+        return {}
+
+    monkeypatch.setattr(provider, "_request", fake_request)
+    monkeypatch.setattr(provider, "_next_event", lambda _timeout: next(events))
+
+    try:
+        response = provider.chat_completion([ChatMessage(role="user", content="Be fast")])
+    finally:
+        provider.close()
+
+    assert response.content == "Fast"
+    assert turn_params["effort"] == "none"
+    assert turn_params["serviceTier"] == "fast"
+
+
+def test_fast_mode_is_not_sent_for_non_sol_models(monkeypatch):
+    provider = _provider(model="gpt-5.6-terra", fast_mode=True)
+    events = iter([
+        {"method": "item/agentMessage/delta", "params": {"delta": "Balanced"}},
+        {"method": "turn/completed", "params": {"turn": {}}},
+    ])
+    turn_params = {}
+
+    monkeypatch.setattr(provider, "_ensure_app_server", lambda: None)
+    monkeypatch.setattr(provider, "_start_thread", lambda **_kwargs: "thread-terra")
+
+    def fake_request(method, params, **_kwargs):
+        if method == "turn/start":
+            turn_params.update(params)
+        return {}
+
+    monkeypatch.setattr(provider, "_request", fake_request)
+    monkeypatch.setattr(provider, "_next_event", lambda _timeout: next(events))
+
+    try:
+        provider.chat_completion([ChatMessage(role="user", content="Answer")])
+    finally:
+        provider.close()
+
+    assert "serviceTier" not in turn_params
 
 
 def test_streaming_completion_yields_codex_deltas(monkeypatch):

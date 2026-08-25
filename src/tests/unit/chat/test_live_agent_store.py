@@ -38,6 +38,28 @@ class DummyStore:
         }
 
 
+class TargetedMetadataStore(DummyStore):
+    def __init__(self, session: ChatSession) -> None:
+        super().__init__(session)
+        self.targeted_updates: list[dict[str, object]] = []
+
+    def update_user_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        metadata: dict[str, object],
+    ) -> bool:
+        self.targeted_updates.append(
+            {
+                "session_id": session_id,
+                "message_id": message_id,
+                "metadata": dict(metadata),
+            }
+        )
+        return True
+
+
 def _session(content: str, *, voice: bool = True, explicit_agent: bool = False):
     now = datetime.now(timezone.utc).isoformat()
     metadata = {
@@ -199,6 +221,34 @@ def test_direct_route_persistence_does_not_block_first_provider_chunk(
     assert store.sessions[0].messages[0].metadata["live_agent_route"]["route"] == (
         "direct_chat"
     )
+
+
+def test_direct_route_uses_targeted_user_metadata_update(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_LIVE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
+    monkeypatch.setenv("HERMES_ENABLED", "1")
+    session, message = _session("How are you?")
+    store = TargetedMetadataStore(session)
+    install_live_agent_store_hooks(TargetedMetadataStore)
+
+    events = list(store.stream_provider_reply_chunks(
+        session,
+        message,
+        provider_id="lmstudio",
+        model_id="test-model",
+    ))
+
+    assert events[-1]["type"] == "complete"
+    assert store.save_calls == 0
+    assert store.targeted_updates == [{
+        "session_id": session.id,
+        "message_id": message.id,
+        "metadata": {
+            "agent_mode": False,
+            "dry_run": False,
+            "live_agent_route": events[-1]["metadata"]["live_agent_route"],
+        },
+    }]
 
 
 def test_typed_chat_never_auto_routes_even_for_action_wording(monkeypatch) -> None:

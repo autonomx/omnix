@@ -61,6 +61,7 @@ describe('settings API adapter', () => {
           ...base.providerConfigs.chatgptCodex,
           model: 'gpt-5.6-sol',
           reasoningEffort: 'high',
+          fastMode: true,
           codexPath: 'C:/tools/codex.exe',
         },
       },
@@ -72,6 +73,7 @@ describe('settings API adapter', () => {
     expect(request.settings_profile_patch.providerConfigs?.chatgptCodex).toEqual({
       model: 'gpt-5.6-sol',
       reasoningEffort: 'high',
+      fastMode: true,
       codexPath: 'C:/tools/codex.exe',
       transport: 'app_server',
     });

@@ -337,16 +337,6 @@ def test_complete_streamed_reply_avoids_compatibility_save(monkeypatch) -> None:
     ) -> tuple[bool, bool]:
         assert current is session
         assert current_user is user_message
-        session.messages.append(
-            ChatMessage(
-                id=fast_path._assistant_message_id(session.id, user_message.id),
-                role="assistant",
-                content=str(kwargs["content"]),
-                created_at=NOW,
-                metadata=dict(kwargs["metadata"]),
-            )
-        )
-        session.message_count = len(session.messages)
         return True, False
 
     monkeypatch.setattr(fast_path, "_load_single_session", fake_load)
@@ -382,6 +372,31 @@ def test_complete_streamed_reply_avoids_compatibility_save(monkeypatch) -> None:
     assert session.message_count == 2
     assert maintenance == [user_message.id]
     assert events == ["live_chat_assistant_completion_fast_path_completed"]
+
+
+def test_live_session_mutation_allows_different_sessions_to_proceed() -> None:
+    """The PostgreSQL path must not inherit the file-store global mutex."""
+    import threading
+
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    second_entered = threading.Event()
+
+    def hold_first() -> None:
+        with fast_path._live_session_mutation("chat:first"):
+            first_entered.set()
+            assert release_first.wait(timeout=1)
+
+    thread = threading.Thread(target=hold_first)
+    thread.start()
+    assert first_entered.wait(timeout=1)
+    with fast_path._live_session_mutation("chat:second"):
+        second_entered.set()
+    release_first.set()
+    thread.join(timeout=1)
+
+    assert second_entered.is_set()
+    assert not thread.is_alive()
 
 
 def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> None:

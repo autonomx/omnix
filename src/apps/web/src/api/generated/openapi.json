@@ -4086,6 +4086,65 @@
         "title": "ClaimJobResponse",
         "type": "object"
       },
+      "CodexAuthStatus": {
+        "properties": {
+          "auth_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Mode"
+          },
+          "authenticated": {
+            "default": false,
+            "title": "Authenticated",
+            "type": "boolean"
+          },
+          "cli_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cli Version"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "installed": {
+            "default": false,
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "started": {
+            "default": false,
+            "title": "Started",
+            "type": "boolean"
+          }
+        },
+        "title": "CodexAuthStatus",
+        "type": "object"
+      },
       "CoinMarketCapCredentialStatus": {
         "additionalProperties": false,
         "properties": {
@@ -20783,6 +20842,48 @@
           }
         },
         "summary": "Providers",
+        "tags": [
+          "providers"
+        ]
+      }
+    },
+    "/api/providers/chatgpt-codex/auth": {
+      "get": {
+        "operationId": "chatgpt_codex_auth_status_api_providers_chatgpt_codex_auth_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexAuthStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Chatgpt Codex Auth Status",
+        "tags": [
+          "providers"
+        ]
+      }
+    },
+    "/api/providers/chatgpt-codex/login": {
+      "post": {
+        "operationId": "chatgpt_codex_login_api_providers_chatgpt_codex_login_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexAuthStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Chatgpt Codex Login",
         "tags": [
           "providers"
         ]

@@ -177,6 +177,7 @@ class ProviderRegistry:
             max_retries=base.max_retries,
             extra_params={
                 "reasoning_effort": str(codex.get("reasoningEffort") or "medium"),
+                "fast_mode": bool(codex.get("fastMode", False)),
                 "codex_path": str(codex.get("codexPath") or "codex"),
                 "transport": str(codex.get("transport") or "app_server"),
             },

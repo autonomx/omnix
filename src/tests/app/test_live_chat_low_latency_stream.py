@@ -36,7 +36,7 @@ def _store() -> SimpleNamespace:
     )
 
 
-def test_generic_provider_emits_first_word_before_sentence_and_retains_usage(monkeypatch) -> None:
+def test_typed_chat_emits_its_first_provider_fragment_and_retains_usage(monkeypatch) -> None:
     class FakeProvider:
         provider_name = "cerebras"
 
@@ -72,7 +72,7 @@ def test_generic_provider_emits_first_word_before_sentence_and_retains_usage(mon
     )
 
     text_events = [event["text"] for event in events if event["type"] == "text_chunk"]
-    assert text_events[0] == "Howdy "
+    assert text_events[0] == "How"
     assert "".join(text_events) == "Howdy right back at ya."
     assert events[-1]["type"] == "complete"
     assert events[-1]["content"] == "Howdy right back at ya."

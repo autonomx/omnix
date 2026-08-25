@@ -101,7 +101,7 @@ def stream_log(stream_id: str, source: str, event: str, **details: Any) -> None:
             json.dumps(
                 {
                     "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
-                    "stream_id": stream_id,
+                    "stream_id": record.get("stream_id"),
                     "source": "diagnostics",
                     "event": "serialization_failed",
                 },

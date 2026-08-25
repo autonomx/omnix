@@ -34,6 +34,7 @@ from .provider_trace import provider_call_enter, provider_call_exit
 
 DEFAULT_CODEX_MODEL = "gpt-5.6-sol"
 DEFAULT_REASONING_EFFORT = "medium"
+FAST_SERVICE_TIER = "fast"
 DEFAULT_CODEX_PATH = "codex"
 DEFAULT_TRANSPORT = "app_server"
 
@@ -72,6 +73,7 @@ class ChatGPTCodexProvider(BaseProvider):
         codex_path = str(extra.get("codex_path") or DEFAULT_CODEX_PATH).strip()
         transport = str(extra.get("transport") or DEFAULT_TRANSPORT).strip().lower()
         reasoning_effort = str(extra.get("reasoning_effort") or DEFAULT_REASONING_EFFORT).strip()
+        fast_mode = bool(extra.get("fast_mode", False))
         if transport != DEFAULT_TRANSPORT:
             raise ValueError("ChatGPT Codex currently supports transport='app_server' only")
         if not codex_path:
@@ -82,6 +84,7 @@ class ChatGPTCodexProvider(BaseProvider):
         extra["codex_path"] = codex_path
         extra["transport"] = transport
         extra["reasoning_effort"] = reasoning_effort
+        extra["fast_mode"] = fast_mode
 
     def requires_api_key(self) -> bool:
         return False
@@ -93,6 +96,10 @@ class ChatGPTCodexProvider(BaseProvider):
     @property
     def reasoning_effort(self) -> str:
         return str(self.config.extra_params.get("reasoning_effort") or DEFAULT_REASONING_EFFORT)
+
+    @property
+    def fast_mode(self) -> bool:
+        return bool(self.config.extra_params.get("fast_mode", False))
 
     def get_config_schema(self) -> Dict[str, Any]:
         return {
@@ -111,6 +118,12 @@ class ChatGPTCodexProvider(BaseProvider):
                     "type": "string",
                     "label": "Reasoning effort",
                     "default": DEFAULT_REASONING_EFFORT,
+                },
+                {
+                    "name": "fast_mode",
+                    "type": "boolean",
+                    "label": "Fast mode",
+                    "default": False,
                 },
                 {
                     "name": "codex_path",
@@ -197,7 +210,32 @@ class ChatGPTCodexProvider(BaseProvider):
         if os.path.isabs(value) or any(sep in value for sep in (os.sep, "/", "\\")):
             path = Path(value).expanduser()
             return str(path) if path.exists() else None
-        return shutil.which(value)
+        resolved = shutil.which(value)
+        if resolved:
+            return resolved
+        if value.lower() in {DEFAULT_CODEX_PATH, f"{DEFAULT_CODEX_PATH}.exe"}:
+            for candidate in ChatGPTCodexProvider._bundled_executable_candidates():
+                if candidate.is_file():
+                    return str(candidate)
+        return None
+
+    @staticmethod
+    def _bundled_executable_candidates() -> list[Path]:
+        """Find Codex installations bundled with supported Windows clients."""
+        if os.name != "nt":
+            return []
+        home = Path.home()
+        candidates = [home / "AppData" / "Roaming" / "npm" / "codex.cmd"]
+        vscode_extensions = home / ".vscode" / "extensions"
+        if vscode_extensions.is_dir():
+            candidates.extend(
+                sorted(
+                    vscode_extensions.glob("openai.chatgpt-*/bin/windows-x86_64/codex.exe"),
+                    key=lambda path: path.stat().st_mtime,
+                    reverse=True,
+                )
+            )
+        return candidates
 
     @staticmethod
     def _run_status_command(command: list[str]) -> dict[str, Any]:
@@ -281,6 +319,7 @@ class ChatGPTCodexProvider(BaseProvider):
             raise ValueError("Messages list cannot be empty")
         selected_model = str(model or self.config.model or DEFAULT_CODEX_MODEL).strip()
         effort = str(kwargs.get("reasoning_effort") or self.reasoning_effort).strip()
+        fast_mode = bool(kwargs.get("fast_mode", self.fast_mode))
         conversation_id = str(kwargs.get("conversation_id") or "").strip() or None
         trace_row = provider_call_enter(
             provider=self.provider_name,
@@ -294,6 +333,7 @@ class ChatGPTCodexProvider(BaseProvider):
                 messages,
                 model=selected_model,
                 effort=effort,
+                fast_mode=fast_mode,
                 conversation_id=conversation_id,
             )
             if stream:
@@ -332,6 +372,7 @@ class ChatGPTCodexProvider(BaseProvider):
         *,
         model: str,
         effort: str,
+        fast_mode: bool,
         conversation_id: str | None,
     ) -> Iterator[ChatResponse]:
         system_instructions = self._system_instructions(messages)
@@ -362,6 +403,8 @@ class ChatGPTCodexProvider(BaseProvider):
             }
             if effort:
                 params["effort"] = effort
+            if fast_mode and model == DEFAULT_CODEX_MODEL:
+                params["serviceTier"] = FAST_SERVICE_TIER
             self._request("turn/start", params, timeout=min(float(self.config.timeout), 60.0))
 
             full_text = ""

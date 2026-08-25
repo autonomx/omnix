@@ -178,6 +178,19 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
             metadata=metadata,
         )
 
+    def update_user_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        metadata: dict[str, object],
+    ) -> bool:
+        return self._repository.update_user_message_metadata(
+            session_id=session_id,
+            message_id=message_id,
+            metadata=metadata,
+        )
+
 
 class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSessionStore):
     pass

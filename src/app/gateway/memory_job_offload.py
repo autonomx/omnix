@@ -43,6 +43,8 @@ def _mark_failure(job_id: str, future: Future[Any]) -> None:
 
 
 def _process_background_job(job, *, chat_store, memory_service):
+    if callable(memory_service):
+        memory_service = memory_service()
     return process_memory_suggestion_job(
         job,
         chat_store=chat_store,
@@ -67,7 +69,7 @@ def install_memory_job_offload_hook() -> None:
             _process_background_job,
             job,
             chat_store=self,
-            memory_service=self.memory_service_factory(),
+            memory_service=self.memory_service_factory,
         )
         future.add_done_callback(lambda completed: _mark_failure(job.id, completed))
         stream_log(
