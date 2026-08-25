@@ -39,7 +39,11 @@ def create_trading_metric_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/api/trading", tags=["trading"])
 
-    @router.get("/metrics", response_model=MarketMetricResponse)
+    # This is an internal chart transport, not a stable generated-client API.
+    # The indicator scheduler consumes the typed payload directly, so keep it
+    # out of the shared public gateway contract until metric subscriptions are
+    # promoted to a versioned external API.
+    @router.get("/metrics", response_model=MarketMetricResponse, include_in_schema=False)
     async def metric_series(
         instrument_id: str = Query(min_length=3, max_length=200),
         metric: str = Query(min_length=3, max_length=120),
