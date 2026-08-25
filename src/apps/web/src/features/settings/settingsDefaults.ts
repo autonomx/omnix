@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS_DOCUMENT: SettingsDocument = {
     lmstudio: { baseUrl: 'http://localhost:1234', model: '', direct: false },
     openrouter: { apiKey: '', model: 'openai/gpt-4o-mini', contextSize: 128000, thinkingBudget: 0 },
     cerebras: { apiKey: '', model: 'llama-3.3-70b-versatile' },
+    chatgptCodex: { model: 'gpt-5.6-sol', reasoningEffort: 'medium', codexPath: 'codex', transport: 'app_server' },
     llamacpp: { baseUrl: 'http://localhost:8080', model: '', downloadLocation: 'server', autoStart: false },
     fasterQwen3Tts: { modelName: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base', modelDir: '', device: 'cuda', dtype: 'bfloat16', chunkSize: 12, nonStreamingMode: true },
     parakeet: { baseUrl: 'http://127.0.0.1:5201' },
