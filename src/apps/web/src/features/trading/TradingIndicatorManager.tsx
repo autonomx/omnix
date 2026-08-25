@@ -6,6 +6,17 @@ import {
   TRADINGVIEW_BUILTIN_DEFINITIONS,
   tradingViewBuiltInDefaultPeriod,
 } from './indicators/tradingViewBuiltIns';
+import {
+  classifyIndicatorCatalogEntry,
+  indicatorAvailabilityMatches,
+  indicatorMarketMatches,
+  type IndicatorAvailabilityFilter,
+  type IndicatorCategory,
+  type IndicatorCategoryFilter,
+  type IndicatorMarket,
+  type IndicatorMarketFilter,
+} from './indicators/indicatorCatalogFilters';
+import './TradingIndicatorManager.css';
 
 type PickerTab = 'indicators' | 'strategies' | 'profiles' | 'patterns';
 type PickerSection = 'favorites' | 'my-scripts' | 'technicals' | 'fundamentals' | 'top' | 'trending';
@@ -19,22 +30,33 @@ type IndicatorDefinition = {
   kind: 'indicator' | 'profile' | 'pattern';
   available: boolean;
   requirement?: string;
+  markets: IndicatorMarket[];
+  category: IndicatorCategory;
 };
 
+type UnclassifiedIndicatorDefinition = Omit<IndicatorDefinition, 'markets' | 'category'>;
+
+function indicatorDefinition(definition: UnclassifiedIndicatorDefinition): IndicatorDefinition {
+  return {
+    ...definition,
+    ...classifyIndicatorCatalogEntry(definition.name, definition.kind),
+  };
+}
+
 const omnixIndicatorDefinitions: IndicatorDefinition[] = [
-  { id: 'bull-market-band', name: 'Bull Market Support Band (20w SMA, 21w EMA)', author: 'zkdev', boosts: '5.3 K', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'death-cross', name: 'Death Cross - 200 MA / 50 Cross Checker', author: 'MexPayne', boosts: '879', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'ema-stack', name: 'EMA 9, 21, 50, 200', author: 'edufelarcon', boosts: '756', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'fair-value-gap', name: 'Fair Value Gap [LuxAlgo]', author: 'LuxAlgo', boosts: '24.5 K', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'golden-cross', name: 'Golden Cross', author: 'MichMexTrade', boosts: '229', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'ideal-bb', name: 'IDEAL BB with MA (With Alerts)', author: 'rautadarsh123', boosts: '9.9 K', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'log-macd', name: 'Logarithmic Moving Average Convergence Divergence', author: 'chemmist', boosts: '882', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'macd-dema', name: 'MACD DEMA', author: 'ToFFF', boosts: '6.5 K', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'swing-liquidity', name: 'Swing Levels and Liquidity - By Leviathan', author: 'LeviathanCapital', boosts: '11.2 K', section: 'technicals', kind: 'indicator', available: true },
-  { id: 'volume-profile', name: 'Volume Profile', author: 'kv4coins', boosts: '23.3 K', section: 'technicals', kind: 'profile', available: true },
+  indicatorDefinition({ id: 'bull-market-band', name: 'Bull Market Support Band (20w SMA, 21w EMA)', author: 'zkdev', boosts: '5.3 K', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'death-cross', name: 'Death Cross - 200 MA / 50 Cross Checker', author: 'MexPayne', boosts: '879', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'ema-stack', name: 'EMA 9, 21, 50, 200', author: 'edufelarcon', boosts: '756', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'fair-value-gap', name: 'Fair Value Gap [LuxAlgo]', author: 'LuxAlgo', boosts: '24.5 K', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'golden-cross', name: 'Golden Cross', author: 'MichMexTrade', boosts: '229', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'ideal-bb', name: 'IDEAL BB with MA (With Alerts)', author: 'rautadarsh123', boosts: '9.9 K', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'log-macd', name: 'Logarithmic Moving Average Convergence Divergence', author: 'chemmist', boosts: '882', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'macd-dema', name: 'MACD DEMA', author: 'ToFFF', boosts: '6.5 K', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'swing-liquidity', name: 'Swing Levels and Liquidity - By Leviathan', author: 'LeviathanCapital', boosts: '11.2 K', section: 'technicals', kind: 'indicator', available: true }),
+  indicatorDefinition({ id: 'volume-profile', name: 'Volume Profile', author: 'kv4coins', boosts: '23.3 K', section: 'technicals', kind: 'profile', available: true }),
 ];
 
-const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILTIN_DEFINITIONS.map((definition) => ({
+const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILTIN_DEFINITIONS.map((definition) => indicatorDefinition({
   id: definition.id as CoreIndicatorId,
   name: definition.name,
   author: 'TradingView built-in',
@@ -45,7 +67,7 @@ const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILT
   requirement: definition.requirement,
 }));
 
-const patternDefinitions: IndicatorDefinition[] = AUTO_CHART_PATTERN_DEFINITIONS.map((definition) => ({
+const patternDefinitions: IndicatorDefinition[] = AUTO_CHART_PATTERN_DEFINITIONS.map((definition) => indicatorDefinition({
   id: definition.id,
   name: definition.name,
   author: 'Omnix',
@@ -85,6 +107,54 @@ const sectionGroups: Array<{ label: string; sections: Array<{ id: PickerSection;
   },
 ];
 
+const marketFilterOptions: Array<{ id: IndicatorMarketFilter; label: string }> = [
+  { id: 'all', label: 'All markets' },
+  { id: 'stocks', label: 'Stocks' },
+  { id: 'crypto', label: 'Crypto' },
+  { id: 'derivatives', label: 'Derivatives' },
+  { id: 'universal', label: 'Universal only' },
+];
+
+const categoryFilterOptions: Array<{ id: IndicatorCategoryFilter; label: string }> = [
+  { id: 'all', label: 'All categories' },
+  { id: 'trend', label: 'Trend' },
+  { id: 'momentum', label: 'Momentum' },
+  { id: 'volatility', label: 'Volatility' },
+  { id: 'volume', label: 'Volume & flow' },
+  { id: 'levels', label: 'Levels & structure' },
+  { id: 'breadth', label: 'Market breadth' },
+  { id: 'on-chain', label: 'On-chain' },
+  { id: 'derivatives', label: 'Derivatives data' },
+  { id: 'fundamentals', label: 'Fundamentals' },
+  { id: 'other', label: 'Other' },
+];
+
+const availabilityFilterOptions: Array<{ id: IndicatorAvailabilityFilter; label: string }> = [
+  { id: 'all', label: 'All availability' },
+  { id: 'ready', label: 'Ready now' },
+  { id: 'data-required', label: 'Data required' },
+];
+
+const marketLabels: Record<IndicatorMarket, string> = {
+  universal: 'Universal',
+  stocks: 'Stocks',
+  crypto: 'Crypto',
+  derivatives: 'Derivatives',
+};
+
+const categoryLabels: Record<IndicatorCategory, string> = {
+  trend: 'Trend',
+  momentum: 'Momentum',
+  volatility: 'Volatility',
+  volume: 'Volume',
+  levels: 'Levels',
+  breadth: 'Breadth',
+  'on-chain': 'On-chain',
+  derivatives: 'Derivatives',
+  fundamentals: 'Fundamentals',
+  other: 'Other',
+};
+
 function indicatorPeriod(indicators: readonly CoreIndicatorInstance[], id: CoreIndicatorId): number {
   const configured = indicators.find((indicator) => indicator.id === id)?.period;
   if (configured !== undefined) return configured;
@@ -116,6 +186,9 @@ export function TradingIndicatorManager({
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<PickerTab>('indicators');
   const [section, setSection] = useState<PickerSection>('technicals');
+  const [marketFilter, setMarketFilter] = useState<IndicatorMarketFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState<IndicatorCategoryFilter>('all');
+  const [availabilityFilter, setAvailabilityFilter] = useState<IndicatorAvailabilityFilter>('all');
   const [favoriteIds, setFavoriteIds] = useState<Set<CoreIndicatorId>>(
     () => new Set(indicatorDefinitions.map((definition) => definition.id)),
   );
@@ -149,10 +222,22 @@ export function TradingIndicatorManager({
       // the dedicated Profiles tab. Pattern studies stay isolated in Patterns.
       if (tab === 'indicators' && definition.kind === 'pattern') return false;
       if (section === 'favorites' && !favoriteIds.has(definition.id)) return false;
-      if (section !== 'favorites' && section !== 'technicals') return false;
-      return !normalizedQuery || definition.name.toLowerCase().includes(normalizedQuery);
+      if (section === 'fundamentals' && definition.category !== 'fundamentals') return false;
+      if (!['favorites', 'technicals', 'fundamentals'].includes(section)) return false;
+      if (!indicatorMarketMatches(definition.markets, marketFilter)) return false;
+      if (categoryFilter !== 'all' && definition.category !== categoryFilter) return false;
+      if (!indicatorAvailabilityMatches(definition.available, availabilityFilter)) return false;
+      if (!normalizedQuery) return true;
+      const searchable = [
+        definition.name,
+        definition.author,
+        definition.category,
+        ...definition.markets,
+        definition.requirement ?? '',
+      ].join(' ').toLowerCase();
+      return searchable.includes(normalizedQuery);
     });
-  }, [favoriteIds, query, section, tab]);
+  }, [availabilityFilter, categoryFilter, favoriteIds, marketFilter, query, section, tab]);
 
   const toggleFavorite = (id: CoreIndicatorId) => {
     setFavoriteIds((current) => {
@@ -170,13 +255,21 @@ export function TradingIndicatorManager({
     triggerRef.current?.focus();
   };
 
+  const resetFilters = () => {
+    setQuery('');
+    setMarketFilter('all');
+    setCategoryFilter('all');
+    setAvailabilityFilter('all');
+  };
+  const hasActiveFilters = Boolean(query.trim()) || marketFilter !== 'all' || categoryFilter !== 'all' || availabilityFilter !== 'all';
+
   const emptyCopy = tab === 'strategies'
     ? ['No strategies available yet', 'Strategy templates will appear here as they are added.']
     : tab === 'profiles'
-      ? ['No profiles found', 'Try another search or category.']
+      ? ['No profiles found', 'Try another search or filter.']
       : tab === 'patterns'
-        ? ['No chart patterns found', 'Try another search or category.']
-        : ['No indicators found', 'Try another search or category.'];
+        ? ['No chart patterns found', 'Try another search or filter.']
+        : ['No indicators found', 'Try another search, market, category, or availability filter.'];
 
   const picker = open && typeof document !== 'undefined' ? createPortal(
     <div className="trading-indicator-picker-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
@@ -188,7 +281,7 @@ export function TradingIndicatorManager({
 
         <label className="trading-indicator-picker-search">
           <span className="trading-indicator-search-icon" aria-hidden="true" />
-          <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" aria-label="Search indicators" />
+          <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, market, category, or data requirement" aria-label="Search indicators" />
         </label>
 
         <div className="trading-indicator-picker-body">
@@ -220,6 +313,31 @@ export function TradingIndicatorManager({
                 </button>
               ))}
             </div>
+            <div className="trading-indicator-picker-filters" aria-label="Indicator filters">
+              <label>
+                <span>Market</span>
+                <select aria-label="Market filter" value={marketFilter} onChange={(event) => setMarketFilter(event.target.value as IndicatorMarketFilter)}>
+                  {marketFilterOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Category</span>
+                <select aria-label="Category filter" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as IndicatorCategoryFilter)}>
+                  {categoryFilterOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Availability</span>
+                <select aria-label="Availability filter" value={availabilityFilter} onChange={(event) => setAvailabilityFilter(event.target.value as IndicatorAvailabilityFilter)}>
+                  {availabilityFilterOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </label>
+              <div className="trading-indicator-picker-filter-summary">
+                <span aria-live="polite">{filteredDefinitions.length} results</span>
+                <button type="button" onClick={resetFilters} disabled={!hasActiveFilters}>Reset</button>
+              </div>
+            </div>
+            <p className="trading-indicator-picker-filter-hint">Stocks, Crypto, and Derivatives include universal technical indicators plus market-specific studies. Use Universal only to hide specialized data series.</p>
             <div className="trading-indicator-picker-columns" aria-hidden="true"><span>NAME</span><span>AUTHOR</span><span>BOOSTS</span></div>
             <div className="trading-indicator-picker-list" role="group" aria-label={tab === 'patterns' ? 'Auto chart patterns' : 'Technical indicators'}>
               {filteredDefinitions.map((definition) => {
@@ -234,6 +352,10 @@ export function TradingIndicatorManager({
                     <button type="button" className="trading-indicator-picker-item" aria-label={buttonLabel} aria-pressed={enabled} disabled={!definition.available} onClick={() => selectIndicator(definition)}>
                       <span className="trading-indicator-picker-name">
                         {definition.name}
+                        <span className="trading-indicator-picker-tags" aria-hidden="true">
+                          <em>{categoryLabels[definition.category]}</em>
+                          {definition.markets.map((market) => <em key={market}>{marketLabels[market]}</em>)}
+                        </span>
                         {enabled ? <small>ACTIVE</small> : !definition.available ? <small>DATA REQUIRED</small> : null}
                       </span>
                       <span className="trading-indicator-picker-author">{definition.author}</span>
