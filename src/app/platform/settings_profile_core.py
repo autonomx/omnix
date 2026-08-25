@@ -59,6 +59,15 @@ class CerebrasProviderConfig(BaseModel):
     model: str = "llama-3.3-70b-versatile"
 
 
+class ChatGPTCodexProviderConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model: str = "gpt-5.6-sol"
+    reasoning_effort: str = Field("medium", alias="reasoningEffort")
+    codex_path: str = Field("codex", alias="codexPath")
+    transport: str = "app_server"
+
+
 class LlamaCppProviderConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -103,6 +112,7 @@ class ProviderConfigs(BaseModel):
     lmstudio: LmStudioProviderConfig = Field(default_factory=LmStudioProviderConfig)
     openrouter: OpenRouterProviderConfig = Field(default_factory=OpenRouterProviderConfig)
     cerebras: CerebrasProviderConfig = Field(default_factory=CerebrasProviderConfig)
+    chatgpt_codex: ChatGPTCodexProviderConfig = Field(default_factory=ChatGPTCodexProviderConfig, alias="chatgptCodex")
     llamacpp: LlamaCppProviderConfig = Field(default_factory=LlamaCppProviderConfig)
     faster_qwen3_tts: FasterQwen3TtsProviderConfig = Field(default_factory=FasterQwen3TtsProviderConfig, alias="fasterQwen3Tts")
     parakeet: ParakeetProviderConfig = Field(default_factory=ParakeetProviderConfig)
