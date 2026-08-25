@@ -51,8 +51,9 @@ const lineStyleOptions: Array<{ value: IndicatorLineStyle; label: string }> = [
 ];
 
 function usesSeparatePane(id: CoreIndicatorId): boolean {
-  return isTradingViewBuiltInId(id)
-    ? tradingViewBuiltInUsesSeparatePane(id)
+  const value = String(id);
+  return isTradingViewBuiltInId(value)
+    ? tradingViewBuiltInUsesSeparatePane(value)
     : indicatorUsesSeparatePane(id);
 }
 
@@ -61,10 +62,11 @@ function supportsBackground(id: CoreIndicatorId, plotCount: number): boolean {
 }
 
 function titleFor(indicator: CoreIndicatorInstance): string {
-  if (isTradingViewBuiltInId(indicator.id)) {
-    return tradingViewBuiltInDefinition(indicator.id)?.name ?? indicator.id.toUpperCase();
+  const id = String(indicator.id);
+  if (isTradingViewBuiltInId(id)) {
+    return tradingViewBuiltInDefinition(id)?.name ?? id.toUpperCase();
   }
-  return displayNames[indicator.id] ?? indicator.id.toUpperCase();
+  return displayNames[indicator.id] ?? id.toUpperCase();
 }
 
 function defaultPlotColor(key: string, index: number): string {
@@ -93,7 +95,7 @@ function copyStyle(style: CoreIndicatorStyle | undefined): CoreIndicatorStyle {
 }
 
 function defaultPeriod(id: CoreIndicatorId): number {
-  const tradingViewDefault = tradingViewBuiltInDefaultPeriod(id);
+  const tradingViewDefault = tradingViewBuiltInDefaultPeriod(String(id));
   if (tradingViewDefault !== null) return tradingViewDefault;
   if (id === 'rsi' || id === 'atr' || id === 'rsi-divergence' || id === 'stochastic-rsi') return 14;
   if (id === 'macd' || id === 'log-macd' || id === 'macd-dema') return 9;
@@ -109,8 +111,9 @@ function defaultPeriod(id: CoreIndicatorId): number {
 function resetIndicator(indicator: CoreIndicatorInstance): CoreIndicatorInstance {
   const period = defaultPeriod(indicator.id);
   const reset: CoreIndicatorInstance = { ...indicator, period, visible: true, style: undefined };
-  if (isTradingViewBuiltInId(indicator.id)) {
-    const name = tradingViewBuiltInDefinition(indicator.id)?.name;
+  const id = String(indicator.id);
+  if (isTradingViewBuiltInId(id)) {
+    const name = tradingViewBuiltInDefinition(id)?.name;
     if (['MA Cross', 'MovingAvg Cross', 'MovingAvg2Line Cross', 'Percentage Price Oscillator (PPO)', 'Percentage Volume Oscillator (PVO)', 'True Strength Index'].includes(name ?? '')) {
       reset.fastPeriod = name === 'True Strength Index' ? 13 : 12;
       reset.slowPeriod = name === 'True Strength Index' ? 25 : 26;
@@ -179,11 +182,15 @@ export function TradingIndicatorSettings({
 }) {
   const [tab, setTab] = useState<SettingsTab>('inputs');
   const [draft, setDraft] = useState<CoreIndicatorInstance>(() => ({ ...indicator, style: copyStyle(indicator.style) }));
-  const plots = useMemo(() => isTradingViewBuiltInId(draft.id)
-    ? tradingViewBuiltInPlotDefinitions(draft)
-    : indicatorPlotDefinitions(draft), [draft]);
+  const plots = useMemo(() => {
+    const id = String(draft.id);
+    return isTradingViewBuiltInId(id)
+      ? tradingViewBuiltInPlotDefinitions({ ...draft, id })
+      : indicatorPlotDefinitions(draft);
+  }, [draft]);
   const style = draft.style;
-  const tradingViewDefinition = isTradingViewBuiltInId(draft.id) ? tradingViewBuiltInDefinition(draft.id) : undefined;
+  const draftId = String(draft.id);
+  const tradingViewDefinition = isTradingViewBuiltInId(draftId) ? tradingViewBuiltInDefinition(draftId) : undefined;
   const tradingViewFastSlow = ['MA Cross', 'MovingAvg Cross', 'MovingAvg2Line Cross', 'Percentage Price Oscillator (PPO)', 'Percentage Volume Oscillator (PVO)', 'True Strength Index'].includes(tradingViewDefinition?.name ?? '');
   const setNumber = (key: 'period' | 'fastPeriod' | 'slowPeriod' | 'signalPeriod' | 'standardDeviations', value: string, minimum = 1) => {
     const next = numberOr(undefined, value, minimum);
