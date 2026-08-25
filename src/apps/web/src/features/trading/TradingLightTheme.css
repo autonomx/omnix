@@ -83,6 +83,23 @@
   color: var(--trading-light-muted) !important;
 }
 
+:root[data-omnix-appearance='light'] .trading-indicator-picker-tabs button {
+  border-color: transparent !important;
+  background: var(--trading-light-surface-muted) !important;
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-indicator-picker-tabs button:hover,
+:root[data-omnix-appearance='light'] .trading-indicator-picker-tabs button[aria-selected='true'] {
+  border-color: rgba(22, 136, 255, 0.55) !important;
+  background: #e6f2ff !important;
+  color: #155b91 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-indicator-picker-tabs button[aria-selected='true'] {
+  box-shadow: 0 1px 4px rgba(50, 70, 92, 0.16) !important;
+}
+
 :root[data-omnix-appearance='light'] .trading-body,
 :root[data-omnix-appearance='light'] .trading-tools,
 :root[data-omnix-appearance='light'] .trading-right-dock,
