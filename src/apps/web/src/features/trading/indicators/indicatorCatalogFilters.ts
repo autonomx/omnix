@@ -11,10 +11,10 @@ export type IndicatorCatalogClassification = {
 };
 
 const STOCK_SPECIFIC = /(analyst price forecast|price target|advance\/decline|earnings|dividend|revenue|fundamental)/i;
-const CRYPTO_SPECIFIC = /(1 year active supply|24-hour volume|active addresses|addresses with balance|block height|blocks mined|\bcrypto\b|gas used|hash rate|miner|mining|transaction|transfer|utxo|spot crypto etf|\bsupply\b)/i;
+const CRYPTO_SPECIFIC = /(1 year active supply|24-hour volume|active addresses|addresses with balance|block (?:height|size)|blocks mined|\bdifficulty\b|\bcrypto\b|gas used|hash rate|miner|mining|transaction|transfer|utxo|spot crypto etf|\bsupply\b)/i;
 const DERIVATIVE_SPECIFIC = /(\bbasis\b|funding|liquidation|open interest|long\/short|futures?|perpetual|mark price|index price|\bpremium\b)/i;
 
-const ON_CHAIN = /(1 year active supply|24-hour volume|active addresses|addresses with balance|block height|blocks mined|gas used|hash rate|miner|mining|transaction|transfer|utxo|spot crypto etf|\bsupply\b)/i;
+const ON_CHAIN = /(1 year active supply|24-hour volume|active addresses|addresses with balance|block (?:height|size)|blocks mined|\bdifficulty\b|gas used|hash rate|miner|mining|transaction|transfer|utxo|spot crypto etf|\bsupply\b)/i;
 const FUNDAMENTALS = /(analyst price forecast|price target|earnings|dividend|revenue|fundamental|valuation)/i;
 const BREADTH = /(advance\/decline|market breadth|new highs|new lows)/i;
 const LEVELS = /(fib|key levels|pitchfork|pivot points?|support|resistance|zig zag|fractal|fair value gap|swing levels|liquidity|volume profile|auto trendlines|trend detector)/i;
