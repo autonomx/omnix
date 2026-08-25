@@ -133,6 +133,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const setDrawingSnapMode = useTradingStore((state) => state.setDrawingSnapMode);
   const updateChart = useTradingStore((state) => state.updateChart);
   const toggleIndicator = useTradingStore((state) => state.toggleIndicator);
+  const updateIndicator = useTradingStore((state) => state.updateIndicator);
   const setIndicators = useTradingStore((state) => state.setIndicators);
   const setLink = useTradingStore((state) => state.setLink);
   const setPanel = useTradingStore((state) => state.setPanel);
@@ -292,6 +293,25 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
   const navigateToAlert = (alert: TradingAlert) => {
     const alertInterval = alert.evaluation_policy.interval;
+    const activateAlertIndicator = (chartId: string) => {
+      const indicatorId = alert.parameters.indicator_id;
+      if (!indicatorId) return;
+
+      const indicator = charts
+        .find((chart) => chart.chartId === chartId)
+        ?.indicators.find((candidate) => candidate.id === indicatorId);
+      const period = alert.parameters.period;
+
+      if (!indicator) {
+        toggleIndicator(chartId, indicatorId, period);
+        return;
+      }
+      if (!indicator.enabled) {
+        toggleIndicator(chartId, indicatorId, period);
+        return;
+      }
+      if (indicator.period !== period) updateIndicator(chartId, indicatorId, { period });
+    };
     const matchingChart = charts.find((chart) => (
       chart.instrumentId === alert.instrument_id
       && Boolean(alert.binding_id)
@@ -304,6 +324,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
         ...(alert.binding_id ? { bindingId: alert.binding_id } : {}),
       });
       setActiveChart(matchingChart.chartId);
+      activateAlertIndicator(matchingChart.chartId);
       return;
     }
 
@@ -315,6 +336,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       interval: alertInterval,
     });
     setActiveChart(activeChartId);
+    activateAlertIndicator(activeChartId);
   };
 
   const toggleToolPanel = (panel: ToolPanel) => {

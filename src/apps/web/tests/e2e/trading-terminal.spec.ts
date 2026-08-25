@@ -528,6 +528,30 @@ test('indicator panes expose close, minimize, and reorder controls', async ({ pa
   await expect(page.locator('.trading-indicator-pane-controls[data-indicator-id="rsi"]')).toHaveCount(0);
 });
 
+test('selecting an indicator alert loads the missing indicator on its chart', async ({ page }) => {
+  const state = await installTradingMocks(page);
+  await page.goto('/trading');
+
+  await page.getByRole('button', { name: 'Right panel', exact: true }).click();
+  const sidePanel = page.getByRole('complementary', { name: 'Trading side panel', exact: true });
+  await sidePanel.getByRole('tab', { name: 'Alerts', exact: true }).click();
+  await sidePanel.getByRole('button', { name: 'Add alert' }).click();
+
+  const alertDialog = page.getByRole('dialog', { name: /Create alert on BTCUSDT/ });
+  await alertDialog.getByRole('combobox', { name: 'Alert condition' }).selectOption('indicator_above');
+  await alertDialog.getByRole('combobox', { name: 'Alert indicator' }).selectOption('stochastic-rsi');
+  await alertDialog.getByRole('textbox', { name: 'Alert indicator period' }).fill('14');
+  await alertDialog.getByRole('textbox', { name: 'Alert value' }).fill('80');
+  await alertDialog.getByRole('button', { name: 'Create alert' }).click();
+
+  await expect.poll(() => state.alerts.length).toBe(1);
+  expect((state.alerts[0].parameters as Record<string, unknown>).indicator_id).toBe('stochastic-rsi');
+  await expect(page.locator('.trading-chart-panel.active .trading-overlay-indicator-label').filter({ hasText: 'STOCHASTIC-RSI 14' })).toHaveCount(0);
+
+  await sidePanel.getByRole('button', { name: /Open BTCUSDT chart for Stoch RSI/ }).click();
+  await expect(page.locator('.trading-chart-panel.active .trading-overlay-indicator-label').filter({ hasText: 'STOCHASTIC-RSI 14' })).toBeVisible();
+});
+
 test('Volume Profile renders volume-at-price bars along the price scale', async ({ page }) => {
   await installTradingMocks(page);
   await page.goto('/trading');
