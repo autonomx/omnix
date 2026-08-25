@@ -1,5 +1,6 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { TradingChartAdapter, DrawingCoordinate } from './chart/chartAdapter';
+import { autoPatternGroupKey, autoPatternTooltipDetails, type AutoPatternTooltipDetails } from './indicators/autoPatternTooltip';
 import { indicatorPaneScale, type CoreIndicatorId, type IndicatorOutput } from './indicators/coreIndicators';
 import './TradingIndicatorBackgroundOverlay.css';
 
@@ -7,6 +8,14 @@ type TradingIndicatorBackgroundOverlayProps = {
   adapter: TradingChartAdapter;
   outputs: readonly IndicatorOutput[];
 };
+
+type HoveredAutoPattern = AutoPatternTooltipDetails & {
+  x: number;
+  y: number;
+};
+
+const AUTO_PATTERN_TOOLTIP_WIDTH = 252;
+const AUTO_PATTERN_TOOLTIP_HEIGHT = 76;
 
 function outputGroupKey(key: string): string {
   const parts = key.split(':');
@@ -49,8 +58,19 @@ type PaneBand = {
   color: string;
 };
 
+function formatPatternDate(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+}
+
+function directionLabel(direction: AutoPatternTooltipDetails['direction']): string {
+  return direction[0].toUpperCase() + direction.slice(1);
+}
+
 export function TradingIndicatorBackgroundOverlay({ adapter, outputs }: TradingIndicatorBackgroundOverlayProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const [hoveredPattern, setHoveredPattern] = useState<HoveredAutoPattern | null>(null);
   const groups = useMemo(() => {
     const grouped = new Map<string, IndicatorOutput[]>();
     for (const output of outputs) {
@@ -61,6 +81,10 @@ export function TradingIndicatorBackgroundOverlay({ adapter, outputs }: TradingI
     }
     return grouped;
   }, [outputs]);
+  const patternOutputs = useMemo(
+    () => outputs.filter((output) => output.kind === 'line' && output.points.length === 2 && autoPatternGroupKey(output.key) !== null),
+    [outputs],
+  );
   const paneBands = useMemo<PaneBand[]>(() => (
     [...groups.entries()].flatMap(([id, group]) => {
       const output = group.find((item) => item.pane === 1);
@@ -106,12 +130,55 @@ export function TradingIndicatorBackgroundOverlay({ adapter, outputs }: TradingI
         line.setAttribute('y2', String(y));
       }
     }
-  }, [adapter, groups, paneBands]);
+    for (const hitLine of svg.querySelectorAll<SVGLineElement>('[data-auto-pattern-hit]')) {
+      const key = hitLine.dataset.autoPatternHit;
+      const output = key ? patternOutputs.find((candidate) => candidate.key === key) : undefined;
+      const first = output?.points[0];
+      const last = output?.points[1];
+      const from = first ? adapter.indicatorPointToCoordinate(output.key, first) : null;
+      const to = last ? adapter.indicatorPointToCoordinate(output.key, last) : null;
+      if (!from || !to) {
+        hitLine.setAttribute('x1', '-1000');
+        hitLine.setAttribute('x2', '-1000');
+        hitLine.setAttribute('y1', '-1000');
+        hitLine.setAttribute('y2', '-1000');
+        continue;
+      }
+      hitLine.setAttribute('x1', String(from.x));
+      hitLine.setAttribute('y1', String(from.y));
+      hitLine.setAttribute('x2', String(to.x));
+      hitLine.setAttribute('y2', String(to.y));
+    }
+  }, [adapter, groups, paneBands, patternOutputs]);
 
   useLayoutEffect(() => {
     refresh();
     return adapter.onViewportChange(refresh);
   }, [adapter, refresh]);
+
+  useLayoutEffect(() => {
+    if (!hoveredPattern) return;
+    if (!patternOutputs.some((output) => autoPatternGroupKey(output.key) === hoveredPattern.groupKey)) setHoveredPattern(null);
+  }, [hoveredPattern, patternOutputs]);
+
+  const showPatternTooltip = (event: ReactPointerEvent<SVGLineElement>, output: IndicatorOutput) => {
+    const svg = svgRef.current;
+    const details = autoPatternTooltipDetails(output, outputs);
+    if (!svg || !details) return;
+    const rect = svg.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+    const maxX = Math.max(6, rect.width - AUTO_PATTERN_TOOLTIP_WIDTH - 6);
+    const maxY = Math.max(6, rect.height - AUTO_PATTERN_TOOLTIP_HEIGHT - 6);
+    const preferredY = pointerY + 14 + AUTO_PATTERN_TOOLTIP_HEIGHT <= rect.height
+      ? pointerY + 14
+      : pointerY - AUTO_PATTERN_TOOLTIP_HEIGHT - 14;
+    setHoveredPattern({
+      ...details,
+      x: Math.min(maxX, Math.max(6, pointerX + 14)),
+      y: Math.min(maxY, Math.max(6, preferredY)),
+    });
+  };
 
   return (
     <svg ref={svgRef} className="trading-indicator-background-overlay" aria-hidden="true">
@@ -140,6 +207,33 @@ export function TradingIndicatorBackgroundOverlay({ adapter, outputs }: TradingI
           ))}
         </g>
       ))}
+      {patternOutputs.map((output) => (
+        <line
+          key={`hover:${output.key}`}
+          className="trading-auto-pattern-hit"
+          data-auto-pattern-hit={output.key}
+          x1="-1000"
+          y1="-1000"
+          x2="-1000"
+          y2="-1000"
+          onPointerEnter={(event) => showPatternTooltip(event, output)}
+          onPointerMove={(event) => showPatternTooltip(event, output)}
+          onPointerLeave={() => setHoveredPattern(null)}
+        />
+      ))}
+      {hoveredPattern ? (
+        <g className={`trading-auto-pattern-tooltip is-${hoveredPattern.direction}`} transform={`translate(${hoveredPattern.x},${hoveredPattern.y})`}>
+          <rect width={AUTO_PATTERN_TOOLTIP_WIDTH} height={AUTO_PATTERN_TOOLTIP_HEIGHT} rx="7" ry="7" />
+          <circle cx="14" cy="17" r="4" />
+          <text className="trading-auto-pattern-tooltip-title" x="25" y="21">{hoveredPattern.name}</text>
+          <text className="trading-auto-pattern-tooltip-meta" x="12" y="43">
+            {directionLabel(hoveredPattern.direction)}{hoveredPattern.confidence === null ? '' : ` · ${hoveredPattern.confidence}% confidence`}
+          </text>
+          <text className="trading-auto-pattern-tooltip-range" x="12" y="62">
+            {formatPatternDate(hoveredPattern.fromTime)} → {formatPatternDate(hoveredPattern.toTime)}
+          </text>
+        </g>
+      ) : null}
     </svg>
   );
 }

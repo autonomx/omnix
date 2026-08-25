@@ -1,4 +1,5 @@
 import type { MarketBar } from '../tradingTypes';
+import { autoChartPatternLines, isAutoChartPatternId, type AutoChartPatternId } from './autoPatterns';
 
 export const CORE_INDICATOR_FORMULA_VERSION = 'omnix-indicators-v2';
 
@@ -57,7 +58,7 @@ export type CoreIndicatorId =
   | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'vwap'
   | 'bull-market-band' | 'death-cross' | 'ema-stack' | 'fair-value-gap' | 'golden-cross'
   | 'ideal-bb' | 'log-macd' | 'macd-dema' | 'rsi-divergence' | 'stochastic-rsi'
-  | 'swing-liquidity' | 'volume-profile';
+  | 'swing-liquidity' | 'volume-profile' | AutoChartPatternId;
 export type CoreIndicatorInstance = {
   id: CoreIndicatorId;
   period: number;
@@ -414,6 +415,21 @@ function calculateIndicatorOutputs(
   bars: readonly MarketBar[],
   instance: CoreIndicatorInstance,
 ): IndicatorOutput[] {
+  if (isAutoChartPatternId(instance.id)) {
+    return autoChartPatternLines(bars, instance.id, instance.period || 3).map((line) => ({
+      key: line.key,
+      title: line.title,
+      pane: 0,
+      kind: 'line',
+      points: line.points,
+      color: line.color,
+      lineStyle: line.lineStyle,
+      lineWidth: line.lineWidth,
+      labelsOnPriceScale: false,
+      valuesInStatusLine: false,
+      inputsInStatusLine: false,
+    }));
+  }
   const values = closes(bars);
   if (instance.id === 'sma' || instance.id === 'ema' || instance.id === 'rsi') {
     const outputs = instance.id === 'sma'
@@ -612,15 +628,15 @@ export function indicatorOutputs(
     .map((output) => ({
       ...output,
       visible: instance.style?.plots?.[output.key] !== false,
-      color: instance.style?.colors?.[output.key],
-      lineStyle: instance.style?.lineStyles?.[output.key],
-      lineWidth: instance.style?.lineWidth,
+      color: instance.style?.colors?.[output.key] ?? output.color,
+      lineStyle: instance.style?.lineStyles?.[output.key] ?? output.lineStyle,
+      lineWidth: instance.style?.lineWidth ?? output.lineWidth,
       backgroundVisible: instance.style?.backgroundVisible !== false,
-      backgroundColor: instance.style?.backgroundColor ?? indicatorDefaultBackgroundColor(instance.id),
-      precision: instance.style?.precision,
-      labelsOnPriceScale: instance.style?.labelsOnPriceScale === true,
-      valuesInStatusLine: instance.style?.valuesInStatusLine,
-      inputsInStatusLine: instance.style?.inputsInStatusLine,
+      backgroundColor: instance.style?.backgroundColor ?? output.backgroundColor ?? indicatorDefaultBackgroundColor(instance.id),
+      precision: instance.style?.precision ?? output.precision,
+      labelsOnPriceScale: instance.style?.labelsOnPriceScale ?? output.labelsOnPriceScale ?? false,
+      valuesInStatusLine: instance.style?.valuesInStatusLine ?? output.valuesInStatusLine,
+      inputsInStatusLine: instance.style?.inputsInStatusLine ?? output.inputsInStatusLine,
     }))
     .filter((output) => output.visible !== false);
 }
