@@ -1,5 +1,10 @@
 import type { MarketBar } from '../tradingTypes';
-import { indicatorOutputs, type CoreIndicatorInstance, type IndicatorOutput } from './coreIndicators';
+import {
+  indicatorDefaultBackgroundColor,
+  indicatorOutputs,
+  type CoreIndicatorInstance,
+  type IndicatorOutput,
+} from './coreIndicators';
 import { calculateTradingViewBuiltInOutputs, isTradingViewBuiltInId } from './tradingViewBuiltIns';
 import type { IndicatorWorkerRequest, IndicatorWorkerResponse } from './indicatorWorkerProtocol';
 
@@ -14,11 +19,30 @@ function defaultWorkerFactory(): Worker {
   return new Worker(new URL('./indicator.worker.ts', import.meta.url), { type: 'module' });
 }
 
+function styleOutputs(outputs: IndicatorOutput[], indicator: CoreIndicatorInstance): IndicatorOutput[] {
+  if (!isTradingViewBuiltInId(indicator.id)) return outputs;
+  return outputs
+    .map((output) => ({
+      ...output,
+      visible: indicator.style?.plots?.[output.key] !== false,
+      color: indicator.style?.colors?.[output.key] ?? output.color,
+      lineStyle: indicator.style?.lineStyles?.[output.key] ?? output.lineStyle,
+      lineWidth: indicator.style?.lineWidth ?? output.lineWidth,
+      backgroundVisible: indicator.style?.backgroundVisible !== false,
+      backgroundColor: indicator.style?.backgroundColor ?? output.backgroundColor ?? indicatorDefaultBackgroundColor(indicator.id),
+      precision: indicator.style?.precision ?? output.precision,
+      labelsOnPriceScale: indicator.style?.labelsOnPriceScale ?? output.labelsOnPriceScale ?? false,
+      valuesInStatusLine: indicator.style?.valuesInStatusLine ?? output.valuesInStatusLine,
+      inputsInStatusLine: indicator.style?.inputsInStatusLine ?? output.inputsInStatusLine,
+    }))
+    .filter((output) => output.visible !== false);
+}
+
 function calculateOutputs(bars: readonly MarketBar[], indicator: CoreIndicatorInstance): IndicatorOutput[] {
-  if (isTradingViewBuiltInId(indicator.id)) {
-    return calculateTradingViewBuiltInOutputs(bars, indicator) as IndicatorOutput[];
-  }
-  return indicatorOutputs(bars, indicator);
+  const outputs = isTradingViewBuiltInId(indicator.id)
+    ? calculateTradingViewBuiltInOutputs(bars, indicator) as IndicatorOutput[]
+    : indicatorOutputs(bars, indicator);
+  return styleOutputs(outputs, indicator);
 }
 
 export class TradingIndicatorScheduler {
