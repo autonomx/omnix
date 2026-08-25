@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
-import { indicatorOutputs } from './coreIndicators';
+import { indicatorOutputs, type IndicatorOutput } from './coreIndicators';
+import { calculateTradingViewBuiltInOutputs, isTradingViewBuiltInId } from './tradingViewBuiltIns';
 import type { IndicatorWorkerRequest, IndicatorWorkerResponse } from './indicatorWorkerProtocol';
 
 const workerScope: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
@@ -10,7 +11,9 @@ workerScope.addEventListener('message', (event: MessageEvent<IndicatorWorkerRequ
   try {
     const outputs = request.indicators
       .filter((indicator) => indicator.enabled && indicator.visible !== false)
-      .flatMap((indicator) => indicatorOutputs(request.bars, indicator));
+      .flatMap((indicator) => isTradingViewBuiltInId(indicator.id)
+        ? calculateTradingViewBuiltInOutputs(request.bars, indicator) as IndicatorOutput[]
+        : indicatorOutputs(request.bars, indicator));
     const response: IndicatorWorkerResponse = { requestId: request.requestId, outputs };
     workerScope.postMessage(response);
   } catch (error) {
