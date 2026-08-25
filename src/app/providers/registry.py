@@ -5,6 +5,7 @@ This module implements a registry that automatically discovers provider plugins
 in the providers directory and provides a factory for creating provider instances.
 """
 
+import hashlib
 import importlib
 import inspect
 from pathlib import Path
@@ -181,6 +182,41 @@ class ProviderRegistry:
                 "transport": str(codex.get("transport") or "app_server"),
             },
         )
+
+    @staticmethod
+    def _install_chatgpt_conversation_key(provider: BaseProvider) -> None:
+        """Give legacy chat callers a stable native Codex thread key.
+
+        New Omnix chat APIs currently pass the full transcript to every provider
+        but do not include the owning session id in BaseProvider kwargs. Codex can
+        avoid replaying that transcript after the first turn if we derive a stable
+        key from the system prompt and the conversation's first user message. A
+        fresh provider/app-server still receives the full transcript and recovers
+        history normally.
+        """
+        original_completion = provider.chat_completion
+
+        def completion(messages, model=None, stream=False, **kwargs):
+            if not kwargs.get("conversation_id") and messages:
+                system = "\n\n".join(
+                    str(getattr(message, "content", "")).strip()
+                    for message in messages
+                    if getattr(message, "role", "") == "system" and str(getattr(message, "content", "")).strip()
+                )
+                first_user = next(
+                    (
+                        str(getattr(message, "content", "")).strip()
+                        for message in messages
+                        if getattr(message, "role", "") == "user" and str(getattr(message, "content", "")).strip()
+                    ),
+                    "",
+                )
+                if first_user:
+                    seed = f"{system}\0{first_user}".encode("utf-8")
+                    kwargs["conversation_id"] = f"omnix:{hashlib.sha256(seed).hexdigest()[:24]}"
+            return original_completion(messages=messages, model=model, stream=stream, **kwargs)
+
+        provider.chat_completion = completion  # type: ignore[method-assign]
     
     def create_provider(
         self,
@@ -239,6 +275,8 @@ class ProviderRegistry:
             
         try:
             provider_instance = provider_class(config=final_config)
+            if provider_name == "chatgpt_codex":
+                self._install_chatgpt_conversation_key(provider_instance)
             return provider_instance
         except Exception as e:
             raise ProviderRegistrationError(
