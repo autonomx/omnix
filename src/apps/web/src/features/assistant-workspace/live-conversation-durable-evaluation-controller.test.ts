@@ -161,13 +161,27 @@ describe('durable Live Conversation evaluation controller', () => {
     });
     liveConversationStore.dispatch({
       type: 'profile',
-      profile: { ...profile, presence_preset: 'legacy' as unknown as typeof profile.presence_preset },
+      profile: {
+        ...profile,
+        presence_preset: 'legacy' as unknown as typeof profile.presence_preset,
+        conversation_stance: 'legacy' as unknown as typeof profile.conversation_stance,
+        duplex_mode: 'legacy' as unknown as typeof profile.duplex_mode,
+      },
     });
+    liveConversationStore.dispatch({
+      type: 'duplex',
+      duplex: { resolvedMode: 'legacy' as unknown as 'half_duplex' },
+    });
+    document.documentElement.dataset.commitSha = 'dev';
 
     const payload = buildDurableEvaluationPayload(activeCall(), '2026-07-11T12:10:00+00:00');
 
     expect(payload.profile_version).toBeNull();
     expect(payload.presence_preset).toBe('natural');
+    expect(payload.conversation_stance).toBe('automatic');
+    expect(payload.configured_duplex_mode).toBe('automatic');
+    expect(payload.resolved_duplex_mode).toBe('half_duplex');
+    expect(payload.exact_commit_sha).toBe('unknown0');
   });
 
   it('posts one record, evaluates the durable aggregate, and counts release observations', async () => {

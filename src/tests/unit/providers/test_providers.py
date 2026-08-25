@@ -57,6 +57,39 @@ class TestLMStudioProvider:
         provider = LMStudioProvider(config)
         assert provider.requires_api_key() is False
 
+    def test_configured_api_key_is_sent_as_bearer_token(self, monkeypatch):
+        response = type("Response", (), {"raise_for_status": lambda self: None})()
+        captured = {}
+
+        def fake_request(method, url, **kwargs):
+            captured.update({"method": method, "url": url, **kwargs})
+            return response
+
+        monkeypatch.setattr("app.providers.lmstudio_provider.requests.request", fake_request)
+        provider = LMStudioProvider(
+            ProviderConfig(provider_type="lmstudio", api_key="config-token")
+        )
+
+        provider._make_request("get", "/v1/models")
+
+        assert captured["headers"] == {"Authorization": "Bearer config-token"}
+
+    def test_environment_api_token_is_sent_as_bearer_token(self, monkeypatch):
+        response = type("Response", (), {"raise_for_status": lambda self: None})()
+        captured = {}
+
+        def fake_request(method, url, **kwargs):
+            captured.update({"method": method, "url": url, **kwargs})
+            return response
+
+        monkeypatch.setenv("LM_API_TOKEN", "environment-token")
+        monkeypatch.setattr("app.providers.lmstudio_provider.requests.request", fake_request)
+        provider = LMStudioProvider(ProviderConfig(provider_type="lmstudio"))
+
+        provider._make_request("get", "/v1/models")
+
+        assert captured["headers"] == {"Authorization": "Bearer environment-token"}
+
 
 class TestOpenRouterProvider:
     """Test suite for OpenRouterProvider."""

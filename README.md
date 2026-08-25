@@ -74,6 +74,16 @@ omnix-image      Image generation service
 - Optional local TTS, STT, and image services depending on enabled modules
 - Optional NVIDIA GPU support for local accelerated model services
 
+If LM Studio's Developer/API server has authentication enabled, expose its token
+to Omnix before starting the backend:
+
+```powershell
+$env:LM_API_TOKEN = "your-lm-studio-token"
+```
+
+Omnix sends this value as `Authorization: Bearer ...` to LM Studio. The token is
+read from the environment and is not persisted in Omnix settings.
+
 ## Python Setup
 
 ```bash

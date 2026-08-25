@@ -100,23 +100,23 @@ export function buildDurableEvaluationPayload(
   const calibration = runtime.duplex.calibration;
   return {
     call_id: call.callId,
-    session_id: runtime.sessionId,
+    session_id: boundedOptionalString(runtime.sessionId, 160),
     started_at: call.startedAt,
     ended_at: endedAt,
     exact_commit_sha: currentCommitSha(),
     app_version: currentAppVersion(),
     browser_version: currentBrowserVersion(),
     os_version: currentOsVersion(),
-    character_id: runtime.identity.characterId,
+    character_id: boundedString(runtime.identity.characterId, 'system-assistant', 160),
     // The bridge can briefly observe legacy/runtime metadata while a call is
     // starting. Keep optional versions and enum values inside the API contract
     // instead of allowing a stale `0` or unknown local-storage value to make
     // the whole aggregate POST fail validation.
     profile_version: positiveIntegerOrNull(runtime.identity.profileVersion),
     presence_preset: normalizedPresencePreset(runtime.profile?.presence_preset),
-    conversation_stance: runtime.profile?.conversation_stance ?? 'automatic',
-    configured_duplex_mode: runtime.duplex.configuredMode,
-    resolved_duplex_mode: runtime.duplex.resolvedMode,
+    conversation_stance: normalizedConversationStance(runtime.profile?.conversation_stance),
+    configured_duplex_mode: normalizedConfiguredDuplexMode(runtime.duplex.configuredMode),
+    resolved_duplex_mode: normalizedResolvedDuplexMode(runtime.duplex.resolvedMode),
     calibration_version: calibration?.version ?? null,
     input_device_hash: calibration?.deviceKey ?? null,
     output_device_hash: calibration?.deviceKey ?? null,
@@ -173,6 +173,41 @@ function normalizedPresencePreset(value: unknown): VoiceSessionEvaluationCreate[
   return value === 'quiet' || value === 'natural' || value === 'engaged' || value === 'listener'
     ? value
     : 'natural';
+}
+
+function normalizedConversationStance(value: unknown): VoiceSessionEvaluationCreate['conversation_stance'] {
+  return value === 'automatic'
+    || value === 'listen'
+    || value === 'discuss'
+    || value === 'advise'
+    || value === 'brainstorm'
+    || value === 'teach'
+    ? value
+    : 'automatic';
+}
+
+function normalizedConfiguredDuplexMode(
+  value: unknown,
+): VoiceSessionEvaluationCreate['configured_duplex_mode'] {
+  return value === 'automatic' || value === 'half_duplex' || value === 'echo_aware'
+    ? value
+    : 'automatic';
+}
+
+function normalizedResolvedDuplexMode(
+  value: unknown,
+): VoiceSessionEvaluationCreate['resolved_duplex_mode'] {
+  return value === 'echo_aware' ? 'echo_aware' : 'half_duplex';
+}
+
+function boundedString(value: unknown, fallback: string, maximum: number): string {
+  const normalized = typeof value === 'string' ? value.trim().slice(0, maximum) : '';
+  return normalized || fallback;
+}
+
+function boundedOptionalString(value: unknown, maximum: number): string | null {
+  const normalized = typeof value === 'string' ? value.trim().slice(0, maximum) : '';
+  return normalized || null;
 }
 
 function positiveIntegerOrNull(value: number | null): number | null {
@@ -257,7 +292,8 @@ function currentCommitSha(): string {
   const value = document.querySelector<HTMLMetaElement>('meta[name="omnix-commit-sha"]')?.content
     || document.documentElement.dataset.commitSha
     || 'unknown0';
-  return value.trim().slice(0, 64) || 'unknown0';
+  const normalized = value.trim().slice(0, 64);
+  return normalized.length >= 7 ? normalized : 'unknown0';
 }
 
 function currentAppVersion(): string {

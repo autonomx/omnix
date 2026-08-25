@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from typing import Any, Dict, Iterator, List, Optional, Union
 from urllib.parse import urlsplit, urlunsplit
@@ -95,9 +96,21 @@ class LMStudioProvider(BaseProvider):
             return _NATIVE_CHAT_COMPLETIONS_ENDPOINT
         return configured if configured.startswith("/") else f"/{configured}"
 
+    def _api_token(self) -> str:
+        """Return the configured LM Studio token without requiring one locally."""
+
+        configured = str(self.config.api_key or "").strip()
+        return configured or os.environ.get("LM_API_TOKEN", "").strip()
+
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         url = f"{self.config.base_url}{endpoint}"
         timeout = kwargs.pop("timeout", self.config.timeout)
+        headers = dict(kwargs.pop("headers", {}) or {})
+        api_token = self._api_token()
+        if api_token and "Authorization" not in headers:
+            headers["Authorization"] = f"Bearer {api_token}"
+        if headers:
+            kwargs["headers"] = headers
         try:
             response = requests.request(method, url, timeout=timeout, **kwargs)
             try:
@@ -113,6 +126,11 @@ class LMStudioProvider(BaseProvider):
                     response_body=body,
                     error=exc,
                 )
+                if response.status_code == 401:
+                    raise AuthenticationError(
+                        "LM Studio rejected the request as unauthorized. "
+                        "Set LM_API_TOKEN or provide ProviderConfig.api_key."
+                    ) from exc
                 raise ConnectionError(
                     f"HTTP error {response.status_code}: {exc}; response_body={body}"
                 ) from exc

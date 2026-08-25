@@ -41,8 +41,13 @@ class OpenAICompatibleTextGenerator(StreamingTextGenerator):
             ],
         }
         try:
+            headers = {}
+            api_token = os.environ.get("LM_API_TOKEN", "").strip()
+            if api_token:
+                headers["Authorization"] = f"Bearer {api_token}"
             with requests.post(
                 f"{self.base_url.rstrip('/')}/chat/completions",
+                headers=headers,
                 json=payload,
                 stream=True,
                 timeout=self.timeout_seconds,
