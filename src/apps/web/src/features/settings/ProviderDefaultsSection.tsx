@@ -32,11 +32,23 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
   const imageOptions = optionsWithCurrent(providerOptions(payload, 'image'), providers.image);
   const imageProviderId = providers.image.replace(/^image:/, '');
 
+  const handleLlmProviderChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextProvider = event.currentTarget.value;
+    if (nextProvider === providers.llm) return;
+    dispatch({ type: 'update', path: 'global.providers.llm', value: nextProvider });
+    // Model ids are provider-specific. Clearing every LLM model route prevents a
+    // previous local/OpenRouter model id from overriding the newly selected
+    // provider's configured default (notably gpt-5.6-sol for ChatGPT Codex).
+    for (const key of ['chat', 'fast', 'quality', 'background', 'embedding', 'imagePrompt']) {
+      dispatch({ type: 'update', path: `global.models.${key}`, value: '' });
+    }
+  };
+
   return (
     <SettingsSection title="Default providers" description="Defaults apply to new sessions and jobs. Module workspaces can override them." scope="global">
       <div className="settings-form-grid">
         <SettingsField label="Default LLM provider">
-          <select value={providers.llm} onChange={(event) => dispatch({ type: 'update', path: 'global.providers.llm', value: event.currentTarget.value })}>
+          <select value={providers.llm} onChange={handleLlmProviderChange}>
             {llmOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </SettingsField>
