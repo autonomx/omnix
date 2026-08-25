@@ -16,6 +16,7 @@ import {
   type IndicatorMarket,
   type IndicatorMarketFilter,
 } from './indicators/indicatorCatalogFilters';
+import { externalIndicatorRequirement, isExternalIndicatorId } from './indicators/externalIndicatorData';
 import './TradingIndicatorManager.css';
 
 type PickerTab = 'indicators' | 'strategies' | 'profiles' | 'patterns';
@@ -56,16 +57,20 @@ const omnixIndicatorDefinitions: IndicatorDefinition[] = [
   indicatorDefinition({ id: 'volume-profile', name: 'Volume Profile', author: 'kv4coins', boosts: '23.3 K', section: 'technicals', kind: 'profile', available: true }),
 ];
 
-const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILTIN_DEFINITIONS.map((definition) => indicatorDefinition({
-  id: definition.id as CoreIndicatorId,
-  name: definition.name,
-  author: 'TradingView built-in',
-  boosts: definition.available ? 'Built-in' : 'Needs data',
-  section: 'technicals',
-  kind: 'indicator',
-  available: definition.available,
-  requirement: definition.requirement,
-}));
+const tradingViewIndicatorDefinitions: IndicatorDefinition[] = TRADINGVIEW_BUILTIN_DEFINITIONS.map((definition) => {
+  const externalRequirement = externalIndicatorRequirement(definition.id);
+  const external = isExternalIndicatorId(definition.id);
+  return indicatorDefinition({
+    id: definition.id as CoreIndicatorId,
+    name: definition.name,
+    author: external ? 'External market data' : 'TradingView built-in',
+    boosts: definition.available ? 'Built-in' : external ? 'Live data' : 'Needs data',
+    section: 'technicals',
+    kind: 'indicator',
+    available: definition.available || external,
+    requirement: externalRequirement ?? definition.requirement,
+  });
+});
 
 const patternDefinitions: IndicatorDefinition[] = AUTO_CHART_PATTERN_DEFINITIONS.map((definition) => indicatorDefinition({
   id: definition.id,
