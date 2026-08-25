@@ -8,6 +8,13 @@ import {
   type IndicatorLineStyle,
   type CoreIndicatorStyle,
 } from './indicators/coreIndicators';
+import {
+  isTradingViewBuiltInId,
+  tradingViewBuiltInDefaultPeriod,
+  tradingViewBuiltInDefinition,
+  tradingViewBuiltInPlotDefinitions,
+  tradingViewBuiltInUsesSeparatePane,
+} from './indicators/tradingViewBuiltIns';
 import './TradingIndicatorSettings.css';
 
 type SettingsTab = 'inputs' | 'style' | 'visibility';
@@ -43,21 +50,30 @@ const lineStyleOptions: Array<{ value: IndicatorLineStyle; label: string }> = [
   { value: 'sparse-dotted', label: '·  ·' },
 ];
 
+function usesSeparatePane(id: CoreIndicatorId): boolean {
+  return isTradingViewBuiltInId(id)
+    ? tradingViewBuiltInUsesSeparatePane(id)
+    : indicatorUsesSeparatePane(id);
+}
+
 function supportsBackground(id: CoreIndicatorId, plotCount: number): boolean {
-  return plotCount >= 2 && !indicatorUsesSeparatePane(id);
+  return plotCount >= 2 && !usesSeparatePane(id);
 }
 
 function titleFor(indicator: CoreIndicatorInstance): string {
+  if (isTradingViewBuiltInId(indicator.id)) {
+    return tradingViewBuiltInDefinition(indicator.id)?.name ?? indicator.id.toUpperCase();
+  }
   return displayNames[indicator.id] ?? indicator.id.toUpperCase();
 }
 
 function defaultPlotColor(key: string, index: number): string {
-  if (key.includes('support') || key.includes('value-area-low')) return '#20c997';
-  if (key.includes('resistance') || key.includes('value-area-high')) return '#ff6b6b';
+  if (key.includes('support') || key.includes('value-area-low') || key.includes('plus') || key.includes('long-stop')) return '#20c997';
+  if (key.includes('resistance') || key.includes('value-area-high') || key.includes('minus') || key.includes('short-stop')) return '#ff6b6b';
   if (key.includes('histogram')) return '#20c997';
   if (key.includes('signal')) return '#ff922b';
   if (key.includes('upper') || key.includes('lower')) return '#74c0fc';
-  if (key.includes('middle')) return '#a5d8ff';
+  if (key.includes('middle') || key.includes('basis')) return '#a5d8ff';
   if (key.startsWith('sma') || key.startsWith('vwap')) return '#ffd43b';
   if (key.startsWith('ema')) return '#e599f7';
   if (key.startsWith('bull-market-band:sma')) return '#ff6b6b';
@@ -77,6 +93,8 @@ function copyStyle(style: CoreIndicatorStyle | undefined): CoreIndicatorStyle {
 }
 
 function defaultPeriod(id: CoreIndicatorId): number {
+  const tradingViewDefault = tradingViewBuiltInDefaultPeriod(id);
+  if (tradingViewDefault !== null) return tradingViewDefault;
   if (id === 'rsi' || id === 'atr' || id === 'rsi-divergence' || id === 'stochastic-rsi') return 14;
   if (id === 'macd' || id === 'log-macd' || id === 'macd-dema') return 9;
   if (id === 'death-cross' || id === 'golden-cross') return 50;
@@ -91,6 +109,15 @@ function defaultPeriod(id: CoreIndicatorId): number {
 function resetIndicator(indicator: CoreIndicatorInstance): CoreIndicatorInstance {
   const period = defaultPeriod(indicator.id);
   const reset: CoreIndicatorInstance = { ...indicator, period, visible: true, style: undefined };
+  if (isTradingViewBuiltInId(indicator.id)) {
+    const name = tradingViewBuiltInDefinition(indicator.id)?.name;
+    if (['MA Cross', 'MovingAvg Cross', 'MovingAvg2Line Cross', 'Percentage Price Oscillator (PPO)', 'Percentage Volume Oscillator (PVO)', 'True Strength Index'].includes(name ?? '')) {
+      reset.fastPeriod = name === 'True Strength Index' ? 13 : 12;
+      reset.slowPeriod = name === 'True Strength Index' ? 25 : 26;
+      reset.signalPeriod = name === 'True Strength Index' ? 13 : 9;
+    }
+    return reset;
+  }
   if (indicator.id === 'macd' || indicator.id === 'log-macd' || indicator.id === 'macd-dema') {
     reset.fastPeriod = 12;
     reset.slowPeriod = 26;
@@ -152,8 +179,12 @@ export function TradingIndicatorSettings({
 }) {
   const [tab, setTab] = useState<SettingsTab>('inputs');
   const [draft, setDraft] = useState<CoreIndicatorInstance>(() => ({ ...indicator, style: copyStyle(indicator.style) }));
-  const plots = useMemo(() => indicatorPlotDefinitions(draft), [draft]);
+  const plots = useMemo(() => isTradingViewBuiltInId(draft.id)
+    ? tradingViewBuiltInPlotDefinitions(draft)
+    : indicatorPlotDefinitions(draft), [draft]);
   const style = draft.style;
+  const tradingViewDefinition = isTradingViewBuiltInId(draft.id) ? tradingViewBuiltInDefinition(draft.id) : undefined;
+  const tradingViewFastSlow = ['MA Cross', 'MovingAvg Cross', 'MovingAvg2Line Cross', 'Percentage Price Oscillator (PPO)', 'Percentage Volume Oscillator (PVO)', 'True Strength Index'].includes(tradingViewDefinition?.name ?? '');
   const setNumber = (key: 'period' | 'fastPeriod' | 'slowPeriod' | 'signalPeriod' | 'standardDeviations', value: string, minimum = 1) => {
     const next = numberOr(undefined, value, minimum);
     setDraft((current) => ({ ...current, [key]: next === undefined ? current[key] : key === 'standardDeviations' ? next : Math.round(next) }));
@@ -193,11 +224,11 @@ export function TradingIndicatorSettings({
           <Field label="Period" value={draft.period} onChange={(value) => setNumber('period', value)} />
         ) : null}
         {draft.id === 'bollinger' ? <Field label="Standard deviations" value={draft.standardDeviations ?? 2} min={0.1} step={0.1} onChange={(value) => setNumber('standardDeviations', value, 0.1)} /> : null}
-        {['macd', 'log-macd', 'macd-dema'].includes(draft.id) ? (
+        {['macd', 'log-macd', 'macd-dema'].includes(draft.id) || tradingViewFastSlow ? (
           <>
-            <Field label="Fast period" value={draft.fastPeriod ?? 12} onChange={(value) => setNumber('fastPeriod', value)} />
-            <Field label="Slow period" value={draft.slowPeriod ?? 26} onChange={(value) => setNumber('slowPeriod', value)} />
-            <Field label="Signal period" value={draft.signalPeriod ?? 9} onChange={(value) => setNumber('signalPeriod', value)} />
+            <Field label="Fast period" value={draft.fastPeriod ?? (tradingViewDefinition?.name === 'True Strength Index' ? 13 : 12)} onChange={(value) => setNumber('fastPeriod', value)} />
+            <Field label="Slow period" value={draft.slowPeriod ?? (tradingViewDefinition?.name === 'True Strength Index' ? 25 : 26)} onChange={(value) => setNumber('slowPeriod', value)} />
+            <Field label="Signal period" value={draft.signalPeriod ?? (tradingViewDefinition?.name === 'True Strength Index' ? 13 : 9)} onChange={(value) => setNumber('signalPeriod', value)} />
           </>
         ) : null}
         {draft.id === 'rsi-divergence' ? <Field label="Fast RSI period" value={draft.fastPeriod ?? 5} onChange={(value) => setNumber('fastPeriod', value)} /> : null}
