@@ -116,6 +116,19 @@ def _provider_from_info(
     )
 
 
+def _chatgpt_codex_model(settings: dict[str, Any]) -> str:
+    profile = settings.get("settings_control_center")
+    if not isinstance(profile, dict):
+        return "gpt-5.6-sol"
+    configs = profile.get("providerConfigs")
+    if not isinstance(configs, dict):
+        return "gpt-5.6-sol"
+    codex = configs.get("chatgptCodex")
+    if not isinstance(codex, dict):
+        return "gpt-5.6-sol"
+    return _safe_str(codex.get("model")).strip() or "gpt-5.6-sol"
+
+
 class ProviderFacade:
     """Read-only facade that normalizes existing provider registries."""
 
@@ -203,6 +216,7 @@ class ProviderFacade:
         configured = {
             "llm:openrouter": ("openrouter", settings.get("openrouter", {}).get("model"), "remote"),
             "llm:cerebras": ("cerebras", settings.get("cerebras", {}).get("model"), "remote"),
+            "llm:chatgpt_codex": ("ChatGPT Codex", _chatgpt_codex_model(settings), "remote"),
             "llm:llamacpp": ("llamacpp", settings.get("llamacpp", {}).get("model"), "local"),
             "llm:lmstudio": ("lmstudio", settings.get("lmstudio", {}).get("model"), "local"),
             "tts:faster-qwen3-tts": (
