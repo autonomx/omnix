@@ -129,6 +129,18 @@ def create_trading_hermes_research_router(
         identity=await asyncio.to_thread(repo.identity_as_of,instrument_id,cutoff)
         evidence=await asyncio.to_thread(repo.list_evidence_as_of,instrument_id,cutoff,200)
         latest=await asyncio.to_thread(repo.latest_report_as_of,instrument_id,cutoff)
+        evidence_loader=getattr(repo,"evidence_by_ids_as_of",None)
+        if latest is not None and latest.source_evidence_ids and callable(evidence_loader):
+            current_evidence=await asyncio.to_thread(
+                evidence_loader,
+                instrument_id,
+                latest.source_evidence_ids,
+                cutoff,
+            )
+            merged={item.evidence_id:item for item in current_evidence}
+            for item in evidence:
+                merged.setdefault(item.evidence_id,item)
+            evidence=list(merged.values())[:200]
         timeline=await asyncio.to_thread(repo.report_timeline,instrument_id,100)
         timeline=[item for item in timeline if item.omnix_known_at is not None and item.omnix_known_at<=cutoff]
         fact_set=await asyncio.to_thread(facts.latest_fact_set_as_of,instrument_id,cutoff)
