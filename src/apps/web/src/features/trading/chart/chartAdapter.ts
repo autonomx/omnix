@@ -113,6 +113,23 @@ function timestamp(value: string): UTCTimestamp {
   return Math.floor(milliseconds / 1_000) as UTCTimestamp;
 }
 
+export function normalizeComparisonBars(bars: readonly MarketBar[]): MarketBar[] {
+  const byTimestamp = new Map<number, { bar: MarketBar; revision: number; index: number }>();
+  bars.forEach((bar, index) => {
+    const milliseconds = Date.parse(bar.start_time);
+    if (!Number.isFinite(milliseconds)) return;
+    const time = Math.floor(milliseconds / 1_000);
+    const revision = Number(bar.ingestion_revision);
+    const existing = byTimestamp.get(time);
+    if (!existing || revision > existing.revision || (revision === existing.revision && index > existing.index)) {
+      byTimestamp.set(time, { bar, revision, index });
+    }
+  });
+  return [...byTimestamp.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, value]) => value.bar);
+}
+
 function barCadenceMilliseconds(bars: readonly MarketBar[]): number | null {
   const intervals = bars
     .slice(1)
@@ -434,6 +451,8 @@ export class TradingChartAdapter {
   private readonly revisions = new Map<number, number>();
   private readonly viewportListeners = new Set<() => void>();
   private readonly comparisonViewportHandler = () => this.renderComparisonSeries();
+  private comparisonRenderInProgress = false;
+  private comparisonRenderPending = false;
   private bars: MarketBar[] = [];
   private indicatorOutputs: IndicatorOutput[] = [];
   private comparisonData: TradingComparisonData[] = [];
@@ -580,12 +599,29 @@ export class TradingChartAdapter {
 
   setComparisonData(items: readonly TradingComparisonData[]): void {
     this.assertActive();
-    this.comparisonData = items.map((item) => ({ ...item, bars: [...item.bars] }));
+    this.comparisonData = items.map((item) => ({ ...item, bars: normalizeComparisonBars(item.bars) }));
     this.renderComparisonSeries();
   }
 
   private renderComparisonSeries(): void {
     if (this.destroyed) return;
+    if (this.comparisonRenderInProgress) {
+      this.comparisonRenderPending = true;
+      return;
+    }
+    this.comparisonRenderInProgress = true;
+    try {
+      this.renderComparisonSeriesInternal();
+    } finally {
+      this.comparisonRenderInProgress = false;
+      if (this.comparisonRenderPending && !this.destroyed) {
+        this.comparisonRenderPending = false;
+        this.renderComparisonSeries();
+      }
+    }
+  }
+
+  private renderComparisonSeriesInternal(): void {
     // Lightweight Charts re-hit-tests the active crosshair when a series is
     // moved or its options change. Clear it first so a transient empty
     // histogram point cannot crash the chart during a zoom/pan redraw.
@@ -594,10 +630,7 @@ export class TradingChartAdapter {
     const enabled = new Set(this.comparisonData.map((item) => item.instrumentId));
     for (const [instrumentId, series] of this.comparisonSeries) {
       if (!enabled.has(instrumentId)) {
-        this.chart.removeSeries(series);
-        this.comparisonSeries.delete(instrumentId);
-        this.comparisonSeriesPanes.delete(instrumentId);
-        this.comparisonSeriesOptions.delete(instrumentId);
+        this.removeComparisonSeries(instrumentId, series);
       }
     }
 
@@ -671,6 +704,17 @@ export class TradingChartAdapter {
     for (let index = this.chart.panes().length - 1; index > lastComparisonPane; index -= 1) {
       const pane = this.chart.panes()[index];
       if (pane?.getSeries().length === 0) this.chart.removePane(index);
+    }
+  }
+
+  private removeComparisonSeries(instrumentId: string, series: ISeriesApi<'Line'>): void {
+    this.comparisonSeries.delete(instrumentId);
+    this.comparisonSeriesPanes.delete(instrumentId);
+    this.comparisonSeriesOptions.delete(instrumentId);
+    try {
+      this.chart.removeSeries(series);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('Series not found')) throw error;
     }
   }
 

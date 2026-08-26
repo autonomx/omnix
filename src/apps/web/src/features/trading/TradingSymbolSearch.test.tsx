@@ -37,6 +37,22 @@ const stock: CanonicalInstrument = {
   status: 'active',
 };
 
+const commodity: CanonicalInstrument = {
+  instrument_id: 'commodity:YAHOO:USOIL',
+  asset_class: 'commodity',
+  instrument_type: 'perpetual',
+  venue: 'YAHOO',
+  venue_symbol: 'CL=F',
+  display_symbol: 'USOIL',
+  base_currency: null,
+  quote_currency: 'USD',
+  exchange_timezone: 'America/Chicago',
+  session_calendar: '24x7',
+  price_scale: 100,
+  minimum_tick: '0.01',
+  status: 'active',
+};
+
 function SearchHarness({ onSelect, onClose }: { onSelect: (instrument: CanonicalInstrument) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
   return (
@@ -83,6 +99,27 @@ describe('TradingSymbolSearch', () => {
 
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Search symbols' }), { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('finds commodity aliases in the Futures category', () => {
+    const onSelect = vi.fn();
+    render(
+      <TradingSymbolSearch
+        open
+        query="USOIL"
+        instruments={[crypto, stock, commodity]}
+        activeInstrumentId={crypto.instrument_id}
+        onQueryChange={vi.fn()}
+        onSelect={onSelect}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const result = screen.getByRole('button', { name: /USOIL/ });
+    expect(result).toHaveTextContent('WTI Crude Oil');
+    expect(result).toHaveTextContent('commodity');
+    fireEvent.click(result);
+    expect(onSelect).toHaveBeenCalledWith(commodity);
   });
 
   it('offers a resolved arithmetic chart and accepts Enter', () => {

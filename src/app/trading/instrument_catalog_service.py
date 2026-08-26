@@ -8,6 +8,7 @@ from typing import Any
 
 from .catalog import (
     _binding,
+    _commodity,
     register_instrument,
     search_instruments,
 )
@@ -26,6 +27,7 @@ YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 CATALOG_TTL_SECONDS = 15 * 60
 QUERY_CACHE_SIZE = 256
 YAHOO_QUOTE_TYPES = {"EQUITY", "ETF", "INDEX"}
+YAHOO_COMMODITY_QUOTE_TYPES = {"COMMODITY", "FUTURE"}
 YAHOO_EXCHANGES = {
     "NMS": "NASDAQ",
     "NGM": "NASDAQ",
@@ -45,7 +47,8 @@ def _decimal_or_default(value: Any, default: str) -> Decimal:
 
 
 def _price_scale(tick: Decimal) -> int:
-    exponent = max(0, -tick.as_tuple().exponent)
+    raw_exponent = tick.as_tuple().exponent
+    exponent = max(0, -raw_exponent) if isinstance(raw_exponent, int) else 0
     return max(1, 10**min(exponent, 8))
 
 
@@ -80,10 +83,14 @@ def _crypto_instrument(symbol: dict[str, Any]) -> CanonicalInstrument | None:
     )
 
 
-def _equity_instrument(quote: dict[str, Any]) -> CanonicalInstrument | None:
+def _yahoo_instrument(quote: dict[str, Any]) -> CanonicalInstrument | None:
     symbol = str(quote.get("symbol") or "").strip().upper()
     quote_type = str(quote.get("quoteType") or "").strip().upper()
-    if not symbol or quote_type not in YAHOO_QUOTE_TYPES:
+    if not symbol:
+        return None
+    if quote_type in YAHOO_COMMODITY_QUOTE_TYPES:
+        return _commodity(symbol, symbol)
+    if quote_type not in YAHOO_QUOTE_TYPES:
         return None
     exchange_code = str(quote.get("exchange") or "YAHOO").strip().upper()
     venue = YAHOO_EXCHANGES.get(exchange_code, exchange_code or "YAHOO")
@@ -107,6 +114,12 @@ def _equity_instrument(quote: dict[str, Any]) -> CanonicalInstrument | None:
     )
 
 
+def _equity_instrument(quote: dict[str, Any]) -> CanonicalInstrument | None:
+    """Keep equity-only discovery callers from accepting commodity quotes."""
+    quote_type = str(quote.get("quoteType") or "").strip().upper()
+    return _yahoo_instrument(quote) if quote_type in YAHOO_QUOTE_TYPES else None
+
+
 def _dynamic_bindings(instrument: CanonicalInstrument) -> tuple[ProviderBinding, ...]:
     if instrument.asset_class is AssetClass.CRYPTO:
         return (
@@ -115,6 +128,15 @@ def _dynamic_bindings(instrument: CanonicalInstrument) -> tuple[ProviderBinding,
                 "binance",
                 instrument.display_symbol,
                 FeedType.WEBSOCKET_AND_REST,
+            ),
+        )
+    if instrument.asset_class is AssetClass.COMMODITY:
+        return (
+            _binding(
+                instrument,
+                "yahoo",
+                instrument.venue_symbol,
+                FeedType.HISTORICAL_POLLING,
             ),
         )
     return (
@@ -251,7 +273,7 @@ class ProviderBackedInstrumentCatalog:
             if isinstance(raw_quotes, list):
                 for raw in raw_quotes:
                     if isinstance(raw, dict):
-                        instrument = _equity_instrument(raw)
+                        instrument = _yahoo_instrument(raw)
                         if instrument is not None:
                             results.append(instrument)
         with self._lock:
