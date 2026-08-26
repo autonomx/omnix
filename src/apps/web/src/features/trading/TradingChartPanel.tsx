@@ -28,12 +28,24 @@ import { isTradingFormulaInstrumentId } from './tradingFormula';
 import { TRADING_COMPARISON_COLORS, type TradingComparison } from './tradingComparisons';
 import './TradingChartOverlayLayout.css';
 import './TradingChartRangeTooltip.css';
+import './TradingChartTimeControls.css';
 import { OMNIX_APPEARANCE_CHANGE_EVENT } from '../settings/appearanceEffects';
 import {
   intervalCompactLabel,
   isIntervalAvailable,
   tradingIntervalMinutes,
 } from './tradingIntervals';
+import {
+  dateInputValue,
+  formatTradingTime,
+  formatTradingTimezoneOffset,
+  readTradingTimezoneId,
+  resolveTradingTimezone,
+  TRADING_TIMEZONE_OPTIONS,
+  TRADING_TIMEZONE_CHANGE_EVENT,
+  writeTradingTimezoneId,
+  zonedDateTimeToUtc,
+} from './tradingTime';
 
 type TradingContextMenuState = ChartAlertPlacement & {
   contextIndicatorId?: CoreIndicatorId;
@@ -101,6 +113,13 @@ const ranges = [
   { label: '5Y', days: 1_825, interval: '1w', tooltip: '5 years in 1 week intervals' },
   { label: 'All', days: null, interval: '1mo', tooltip: 'All available data in 1 month intervals' },
 ] as const;
+
+type CustomVisibleRange = {
+  from: string;
+  to: string;
+};
+
+type SelectedVisibleRange = number | null | CustomVisibleRange;
 
 const rightOffsetStorageKey = 'omnix.trading.chart.right-offset';
 const rightOffsetOptions = [0, 5, DEFAULT_TRADING_RIGHT_OFFSET, 20, 50] as const;
@@ -181,7 +200,31 @@ function closestSupportedInterval(target: string, supported: readonly string[]):
   ))[0] ?? target;
 }
 
-function applyVisibleRange(chart: IChartApi, days: number | null, total: number, interval: string, rightOffset = DEFAULT_TRADING_RIGHT_OFFSET): void {
+function applyVisibleRange(
+  chart: IChartApi,
+  selection: SelectedVisibleRange,
+  bars: readonly MarketBar[],
+  interval: string,
+  rightOffset = DEFAULT_TRADING_RIGHT_OFFSET,
+  timeZone = 'UTC',
+): void {
+  if (typeof selection === 'object' && selection !== null) {
+    const fromTime = zonedDateTimeToUtc(selection.from, timeZone);
+    const toTime = zonedDateTimeToUtc(selection.to, timeZone, true);
+    if (fromTime === null || toTime === null || bars.length === 0) return;
+    const startIndex = bars.findIndex((bar) => Date.parse(bar.start_time) >= fromTime);
+    const endIndex = [...bars].reverse().findIndex((bar) => Date.parse(bar.start_time) <= toTime);
+    const from = startIndex >= 0 ? startIndex : fromTime < Date.parse(bars[0].start_time) ? 0 : bars.length - 1;
+    const to = endIndex >= 0 ? bars.length - 1 - endIndex : toTime < Date.parse(bars[0].start_time) ? 0 : bars.length - 1;
+    const safeRightOffset = Math.max(0, Math.min(100, Math.round(rightOffset)));
+    chart.timeScale().setVisibleLogicalRange({
+      from: Math.max(-0.5, Math.min(from, to) - 0.5),
+      to: Math.max(Math.max(from, to) + 0.5, Math.max(from, to) + 0.5 + safeRightOffset),
+    });
+    return;
+  }
+  const days = selection;
+  const total = bars.length;
   if (total === 0) return;
   const safeRightOffset = Math.max(0, Math.min(100, Math.round(rightOffset)));
   if (days === null) {
@@ -339,7 +382,7 @@ export function TradingChartPanel({
   const previousIntervalRef = useRef(interval);
   const pendingIntervalScrollRef = useRef(false);
   const [, forceLiveRender] = useState(0);
-  const selectedRangeRef = useRef<number | null | undefined>(undefined);
+  const selectedRangeRef = useRef<SelectedVisibleRange | undefined>(undefined);
   const pendingRangeIntervalRef = useRef<string | null>(null);
   const indicatorsRef = useRef<CoreIndicatorInstance[]>(indicators);
   const indicatorSchedulerRef = useRef<TradingIndicatorScheduler | null>(null);
@@ -380,6 +423,15 @@ export function TradingChartPanel({
   const [settingsIndicator, setSettingsIndicator] = useState<CoreIndicatorInstance | null>(null);
   const [selectedIndicator, setSelectedIndicator] = useState<TradingIndicatorSelection | null>(null);
   const [selectedRangeLabel, setSelectedRangeLabel] = useState('All');
+  const [customRangeOpen, setCustomRangeOpen] = useState(false);
+  const [customRangeStart, setCustomRangeStart] = useState('');
+  const [customRangeEnd, setCustomRangeEnd] = useState('');
+  const [customRangeError, setCustomRangeError] = useState<string | null>(null);
+  const [timezoneId, setTimezoneId] = useState(readTradingTimezoneId);
+  const [timezoneMenuOpen, setTimezoneMenuOpen] = useState(false);
+  const [clockNow, setClockNow] = useState(() => new Date());
+  const customRangeRef = useRef<HTMLDivElement | null>(null);
+  const timezoneMenuRef = useRef<HTMLDivElement | null>(null);
   const [rightOffset, setRightOffset] = useState(readTradingRightOffset);
   const [replayStartIndex, setReplayStartIndex] = useState<number | null>(null);
   const [replayCursorIndex, setReplayCursorIndex] = useState<number | null>(null);
@@ -691,6 +743,36 @@ export function TradingChartPanel({
   }, [adapter]);
 
   useEffect(() => {
+    adapter?.setTimezone(resolveTradingTimezone(timezoneId, chartQuery.data?.instrument.exchange_timezone));
+  }, [adapter, chartQuery.data?.instrument.exchange_timezone, timezoneId]);
+
+  useEffect(() => {
+    if (!customRangeOpen && !timezoneMenuOpen) return;
+    const closeMenus = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (customRangeOpen && !customRangeRef.current?.contains(target)) setCustomRangeOpen(false);
+      if (timezoneMenuOpen && !timezoneMenuRef.current?.contains(target)) setTimezoneMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeMenus, true);
+    return () => document.removeEventListener('pointerdown', closeMenus, true);
+  }, [customRangeOpen, timezoneMenuOpen]);
+
+  useEffect(() => {
+    const synchronizeTimezone = (event: Event) => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== 'string') return;
+      if (TRADING_TIMEZONE_OPTIONS.some((option) => option.id === event.detail)) setTimezoneId(event.detail);
+    };
+    window.addEventListener(TRADING_TIMEZONE_CHANGE_EVENT, synchronizeTimezone);
+    return () => window.removeEventListener(TRADING_TIMEZONE_CHANGE_EVENT, synchronizeTimezone);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(new Date()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (previousIntervalRef.current === interval) return;
     previousIntervalRef.current = interval;
     pendingIntervalScrollRef.current = true;
@@ -699,6 +781,7 @@ export function TradingChartPanel({
   useEffect(() => {
     const bars = normalizeChartBars((chartQuery.data?.bars ?? []) as MarketBar[]);
     allBarsRef.current = bars;
+    const previousDataIdentity = streamDataKeyRef.current?.split('|').slice(0, 2).join('|') ?? null;
     const dataKey = chartQuery.data
       ? `${chartQuery.data.instrument.instrument_id}|${chartQuery.data.binding.binding_id}|${chartQuery.data.interval}|${historyLimit}`
       : null;
@@ -718,7 +801,12 @@ export function TradingChartPanel({
     // move the selected bar to the right edge instead of leaving it where the
     // user clicked. Fit only when loading new data or returning to live mode.
     const shouldFit = dataChanged || (replayViewChanged && !replayVisible);
-    const keepSelectedRange = dataChanged && pendingRangeIntervalRef.current === interval;
+    const currentDataIdentity = dataKey?.split('|').slice(0, 2).join('|') ?? null;
+    const keepCustomRange = typeof selectedRangeRef.current === 'object'
+      && selectedRangeRef.current !== null
+      && previousDataIdentity !== null
+      && previousDataIdentity === currentDataIdentity;
+    const keepSelectedRange = dataChanged && (pendingRangeIntervalRef.current === interval || keepCustomRange);
     if (dataChanged && !keepSelectedRange) {
       selectedRangeRef.current = undefined;
       setSelectedRangeLabel('All');
@@ -729,7 +817,7 @@ export function TradingChartPanel({
     barsRef.current = visibleBars;
     adapterRef.current?.setBars(visibleBars, shouldFit);
     if (keepSelectedRange && selectedRangeRef.current !== undefined && visibleBars.length > 0 && adapterRef.current) {
-      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, visibleBars.length, interval, rightOffset);
+      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, visibleBars, interval, rightOffset, selectedTimezone);
     }
     if (pendingIntervalScrollRef.current && dataChanged && visibleBars.length > 0 && adapterRef.current) {
       adapterRef.current.scrollToLatest();
@@ -738,7 +826,7 @@ export function TradingChartPanel({
     if (keepSelectedRange) pendingRangeIntervalRef.current = null;
     if (dataKey !== null && bars.length > 0) fittedBarsKeyRef.current = dataKey;
     scheduleIndicators();
-  }, [active, chartQuery.data, interval, replayCursorIndex, replayMode, replayStartIndex, replayVisible, rightOffset, scheduleIndicators]);
+  }, [active, chartQuery.data, interval, replayCursorIndex, replayMode, replayStartIndex, replayVisible, rightOffset, scheduleIndicators, timezoneId]);
 
   useEffect(() => {
     setReplayStartIndex(null);
@@ -784,9 +872,9 @@ export function TradingChartPanel({
   useEffect(() => {
     adapterRef.current?.setChartType(chartType, barsRef.current);
     if (selectedRangeRef.current !== undefined && barsRef.current.length > 0 && adapterRef.current) {
-      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, barsRef.current.length, interval, rightOffset);
+      applyVisibleRange(adapterRef.current.api(), selectedRangeRef.current, barsRef.current, interval, rightOffset, selectedTimezone);
     }
-  }, [chartType, interval, rightOffset]);
+  }, [chartType, interval, rightOffset, timezoneId]);
 
   useEffect(() => {
     indicatorsRef.current = indicators;
@@ -916,6 +1004,8 @@ export function TradingChartPanel({
   const resolvedBinding = chartQuery.data?.binding;
   const bars = barsRef.current.length > 0 ? barsRef.current : chartQuery.data?.bars ?? [];
   const latest = bars[bars.length - 1];
+  const selectedTimezone = resolveTradingTimezone(timezoneId, chartQuery.data?.instrument.exchange_timezone);
+  const selectedTimezoneOption = TRADING_TIMEZONE_OPTIONS.find((option) => option.id === timezoneId) ?? TRADING_TIMEZONE_OPTIONS[0];
   const previous = bars[bars.length - 2];
   const latestClose = Number(latest?.close ?? 0);
   const previousClose = Number(previous?.close ?? latest?.open ?? 0);
@@ -1090,6 +1180,36 @@ export function TradingChartPanel({
     }
   };
 
+  const openCustomRange = () => {
+    const first = barsRef.current[0]?.start_time ?? new Date().toISOString();
+    const last = barsRef.current.at(-1)?.end_time ?? new Date().toISOString();
+    setCustomRangeStart((current) => current || dateInputValue(first, selectedTimezone));
+    setCustomRangeEnd((current) => current || dateInputValue(last, selectedTimezone));
+    setCustomRangeError(null);
+    setCustomRangeOpen((current) => !current);
+    setTimezoneMenuOpen(false);
+  };
+
+  const applyCustomRange = () => {
+    const fromTime = zonedDateTimeToUtc(customRangeStart, selectedTimezone);
+    const toTime = zonedDateTimeToUtc(customRangeEnd, selectedTimezone, true);
+    if (fromTime === null || toTime === null) {
+      setCustomRangeError('Choose both a start and end date.');
+      return;
+    }
+    if (fromTime > toTime) {
+      setCustomRangeError('The start date must be before the end date.');
+      return;
+    }
+    const selection = { from: customRangeStart, to: customRangeEnd } satisfies CustomVisibleRange;
+    selectedRangeRef.current = selection;
+    setSelectedRangeLabel('Custom');
+    setCustomRangeError(null);
+    setCustomRangeOpen(false);
+    const chart = adapterRef.current?.api();
+    if (chart) applyVisibleRange(chart, selection, barsRef.current, interval, rightOffset, selectedTimezone);
+  };
+
   const showRange = (label: string, days: number | null, requestedInterval: string) => {
     selectedRangeRef.current = days;
     setSelectedRangeLabel(label);
@@ -1101,7 +1221,7 @@ export function TradingChartPanel({
     onChangeInterval(nextInterval);
     const chart = adapterRef.current?.api();
     if (!chart) return;
-    if (interval === nextInterval) applyVisibleRange(chart, days, barsRef.current.length, interval, rightOffset);
+    if (interval === nextInterval) applyVisibleRange(chart, days, barsRef.current, interval, rightOffset, selectedTimezone);
   };
 
   const openContextMenu = (point: ChartAlertPlacement, indicatorId?: CoreIndicatorId) => {
@@ -1844,9 +1964,75 @@ export function TradingChartPanel({
               {range.label}
             </button>
           ))}
+          <div className="trading-custom-range" ref={customRangeRef}>
+            <button
+              type="button"
+              className="trading-custom-range-trigger"
+              aria-label="Select custom date range"
+              aria-expanded={customRangeOpen}
+              aria-pressed={selectedRangeLabel === 'Custom'}
+              title="Custom date range"
+              onClick={openCustomRange}
+            >
+              <svg aria-hidden="true" viewBox="0 0 16 16" focusable="false">
+                <rect x="2.5" y="3.5" width="11" height="10" rx="1" />
+                <path d="M5 2v3M11 2v3M2.5 6.5h11" />
+              </svg>
+            </button>
+            {customRangeOpen ? (
+              <form className="trading-custom-range-popover" onSubmit={(event) => { event.preventDefault(); applyCustomRange(); }}>
+                <strong>Custom range</strong>
+                <label>From<input type="date" value={customRangeStart} onChange={(event) => setCustomRangeStart(event.target.value)} /></label>
+                <label>To<input type="date" value={customRangeEnd} onChange={(event) => setCustomRangeEnd(event.target.value)} /></label>
+                {customRangeError ? <small role="alert">{customRangeError}</small> : null}
+                <div>
+                  <button type="button" onClick={() => setCustomRangeOpen(false)}>Cancel</button>
+                  <button type="submit" className="primary">Apply</button>
+                </div>
+              </form>
+            ) : null}
+          </div>
         </nav>
         <div className="trading-chart-footer-meta">
-          <span>{latest?.end_time ? new Date(latest.end_time).toLocaleTimeString() : provenance?.as_of ? new Date(provenance.as_of).toLocaleTimeString() : 'Awaiting data'}</span>
+          <div className="trading-timezone-control" ref={timezoneMenuRef}>
+            <button
+              type="button"
+              className="trading-timezone-trigger"
+              aria-label={`Chart timezone: ${selectedTimezoneOption.label}`}
+              aria-haspopup="listbox"
+              aria-expanded={timezoneMenuOpen}
+              title={`Timezone: ${selectedTimezoneOption.label}`}
+              onClick={() => { setTimezoneMenuOpen((current) => !current); setCustomRangeOpen(false); }}
+            >
+              {`${formatTradingTime(clockNow, selectedTimezone)} ${formatTradingTimezoneOffset(clockNow, selectedTimezone)}`}
+            </button>
+            {timezoneMenuOpen ? (
+              <div className="trading-timezone-menu" role="listbox" aria-label="Chart timezone">
+                {TRADING_TIMEZONE_OPTIONS.map((option) => {
+                  const optionTimezone = resolveTradingTimezone(option.id, chartQuery.data?.instrument.exchange_timezone);
+                  const offset = formatTradingTimezoneOffset(clockNow, optionTimezone);
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="option"
+                      aria-selected={timezoneId === option.id}
+                      onClick={() => {
+                        setTimezoneId(option.id);
+                        writeTradingTimezoneId(option.id);
+                        window.dispatchEvent(new CustomEvent(TRADING_TIMEZONE_CHANGE_EVENT, { detail: option.id }));
+                        setTimezoneMenuOpen(false);
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      <small>{option.id === 'exchange' ? `(${offset})` : ''}</small>
+                      {timezoneId === option.id ? <b aria-hidden="true">✓</b> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
           <span>{streamStatus === 'live' ? 'live source' : provenance?.cached ? 'cached' : 'live source'}</span>
           <span>{drawings.status}</span>
         </div>
