@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from app.trading.providers.errors import ProviderUnavailableError
 from app.trading.research.contracts import TradingEvidence, fingerprint
 from app.trading.research.adapters.base import AdapterExecutionResult
 from app.trading.research.coordinator import create_trading_research_request, run_trading_research
@@ -149,11 +150,14 @@ def test_coordinator_returns_failed_report_when_identity_provider_fails():
 
     class BrokenIdentityResolver:
         def resolve(self, instrument_id):
-            raise Exception("SEC unavailable")
+            raise ProviderUnavailableError("SEC unavailable")
+
+    repository = Repository()
+    repository.evidence.append(_evidence("Historical evidence must not satisfy a new run.", "historical"))
 
     result = run_trading_research(
         create_trading_research_request(instrument_id="equity:NASDAQ:XYZ"),
-        repository=Repository(),
+        repository=repository,
         fact_repository=FactRepository(),
         shadow_repository=object(),
         identity_resolver=BrokenIdentityResolver(),
@@ -164,7 +168,26 @@ def test_coordinator_returns_failed_report_when_identity_provider_fails():
     )
 
     assert result.report.research_status == "failed"
-    assert "issuer_identity_unavailable:Exception" in result.warnings
+    assert result.report.source_evidence_ids == ()
+    assert result.fact_set.evidence_ids == ()
+    assert "issuer_identity_unavailable:ProviderUnavailableError" in result.warnings
+
+    class ProgrammingErrorResolver:
+        def resolve(self, instrument_id):
+            raise RuntimeError("resolver bug")
+
+    with pytest.raises(RuntimeError, match="resolver bug"):
+        run_trading_research(
+            create_trading_research_request(instrument_id="equity:NASDAQ:XYZ"),
+            repository=Repository(),
+            fact_repository=FactRepository(),
+            shadow_repository=object(),
+            identity_resolver=ProgrammingErrorResolver(),
+            sec=EmptyAdapter(),
+            company=EmptyAdapter(),
+            web=EmptyAdapter(),
+            run_shadow_ai=False,
+        )
 
 
 def test_research_package_has_no_order_execution_imports():
