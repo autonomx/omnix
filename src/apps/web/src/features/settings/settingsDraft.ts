@@ -11,10 +11,10 @@ export function createSettingsDraftState(document: SettingsDocument): SettingsDr
 export function settingsDraftReducer(state: SettingsDraftState, action: SettingsDraftAction): SettingsDraftState {
   if (action.type === 'load' || action.type === 'saved') {
     const server = migrateSettingsDocument(action.document);
-    return { server, draft: cloneSettingsValue(server), dirtyPaths: [], fieldErrors: {}, status: action.type === 'saved' ? 'saved' : 'idle', message: '' };
+    return { server, draft: cloneSettingsValue(server), dirtyPaths: [], fieldErrors: {}, status: action.type === 'saved' ? 'saved' : 'idle', message: action.type === 'saved' ? 'Changes saved.' : '' };
   }
   if (action.type === 'discard') {
-    return { ...state, draft: cloneSettingsValue(state.server), dirtyPaths: [], fieldErrors: {}, status: 'idle', message: '' };
+    return { ...state, draft: cloneSettingsValue(state.server), dirtyPaths: [], fieldErrors: {}, status: 'idle', message: state.dirtyPaths.length ? 'Changes discarded.' : '' };
   }
   if (action.type === 'update') {
     const draft = setSettingsPath(state.draft, action.path, action.value);

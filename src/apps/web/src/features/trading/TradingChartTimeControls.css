@@ -1,0 +1,190 @@
+.trading-chart-panel > footer nav {
+  position: relative;
+}
+
+.trading-chart-panel > footer nav button {
+  font-size: 9px;
+}
+
+.trading-chart-panel > footer .trading-chart-footer-meta {
+  font-size: 9px;
+}
+
+.trading-custom-range,
+.trading-timezone-control {
+  position: relative;
+}
+
+.trading-custom-range-trigger {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 21px;
+  padding: 2px 4px !important;
+}
+
+.trading-custom-range-trigger svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.35;
+}
+
+.trading-custom-range-trigger[aria-pressed='true'] {
+  color: #6fb9ff !important;
+}
+
+.trading-custom-range-popover {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  width: 190px;
+  gap: 8px;
+  border: 1px solid rgba(116, 151, 181, .3);
+  border-radius: 7px;
+  background: #0b1724;
+  padding: 10px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .4);
+  color: #dbe7f0;
+}
+
+.trading-custom-range-popover > strong {
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.trading-custom-range-popover label {
+  display: grid;
+  gap: 4px;
+  color: #90a2b4;
+  font-size: 9px;
+}
+
+.trading-custom-range-popover input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px !important;
+  font-size: 10px;
+}
+
+.trading-custom-range-popover > small {
+  color: #ff969d;
+  font-size: 9px;
+}
+
+.trading-custom-range-popover > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.trading-custom-range-popover > div button {
+  padding: 5px 7px !important;
+  font-size: 9px;
+}
+
+.trading-custom-range-popover > div .primary {
+  border-color: #1688ff;
+  background: #1688ff;
+  color: #fff;
+}
+
+.trading-timezone-trigger {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  color: inherit !important;
+  font-size: inherit;
+  white-space: nowrap;
+}
+
+.trading-timezone-trigger:hover,
+.trading-timezone-trigger:focus-visible {
+  color: #70baff !important;
+}
+
+.trading-timezone-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 7px);
+  z-index: 40;
+  display: grid;
+  width: 220px;
+  max-height: min(330px, 60vh);
+  overflow-y: auto;
+  border: 1px solid rgba(116, 151, 181, .3);
+  border-radius: 7px;
+  background: #0b1724;
+  padding: 5px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
+}
+
+.trading-timezone-menu button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 5px;
+  min-height: 27px;
+  border: 0 !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  padding: 4px 6px !important;
+  color: #c8d5df !important;
+  text-align: left;
+  font-size: 10px;
+}
+
+.trading-timezone-menu button:hover,
+.trading-timezone-menu button:focus-visible,
+.trading-timezone-menu button[aria-selected='true'] {
+  background: rgba(22, 136, 255, .16) !important;
+  color: #fff !important;
+}
+
+.trading-timezone-menu button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trading-timezone-menu button small {
+  color: #8599ac;
+  font-size: 9px;
+}
+
+.trading-timezone-menu button b {
+  color: #6fb9ff;
+  font-size: 13px;
+  line-height: 1;
+  text-align: center;
+}
+
+:root[data-omnix-appearance='light'] .trading-custom-range-popover,
+:root[data-omnix-appearance='light'] .trading-timezone-menu {
+  border-color: var(--trading-light-line);
+  background: var(--trading-light-surface);
+  box-shadow: 0 12px 28px rgba(50, 70, 92, .2);
+  color: var(--trading-light-text);
+}
+
+:root[data-omnix-appearance='light'] .trading-custom-range-popover label,
+:root[data-omnix-appearance='light'] .trading-timezone-menu button small {
+  color: var(--trading-light-muted);
+}
+
+:root[data-omnix-appearance='light'] .trading-timezone-menu button {
+  color: var(--trading-light-text) !important;
+}
+
+@media (max-width: 700px) {
+  .trading-timezone-menu {
+    right: -6px;
+  }
+}

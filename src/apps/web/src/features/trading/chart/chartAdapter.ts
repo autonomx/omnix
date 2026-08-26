@@ -24,6 +24,7 @@ import type { DrawingPoint } from '../drawings/drawingCommands';
 import { indicatorOutputs, indicatorPaneScale, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 import type { TradingComparisonPlacement } from '../tradingComparisons';
+import { formatTradingChartTick, formatTradingChartTime } from '../tradingTime';
 
 export type TradingChartTypeGroup = 'candles' | 'lines' | 'areas' | 'columns' | 'profiles' | 'specialty';
 export const TRADING_CHART_TYPE_GROUPS: readonly { id: TradingChartTypeGroup; label: string }[] = [
@@ -489,6 +490,7 @@ export class TradingChartAdapter {
       },
       kineticScroll: { mouse: true, touch: true },
     });
+    this.setTimezone('UTC');
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.comparisonViewportHandler);
     this.priceSeries = this.createPriceSeries(chartType);
     this.volumeSeries = this.chart.addSeries(HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' }, priceLineVisible: false });
@@ -576,6 +578,18 @@ export class TradingChartAdapter {
       leftPriceScale: { borderColor },
       rightPriceScale: { borderColor },
       timeScale: { borderColor },
+    });
+  }
+
+  setTimezone(timeZone: string): void {
+    this.assertActive();
+    this.chart.applyOptions({
+      localization: {
+        timeFormatter: (time: Time) => formatTradingChartTime(time, timeZone),
+      },
+      timeScale: {
+        tickMarkFormatter: (time: Time) => formatTradingChartTick(time, timeZone),
+      },
     });
   }
 

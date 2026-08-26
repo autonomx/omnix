@@ -319,6 +319,10 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     hermes_enabled = _env_flag("HERMES_ENABLED")
     hermes_auto_start = hermes_enabled and _env_flag("OMNIX_START_HERMES")
     hermes_base_url = os.environ.get("HERMES_BASE_URL", "http://127.0.0.1:8642")
+    trading_hermes_enabled = os.environ.get(
+        "OMNIX_TRADING_HERMES_RESEARCH_ENABLED",
+        "1" if hermes_enabled else "0",
+    )
     common = {
         "PYTHONPATH": str(root / "src"),
         "OMNIX_TTS_URL": os.environ.get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
@@ -366,6 +370,9 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 **common,
                 "OMNIX_TTS_MODEL_DIR": tts_model_dir,
                 "OMNIX_QWEN3_TTS_MODEL_DIR": tts_model_dir,
+                "HERMES_ENABLED": "1" if hermes_enabled else "0",
+                "HERMES_BASE_URL": hermes_base_url,
+                "OMNIX_TRADING_HERMES_RESEARCH_ENABLED": trading_hermes_enabled,
             },
             ports=(8000,),
             description="FastAPI gateway for the redesigned web app on 127.0.0.1:8000.",

@@ -209,25 +209,40 @@ class QuickSearchService:
             for index, page, exc in extraction_results:
                 item = recorded.items[index]
                 snapshot = snapshots[index]
+                failure = exc
                 if exc is None and page is not None:
-                    updated = store.save_extraction(snapshot.snapshot_id, page)
-                    snapshots[index] = updated
-                    item.metadata.update({
-                        "extraction_status": "completed",
-                        "extractor_version": page.extractor_version,
-                        "content_hash": page.content_hash,
-                        "extracted_text_ref": updated.extracted_text_ref,
-                        "extracted_title": page.title,
-                        "extracted_excerpt": page.text[:4000],
-                    })
-                    extracted += 1
-                else:
-                    snapshots[index] = store.mark_extraction_failed(snapshot.snapshot_id) or snapshot
-                    item.metadata["extraction_status"] = "failed"
-                    item.metadata["extraction_error"] = (
-                        f"{type(exc).__name__}: {exc}" if exc is not None else "extraction failed"
-                    )
-                    extraction_failures += 1
+                    try:
+                        updated = store.save_extraction(snapshot.snapshot_id, page)
+                    except Exception as persistence_exc:
+                        # A durable extraction failure must not discard an otherwise
+                        # usable provider snippet. This is especially important for
+                        # trading research, where the snippet is still valid evidence
+                        # even when PostgreSQL/asset persistence is temporarily down.
+                        failure = persistence_exc
+                    else:
+                        snapshots[index] = updated
+                        item.metadata.update({
+                            "extraction_status": "completed",
+                            "extractor_version": page.extractor_version,
+                            "content_hash": page.content_hash,
+                            "extracted_text_ref": updated.extracted_text_ref,
+                            "extracted_title": page.title,
+                            "extracted_excerpt": page.text[:4000],
+                        })
+                        extracted += 1
+                        continue
+
+                try:
+                    failed_snapshot = store.mark_extraction_failed(snapshot.snapshot_id)
+                except Exception:
+                    failed_snapshot = None
+                if failed_snapshot is not None:
+                    snapshots[index] = failed_snapshot
+                item.metadata["extraction_status"] = "failed"
+                item.metadata["extraction_error"] = (
+                    f"{type(failure).__name__}: {failure}" if failure is not None else "extraction failed"
+                )
+                extraction_failures += 1
             if extraction_failures:
                 warnings.append({
                     "code": "page_extraction_partial",

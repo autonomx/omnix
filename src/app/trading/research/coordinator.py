@@ -5,20 +5,21 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import BaseModel, ConfigDict
 
+from app.trading.providers.errors import ProviderFallbackEligibleError
 from app.trading.trade_logging import trade_log
 
 from .adapters.company_ir import CompanyIrAdapter
 from .adapters.generic_web import GenericWebAdapter
 from .adapters.sec_edgar import SecEdgarAdapter
 from .contracts import (
-    ResearchActionRecord, ResearchCoverage, StrategyResearchFeatures, TradingFactSet, TradingResearchReport,
+    ResearchActionRecord, ResearchCoverage, StrategyResearchFeatures, TradingFactSet, TradingMarketBrief, TradingResearchReport,
     TradingResearchRequest, fingerprint,
 )
 from .fact_repository import TradingFactRepository, default_fact_repository
 from .facts.extraction import build_fact_set
 from .feature_projection import project_research_features
 from .hermes_loop import ResearchLoopResult, run_iterative_research
-from .issuer_identity import SecIssuerIdentityResolver
+from .issuer_identity import SecIssuerIdentityResolver, fallback_issuer_identity
 from .novelty_shadow import generate_novelty_shadow
 from .repository import TradingResearchRepository, default_research_repository
 from .shadow_repository import TradingShadowResearchRepository, default_shadow_repository
@@ -33,6 +34,8 @@ class TradingResearchCoordinatorResult(BaseModel):
     trace_id: str
     planner_backend: str
     warnings: tuple[str, ...] = ()
+    brief: TradingMarketBrief | None = None
+    brief_warning: str | None = None
 
 
 def create_trading_research_request(
@@ -55,14 +58,39 @@ def create_trading_research_request(
     )
 
 
+def _evidence_for_ids(
+    repository: TradingResearchRepository,
+    request: TradingResearchRequest,
+    evidence_ids: tuple[str, ...] | list[str],
+    known_at: datetime,
+):
+    ids = tuple(dict.fromkeys(evidence_ids))
+    if not ids:
+        return []
+    loader = getattr(repository, "evidence_by_ids_as_of", None)
+    if callable(loader):
+        return loader(request.instrument_id, ids, known_at)
+    available = repository.list_evidence_as_of(
+        request.instrument_id,
+        known_at,
+        max(200, request.max_sources * 4),
+    )
+    by_id = {item.evidence_id: item for item in available}
+    return [by_id[evidence_id] for evidence_id in ids if evidence_id in by_id]
+
+
 def _harvest_action(repository: TradingResearchRepository, request: TradingResearchRequest, identity, *, trace_id: str,
                     step: int, operation: str, adapter, query: str | None, limit: int) -> tuple[str, ...]:
     started = datetime.now(timezone.utc)
     action_id = "harvest-" + hashlib.sha256(f"{trace_id}|{step}|{operation}".encode()).hexdigest()[:24]
     try:
         result = adapter.find(identity, query=query, limit=limit)
-        existing = repository.list_evidence_as_of(request.instrument_id, datetime.now(timezone.utc), request.max_sources)
-        remaining = max(0, request.max_sources - len(existing))
+        current_ids = {
+            evidence_id
+            for action in repository.action_trace(trace_id)
+            for evidence_id in action.evidence_ids
+        }
+        remaining = max(0, request.max_sources - len(current_ids))
         ids = [repository.save_evidence(item).evidence_id for item in result.evidence[:remaining]]
         completed = datetime.now(timezone.utc)
         repository.save_action(ResearchActionRecord(
@@ -135,7 +163,9 @@ def _research_status(*, coverage: ResearchCoverage, actions: list[ResearchAction
     if stop_reason == "deadline_exhausted":
         return "timed_out"
     source_actions = [action for action in actions if action.operation in {"sec_find_filings", "company_find_releases", "web_search"}]
-    if evidence_count == 0 and source_actions and all(action.status == "failed" for action in source_actions):
+    if evidence_count == 0 and source_actions and all(
+        action.status in {"failed", "completed"} for action in source_actions
+    ):
         return "failed"
     return "complete" if all(value == "complete" for value in states.values()) else "partial"
 
@@ -153,9 +183,18 @@ def run_trading_research(
     web = web or GenericWebAdapter()
     company = company or CompanyIrAdapter(web)
     now = datetime.now(timezone.utc)
+    warnings: list[str] = []
     identity = repository.identity_as_of(request.instrument_id, now)
-    if identity is None:
-        identity = repository.save_identity(identity_resolver.resolve(request.instrument_id))
+    if identity is None or identity.cik is None:
+        try:
+            resolved_identity = identity_resolver.resolve(request.instrument_id)
+        except ProviderFallbackEligibleError as exc:
+            # Expected provider availability failures may fall back to symbol-only
+            # identity so read-only web research can continue. Contract/programming
+            # defects are intentionally allowed to surface instead of being hidden.
+            resolved_identity = fallback_issuer_identity(request.instrument_id)
+            warnings.append(f"issuer_identity_unavailable:{type(exc).__name__}")
+        identity = repository.save_identity(resolved_identity)
 
     trace_id = "htr-harvest-" + hashlib.sha256(request.request_id.encode()).hexdigest()[:20]
     _harvest_action(repository, request, identity, trace_id=trace_id, step=0, operation="sec_find_filings", adapter=sec,
@@ -165,14 +204,19 @@ def run_trading_research(
     _harvest_action(repository, request, identity, trace_id=trace_id, step=2, operation="web_search", adapter=web,
                     query=f"{identity.symbol} {identity.legal_name or ''} latest catalyst financing warrants", limit=min(6, request.max_sources))
     harvest_finished = datetime.now(timezone.utc)
-    harvest_evidence = repository.list_evidence_as_of(request.instrument_id, harvest_finished, request.max_sources)
+    harvest_actions = repository.action_trace(trace_id)
+    harvest_evidence_ids = tuple(dict.fromkeys(
+        evidence_id
+        for action in harvest_actions
+        for evidence_id in action.evidence_ids
+    ))
+    harvest_evidence = _evidence_for_ids(repository, request, harvest_evidence_ids, harvest_finished)
     harvest_fact_set = build_fact_set(
         instrument_id=request.instrument_id,
         evidence=harvest_evidence,
         decision_at=harvest_finished,
         strategy_id=request.strategy_id,
     )
-    harvest_actions = repository.action_trace(trace_id)
     harvest_coverage = _coverage(harvest_actions, harvest_fact_set, novelty_checked=False)
     if _deterministic_harvest_resolved(harvest_coverage, harvest_fact_set):
         loop = ResearchLoopResult(
@@ -180,16 +224,25 @@ def run_trading_research(
             planner_backend="not_required",
             stop_reason="deterministic_evidence_complete",
             action_count=0,
-            evidence_ids=tuple(item.evidence_id for item in harvest_evidence),
+            evidence_ids=harvest_evidence_ids,
         )
     else:
-        loop = run_iterative_research(request, identity, repository, planner=planner, sec=sec, company=company, web=web)
+        loop = run_iterative_research(
+            request,
+            identity,
+            repository,
+            planner=planner,
+            sec=sec,
+            company=company,
+            web=web,
+            seed_evidence_ids=harvest_evidence_ids,
+        )
 
     finished = datetime.now(timezone.utc)
-    evidence = repository.list_evidence_as_of(request.instrument_id, finished, request.max_sources)
+    evidence = _evidence_for_ids(repository, request, loop.evidence_ids, finished)
     preliminary = build_fact_set(instrument_id=request.instrument_id, evidence=evidence, decision_at=finished, strategy_id=request.strategy_id)
     novelty_checked = False
-    warnings = list(loop.warnings)
+    warnings.extend(loop.warnings)
     if run_shadow_ai:
         try:
             annotation = generate_novelty_shadow(request.instrument_id, evidence, observed_at=finished)

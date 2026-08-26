@@ -15,7 +15,22 @@ class GenericWebAdapter:
     def __init__(self, search_service=None, extractor_factory=None) -> None:
         if search_service is None:
             from app.research.quick_search import QuickSearchService
-            search_service = QuickSearchService(max_extracts=2)
+            from app.research.provider_chain import ProviderFallbackSearchClient
+            from app.research.settings import load_research_runtime_settings
+
+            settings = load_research_runtime_settings()
+
+            def client_factory(timeout_seconds: float):
+                return ProviderFallbackSearchClient(
+                    providers=settings.effective_provider_chain,
+                    timeout_seconds=timeout_seconds,
+                )
+
+            search_service = QuickSearchService(
+                client_factory=client_factory,
+                research_policy=settings.policy,
+                max_extracts=min(2, settings.max_extracts),
+            )
         if extractor_factory is None:
             from app.research.extraction import ReadablePageExtractor
             extractor_factory = ReadablePageExtractor
@@ -55,7 +70,20 @@ class GenericWebAdapter:
                 metadata={"provider": item.metadata.get("provider") if item.metadata else None, "query": q},
                 immutable_fingerprint=fp,
             ))
-        return AdapterExecutionResult(evidence=tuple(evidence), detail=f"web_results:{len(evidence)}")
+        diagnostics = getattr(execution, "diagnostics", {}) or {}
+        provider = str(diagnostics.get("provider") or "unknown")
+        status = str(diagnostics.get("status") or "unknown")
+        results = diagnostics.get("results", len(execution.items))
+        attempts = ",".join(str(item) for item in diagnostics.get("provider_attempts", ()))
+        failures = ",".join(
+            f"{provider_name}:{message}"
+            for provider_name, message in (diagnostics.get("provider_failures") or {}).items()
+        )
+        detail = (
+            f"web_results:{len(evidence)} provider:{provider} status:{status} "
+            f"items:{results} attempts:{attempts or 'none'} failures:{failures or 'none'}"
+        )
+        return AdapterExecutionResult(evidence=tuple(evidence), detail=detail)
 
     def extract(self, identity: IssuerIdentity, *, locator: str) -> AdapterExecutionResult:
         page = self.extractor_factory().extract(locator)

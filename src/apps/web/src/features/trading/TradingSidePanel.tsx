@@ -5,6 +5,7 @@ import { TradingLayoutPanel } from './TradingLayoutPanel';
 import { TradingNewsPanel } from './TradingNewsPanel';
 import { TradingPaperPanel } from './TradingPaperPanel';
 import { TradingProspectiveEconomicPanel } from './TradingProspectiveEconomicPanel';
+import { TradingResearchPanel } from './TradingResearchPanel';
 import { TradingSymbolIntelligence } from './TradingSymbolIntelligence';
 import { TradingTradeJournal } from './TradingTradeJournal';
 import { TradingWatchlist } from './TradingWatchlist';
@@ -15,7 +16,7 @@ import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIn
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
 
-export type TradingSideTab = 'watchlist' | 'paper' | 'intelligence' | 'journal' | 'prospective' | 'indicators' | 'alerts' | 'news' | 'layout' | 'objects' | 'pine';
+export type TradingSideTab = 'watchlist' | 'paper' | 'intelligence' | 'journal' | 'prospective' | 'indicators' | 'alerts' | 'news' | 'research' | 'layout' | 'objects' | 'pine';
 
 const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'watchlist', label: 'Watchlist' },
@@ -26,6 +27,7 @@ const tabs: Array<{ id: TradingSideTab; label: string }> = [
   { id: 'indicators', label: 'Indicators' },
   { id: 'alerts', label: 'Alerts' },
   { id: 'news', label: 'News' },
+  { id: 'research', label: 'Research' },
   { id: 'layout', label: 'Layout' },
 ];
 
@@ -59,7 +61,6 @@ export function TradingSidePanel({
   onRemoveChart,
   onSetLink,
   onSetSnapMode,
-  onOpenResearch,
 }: {
   sessionId?: string;
   instruments: CanonicalInstrument[];
@@ -90,7 +91,6 @@ export function TradingSidePanel({
   onRemoveChart: () => void;
   onSetLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   onSetSnapMode: (mode: DrawingSnapMode) => void;
-  onOpenResearch: () => void;
 }) {
   const [internalTab, setInternalTab] = useState<TradingSideTab>('watchlist');
   const activeTab = selectedTab ?? internalTab;
@@ -192,7 +192,14 @@ export function TradingSidePanel({
             onSelectAlert={onSelectAlert}
           />
         ) : null}
-        {activeTab === 'news' ? <TradingNewsPanel onOpenResearch={onOpenResearch} /> : null}
+        {activeTab === 'news' ? <TradingNewsPanel key={activeInstrumentId} instrumentId={activeInstrumentId} /> : null}
+        {activeTab === 'research' ? (
+          <TradingResearchPanel
+            instrumentId={activeInstrumentId}
+            bindingId={bindingId}
+            interval={interval}
+          />
+        ) : null}
         {activeTab === 'layout' ? (
           <TradingLayoutPanel
             layout={layout}

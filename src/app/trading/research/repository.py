@@ -55,13 +55,13 @@ class TradingResearchRepository:
                  extraction_status,metadata,immutable_fingerprint)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
                 ON CONFLICT (workspace_id, immutable_fingerprint) DO UPDATE SET immutable_fingerprint=EXCLUDED.immutable_fingerprint
-                RETURNING omnix_known_at
+                RETURNING evidence_id, omnix_known_at
             """, (self.context.workspace_id,item.evidence_id,item.instrument_id,item.issuer_identity_id,item.evidence_type,
                   item.source_type,item.source_locator,item.source_authority_tier,item.source_published_at,item.source_available_at,
                   item.captured_at,item.title,item.content,item.content_hash,item.extraction_status,json.dumps(item.metadata,default=str),
                   item.immutable_fingerprint)).fetchone()
             uow.commit()
-        return item.model_copy(update={"omnix_known_at": row[0]})
+        return item.model_copy(update={"evidence_id": row[0], "omnix_known_at": row[1]})
 
     def list_evidence_as_of(self, instrument_id: str, known_at_lte: datetime, limit: int = 200) -> list[TradingEvidence]:
         with self.uow_factory() as uow:
@@ -77,6 +77,34 @@ class TradingResearchRepository:
             source_locator=r[5],source_authority_tier=r[6],source_published_at=r[7],source_available_at=r[8],captured_at=r[9],
             omnix_known_at=r[10],title=r[11],content=r[12],content_hash=r[13],extraction_status=r[14],metadata=r[15],
             immutable_fingerprint=r[16]) for r in rows]
+
+    def evidence_by_ids_as_of(
+        self,
+        instrument_id: str,
+        evidence_ids: tuple[str, ...] | list[str],
+        known_at_lte: datetime,
+    ) -> list[TradingEvidence]:
+        ids = tuple(dict.fromkeys(evidence_ids))
+        if not ids:
+            return []
+        placeholders = ",".join(["%s"] * len(ids))
+        with self.uow_factory() as uow:
+            rows = uow.connection.execute(f"""
+                SELECT evidence_id,instrument_id,issuer_identity_id,evidence_type,source_type,source_locator,
+                       source_authority_tier,source_published_at,source_available_at,captured_at,omnix_known_at,title,
+                       content,content_hash,extraction_status,metadata,immutable_fingerprint
+                  FROM omnix_trading_research_evidence
+                 WHERE workspace_id=%s AND instrument_id=%s AND omnix_known_at<=%s
+                   AND evidence_id IN ({placeholders})
+            """, (self.context.workspace_id, instrument_id, known_at_lte, *ids)).fetchall()
+        by_id = {
+            r[0]: TradingEvidence(evidence_id=r[0],instrument_id=r[1],issuer_identity_id=r[2],evidence_type=r[3],source_type=r[4],
+                source_locator=r[5],source_authority_tier=r[6],source_published_at=r[7],source_available_at=r[8],captured_at=r[9],
+                omnix_known_at=r[10],title=r[11],content=r[12],content_hash=r[13],extraction_status=r[14],metadata=r[15],
+                immutable_fingerprint=r[16])
+            for r in rows
+        }
+        return [by_id[evidence_id] for evidence_id in ids if evidence_id in by_id]
 
     def save_action(self, item: ResearchActionRecord) -> ResearchActionRecord:
         with self.uow_factory() as uow:

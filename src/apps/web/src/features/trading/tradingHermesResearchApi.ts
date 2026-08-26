@@ -45,6 +45,27 @@ export interface HermesResearchEvidence {
   metadata: Record<string, unknown>;
 }
 
+export interface HermesMarketBriefItem {
+  text: string;
+  source_evidence_ids: string[];
+}
+
+export interface HermesMarketBrief {
+  instrument_id: string;
+  generated_at: string;
+  provider: string;
+  model: string;
+  headline: string;
+  summary: string;
+  key_points: HermesMarketBriefItem[];
+  risks: HermesMarketBriefItem[];
+  watch_items: HermesMarketBriefItem[];
+  confidence: 'low' | 'medium' | 'high' | 'uncertain';
+  source_evidence_ids: string[];
+  read_only: true;
+  disclaimer: string;
+}
+
 export interface HermesSupplyFact {
   fact_id: string;
   supply_type: string;
@@ -183,18 +204,20 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const tradingHermesResearchApi = {
-  start: (instrumentId: string, strategyId: string) => requestJson<{
+  start: (instrumentId: string, strategyId?: string | null) => requestJson<{
     report: HermesResearchReport;
     fact_set: HermesResearchFactSet;
     features: HermesResearchFeatures;
     trace_id: string;
     planner_backend: string;
     warnings: string[];
+    brief: HermesMarketBrief | null;
+    brief_warning: string | null;
   }>('/api/trading/hermes-research/start', {
     method: 'POST',
     body: JSON.stringify({
       instrument_id: instrumentId,
-      strategy_id: strategyId,
+      strategy_id: strategyId || null,
       deadline_seconds: 45,
       max_steps: 8,
       max_queries: 5,

@@ -5,7 +5,6 @@ import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
 import { TradingReplayPanel } from './TradingReplayPanel';
-import { TradingResearchPanel } from './TradingResearchPanel';
 import { TradingScannerPanel } from './TradingScannerPanel';
 import { TradingStrategiesPanel } from './TradingStrategiesPanel';
 import { TradingSidePanel } from './TradingSidePanel';
@@ -67,7 +66,7 @@ const gridOptions: Array<{ id: TradingLayout; label: string }> = [
 
 const quickIntervalPriority = ['1h', '2h', '4h'];
 
-type ToolPanel = 'scanner' | 'replay' | 'strategies' | 'research';
+type ToolPanel = 'scanner' | 'replay' | 'strategies';
 type FormulaResolution = TradingFormulaSearchPreview & { operands: Record<string, string> };
 
 // TradingSidePanel mounts TradingPaperPanel in the dedicated Trade tab.
@@ -357,6 +356,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     setToolPanel(null);
   };
 
+  const openResearchPanel = () => {
+    setSidePanelTab('research');
+    setPanel('right', true);
+    setToolPanelFullscreen(false);
+    setToolPanel(null);
+  };
+
   useEffect(() => {
     if (!toolPanelFullscreen) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -616,7 +622,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
           <button type="button" aria-pressed={toolPanel === 'replay'} onClick={() => toggleToolPanel('replay')}>Backtest</button>
           <button type="button" aria-pressed={toolPanel === 'strategies'} onClick={() => toggleToolPanel('strategies')}>Strategies</button>
           <button type="button" aria-pressed={sidePanelTab === 'paper' && panels.right} onClick={openPaperTrading}>Trade</button>
-          <button type="button" aria-pressed={toolPanel === 'research'} onClick={() => toggleToolPanel('research')}>AI Research</button>
+          <button type="button" aria-pressed={sidePanelTab === 'research' && panels.right} onClick={openResearchPanel}>AI Research</button>
         </div>
 
         <span className="trading-provider-status" data-status={selectedBinding ? 'ready' : 'unavailable'} title={selectedBinding ? `${selectedBinding.provider} · ${selectedBinding.usage_scope} · ${selectedBinding.is_official_api ? 'official' : 'unofficial'}` : 'No compatible feed'}>
@@ -678,7 +684,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                     ? 'Replay & backtest'
                     : toolPanel === 'strategies'
                       ? 'Automated strategies'
-                      : 'AI market research'}</strong>
+                      : 'Automated strategies'}</strong>
                 <div className="trading-tool-drawer-actions">
                   <button type="button" onClick={() => setToolPanelFullscreen((value) => !value)} aria-pressed={toolPanelFullscreen} aria-label={toolPanelFullscreen ? 'Restore analysis tool' : 'Fullscreen analysis tool'}>{toolPanelFullscreen ? 'Restore' : 'Fullscreen'}</button>
                   <button type="button" onClick={() => { setToolPanelFullscreen(false); setToolPanel(null); }} aria-label="Close analysis tool">×</button>
@@ -690,9 +696,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
                 ) : null}
                 {toolPanel === 'strategies' ? <TradingStrategiesPanel /> : null}
-                {toolPanel === 'research' ? (
-                  <TradingResearchPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
-                ) : null}
               </div>
             </section>
           ) : null}
@@ -734,7 +737,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 onRemoveChart={() => removeChart()}
                 onSetLink={setLink}
                 onSetSnapMode={(mode: DrawingSnapMode) => setDrawingSnapMode(mode)}
-                onOpenResearch={() => setToolPanel('research')}
               />
             ) : null}
             <TradingSideRail

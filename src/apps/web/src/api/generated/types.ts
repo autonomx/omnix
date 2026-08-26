@@ -10030,6 +10030,57 @@ export interface components {
              */
             unresolved_facts: string[];
         };
+        /** TradingMarketBrief */
+        TradingMarketBrief: {
+            /**
+             * Confidence
+             * @default uncertain
+             * @enum {string}
+             */
+            confidence: "low" | "medium" | "high" | "uncertain";
+            /**
+             * Disclaimer
+             * @default AI-generated research summary only. Not financial advice. No order was created or executed.
+             * @constant
+             */
+            disclaimer: "AI-generated research summary only. Not financial advice. No order was created or executed.";
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Headline */
+            headline: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Key Points */
+            key_points?: components["schemas"]["TradingMarketBriefItem"][];
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
+            /**
+             * Read Only
+             * @default true
+             * @constant
+             */
+            read_only: true;
+            /** Risks */
+            risks?: components["schemas"]["TradingMarketBriefItem"][];
+            /** Source Evidence Ids */
+            source_evidence_ids?: string[];
+            /** Summary */
+            summary: string;
+            /** Watch Items */
+            watch_items?: components["schemas"]["TradingMarketBriefItem"][];
+        };
+        /** TradingMarketBriefItem */
+        TradingMarketBriefItem: {
+            /** Source Evidence Ids */
+            source_evidence_ids?: string[];
+            /** Text */
+            text: string;
+        };
         /** TradingOperationalHealth */
         TradingOperationalHealth: {
             /**
@@ -10100,6 +10151,9 @@ export interface components {
         };
         /** TradingResearchCoordinatorResult */
         TradingResearchCoordinatorResult: {
+            brief?: components["schemas"]["TradingMarketBrief"] | null;
+            /** Brief Warning */
+            brief_warning?: string | null;
             fact_set: components["schemas"]["TradingFactSet"];
             features: components["schemas"]["StrategyResearchFeatures"];
             /** Planner Backend */

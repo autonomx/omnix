@@ -213,6 +213,7 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
     assert 'role="tab"' in side_panel
     assert 'aria-selected=' in side_panel
     assert "onClick={() => setActiveTab" in side_panel
+    assert "TradingResearchPanel" in side_panel
 
     workspace = Path(
         "src/apps/web/src/features/trading/TradingWorkspace.tsx"
@@ -221,7 +222,6 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
     assert "TradingScannerPanel" in workspace
     assert "TradingReplayPanel" in workspace
     assert "TradingPaperPanel" in workspace
-    assert "TradingResearchPanel" in workspace
     assert "TradingStrategiesPanel" in workspace
 
     strategy_panel = Path(
