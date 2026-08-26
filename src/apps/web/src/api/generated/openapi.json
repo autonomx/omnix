@@ -1306,7 +1306,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {
@@ -17799,6 +17815,129 @@
         "title": "TradingFactSet",
         "type": "object"
       },
+      "TradingMarketBrief": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "default": "uncertain",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "uncertain"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "disclaimer": {
+            "const": "AI-generated research summary only. Not financial advice. No order was created or executed.",
+            "default": "AI-generated research summary only. Not financial advice. No order was created or executed.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "headline": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Headline",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "key_points": {
+            "items": {
+              "$ref": "#/components/schemas/TradingMarketBriefItem"
+            },
+            "maxItems": 5,
+            "title": "Key Points",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "risks": {
+            "items": {
+              "$ref": "#/components/schemas/TradingMarketBriefItem"
+            },
+            "maxItems": 5,
+            "title": "Risks",
+            "type": "array"
+          },
+          "source_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Source Evidence Ids",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 1800,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "watch_items": {
+            "items": {
+              "$ref": "#/components/schemas/TradingMarketBriefItem"
+            },
+            "maxItems": 4,
+            "title": "Watch Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "generated_at",
+          "provider",
+          "model",
+          "headline",
+          "summary"
+        ],
+        "title": "TradingMarketBrief",
+        "type": "object"
+      },
+      "TradingMarketBriefItem": {
+        "additionalProperties": false,
+        "properties": {
+          "source_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Source Evidence Ids",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TradingMarketBriefItem",
+        "type": "object"
+      },
       "TradingOperationalHealth": {
         "additionalProperties": false,
         "properties": {
@@ -17956,6 +18095,27 @@
       "TradingResearchCoordinatorResult": {
         "additionalProperties": false,
         "properties": {
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TradingMarketBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "brief_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief Warning"
+          },
           "fact_set": {
             "$ref": "#/components/schemas/TradingFactSet"
           },

@@ -129,6 +129,13 @@ def test_research_status_distinguishes_timeout_and_total_source_failure():
         coverage=ResearchCoverage(sec="failed", company_ir="failed", recent_news="failed"),
         actions=failed, evidence_count=0, stop_reason="planner_stop",
     ) == "failed"
+    completed_without_sources = [
+        item.model_copy(update={"status": "completed"}) for item in failed
+    ]
+    assert _research_status(
+        coverage=ResearchCoverage(sec="complete", company_ir="complete", recent_news="complete"),
+        actions=completed_without_sources, evidence_count=0, stop_reason="planner_stop",
+    ) == "failed"
 
 
 def test_legacy_strategy_research_is_never_authoritative():

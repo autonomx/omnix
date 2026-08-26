@@ -69,7 +69,6 @@ class SecIssuerIdentityResolver:
             "legal_name": legal_name,
             "cik": cik,
             "source": "sec_company_tickers",
-            "captured_at": captured.isoformat(),
             "confidence": confidence,
         }
         fp = fingerprint(payload)
@@ -86,3 +85,32 @@ class SecIssuerIdentityResolver:
             confidence=confidence,
             immutable_fingerprint=fp,
         )
+
+
+def fallback_issuer_identity(instrument_id: str) -> IssuerIdentity:
+    """Build a low-confidence identity when the SEC directory is unavailable.
+
+    Research can still use symbol-based web/company queries without a CIK. The
+    fallback is deliberately marked as unresolved so downstream coverage stays
+    partial instead of presenting it as authoritative issuer identity data.
+    """
+
+    symbol, exchange = _symbol_exchange(instrument_id)
+    captured = datetime.now(timezone.utc)
+    payload = {
+        "instrument_id": instrument_id,
+        "symbol": symbol,
+        "exchange": exchange,
+        "source": "instrument_id_fallback",
+    }
+    return IssuerIdentity(
+        identity_id=f"issuer-fallback-{hashlib.sha256(instrument_id.encode()).hexdigest()[:24]}",
+        instrument_id=instrument_id,
+        symbol=symbol,
+        exchange=exchange,
+        source="instrument_id_fallback",
+        source_available_at=None,
+        captured_at=captured,
+        confidence="0",
+        immutable_fingerprint=fingerprint(payload),
+    )

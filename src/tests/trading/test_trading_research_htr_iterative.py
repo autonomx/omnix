@@ -6,12 +6,11 @@ from datetime import datetime, timedelta, timezone
 from app.trading.research.adapters.base import AdapterExecutionResult
 from app.trading.research.contracts import (
     IssuerIdentity,
-    ResearchActionProposal,
     TradingEvidence,
     TradingResearchRequest,
     fingerprint,
 )
-from app.trading.research.hermes_loop import run_iterative_research
+from app.trading.research.hermes_loop import hermes_trading_research_enabled, run_iterative_research
 
 
 class MemoryRepository:
@@ -95,6 +94,13 @@ class UnknownOperationPlanner:
         return {"action": {"operation": "place_order", "args": {}, "reason": "bad"}, "rationale": "bad"}
 
 
+class OfflinePlanner:
+    backend = "hermes"
+
+    def next_action(self, request, context):
+        raise Exception("Hermes sidecar unavailable")
+
+
 def _identity():
     now = datetime.now(timezone.utc)
     return IssuerIdentity(
@@ -158,3 +164,22 @@ def test_unknown_order_operation_is_rejected_by_schema_and_not_executed():
     )
     assert result.stop_reason == "planner_invalid"
     assert repository.actions == []
+
+
+def test_planner_transport_failure_returns_partial_loop_result():
+    repository = MemoryRepository()
+    empty = EmptyAdapter()
+    result = run_iterative_research(
+        _request(), _identity(), repository, planner=OfflinePlanner(), sec=empty, company=empty, web=empty,
+    )
+    assert result.stop_reason == "planner_unavailable"
+    assert result.warnings == ("planner_unavailable:Exception",)
+
+
+def test_trading_research_reuses_chat_hermes_switch_unless_explicitly_disabled(monkeypatch):
+    monkeypatch.setenv("HERMES_ENABLED", "1")
+    monkeypatch.delenv("OMNIX_TRADING_HERMES_RESEARCH_ENABLED", raising=False)
+    assert hermes_trading_research_enabled() is True
+
+    monkeypatch.setenv("OMNIX_TRADING_HERMES_RESEARCH_ENABLED", "0")
+    assert hermes_trading_research_enabled() is False

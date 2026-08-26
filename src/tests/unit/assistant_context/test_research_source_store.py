@@ -1,4 +1,5 @@
 from app.assistant_context.models import AssistantContextItem
+from app.research.extraction import ExtractedPage
 from app.research.quick_search import QuickSearchService
 from app.research.source_store import (
     ResearchSourceStore,
@@ -27,6 +28,25 @@ class FakeSearchClient:
                 metadata={"provider": "brave"},
             ),
         ]
+
+
+class FailingExtractionStore(ResearchSourceStore):
+    def save_extraction(self, snapshot_id, page):
+        raise RuntimeError("asset store unavailable")
+
+
+class FakeExtractor:
+    def extract(self, url: str) -> ExtractedPage:
+        return ExtractedPage(
+            requested_url=url,
+            final_url=url,
+            title="Release",
+            published_at=None,
+            text="Extracted release details.",
+            content_hash="hash",
+            extractor_version="fixture",
+            elapsed_ms=1,
+        )
 
 
 def test_url_canonicalization_removes_tracking_fragment_and_default_port() -> None:
@@ -87,3 +107,20 @@ def test_quick_search_persists_manifest_with_stable_citations(tmp_path) -> None:
     assert restored.manifest.source_record_ids == [result.sources[0].source_record_id]
     assert restored.snapshots[0].citation_label == "S1"
     assert restored.sources[0].model_dump().get("content_hash") is None
+
+
+def test_extraction_persistence_failure_keeps_search_snippet(tmp_path) -> None:
+    store = FailingExtractionStore(tmp_path / "sources.json")
+    result = QuickSearchService(
+        client_factory=lambda timeout: FakeSearchClient(),
+        source_store_factory=lambda: store,
+        extractor_factory=FakeExtractor,
+        cache_store_factory=None,
+    ).search("current release", 5)
+
+    assert len(result.items) == 1
+    assert result.items[0].content == "Current release details."
+    assert result.items[0].metadata["extraction_status"] == "failed"
+    assert result.diagnostics["status"] == "completed"
+    assert result.diagnostics["extraction_failures"] == 1
+    assert result.warnings[-1]["code"] == "page_extraction_partial"

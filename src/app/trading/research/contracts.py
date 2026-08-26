@@ -82,6 +82,31 @@ class TradingEvidence(FrozenModel):
     )(utc)
 
 
+class TradingMarketBriefItem(FrozenModel):
+    text: str = Field(min_length=1, max_length=500)
+    source_evidence_ids: tuple[str, ...] = Field(default_factory=tuple, max_length=4)
+
+
+class TradingMarketBrief(FrozenModel):
+    instrument_id: str
+    generated_at: datetime
+    provider: str
+    model: str
+    headline: str = Field(min_length=1, max_length=240)
+    summary: str = Field(min_length=1, max_length=1_800)
+    key_points: tuple[TradingMarketBriefItem, ...] = Field(default_factory=tuple, max_length=5)
+    risks: tuple[TradingMarketBriefItem, ...] = Field(default_factory=tuple, max_length=5)
+    watch_items: tuple[TradingMarketBriefItem, ...] = Field(default_factory=tuple, max_length=4)
+    confidence: Literal["low", "medium", "high", "uncertain"] = "uncertain"
+    source_evidence_ids: tuple[str, ...] = Field(default_factory=tuple, max_length=12)
+    read_only: Literal[True] = True
+    disclaimer: Literal[
+        "AI-generated research summary only. Not financial advice. No order was created or executed."
+    ] = "AI-generated research summary only. Not financial advice. No order was created or executed."
+
+    _timestamps = field_validator("generated_at")(utc)
+
+
 class SupplyFact(FrozenModel):
     fact_id: str
     schema_version: str = "supply-facts-1"

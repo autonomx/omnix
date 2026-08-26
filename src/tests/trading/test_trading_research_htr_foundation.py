@@ -8,8 +8,11 @@ from pathlib import Path
 import pytest
 
 from app.trading.research.contracts import TradingEvidence, fingerprint
+from app.trading.research.adapters.base import AdapterExecutionResult
+from app.trading.research.coordinator import create_trading_research_request, run_trading_research
 from app.trading.research.facts.metrics import derive_supply_metrics
 from app.trading.research.facts.supply import extract_supply_facts
+from app.trading.research.issuer_identity import fallback_issuer_identity
 from app.trading.research.knowledge_time import latest_as_of
 
 
@@ -77,6 +80,91 @@ def test_later_knowledge_is_not_visible_to_earlier_decision():
     later = _evidence("later", "late").model_copy(update={"omnix_known_at": first.omnix_known_at + timedelta(minutes=12)})
     assert latest_as_of([first, later], first.omnix_known_at + timedelta(minutes=6)).evidence_id == "early"
     assert latest_as_of([first, later], first.omnix_known_at + timedelta(minutes=13)).evidence_id == "late"
+
+
+def test_identity_fallback_preserves_symbol_without_claiming_sec_authority():
+    identity = fallback_issuer_identity("equity:NASDAQ:XYZ")
+    replay = fallback_issuer_identity("equity:NASDAQ:XYZ")
+
+    assert identity.symbol == "XYZ"
+    assert identity.exchange == "NASDAQ"
+    assert identity.cik is None
+    assert identity.source == "instrument_id_fallback"
+    assert identity.confidence == Decimal("0")
+    assert identity.immutable_fingerprint == replay.immutable_fingerprint
+
+
+def test_coordinator_returns_failed_report_when_identity_provider_fails():
+    class Repository:
+        def __init__(self):
+            self.identity = None
+            self.evidence = []
+            self.actions = []
+
+        def identity_as_of(self, instrument_id, known_at_lte):
+            return self.identity
+
+        def save_identity(self, item):
+            self.identity = item.model_copy(update={"omnix_known_at": item.captured_at})
+            return self.identity
+
+        def list_evidence_as_of(self, instrument_id, known_at_lte, limit=200):
+            return [item for item in self.evidence if item.instrument_id == instrument_id][:limit]
+
+        def save_evidence(self, item):
+            saved = item.model_copy(update={"omnix_known_at": item.captured_at})
+            self.evidence.append(saved)
+            return saved
+
+        def save_action(self, item):
+            saved = item.model_copy(update={"omnix_known_at": item.completed_at or item.requested_at})
+            self.actions.append(saved)
+            return saved
+
+        def action_trace(self, trace_id):
+            return [item for item in self.actions if item.trace_id == trace_id]
+
+        def next_report_version(self, instrument_id):
+            return 1
+
+        def save_report(self, item):
+            return item.model_copy(update={"omnix_known_at": item.research_completed_at})
+
+    class FactRepository:
+        def save_supply_fact(self, item):
+            return item.model_copy(update={"omnix_known_at": item.generated_at})
+
+        def save_fact_set(self, item):
+            return item.model_copy(update={"omnix_known_at": item.generated_at})
+
+        def save_features(self, item):
+            return item.model_copy(update={"omnix_known_at": item.decision_at})
+
+    class EmptyAdapter:
+        def find(self, identity, *, query=None, limit=10):
+            return AdapterExecutionResult()
+
+        def extract(self, identity, *, locator):
+            return AdapterExecutionResult()
+
+    class BrokenIdentityResolver:
+        def resolve(self, instrument_id):
+            raise Exception("SEC unavailable")
+
+    result = run_trading_research(
+        create_trading_research_request(instrument_id="equity:NASDAQ:XYZ"),
+        repository=Repository(),
+        fact_repository=FactRepository(),
+        shadow_repository=object(),
+        identity_resolver=BrokenIdentityResolver(),
+        sec=EmptyAdapter(),
+        company=EmptyAdapter(),
+        web=EmptyAdapter(),
+        run_shadow_ai=False,
+    )
+
+    assert result.report.research_status == "failed"
+    assert "issuer_identity_unavailable:Exception" in result.warnings
 
 
 def test_research_package_has_no_order_execution_imports():

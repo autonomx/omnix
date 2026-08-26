@@ -61,7 +61,6 @@ export function TradingSidePanel({
   onRemoveChart,
   onSetLink,
   onSetSnapMode,
-  onOpenResearch,
 }: {
   sessionId?: string;
   instruments: CanonicalInstrument[];
@@ -92,7 +91,6 @@ export function TradingSidePanel({
   onRemoveChart: () => void;
   onSetLink: (key: keyof TradingLinkState, enabled: boolean) => void;
   onSetSnapMode: (mode: DrawingSnapMode) => void;
-  onOpenResearch: () => void;
 }) {
   const [internalTab, setInternalTab] = useState<TradingSideTab>('watchlist');
   const activeTab = selectedTab ?? internalTab;
@@ -194,7 +192,7 @@ export function TradingSidePanel({
             onSelectAlert={onSelectAlert}
           />
         ) : null}
-        {activeTab === 'news' ? <TradingNewsPanel onOpenResearch={onOpenResearch} /> : null}
+        {activeTab === 'news' ? <TradingNewsPanel instrumentId={activeInstrumentId} /> : null}
         {activeTab === 'research' ? (
           <TradingResearchPanel
             instrumentId={activeInstrumentId}

@@ -13,6 +13,7 @@ from .research.contracts import (
 )
 from .research.coordinator import TradingResearchCoordinatorResult, create_trading_research_request, run_trading_research
 from .research.fact_repository import TradingFactRepository, default_fact_repository
+from .research.market_brief import generate_trading_market_brief
 from .research.outcome_dataset import attribution_summary
 from .research.policy import ResearchPolicyDecision, evaluate_research_policy
 from .research.repository import TradingResearchRepository, default_research_repository
@@ -87,8 +88,25 @@ def create_trading_hermes_research_router(
             research_request=create_trading_research_request(instrument_id=request.instrument_id,strategy_id=request.strategy_id,
                 decision_context_at=request.decision_context_at,deadline_seconds=request.deadline_seconds,max_steps=request.max_steps,
                 max_queries=request.max_queries,max_sources=request.max_sources,max_extracts=request.max_extracts)
-            return await asyncio.to_thread(run_trading_research,research_request,repository=repository_factory(),
+            repository=repository_factory()
+            result=await asyncio.to_thread(run_trading_research,research_request,repository=repository,
                 fact_repository=fact_repository_factory(),shadow_repository=shadow_repository_factory(),run_shadow_ai=request.run_shadow_ai)
+            evidence=await asyncio.to_thread(
+                repository.list_evidence_as_of,
+                request.instrument_id,
+                result.report.research_completed_at or datetime.now(timezone.utc),
+                request.max_sources,
+            )
+            if not evidence:
+                return result.model_copy(update={"brief_warning":"No source evidence was available for an AI market brief."})
+            try:
+                brief=await asyncio.to_thread(generate_trading_market_brief,result.report,result.fact_set,evidence)
+            except Exception as exc:
+                return result.model_copy(update={
+                    "brief_warning":"AI market brief was unavailable; the captured sources remain available.",
+                    "warnings":tuple(dict.fromkeys((*result.warnings,f"market_brief_unavailable:{type(exc).__name__}"))),
+                })
+            return result.model_copy(update={"brief":brief})
         except ValueError as exc: raise HTTPException(status_code=422,detail=str(exc)) from exc
         except RuntimeError as exc: raise HTTPException(status_code=503,detail=str(exc)) from exc
 

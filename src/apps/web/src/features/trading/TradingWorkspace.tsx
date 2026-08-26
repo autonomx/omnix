@@ -737,7 +737,6 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 onRemoveChart={() => removeChart()}
                 onSetLink={setLink}
                 onSetSnapMode={(mode: DrawingSnapMode) => setDrawingSnapMode(mode)}
-                onOpenResearch={openResearchPanel}
               />
             ) : null}
             <TradingSideRail

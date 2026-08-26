@@ -45,8 +45,17 @@ class SafeStopPlanner:
 
 
 def hermes_trading_research_enabled() -> bool:
-    flag = lambda name: os.environ.get(name, "0").strip().lower() in {"1", "true", "yes", "on"}
-    return flag("HERMES_ENABLED") and flag("OMNIX_TRADING_HERMES_RESEARCH_ENABLED")
+    def flag(name: str) -> bool:
+        return os.environ.get(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+
+    if not flag("HERMES_ENABLED"):
+        return False
+    # Trading research is read-only. Reuse the same Hermes switch as chat when
+    # no trading-specific override was supplied; an explicit false still
+    # provides a safe opt-out for deployments that want Hermes chat only.
+    if "OMNIX_TRADING_HERMES_RESEARCH_ENABLED" in os.environ:
+        return flag("OMNIX_TRADING_HERMES_RESEARCH_ENABLED")
+    return True
 
 
 @dataclass(frozen=True)
@@ -119,6 +128,13 @@ def run_iterative_research(
             decision = TradingHermesNextActionDecision.model_validate(active_planner.next_action(request, context))
         except (ValidationError, ValueError, TypeError) as exc:
             warnings.append(f"planner_invalid:{type(exc).__name__}"); stop_reason = "planner_invalid"; break
+        except Exception as exc:
+            # Keep sidecar transport/HTTP failures inside the research
+            # boundary. The deterministic harvest remains valid and the API
+            # can return a partial report with an actionable warning.
+            warnings.append(f"planner_unavailable:{type(exc).__name__}")
+            stop_reason = "planner_unavailable"
+            break
         proposal = decision.action
         if proposal.operation not in request.allowed_operations:
             stop_reason = "operation_blocked"; warnings.append(f"blocked:{proposal.operation}"); break

@@ -11,14 +11,14 @@ from .adapters.company_ir import CompanyIrAdapter
 from .adapters.generic_web import GenericWebAdapter
 from .adapters.sec_edgar import SecEdgarAdapter
 from .contracts import (
-    ResearchActionRecord, ResearchCoverage, StrategyResearchFeatures, TradingFactSet, TradingResearchReport,
+    ResearchActionRecord, ResearchCoverage, StrategyResearchFeatures, TradingFactSet, TradingMarketBrief, TradingResearchReport,
     TradingResearchRequest, fingerprint,
 )
 from .fact_repository import TradingFactRepository, default_fact_repository
 from .facts.extraction import build_fact_set
 from .feature_projection import project_research_features
 from .hermes_loop import ResearchLoopResult, run_iterative_research
-from .issuer_identity import SecIssuerIdentityResolver
+from .issuer_identity import SecIssuerIdentityResolver, fallback_issuer_identity
 from .novelty_shadow import generate_novelty_shadow
 from .repository import TradingResearchRepository, default_research_repository
 from .shadow_repository import TradingShadowResearchRepository, default_shadow_repository
@@ -33,6 +33,8 @@ class TradingResearchCoordinatorResult(BaseModel):
     trace_id: str
     planner_backend: str
     warnings: tuple[str, ...] = ()
+    brief: TradingMarketBrief | None = None
+    brief_warning: str | None = None
 
 
 def create_trading_research_request(
@@ -135,7 +137,9 @@ def _research_status(*, coverage: ResearchCoverage, actions: list[ResearchAction
     if stop_reason == "deadline_exhausted":
         return "timed_out"
     source_actions = [action for action in actions if action.operation in {"sec_find_filings", "company_find_releases", "web_search"}]
-    if evidence_count == 0 and source_actions and all(action.status == "failed" for action in source_actions):
+    if evidence_count == 0 and source_actions and all(
+        action.status in {"failed", "completed"} for action in source_actions
+    ):
         return "failed"
     return "complete" if all(value == "complete" for value in states.values()) else "partial"
 
@@ -153,9 +157,19 @@ def run_trading_research(
     web = web or GenericWebAdapter()
     company = company or CompanyIrAdapter(web)
     now = datetime.now(timezone.utc)
+    warnings: list[str] = []
     identity = repository.identity_as_of(request.instrument_id, now)
-    if identity is None:
-        identity = repository.save_identity(identity_resolver.resolve(request.instrument_id))
+    if identity is None or identity.cik is None:
+        try:
+            resolved_identity = identity_resolver.resolve(request.instrument_id)
+        except Exception as exc:
+            # A provider outage or HTTP policy response must not turn an
+            # on-demand, read-only research request into an opaque 500. Keep
+            # the symbol usable for web research and make the missing primary
+            # identity visible in the returned warnings/coverage.
+            resolved_identity = fallback_issuer_identity(request.instrument_id)
+            warnings.append(f"issuer_identity_unavailable:{type(exc).__name__}")
+        identity = repository.save_identity(resolved_identity)
 
     trace_id = "htr-harvest-" + hashlib.sha256(request.request_id.encode()).hexdigest()[:20]
     _harvest_action(repository, request, identity, trace_id=trace_id, step=0, operation="sec_find_filings", adapter=sec,
@@ -189,7 +203,7 @@ def run_trading_research(
     evidence = repository.list_evidence_as_of(request.instrument_id, finished, request.max_sources)
     preliminary = build_fact_set(instrument_id=request.instrument_id, evidence=evidence, decision_at=finished, strategy_id=request.strategy_id)
     novelty_checked = False
-    warnings = list(loop.warnings)
+    warnings.extend(loop.warnings)
     if run_shadow_ai:
         try:
             annotation = generate_novelty_shadow(request.instrument_id, evidence, observed_at=finished)
