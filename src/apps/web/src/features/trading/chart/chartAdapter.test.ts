@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
 import type { MarketBar } from '../tradingTypes';
 
 const bar: MarketBar = {
@@ -79,6 +79,23 @@ describe('Trading chart adapter normalization', () => {
     expect(candlestickData(bar).time).toBe(Date.parse(bar.start_time) / 1_000);
     expect(volumeData(bar).color).toContain('32,201,151');
     expect(volumeData({ ...bar, close: '99' }).color).toContain('255,107,107');
+  });
+
+  it('normalizes chart bars to strictly increasing epoch seconds', () => {
+    const corrected = {
+      ...secondBar,
+      start_time: '2026-08-05T12:01:00.500+00:00',
+      close: '15',
+      ingestion_revision: 2,
+    };
+    const normalized = normalizeChartBars([corrected, { ...bar, start_time: 'not-a-date' }, bar, secondBar]);
+
+    expect(normalized).toHaveLength(2);
+    expect(normalized[0]).toBe(bar);
+    expect(normalized[1]).toBe(corrected);
+    expect(Math.floor(Date.parse(normalized[1].start_time) / 1_000)).toBe(
+      Math.floor(Date.parse(secondBar.start_time) / 1_000),
+    );
   });
 
   it('rejects invalid provider timestamps', () => {

@@ -1,11 +1,56 @@
-import type { ChangeEvent } from 'react';
-import type { ProviderFacadePayload } from '../../api/client';
+import { useEffect, useState, type ChangeEvent } from 'react';
+import { omnixApiClient, type CodexAuthStatus, type ProviderFacadePayload } from '../../api/client';
 import { modelOptions, providerOptions } from './providerOptions';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 
+const defaultReasoningEffortOptions = [
+  { id: 'none', label: 'Instant (none)' },
+  { id: 'low', label: 'low' },
+  { id: 'medium', label: 'medium' },
+  { id: 'high', label: 'high' },
+];
+
 function optionsWithCurrent(options: Array<{ id: string; label: string }>, current: string) {
   return current && !options.some((option) => option.id === current) ? [{ id: current, label: `${current} (unavailable)` }, ...options] : options;
+}
+
+function codexModelId(model: ProviderFacadePayload['models'][number]): string {
+  const metadata = model.metadata as Record<string, unknown> | undefined;
+  const metadataId = typeof metadata?.model_id === 'string' ? metadata.model_id.trim() : '';
+  return metadataId || model.id.replace(/^llm:chatgpt_codex:/, '');
+}
+
+function codexModelOptions(payload: ProviderFacadePayload | undefined, current: string) {
+  const options = (payload?.models ?? [])
+    .filter((model) => model.provider_id === 'llm:chatgpt_codex')
+    .map((model) => ({ id: codexModelId(model), label: model.label || codexModelId(model) }))
+    .filter((option, index, all) => option.id && all.findIndex((candidate) => candidate.id === option.id) === index);
+  return optionsWithCurrent(options, current);
+}
+
+function reasoningEffortId(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const row = value as Record<string, unknown>;
+  for (const key of ['effort', 'id', 'value', 'name']) {
+    if (typeof row[key] === 'string' && row[key].trim()) return row[key].trim();
+  }
+  return '';
+}
+
+function codexReasoningOptions(payload: ProviderFacadePayload | undefined, modelId: string, current: string) {
+  const model = (payload?.models ?? []).find((candidate) => (
+    candidate.provider_id === 'llm:chatgpt_codex' && codexModelId(candidate) === modelId
+  ));
+  const metadata = model?.metadata as Record<string, unknown> | undefined;
+  const supported = Array.isArray(metadata?.supported_reasoning_efforts)
+    ? metadata.supported_reasoning_efforts.map(reasoningEffortId).filter(Boolean)
+    : [];
+  const options = supported.length
+    ? [...new Set(supported)].map((id) => ({ id, label: id === 'none' ? 'Instant (none)' : id }))
+    : defaultReasoningEffortOptions;
+  return optionsWithCurrent(options, current);
 }
 
 function updateString(dispatch: ReturnType<typeof useSettingsProfileContext>['dispatch'], path: string) {
@@ -20,23 +65,93 @@ function updateBoolean(dispatch: ReturnType<typeof useSettingsProfileContext>['d
   return (event: ChangeEvent<HTMLInputElement>) => dispatch({ type: 'update', path, value: event.currentTarget.checked });
 }
 
+function codexAuthLabel(status: CodexAuthStatus): string {
+  if (!status.installed) return 'Codex CLI not found';
+  if (!status.authenticated) return 'Not signed in';
+  if (status.auth_mode === 'chatgpt') return 'Signed in with ChatGPT';
+  if (status.auth_mode === 'api_key') return 'Signed in with API key';
+  return 'Signed in';
+}
+
 export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadePayload }) {
   const { state, dispatch } = useSettingsProfileContext();
+  const [codexAuthStatus, setCodexAuthStatus] = useState<CodexAuthStatus>();
+  const [codexAuthBusy, setCodexAuthBusy] = useState<'login' | 'check' | null>(null);
+  const [codexAuthMessage, setCodexAuthMessage] = useState('');
+  const [codexCatalogPayload, setCodexCatalogPayload] = useState<ProviderFacadePayload>();
   const providers = state.draft.global.providers;
   const models = state.draft.global.models;
   const configs = state.draft.providerConfigs;
+  const effectivePayload = providers.llm === 'chatgpt_codex' ? codexCatalogPayload ?? payload : payload;
   const llmOptions = optionsWithCurrent(providerOptions(payload, 'chat'), providers.llm);
-  const chatModels = optionsWithCurrent(modelOptions(payload, providers.llm), models.chat);
+  const chatModels = optionsWithCurrent(modelOptions(effectivePayload, providers.llm), models.chat);
   const ttsOptions = optionsWithCurrent(providerOptions(payload, 'tts'), providers.tts);
   const sttOptions = optionsWithCurrent(providerOptions(payload, 'stt'), providers.stt);
   const imageOptions = optionsWithCurrent(providerOptions(payload, 'image'), providers.image);
   const imageProviderId = providers.image.replace(/^image:/, '');
+  const codexModels = codexModelOptions(effectivePayload, configs.chatgptCodex.model);
+  const reasoningEffortOptions = codexReasoningOptions(
+    effectivePayload,
+    configs.chatgptCodex.model,
+    configs.chatgptCodex.reasoningEffort,
+  );
+
+  useEffect(() => {
+    if (providers.llm !== 'chatgpt_codex') return;
+    let active = true;
+    void omnixApiClient.getCodexAuthStatus().then((status) => {
+      if (active) setCodexAuthStatus(status);
+    }).catch((error: unknown) => {
+      if (active) setCodexAuthMessage(error instanceof Error ? error.message : 'Unable to check Codex login.');
+    });
+    void omnixApiClient.listModels().then((catalog) => {
+      if (active) setCodexCatalogPayload(catalog);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [providers.llm]);
+
+  const refreshCodexCatalog = () => {
+    void omnixApiClient.listModels().then(setCodexCatalogPayload).catch(() => undefined);
+  };
+
+  const checkCodexLogin = async (action: 'login' | 'check') => {
+    setCodexAuthBusy(action);
+    setCodexAuthMessage('');
+    try {
+      const status = action === 'login'
+        ? await omnixApiClient.startCodexLogin()
+        : await omnixApiClient.getCodexAuthStatus();
+      setCodexAuthStatus(status);
+      if (status.authenticated) refreshCodexCatalog();
+      if (action === 'login' && status.started) {
+        setCodexAuthMessage('Browser sign-in opened. Complete it, then click Check login.');
+      } else if (action === 'login' && !status.installed) {
+        setCodexAuthMessage(status.detail || 'Install Codex CLI before signing in.');
+      }
+    } catch (error: unknown) {
+      setCodexAuthMessage(error instanceof Error ? error.message : 'Unable to start Codex login.');
+    } finally {
+      setCodexAuthBusy(null);
+    }
+  };
+
+  const handleLlmProviderChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextProvider = event.currentTarget.value;
+    if (nextProvider === providers.llm) return;
+    dispatch({ type: 'update', path: 'global.providers.llm', value: nextProvider });
+    // Model ids are provider-specific. Clearing every LLM model route prevents a
+    // previous local/OpenRouter model id from overriding the newly selected
+    // provider's configured default (notably gpt-5.6-sol for ChatGPT Codex).
+    for (const key of ['chat', 'fast', 'quality', 'background', 'embedding', 'imagePrompt']) {
+      dispatch({ type: 'update', path: `global.models.${key}`, value: '' });
+    }
+  };
 
   return (
     <SettingsSection title="Default providers" description="Defaults apply to new sessions and jobs. Module workspaces can override them." scope="global">
       <div className="settings-form-grid">
         <SettingsField label="Default LLM provider">
-          <select value={providers.llm} onChange={(event) => dispatch({ type: 'update', path: 'global.providers.llm', value: event.currentTarget.value })}>
+          <select value={providers.llm} onChange={handleLlmProviderChange}>
             {llmOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </SettingsField>
@@ -97,6 +212,54 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
                 <small>Stored with Windows user-scoped encryption. CEREBRAS_API_KEY overrides this value.</small>
               </SettingsField>
               <SettingsField label="Model"><input value={configs.cerebras.model} onChange={updateString(dispatch, 'providerConfigs.cerebras.model')} /></SettingsField>
+            </div>
+          </div>
+        ) : null}
+        {providers.llm === 'chatgpt_codex' ? (
+          <div className="provider-config-group">
+            <h4>ChatGPT Plus (Codex)</h4>
+            <div className="settings-form-grid">
+              <SettingsField label="Model">
+                <select value={configs.chatgptCodex.model} onChange={updateString(dispatch, 'providerConfigs.chatgptCodex.model')}>
+                  {codexModels.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+                <small>Loaded from the models available to your ChatGPT account through Codex; the configured model remains available if discovery is offline.</small>
+              </SettingsField>
+              <SettingsField label="Reasoning effort">
+                <select value={configs.chatgptCodex.reasoningEffort} onChange={updateString(dispatch, 'providerConfigs.chatgptCodex.reasoningEffort')}>
+                  {reasoningEffortOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+                <small>Uses the selected model's advertised reasoning levels when Codex exposes them.</small>
+              </SettingsField>
+              <SettingsField label="Fast mode">
+                <input
+                  type="checkbox"
+                  checked={configs.chatgptCodex.fastMode}
+                  onChange={updateBoolean(dispatch, 'providerConfigs.chatgptCodex.fastMode')}
+                  disabled={configs.chatgptCodex.model !== 'gpt-5.6-sol'}
+                />
+                <small>Uses Fast service tier for GPT-5.6 Sol. Select Sol to enable this control.</small>
+              </SettingsField>
+              <SettingsField label="Codex executable">
+                <input value={configs.chatgptCodex.codexPath} onChange={updateString(dispatch, 'providerConfigs.chatgptCodex.codexPath')} placeholder="codex" />
+              </SettingsField>
+              <SettingsField label="Transport">
+                <input value={configs.chatgptCodex.transport} readOnly />
+                <small>Uses the persistent local Codex app-server stdio transport.</small>
+              </SettingsField>
+              <SettingsField label="Authentication" wide>
+                <div className="settings-inline-actions">
+                  <button type="button" className="settings-secondary-button" onClick={() => void checkCodexLogin('login')} disabled={codexAuthBusy !== null}>
+                    {codexAuthBusy === 'login' ? 'Opening sign-in…' : 'Log in with ChatGPT'}
+                  </button>
+                  <button type="button" className="settings-secondary-button" onClick={() => void checkCodexLogin('check')} disabled={codexAuthBusy !== null}>
+                    {codexAuthBusy === 'check' ? 'Checking…' : 'Check login'}
+                  </button>
+                </div>
+                {codexAuthStatus ? <small role="status">Codex status: {codexAuthLabel(codexAuthStatus)}.</small> : null}
+                {codexAuthMessage ? <small className="settings-inline-status" role="status">{codexAuthMessage}</small> : null}
+                <small>Authentication stays in Codex. Omnix never stores the OAuth token.</small>
+              </SettingsField>
             </div>
           </div>
         ) : null}

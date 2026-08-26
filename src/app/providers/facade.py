@@ -116,6 +116,19 @@ def _provider_from_info(
     )
 
 
+def _chatgpt_codex_model(settings: dict[str, Any]) -> str:
+    profile = settings.get("settings_control_center")
+    if not isinstance(profile, dict):
+        return "gpt-5.6-sol"
+    configs = profile.get("providerConfigs")
+    if not isinstance(configs, dict):
+        return "gpt-5.6-sol"
+    codex = configs.get("chatgptCodex")
+    if not isinstance(codex, dict):
+        return "gpt-5.6-sol"
+    return _safe_str(codex.get("model")).strip() or "gpt-5.6-sol"
+
+
 class ProviderFacade:
     """Read-only facade that normalizes existing provider registries."""
 
@@ -200,9 +213,15 @@ class ProviderFacade:
         settings = self._load_settings()
         available_provider_ids = {provider.id for provider in providers or self.list_providers()}
         models: list[ModelSummary] = []
+        live_codex_models = (
+            self._live_chatgpt_codex_models()
+            if "llm:chatgpt_codex" in available_provider_ids
+            else []
+        )
         configured = {
             "llm:openrouter": ("openrouter", settings.get("openrouter", {}).get("model"), "remote"),
             "llm:cerebras": ("cerebras", settings.get("cerebras", {}).get("model"), "remote"),
+            "llm:chatgpt_codex": ("ChatGPT Codex", _chatgpt_codex_model(settings), "remote"),
             "llm:llamacpp": ("llamacpp", settings.get("llamacpp", {}).get("model"), "local"),
             "llm:lmstudio": ("lmstudio", settings.get("lmstudio", {}).get("model"), "local"),
             "tts:faster-qwen3-tts": (
@@ -212,6 +231,8 @@ class ProviderFacade:
             ),
         }
         for provider_id, (label_prefix, model_id, location) in configured.items():
+            if provider_id == "llm:chatgpt_codex" and live_codex_models:
+                continue
             model_id = _safe_str(model_id).strip()
             if not model_id or provider_id not in available_provider_ids:
                 continue
@@ -223,10 +244,45 @@ class ProviderFacade:
                     provider_id=provider_id,
                     capabilities=capabilities,
                     location=location,  # type: ignore[arg-type]
-                    metadata={"source": "settings"},
+                    metadata={"source": "settings", "model_id": model_id},
                 )
             )
+        models.extend(live_codex_models)
         return models
+
+    @staticmethod
+    def _live_chatgpt_codex_models() -> list[ModelSummary]:
+        """Expose the authenticated Codex catalog, falling back inside the provider."""
+        try:
+            from app.shared import get_provider
+
+            provider = get_provider("chatgpt_codex")
+            if provider is None:
+                return []
+            live_models = provider.get_models()
+        except Exception:
+            return []
+
+        result: list[ModelSummary] = []
+        seen: set[str] = set()
+        for model in live_models:
+            model_id = _safe_str(getattr(model, "id", "")).strip()
+            if not model_id or model_id in seen:
+                continue
+            seen.add(model_id)
+            metadata = dict(getattr(model, "metadata", {}) or {})
+            metadata["model_id"] = model_id
+            result.append(
+                ModelSummary(
+                    id=f"llm:chatgpt_codex:{model_id}",
+                    label=_safe_str(getattr(model, "name", "")).strip() or model_id,
+                    provider_id="llm:chatgpt_codex",
+                    capabilities=[ProviderCapability.CHAT],
+                    location="remote",
+                    metadata=metadata,
+                )
+            )
+        return result
 
     def _list_llm(self) -> list[dict[str, Any]]:
         if self._llm_lister:

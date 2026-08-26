@@ -36,7 +36,7 @@ def _store() -> SimpleNamespace:
     )
 
 
-def test_generic_provider_emits_first_word_before_sentence_and_retains_usage(monkeypatch) -> None:
+def test_typed_chat_emits_its_first_provider_fragment_and_retains_usage(monkeypatch) -> None:
     class FakeProvider:
         provider_name = "cerebras"
 
@@ -72,12 +72,66 @@ def test_generic_provider_emits_first_word_before_sentence_and_retains_usage(mon
     )
 
     text_events = [event["text"] for event in events if event["type"] == "text_chunk"]
-    assert text_events[0] == "Howdy "
+    assert text_events[0] == "How"
     assert "".join(text_events) == "Howdy right back at ya."
     assert events[-1]["type"] == "complete"
     assert events[-1]["content"] == "Howdy right back at ya."
     assert events[-1]["metadata"]["usage"] == {"completion_tokens": 6}
     json.dumps(events[-1])
+
+
+def test_codex_low_latency_path_reuses_exact_omnix_session(monkeypatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeProvider:
+        provider_name = "chatgpt_codex"
+
+        def chat_completion(self, **kwargs: Any):
+            calls.append(kwargs)
+            return iter([ChatResponse(content="Hello from Plus.", model="gpt-5.6-sol")])
+
+    monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider())
+
+    events = list(
+        _stream_low_latency_reply(
+            _store(),
+            SimpleNamespace(id="chat:exact-low-latency-session"),
+            SimpleNamespace(id="msg:user", content="Hello", metadata={}),
+            provider_id="chatgpt_codex",
+            model_id="gpt-5.6-sol",
+            context_items=[],
+        )
+    )
+
+    assert events[-1]["content"] == "Hello from Plus."
+    assert calls[0]["stream"] is True
+    assert calls[0]["conversation_id"] == "chat:exact-low-latency-session"
+
+
+def test_non_codex_low_latency_path_does_not_receive_conversation_id(monkeypatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeProvider:
+        provider_name = "cerebras"
+
+        def chat_completion(self, **kwargs: Any):
+            calls.append(kwargs)
+            return iter([ChatResponse(content="Hello.", model="fast-model")])
+
+    monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider())
+
+    list(
+        _stream_low_latency_reply(
+            _store(),
+            SimpleNamespace(id="chat:ordinary-provider"),
+            SimpleNamespace(id="msg:user", content="Hello", metadata={}),
+            provider_id="cerebras",
+            model_id="fast-model",
+            context_items=[],
+        )
+    )
+
+    assert "conversation_id" not in calls[0]
 
 
 def test_provider_usage_model_is_normalized_before_terminal_sse_serialization(monkeypatch) -> None:

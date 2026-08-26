@@ -1,4 +1,4 @@
-"""Emit provider text after the first complete lexical unit.
+"""Emit provider text with immediate typed-chat and lexical voice delivery.
 
 The legacy chat stream waited for sentence-ending punctuation before yielding any
 text. That made a fast provider look slow and delayed live-call TTS. This hook is
@@ -26,17 +26,26 @@ _SENTENCE_BOUNDARIES = frozenset(".!?。！？\n")
 
 
 class LowLatencyTextChunker:
-    """Keep split words intact while releasing the first lexical unit early."""
+    """Keep spoken fragments lexical while allowing typed chat to paint instantly."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, emit_initial_fragment: bool = False) -> None:
         self._pending = ""
         self._emitted = False
+        self._emit_initial_fragment = emit_initial_fragment
 
     def push(self, text: str) -> list[str]:
         if text:
             self._pending += text
         ready: list[str] = []
         while self._pending:
+            if self._emit_initial_fragment and not self._emitted:
+                chunk = self._pending
+                self._pending = ""
+                if not chunk.strip():
+                    continue
+                ready.append(chunk)
+                self._emitted = True
+                continue
             cut = self._next_cut()
             if cut is None:
                 break
@@ -114,6 +123,15 @@ def _last_whitespace_cut(text: str, *, minimum: int, maximum: int) -> int | None
     return cut
 
 
+def _is_live_voice_turn(user_message: Any) -> bool:
+    metadata = getattr(user_message, "metadata", None)
+    if not isinstance(metadata, dict):
+        return False
+    if str(metadata.get("speech_segment_id") or "").strip():
+        return True
+    return str(metadata.get("user_turn_id") or "").startswith("voice-user-turn:")
+
+
 def _json_safe_provider_value(value: Any) -> Any:
     """Convert provider metadata into plain values safe for SSE JSON encoding."""
     if value is None or isinstance(value, (str, int, float, bool)):
@@ -160,7 +178,8 @@ def _stream_low_latency_reply(
     from app.providers import ChatMessage as ProviderMessage
 
     started = time.perf_counter()
-    provider = shared.get_provider(_provider_key(provider_id))
+    provider_name = _provider_key(provider_id)
+    provider = shared.get_provider(provider_name)
     if provider is None:
         raise RuntimeError("Chat provider is not available")
 
@@ -176,8 +195,20 @@ def _stream_low_latency_reply(
         for message in rendered.messages
     ]
     model_name = _model_key(model_id)
-    response = provider.chat_completion(messages=messages, model=model_name, stream=True)
-    chunker = LowLatencyTextChunker()
+    completion_kwargs: dict[str, Any] = {}
+    if provider_name == "chatgpt_codex":
+        conversation_id = str(getattr(session, "id", "") or "").strip()
+        if conversation_id:
+            completion_kwargs["conversation_id"] = conversation_id
+    response = provider.chat_completion(
+        messages=messages,
+        model=model_name,
+        stream=True,
+        **completion_kwargs,
+    )
+    chunker = LowLatencyTextChunker(
+        emit_initial_fragment=not _is_live_voice_turn(user_message),
+    )
     full_text = ""
     resolved_model = model_name
     usage = None
@@ -227,6 +258,7 @@ def _stream_low_latency_reply(
             first_client_chunk_ms = (time.perf_counter() - started) * 1000.0
         yield {"type": "text_chunk", "text": remaining}
 
+    completion_log_started = time.perf_counter()
     stream_log(
         "gateway-live-chat-first-token",
         "runtime",
@@ -241,17 +273,27 @@ def _stream_low_latency_reply(
         ),
         total_ms=round((time.perf_counter() - started) * 1000.0, 3),
     )
+    completion_log_ms = (time.perf_counter() - completion_log_started) * 1000.0
+
+    terminal_metadata_started = time.perf_counter()
     usage_payload = _json_safe_provider_value(usage)
+    memory_metadata = self._active_memory_metadata(assembly, rendered)
+    history_metadata = self._active_history_metadata(assembly)
+    terminal_metadata_ms = (time.perf_counter() - terminal_metadata_started) * 1000.0
     yield {
         "type": "complete",
         "content": full_text.strip(),
+        "diagnostics": {
+            "provider_completion_log_ms": round(completion_log_ms, 3),
+            "terminal_metadata_ms": round(terminal_metadata_ms, 3),
+        },
         "metadata": {
             "generation_status": "completed",
             "provider_id": provider_id,
             "model_id": model_id,
             "resolved_model": resolved_model,
-            **self._active_memory_metadata(assembly, rendered),
-            **self._active_history_metadata(assembly),
+            **memory_metadata,
+            **history_metadata,
             **({"usage": usage_payload} if usage_payload is not None else {}),
         },
     }

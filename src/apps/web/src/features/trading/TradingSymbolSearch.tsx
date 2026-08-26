@@ -55,6 +55,15 @@ const equityNames: Record<string, string> = {
   SPY: 'SPDR S&P 500 ETF Trust',
 };
 
+const commodityNames: Record<string, string> = {
+  COPPER: 'Copper Futures',
+  NATGAS: 'Natural Gas Futures',
+  UKOIL: 'Brent Crude Oil',
+  USOIL: 'WTI Crude Oil',
+  XAGUSD: 'Silver Futures',
+  XAUUSD: 'Gold Futures',
+};
+
 function categoryForInstrument(instrument: CanonicalInstrument): SymbolSearchCategory {
   if (instrument.asset_class === 'crypto') return 'crypto';
   if (instrument.instrument_type === 'index') return 'indices';
@@ -92,6 +101,9 @@ function instrumentName(instrument: CanonicalInstrument): string {
     const quote = currencyNames[instrument.quote_currency ?? ''] ?? instrument.quote_currency ?? 'USD';
     return `${base} / ${quote}`;
   }
+  if (instrument.asset_class === 'commodity') {
+    return commodityNames[instrument.display_symbol] ?? `${instrument.display_symbol} · ${instrument.venue}`;
+  }
   return equityNames[instrument.display_symbol] ?? `${instrument.display_symbol} · ${instrument.venue}`;
 }
 
@@ -102,6 +114,7 @@ function instrumentTypeLabel(instrument: CanonicalInstrument): string {
   }
   if (instrument.instrument_type === 'index') return 'index';
   if (instrument.asset_class === 'forex') return 'forex';
+  if (instrument.asset_class === 'commodity') return 'commodity';
   return 'stock';
 }
 

@@ -188,6 +188,37 @@ class PostgresChatRepositoryAdapter:
             work.commit()
         return changed
 
+    def update_user_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        metadata: dict[str, object],
+    ) -> bool:
+        """Patch one accepted user turn without rewriting the chat workspace."""
+        if not metadata:
+            return False
+        with unit_of_work(self.database) as work:
+            cursor = work.connection.execute(
+                """
+                UPDATE omnix_chat_messages
+                   SET metadata = metadata || %s::jsonb
+                 WHERE workspace_id = %s
+                   AND session_id = %s
+                   AND id = %s
+                   AND role = 'user'
+                """,
+                (
+                    _json(metadata),
+                    self.context.workspace_id,
+                    session_id,
+                    message_id,
+                ),
+            )
+            changed = cursor.rowcount > 0
+            work.commit()
+        return changed
+
     def _session_payload(self, session: ChatSession) -> dict[str, Any]:
         return {
             "id": session.id,

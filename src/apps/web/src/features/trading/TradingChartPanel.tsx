@@ -6,7 +6,7 @@ import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
-import { DEFAULT_TRADING_RIGHT_OFFSET, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingComparisonData, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
+import { DEFAULT_TRADING_RIGHT_OFFSET, normalizeChartBars, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingComparisonData, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
@@ -272,6 +272,7 @@ async function comparisonBars(
 }
 
 export function TradingChartPanel({
+  sessionId,
   chartId,
   chartNumber,
   instrumentId,
@@ -298,6 +299,7 @@ export function TradingChartPanel({
   synchronization,
   paperAccountId,
 }: {
+  sessionId?: string;
   chartId: string;
   chartNumber: number;
   instrumentId: string;
@@ -351,7 +353,7 @@ export function TradingChartPanel({
   const restartReplaySession = useTradingStore((state) => state.restartReplaySession);
   const setReplayBar = useTradingReplayStore((state) => state.setBar);
   const clearReplayState = useTradingReplayStore((state) => state.clear);
-  const drawings = useTradingDrawings(instrumentId);
+  const drawings = useTradingDrawings(instrumentId, sessionId);
   const selectedDrawing = drawings.state.drawings.find((drawing) => drawing.drawingId === drawings.state.selectedId) ?? null;
   const [adapter, setAdapter] = useState<TradingChartAdapter | null>(null);
   const [streamStatus, setStreamStatus] = useState<TradingStreamStatus | 'replay'>('connecting');
@@ -695,7 +697,7 @@ export function TradingChartPanel({
   }, [interval]);
 
   useEffect(() => {
-    const bars = (chartQuery.data?.bars ?? []) as MarketBar[];
+    const bars = normalizeChartBars((chartQuery.data?.bars ?? []) as MarketBar[]);
     allBarsRef.current = bars;
     const dataKey = chartQuery.data
       ? `${chartQuery.data.instrument.instrument_id}|${chartQuery.data.binding.binding_id}|${chartQuery.data.interval}|${historyLimit}`

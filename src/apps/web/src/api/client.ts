@@ -9,6 +9,7 @@ export type CancelJobRequest = components['schemas']['CancelJobRequest'];
 export type ChatSession = components['schemas']['ChatSession'];
 export type ChatSessionListResponse = components['schemas']['ChatSessionListResponse'];
 export type CheckpointEnvelope = components['schemas']['CheckpointEnvelope'];
+export type CodexAuthStatus = components['schemas']['CodexAuthStatus'];
 type GeneratedCreateChatSessionRequest = components['schemas']['CreateChatSessionRequest'];
 export type CreateChatSessionRequest = Partial<GeneratedCreateChatSessionRequest>;
 export type CreateJobRequest = components['schemas']['CreateJobRequest'];
@@ -315,6 +316,14 @@ export class OmnixApiClient {
 
   async listModels(): Promise<ProviderFacadePayload> {
     return this.get<ProviderFacadePayload>('/api/models');
+  }
+
+  async getCodexAuthStatus(): Promise<CodexAuthStatus> {
+    return this.get<CodexAuthStatus>('/api/providers/chatgpt-codex/auth');
+  }
+
+  async startCodexLogin(): Promise<CodexAuthStatus> {
+    return this.post<Record<string, never>, CodexAuthStatus>('/api/providers/chatgpt-codex/login', {});
   }
 
   async refreshProviders(request: ProviderModelRefreshRequest = { scope: 'all', priority: 0 }): Promise<JobRecord> {

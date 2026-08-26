@@ -11,13 +11,15 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import wraps
+from threading import Lock, RLock
 from typing import Any
 
 from app.chat.assistant_turns import default_assistant_turn_coordinator
 from app.chat.character_store import _find_idempotent_user_turn, _start_assistant_turn
-from app.chat.concurrency import serialized_chat_mutation
 from app.chat.memory_commands import parse_memory_command
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.chat.retention_policy import transcript_retention_allowed
@@ -31,6 +33,45 @@ from app.persistence.unit_of_work import unit_of_work
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_postgres_fast_path_installed"
+_SESSION_LOCKS_GUARD = Lock()
+_SESSION_LOCKS: dict[str, tuple[RLock, int]] = {}
+
+
+@contextmanager
+def _live_session_mutation(session_id: str) -> Iterator[float]:
+    """Serialize live PostgreSQL writes only with their own chat session.
+
+    The regular Chat store has a process-wide lock because its JSON backend
+    rewrites the complete collection. The live PostgreSQL fast path writes one
+    session atomically, so retaining that global lock made a completed reply
+    wait behind unrelated chat and memory work. Entries are removed once their
+    last holder or waiter leaves to keep the registry bounded.
+    """
+    key = session_id.strip() or "__unknown_session__"
+    with _SESSION_LOCKS_GUARD:
+        current = _SESSION_LOCKS.get(key)
+        if current is None:
+            lock, users = RLock(), 0
+        else:
+            lock, users = current
+        _SESSION_LOCKS[key] = (lock, users + 1)
+
+    wait_started = time.perf_counter()
+    lock.acquire()
+    wait_ms = (time.perf_counter() - wait_started) * 1000.0
+    try:
+        yield wait_ms
+    finally:
+        lock.release()
+        with _SESSION_LOCKS_GUARD:
+            current = _SESSION_LOCKS.get(key)
+            if current is not None:
+                current_lock, users = current
+                if current_lock is lock:
+                    if users <= 1:
+                        _SESSION_LOCKS.pop(key, None)
+                    else:
+                        _SESSION_LOCKS[key] = (lock, users - 1)
 
 
 def _utcnow() -> str:
@@ -218,6 +259,47 @@ def _persist_assistant_completion(
     return assistant_appended, assistant_already_present
 
 
+def _completed_session_snapshot(
+    session: ChatSession,
+    user_message: ChatMessage,
+    *,
+    content: str,
+    metadata: dict[str, Any],
+    assistant_turn_id: str,
+    generation_status: str,
+    assistant_turn_payload: dict[str, Any] | None,
+    assistant_appended: bool,
+) -> ChatSession:
+    """Update the already-loaded session for the normal append-success path."""
+    user_metadata = dict(user_message.metadata)
+    user_metadata["generation_status"] = generation_status
+    if assistant_turn_payload is not None:
+        user_metadata["assistant_turn"] = assistant_turn_payload
+    user_message.metadata = user_metadata
+
+    if assistant_appended:
+        assistant_metadata = {
+            **metadata,
+            "segment_id": session.active_segment_id,
+            "generation_status": generation_status,
+        }
+        if assistant_turn_id:
+            assistant_metadata["assistant_turn_id"] = assistant_turn_id
+        if generation_status == "interrupted":
+            assistant_metadata["delivery_status"] = "interrupted"
+        assistant_message = ChatMessage(
+            id=_assistant_message_id(session.id, user_message.id),
+            role="assistant",
+            content=content.strip(),
+            created_at=_utcnow(),
+            metadata=assistant_metadata,
+        )
+        session.messages.append(assistant_message)
+        session.message_count = len(session.messages)
+        session.updated_at = assistant_message.created_at
+    return session
+
+
 def _begin_user_message_fast(
     self: PostgresCharacterChatSessionStore,
     session_id: str,
@@ -317,6 +399,8 @@ def _complete_streamed_reply_fast(
     user_message_id: str,
     content: str,
     metadata: dict[str, Any],
+    *,
+    lock_wait_ms: float = 0.0,
 ) -> ChatSession | None:
     """Complete one streamed reply without a workspace-wide compatibility save."""
     started = time.perf_counter()
@@ -358,6 +442,7 @@ def _complete_streamed_reply_fast(
             generation_status = "completed"
 
         stage = "persist_completion"
+        persist_started = time.perf_counter()
         assistant_appended, assistant_already_present = _persist_assistant_completion(
             self,
             session,
@@ -370,13 +455,32 @@ def _complete_streamed_reply_fast(
                 turn.model_dump(mode="json") if turn is not None else None
             ),
         )
-        stage = "reload_session"
-        completed = _load_single_session(self, session_id)
-        if completed is None:
-            return None
+        persist_ms = (time.perf_counter() - persist_started) * 1000.0
+        if assistant_already_present:
+            stage = "reload_session"
+            completed = _load_single_session(self, session_id)
+            if completed is None:
+                return None
+        else:
+            completed = _completed_session_snapshot(
+                session,
+                user_message,
+                content=content,
+                metadata=metadata,
+                assistant_turn_id=assistant_turn_id,
+                generation_status=generation_status,
+                assistant_turn_payload=(
+                    turn.model_dump(mode="json") if turn is not None else None
+                ),
+                assistant_appended=assistant_appended,
+            )
         if generation_status == "completed":
             stage = "post_turn_maintenance"
+            maintenance_started = time.perf_counter()
             self._run_post_turn_maintenance(completed, user_message_id)
+            maintenance_ms = (time.perf_counter() - maintenance_started) * 1000.0
+        else:
+            maintenance_ms = 0.0
 
         stream_log(
             "gateway-live-chat-completion",
@@ -386,6 +490,9 @@ def _complete_streamed_reply_fast(
             assistant_already_present=assistant_already_present,
             content_chars=len(content.strip()),
             generation_status=generation_status,
+            lock_wait_ms=round(lock_wait_ms, 3),
+            persist_ms=round(persist_ms, 3),
+            post_turn_maintenance_ms=round(maintenance_ms, 3),
             total_ms=round((time.perf_counter() - started) * 1000.0, 3),
         )
         return completed
@@ -420,12 +527,33 @@ def install_live_chat_postgres_fast_path() -> None:
     ) -> ChatSession | None:
         return _load_single_session(self, session_id)
 
-    patched_begin_user_message = wraps(original_begin_user_message)(
-        serialized_chat_mutation(_begin_user_message_fast)
-    )
-    patched_complete_streamed_reply = wraps(original_complete_streamed_reply)(
-        serialized_chat_mutation(_complete_streamed_reply_fast)
-    )
+    @wraps(original_begin_user_message)
+    def patched_begin_user_message(
+        self: PostgresCharacterChatSessionStore,
+        session_id: str,
+        request: SendChatMessageRequest,
+        **kwargs: Any,
+    ) -> tuple[ChatSession, ChatMessage] | None:
+        with _live_session_mutation(session_id):
+            return _begin_user_message_fast(self, session_id, request, **kwargs)
+
+    @wraps(original_complete_streamed_reply)
+    def patched_complete_streamed_reply(
+        self: PostgresCharacterChatSessionStore,
+        session_id: str,
+        user_message_id: str,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> ChatSession | None:
+        with _live_session_mutation(session_id) as lock_wait_ms:
+            return _complete_streamed_reply_fast(
+                self,
+                session_id,
+                user_message_id,
+                content,
+                metadata,
+                lock_wait_ms=lock_wait_ms,
+            )
 
     PostgresChatSessionStore.get_session = patched_get_session
     PostgresCharacterChatSessionStore.begin_user_message = patched_begin_user_message

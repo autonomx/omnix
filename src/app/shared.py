@@ -250,6 +250,18 @@ def load_secrets():
     return {"api_keys": {}}
 
 
+def _chatgpt_codex_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the non-secret typed Codex profile used to construct the provider."""
+    profile = settings.get("settings_control_center", {})
+    if not isinstance(profile, dict):
+        return {}
+    provider_configs = profile.get("providerConfigs", {})
+    if not isinstance(provider_configs, dict):
+        return {}
+    codex = provider_configs.get("chatgptCodex", {})
+    return dict(codex) if isinstance(codex, dict) else {}
+
+
 def _llm_provider_cache_inputs_from_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     """Extract only the settings fields that affect LLM provider construction."""
     settings = migrate_settings(dict(settings or {}))
@@ -259,6 +271,7 @@ def _llm_provider_cache_inputs_from_settings(settings: Dict[str, Any]) -> Dict[s
         "openrouter": dict(settings.get("openrouter", {})),
         "cerebras": dict(settings.get("cerebras", {})),
         "llamacpp": dict(settings.get("llamacpp", {})),
+        "chatgpt_codex": _chatgpt_codex_settings(settings),
     }
 
 
@@ -427,35 +440,55 @@ def extract_thinking(content):
     return "", content
 
 def _build_provider_cache_key(provider_name: str, provider_config: "ProviderConfig") -> str:
-    """Build a stable cache key from provider configuration.
+    """Build a stable cache key from all provider construction inputs.
 
     Uses a SHA-256 hash of the API key rather than the raw secret so that
     sensitive material is not held in a general-purpose cache key string.
     """
     raw_key = getattr(provider_config, "api_key", "") or ""
     key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()[:16] if raw_key else ""
+    extra_params = getattr(provider_config, "extra_params", {}) or {}
+    try:
+        extra_payload = json.dumps(extra_params, sort_keys=True, separators=(",", ":"), default=str)
+    except TypeError:
+        extra_payload = str(extra_params)
+    extra_hash = hashlib.sha256(extra_payload.encode("utf-8")).hexdigest()[:16]
     parts = [
         provider_name,
         getattr(provider_config, "base_url", "") or "",
         getattr(provider_config, "model", "") or "",
         key_hash,
+        extra_hash,
     ]
     return "|".join(parts)
 
 
+def _close_provider_instance(instance: Any) -> None:
+    """Release process-backed providers before dropping the cache reference."""
+    close = getattr(instance, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception as exc:
+            print(f"Error closing cached provider: {exc}")
+
+
 def invalidate_provider_cache() -> None:
-    """Clear the cached LLM provider so the next get_provider() builds fresh."""
+    """Clear and retire the cached LLM provider before the next construction."""
+    instance = _PROVIDER_CACHE.get("instance")
     _PROVIDER_CACHE["key"] = None
     _PROVIDER_CACHE["instance"] = None
+    if instance is not None:
+        _close_provider_instance(instance)
 
 
 def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
     """
     Get a provider instance based on settings.
 
-    Uses a lightweight cache keyed on (provider, base_url, model, api_key)
-    so that repeated calls within the same process (e.g. multiple RPG turn
-    phases) return the same instance instead of rebuilding from scratch.
+    Uses a lightweight cache keyed on all provider construction inputs so that
+    repeated calls within the same process return the same instance while model,
+    endpoint, reasoning, and transport changes create a fresh provider.
 
     Args:
         provider_name: Optional provider name override, otherwise uses settings
@@ -494,6 +527,18 @@ def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
                 base_url='https://api.cerebras.ai',
                 model=cb_settings.get('model', 'llama-3.3-70b-versatile')
             )
+        elif provider == 'chatgpt_codex':
+            codex_settings = _chatgpt_codex_settings(settings)
+            provider_config = ProviderConfig(
+                provider_type='chatgpt_codex',
+                model=str(codex_settings.get('model') or 'gpt-5.6-sol'),
+                extra_params={
+                    'reasoning_effort': str(codex_settings.get('reasoningEffort') or 'medium'),
+                    'fast_mode': bool(codex_settings.get('fastMode', False)),
+                    'codex_path': str(codex_settings.get('codexPath') or 'codex'),
+                    'transport': str(codex_settings.get('transport') or 'app_server'),
+                },
+            )
         elif provider == 'llamacpp':
             lp_settings = settings.get('llamacpp', {})
             dl_loc = lp_settings.get('download_location', 'server')
@@ -518,12 +563,17 @@ def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
 
         # Check cache before creating a new provider instance
         cache_key = _build_provider_cache_key(provider, provider_config)
-        if _PROVIDER_CACHE["key"] == cache_key and _PROVIDER_CACHE["instance"] is not None:
-            return _PROVIDER_CACHE["instance"]
+        cached_instance = _PROVIDER_CACHE["instance"]
+        if _PROVIDER_CACHE["key"] == cache_key and cached_instance is not None:
+            return cached_instance
 
-        # Create provider instance using registry
+        # Create provider instance using registry. Retire the previous process-backed
+        # instance only after construction succeeds so a bad replacement config does
+        # not tear down a still-usable provider.
         registry = get_registry()
         provider_instance = registry.create_provider(provider, provider_config=provider_config)
+        if cached_instance is not None and cached_instance is not provider_instance:
+            _close_provider_instance(cached_instance)
 
         # Store in cache
         _PROVIDER_CACHE["key"] = cache_key
@@ -547,6 +597,16 @@ def get_provider_config():
         return {'provider': 'openrouter', 'api_key': settings['openrouter'].get('api_key', ''), 'model': settings['openrouter'].get('model', 'openai/gpt-4o-mini'), 'base_url': 'https://openrouter.ai/api/v1', 'context_size': settings['openrouter'].get('context_size', 128000), 'thinking_budget': settings['openrouter'].get('thinking_budget', 0)}
     elif provider == 'cerebras':
         return {'provider': 'cerebras', 'api_key': settings['cerebras'].get('api_key', ''), 'model': settings['cerebras'].get('model', 'llama-3.3-70b-versatile'), 'base_url': 'https://api.cerebras.ai'}
+    elif provider == 'chatgpt_codex':
+        codex = _chatgpt_codex_settings(settings)
+        return {
+            'provider': 'chatgpt_codex',
+            'model': str(codex.get('model') or 'gpt-5.6-sol'),
+            'reasoning_effort': str(codex.get('reasoningEffort') or 'medium'),
+            'fast_mode': bool(codex.get('fastMode', False)),
+            'codex_path': str(codex.get('codexPath') or 'codex'),
+            'transport': str(codex.get('transport') or 'app_server'),
+        }
     elif provider == 'llamacpp':
         l_settings = settings.get('llamacpp', {})
         dl_loc = l_settings.get('download_location', 'server')

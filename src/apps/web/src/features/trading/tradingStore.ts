@@ -10,9 +10,22 @@ import {
 } from './indicators/tradingViewBuiltIns';
 import type { TradingComparison } from './tradingComparisons';
 
-export type TradingLayout = 'auto' | 'columns-1' | 'columns-2' | 'columns-3' | 'columns-4';
+export type TradingLayout =
+  | 'auto'
+  | 'columns-1'
+  | 'columns-2'
+  | 'columns-3'
+  | 'columns-4'
+  | 'rows-2'
+  | 'rows-3'
+  | 'rows-4'
+  | 'main-left-3'
+  | 'main-right-3'
+  | 'main-top-3'
+  | 'main-bottom-3';
 export const MIN_TRADING_CHARTS = 1;
 export const MAX_TRADING_CHARTS = 16;
+export const MAX_TRADING_TABS = 12;
 
 export type TradingChartState = {
   chartId: string;
@@ -35,7 +48,19 @@ export type TradingPanelState = {
   bottom: boolean;
 };
 
+export type TradingTabState = {
+  tabId: string;
+  name: string;
+  layout: TradingLayout;
+  activeChartId: string;
+  charts: TradingChartState[];
+  links: TradingLinkState;
+  panels: TradingPanelState;
+};
+
 type TradingWorkspaceState = {
+  activeTabId: string;
+  tabs: TradingTabState[];
   layout: TradingLayout;
   activeChartId: string;
   replayMode: boolean;
@@ -47,6 +72,10 @@ type TradingWorkspaceState = {
   panels: TradingPanelState;
   favoriteInstrumentIds: string[];
   setLayout: (layout: TradingLayout) => void;
+  setActiveTab: (tabId: string) => void;
+  addTab: (name?: string) => string | null;
+  renameTab: (tabId: string, name: string) => void;
+  removeTab: (tabId?: string) => void;
   setActiveChart: (chartId: string) => void;
   setReplayMode: (enabled: boolean) => void;
   restartReplaySession: () => void;
@@ -145,7 +174,65 @@ function boundedChartCount(count: number): number {
   return Math.max(MIN_TRADING_CHARTS, Math.min(MAX_TRADING_CHARTS, Math.trunc(count)));
 }
 
+function initialSessionTab(): TradingTabState {
+  const chart = initialChart();
+  return {
+    tabId: 'tab-1',
+    name: 'Main Session',
+    layout: 'auto',
+    activeChartId: chart.chartId,
+    charts: [chart],
+    links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
+    panels: { right: true, bottom: true },
+  };
+}
+
+function copySessionCharts(source: readonly TradingChartState[], tabId: string): TradingChartState[] {
+  return source.map((chart) => copyChart(chart, `${tabId}-${chart.chartId}`));
+}
+
+let fallbackTabSequence = 0;
+
+function nextTabId(tabs: readonly TradingTabState[]): string {
+  const ids = new Set(tabs.map((tab) => tab.tabId));
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    fallbackTabSequence += 1;
+    const uniquePart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${fallbackTabSequence.toString(36)}`;
+    const tabId = `tab-${uniquePart}`;
+    if (!ids.has(tabId)) return tabId;
+  }
+  return `tab-${Date.now().toString(36)}-${fallbackTabSequence.toString(36)}-${tabs.length}`;
+}
+
+function sessionFromState(state: TradingWorkspaceState, tab: TradingTabState): TradingTabState {
+  return {
+    ...tab,
+    layout: state.layout,
+    activeChartId: state.activeChartId,
+    charts: state.charts,
+    links: state.links,
+    panels: state.panels,
+  };
+}
+
+function syncActiveTab(
+  state: TradingWorkspaceState,
+  patch: Partial<Pick<TradingWorkspaceState, 'layout' | 'activeChartId' | 'charts' | 'links' | 'panels'>> = {},
+) {
+  const next = { ...state, ...patch };
+  const activeTab = state.tabs.find((tab) => tab.tabId === state.activeTabId);
+  if (!activeTab) return { ...patch, tabs: [sessionFromState(next, initialSessionTab())] };
+  return {
+    ...patch,
+    tabs: state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(next, activeTab) : tab),
+  };
+}
+
 export const useTradingStore = create<TradingWorkspaceState>((set) => ({
+  activeTabId: 'tab-1',
+  tabs: [initialSessionTab()],
   layout: 'auto',
   activeChartId: 'chart-1',
   replayMode: false,
@@ -156,9 +243,98 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
   links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
   panels: { right: true, bottom: true },
   favoriteInstrumentIds: [],
-  setLayout: (layout) => set({ layout }),
+  setLayout: (layout) => set((state) => syncActiveTab(state, { layout })),
+  setActiveTab: (activeTabId) => set((state) => {
+    if (activeTabId === state.activeTabId) return state;
+    const selected = state.tabs.find((tab) => tab.tabId === activeTabId);
+    if (!selected) return state;
+    const current = state.tabs.find((tab) => tab.tabId === state.activeTabId);
+    const tabs = current
+      ? state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(state, tab) : tab)
+      : state.tabs;
+    return {
+      activeTabId,
+      tabs,
+      layout: selected.layout,
+      activeChartId: selected.activeChartId,
+      charts: selected.charts,
+      links: selected.links,
+      panels: selected.panels,
+      replayMode: false,
+      replaySessionId: state.replaySessionId + 1,
+    };
+  }),
+  addTab: (name) => {
+    let createdId: string | null = null;
+    set((state) => {
+      if (state.tabs.length >= MAX_TRADING_TABS) return state;
+      const current = state.tabs.find((tab) => tab.tabId === state.activeTabId);
+      const tabs = current
+        ? state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(state, tab) : tab)
+        : state.tabs;
+      const tabId = nextTabId(tabs);
+      const charts = copySessionCharts(state.charts, tabId);
+      const activeChartIndex = Math.max(0, state.charts.findIndex((chart) => chart.chartId === state.activeChartId));
+      const selectedChart = charts[Math.min(activeChartIndex, charts.length - 1)];
+      const tab: TradingTabState = {
+        tabId,
+        name: name?.trim() || `Session ${tabs.length + 1}`,
+        layout: state.layout,
+        activeChartId: selectedChart.chartId,
+        charts,
+        links: { ...state.links },
+        panels: { ...state.panels },
+      };
+      createdId = tabId;
+      return {
+        activeTabId: tabId,
+        tabs: [...tabs, tab],
+        layout: tab.layout,
+        activeChartId: tab.activeChartId,
+        charts: tab.charts,
+        links: tab.links,
+        panels: tab.panels,
+        replayMode: false,
+        replaySessionId: state.replaySessionId + 1,
+      };
+    });
+    return createdId;
+  },
+  renameTab: (tabId, name) => set((state) => {
+    const nextName = name.trim();
+    if (!nextName) return state;
+    const current = state.tabs.find((tab) => tab.tabId === state.activeTabId);
+    const tabs = current
+      ? state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(state, tab) : tab)
+      : state.tabs;
+    return { tabs: tabs.map((tab) => tab.tabId === tabId ? { ...tab, name: nextName } : tab) };
+  }),
+  removeTab: (tabId) => set((state) => {
+    if (state.tabs.length <= 1) return state;
+    const targetId = tabId ?? state.activeTabId;
+    const targetIndex = state.tabs.findIndex((tab) => tab.tabId === targetId);
+    if (targetIndex < 0) return state;
+    const current = state.tabs.find((tab) => tab.tabId === state.activeTabId);
+    const syncedTabs = current
+      ? state.tabs.map((tab) => tab.tabId === state.activeTabId ? sessionFromState(state, tab) : tab)
+      : state.tabs;
+    const tabs = syncedTabs.filter((tab) => tab.tabId !== targetId);
+    if (targetId !== state.activeTabId) return { tabs };
+    const selected = tabs[Math.min(targetIndex, tabs.length - 1)];
+    return {
+      activeTabId: selected.tabId,
+      tabs,
+      layout: selected.layout,
+      activeChartId: selected.activeChartId,
+      charts: selected.charts,
+      links: selected.links,
+      panels: selected.panels,
+      replayMode: false,
+      replaySessionId: state.replaySessionId + 1,
+    };
+  }),
   setActiveChart: (activeChartId) => set((state) => (
-    state.charts.some((chart) => chart.chartId === activeChartId) ? { activeChartId } : state
+    state.charts.some((chart) => chart.chartId === activeChartId) ? syncActiveTab(state, { activeChartId }) : state
   )),
   setReplayMode: (replayMode) => set((state) => replayMode
     ? { replayMode: true, replaySessionId: state.replaySessionId + 1 }
@@ -168,7 +344,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
     if (state.charts.length >= MAX_TRADING_CHARTS) return state;
     const source = state.charts.find((chart) => chart.chartId === state.activeChartId) ?? state.charts[0] ?? initialChart();
     const chart = copyChart(source, nextChartId(state.charts));
-    return { charts: [...state.charts, chart], activeChartId: chart.chartId };
+    return syncActiveTab(state, { charts: [...state.charts, chart], activeChartId: chart.chartId });
   }),
   removeChart: (chartId) => set((state) => {
     if (state.charts.length <= MIN_TRADING_CHARTS) return state;
@@ -179,26 +355,26 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
     const activeChartId = state.activeChartId === targetId
       ? charts[Math.min(targetIndex, charts.length - 1)].chartId
       : state.activeChartId;
-    return { charts, activeChartId };
+    return syncActiveTab(state, { charts, activeChartId });
   }),
   setChartCount: (count) => set((state) => {
     const target = boundedChartCount(count);
     if (target === state.charts.length) return state;
     if (target < state.charts.length) {
       const charts = state.charts.slice(0, target);
-      return {
+      return syncActiveTab(state, {
         charts,
         activeChartId: charts.some((chart) => chart.chartId === state.activeChartId)
           ? state.activeChartId
           : charts[charts.length - 1].chartId,
-      };
+      });
     }
     const charts = [...state.charts];
     const source = state.charts.find((chart) => chart.chartId === state.activeChartId) ?? state.charts[0] ?? initialChart();
     while (charts.length < target) {
       charts.push(copyChart(source, nextChartId(charts)));
     }
-    return { charts };
+    return syncActiveTab(state, { charts });
   }),
   setDrawingTool: (drawingTool) => set({ drawingTool }),
   setDrawingSnapMode: (drawingSnapMode) => set({ drawingSnapMode }),
@@ -206,8 +382,7 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
     const instrumentChanged = patch.instrumentId !== undefined;
     const linkedInstrument = instrumentChanged && state.links.instrument;
     const linkedInterval = patch.interval !== undefined && state.links.interval;
-    return {
-      charts: state.charts.map((chart) => {
+    return syncActiveTab(state, { charts: state.charts.map((chart) => {
         if (chart.chartId === chartId) {
           return {
             ...chart,
@@ -220,11 +395,9 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
           ...(linkedInstrument ? { instrumentId: patch.instrumentId, bindingId: null } : {}),
           ...(linkedInterval ? { interval: patch.interval } : {}),
         };
-      }),
-    };
+      }) });
   }),
-  toggleIndicator: (chartId, id, period) => set((state) => ({
-    charts: state.charts.map((chart) => {
+  toggleIndicator: (chartId, id, period) => set((state) => syncActiveTab(state, { charts: state.charts.map((chart) => {
       if (chart.chartId !== chartId) return chart;
       const existing = chart.indicators.find((indicator) => indicator.id === id);
       if (!existing) return { ...chart, indicators: [...chart.indicators, newIndicatorInstance(id, period)] };
@@ -237,25 +410,19 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
           period: period ?? indicator.period,
         }),
       };
-    }),
-  })),
-  toggleIndicatorVisibility: (chartId, id) => set((state) => ({
-    charts: state.charts.map((chart) => chart.chartId !== chartId ? chart : {
+    }) })),
+  toggleIndicatorVisibility: (chartId, id) => set((state) => syncActiveTab(state, { charts: state.charts.map((chart) => chart.chartId !== chartId ? chart : {
       ...chart,
       indicators: chart.indicators.map((indicator) => indicator.id !== id || !indicator.enabled ? indicator : {
         ...indicator,
         visible: indicator.visible === false,
       }),
-    }),
-  })),
-  updateIndicator: (chartId, id, patch) => set((state) => ({
-    charts: state.charts.map((chart) => chart.chartId !== chartId ? chart : {
+    }) })),
+  updateIndicator: (chartId, id, patch) => set((state) => syncActiveTab(state, { charts: state.charts.map((chart) => chart.chartId !== chartId ? chart : {
       ...chart,
       indicators: chart.indicators.map((indicator) => indicator.id === id ? { ...indicator, ...patch, id: indicator.id } : indicator),
-    }),
-  })),
-  moveIndicator: (chartId, id, direction) => set((state) => ({
-    charts: state.charts.map((chart) => {
+    }) })),
+  moveIndicator: (chartId, id, direction) => set((state) => syncActiveTab(state, { charts: state.charts.map((chart) => {
       if (chart.chartId !== chartId || !usesSeparatePane(id)) return chart;
       const paneIndicators = chart.indicators.filter((indicator) => usesSeparatePane(indicator.id) && indicator.enabled);
       const currentIndex = paneIndicators.findIndex((indicator) => indicator.id === id);
@@ -272,15 +439,12 @@ export const useTradingStore = create<TradingWorkspaceState>((set) => ({
         return next ?? indicator;
       });
       return { ...chart, indicators };
-    }),
-  })),
-  setIndicators: (chartId, indicators) => set((state) => ({
-    charts: state.charts.map((chart) => chart.chartId === chartId
+    }) })),
+  setIndicators: (chartId, indicators) => set((state) => syncActiveTab(state, { charts: state.charts.map((chart) => chart.chartId === chartId
       ? { ...chart, indicators: indicators.map((indicator) => ({ ...indicator })) }
-      : chart),
-  })),
-  setLink: (key, enabled) => set((state) => ({ links: { ...state.links, [key]: enabled } })),
-  setPanel: (key, open) => set((state) => ({ panels: { ...state.panels, [key]: open } })),
+      : chart) }) ),
+  setLink: (key, enabled) => set((state) => syncActiveTab(state, { links: { ...state.links, [key]: enabled } })),
+  setPanel: (key, open) => set((state) => syncActiveTab(state, { panels: { ...state.panels, [key]: open } })),
   toggleFavoriteInstrument: (instrumentId) => set((state) => ({
     favoriteInstrumentIds: state.favoriteInstrumentIds.includes(instrumentId)
       ? state.favoriteInstrumentIds.filter((item) => item !== instrumentId)

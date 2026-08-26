@@ -49,4 +49,35 @@ describe('settings API adapter', () => {
     expect(request.settings_profile_patch.providerConfigs?.cerebras?.apiKey).toBeUndefined();
     expect(JSON.stringify(request.settings_profile_patch)).not.toContain('sk-live');
   });
+
+  it('persists ChatGPT Codex settings only as non-secret typed profile data', () => {
+    const base = migrateSettingsDocument(DEFAULT_SETTINGS_DOCUMENT);
+    const draft = migrateSettingsDocument({
+      ...base,
+      global: { ...base.global, providers: { ...base.global.providers, llm: 'chatgpt_codex' } },
+      providerConfigs: {
+        ...base.providerConfigs,
+        chatgptCodex: {
+          ...base.providerConfigs.chatgptCodex,
+          model: 'gpt-5.6-sol',
+          reasoningEffort: 'high',
+          fastMode: true,
+          codexPath: 'C:/tools/codex.exe',
+        },
+      },
+    });
+
+    const request = createSettingsSaveRequest(base, draft);
+
+    expect(request.provider).toBe('chatgpt_codex');
+    expect(request.settings_profile_patch.providerConfigs?.chatgptCodex).toEqual({
+      model: 'gpt-5.6-sol',
+      reasoningEffort: 'high',
+      fastMode: true,
+      codexPath: 'C:/tools/codex.exe',
+      transport: 'app_server',
+    });
+    expect(JSON.stringify(request)).not.toContain('api_key');
+    expect(JSON.stringify(request)).not.toContain('apiKey');
+  });
 });

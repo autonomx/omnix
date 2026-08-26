@@ -5,6 +5,7 @@ import { TRADING_CHART_TYPE_OPTIONS } from '../chart/chartAdapter';
 import { binanceInstrumentIdFor } from '../cryptoInstrumentDefaults';
 import {
   MAX_TRADING_CHARTS,
+  MAX_TRADING_TABS,
   type TradingChartState,
   type TradingLayout,
   type TradingLinkState,
@@ -21,6 +22,18 @@ export type TradingWorkspacePayload = {
   links: TradingLinkState;
   panels: TradingPanelState;
   favoriteInstrumentIds: string[];
+  activeTabId?: string;
+  tabs?: TradingTabPayload[];
+};
+
+export type TradingTabPayload = {
+  tabId: string;
+  name: string;
+  layout: TradingLayout;
+  activeChartId: string;
+  charts: TradingChartState[];
+  links: TradingLinkState;
+  panels: TradingPanelState;
 };
 
 type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId' | 'comparisons'> & {
@@ -31,7 +44,11 @@ type PersistableChart = Omit<TradingChartState, 'indicators' | 'bindingId' | 'co
 
 type LegacyLayout = 'one' | 'two-horizontal' | 'two-vertical' | 'four';
 
-const layouts: TradingLayout[] = ['auto', 'columns-1', 'columns-2', 'columns-3', 'columns-4'];
+const layouts: TradingLayout[] = [
+  'auto', 'columns-1', 'columns-2', 'columns-3', 'columns-4',
+  'rows-2', 'rows-3', 'rows-4',
+  'main-left-3', 'main-right-3', 'main-top-3', 'main-bottom-3',
+];
 const legacyLayouts: LegacyLayout[] = ['one', 'two-horizontal', 'two-vertical', 'four'];
 
 export function serializeTradingWorkspace(input: {
@@ -42,8 +59,10 @@ export function serializeTradingWorkspace(input: {
   links: TradingLinkState;
   panels?: TradingPanelState;
   favoriteInstrumentIds?: string[];
+  activeTabId?: string;
+  tabs?: TradingTabPayload[];
 }): TradingWorkspacePayload {
-  return {
+  const payload: TradingWorkspacePayload = {
     schemaVersion: 3,
     name: input.name?.trim() || 'Main Workspace',
     layout: input.layout,
@@ -58,6 +77,21 @@ export function serializeTradingWorkspace(input: {
     panels: { ...(input.panels ?? { right: true, bottom: true }) },
     favoriteInstrumentIds: [...new Set(input.favoriteInstrumentIds ?? [])],
   };
+  if (input.activeTabId && input.tabs?.length) {
+    payload.activeTabId = input.activeTabId;
+    payload.tabs = input.tabs.map((tab) => ({
+      ...tab,
+      charts: tab.charts.map((chart) => ({
+        ...chart,
+        bindingId: chart.bindingId ?? null,
+        indicators: (chart.indicators ?? []).map((indicator) => ({ ...indicator })),
+        comparisons: (chart.comparisons ?? []).map((comparison) => ({ ...comparison })),
+      })),
+      links: { ...tab.links },
+      panels: { ...tab.panels },
+    }));
+  }
+  return payload;
 }
 
 function indicator(value: unknown): value is CoreIndicatorInstance {
@@ -161,6 +195,30 @@ function parseFavorites(value: unknown): string[] {
   return [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length > 0))].slice(0, 500);
 }
 
+function parseTabs(value: unknown): TradingTabPayload[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_TRADING_TABS) return null;
+  const tabs: TradingTabPayload[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') return null;
+    const tab = raw as Partial<TradingTabPayload>;
+    const charts = parseCharts(tab.charts);
+    const links = parseLinks(tab.links);
+    if (typeof tab.tabId !== 'string' || !tab.tabId || typeof tab.name !== 'string' || !tab.name.trim() || !charts || !links) return null;
+    const requestedActive = typeof tab.activeChartId === 'string' ? tab.activeChartId : charts[0].chartId;
+    tabs.push({
+      tabId: tab.tabId,
+      name: tab.name.trim(),
+      layout: typeof tab.layout === 'string' && layouts.includes(tab.layout as TradingLayout) ? tab.layout as TradingLayout : 'auto',
+      activeChartId: charts.some((chart) => chart.chartId === requestedActive) ? requestedActive : charts[0].chartId,
+      charts,
+      links,
+      panels: parsePanels(tab.panels),
+    });
+  }
+  if (new Set(tabs.map((tab) => tab.tabId)).size !== tabs.length) return null;
+  return tabs;
+}
+
 function migrateLegacyCharts(
   charts: TradingChartState[],
   layout: LegacyLayout,
@@ -222,10 +280,12 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
   }
 
   if ((payload.schemaVersion !== 2 && payload.schemaVersion !== 3) || typeof payload.layout !== 'string' || !layouts.includes(payload.layout as TradingLayout)) return null;
+  const parsedTabs = payload.tabs === undefined ? undefined : parseTabs(payload.tabs);
+  if (payload.tabs !== undefined && !parsedTabs) return null;
   const requestedActive = typeof payload.activeChartId === 'string' ? payload.activeChartId : charts[0].chartId;
   const migratedCharts = migrateCryptoChartsToBinance(charts);
   const migratedLinks = payload.schemaVersion === 2 ? { ...links, visibleRange: false } : links;
-  return {
+  const result: TradingWorkspacePayload = {
     schemaVersion: 3,
     name: typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : 'Main Workspace',
     layout: payload.layout as TradingLayout,
@@ -235,4 +295,15 @@ export function parseTradingWorkspace(value: unknown): TradingWorkspacePayload |
     panels: parsePanels(payload.panels),
     favoriteInstrumentIds: migrateCryptoFavoritesToBinance(payload.favoriteInstrumentIds),
   };
+  if (parsedTabs) {
+    const migratedTabs = parsedTabs.map((tab) => ({
+      ...tab,
+      charts: migrateCryptoChartsToBinance(tab.charts),
+    }));
+    result.tabs = migratedTabs;
+    result.activeTabId = typeof payload.activeTabId === 'string' && migratedTabs.some((tab) => tab.tabId === payload.activeTabId)
+      ? payload.activeTabId
+      : migratedTabs[0].tabId;
+  }
+  return result;
 }

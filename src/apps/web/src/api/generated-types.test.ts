@@ -33,6 +33,8 @@ describe('generated gateway API types', () => {
     const expectedRpgPlayerEncounterPath = '/api/rpg/player/encounter' satisfies keyof GatewayApiPaths;
     const expectedJobsPath = '/api/jobs' satisfies keyof GatewayApiPaths;
     const expectedProvidersPath = '/api/providers' satisfies keyof GatewayApiPaths;
+    const expectedCodexAuthPath = '/api/providers/chatgpt-codex/auth' satisfies keyof GatewayApiPaths;
+    const expectedCodexLoginPath = '/api/providers/chatgpt-codex/login' satisfies keyof GatewayApiPaths;
     const expectedProvidersRefreshPath = '/api/providers/refresh' satisfies keyof GatewayApiPaths;
     const expectedModelsRefreshPath = '/api/models/refresh' satisfies keyof GatewayApiPaths;
     const expectedModelResidencyPath = '/api/model-residency' satisfies keyof GatewayApiPaths;
@@ -74,6 +76,8 @@ describe('generated gateway API types', () => {
     expect(expectedRpgPlayerEncounterPath).toBe('/api/rpg/player/encounter');
     expect(expectedJobsPath).toBe('/api/jobs');
     expect(expectedProvidersPath).toBe('/api/providers');
+    expect(expectedCodexAuthPath).toBe('/api/providers/chatgpt-codex/auth');
+    expect(expectedCodexLoginPath).toBe('/api/providers/chatgpt-codex/login');
     expect(expectedProvidersRefreshPath).toBe('/api/providers/refresh');
     expect(expectedModelsRefreshPath).toBe('/api/models/refresh');
     expect(expectedModelResidencyPath).toBe('/api/model-residency');

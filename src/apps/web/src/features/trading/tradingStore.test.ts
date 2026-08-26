@@ -19,6 +19,16 @@ function chart(chartId: string, instrumentId: string, interval: string): Trading
 
 beforeEach(() => {
   useTradingStore.setState({
+    activeTabId: 'tab-1',
+    tabs: [{
+      tabId: 'tab-1',
+      name: 'Main Session',
+      layout: 'auto',
+      activeChartId: 'chart-1',
+      charts: [chart('chart-1', 'btc', '1m')],
+      links: { instrument: false, interval: false, crosshair: true, visibleRange: false },
+      panels: { right: true, bottom: true },
+    }],
     layout: 'auto',
     activeChartId: 'chart-1',
     charts: [
@@ -90,6 +100,35 @@ describe('Trading multi-chart store', () => {
     expect(useTradingStore.getState().favoriteInstrumentIds).toEqual(['equity:NASDAQ:AAPL']);
     useTradingStore.getState().toggleFavoriteInstrument('equity:NASDAQ:AAPL');
     expect(useTradingStore.getState().favoriteInstrumentIds).toEqual([]);
+  });
+
+  it('keeps chart sessions independent across tabs', () => {
+    useTradingStore.getState().setChartCount(1);
+    useTradingStore.getState().updateChart('chart-1', { instrumentId: 'spy', interval: '1d' });
+    const secondTabId = useTradingStore.getState().addTab('Swing Research');
+    expect(secondTabId).toBeTruthy();
+    expect(secondTabId).not.toBe('tab-1');
+    expect(useTradingStore.getState().tabs).toHaveLength(2);
+
+    useTradingStore.getState().updateChart(useTradingStore.getState().activeChartId, { instrumentId: 'eth' });
+    useTradingStore.getState().setActiveTab('tab-1');
+    expect(useTradingStore.getState().tabs[0].name).toBe('Main Session');
+    expect(useTradingStore.getState().charts[0].instrumentId).toBe('spy');
+
+    useTradingStore.getState().setActiveTab(secondTabId!);
+    expect(useTradingStore.getState().charts[0].instrumentId).toBe('eth');
+    useTradingStore.getState().renameTab(secondTabId!, 'ETH Day');
+    expect(useTradingStore.getState().tabs[1].name).toBe('ETH Day');
+  });
+
+  it('never reuses a closed tab identity', () => {
+    useTradingStore.getState().setChartCount(1);
+    const firstCreated = useTradingStore.getState().addTab('First');
+    expect(firstCreated).toBeTruthy();
+    useTradingStore.getState().removeTab(firstCreated!);
+    const replacement = useTradingStore.getState().addTab('Replacement');
+    expect(replacement).toBeTruthy();
+    expect(replacement).not.toBe(firstCreated);
   });
 
   it('hides selected overlays without deleting them', () => {

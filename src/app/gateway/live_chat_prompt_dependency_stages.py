@@ -28,6 +28,7 @@ from app import shared
 from app.assistant_memory import settings as memory_settings_module
 from app.chat import context_budget as context_budget_module
 from app.chat import memory_prompt as memory_prompt_module
+from app.chat import retention_policy as retention_policy_module
 
 from . import live_chat_companion_context as companion_context
 from . import live_chat_live_voice_profile as live_voice_profile
@@ -251,6 +252,9 @@ def _install_dependency_wrappers() -> None:
         _load_memory_runtime_settings_cached
     )
     context_budget_module.load_memory_runtime_settings = (
+        _load_memory_runtime_settings_cached
+    )
+    retention_policy_module.load_memory_runtime_settings = (
         _load_memory_runtime_settings_cached
     )
     live_voice_profile._live_voice_prompt_budget = _timed_dependency(

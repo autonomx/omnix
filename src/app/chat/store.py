@@ -271,17 +271,23 @@ class ChatSessionStore:
 
         messages = self._provider_messages(session, user_message, context_items or [])
         model_name = _model_key(model_id)
-        response = provider.chat_completion(messages=messages, model=model_name, stream=True)
+        completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
+        response = provider.chat_completion(
+            messages=messages,
+            model=model_name,
+            stream=True,
+            **completion_kwargs,
+        )
         pending = ""
         full_text = ""
         resolved_model = model_name
         usage = None
         for chunk in response:
+            resolved_model = getattr(chunk, "model", None) or resolved_model
+            usage = getattr(chunk, "usage", None) or usage
             text = (getattr(chunk, "content", "") or "")
             if not text:
                 continue
-            resolved_model = getattr(chunk, "model", None) or resolved_model
-            usage = getattr(chunk, "usage", None) or usage
             full_text += text
             pending += text
             ready, pending = _pop_ready_sentences(pending)
@@ -403,7 +409,13 @@ class ChatSessionStore:
         messages = self._provider_messages(session, user_message, context_items)
 
         model_name = _model_key(model_id)
-        response = provider.chat_completion(messages=messages, model=model_name, stream=False)
+        completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
+        response = provider.chat_completion(
+            messages=messages,
+            model=model_name,
+            stream=False,
+            **completion_kwargs,
+        )
         content = (getattr(response, "content", "") or "").strip()
         if not content:
             raise RuntimeError("Chat response was empty")

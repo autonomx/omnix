@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.persistence.runtime import LegacyPersistenceRetired
-from app.shared import load_secrets, load_settings, save_secrets, save_settings
+from app.shared import invalidate_provider_cache, load_secrets, load_settings, save_secrets, save_settings
 
 from .audio_cache import invalidate_changed_audio_caches
 from .settings import SettingsPayload, SettingsSaveResponse, apply_settings_payload
@@ -57,6 +57,13 @@ def _provider_patch(settings: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _codex_profile_changed(patch: Any) -> bool:
+    if not isinstance(patch, dict):
+        return False
+    configs = patch.get("providerConfigs")
+    return isinstance(configs, dict) and "chatgptCodex" in configs
+
+
 def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
     """Apply compatibility and profile fields, then persist one settings document.
 
@@ -72,6 +79,7 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
     legacy = _legacy_request(data)
     patch = data.get(PROFILE_PATCH_KEY)
     base_revision = data.get(PROFILE_BASE_REVISION_KEY)
+    codex_profile_changed = _codex_profile_changed(patch)
 
     try:
         # Validate the revision against the unmodified authoritative document.
@@ -101,6 +109,11 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         if secrets_changed:
             save_secrets(secrets)
         save_settings(settings)
+        if codex_profile_changed:
+            # ChatGPT/Codex settings live only in the typed profile so the legacy
+            # LLM cache fingerprint cannot see them. Force a fresh provider on the
+            # next request after model/reasoning/executable changes.
+            invalidate_provider_cache()
         invalidate_changed_audio_caches(previous_settings, settings)
     except (
         LegacyPersistenceRetired,

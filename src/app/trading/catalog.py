@@ -71,7 +71,7 @@ YAHOO_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
     official=False,
     realtime="unofficial regular-session polling; availability not guaranteed",
-    assets=(AssetClass.EQUITY,),
+    assets=(AssetClass.EQUITY, AssetClass.COMMODITY),
     intervals=("1m", "5m", "15m", "1h", "1d", "1w", "1mo"),
     terms="https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html",
 )
@@ -189,6 +189,23 @@ def _equity(venue: str, symbol: str) -> CanonicalInstrument:
     )
 
 
+def _commodity(symbol: str, provider_symbol: str) -> CanonicalInstrument:
+    return CanonicalInstrument(
+        instrument_id=f"commodity:YAHOO:{symbol}",
+        asset_class=AssetClass.COMMODITY,
+        instrument_type=InstrumentType.PERPETUAL,
+        venue="YAHOO",
+        venue_symbol=provider_symbol,
+        display_symbol=symbol,
+        base_currency=None,
+        quote_currency="USD",
+        exchange_timezone="America/Chicago",
+        session_calendar="24x7",
+        price_scale=100,
+        minimum_tick=Decimal("0.01"),
+    )
+
+
 def _crypto_cap(symbol: str) -> CanonicalInstrument:
     is_dominance = symbol.endswith(".D")
     return CanonicalInstrument(
@@ -240,6 +257,12 @@ INSTRUMENTS = (
     _equity("NASDAQ", "NVDA"),
     _equity("NASDAQ", "TSLA"),
     _equity("ARCA", "SPY"),
+    _commodity("USOIL", "CL=F"),
+    _commodity("UKOIL", "BZ=F"),
+    _commodity("XAUUSD", "GC=F"),
+    _commodity("XAGUSD", "SI=F"),
+    _commodity("NATGAS", "NG=F"),
+    _commodity("COPPER", "HG=F"),
 )
 
 
@@ -331,6 +354,15 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
             _binding(
                 instrument,
                 "yahoo",
+                instrument.venue_symbol,
+                FeedType.HISTORICAL_POLLING,
+            ),
+        )
+        if instrument.asset_class is AssetClass.COMMODITY
+        else (
+            _binding(
+                instrument,
+                "yahoo",
                 instrument.display_symbol,
                 FeedType.HISTORICAL_POLLING,
                 adjustments=(AdjustmentMode.RAW,),
@@ -357,6 +389,7 @@ _dynamic_instruments: dict[str, CanonicalInstrument] = {}
 _dynamic_bindings: dict[str, ProviderBinding] = {}
 _CANONICAL_EQUITY_TOKEN = re.compile(r"^[A-Z0-9._^=-]+$")
 _CANONICAL_CRYPTO_TOKEN = re.compile(r"^[A-Z0-9]+$")
+_CANONICAL_COMMODITY_TOKEN = re.compile(r"^[A-Z0-9._=^/-]+$")
 
 
 def _restore_dynamic_crypto(instrument_id: str) -> CanonicalInstrument | None:
@@ -448,6 +481,22 @@ def _restore_dynamic_equity(instrument_id: str) -> CanonicalInstrument | None:
     return instrument
 
 
+def _restore_dynamic_commodity(instrument_id: str) -> CanonicalInstrument | None:
+    """Rehydrate a Yahoo commodity/futures symbol saved from a previous process."""
+    parts = instrument_id.split(":")
+    if len(parts) != 3 or parts[0] != "commodity" or parts[1] != "YAHOO":
+        return None
+    symbol = parts[2].upper()
+    if not symbol or not _CANONICAL_COMMODITY_TOKEN.fullmatch(symbol):
+        return None
+    instrument = _commodity(symbol, symbol)
+    register_instrument(
+        instrument,
+        (_binding(instrument, "yahoo", symbol, FeedType.HISTORICAL_POLLING),),
+    )
+    return instrument
+
+
 def register_instrument(
     instrument: CanonicalInstrument,
     bindings: tuple[ProviderBinding, ...] = (),
@@ -470,7 +519,12 @@ def all_instruments() -> list[CanonicalInstrument]:
 
 def all_bindings() -> list[ProviderBinding]:
     with _catalog_lock:
-        return [*BINDINGS, *_dynamic_bindings.values()]
+        # Provider discovery can re-register a symbol that is already present in
+        # the built-in catalog. Keep the first-seen ordering while letting the
+        # discovered binding refresh the static entry's metadata.
+        bindings_by_id = {binding.binding_id: binding for binding in BINDINGS}
+        bindings_by_id.update(_dynamic_bindings)
+        return list(bindings_by_id.values())
 
 
 def search_instruments(query: str = "") -> list[CanonicalInstrument]:
@@ -493,7 +547,11 @@ def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
     static = next((item for item in INSTRUMENTS if item.instrument_id == instrument_id), None)
     if static is not None:
         return static
-    return _restore_dynamic_equity(instrument_id) or _restore_dynamic_crypto(instrument_id)
+    return (
+        _restore_dynamic_equity(instrument_id)
+        or _restore_dynamic_commodity(instrument_id)
+        or _restore_dynamic_crypto(instrument_id)
+    )
 
 
 def binding_by_id(binding_id: str) -> ProviderBinding | None:
@@ -508,7 +566,10 @@ def binding_by_id(binding_id: str) -> ProviderBinding | None:
     # entry before looking up that binding.
     parts = binding_id.split(":", 2)
     if len(parts) == 3 and parts[0] in {"yahoo", "alpaca_iex", "stooq"}:
-        _restore_dynamic_equity(parts[2])
+        if parts[2].startswith("commodity:YAHOO:"):
+            _restore_dynamic_commodity(parts[2])
+        else:
+            _restore_dynamic_equity(parts[2])
     elif len(parts) == 3 and parts[0] == "binance":
         _restore_dynamic_crypto(parts[2])
     return _dynamic_bindings.get(binding_id)
@@ -519,6 +580,7 @@ def bindings_for_instrument(instrument_id: str) -> list[ProviderBinding]:
     if bindings:
         return bindings
     _restore_dynamic_equity(instrument_id)
+    _restore_dynamic_commodity(instrument_id)
     _restore_dynamic_crypto(instrument_id)
     return [item for item in all_bindings() if item.instrument_id == instrument_id]
 

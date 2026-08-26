@@ -95,9 +95,12 @@ from app.platform import (
     update_legacy_session,
     validate_adventure_payload,
 )
+from app.platform.settings_profile_repository import load_settings_profile
 from app.prompts import PromptRenderError, PromptRenderRequest, PromptTemplateRenderer, RenderedPrompt
 from app.providers.cache_status import ProviderModelRefreshRequest, create_provider_model_refresh_job_request
 from app.providers.facade import ProviderFacade, ProviderFacadePayload, default_provider_facade
+from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
+from app.shared import load_settings
 from app.replay import (
     CheckpointEnvelope,
     PersistenceInventory,
@@ -148,6 +151,21 @@ class RuntimeStatusPayload(BaseModel):
     gateway: GatewayHealth = Field(default_factory=GatewayHealth)
     workers: WorkerHealthPayload = Field(default_factory=WorkerHealthPayload)
     compatibility: dict[str, Any] = Field(default_factory=dict)
+
+
+class CodexAuthStatus(BaseModel):
+    installed: bool = False
+    authenticated: bool = False
+    auth_mode: str | None = None
+    cli_version: str | None = None
+    detail: str = ""
+    started: bool = False
+    pid: int | None = None
+
+
+def _configured_codex_path() -> str:
+    profile = load_settings_profile(load_settings())
+    return profile.provider_configs.chatgpt_codex.codex_path
 
 
 class CompatibilityHandoffPayload(BaseModel):
@@ -466,6 +484,14 @@ def create_gateway_app(
     @gateway.get("/api/models", response_model=ProviderFacadePayload, tags=["providers"])
     async def models() -> ProviderFacadePayload:
         return get_provider_facade().payload()
+
+    @gateway.get("/api/providers/chatgpt-codex/auth", response_model=CodexAuthStatus, tags=["providers"])
+    async def chatgpt_codex_auth_status() -> CodexAuthStatus:
+        return ChatGPTCodexProvider.auth_status(_configured_codex_path())
+
+    @gateway.post("/api/providers/chatgpt-codex/login", response_model=CodexAuthStatus, tags=["providers"])
+    async def chatgpt_codex_login() -> CodexAuthStatus:
+        return ChatGPTCodexProvider.start_login(_configured_codex_path())
 
     @gateway.post("/api/providers/refresh", response_model=JobRecord, tags=["providers"])
     async def refresh_providers(request: ProviderModelRefreshRequest) -> JobRecord:

@@ -18,6 +18,7 @@ from .base import (
     ProviderError,
 )
 from .cerebras_provider import CerebrasProvider
+from .chatgpt_codex_provider import ChatGPTCodexProvider
 from .llamacpp_provider import LlamaCppProvider
 from .lmstudio_provider import LMStudioProvider
 from .openrouter_provider import OpenRouterProvider
@@ -40,5 +41,6 @@ __all__ = [
     'LMStudioProvider',
     'OpenRouterProvider',
     'CerebrasProvider',
+    'ChatGPTCodexProvider',
     'LlamaCppProvider'
 ]
