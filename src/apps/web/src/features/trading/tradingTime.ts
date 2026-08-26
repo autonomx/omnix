@@ -9,27 +9,27 @@ export type TradingTimezoneOption = {
 export const TRADING_TIMEZONE_OPTIONS: readonly TradingTimezoneOption[] = [
   { id: 'utc', label: 'UTC', timeZone: 'UTC' },
   { id: 'exchange', label: 'Exchange', timeZone: null },
-  { id: 'honolulu', label: '(UTC-10) Honolulu', timeZone: 'Pacific/Honolulu' },
-  { id: 'anchorage', label: '(UTC-8) Anchorage', timeZone: 'America/Anchorage' },
-  { id: 'juneau', label: '(UTC-8) Juneau', timeZone: 'America/Juneau' },
-  { id: 'los-angeles', label: '(UTC-7) Los Angeles', timeZone: 'America/Los_Angeles' },
-  { id: 'phoenix', label: '(UTC-7) Phoenix', timeZone: 'America/Phoenix' },
-  { id: 'vancouver', label: '(UTC-7) Vancouver', timeZone: 'America/Vancouver' },
-  { id: 'denver', label: '(UTC-6) Denver', timeZone: 'America/Denver' },
-  { id: 'mexico-city', label: '(UTC-6) Mexico City', timeZone: 'America/Mexico_City' },
-  { id: 'san-salvador', label: '(UTC-6) San Salvador', timeZone: 'America/El_Salvador' },
-  { id: 'bogota', label: '(UTC-5) Bogota', timeZone: 'America/Bogota' },
-  { id: 'chicago', label: '(UTC-5) Chicago', timeZone: 'America/Chicago' },
-  { id: 'lima', label: '(UTC-5) Lima', timeZone: 'America/Lima' },
-  { id: 'caracas', label: '(UTC-4) Caracas', timeZone: 'America/Caracas' },
-  { id: 'new-york', label: '(UTC-4) New York', timeZone: 'America/New_York' },
-  { id: 'santiago', label: '(UTC-4) Santiago', timeZone: 'America/Santiago' },
-  { id: 'toronto', label: '(UTC-4) Toronto', timeZone: 'America/Toronto' },
-  { id: 'buenos-aires', label: '(UTC-3) Buenos Aires', timeZone: 'America/Argentina/Buenos_Aires' },
-  { id: 'halifax', label: '(UTC-3) Halifax', timeZone: 'America/Halifax' },
-  { id: 'sao-paulo', label: '(UTC-3) Sao Paulo', timeZone: 'America/Sao_Paulo' },
-  { id: 'azores', label: '(UTC) Azores', timeZone: 'Atlantic/Azores' },
-  { id: 'reykjavik', label: '(UTC) Reykjavik', timeZone: 'Atlantic/Reykjavik' },
+  { id: 'honolulu', label: 'Honolulu', timeZone: 'Pacific/Honolulu' },
+  { id: 'anchorage', label: 'Anchorage', timeZone: 'America/Anchorage' },
+  { id: 'juneau', label: 'Juneau', timeZone: 'America/Juneau' },
+  { id: 'los-angeles', label: 'Los Angeles', timeZone: 'America/Los_Angeles' },
+  { id: 'phoenix', label: 'Phoenix', timeZone: 'America/Phoenix' },
+  { id: 'vancouver', label: 'Vancouver', timeZone: 'America/Vancouver' },
+  { id: 'denver', label: 'Denver', timeZone: 'America/Denver' },
+  { id: 'mexico-city', label: 'Mexico City', timeZone: 'America/Mexico_City' },
+  { id: 'san-salvador', label: 'San Salvador', timeZone: 'America/El_Salvador' },
+  { id: 'bogota', label: 'Bogota', timeZone: 'America/Bogota' },
+  { id: 'chicago', label: 'Chicago', timeZone: 'America/Chicago' },
+  { id: 'lima', label: 'Lima', timeZone: 'America/Lima' },
+  { id: 'caracas', label: 'Caracas', timeZone: 'America/Caracas' },
+  { id: 'new-york', label: 'New York', timeZone: 'America/New_York' },
+  { id: 'santiago', label: 'Santiago', timeZone: 'America/Santiago' },
+  { id: 'toronto', label: 'Toronto', timeZone: 'America/Toronto' },
+  { id: 'buenos-aires', label: 'Buenos Aires', timeZone: 'America/Argentina/Buenos_Aires' },
+  { id: 'halifax', label: 'Halifax', timeZone: 'America/Halifax' },
+  { id: 'sao-paulo', label: 'Sao Paulo', timeZone: 'America/Sao_Paulo' },
+  { id: 'azores', label: 'Azores', timeZone: 'Atlantic/Azores' },
+  { id: 'reykjavik', label: 'Reykjavik', timeZone: 'Atlantic/Reykjavik' },
 ] as const;
 
 const TIMEZONE_STORAGE_KEY = 'omnix.trading.chart.timezone';
@@ -164,6 +164,20 @@ function parsedDateTime(value: string, endOfDay: boolean): { year: number; month
     millisecond: endOfDay && hour === undefined ? 999 : 0,
   };
 }
+
+export function tradingDateRangeWithinLoadedHistory(
+  from: string,
+  to: string,
+  firstLoadedAt: Date | number | string,
+  lastLoadedAt: Date | number | string,
+  timeZone: string,
+): boolean {
+  if (!from || !to) return false;
+  const firstLoadedDate = dateInputValue(firstLoadedAt, timeZone);
+  const lastLoadedDate = dateInputValue(lastLoadedAt, timeZone);
+  return from >= firstLoadedDate && to <= lastLoadedDate;
+}
+
 
 export function zonedDateTimeToUtc(value: string, timeZone: string, endOfDay = false): number | null {
   const parsed = parsedDateTime(value, endOfDay);
