@@ -132,6 +132,22 @@ def test_search_evidence_changes_the_next_hermes_action_to_sec():
     assert any(action.operation == "sec_find_filings" for action in repository.actions)
 
 
+def test_historical_evidence_does_not_steer_a_new_iterative_run():
+    repository = MemoryRepository()
+    historical = FinancingWeb().find(_identity(), query="old", limit=10).evidence[0]
+    repository.save_evidence(historical)
+    planner = AdaptivePlanner()
+    empty = EmptyAdapter()
+
+    result = run_iterative_research(
+        _request(), _identity(), repository, planner=planner,
+        sec=empty, company=empty, web=FinancingWeb(),
+    )
+
+    assert planner.operations[:2] == ["web_search", "sec_find_filings"]
+    assert result.evidence_ids == ("web-financing",)
+
+
 def test_query_budget_stops_before_an_extra_search():
     class SearchForever:
         backend = "fake-hermes"
