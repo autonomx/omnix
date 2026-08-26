@@ -38,6 +38,7 @@ import { liveChatSubmissionGateway } from '../assistant-workspace/live-chat-subm
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
+import { ChatIdentityModeControl } from './ChatIdentityModeControl';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
 import { LiveChatFullscreenShell } from './LiveChatFullscreenShell';
 import { Live2DZoomControl } from './Live2DZoomControl';
@@ -1722,14 +1723,20 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <header className="assistant-chat-header">
                 <div><p className="eyebrow">Current chat</p><h2>{activeSession?.title ?? 'Hey! How are you today?'}</h2></div>
                 <div className="assistant-chat-header-actions assistant-chat-integrated-actions">
-                  <label className="assistant-header-voice-select">
-                    <span>Voice</span>
-                    <select aria-label="Cloned voice" value={liveCallRuntime?.interaction_mode === 'character' ? currentLiveCallVoiceId() : assistantSettings.voiceId} disabled={liveCallRuntime?.interaction_mode === 'character'} onChange={(event) => updateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}>
-                      <option value="">{runtimeConfig.ttsVoice ? `Default (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>
-                      {voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}
-                    </select>
-                  </label>
-                  <button className="assistant-header-pill" type="button" onClick={() => showAssistantView('settings')}>Personality</button>
+                  <ChatIdentityModeControl
+                    sessionId={selectedSessionId}
+                    systemVoiceId={assistantSettings.voiceId}
+                    defaultVoiceLabel={runtimeConfig.ttsVoice ? `Default (${runtimeConfig.ttsVoice})` : 'Default voice'}
+                    voiceOptions={voiceProfiles.map((asset) => ({
+                      assetId: asset.id,
+                      value: voiceProfileId(asset),
+                      label: voiceProfileLabel(asset),
+                    }))}
+                    onSystemVoiceChange={(voiceId) => updateAssistantSettings({ ...assistantSettings, voiceId })}
+                    onSessionResolved={(sessionId) => setSelectedSessionId(sessionId)}
+                    onOpenSystemSettings={() => showAssistantView('settings')}
+                    onOpenCharacterSettings={() => showAssistantView('characters')}
+                  />
                 </div>
               </header>
               <div className="assistant-chat-messages" role="log" aria-live="polite" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
