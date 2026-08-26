@@ -34,11 +34,21 @@ def _clean_text(value: Any, *, field: str, limit: int) -> str:
     return text[:limit]
 
 
-def _source_ids(value: Any, *, allowed: set[str], limit: int) -> tuple[str, ...]:
+def _source_ids(
+    value: Any,
+    *,
+    allowed: set[str],
+    limit: int,
+    require_nonempty: bool = False,
+) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise ValueError("market_brief_source_evidence_ids_must_be_a_list")
-    values = [item for item in value if isinstance(item, str) and item in allowed]
-    return tuple(dict.fromkeys(values))[:limit]
+    if any(not isinstance(item, str) or item not in allowed for item in value):
+        raise ValueError("market_brief_source_evidence_ids_invalid")
+    values = tuple(dict.fromkeys(value))[:limit]
+    if require_nonempty and not values:
+        raise ValueError("market_brief_source_evidence_ids_required")
+    return values
 
 
 def _items(value: Any, *, field: str, allowed: set[str], limit: int) -> tuple[TradingMarketBriefItem, ...]:
@@ -50,7 +60,12 @@ def _items(value: Any, *, field: str, allowed: set[str], limit: int) -> tuple[Tr
             raise ValueError(f"market_brief_{field}_{index}_must_be_an_object")
         items.append(TradingMarketBriefItem(
             text=_clean_text(item.get("text"), field=f"{field}_{index}_text", limit=500),
-            source_evidence_ids=_source_ids(item.get("source_evidence_ids"), allowed=allowed, limit=4),
+            source_evidence_ids=_source_ids(
+                item.get("source_evidence_ids"),
+                allowed=allowed,
+                limit=4,
+                require_nonempty=True,
+            ),
         ))
     return tuple(items)
 
@@ -154,5 +169,10 @@ def generate_trading_market_brief(
         risks=_items(payload["risks"], field="risks", allowed=evidence_ids, limit=5),
         watch_items=_items(payload["watch_items"], field="watch_items", allowed=evidence_ids, limit=4),
         confidence=confidence,
-        source_evidence_ids=_source_ids(payload["source_evidence_ids"], allowed=evidence_ids, limit=12),
+        source_evidence_ids=_source_ids(
+            payload["source_evidence_ids"],
+            allowed=evidence_ids,
+            limit=12,
+            require_nonempty=True,
+        ),
     )
