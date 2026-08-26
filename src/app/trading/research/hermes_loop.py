@@ -72,9 +72,39 @@ def _action_id(trace_id: str, step: int, operation: str) -> str:
     return "tra-" + hashlib.sha256(f"{trace_id}|{step}|{operation}".encode()).hexdigest()[:24]
 
 
-def _context(repository: TradingResearchRepository, request: TradingResearchRequest, *, step: int, queries: int, extracts: int, prior_actions: list[str]) -> TradingHermesContext:
+def _evidence_for_ids(
+    repository: TradingResearchRepository,
+    request: TradingResearchRequest,
+    evidence_ids: list[str] | tuple[str, ...],
+    known_at: datetime,
+):
+    ids = tuple(dict.fromkeys(evidence_ids))
+    if not ids:
+        return []
+    loader = getattr(repository, "evidence_by_ids_as_of", None)
+    if callable(loader):
+        return loader(request.instrument_id, ids, known_at)
+    available = repository.list_evidence_as_of(
+        request.instrument_id,
+        known_at,
+        max(200, request.max_sources * 4),
+    )
+    by_id = {item.evidence_id: item for item in available}
+    return [by_id[evidence_id] for evidence_id in ids if evidence_id in by_id]
+
+
+def _context(
+    repository: TradingResearchRepository,
+    request: TradingResearchRequest,
+    *,
+    step: int,
+    queries: int,
+    extracts: int,
+    prior_actions: list[str],
+    evidence_ids: list[str],
+) -> TradingHermesContext:
     now = datetime.now(timezone.utc)
-    evidence = repository.list_evidence_as_of(request.instrument_id, now, request.max_sources)
+    evidence = _evidence_for_ids(repository, request, evidence_ids, now)
     unresolved: list[str] = []
     text = " ".join(item.content.lower() for item in evidence)
     if not any(item.source_authority_tier == 1 for item in evidence): unresolved.append("primary_source_confirmation")
@@ -114,16 +144,26 @@ def run_iterative_research(
     company: CompanyIrAdapter | None = None,
     web: GenericWebAdapter | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+    seed_evidence_ids: tuple[str, ...] = (),
 ) -> ResearchLoopResult:
     active_planner = planner or (HermesPlanner() if hermes_trading_research_enabled() else SafeStopPlanner("hermes_disabled"))
     sec = sec or SecEdgarAdapter(); web = web or GenericWebAdapter(); company = company or CompanyIrAdapter(web)
     trace_id = "htr-" + hashlib.sha256(f"{request.request_id}|{request.instrument_id}|{request.requested_at.isoformat()}".encode()).hexdigest()[:24]
     queries = extracts = 0; prior: list[str] = []; warnings: list[str] = []; stop_reason = "step_budget_exhausted"
+    run_evidence_ids = list(dict.fromkeys(seed_evidence_ids))[:request.max_sources]
     for step in range(request.max_steps):
         now = clock().astimezone(timezone.utc)
         if now >= request.deadline_at:
             stop_reason = "deadline_exhausted"; break
-        context = _context(repository, request, step=step, queries=queries, extracts=extracts, prior_actions=prior)
+        context = _context(
+            repository,
+            request,
+            step=step,
+            queries=queries,
+            extracts=extracts,
+            prior_actions=prior,
+            evidence_ids=run_evidence_ids,
+        )
         try:
             decision = TradingHermesNextActionDecision.model_validate(active_planner.next_action(request, context))
         except (ValidationError, ValueError, TypeError) as exc:
@@ -153,10 +193,12 @@ def run_iterative_research(
             saved_ids: list[str] = []
             detail = "evaluation_checkpoint" if result is None else result.detail
             if result is not None:
-                existing = repository.list_evidence_as_of(request.instrument_id, clock(), request.max_sources)
-                remaining = max(0, request.max_sources-len(existing))
+                remaining = max(0, request.max_sources - len(run_evidence_ids))
                 for item in result.evidence[:remaining]:
-                    saved = repository.save_evidence(item); saved_ids.append(saved.evidence_id)
+                    saved = repository.save_evidence(item)
+                    saved_ids.append(saved.evidence_id)
+                    if saved.evidence_id not in run_evidence_ids:
+                        run_evidence_ids.append(saved.evidence_id)
                 warnings.extend(result.warnings)
             completed = clock().astimezone(timezone.utc)
             record = ResearchActionRecord(
@@ -185,7 +227,6 @@ def run_iterative_research(
             )
             repository.save_action(record); warnings.append(f"action_failed:{proposal.operation}:{type(exc).__name__}")
             prior.append(f"{proposal.operation}:failed")
-    evidence = repository.list_evidence_as_of(request.instrument_id, clock(), request.max_sources)
     return ResearchLoopResult(trace_id=trace_id, planner_backend=active_planner.backend, stop_reason=stop_reason,
-                              action_count=len(repository.action_trace(trace_id)), evidence_ids=tuple(item.evidence_id for item in evidence),
+                              action_count=len(repository.action_trace(trace_id)), evidence_ids=tuple(run_evidence_ids),
                               warnings=tuple(dict.fromkeys(warnings)))
