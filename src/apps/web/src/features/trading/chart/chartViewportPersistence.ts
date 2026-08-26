@@ -1,3 +1,4 @@
+import { currentTradingWorkspaceScopeId } from '../persistence/useTradingWorkspacePersistence';
 import { TradingChartAdapter } from './chartAdapter';
 
 type NumericRange = { from: number; to: number };
@@ -10,6 +11,7 @@ type ViewportSnapshot = {
 
 const viewports = new Map<string, ViewportSnapshot>();
 const restoredAdapters = new WeakSet<TradingChartAdapter>();
+const adapterKeys = new WeakMap<TradingChartAdapter, string>();
 let installed = false;
 
 function finiteRange(value: NumericRange | null): NumericRange | null {
@@ -17,18 +19,17 @@ function finiteRange(value: NumericRange | null): NumericRange | null {
   return { from: value.from, to: value.to };
 }
 
-function workspaceId(): string {
-  if (typeof document === 'undefined') return 'workspace';
-  const select = document.querySelector<HTMLSelectElement>('.trading-workspace-switcher select');
-  return select?.value || 'workspace';
-}
-
 function viewportKey(adapter: TradingChartAdapter): string | null {
+  const existing = adapterKeys.get(adapter);
+  if (existing) return existing;
   if (typeof document === 'undefined') return null;
   const chartElement = adapter.api().chartElement();
   const panel = chartElement.closest<HTMLElement>('[data-chart-id]');
   const chartId = panel?.dataset.chartId;
-  return chartId ? `${workspaceId()}:${chartId}` : null;
+  if (!chartId) return null;
+  const key = `${currentTradingWorkspaceScopeId()}:${chartId}`;
+  adapterKeys.set(adapter, key);
+  return key;
 }
 
 function priceScaleSnapshot(adapter: TradingChartAdapter, side: 'left' | 'right'): PriceScaleSnapshot {
@@ -74,8 +75,9 @@ function restore(adapter: TradingChartAdapter): void {
 
 /**
  * Preserve manual time/price viewport state when React remounts chart panels
- * during trading-tab or workspace switches. The persistence key combines the
- * saved workspace id with the chart id, so two workspaces never share zoom.
+ * during trading-tab or workspace switches. Each adapter captures its workspace
+ * identity once, so cleanup after a workspace switch cannot write the outgoing
+ * viewport into the newly selected workspace's namespace.
  */
 export function installTradingChartViewportPersistence(): void {
   if (installed) return;
