@@ -160,7 +160,7 @@ describe('TradingNewsPanel', () => {
   });
 
   it('ignores a research completion from a symbol that is no longer active', async () => {
-    let resolveStart: ((value: unknown) => void) | null = null;
+    let resolveStart!: (value: unknown) => void;
     hermesApi.start.mockReturnValue(new Promise((resolve) => { resolveStart = resolve; }));
     hermesApi.audit.mockResolvedValue({
       as_of: '2026-08-25T21:00:00Z',
@@ -172,7 +172,7 @@ describe('TradingNewsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Research with Hermes' }));
     rerender(<TradingNewsPanel instrumentId="equity:NYSE:GME" />);
 
-    resolveStart?.({
+    resolveStart({
       planner_backend: 'hermes',
       report: {
         source_evidence_ids: ['evidence-1'],
