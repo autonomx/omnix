@@ -178,7 +178,8 @@ def _stream_low_latency_reply(
     from app.providers import ChatMessage as ProviderMessage
 
     started = time.perf_counter()
-    provider = shared.get_provider(_provider_key(provider_id))
+    provider_name = _provider_key(provider_id)
+    provider = shared.get_provider(provider_name)
     if provider is None:
         raise RuntimeError("Chat provider is not available")
 
@@ -194,7 +195,17 @@ def _stream_low_latency_reply(
         for message in rendered.messages
     ]
     model_name = _model_key(model_id)
-    response = provider.chat_completion(messages=messages, model=model_name, stream=True)
+    completion_kwargs: dict[str, Any] = {}
+    if provider_name == "chatgpt_codex":
+        conversation_id = str(getattr(session, "id", "") or "").strip()
+        if conversation_id:
+            completion_kwargs["conversation_id"] = conversation_id
+    response = provider.chat_completion(
+        messages=messages,
+        model=model_name,
+        stream=True,
+        **completion_kwargs,
+    )
     chunker = LowLatencyTextChunker(
         emit_initial_fragment=not _is_live_voice_turn(user_message),
     )
