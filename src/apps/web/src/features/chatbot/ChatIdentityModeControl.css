@@ -1,0 +1,167 @@
+.chat-identity-mode-control {
+  align-items: center;
+  display: flex;
+  flex: 0 1 auto;
+  gap: 0.5rem;
+  min-width: 0;
+  position: relative;
+}
+
+.chat-identity-mode-toggle {
+  align-items: center;
+  background: rgba(10, 16, 32, 0.76);
+  border: 1px solid rgba(151, 171, 226, 0.2);
+  border-radius: 0.72rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding: 0.18rem;
+}
+
+.chat-identity-mode-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.55rem;
+  color: rgba(224, 232, 255, 0.74);
+  font-size: 0.82rem;
+  font-weight: 800;
+  min-height: 1.95rem;
+  padding: 0 0.82rem;
+  transition: background 120ms ease, box-shadow 120ms ease, color 120ms ease;
+}
+
+.chat-identity-mode-toggle button.active {
+  background: linear-gradient(135deg, rgba(112, 85, 255, 0.96), rgba(20, 184, 226, 0.94));
+  box-shadow: 0 0.35rem 0.95rem rgba(48, 92, 214, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.chat-identity-mode-toggle button:focus-visible,
+.chat-identity-context-select:focus-within {
+  outline: 2px solid rgba(93, 207, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.chat-identity-mode-toggle button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.chat-identity-context-select {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(31, 43, 76, 0.9), rgba(17, 25, 47, 0.92));
+  border: 1px solid rgba(124, 172, 255, 0.28);
+  border-radius: 0.66rem;
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: #f5f7ff;
+  display: inline-flex;
+  flex: 0 1 13.5rem;
+  gap: 0.42rem;
+  min-height: 2.35rem;
+  min-width: 10.5rem;
+  padding: 0 0.45rem 0 0.7rem;
+}
+
+.chat-identity-context-select.character {
+  border-color: rgba(42, 210, 214, 0.36);
+  box-shadow: 0 0.35rem 1rem rgba(14, 141, 177, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.chat-identity-context-select > span:first-child {
+  color: #78ddff;
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+}
+
+.chat-identity-context-select.character > span:first-child {
+  color: #6cf0d1;
+}
+
+.chat-identity-context-label {
+  color: rgba(235, 240, 255, 0.72);
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.chat-identity-context-select select {
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, #dce8ff 50%) right 0.45rem center / 0.38rem 0.38rem no-repeat,
+    transparent;
+  border: 0;
+  color: #f7f9ff;
+  cursor: pointer;
+  flex: 1 1 auto;
+  font-size: 0.83rem;
+  font-weight: 800;
+  min-width: 4.5rem;
+  outline: 0;
+  overflow: hidden;
+  padding: 0 1.05rem 0 0.1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-identity-context-select select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.chat-identity-context-select option {
+  background: #11182c;
+  color: #f6f8ff;
+}
+
+.chat-identity-settings-button {
+  min-width: max-content !important;
+}
+
+.chat-identity-mode-status {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 1250px) {
+  .chat-identity-context-label {
+    display: none;
+  }
+
+  .chat-identity-context-select {
+    flex-basis: 10.5rem;
+    min-width: 8rem;
+  }
+
+  .chat-identity-mode-toggle button {
+    padding-inline: 0.62rem;
+  }
+}
+
+@media (max-width: 980px) {
+  .chat-identity-mode-control {
+    gap: 0.35rem;
+  }
+
+  .chat-identity-context-select {
+    flex-basis: 8.5rem;
+    min-width: 7rem;
+  }
+
+  .chat-identity-mode-toggle button {
+    font-size: 0.76rem;
+    padding-inline: 0.48rem;
+  }
+
+  .chat-identity-settings-button {
+    padding-inline: 0.58rem !important;
+  }
+}
