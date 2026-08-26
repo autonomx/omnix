@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { tradingHermesResearchApi } from './tradingHermesResearchApi';
 import type { HermesMarketBrief, HermesResearchAudit, HermesResearchEvidence } from './tradingHermesResearchApi';
 import './TradingNews.css';
@@ -57,21 +57,49 @@ export function TradingNewsPanel({ instrumentId }: { instrumentId: string }) {
   const [brief, setBrief] = useState<HermesMarketBrief | null>(null);
   const [briefWarning, setBriefWarning] = useState<string | null>(null);
   const [notice, setNotice] = useState('Research runs only when you request it.');
+  const requestGenerationRef = useRef(0);
+  const activeInstrumentRef = useRef(instrumentId);
+
+  useEffect(() => {
+    activeInstrumentRef.current = instrumentId;
+    requestGenerationRef.current += 1;
+    setStatus('idle');
+    setAudit(null);
+    setBrief(null);
+    setBriefWarning(null);
+    setNotice('Research runs only when you request it.');
+  }, [instrumentId]);
 
   const runResearch = async () => {
     if (!instrumentId || status === 'running') return;
+    const requestedInstrumentId = instrumentId;
+    const requestGeneration = ++requestGenerationRef.current;
     setStatus('running');
     setAudit(null);
     setBrief(null);
     setBriefWarning(null);
     setNotice('Running Hermes research for this symbol...');
     try {
-      const result = await tradingHermesResearchApi.start(instrumentId);
-      const nextAudit = await tradingHermesResearchApi.audit(instrumentId);
-      setAudit(nextAudit);
+      const result = await tradingHermesResearchApi.start(requestedInstrumentId);
+      if (
+        requestGeneration !== requestGenerationRef.current
+        || activeInstrumentRef.current !== requestedInstrumentId
+      ) return;
+      const nextAudit = await tradingHermesResearchApi.audit(requestedInstrumentId);
+      if (
+        requestGeneration !== requestGenerationRef.current
+        || activeInstrumentRef.current !== requestedInstrumentId
+      ) return;
+      const currentEvidenceIds = new Set(result.report.source_evidence_ids);
+      const currentEvidence = nextAudit.evidence.filter((item) => currentEvidenceIds.has(item.evidence_id));
+      setAudit({
+        ...nextAudit,
+        latest_report: result.report,
+        evidence: currentEvidence,
+      });
       setBrief(result.brief ?? null);
       setBriefWarning(result.brief_warning ?? null);
-      const sourceCount = nextAudit.evidence.length;
+      const sourceCount = currentEvidence.length;
       setStatus(sourceCount ? 'ready' : 'empty');
       setNotice(sourceCount
         ? `Research complete. ${sourceCount} timestamped sources captured. Planner: ${result.planner_backend}.`
