@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { TradingChartPanel } from './TradingChartPanel';
 import { TradingChartSynchronization } from './chart/chartSynchronization';
+import { installTradingChartViewportPersistence } from './chart/chartViewportPersistence';
 import { useTradingStore, type TradingLayout } from './tradingStore';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
+
+installTradingChartViewportPersistence();
 
 export function tradingGridColumns(layout: TradingLayout, chartCount: number): number {
   if (layout === 'rows-2' || layout === 'rows-3' || layout === 'rows-4') return 1;
