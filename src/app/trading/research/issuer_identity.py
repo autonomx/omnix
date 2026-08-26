@@ -5,6 +5,10 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
+from requests import RequestException
+
+from app.trading.providers.errors import ProviderContractError, ProviderUnavailableError
+
 from .contracts import IssuerIdentity, fingerprint
 
 _SEC_TICKERS = "https://www.sec.gov/files/company_tickers.json"
@@ -41,10 +45,16 @@ class SecIssuerIdentityResolver:
     def _load(self) -> dict[str, dict[str, Any]]:
         if self._mapping is not None:
             return self._mapping
-        response = self.runtime.get(_SEC_TICKERS, headers=self._headers(), timeout=20)
-        payload = response.json()
+        try:
+            response = self.runtime.get(_SEC_TICKERS, headers=self._headers(), timeout=20)
+        except RequestException as exc:
+            raise ProviderUnavailableError(f"SEC issuer directory unavailable: {exc}") from exc
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ProviderContractError("SEC issuer directory returned invalid JSON") from exc
         if not isinstance(payload, dict):
-            raise ValueError("sec_company_tickers_malformed")
+            raise ProviderContractError("sec_company_tickers_malformed")
         mapping: dict[str, dict[str, Any]] = {}
         for row in payload.values():
             if not isinstance(row, dict):
