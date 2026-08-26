@@ -70,7 +70,7 @@ class GenericWebAdapter:
                 metadata={"provider": item.metadata.get("provider") if item.metadata else None, "query": q},
                 immutable_fingerprint=fp,
             ))
-        diagnostics = execution.diagnostics
+        diagnostics = getattr(execution, "diagnostics", {}) or {}
         provider = str(diagnostics.get("provider") or "unknown")
         status = str(diagnostics.get("status") or "unknown")
         results = diagnostics.get("results", len(execution.items))
