@@ -113,7 +113,7 @@ function timestamp(value: string): UTCTimestamp {
   return Math.floor(milliseconds / 1_000) as UTCTimestamp;
 }
 
-export function normalizeComparisonBars(bars: readonly MarketBar[]): MarketBar[] {
+export function normalizeChartBars(bars: readonly MarketBar[]): MarketBar[] {
   const byTimestamp = new Map<number, { bar: MarketBar; revision: number; index: number }>();
   bars.forEach((bar, index) => {
     const milliseconds = Date.parse(bar.start_time);
@@ -582,24 +582,25 @@ export class TradingChartAdapter {
   setBars(bars: readonly MarketBar[], fit = true): void {
     this.assertActive();
     const visibleRange = fit ? null : this.chart.timeScale().getVisibleLogicalRange();
-    this.bars = [...bars];
+    this.bars = normalizeChartBars(bars);
     this.revisions.clear();
-    for (const bar of bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
-    this.setPriceData(bars);
-    this.volumeSeries.setData(bars.map(volumeData));
+    for (const bar of this.bars) this.revisions.set(timestamp(bar.start_time), bar.ingestion_revision);
+    this.setPriceData(this.bars);
+    this.volumeSeries.setData(this.bars.map(volumeData));
     this.renderComparisonSeries();
     if (fit) this.fitContent();
     else if (visibleRange) this.chart.timeScale().setVisibleLogicalRange(visibleRange);
   }
 
   setIndicators(bars: readonly MarketBar[], indicators: readonly CoreIndicatorInstance[]): void {
-    const outputs = indicators.filter((item) => item.enabled && item.visible !== false).flatMap((item) => indicatorOutputs(bars, item));
+    const normalizedBars = normalizeChartBars(bars);
+    const outputs = indicators.filter((item) => item.enabled && item.visible !== false).flatMap((item) => indicatorOutputs(normalizedBars, item));
     this.setIndicatorOutputs(outputs);
   }
 
   setComparisonData(items: readonly TradingComparisonData[]): void {
     this.assertActive();
-    this.comparisonData = items.map((item) => ({ ...item, bars: normalizeComparisonBars(item.bars) }));
+    this.comparisonData = items.map((item) => ({ ...item, bars: normalizeChartBars(item.bars) }));
     this.renderComparisonSeries();
   }
 

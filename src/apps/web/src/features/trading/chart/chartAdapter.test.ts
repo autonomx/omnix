@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeComparisonBars, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
 import type { MarketBar } from '../tradingTypes';
 
 const bar: MarketBar = {
@@ -81,14 +81,14 @@ describe('Trading chart adapter normalization', () => {
     expect(volumeData({ ...bar, close: '99' }).color).toContain('255,107,107');
   });
 
-  it('normalizes comparison bars to strictly increasing epoch seconds', () => {
+  it('normalizes chart bars to strictly increasing epoch seconds', () => {
     const corrected = {
       ...secondBar,
       start_time: '2026-08-05T12:01:00.500+00:00',
       close: '15',
       ingestion_revision: 2,
     };
-    const normalized = normalizeComparisonBars([corrected, { ...bar, start_time: 'not-a-date' }, bar, secondBar]);
+    const normalized = normalizeChartBars([corrected, { ...bar, start_time: 'not-a-date' }, bar, secondBar]);
 
     expect(normalized).toHaveLength(2);
     expect(normalized[0]).toBe(bar);

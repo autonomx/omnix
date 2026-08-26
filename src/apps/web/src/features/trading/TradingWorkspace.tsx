@@ -140,7 +140,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const toggleFavoriteInstrument = useTradingStore((state) => state.toggleFavoriteInstrument);
   const activeChart = charts.find((chart) => chart.chartId === activeChartId) ?? charts[0];
   const providerBindings = useMemo(
-    () => (providers.data ?? []).flatMap((provider) => provider.bindings ?? []),
+    () => {
+      const bindingsById = new Map<string, ProviderBinding>();
+      for (const binding of (providers.data ?? []).flatMap((provider) => provider.bindings ?? [])) {
+        if (!bindingsById.has(binding.binding_id)) bindingsById.set(binding.binding_id, binding);
+      }
+      return [...bindingsById.values()];
+    },
     [providers.data],
   );
   const availableBindings = useMemo(

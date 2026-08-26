@@ -6,7 +6,7 @@ import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
-import { DEFAULT_TRADING_RIGHT_OFFSET, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingComparisonData, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
+import { DEFAULT_TRADING_RIGHT_OFFSET, normalizeChartBars, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingComparisonData, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
@@ -697,7 +697,7 @@ export function TradingChartPanel({
   }, [interval]);
 
   useEffect(() => {
-    const bars = (chartQuery.data?.bars ?? []) as MarketBar[];
+    const bars = normalizeChartBars((chartQuery.data?.bars ?? []) as MarketBar[]);
     allBarsRef.current = bars;
     const dataKey = chartQuery.data
       ? `${chartQuery.data.instrument.instrument_id}|${chartQuery.data.binding.binding_id}|${chartQuery.data.interval}|${historyLimit}`

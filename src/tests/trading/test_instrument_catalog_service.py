@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.trading.catalog import (
+    all_bindings,
     binding_by_id,
     bindings_for_instrument,
     default_binding,
@@ -70,6 +71,32 @@ def test_provider_catalog_discovers_binance_spot_symbols_and_registers_binding()
     assert binding.provider == "binance"
     assert binding.provider_symbol == "ADAUSDT"
     assert binding in bindings_for_instrument(instrument.instrument_id)
+
+
+def test_provider_catalog_does_not_duplicate_static_binding_ids() -> None:
+    binance = FakeRuntime(
+        {
+            "symbols": [
+                {
+                    "symbol": "BTCUSDT",
+                    "status": "TRADING",
+                    "isSpotTradingAllowed": True,
+                    "baseAsset": "BTC",
+                    "quoteAsset": "USDT",
+                },
+            ],
+        },
+    )
+    catalog = ProviderBackedInstrumentCatalog(
+        binance_runtime=binance,
+        yahoo_runtime=FakeRuntime({"quotes": []}),
+    )
+
+    catalog.search("BTC")
+
+    binding_ids = [binding.binding_id for binding in all_bindings()]
+    assert len(binding_ids) == len(set(binding_ids))
+    assert binding_ids.count("binance:websocket_and_rest:crypto:BINANCE:spot:BTC-USDT") == 1
 
 
 def test_provider_catalog_discovers_yahoo_equity_search_results() -> None:

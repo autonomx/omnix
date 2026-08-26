@@ -519,7 +519,12 @@ def all_instruments() -> list[CanonicalInstrument]:
 
 def all_bindings() -> list[ProviderBinding]:
     with _catalog_lock:
-        return [*BINDINGS, *_dynamic_bindings.values()]
+        # Provider discovery can re-register a symbol that is already present in
+        # the built-in catalog. Keep the first-seen ordering while letting the
+        # discovered binding refresh the static entry's metadata.
+        bindings_by_id = {binding.binding_id: binding for binding in BINDINGS}
+        bindings_by_id.update(_dynamic_bindings)
+        return list(bindings_by_id.values())
 
 
 def search_instruments(query: str = "") -> list[CanonicalInstrument]:
