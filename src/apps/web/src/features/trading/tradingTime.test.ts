@@ -3,6 +3,8 @@ import {
   dateInputValue,
   formatTradingTime,
   formatTradingTimezoneOffset,
+  tradingDateRangeWithinLoadedHistory,
+  TRADING_TIMEZONE_OPTIONS,
   zonedDateTimeToUtc,
 } from './tradingTime';
 
@@ -21,5 +23,28 @@ describe('TradingView-style timezone formatting', () => {
 
   it('uses the selected timezone when seeding custom range inputs', () => {
     expect(dateInputValue(sample, 'America/Vancouver')).toBe('2026-08-24');
+  });
+
+  it('derives DST-sensitive offsets at render time instead of hard-coding them in labels', () => {
+    expect(formatTradingTimezoneOffset('2026-01-15T20:00:00.000Z', 'America/Vancouver')).toBe('UTC-8');
+    expect(formatTradingTimezoneOffset(sample, 'America/Vancouver')).toBe('UTC-7');
+    expect(TRADING_TIMEZONE_OPTIONS.find((option) => option.id === 'vancouver')?.label).toBe('Vancouver');
+  });
+
+  it('rejects custom ranges outside the dates that are actually loaded', () => {
+    expect(tradingDateRangeWithinLoadedHistory(
+      '2026-08-20',
+      '2026-08-25',
+      '2026-08-20T13:30:00.000Z',
+      '2026-08-25T20:00:00.000Z',
+      'America/New_York',
+    )).toBe(true);
+    expect(tradingDateRangeWithinLoadedHistory(
+      '2026-08-01',
+      '2026-08-25',
+      '2026-08-20T13:30:00.000Z',
+      '2026-08-25T20:00:00.000Z',
+      'America/New_York',
+    )).toBe(false);
   });
 });
