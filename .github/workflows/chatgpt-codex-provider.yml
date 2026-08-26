@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "src/app/chat/store.py"
+      - "src/app/gateway/live_chat_low_latency_stream.py"
+      - "src/app/shared.py"
       - "src/app/providers/chatgpt_codex_provider.py"
       - "src/app/providers/registry.py"
       - "src/app/providers/facade.py"
@@ -12,8 +14,10 @@ on:
       - "src/app/platform/settings_control.py"
       - "src/app/platform/settings_profile_core.py"
       - "src/apps/web/src/features/settings/**"
+      - "src/tests/app/test_live_chat_low_latency_stream.py"
       - "src/tests/unit/chat/test_chatgpt_codex_session_routing.py"
       - "src/tests/unit/providers/test_chatgpt_codex_provider.py"
+      - "src/tests/unit/providers/test_provider_cache_lifecycle.py"
       - ".github/workflows/chatgpt-codex-provider.yml"
   workflow_dispatch:
 
@@ -50,19 +54,25 @@ jobs:
           # forcing unrelated whole-file modernization in a provider PR.
           ruff check --select E4,E7,E9,F \
             src/app/chat/store.py \
+            src/app/gateway/live_chat_low_latency_stream.py \
+            src/app/shared.py \
             src/app/providers/chatgpt_codex_provider.py \
             src/app/providers/registry.py \
             src/app/providers/facade.py \
             src/app/platform/settings_control.py \
             src/app/platform/settings_profile_core.py \
+            src/tests/app/test_live_chat_low_latency_stream.py \
             src/tests/unit/chat/test_chatgpt_codex_session_routing.py \
-            src/tests/unit/providers/test_chatgpt_codex_provider.py
+            src/tests/unit/providers/test_chatgpt_codex_provider.py \
+            src/tests/unit/providers/test_provider_cache_lifecycle.py
 
       - name: Provider and chat routing unit tests
         run: |
           python -m pytest \
             src/tests/unit/providers/test_chatgpt_codex_provider.py \
+            src/tests/unit/providers/test_provider_cache_lifecycle.py \
             src/tests/unit/chat/test_chatgpt_codex_session_routing.py \
+            src/tests/app/test_live_chat_low_latency_stream.py \
             -q --tb=short
 
       - name: Set up Node
