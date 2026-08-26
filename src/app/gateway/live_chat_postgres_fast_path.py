@@ -11,11 +11,12 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import wraps
 from threading import Lock, RLock
-from typing import Any, Iterator
+from typing import Any
 
 from app.chat.assistant_turns import default_assistant_turn_coordinator
 from app.chat.character_store import _find_idempotent_user_turn, _start_assistant_turn
@@ -64,15 +65,13 @@ def _live_session_mutation(session_id: str) -> Iterator[float]:
         lock.release()
         with _SESSION_LOCKS_GUARD:
             current = _SESSION_LOCKS.get(key)
-            if current is None:
-                return
-            current_lock, users = current
-            if current_lock is not lock:
-                return
-            if users <= 1:
-                _SESSION_LOCKS.pop(key, None)
-            else:
-                _SESSION_LOCKS[key] = (lock, users - 1)
+            if current is not None:
+                current_lock, users = current
+                if current_lock is lock:
+                    if users <= 1:
+                        _SESSION_LOCKS.pop(key, None)
+                    else:
+                        _SESSION_LOCKS[key] = (lock, users - 1)
 
 
 def _utcnow() -> str:
