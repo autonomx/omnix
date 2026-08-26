@@ -102,7 +102,7 @@ export function TradingNewsPanel({ instrumentId }: { instrumentId: string }) {
       const sourceCount = currentEvidence.length;
       setStatus(sourceCount ? 'ready' : 'empty');
       setNotice(sourceCount
-        ? `Research complete. ${sourceCount} timestamped sources captured. Planner: ${result.planner_backend}.`
+        ? `Research complete. ${sourceCount} sources used for this run. Planner: ${result.planner_backend}.`
         : `Research finished, but no usable sources were returned. Planner: ${result.planner_backend}.`);
     } catch (error) {
       setStatus('error');
