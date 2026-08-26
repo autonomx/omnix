@@ -559,3 +559,102 @@
 :root[data-omnix-appearance='light'] .trading-paper-activity summary span {
   color: var(--trading-light-text) !important;
 }
+
+/* Compact TradingView-style header and chart-session strip */
+:root[data-omnix-appearance='light'] .trading-terminal-header,
+:root[data-omnix-appearance='light'] .trading-command-bar,
+:root[data-omnix-appearance='light'] .trading-session-tabs {
+  border-color: var(--trading-light-line-soft) !important;
+  background: var(--trading-light-surface) !important;
+  box-shadow: 0 2px 10px rgba(50, 70, 92, 0.06) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-workspace-switcher,
+:root[data-omnix-appearance='light'] .trading-layout-switcher,
+:root[data-omnix-appearance='light'] .trading-provider-status,
+:root[data-omnix-appearance='light'] .trading-timeframe-buttons {
+  border-color: var(--trading-light-line-soft) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-type-trigger,
+:root[data-omnix-appearance='light'] .trading-interval-manager > summary,
+:root[data-omnix-appearance='light'] .trading-indicator-manager > button {
+  border-color: var(--trading-light-line) !important;
+  background: var(--trading-light-surface-muted) !important;
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-type-trigger:hover,
+:root[data-omnix-appearance='light'] .trading-chart-type-trigger[aria-expanded='true'],
+:root[data-omnix-appearance='light'] .trading-interval-manager > summary:hover,
+:root[data-omnix-appearance='light'] .trading-interval-manager[open] > summary,
+:root[data-omnix-appearance='light'] .trading-indicator-manager > button:hover,
+:root[data-omnix-appearance='light'] .trading-indicator-manager > button[aria-expanded='true'] {
+  border-color: rgba(22, 136, 255, 0.62) !important;
+  background: #eef6ff !important;
+  color: #155b91 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-type-trigger-caret,
+:root[data-omnix-appearance='light'] .trading-interval-manager .trading-menu-caret,
+:root[data-omnix-appearance='light'] .trading-indicator-manager .trading-menu-caret {
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab {
+  border-right-color: var(--trading-light-line-soft) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab > [role='tab'] {
+  background: transparent !important;
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab > [role='tab']:hover,
+:root[data-omnix-appearance='light'] .trading-session-tab.active > [role='tab'] {
+  background: #eef6ff !important;
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab.active > [role='tab'] {
+  box-shadow: inset 0 -2px #1688ff !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab-dot {
+  border-color: #8fa2b5 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab.active .trading-session-tab-dot {
+  border-color: #1688ff !important;
+  background: #1688ff !important;
+  box-shadow: 0 0 8px rgba(22, 136, 255, 0.35) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab-close {
+  background: transparent !important;
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab-close:hover:not(:disabled) {
+  background: #fff2f3 !important;
+  color: #c43e4b !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab-divider {
+  border-right-color: var(--trading-light-line-soft) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab-add {
+  border-color: rgba(22, 136, 255, 0.42) !important;
+  background: #eef6ff !important;
+  color: #1266a9 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab-add:hover:not(:disabled) {
+  border-color: #1688ff !important;
+  background: #e1f0ff !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-session-tab-hint {
+  color: var(--trading-light-muted) !important;
+}

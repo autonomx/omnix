@@ -339,3 +339,84 @@
     right: 8px;
   }
 }
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-menu {
+  border-color: var(--trading-light-line) !important;
+  background: rgba(255, 255, 255, 0.99) !important;
+  box-shadow: 0 18px 44px rgba(50, 70, 92, 0.2), 0 0 0 1px rgba(22, 136, 255, 0.06) !important;
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-menu-header {
+  border-bottom-color: var(--trading-light-line-soft) !important;
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-menu-header strong {
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-row {
+  border-top-color: var(--trading-light-line-soft) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-row-count,
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync h3 {
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-option {
+  border-color: transparent !important;
+  background: var(--trading-light-surface-muted) !important;
+  color: #536273 !important;
+  box-shadow: 0 1px 3px rgba(50, 70, 92, 0.08) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-option:hover,
+:root[data-omnix-appearance='light'] .trading-chart-layout-option[aria-pressed='true'] {
+  border-color: rgba(22, 136, 255, 0.55) !important;
+  background: #eef6ff !important;
+  color: #155b91 !important;
+  box-shadow: 0 2px 6px rgba(22, 136, 255, 0.14) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-layout-preview {
+  color: #60758a !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync {
+  border-top-color: var(--trading-light-line-soft) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync-row {
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync-row .trading-chart-layout-info {
+  background: #718397 !important;
+  color: #ffffff !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync-row .trading-chart-layout-info::after {
+  border-color: var(--trading-light-line) !important;
+  background: #ffffff !important;
+  color: var(--trading-light-text) !important;
+  box-shadow: 0 8px 20px rgba(50, 70, 92, 0.18) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync-row .trading-chart-layout-info::before {
+  border-top-color: #ffffff !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync-row button[role='switch'] {
+  background: #d6dee7 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync-row button[role='switch'] i {
+  background: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(50, 70, 92, 0.18);
+}
+
+:root[data-omnix-appearance='light'] .trading-chart-layout-sync-row button[role='switch'].active {
+  background: #1688ff !important;
+}
