@@ -209,14 +209,14 @@ class ChatGPTCodexProvider(BaseProvider):
             return None
         if os.path.isabs(value) or any(sep in value for sep in (os.sep, "/", "\\")):
             path = Path(value).expanduser()
-            return str(path) if path.exists() else None
+            return str(path.resolve()) if path.exists() else None
         resolved = shutil.which(value)
         if resolved:
-            return resolved
+            return str(Path(resolved).expanduser().resolve())
         if value.lower() in {DEFAULT_CODEX_PATH, f"{DEFAULT_CODEX_PATH}.exe"}:
             for candidate in ChatGPTCodexProvider._bundled_executable_candidates():
                 if candidate.is_file():
-                    return str(candidate)
+                    return str(candidate.resolve())
         return None
 
     @staticmethod

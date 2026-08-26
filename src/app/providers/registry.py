@@ -153,12 +153,12 @@ class ProviderRegistry:
 
     @staticmethod
     def _chatgpt_codex_config(base: ProviderConfig) -> ProviderConfig:
-        """Resolve non-secret Codex settings from the typed settings profile.
+        """Resolve typed Codex settings for bare or legacy malformed inputs.
 
-        ``shared.get_provider`` predates this provider and falls through to the
-        LM Studio config branch for provider ids it does not know. Normalizing
-        here keeps the legacy factory compatible without ever treating ChatGPT
-        subscription auth as an API-key provider.
+        New callers that already supply a ``chatgpt_codex`` ProviderConfig keep
+        their explicit values. This compatibility path only repairs old factory
+        callers that arrive with no Codex config or with another provider's
+        configuration (historically the LM Studio fallthrough).
         """
         try:
             from app.shared import load_settings
@@ -235,7 +235,10 @@ class ProviderRegistry:
             # Use empty config, provider should provide defaults
             final_config = ProviderConfig(provider_type=provider_name)
 
-        if provider_name == "chatgpt_codex":
+        if provider_name == "chatgpt_codex" and (
+            (provider_config is None and config is None)
+            or final_config.provider_type != "chatgpt_codex"
+        ):
             final_config = self._chatgpt_codex_config(final_config)
             
         try:

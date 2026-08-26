@@ -4,12 +4,7 @@ import { modelOptions, providerOptions } from './providerOptions';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 
-const chatgptCodexModelOptions = [
-  { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol' },
-  { id: 'gpt-5.6-terra', label: 'gpt-5.6-terra' },
-  { id: 'gpt-5.6-luna', label: 'gpt-5.6-luna' },
-];
-const reasoningEffortOptions = [
+const defaultReasoningEffortOptions = [
   { id: 'none', label: 'Instant (none)' },
   { id: 'low', label: 'low' },
   { id: 'medium', label: 'medium' },
@@ -18,6 +13,44 @@ const reasoningEffortOptions = [
 
 function optionsWithCurrent(options: Array<{ id: string; label: string }>, current: string) {
   return current && !options.some((option) => option.id === current) ? [{ id: current, label: `${current} (unavailable)` }, ...options] : options;
+}
+
+function codexModelId(model: ProviderFacadePayload['models'][number]): string {
+  const metadata = model.metadata as Record<string, unknown> | undefined;
+  const metadataId = typeof metadata?.model_id === 'string' ? metadata.model_id.trim() : '';
+  return metadataId || model.id.replace(/^llm:chatgpt_codex:/, '');
+}
+
+function codexModelOptions(payload: ProviderFacadePayload | undefined, current: string) {
+  const options = (payload?.models ?? [])
+    .filter((model) => model.provider_id === 'llm:chatgpt_codex')
+    .map((model) => ({ id: codexModelId(model), label: model.label || codexModelId(model) }))
+    .filter((option, index, all) => option.id && all.findIndex((candidate) => candidate.id === option.id) === index);
+  return optionsWithCurrent(options, current);
+}
+
+function reasoningEffortId(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const row = value as Record<string, unknown>;
+  for (const key of ['effort', 'id', 'value', 'name']) {
+    if (typeof row[key] === 'string' && row[key].trim()) return row[key].trim();
+  }
+  return '';
+}
+
+function codexReasoningOptions(payload: ProviderFacadePayload | undefined, modelId: string, current: string) {
+  const model = (payload?.models ?? []).find((candidate) => (
+    candidate.provider_id === 'llm:chatgpt_codex' && codexModelId(candidate) === modelId
+  ));
+  const metadata = model?.metadata as Record<string, unknown> | undefined;
+  const supported = Array.isArray(metadata?.supported_reasoning_efforts)
+    ? metadata.supported_reasoning_efforts.map(reasoningEffortId).filter(Boolean)
+    : [];
+  const options = supported.length
+    ? [...new Set(supported)].map((id) => ({ id, label: id === 'none' ? 'Instant (none)' : id }))
+    : defaultReasoningEffortOptions;
+  return optionsWithCurrent(options, current);
 }
 
 function updateString(dispatch: ReturnType<typeof useSettingsProfileContext>['dispatch'], path: string) {
@@ -45,15 +78,23 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
   const [codexAuthStatus, setCodexAuthStatus] = useState<CodexAuthStatus>();
   const [codexAuthBusy, setCodexAuthBusy] = useState<'login' | 'check' | null>(null);
   const [codexAuthMessage, setCodexAuthMessage] = useState('');
+  const [codexCatalogPayload, setCodexCatalogPayload] = useState<ProviderFacadePayload>();
   const providers = state.draft.global.providers;
   const models = state.draft.global.models;
   const configs = state.draft.providerConfigs;
+  const effectivePayload = providers.llm === 'chatgpt_codex' ? codexCatalogPayload ?? payload : payload;
   const llmOptions = optionsWithCurrent(providerOptions(payload, 'chat'), providers.llm);
-  const chatModels = optionsWithCurrent(modelOptions(payload, providers.llm), models.chat);
+  const chatModels = optionsWithCurrent(modelOptions(effectivePayload, providers.llm), models.chat);
   const ttsOptions = optionsWithCurrent(providerOptions(payload, 'tts'), providers.tts);
   const sttOptions = optionsWithCurrent(providerOptions(payload, 'stt'), providers.stt);
   const imageOptions = optionsWithCurrent(providerOptions(payload, 'image'), providers.image);
   const imageProviderId = providers.image.replace(/^image:/, '');
+  const codexModels = codexModelOptions(effectivePayload, configs.chatgptCodex.model);
+  const reasoningEffortOptions = codexReasoningOptions(
+    effectivePayload,
+    configs.chatgptCodex.model,
+    configs.chatgptCodex.reasoningEffort,
+  );
 
   useEffect(() => {
     if (providers.llm !== 'chatgpt_codex') return;
@@ -63,8 +104,15 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
     }).catch((error: unknown) => {
       if (active) setCodexAuthMessage(error instanceof Error ? error.message : 'Unable to check Codex login.');
     });
+    void omnixApiClient.listModels().then((catalog) => {
+      if (active) setCodexCatalogPayload(catalog);
+    }).catch(() => undefined);
     return () => { active = false; };
   }, [providers.llm]);
+
+  const refreshCodexCatalog = () => {
+    void omnixApiClient.listModels().then(setCodexCatalogPayload).catch(() => undefined);
+  };
 
   const checkCodexLogin = async (action: 'login' | 'check') => {
     setCodexAuthBusy(action);
@@ -74,6 +122,7 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
         ? await omnixApiClient.startCodexLogin()
         : await omnixApiClient.getCodexAuthStatus();
       setCodexAuthStatus(status);
+      if (status.authenticated) refreshCodexCatalog();
       if (action === 'login' && status.started) {
         setCodexAuthMessage('Browser sign-in opened. Complete it, then click Check login.');
       } else if (action === 'login' && !status.installed) {
@@ -172,15 +221,15 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
             <div className="settings-form-grid">
               <SettingsField label="Model">
                 <select value={configs.chatgptCodex.model} onChange={updateString(dispatch, 'providerConfigs.chatgptCodex.model')}>
-                  {optionsWithCurrent(chatgptCodexModelOptions, configs.chatgptCodex.model).map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                  {codexModels.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                 </select>
-                <small>Uses the model available to your ChatGPT account through Codex, not OpenAI API billing.</small>
+                <small>Loaded from the models available to your ChatGPT account through Codex; the configured model remains available if discovery is offline.</small>
               </SettingsField>
               <SettingsField label="Reasoning effort">
                 <select value={configs.chatgptCodex.reasoningEffort} onChange={updateString(dispatch, 'providerConfigs.chatgptCodex.reasoningEffort')}>
-                  {optionsWithCurrent(reasoningEffortOptions, configs.chatgptCodex.reasoningEffort).map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                  {reasoningEffortOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                 </select>
-                <small>Instant uses no extra reasoning effort for the lowest latency.</small>
+                <small>Uses the selected model's advertised reasoning levels when Codex exposes them.</small>
               </SettingsField>
               <SettingsField label="Fast mode">
                 <input

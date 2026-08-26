@@ -1,4 +1,8 @@
-import type { TradingTabState } from './tradingStore';
+import { useTradingStore, type TradingTabState } from './tradingStore';
+
+function isGeneratedTabName(name: string): boolean {
+  return name === 'Main Session' || /^Session \d+$/.test(name);
+}
 
 export function TradingSessionTabs({
   tabs,
@@ -17,11 +21,21 @@ export function TradingSessionTabs({
   onAdd: () => void;
   onClose: (tab: TradingTabState) => void;
 }) {
+  const renameTab = useTradingStore((state) => state.renameTab);
+
+  const renameSession = (tab: TradingTabState, fallbackLabel: string) => {
+    const currentName = isGeneratedTabName(tab.name) ? fallbackLabel : tab.name;
+    const nextName = window.prompt('Rename chart session', currentName);
+    if (nextName?.trim()) renameTab(tab.tabId, nextName);
+  };
+
   return (
     <nav className="trading-session-tabs" aria-label="Trading chart sessions">
       <div className="trading-session-tabs-scroll" role="tablist" aria-label="Independent chart sessions">
         {tabs.map((tab, index) => {
-          const label = getTabLabel(tab);
+          const fallbackLabel = getTabLabel(tab);
+          const label = isGeneratedTabName(tab.name) ? fallbackLabel : tab.name;
+          const title = label === fallbackLabel ? `${label} chart session` : `${label} · ${fallbackLabel}`;
           return (
           <div className={`trading-session-tab${tab.tabId === activeTabId ? ' active' : ''}`} key={tab.tabId}>
             <button
@@ -30,11 +44,21 @@ export function TradingSessionTabs({
               aria-selected={tab.tabId === activeTabId}
               aria-label={`Open ${label} chart session`}
               onClick={() => onSelect(tab.tabId)}
-              title={`${label} chart session`}
+              onDoubleClick={() => renameSession(tab, fallbackLabel)}
+              title={`${title} · Double-click to rename`}
             >
               <span className="trading-session-tab-dot" aria-hidden="true" />
               <span className="trading-session-tab-name">{label}</span>
               {tab.tabId === activeTabId ? <span className="trading-session-tab-state" aria-hidden="true" /> : null}
+            </button>
+            <button
+              type="button"
+              className="trading-session-tab-close trading-session-tab-rename"
+              aria-label={`Rename ${label} chart session`}
+              title="Rename chart session"
+              onClick={() => renameSession(tab, fallbackLabel)}
+            >
+              ✎
             </button>
             <button
               type="button"
