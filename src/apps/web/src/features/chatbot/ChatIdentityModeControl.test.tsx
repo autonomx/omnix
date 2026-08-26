@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -36,7 +37,7 @@ const voices = [
   { assetId: 'voice-cloning:sofia', value: 'sofia', label: 'Sofia Voice' },
 ];
 
-function renderControl(props: Partial<React.ComponentProps<typeof ChatIdentityModeControl>> = {}) {
+function renderControl(props: Partial<ComponentProps<typeof ChatIdentityModeControl>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const defaults = {
     sessionId: 'chat:one',
