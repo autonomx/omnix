@@ -1,7 +1,7 @@
 """Unit coverage for the ChatGPT subscription-backed Codex provider."""
 from __future__ import annotations
 
-from pathlib import Path
+from types import SimpleNamespace
 
 from app.providers import ChatGPTCodexProvider, ChatMessage, ProviderConfig, ProviderRegistry
 import app.providers.chatgpt_codex_provider as codex_module
@@ -56,14 +56,65 @@ def test_auth_status_recognizes_chatgpt_login(monkeypatch):
     assert status["cli_version"] == "codex-cli 0.test"
 
 
-def test_resolver_finds_vscode_codex_bundle_when_not_on_path(monkeypatch, tmp_path):
-    executable = tmp_path / ".vscode" / "extensions" / "openai.chatgpt-26.818.41705-win32-x64" / "bin" / "windows-x86_64" / "codex.exe"
-    executable.parent.mkdir(parents=True)
+def test_resolver_uses_bundled_codex_candidate_when_not_on_path(monkeypatch, tmp_path):
+    executable = tmp_path / "codex.exe"
     executable.touch()
     monkeypatch.setattr(codex_module.shutil, "which", lambda _value: None)
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
+    monkeypatch.setattr(
+        ChatGPTCodexProvider,
+        "_bundled_executable_candidates",
+        staticmethod(lambda: [executable]),
+    )
 
     assert ChatGPTCodexProvider._resolve_executable("codex") == str(executable)
+
+
+def test_connection_probes_initialized_app_server(monkeypatch):
+    provider = _provider()
+    calls: list[str] = []
+    monkeypatch.setattr(
+        provider,
+        "auth_status",
+        lambda _path: {
+            "installed": True,
+            "authenticated": True,
+            "auth_mode": "chatgpt",
+        },
+    )
+
+    def ensure_server() -> None:
+        calls.append("ensure")
+        provider._process = SimpleNamespace(poll=lambda: None)
+
+    monkeypatch.setattr(provider, "_ensure_app_server", ensure_server)
+    try:
+        assert provider.test_connection() is True
+        assert calls == ["ensure"]
+    finally:
+        provider._process = None
+        provider.close()
+
+
+def test_connection_fails_when_app_server_cannot_initialize(monkeypatch):
+    provider = _provider()
+    monkeypatch.setattr(
+        provider,
+        "auth_status",
+        lambda _path: {
+            "installed": True,
+            "authenticated": True,
+            "auth_mode": "chatgpt",
+        },
+    )
+    monkeypatch.setattr(
+        provider,
+        "_ensure_app_server",
+        lambda: (_ for _ in ()).throw(RuntimeError("startup failed")),
+    )
+    try:
+        assert provider.test_connection() is False
+    finally:
+        provider.close()
 
 
 def test_registry_resolves_typed_codex_profile_instead_of_lmstudio_config(monkeypatch):
