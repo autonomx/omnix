@@ -91,12 +91,24 @@ def create_trading_hermes_research_router(
             repository=repository_factory()
             result=await asyncio.to_thread(run_trading_research,research_request,repository=repository,
                 fact_repository=fact_repository_factory(),shadow_repository=shadow_repository_factory(),run_shadow_ai=request.run_shadow_ai)
-            evidence=await asyncio.to_thread(
-                repository.list_evidence_as_of,
-                request.instrument_id,
-                result.report.research_completed_at or datetime.now(timezone.utc),
-                request.max_sources,
-            )
+            completed_at=result.report.research_completed_at or datetime.now(timezone.utc)
+            evidence_loader=getattr(repository,"evidence_by_ids_as_of",None)
+            if callable(evidence_loader):
+                evidence=await asyncio.to_thread(
+                    evidence_loader,
+                    request.instrument_id,
+                    result.report.source_evidence_ids,
+                    completed_at,
+                )
+            else:
+                available=await asyncio.to_thread(
+                    repository.list_evidence_as_of,
+                    request.instrument_id,
+                    completed_at,
+                    max(200,request.max_sources*4),
+                )
+                current_ids=set(result.report.source_evidence_ids)
+                evidence=[item for item in available if item.evidence_id in current_ids]
             if not evidence:
                 return result.model_copy(update={"brief_warning":"No source evidence was available for an AI market brief."})
             try:
