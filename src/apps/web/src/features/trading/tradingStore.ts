@@ -191,11 +191,19 @@ function copySessionCharts(source: readonly TradingChartState[], tabId: string):
   return source.map((chart) => copyChart(chart, `${tabId}-${chart.chartId}`));
 }
 
+let fallbackTabSequence = 0;
+
 function nextTabId(tabs: readonly TradingTabState[]): string {
-  let index = 1;
   const ids = new Set(tabs.map((tab) => tab.tabId));
-  while (ids.has(`tab-${index}`)) index += 1;
-  return `tab-${index}`;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    fallbackTabSequence += 1;
+    const uniquePart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${fallbackTabSequence.toString(36)}`;
+    const tabId = `tab-${uniquePart}`;
+    if (!ids.has(tabId)) return tabId;
+  }
+  return `tab-${Date.now().toString(36)}-${fallbackTabSequence.toString(36)}-${tabs.length}`;
 }
 
 function sessionFromState(state: TradingWorkspaceState, tab: TradingTabState): TradingTabState {
