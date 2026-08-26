@@ -258,8 +258,21 @@ class ChatGPTCodexProvider(BaseProvider):
             return {"returncode": -1, "stdout": "", "stderr": str(exc)}
 
     def test_connection(self) -> bool:
+        """Verify ChatGPT auth and a usable initialized Codex app-server transport."""
         status = self.auth_status(self.codex_path)
-        return bool(status.get("installed") and status.get("authenticated") and status.get("auth_mode") == "chatgpt")
+        if not (
+            status.get("installed")
+            and status.get("authenticated")
+            and status.get("auth_mode") == "chatgpt"
+        ):
+            return False
+        try:
+            with self._lock:
+                self._ensure_app_server()
+                process = self._process
+                return process is not None and process.poll() is None
+        except Exception:
+            return False
 
     def get_models(self) -> List[ModelInfo]:
         fallback = self._fallback_model()
