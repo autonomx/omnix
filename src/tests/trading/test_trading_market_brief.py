@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from app.trading.research.contracts import TradingEvidence, TradingResearchReport, fingerprint
 from app.trading.research.facts.extraction import build_fact_set
 from app.trading.research.market_brief import generate_trading_market_brief
@@ -60,7 +62,7 @@ class _Provider:
               \"summary\": \"The supplied source reports a demand update; financing coverage remains unresolved.\",
               \"key_points\": [{
                 \"text\": \"The company update identifies demand as the current catalyst.\",
-                \"source_evidence_ids\": [\"evidence-nvda-1\", \"not-a-source\"]
+                \"source_evidence_ids\": [\"evidence-nvda-1\"]
               }],
               \"risks\": [{
                 \"text\": \"Supply and financing coverage are still unresolved.\",
@@ -68,7 +70,7 @@ class _Provider:
               }],
               \"watch_items\": [],
               \"confidence\": \"medium\",
-              \"source_evidence_ids\": [\"evidence-nvda-1\", \"not-a-source\"]
+              \"source_evidence_ids\": [\"evidence-nvda-1\"]
             }"""
         }
 
@@ -98,3 +100,41 @@ def test_market_brief_uses_configured_provider_and_keeps_only_captured_citations
     assert brief.key_points[0].source_evidence_ids == (evidence.evidence_id,)
     assert "untrusted reference material" in provider.messages[0].content
     assert '"evidence_id":"evidence-nvda-1"' in provider.messages[1].content
+
+
+class _InvalidCitationProvider(_Provider):
+    def chat_completion(self, messages, model=None, stream=False, **kwargs):
+        self.messages = messages
+        return {
+            "content": """{
+              "headline": "Unsupported claim",
+              "summary": "This claim cites evidence that was never captured.",
+              "key_points": [{
+                "text": "Unsupported current claim.",
+                "source_evidence_ids": ["not-a-source"]
+              }],
+              "risks": [],
+              "watch_items": [],
+              "confidence": "medium",
+              "source_evidence_ids": ["evidence-nvda-1"]
+            }"""
+        }
+
+
+def test_market_brief_rejects_claims_with_unknown_citations():
+    evidence = _evidence()
+    report = _report(evidence)
+    fact_set = build_fact_set(
+        instrument_id=evidence.instrument_id,
+        evidence=(evidence,),
+        decision_at=evidence.captured_at,
+        report_id=report.report_id,
+    )
+
+    with pytest.raises(ValueError, match="market_brief_source_evidence_ids_invalid"):
+        generate_trading_market_brief(
+            report,
+            fact_set,
+            (evidence,),
+            provider_factory=_InvalidCitationProvider,
+        )
