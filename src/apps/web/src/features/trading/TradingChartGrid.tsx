@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { TradingChartPanel } from './TradingChartPanel';
 import { TradingChartSynchronization } from './chart/chartSynchronization';
 import { installTradingChartViewportPersistence } from './chart/chartViewportPersistence';
+import { currentTradingWorkspaceScopeId } from './persistence/useTradingWorkspacePersistence';
 import { useTradingStore, type TradingLayout } from './tradingStore';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
 
@@ -45,6 +46,7 @@ export function TradingChartGrid({
   const moveIndicator = useTradingStore((state) => state.moveIndicator);
   const [focusedChartId, setFocusedChartId] = useState<string | null>(null);
   const synchronization = useMemo(() => new TradingChartSynchronization(), []);
+  const workspaceScopeId = currentTradingWorkspaceScopeId();
   const columns = tradingGridColumns(layout, charts.length);
   const style = { '--trading-grid-columns': columns } as CSSProperties;
   const focusedChart = focusedChartId === null ? null : charts.find((chart) => chart.chartId === focusedChartId) ?? null;
@@ -62,7 +64,7 @@ export function TradingChartGrid({
 
   useEffect(() => {
     setFocusedChartId(null);
-  }, [activeTabId]);
+  }, [activeTabId, workspaceScopeId]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -81,7 +83,7 @@ export function TradingChartGrid({
       {visibleCharts.map((chart) => (
         <div key={chart.chartId} className="trading-chart-grid-cell">
           <TradingChartPanel
-            key={`${activeTabId}:${chart.chartId}`}
+            key={`${workspaceScopeId}:${activeTabId}:${chart.chartId}`}
             sessionId={activeTabId}
             chartId={chart.chartId}
             chartNumber={charts.findIndex((item) => item.chartId === chart.chartId) + 1}
