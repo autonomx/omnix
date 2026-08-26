@@ -192,7 +192,7 @@ export function TradingSidePanel({
             onSelectAlert={onSelectAlert}
           />
         ) : null}
-        {activeTab === 'news' ? <TradingNewsPanel instrumentId={activeInstrumentId} /> : null}
+        {activeTab === 'news' ? <TradingNewsPanel key={activeInstrumentId} instrumentId={activeInstrumentId} /> : null}
         {activeTab === 'research' ? (
           <TradingResearchPanel
             instrumentId={activeInstrumentId}
