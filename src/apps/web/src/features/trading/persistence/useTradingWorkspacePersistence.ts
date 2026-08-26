@@ -31,6 +31,17 @@ export type TradingWorkspacePersistence = {
   resolveConflict: (resolution: 'reload' | 'overwrite') => Promise<void>;
 };
 
+let activeWorkspaceScopeId = 'workspace-uninitialized';
+
+/** Return the active persisted workspace namespace for tab-scoped child data. */
+export function currentTradingWorkspaceScopeId(): string {
+  return activeWorkspaceScopeId;
+}
+
+function setTradingWorkspaceScopeId(workspaceId: string): void {
+  activeWorkspaceScopeId = workspaceId.trim() || 'workspace-uninitialized';
+}
+
 function safeWorkspace(record: TradingDocument | null): TradingWorkspacePayload | null {
   return record ? parseTradingWorkspace(record.payload) : null;
 }
@@ -179,6 +190,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
         recordsRef.current = new Map(records.map((record) => [record.record_id, record]));
         let record = records.find((item) => item.record_id === 'main') ?? records[0] ?? null;
         if (!record) {
+          setTradingWorkspaceScopeId('main');
           if (draft) hydrate(draft);
           const created = await tradingApi.createDocument(
             'workspaces',
@@ -191,6 +203,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
         }
         if (disposed || cancelledRef.current) return;
         activeIdRef.current = record.record_id;
+        setTradingWorkspaceScopeId(record.record_id);
         setActiveWorkspaceId(record.record_id);
         if (!hydrate(record.payload) && draft) hydrate(draft);
         refreshSummaries();
@@ -231,7 +244,9 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
     }
     if (!conflictRef.current) await saveActive();
     const record = recordsRef.current.get(id);
-    if (!record || !hydrate(record.payload)) return;
+    if (!record) return;
+    setTradingWorkspaceScopeId(id);
+    if (!hydrate(record.payload)) return;
     activeIdRef.current = id;
     setActiveWorkspaceId(id);
     conflictRef.current = null;
@@ -253,6 +268,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       );
       recordsRef.current.set(id, created);
       activeIdRef.current = id;
+      setTradingWorkspaceScopeId(id);
       setActiveWorkspaceId(id);
       conflictRef.current = null;
       refreshSummaries();
@@ -279,6 +295,7 @@ export function useTradingWorkspacePersistence(): TradingWorkspacePersistence {
       recordsRef.current.delete(current.record_id);
       const next = [...recordsRef.current.values()][0];
       activeIdRef.current = next.record_id;
+      setTradingWorkspaceScopeId(next.record_id);
       setActiveWorkspaceId(next.record_id);
       hydrate(next.payload);
       conflictRef.current = null;
