@@ -43,6 +43,7 @@ import {
   resolveTradingTimezone,
   TRADING_TIMEZONE_OPTIONS,
   TRADING_TIMEZONE_CHANGE_EVENT,
+  tradingDateRangeWithinLoadedHistory,
   writeTradingTimezoneId,
   zonedDateTimeToUtc,
 } from './tradingTime';
@@ -1201,6 +1202,24 @@ export function TradingChartPanel({
       setCustomRangeError('The start date must be before the end date.');
       return;
     }
+    const firstLoaded = barsRef.current[0]?.start_time;
+    const lastLoaded = barsRef.current.at(-1)?.end_time ?? barsRef.current.at(-1)?.start_time;
+    if (!firstLoaded || !lastLoaded) {
+      setCustomRangeError('No chart history is loaded for this range.');
+      return;
+    }
+    if (!tradingDateRangeWithinLoadedHistory(
+      customRangeStart,
+      customRangeEnd,
+      firstLoaded,
+      lastLoaded,
+      selectedTimezone,
+    )) {
+      setCustomRangeError(
+        `Requested dates are outside loaded history (${dateInputValue(firstLoaded, selectedTimezone)} to ${dateInputValue(lastLoaded, selectedTimezone)}).`,
+      );
+      return;
+    }
     const selection = { from: customRangeStart, to: customRangeEnd } satisfies CustomVisibleRange;
     selectedRangeRef.current = selection;
     setSelectedRangeLabel('Custom');
@@ -2025,7 +2044,7 @@ export function TradingChartPanel({
                       }}
                     >
                       <span>{option.label}</span>
-                      <small>{option.id === 'exchange' ? `(${offset})` : ''}</small>
+                      <small>{offset}</small>
                       {timezoneId === option.id ? <b aria-hidden="true">✓</b> : null}
                     </button>
                   );
