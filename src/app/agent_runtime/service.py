@@ -573,11 +573,31 @@ class AgentRunService:
                 self.budgets.enforce_wall_time(run_id)
             except AgentBudgetError:
                 self.runtime.close_run(run_id)
+                self._cancel_descendants(run_id)
                 continue
             try:
                 self.heartbeat(run_id, ttl_seconds=90)
             except Exception:
                 continue
+
+        with unit_of_work(self.database) as work:
+            terminal_parents = work.connection.execute(
+                """
+                SELECT DISTINCT parent.run_id
+                  FROM omnix_agent_runs AS parent
+                  JOIN omnix_agent_runs AS child
+                    ON child.workspace_id = parent.workspace_id
+                   AND child.parent_run_id = parent.run_id
+                 WHERE parent.workspace_id = %s
+                   AND parent.status IN ('completed','failed','cancelled')
+                   AND child.status NOT IN ('completed','failed','cancelled')
+                 ORDER BY parent.run_id
+                """,
+                (self.context.workspace_id,),
+            ).fetchall()
+            work.rollback()
+        for row in terminal_parents:
+            self._cancel_descendants(str(row[0]))
 
         active_ids = self.runtime.active_run_ids()
         if active_ids:
