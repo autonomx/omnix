@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
+from .workflows import WorkflowEvent
 
 
 class AgentRuntime(ABC):
@@ -52,6 +53,14 @@ class WorkflowRuntime(ABC):
 
     @abstractmethod
     def get_status(self, run_id: str) -> dict[str, object] | None: ...
+
+    @abstractmethod
+    def stream_events(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int = 0,
+    ) -> Iterable[WorkflowEvent]: ...
 
     @abstractmethod
     def list_runs(
