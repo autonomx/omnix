@@ -24,9 +24,13 @@ def pi_guard_extension_path() -> Path:
     return Path(__file__).with_name("pi_guard_extension.ts").resolve()
 
 
+def pi_model_provider_extension_path() -> Path:
+    return Path(__file__).with_name("pi_model_provider_extension.ts").resolve()
+
+
 def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     executable = shutil.which(pi_path) or pi_path
-    model = spec.model.model_id
+    model = f"{spec.model.provider_id}::{spec.model.model_id}"
     argv = [
         executable,
         "--mode",
@@ -35,7 +39,7 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
         "--name",
         spec.run_id,
         "--provider",
-        spec.model.provider_id,
+        "omnix",
         "--model",
         model,
         "--no-skills",
@@ -43,6 +47,8 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
         "--no-context-files",
         "--extension",
         str(pi_guard_extension_path()),
+        "--extension",
+        str(pi_model_provider_extension_path()),
     ]
     tools = ["read", "edit", "write", "grep", "find", "ls"]
     tools.append("powershell" if os.name == "nt" else "bash")
@@ -113,6 +119,13 @@ class PiRpcSession:
             "OMNIX_AGENT_WORKSPACE": str(cwd),
             "OMNIX_AGENT_COMMAND_POLICY": spec.execution.command_policy,
             "OMNIX_AGENT_NETWORK_POLICY": spec.execution.network_policy,
+            "OMNIX_AGENT_PROVIDER_ID": spec.model.provider_id,
+            "OMNIX_AGENT_MODEL_ID": spec.model.model_id,
+            "OMNIX_AGENT_MODEL_KEY": f"{spec.model.provider_id}::{spec.model.model_id}",
+            "OMNIX_AGENT_MODEL_GATEWAY_URL": os.environ.get(
+                "OMNIX_AGENT_MODEL_GATEWAY_URL",
+                "http://127.0.0.1:8000/api/agent-model/v1",
+            ),
         }
         self.process = process_factory(
             pi_rpc_argv(spec, pi_path=pi_path),

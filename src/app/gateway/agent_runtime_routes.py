@@ -14,9 +14,11 @@ def register_agent_runtime_routes(app: FastAPI) -> None:
     if getattr(app.state, _ROUTE_SENTINEL, False):
         return
     from app.agent_runtime.api import router
+    from app.agent_runtime.model_gateway import router as model_router
     from app.agent_runtime.routing_api import router as routing_router
 
     app.include_router(router)
+    app.include_router(model_router)
     app.include_router(routing_router)
     setattr(app.state, _ROUTE_SENTINEL, True)
 
