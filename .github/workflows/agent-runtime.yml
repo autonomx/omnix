@@ -1,0 +1,95 @@
+name: Omnix Agent Runtime gates
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/app/agent_runtime/**"
+      - "src/tests/agent_runtime/**"
+      - "src/tests/persistence/test_agent_*"
+      - "src/tests/persistence/test_workflow_*"
+      - "src/app/gateway/agent_runtime_routes.py"
+      - "src/app/gateway/__init__.py"
+      - "src/app/assist_core/hermes_catalog.py"
+      - "src/app/assistant_tools/registry.py"
+      - "src/app/assistant_tools/hermes_bridge.py"
+      - "src/app/assistant_tools/home_adapter.py"
+      - "src/app/assistant_tools/repo_adapter.py"
+      - "src/app/persistence/migrations/*agent*.sql"
+      - "src/app/persistence/migrations/*workflow*.sql"
+      - "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"
+      - "src/apps/web/src/features/chatbot/OmnixRunCard.*"
+      - "src/apps/web/src/api/client.ts"
+      - "src/apps/web/src/api/generated/**"
+      - "src/apps/web/package.json"
+      - "package-lock.json"
+      - ".github/workflows/agent-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PYTHONPATH: src
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+    steps:
+      - name: Check out immutable workflow head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact checked-out head
+        shell: bash
+        run: |
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          echo "Expected head: ${expected}"
+          echo "Checked out:   ${actual}"
+          test "${actual}" = "${expected}"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Agent Runtime test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright \
+            "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+      - name: Compile Agent Runtime Python modules
+        run: python -m compileall -q src/app/agent_runtime
+      - name: Run Agent Runtime unit and authority tests
+        run: python -m pytest src/tests/agent_runtime -q --tb=short
+      - name: Run Agent Runtime PostgreSQL contracts
+        run: |
+          python -m pytest \
+            src/tests/persistence/test_agent_budget_integration.py \
+            src/tests/persistence/test_agent_runtime_repository_integration.py \
+            src/tests/persistence/test_workflow_runtime_integration.py \
+            -q --tb=short
+      - name: Run Agent Runtime UI tests
+        run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx
+      - name: Typecheck web integration
+        run: npm --workspace @omnix/web run typecheck
