@@ -1043,7 +1043,6 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 continue
 
     def _enqueue_due_schedule_fires(self) -> None:
-        now = datetime.now(timezone.utc)
         with unit_of_work(self.database) as work:
             rows = work.connection.execute(
                 """
