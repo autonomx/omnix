@@ -30,3 +30,35 @@ def test_strong_backend_fails_closed_without_operator_configuration(monkeypatch,
     )
     with pytest.raises(AgentIsolationError):
         isolation.build_command(spec, argv=["pi", "--mode", "rpc"], cwd=tmp_path, env={})
+
+
+
+def test_strong_backend_drops_linux_capabilities_and_privilege_escalation(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    isolation = DockerStrongIsolation(
+        image="omnix-agent:test",
+        network="omnix-agent-restricted",
+    )
+    isolation.docker = "docker"
+    spec = AgentRunSpec(
+        run_id="run-strong-hardened",
+        task="inspect",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(
+            root=str(tmp_path),
+            isolation_policy="docker_strong",
+        ),
+    )
+    command = isolation.build_command(
+        spec,
+        argv=["pi", "--mode", "rpc"],
+        cwd=tmp_path,
+        env={},
+    )
+    assert command[command.index("--cap-drop") + 1] == "ALL"
+    assert (
+        command[command.index("--security-opt") + 1]
+        == "no-new-privileges:true"
+    )
