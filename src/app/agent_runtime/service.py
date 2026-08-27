@@ -149,6 +149,17 @@ class AgentRunService:
             current = repository.get_run(command.run_id)
             if current is None:
                 raise KeyError(command.run_id)
+            if current.status in {"completed", "failed", "cancelled"}:
+                if status != "consumed" and repository.claim_command(
+                    command.run_id,
+                    stored.command_id,
+                ):
+                    repository.complete_command(
+                        command.run_id,
+                        stored.command_id,
+                    )
+                work.commit()
+                return current
             if status == "consumed" or not repository.claim_command(command.run_id, stored.command_id):
                 work.commit()
                 return current
@@ -355,6 +366,9 @@ class AgentRunService:
                     work.rollback()
                     return
                 repository.append_event(event)
+                if current.status in {"completed", "failed", "cancelled"}:
+                    work.commit()
+                    return
                 if event.event_type == "run.started" and current.status != "running":
                     current = repository.update_state(
                         event.run_id,
