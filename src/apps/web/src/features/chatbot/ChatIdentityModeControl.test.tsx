@@ -120,8 +120,9 @@ describe('ChatIdentityModeControl', () => {
     }));
 
     renderControl();
-    await screen.findByRole('button', { name: 'Character' });
-    fireEvent.click(screen.getByRole('button', { name: 'Character' }));
+    const characterButton = await screen.findByRole('button', { name: 'Character' });
+    await waitFor(() => expect(characterButton).not.toBeDisabled());
+    fireEvent.click(characterButton);
 
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toMatchObject({
