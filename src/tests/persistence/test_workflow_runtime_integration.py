@@ -175,3 +175,33 @@ def test_workflow_supervisor_resumes_completed_and_pending_safe_boundaries() -> 
     finally:
         runtime._supervisor_stop.set()
         database.close()
+
+
+def test_terminal_workflow_ignores_late_pause_resume_and_cancel() -> None:
+    database = _database()
+    runtime = PostgresWorkflowRuntime(database)
+    suffix = uuid.uuid4().hex[:10]
+    try:
+        definition = WorkflowDefinition(
+            id=f"terminal-{suffix}",
+            version=1,
+            name="Terminal workflow",
+            steps=[],
+        )
+        runtime.register(definition)
+        run_id = runtime.start(definition.id, {})
+        before = runtime.get_status(run_id)
+        assert before is not None
+        assert before["status"] == "completed"
+
+        runtime.pause(run_id)
+        runtime.resume(run_id)
+        runtime.cancel(run_id)
+
+        after = runtime.get_status(run_id)
+        assert after is not None
+        assert after["status"] == "completed"
+        assert after["revision"] == before["revision"]
+    finally:
+        runtime._supervisor_stop.set()
+        database.close()
