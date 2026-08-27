@@ -3003,7 +3003,7 @@ class _HttpTtsProvider:
     def get_speakers(self):
         from app.tts_http_client import tts_speakers
 
-        response = await asyncio.to_thread(tts_speakers)
+        response = tts_speakers()
         return response.get("speakers", [])
 
 
