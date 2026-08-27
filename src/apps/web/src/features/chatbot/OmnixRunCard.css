@@ -1,0 +1,67 @@
+.assistant-runtime-card {
+  background: rgba(10, 16, 31, 0.72);
+  border: 1px solid rgba(132, 148, 196, 0.24);
+  border-radius: 0.72rem;
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+}
+
+.assistant-runtime-card > header {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+}
+
+.assistant-runtime-card > header span,
+.assistant-runtime-card small {
+  color: var(--omnix-muted);
+}
+
+.assistant-runtime-card > header strong {
+  border: 1px solid rgba(151, 114, 255, 0.34);
+  border-radius: 999px;
+  color: var(--omnix-text);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.assistant-runtime-card > p {
+  margin: 0;
+}
+
+.assistant-runtime-error {
+  color: #ff8b98 !important;
+}
+
+.assistant-runtime-actions,
+.assistant-runtime-approval,
+.assistant-runtime-approval > div {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.assistant-runtime-actions button,
+.assistant-runtime-approval button {
+  background: rgba(124, 92, 255, 0.22);
+  border: 1px solid rgba(151, 114, 255, 0.4);
+  border-radius: 0.5rem;
+  color: var(--omnix-text);
+  cursor: pointer;
+  min-height: 2rem;
+  padding: 0 0.65rem;
+}
+
+.assistant-runtime-actions button:disabled,
+.assistant-runtime-approval button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.assistant-runtime-approval {
+  justify-content: space-between;
+}

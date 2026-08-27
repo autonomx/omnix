@@ -57,6 +57,58 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
             context_items: list[dict[str, Any]] | None = None,
             _original: Callable[..., Iterable[dict[str, Any]]] = original,
         ):
+            governed_pending = _pending_governed_proposal(session, user_message.id)
+            governed_choice = _confirmation_choice(user_message.content) if governed_pending else None
+            if governed_pending and governed_choice == "approve":
+                proposal_message, request = governed_pending
+                payload = hermes_assistant_tool_execute_payload(
+                    user_message.content,
+                    request.model_copy(update={"approved": True, "session_id": session.id}),
+                )
+                status = "executed" if payload.execution_result.error is None else "failed"
+                _mark_governed_proposal(
+                    self,
+                    session.id,
+                    proposal_message.id,
+                    status=status,
+                    result=payload.model_dump(mode="json"),
+                )
+                yield from _governed_execution_events(user_message, payload)
+                return
+            if governed_pending and governed_choice == "reject":
+                proposal_message, request = governed_pending
+                _mark_governed_proposal(
+                    self,
+                    session.id,
+                    proposal_message.id,
+                    status="rejected",
+                    result={"tool_id": request.tool_id, "action_id": request.action_id},
+                )
+                yield from _governed_rejection_events(user_message, request)
+                return
+
+            try:
+                from app.agent_runtime.chat_bridge import route_typed_chat_turn
+
+                generalized = route_typed_chat_turn(
+                    session,
+                    user_message,
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    context_items=context_items,
+                )
+            except Exception:
+                generalized = None
+            if generalized is not None:
+                _persist_omnix_route(
+                    self,
+                    session.id,
+                    user_message,
+                    generalized.metadata.get("omnix_route"),
+                )
+                yield from _generalized_result_events(user_message, generalized.content, generalized.metadata)
+                return
+
             pending = _pending_kasa_proposal(session, user_message.id)
             choice = _confirmation_choice(user_message.content) if pending else None
             if pending and choice == "approve":
@@ -351,6 +403,149 @@ def _persist_route(
         sessions[index] = session
         store._save_sessions(sessions)
         return
+
+
+def _persist_omnix_route(
+    store,
+    session_id: str,
+    user_message: ChatMessage,
+    route: object,
+) -> None:
+    if not isinstance(route, dict):
+        return
+    patch: dict[str, object] = {"omnix_route": route}
+    user_message.metadata.update(patch)
+    targeted_update = getattr(store, "update_user_message_metadata", None)
+    if callable(targeted_update):
+        targeted_update(session_id=session_id, message_id=user_message.id, metadata=patch)
+        return
+    sessions = store._load_sessions()
+    for index, session in enumerate(sessions):
+        if session.id != session_id:
+            continue
+        for message in session.messages:
+            if message.id == user_message.id:
+                message.metadata.update(patch)
+                break
+        sessions[index] = session
+        store._save_sessions(sessions)
+        return
+
+
+def _pending_governed_proposal(
+    session: ChatSession,
+    current_user_message_id: str,
+) -> tuple[ChatMessage, AssistantToolRequest] | None:
+    for message in reversed(session.messages):
+        if message.id == current_user_message_id or message.role != "assistant":
+            continue
+        if message.metadata.get("governed_tool_execution_status") != "pending":
+            continue
+        raw = message.metadata.get("pending_governed_tool_request")
+        if not isinstance(raw, dict):
+            continue
+        try:
+            return message, AssistantToolRequest.model_validate(raw)
+        except ValidationError:
+            continue
+    return None
+
+
+def _mark_governed_proposal(
+    store,
+    session_id: str,
+    assistant_message_id: str,
+    *,
+    status: str,
+    result: dict[str, Any],
+) -> None:
+    sessions = store._load_sessions()
+    for index, session in enumerate(sessions):
+        if session.id != session_id:
+            continue
+        for message in session.messages:
+            if message.id != assistant_message_id:
+                continue
+            message.metadata["governed_tool_execution_status"] = status
+            message.metadata["governed_tool_execution_result"] = result
+            message.metadata["governed_tool_execution_updated_at"] = datetime.now(timezone.utc).isoformat()
+            break
+        sessions[index] = session
+        store._save_sessions(sessions)
+        return
+
+
+def _generalized_result_events(
+    user_message: ChatMessage,
+    content: str,
+    metadata: dict[str, Any],
+):
+    coordinator = default_assistant_turn_coordinator()
+    assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
+    if assistant_turn_id:
+        coordinator.mark_streaming(assistant_turn_id)
+    if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+        yield _interrupted(assistant_turn_id, "")
+        return
+    pending_text = content
+    ready, pending_text = _pop_ready_sentences(pending_text)
+    emitted: list[str] = []
+    for sentence in ready:
+        if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+            yield _interrupted(assistant_turn_id, " ".join(emitted))
+            return
+        emitted.append(sentence)
+        yield {"type": "text_chunk", "text": sentence}
+    if pending_text.strip():
+        yield {"type": "text_chunk", "text": pending_text.strip()}
+    yield {
+        "type": "complete",
+        "content": content,
+        "metadata": {
+            **metadata,
+            "assistant_turn_id": assistant_turn_id or None,
+            "live_agent": False,
+        },
+    }
+
+
+def _governed_execution_events(user_message: ChatMessage, payload):
+    result = payload.execution_result
+    content = result.result_summary or ("Governed action failed." if result.error else "Governed action completed.")
+    if result.error:
+        content = f"{content} {result.error}".strip()
+    yield {"type": "text_chunk", "text": content}
+    yield {
+        "type": "complete",
+        "content": content,
+        "metadata": {
+            "generation_status": "completed",
+            "agent_mode": False,
+            "live_agent": False,
+            "review_required": False,
+            "executes": result.error is None,
+            "direct_execution": payload.model_dump(mode="json"),
+        },
+    }
+
+
+def _governed_rejection_events(user_message: ChatMessage, request: AssistantToolRequest):
+    del user_message
+    content = f"Cancelled. I did not execute {request.action_id}."
+    yield {"type": "text_chunk", "text": content}
+    yield {
+        "type": "complete",
+        "content": content,
+        "metadata": {
+            "generation_status": "completed",
+            "agent_mode": False,
+            "live_agent": False,
+            "review_required": False,
+            "executes": False,
+            "tool_request": request.model_dump(mode="json"),
+            "direct_execution": {"status": "rejected"},
+        },
+    }
 
 
 def _pending_kasa_proposal(

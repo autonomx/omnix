@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from .contracts import (
+    AgentApproval,
     AgentArtifact,
     AgentEvent,
     AgentRunCommand,
@@ -132,6 +133,13 @@ def command_agent_run(run_id: str, request: AgentCommandRequest) -> AgentRunSnap
 @router.get("/{run_id}/events", response_model=list[AgentEvent])
 def list_agent_events(run_id: str, after_sequence: int = 0) -> list[AgentEvent]:
     return _service().events(run_id, after_sequence=max(0, after_sequence))
+
+
+@router.get("/{run_id}/approvals", response_model=list[AgentApproval])
+def list_agent_approvals(run_id: str, state: str | None = None) -> list[AgentApproval]:
+    if _service().get(run_id) is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    return _service().approvals(run_id, state=state)
 
 
 @router.get("/{run_id}/artifacts", response_model=list[AgentArtifact])

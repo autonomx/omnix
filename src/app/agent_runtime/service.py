@@ -52,8 +52,6 @@ class AgentRunService:
         initial_parent = self.get(parent_run_id)
         if initial_parent is None:
             raise KeyError(parent_run_id)
-        preliminary = derive_child_spec(initial_parent, request)
-
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             locked = work.connection.execute(
@@ -243,6 +241,13 @@ class AgentRunService:
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             rows = repository.list_events(run_id, after_sequence=after_sequence)
+            work.rollback()
+            return rows
+
+    def approvals(self, run_id: str, *, state: str | None = None):
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            rows = repository.list_approvals(run_id, state=state)
             work.rollback()
             return rows
 

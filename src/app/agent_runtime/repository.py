@@ -328,6 +328,52 @@ class PostgresAgentRunRepository:
             (self.context.workspace_id, run_id),
         )
 
+    def claim_commands(self, run_id: str, *, limit: int = 20) -> list[AgentRunCommand]:
+        """Compatibility batch claim used by repository consumers.
+
+        The orchestration service uses claim_command()/complete_command() so a
+        command is not marked consumed until its side effect succeeds. This
+        legacy batch API preserves the Phase-3 repository contract for callers
+        that explicitly want dequeue-and-consume semantics.
+        """
+        rows = self.connection.execute(
+            """
+            WITH claimed AS (
+                SELECT command_id
+                  FROM omnix_agent_run_commands
+                 WHERE workspace_id = %s AND run_id = %s AND status = 'pending'
+                 ORDER BY created_at, command_id
+                 FOR UPDATE SKIP LOCKED
+                 LIMIT %s
+            )
+            UPDATE omnix_agent_run_commands AS command
+               SET status = 'consumed', consumed_at = CURRENT_TIMESTAMP
+              FROM claimed
+             WHERE command.workspace_id = %s AND command.run_id = %s
+               AND command.command_id = claimed.command_id
+            RETURNING command.command_id, command.command_type, command.payload,
+                      command.idempotency_key, command.created_at
+            """,
+            (
+                self.context.workspace_id,
+                run_id,
+                max(1, min(limit, 100)),
+                self.context.workspace_id,
+                run_id,
+            ),
+        ).fetchall()
+        return [
+            AgentRunCommand(
+                command_id=str(row[0]),
+                run_id=run_id,
+                command_type=str(row[1]),
+                payload=dict(row[2] or {}),
+                idempotency_key=str(row[3]),
+                created_at=row[4],
+            )
+            for row in rows
+        ]
+
     def list_pending_commands(self, run_id: str, *, limit: int = 100) -> list[AgentRunCommand]:
         rows = self.connection.execute(
             """
@@ -392,6 +438,48 @@ class PostgresAgentRunRepository:
             state=str(row[1]), request_payload=dict(row[2] or {}),
             resolution_payload=dict(row[3] or {}), created_at=row[4], resolved_at=row[5],
         )
+
+    def list_approvals(
+        self,
+        run_id: str,
+        *,
+        state: str | None = None,
+    ) -> list[AgentApproval]:
+        if state is None:
+            rows = self.connection.execute(
+                """
+                SELECT approval_id, capability_id, state, request_payload,
+                       resolution_payload, created_at, resolved_at
+                  FROM omnix_agent_approvals
+                 WHERE workspace_id = %s AND run_id = %s
+                 ORDER BY created_at, approval_id
+                """,
+                (self.context.workspace_id, run_id),
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                """
+                SELECT approval_id, capability_id, state, request_payload,
+                       resolution_payload, created_at, resolved_at
+                  FROM omnix_agent_approvals
+                 WHERE workspace_id = %s AND run_id = %s AND state = %s
+                 ORDER BY created_at, approval_id
+                """,
+                (self.context.workspace_id, run_id, state),
+            ).fetchall()
+        return [
+            AgentApproval(
+                approval_id=str(row[0]),
+                run_id=run_id,
+                capability_id=str(row[1]),
+                state=str(row[2]),
+                request_payload=dict(row[3] or {}),
+                resolution_payload=dict(row[4] or {}),
+                created_at=row[5],
+                resolved_at=row[6],
+            )
+            for row in rows
+        ]
 
     def resolve_approval(
         self, run_id: str, approval_id: str, *, approved: bool,

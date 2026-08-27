@@ -30,6 +30,40 @@ export type SendChatMessageResponse = components['schemas']['SendChatMessageResp
 export type SettingsPayload = components['schemas']['SettingsPayload'];
 export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse'];
 
+export interface AgentRunSnapshot {
+  run_id: string;
+  status: string;
+  desired_state: string;
+  revision: number;
+  last_error?: string | null;
+  spec: {
+    profile: string;
+    task: string;
+    objective?: string;
+  };
+}
+
+export interface AgentApproval {
+  approval_id: string;
+  run_id: string;
+  capability_id: string;
+  state: string;
+  request_payload: Record<string, unknown>;
+  resolution_payload: Record<string, unknown>;
+  created_at: string;
+  resolved_at?: string | null;
+}
+
+export interface WorkflowRunSnapshot {
+  run_id: string;
+  workflow_id: string;
+  workflow_version: number;
+  status: string;
+  current_step_id?: string | null;
+  input_payload: Record<string, unknown>;
+  revision: number;
+}
+
 export interface DeleteChatSessionResponse {
   ok: boolean;
   session_id: string;
@@ -313,6 +347,41 @@ export class OmnixApiClient {
 
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {
     return this.post<SendChatMessageRequest, SendChatMessageResponse>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, request);
+  }
+
+  async getAgentRun(runId: string): Promise<AgentRunSnapshot> {
+    return this.get<AgentRunSnapshot>(`/api/agent-runs/${encodeURIComponent(runId)}`);
+  }
+
+  async commandAgentRun(
+    runId: string,
+    commandType: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
+    payload: Record<string, unknown> = {},
+  ): Promise<AgentRunSnapshot> {
+    return this.post(
+      `/api/agent-runs/${encodeURIComponent(runId)}/commands`,
+      { command_type: commandType, payload },
+    );
+  }
+
+  async listAgentApprovals(runId: string, state?: string): Promise<AgentApproval[]> {
+    const query = state ? `?state=${encodeURIComponent(state)}` : '';
+    return this.get<AgentApproval[]>(`/api/agent-runs/${encodeURIComponent(runId)}/approvals${query}`);
+  }
+
+  async getWorkflowRun(runId: string): Promise<WorkflowRunSnapshot> {
+    return this.get<WorkflowRunSnapshot>(`/api/workflow-runs/${encodeURIComponent(runId)}`);
+  }
+
+  async commandWorkflowRun(
+    runId: string,
+    command: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
+    stepId?: string,
+  ): Promise<WorkflowRunSnapshot> {
+    return this.post(
+      `/api/workflow-runs/${encodeURIComponent(runId)}/commands`,
+      { command, ...(stepId ? { step_id: stepId } : {}) },
+    );
   }
 
   async updateDeepResearchPlan(jobId: string, request: DeepResearchPlanUpdateRequest): Promise<JobRecord> {
