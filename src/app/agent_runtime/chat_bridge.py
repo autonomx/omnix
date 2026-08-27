@@ -299,7 +299,14 @@ def _agent_result(
                 description="Complete the user's requested task and report verifiable evidence.",
             )
         ],
-        expected_artifacts=["diff"] if profile.requires_workspace else [],
+expected_artifacts=(
+            ["diff"]
+            if any(
+                capability in {"workspace.edit", "workspace.write"}
+                for capability in local
+            )
+            else []
+        ),
     )
     try:
         snapshot = service.start(spec)

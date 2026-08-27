@@ -109,7 +109,14 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
             SuccessCriterion(id=f"criterion-{index + 1}", description=value)
             for index, value in enumerate(request.success_criteria)
         ],
-        expected_artifacts=["diff"] if profile.requires_workspace else [],
+expected_artifacts=(
+            ["diff"]
+            if any(
+                capability in {"workspace.edit", "workspace.write"}
+                for capability in issued_capabilities
+            )
+            else []
+        ),
     )
     try:
         return _service().start(spec)
