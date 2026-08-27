@@ -12,6 +12,7 @@ from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
+from .acceptance import evaluate_acceptance
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
@@ -140,13 +141,27 @@ class AgentRunService:
                         worker_id=self.worker_id,
                     )
                 elif event.event_type == "run.completed":
+                    repository.append_event(
+                        AgentEvent(run_id=event.run_id, event_type="acceptance.started", payload={"source": "omnix"})
+                    )
                     self._capture_diff(repository, current.spec)
+                    events = repository.list_events(event.run_id, after_sequence=0, limit=5000)
+                    artifacts = repository.list_artifacts(event.run_id)
+                    result = evaluate_acceptance(current.spec, events=events, artifacts=artifacts)
+                    repository.append_event(
+                        AgentEvent(
+                            run_id=event.run_id,
+                            event_type="acceptance.completed",
+                            payload=result.model_dump(mode="json"),
+                        )
+                    )
                     current = repository.get_run(event.run_id) or current
                     repository.update_state(
                         event.run_id,
                         expected_revision=current.revision,
-                        status="completed",
+                        status="completed" if result.passed else "failed",
                         worker_id=self.worker_id,
+                        last_error=None if result.passed else "acceptance_failed:" + ",".join(result.failures),
                     )
                 elif event.event_type == "run.failed":
                     repository.update_state(
@@ -176,6 +191,65 @@ class AgentRunService:
                 metadata={"preview": diff[:200_000], "truncated": len(diff) > 200_000},
             )
         )
+
+    def recover_orphaned_runs(self) -> list[str]:
+        """Re-acquire expired/unowned non-terminal runs and resume from workspace truth."""
+        recovered: list[str] = []
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """
+                SELECT run_id
+                  FROM omnix_agent_runs AS run
+                  LEFT JOIN omnix_agent_worker_leases AS lease
+                    ON lease.workspace_id = run.workspace_id AND lease.run_id = run.run_id
+                 WHERE run.workspace_id = %s
+                   AND run.status IN ('queued','starting','running','resume_requested')
+                   AND run.desired_state = 'running'
+                   AND (lease.run_id IS NULL OR lease.lease_expires_at <= CURRENT_TIMESTAMP)
+                 ORDER BY run.created_at
+                """,
+                (self.context.workspace_id,),
+            ).fetchall()
+            work.rollback()
+        for row in rows:
+            run_id = str(row[0])
+            snapshot = self.get(run_id)
+            if snapshot is None or self.runtime.get_status(run_id) is not None:
+                continue
+            try:
+                with unit_of_work(self.database) as work:
+                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                    repository.acquire_lease(run_id, worker_id=self.worker_id, ttl_seconds=60)
+                    current = repository.get_run(run_id)
+                    if current is not None:
+                        repository.update_state(
+                            run_id,
+                            expected_revision=current.revision,
+                            status="starting",
+                            worker_id=self.worker_id,
+                        )
+                    work.commit()
+                self.runtime.start(snapshot.spec)
+                self.runtime.command(
+                    AgentRunCommand(
+                        run_id=run_id,
+                        command_type="steer",
+                        payload={"message": "This run was recovered after a worker restart. Reinspect the current workspace before continuing."},
+                    )
+                )
+                recovered.append(run_id)
+            except Exception:
+                continue
+        return recovered
+
+    def heartbeat(self, run_id: str, *, ttl_seconds: int = 60) -> None:
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            repository.acquire_lease(run_id, worker_id=self.worker_id, ttl_seconds=ttl_seconds)
+            repository.append_event(
+                AgentEvent(run_id=run_id, event_type="worker.heartbeat", payload={"worker_id": self.worker_id})
+            )
+            work.commit()
 
     @staticmethod
     def _prepare_workspace(spec: AgentRunSpec) -> AgentRunSpec:
