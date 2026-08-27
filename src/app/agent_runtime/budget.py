@@ -49,11 +49,11 @@ class AgentBudgetManager:
             if snapshot is None:
                 raise KeyError(run_id)
             usage = repository.get_usage(run_id)
+            maximum = self._effective_limits(repository, snapshot)["max_tokens"]
             work.rollback()
-        maximum = snapshot.spec.limits.max_tokens
         if maximum is None:
             return None
-        return max(0, maximum - int(usage["output_tokens"]))
+        return max(0, int(maximum) - int(usage["output_tokens"]))
 
     def token_metering_required(self, run_id: str) -> bool:
         with unit_of_work(self.database) as work:
@@ -72,7 +72,9 @@ class AgentBudgetManager:
     ) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
+            self._lock_run(repository, run_id)
             snapshot = self._require_runnable(repository, run_id)
+            effective = self._effective_limits(repository, snapshot)
             if self._wall_time_exceeded(snapshot):
                 reason = "budget_max_wall_time_exceeded"
                 self._fail_locked(repository, snapshot, reason)
@@ -89,8 +91,8 @@ class AgentBudgetManager:
                 raise AgentBudgetError(reason)
             current = repository.get_usage(run_id)
             if (
-                snapshot.spec.limits.max_tokens is not None
-                and int(current["output_tokens"]) >= snapshot.spec.limits.max_tokens
+                effective["max_tokens"] is not None
+                and int(current["output_tokens"]) >= int(effective["max_tokens"])
             ):
                 reason = "budget_output_tokens_exhausted"
                 self._fail_locked(repository, snapshot, reason)
@@ -100,7 +102,7 @@ class AgentBudgetManager:
                 run_id,
                 steps=1,
                 model_calls=1,
-                max_steps=snapshot.spec.limits.max_steps,
+                max_steps=int(effective["max_steps"]),
             )
             if usage is None:
                 reason = "budget_max_steps_exceeded"
@@ -119,7 +121,9 @@ class AgentBudgetManager:
         del tool_name
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
+            self._lock_run(repository, run_id)
             snapshot = self._require_runnable(repository, run_id)
+            effective = self._effective_limits(repository, snapshot)
             if self._wall_time_exceeded(snapshot):
                 reason = "budget_max_wall_time_exceeded"
                 self._fail_locked(repository, snapshot, reason)
@@ -128,7 +132,7 @@ class AgentBudgetManager:
             usage = repository.consume_usage(
                 run_id,
                 tool_calls=1,
-                max_tool_calls=snapshot.spec.limits.max_tool_calls,
+                max_tool_calls=int(effective["max_tool_calls"]),
             )
             if usage is None:
                 reason = "budget_max_tool_calls_exceeded"
@@ -145,13 +149,19 @@ class AgentBudgetManager:
             return self.usage(run_id)
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
+            self._lock_run(repository, run_id)
             snapshot = repository.get_run(run_id)
             if snapshot is None:
                 raise KeyError(run_id)
+            effective = self._effective_limits(repository, snapshot)
             usage = repository.consume_usage(
                 run_id,
                 output_tokens=tokens,
-                max_output_tokens=snapshot.spec.limits.max_tokens,
+                max_output_tokens=(
+                    int(effective["max_tokens"])
+                    if effective["max_tokens"] is not None
+                    else None
+                ),
             )
             if usage is None:
                 reason = "budget_max_output_tokens_exceeded"
@@ -185,6 +195,55 @@ class AgentBudgetManager:
             if snapshot is not None:
                 self._fail_locked(repository, snapshot, reason)
             work.commit()
+
+    @staticmethod
+    def _lock_run(
+        repository: PostgresAgentRunRepository,
+        run_id: str,
+    ) -> None:
+        row = repository.connection.execute(
+            """
+            SELECT run_id
+              FROM omnix_agent_runs
+             WHERE workspace_id = %s AND run_id = %s
+             FOR UPDATE
+            """,
+            (repository.context.workspace_id, run_id),
+        ).fetchone()
+        if row is None:
+            raise KeyError(run_id)
+
+    @staticmethod
+    def _effective_limits(
+        repository: PostgresAgentRunRepository,
+        snapshot: AgentRunSnapshot,
+    ) -> dict[str, int | float | None]:
+        children = repository.list_children(snapshot.run_id)
+        limits = snapshot.spec.limits
+        reserved_steps = sum(child.spec.limits.max_steps for child in children)
+        reserved_tools = sum(child.spec.limits.max_tool_calls for child in children)
+        reserved_tokens = sum(
+            child.spec.limits.max_tokens or 0
+            for child in children
+        )
+        reserved_cost = sum(
+            child.spec.limits.max_cost or 0.0
+            for child in children
+        )
+        return {
+            "max_steps": max(0, limits.max_steps - reserved_steps),
+            "max_tool_calls": max(0, limits.max_tool_calls - reserved_tools),
+            "max_tokens": (
+                max(0, limits.max_tokens - reserved_tokens)
+                if limits.max_tokens is not None
+                else None
+            ),
+            "max_cost": (
+                max(0.0, limits.max_cost - reserved_cost)
+                if limits.max_cost is not None
+                else None
+            ),
+        }
 
     @staticmethod
     def _require_runnable(
