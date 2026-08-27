@@ -211,6 +211,7 @@ def test_terminal_workflow_ignores_late_pause_resume_and_cancel() -> None:
 def test_workflow_schedule_persists_fire_pins_version_and_dispatches_once() -> None:
     database = _database()
     runtime = PostgresWorkflowRuntime(database)
+    runtime._supervisor_started = True
     suffix = uuid.uuid4().hex[:10]
     try:
         first = WorkflowDefinition(
@@ -280,6 +281,7 @@ def test_workflow_schedule_persists_fire_pins_version_and_dispatches_once() -> N
 def test_workflow_schedule_rejects_unsafe_timing_and_reserved_idempotency() -> None:
     database = _database()
     runtime = PostgresWorkflowRuntime(database)
+    runtime._supervisor_started = True
     suffix = uuid.uuid4().hex[:10]
     try:
         definition = WorkflowDefinition(
@@ -317,6 +319,88 @@ def test_workflow_schedule_rejects_unsafe_timing_and_reserved_idempotency() -> N
                 {"idempotency_key": "caller-controlled"},
                 run_at=datetime.now(timezone.utc),
             )
+    finally:
+        runtime._supervisor_stop.set()
+        database.close()
+
+
+
+def test_recurring_workflow_schedule_collapses_missed_intervals() -> None:
+    database = _database()
+    runtime = PostgresWorkflowRuntime(database)
+    runtime._supervisor_started = True
+    suffix = uuid.uuid4().hex[:10]
+    try:
+        definition = WorkflowDefinition(
+            id=f"recurring-{suffix}",
+            version=1,
+            name="Recurring",
+            steps=[],
+        )
+        runtime.register(definition)
+        schedule_id = runtime.schedule(
+            definition.id,
+            {"source": "recurring-test"},
+            run_at=datetime.now(timezone.utc) - timedelta(hours=2),
+            interval_seconds=60,
+            schedule_id=f"recurring-schedule-{suffix}",
+        )
+
+        runtime._supervise_once()
+        first_history = runtime.list_runs(workflow_id=definition.id)
+        runtime._supervise_once()
+        second_history = runtime.list_runs(workflow_id=definition.id)
+
+        assert len(first_history) == 1
+        assert len(second_history) == 1
+        schedule = next(
+            row for row in runtime.list_schedules()
+            if row.schedule_id == schedule_id
+        )
+        assert schedule.enabled is True
+        assert schedule.next_run_at is not None
+        assert schedule.next_run_at > datetime.now(timezone.utc)
+    finally:
+        runtime._supervisor_stop.set()
+        database.close()
+
+
+def test_cancel_schedule_suppresses_pending_fire() -> None:
+    database = _database()
+    runtime = PostgresWorkflowRuntime(database)
+    runtime._supervisor_started = True
+    suffix = uuid.uuid4().hex[:10]
+    try:
+        definition = WorkflowDefinition(
+            id=f"cancel-schedule-{suffix}",
+            version=1,
+            name="Cancel schedule",
+            steps=[],
+        )
+        runtime.register(definition)
+        schedule_id = runtime.schedule(
+            definition.id,
+            {},
+            run_at=datetime.now(timezone.utc) - timedelta(seconds=5),
+            schedule_id=f"cancel-schedule-id-{suffix}",
+        )
+        runtime._enqueue_due_schedule_fires()
+        runtime.cancel_schedule(schedule_id)
+        runtime._dispatch_pending_schedule_fires()
+
+        assert runtime.list_runs(workflow_id=definition.id) == []
+        with unit_of_work(database) as work:
+            state = work.connection.execute(
+                """
+                SELECT status
+                  FROM omnix_workflow_schedule_fires
+                 WHERE workspace_id = %s AND schedule_id = %s
+                """,
+                (runtime.context.workspace_id, schedule_id),
+            ).fetchone()
+            work.rollback()
+        assert state is not None
+        assert str(state[0]) == "cancelled"
     finally:
         runtime._supervisor_stop.set()
         database.close()
