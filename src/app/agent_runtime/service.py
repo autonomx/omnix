@@ -13,6 +13,7 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .acceptance import evaluate_acceptance
+from .budget import AgentBudgetError, AgentBudgetManager
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
@@ -30,7 +31,11 @@ class AgentRunService:
         self.database = database or default_database()
         self.context = bootstrap_local_tenant(self.database)
         self.worker_id = worker_id or f"agent-worker:{os.getpid()}"
-        self.runtime = PiAgentRuntime(pi_path=pi_path or os.environ.get("OMNIX_PI_PATH", "pi"), event_sink=self._persist_runtime_event)
+        self.runtime = PiAgentRuntime(
+            pi_path=pi_path or os.environ.get("OMNIX_PI_PATH", "pi"),
+            event_sink=self._persist_runtime_event,
+        )
+        self.budgets = AgentBudgetManager(self.database, context=self.context)
         self._lock = threading.RLock()
         self._supervisor_lock = threading.Lock()
         self._supervisor_started = False
@@ -494,8 +499,14 @@ class AgentRunService:
             ).fetchall()
             work.rollback()
         for row in rows:
+            run_id = str(row[0])
             try:
-                self.heartbeat(str(row[0]), ttl_seconds=90)
+                self.budgets.enforce_wall_time(run_id)
+            except AgentBudgetError:
+                self.runtime.close_run(run_id)
+                continue
+            try:
+                self.heartbeat(run_id, ttl_seconds=90)
             except Exception:
                 continue
 

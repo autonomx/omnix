@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.providers.base import ChatMessage, ChatResponse
 from app.shared import get_provider
 
+from .budget import AgentBudgetError, default_agent_budget_manager
 from .service import default_agent_run_service
 
 router = APIRouter(prefix="/api/agent-model/v1", tags=["agent-model"])
@@ -125,6 +126,34 @@ def _kwargs(request: AgentChatCompletionRequest, default_effort: str | None) -> 
     return values
 
 
+def _output_tokens(response: ChatResponse) -> int | None:
+    usage = response.usage if isinstance(response.usage, dict) else {}
+    for key in ("completion_tokens", "output_tokens"):
+        value = usage.get(key)
+        if isinstance(value, bool):
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            return parsed
+    return None
+
+
+def _bounded_max_tokens(
+    requested: int | None,
+    remaining: int | None,
+) -> int | None:
+    if remaining is None:
+        return requested
+    if remaining <= 0:
+        return 0
+    if requested is None:
+        return remaining
+    return max(1, min(int(requested), remaining))
+
+
 def _choice(response: ChatResponse, *, delta: bool) -> dict[str, Any]:
     body: dict[str, Any] = {}
     if response.content:
@@ -176,11 +205,40 @@ async def agent_chat_completion(
         x_omnix_agent_run_id,
         request.model,
     )
+    budget = default_agent_budget_manager()
+    try:
+        await asyncio.to_thread(
+            budget.authorize_model_call,
+            x_omnix_agent_run_id,
+            provider_id=provider_id,
+        )
+        remaining_tokens = await asyncio.to_thread(
+            budget.remaining_output_tokens,
+            x_omnix_agent_run_id,
+        )
+    except AgentBudgetError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
     provider = await asyncio.to_thread(get_provider, provider_id)
     if provider is None:
         raise HTTPException(status_code=503, detail=f"agent_provider_unavailable:{provider_id}")
     messages = _messages(request.messages)
     kwargs = _kwargs(request, default_effort)
+    bounded_tokens = _bounded_max_tokens(
+        kwargs.get("max_tokens"),
+        remaining_tokens,
+    )
+    if bounded_tokens == 0:
+        await asyncio.to_thread(
+            budget.fail,
+            x_omnix_agent_run_id,
+            "budget_output_tokens_exhausted",
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="budget_output_tokens_exhausted",
+        )
+    if bounded_tokens is not None:
+        kwargs["max_tokens"] = bounded_tokens
     completion_id = f"chatcmpl-omnix-{x_omnix_agent_run_id[:16]}"
     created = int(time.time())
 
@@ -194,6 +252,30 @@ async def agent_chat_completion(
         )
         if not isinstance(response, ChatResponse):
             raise HTTPException(status_code=502, detail="agent_provider_invalid_response")
+        output_tokens = _output_tokens(response)
+        if output_tokens is None:
+            if await asyncio.to_thread(
+                budget.token_metering_required,
+                x_omnix_agent_run_id,
+            ):
+                await asyncio.to_thread(
+                    budget.fail,
+                    x_omnix_agent_run_id,
+                    "budget_output_tokens_unmeterable",
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail="budget_output_tokens_unmeterable",
+                )
+        elif output_tokens:
+            try:
+                await asyncio.to_thread(
+                    budget.record_output_tokens,
+                    x_omnix_agent_run_id,
+                    output_tokens,
+                )
+            except AgentBudgetError as exc:
+                raise HTTPException(status_code=429, detail=str(exc)) from exc
         return {
             "id": completion_id,
             "object": "chat.completion",
@@ -212,6 +294,7 @@ async def agent_chat_completion(
     )
 
     async def generate():
+        observed_output_tokens: int | None = None
         try:
             while True:
                 response = await asyncio.to_thread(_next_stream_response, iterator)
@@ -219,6 +302,12 @@ async def agent_chat_completion(
                     break
                 if not isinstance(response, ChatResponse):
                     continue
+                current_output_tokens = _output_tokens(response)
+                if current_output_tokens is not None:
+                    observed_output_tokens = max(
+                        observed_output_tokens or 0,
+                        current_output_tokens,
+                    )
                 payload = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -229,6 +318,42 @@ async def agent_chat_completion(
                 if response.usage:
                     payload["usage"] = response.usage
                 yield f"data: {json.dumps(payload, sort_keys=True)}\n\n"
+            if observed_output_tokens is None:
+                if await asyncio.to_thread(
+                    budget.token_metering_required,
+                    x_omnix_agent_run_id,
+                ):
+                    await asyncio.to_thread(
+                        budget.fail,
+                        x_omnix_agent_run_id,
+                        "budget_output_tokens_unmeterable",
+                    )
+                    payload = {
+                        "error": {
+                            "message": "budget_output_tokens_unmeterable",
+                            "type": "agent_budget_error",
+                        }
+                    }
+                    yield f"data: {json.dumps(payload, sort_keys=True)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+            elif observed_output_tokens:
+                try:
+                    await asyncio.to_thread(
+                        budget.record_output_tokens,
+                        x_omnix_agent_run_id,
+                        observed_output_tokens,
+                    )
+                except AgentBudgetError as exc:
+                    payload = {
+                        "error": {
+                            "message": str(exc),
+                            "type": "agent_budget_error",
+                        }
+                    }
+                    yield f"data: {json.dumps(payload, sort_keys=True)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
             yield "data: [DONE]\n\n"
         except Exception as exc:
             payload = {

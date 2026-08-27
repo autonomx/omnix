@@ -21,6 +21,81 @@ class PiRuntimeError(RuntimeError):
     pass
 
 
+_MINIMAL_ENVIRONMENT_KEYS = (
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "HOME",
+    "USERPROFILE",
+    "LANG",
+    "LC_ALL",
+)
+
+
+def build_agent_environment(
+    spec: AgentRunSpec,
+    cwd: Path,
+    *,
+    parent_environment: dict[str, str] | None = None,
+) -> dict[str, str]:
+    source = parent_environment if parent_environment is not None else dict(os.environ)
+    if spec.execution.environment_policy != "minimal":
+        raise PiRuntimeError(
+            f"unsupported agent environment policy: {spec.execution.environment_policy}"
+        )
+    env = {
+        key: str(source[key])
+        for key in _MINIMAL_ENVIRONMENT_KEYS
+        if source.get(key)
+    }
+    for key in spec.execution.allowed_environment_keys:
+        normalized = str(key or "").strip()
+        if (
+            normalized
+            and not normalized.startswith("OMNIX_AGENT_")
+            and normalized in source
+        ):
+            env[normalized] = str(source[normalized])
+    workspace = spec.workspace
+    env.update(
+        {
+            "OMNIX_AGENT_RUN_ID": spec.run_id,
+            "OMNIX_AGENT_WORKSPACE": str(cwd),
+            "OMNIX_AGENT_COMMAND_POLICY": spec.execution.command_policy,
+            "OMNIX_AGENT_NETWORK_POLICY": spec.execution.network_policy,
+            "OMNIX_AGENT_PROVIDER_ID": spec.model.provider_id,
+            "OMNIX_AGENT_MODEL_ID": spec.model.model_id,
+            "OMNIX_AGENT_MODEL_KEY": (
+                f"{spec.model.provider_id}::{spec.model.model_id}"
+            ),
+            "OMNIX_AGENT_MODEL_GATEWAY_URL": source.get(
+                "OMNIX_AGENT_MODEL_GATEWAY_URL",
+                "http://127.0.0.1:8000/api/agent-model/v1",
+            ),
+            "OMNIX_AGENT_BROKER_URL": source.get(
+                "OMNIX_AGENT_BROKER_URL",
+                "http://127.0.0.1:8000/api/agent-runs",
+            ),
+            "OMNIX_AGENT_EXTERNAL_CAPABILITIES": json.dumps(
+                spec.external_capabilities
+            ),
+            "OMNIX_AGENT_REASONING_EFFORT": spec.model.reasoning_effort or "",
+            "OMNIX_AGENT_ALLOWED_PATHS": json.dumps(
+                list(workspace.allowed_paths if workspace else [])
+            ),
+            "OMNIX_AGENT_FORBIDDEN_PATHS": json.dumps(
+                list(workspace.forbidden_paths if workspace else [])
+            ),
+        }
+    )
+    return env
+
+
 def pi_guard_extension_path() -> Path:
     return Path(__file__).with_name("pi_guard_extension.ts").resolve()
 
@@ -131,26 +206,7 @@ class PiRpcSession:
         self._responses: queue.Queue[dict[str, Any]] = queue.Queue()
         self._closed = False
         cwd = Path(spec.workspace.worktree or spec.workspace.root).expanduser().resolve()
-        env = {
-            **os.environ,
-            "OMNIX_AGENT_RUN_ID": spec.run_id,
-            "OMNIX_AGENT_WORKSPACE": str(cwd),
-            "OMNIX_AGENT_COMMAND_POLICY": spec.execution.command_policy,
-            "OMNIX_AGENT_NETWORK_POLICY": spec.execution.network_policy,
-            "OMNIX_AGENT_PROVIDER_ID": spec.model.provider_id,
-            "OMNIX_AGENT_MODEL_ID": spec.model.model_id,
-            "OMNIX_AGENT_MODEL_KEY": f"{spec.model.provider_id}::{spec.model.model_id}",
-            "OMNIX_AGENT_MODEL_GATEWAY_URL": os.environ.get(
-                "OMNIX_AGENT_MODEL_GATEWAY_URL",
-                "http://127.0.0.1:8000/api/agent-model/v1",
-            ),
-            "OMNIX_AGENT_BROKER_URL": os.environ.get(
-                "OMNIX_AGENT_BROKER_URL",
-                "http://127.0.0.1:8000/api/agent-runs",
-            ),
-            "OMNIX_AGENT_EXTERNAL_CAPABILITIES": json.dumps(spec.external_capabilities),
-            "OMNIX_AGENT_REASONING_EFFORT": spec.model.reasoning_effort or "",
-        }
+        env = build_agent_environment(spec, cwd)
         argv = pi_rpc_argv(spec, pi_path=pi_path)
         if process_factory is not None:
             self.process = process_factory(

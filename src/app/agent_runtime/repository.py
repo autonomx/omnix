@@ -680,6 +680,105 @@ class PostgresAgentRunRepository:
             ),
         )
 
+    def get_usage(self, run_id: str) -> dict[str, Any]:
+        self.connection.execute(
+            """
+            INSERT INTO omnix_agent_run_usage (workspace_id, run_id)
+            VALUES (%s, %s)
+            ON CONFLICT (workspace_id, run_id) DO NOTHING
+            """,
+            (self.context.workspace_id, run_id),
+        )
+        row = self.connection.execute(
+            """
+            SELECT steps, tool_calls, model_calls, output_tokens, cost
+              FROM omnix_agent_run_usage
+             WHERE workspace_id = %s AND run_id = %s
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+        if row is None:
+            raise KeyError(run_id)
+        return {
+            "steps": int(row[0]),
+            "tool_calls": int(row[1]),
+            "model_calls": int(row[2]),
+            "output_tokens": int(row[3]),
+            "cost": float(row[4]),
+        }
+
+    def consume_usage(
+        self,
+        run_id: str,
+        *,
+        steps: int = 0,
+        tool_calls: int = 0,
+        model_calls: int = 0,
+        output_tokens: int = 0,
+        cost: float = 0.0,
+        max_steps: int | None = None,
+        max_tool_calls: int | None = None,
+        max_output_tokens: int | None = None,
+        max_cost: float | None = None,
+    ) -> dict[str, Any] | None:
+        if min(steps, tool_calls, model_calls, output_tokens) < 0 or cost < 0:
+            raise ValueError("usage deltas must be non-negative")
+        self.connection.execute(
+            """
+            INSERT INTO omnix_agent_run_usage (workspace_id, run_id)
+            VALUES (%s, %s)
+            ON CONFLICT (workspace_id, run_id) DO NOTHING
+            """,
+            (self.context.workspace_id, run_id),
+        )
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_run_usage
+               SET steps = steps + %s,
+                   tool_calls = tool_calls + %s,
+                   model_calls = model_calls + %s,
+                   output_tokens = output_tokens + %s,
+                   cost = cost + %s,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s
+               AND (%s IS NULL OR steps + %s <= %s)
+               AND (%s IS NULL OR tool_calls + %s <= %s)
+               AND (%s IS NULL OR output_tokens + %s <= %s)
+               AND (%s IS NULL OR cost + %s <= %s)
+            RETURNING steps, tool_calls, model_calls, output_tokens, cost
+            """,
+            (
+                steps,
+                tool_calls,
+                model_calls,
+                output_tokens,
+                cost,
+                self.context.workspace_id,
+                run_id,
+                max_steps,
+                steps,
+                max_steps,
+                max_tool_calls,
+                tool_calls,
+                max_tool_calls,
+                max_output_tokens,
+                output_tokens,
+                max_output_tokens,
+                max_cost,
+                cost,
+                max_cost,
+            ),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "steps": int(row[0]),
+            "tool_calls": int(row[1]),
+            "model_calls": int(row[2]),
+            "output_tokens": int(row[3]),
+            "cost": float(row[4]),
+        }
+
     def acquire_lease(self, run_id: str, *, worker_id: str, ttl_seconds: int = 30) -> WorkerLease:
         token = uuid.uuid4().hex
         expires = datetime.now(timezone.utc) + timedelta(seconds=max(5, ttl_seconds))

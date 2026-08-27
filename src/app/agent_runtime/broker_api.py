@@ -14,11 +14,21 @@ from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payl
 from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
 from app.persistence.unit_of_work import unit_of_work
 
+from .budget import AgentBudgetError, default_agent_budget_manager
 from .contracts import AgentApproval, AgentEvent
 from .repository import PostgresAgentRunRepository
 from .service import default_agent_run_service
 
 router = APIRouter(prefix="/api/agent-runs", tags=["agent-runtime"])
+
+
+class BrokerToolBudgetRequest(BaseModel):
+    tool_name: str
+
+
+class BrokerToolBudgetResponse(BaseModel):
+    allowed: bool = True
+    usage: dict[str, Any] = Field(default_factory=dict)
 
 
 class BrokerCapabilityRequest(BaseModel):
@@ -79,6 +89,26 @@ def _stored_response(
         executed=stored.get("state") == "completed" and not stored.get("error"),
         result=result,
     )
+
+
+@router.post(
+    "/{run_id}/budget/tool",
+    response_model=BrokerToolBudgetResponse,
+)
+def authorize_agent_tool_call(
+    run_id: str,
+    request: BrokerToolBudgetRequest,
+) -> BrokerToolBudgetResponse:
+    try:
+        usage = default_agent_budget_manager().authorize_tool_call(
+            run_id,
+            tool_name=request.tool_name,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
+    except AgentBudgetError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    return BrokerToolBudgetResponse(usage=dict(usage))
 
 
 @router.post("/{run_id}/capabilities/{capability_id:path}", response_model=BrokerCapabilityResponse)
