@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-FastAPI Server for Ultra-Low-Latency Voice Conversation
-Replaces Flask for streaming endpoints to achieve sub-500ms latency
+Legacy Omnix FastAPI compatibility server.
 
-Key optimizations:
+The supported shared-web entrypoint is app.gateway.main:app. This module
+remains for local compatibility routes, generated media, and older voice
+endpoints while those surfaces are retired or migrated.
+
+Key optimizations retained here:
 - WebSocket instead of HTTP SSE
 - Binary PCM instead of base64
 - Predictive TTS (start after 25 chars)
