@@ -132,7 +132,7 @@ export const INITIAL_SETTINGS_REGISTRY: SettingDefinition[] = [
     persistenceOwner: 'browser-storage',
     writable: true,
     appliesTo: 'immediately',
-    searchAliases: ['graphite', 'grey', 'green', 'evergreen', 'aurora'],
+    searchAliases: ['graphite', 'grey', 'green', 'evergreen', 'aurora', 'liquid glass', 'glass', 'frosted', 'transparent'],
   },
   {
     key: 'appearance.textScale',
