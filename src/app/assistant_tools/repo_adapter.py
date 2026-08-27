@@ -1,6 +1,11 @@
-"""Repository runtime adapter foundation for assistant tools."""
+"""Governed repository adapter: local preparation is separate from remote publication."""
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
 import uuid
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -19,11 +24,10 @@ class RepositoryPullRequestRecord:
 
 class RepositoryRuntimeAdapter(Protocol):
     def read_repo(self, *, repository: str) -> dict[str, object]: ...
-
     def create_branch(self, *, repository: str, branch: str, base_sha: str) -> dict[str, object]: ...
-
+    def push(self, *, repository: str, worktree: str, branch: str, remote: str = "origin") -> dict[str, object]: ...
+    def inspect_ci(self, *, repository: str, ref: str) -> dict[str, object]: ...
     def create_pr(self, *, repository: str, title: str, body: str, branch: str, base: str) -> RepositoryPullRequestRecord: ...
-
     def merge_pr(self, *, repository: str, number: int, expected_head_sha: str) -> RepositoryPullRequestRecord: ...
 
 
@@ -36,6 +40,12 @@ class FakeRepositoryRuntimeAdapter:
 
     def create_branch(self, *, repository: str, branch: str, base_sha: str) -> dict[str, object]:
         return {"repository": repository, "branch": branch, "base_sha": base_sha, "created": True}
+
+    def push(self, *, repository: str, worktree: str, branch: str, remote: str = "origin") -> dict[str, object]:
+        return {"repository": repository, "worktree": worktree, "branch": branch, "remote": remote, "pushed": True}
+
+    def inspect_ci(self, *, repository: str, ref: str) -> dict[str, object]:
+        return {"repository": repository, "ref": ref, "status": "success", "checks_passed": True}
 
     def create_pr(self, *, repository: str, title: str, body: str, branch: str, base: str) -> RepositoryPullRequestRecord:
         number = max(self.pull_requests.keys(), default=1000) + 1
@@ -56,12 +66,161 @@ class FakeRepositoryRuntimeAdapter:
         return merged
 
 
+class GitHubCliRuntimeAdapter:
+    """Explicitly enabled GitHub CLI publication adapter.
+
+    Authentication remains owned by the installed gh/git clients. Omnix never
+    reads or stores GitHub credentials; it only invokes a gated operation.
+    """
+
+    def __init__(self, *, timeout: float = 30.0) -> None:
+        self.gh = shutil.which("gh")
+        if not self.gh:
+            raise RuntimeError("GitHub CLI is not installed")
+        self.timeout = timeout
+
+    def _gh(self, args: list[str], *, timeout: float | None = None) -> dict[str, object]:
+        completed = subprocess.run(
+            [self.gh, *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout or self.timeout,
+            check=False,
+            shell=False,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(f"gh_failed:{completed.stderr[-1000:]}")
+        text = completed.stdout.strip()
+        return json.loads(text) if text else {}
+
+    def read_repo(self, *, repository: str) -> dict[str, object]:
+        _repository_parts(repository)
+        data = self._gh(["api", f"repos/{repository}"])
+        return {
+            "repository": str(data.get("full_name") or repository),
+            "default_branch": data.get("default_branch"),
+            "visibility": data.get("visibility"),
+        }
+
+    def create_branch(self, *, repository: str, branch: str, base_sha: str) -> dict[str, object]:
+        _repository_parts(repository)
+        data = self._gh(
+            [
+                "api",
+                "--method",
+                "POST",
+                f"repos/{repository}/git/refs",
+                "-f",
+                f"ref=refs/heads/{branch}",
+                "-f",
+                f"sha={base_sha}",
+            ]
+        )
+        return {"repository": repository, "branch": branch, "base_sha": base_sha, "ref": data.get("ref"), "created": True}
+
+    def push(self, *, repository: str, worktree: str, branch: str, remote: str = "origin") -> dict[str, object]:
+        _repository_parts(repository)
+        cwd = Path(worktree).expanduser().resolve()
+        completed = subprocess.run(
+            ["git", "push", remote, f"HEAD:refs/heads/{branch}"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+            check=False,
+            shell=False,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(f"git_push_failed:{completed.stderr[-1000:]}")
+        return {"repository": repository, "branch": branch, "remote": remote, "pushed": True}
+
+    def inspect_ci(self, *, repository: str, ref: str) -> dict[str, object]:
+        _repository_parts(repository)
+        data = self._gh(["api", f"repos/{repository}/commits/{ref}/check-runs"])
+        checks = list(data.get("check_runs") or [])
+        passed = bool(checks) and all(str(row.get("conclusion")) in {"success", "neutral", "skipped"} for row in checks)
+        return {
+            "repository": repository,
+            "ref": ref,
+            "checks_passed": passed,
+            "checks": [
+                {"name": row.get("name"), "status": row.get("status"), "conclusion": row.get("conclusion")}
+                for row in checks
+            ],
+        }
+
+    def create_pr(self, *, repository: str, title: str, body: str, branch: str, base: str) -> RepositoryPullRequestRecord:
+        _repository_parts(repository)
+        data = self._gh(
+            [
+                "api",
+                "--method",
+                "POST",
+                f"repos/{repository}/pulls",
+                "-f",
+                f"title={title}",
+                "-f",
+                f"body={body}",
+                "-f",
+                f"head={branch}",
+                "-f",
+                f"base={base}",
+            ]
+        )
+        head = data.get("head") if isinstance(data.get("head"), dict) else {}
+        return RepositoryPullRequestRecord(
+            number=int(data["number"]),
+            title=str(data.get("title") or title),
+            head_sha=str(head.get("sha") or ""),
+            checks_passed=False,
+            merged=bool(data.get("merged")),
+        )
+
+    def merge_pr(self, *, repository: str, number: int, expected_head_sha: str) -> RepositoryPullRequestRecord:
+        _repository_parts(repository)
+        pr = self._gh(["api", f"repos/{repository}/pulls/{number}"])
+        head = pr.get("head") if isinstance(pr.get("head"), dict) else {}
+        head_sha = str(head.get("sha") or "")
+        if head_sha != expected_head_sha:
+            raise ValueError("head_sha_mismatch")
+        ci = self.inspect_ci(repository=repository, ref=head_sha)
+        if not bool(ci.get("checks_passed")):
+            raise ValueError("checks_not_passed")
+        merged = self._gh(
+            [
+                "api",
+                "--method",
+                "PUT",
+                f"repos/{repository}/pulls/{number}/merge",
+                "-f",
+                f"sha={expected_head_sha}",
+                "-f",
+                "merge_method=merge",
+            ]
+        )
+        if not bool(merged.get("merged")):
+            raise RuntimeError(str(merged.get("message") or "merge_failed"))
+        return RepositoryPullRequestRecord(
+            number=number,
+            title=str(pr.get("title") or ""),
+            head_sha=head_sha,
+            checks_passed=True,
+            merged=True,
+        )
+
+
 _DEFAULT_REPOSITORY_ADAPTER = FakeRepositoryRuntimeAdapter(
     pull_requests={1: RepositoryPullRequestRecord(number=1, title="Prepared change", head_sha="abc123", checks_passed=True)}
 )
 
 
 def get_repository_runtime_adapter() -> RepositoryRuntimeAdapter:
+    if (os.environ.get("OMNIX_GITHUB_REAL_ADAPTER") or "").strip().lower() in {"1", "true", "yes", "on"}:
+        return GitHubCliRuntimeAdapter()
     return _DEFAULT_REPOSITORY_ADAPTER
 
 
@@ -70,74 +229,50 @@ def run_repository_tool_request(request: AssistantToolRequest, adapter: Reposito
     repository = str(request.input.get("repository") or request.input.get("repo") or "")
     try:
         if request.action_id == "github.read_repo":
-            output = runtime.read_repo(repository=repository)
-            return AssistantToolResult(
-                tool_id=request.tool_id,
-                action_id=request.action_id,
-                session_id=request.session_id,
-                risk_level="low",
-                state_changed=False,
-                result_summary=f"Read repository {repository or 'metadata'}.",
-                output=output,
-            )
+            return _result(request, "low", False, "Read repository.", runtime.read_repo(repository=repository))
         if request.action_id == "github.create_branch":
-            output = runtime.create_branch(
-                repository=repository,
-                branch=str(request.input.get("branch") or ""),
-                base_sha=str(request.input.get("base_sha") or ""),
-            )
-            return AssistantToolResult(
-                tool_id=request.tool_id,
-                action_id=request.action_id,
-                session_id=request.session_id,
-                risk_level="medium",
-                state_changed=True,
-                result_summary=f"Created repository branch {output.get('branch')}.",
-                output=output,
-            )
+            output = runtime.create_branch(repository=repository, branch=str(request.input.get("branch") or ""), base_sha=str(request.input.get("base_sha") or ""))
+            return _result(request, "medium", True, f"Created repository branch {output.get('branch')}.", output)
+        if request.action_id == "github.push":
+            output = runtime.push(repository=repository, worktree=str(request.input.get("worktree") or ""), branch=str(request.input.get("branch") or ""), remote=str(request.input.get("remote") or "origin"))
+            return _result(request, "medium", True, f"Pushed branch {output.get('branch')}.", output)
+        if request.action_id == "github.inspect_ci":
+            output = runtime.inspect_ci(repository=repository, ref=str(request.input.get("ref") or request.input.get("sha") or ""))
+            return _result(request, "low", False, "Inspected repository CI.", output)
         if request.action_id == "github.create_pr":
-            record = runtime.create_pr(
-                repository=repository,
-                title=str(request.input.get("title") or "Prepared change"),
-                body=str(request.input.get("body") or ""),
-                branch=str(request.input.get("branch") or ""),
-                base=str(request.input.get("base") or ""),
-            )
-            return AssistantToolResult(
-                tool_id=request.tool_id,
-                action_id=request.action_id,
-                session_id=request.session_id,
-                risk_level="medium",
-                state_changed=True,
-                result_summary=f"Opened pull request #{record.number}.",
-                output={"pull_request": record.__dict__},
-            )
+            record = runtime.create_pr(repository=repository, title=str(request.input.get("title") or "Prepared change"), body=str(request.input.get("body") or ""), branch=str(request.input.get("branch") or ""), base=str(request.input.get("base") or "main"))
+            return _result(request, "medium", True, f"Opened pull request #{record.number}.", {"pull_request": record.__dict__})
         if request.action_id == "github.merge_pr":
-            record = runtime.merge_pr(
-                repository=repository,
-                number=int(request.input.get("number") or 0),
-                expected_head_sha=str(request.input.get("expected_head_sha") or ""),
-            )
-            return AssistantToolResult(
-                tool_id=request.tool_id,
-                action_id=request.action_id,
-                session_id=request.session_id,
-                risk_level="high",
-                state_changed=True,
-                result_summary=f"Merged pull request #{record.number}.",
-                output={"pull_request": record.__dict__},
-            )
-    except ValueError as exc:
+            record = runtime.merge_pr(repository=repository, number=int(request.input.get("number") or 0), expected_head_sha=str(request.input.get("expected_head_sha") or ""))
+            return _result(request, "high", True, f"Merged pull request #{record.number}.", {"pull_request": record.__dict__})
+    except (ValueError, RuntimeError) as exc:
         return AssistantToolResult(
             tool_id=request.tool_id,
             action_id=request.action_id,
             session_id=request.session_id,
-            error=str(exc),
-            result_summary="Repository action was blocked by runtime safeguards.",
+            error=str(exc)[:500],
+            result_summary="Repository action was blocked or failed at the governed publication boundary.",
         )
+    return AssistantToolResult(tool_id=request.tool_id, action_id=request.action_id, session_id=request.session_id, error="repository_action_not_available")
+
+
+def _result(request: AssistantToolRequest, risk: str, changed: bool, summary: str, output: dict[str, object]) -> AssistantToolResult:
     return AssistantToolResult(
         tool_id=request.tool_id,
         action_id=request.action_id,
         session_id=request.session_id,
-        error="repository_action_not_available",
+        risk_level=risk,
+        state_changed=changed,
+        result_summary=summary,
+        output=output,
     )
+
+
+def _repository_parts(repository: str) -> tuple[str, str]:
+    value = str(repository or "").strip()
+    if value.startswith("https://github.com/"):
+        value = value.removeprefix("https://github.com/").removesuffix(".git").strip("/")
+    parts = value.split("/")
+    if len(parts) != 2 or not all(parts):
+        raise ValueError("repository must be owner/name")
+    return parts[0], parts[1]
