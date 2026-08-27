@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from app.agent_runtime.contracts import AgentRunCommand, AgentRunSpec, ModelRef
+from app.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSpec, ModelRef
 from app.agent_runtime.repository import AgentLeaseConflict, PostgresAgentRunRepository
 from app.agent_runtime.service import AgentRunService
 from app.persistence.config import DatabaseSettings
@@ -113,6 +113,76 @@ def test_recovery_start_failure_fails_run_instead_of_renewing_zombie_lease(monke
             assert persisted.desired_state == "cancelled"
             assert persisted.last_error is not None
             assert "recovery_failed:RuntimeError: pi restart failed" in persisted.last_error
+            work.rollback()
+    finally:
+        database.close()
+
+
+def test_terminal_agent_run_ignores_late_commands_and_runtime_events() -> None:
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        run_id = f"agent-terminal-{uuid.uuid4().hex}"
+        spec = AgentRunSpec(
+            run_id=run_id,
+            task="Already done",
+            model=ModelRef(provider_id="test", model_id="model"),
+        )
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            created = repository.create_run(spec)
+            terminal = repository.update_state(
+                run_id,
+                expected_revision=created.revision,
+                status="completed",
+            )
+            work.commit()
+
+        service = AgentRunService(database, worker_id="terminal-worker")
+        service._supervisor_started = True
+
+        after_command = service.command(
+            AgentRunCommand(
+                run_id=run_id,
+                command_type="pause",
+                idempotency_key="late-pause",
+            )
+        )
+        assert after_command.status == "completed"
+        assert after_command.revision == terminal.revision
+
+        service._persist_runtime_event(
+            AgentEvent(
+                run_id=run_id,
+                event_type="run.started",
+                payload={"source": "late-pi"},
+            )
+        )
+        service._persist_runtime_event(
+            AgentEvent(
+                run_id=run_id,
+                event_type="run.failed",
+                payload={"error": "late failure"},
+            )
+        )
+
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            persisted = repository.get_run(run_id)
+            assert persisted is not None
+            assert persisted.status == "completed"
+            assert persisted.revision == terminal.revision
+            command_status = work.connection.execute(
+                """
+                SELECT status
+                  FROM omnix_agent_run_commands
+                 WHERE workspace_id = %s AND run_id = %s
+                   AND idempotency_key = 'late-pause'
+                """,
+                (context.workspace_id, run_id),
+            ).fetchone()
+            assert command_status is not None
+            assert str(command_status[0]) == "consumed"
             work.rollback()
     finally:
         database.close()
