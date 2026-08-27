@@ -11,6 +11,9 @@ websockets>=12.0
 python-socketio>=5.9.0
 aiohttp>=3.8.0
 
+# Local smart-home runtime used by the Assistant Tools Kasa adapter.
+python-kasa>=0.10.2,<1.0
+
 # Core compatibility pins
 numpy==1.26.4
 packaging==23.2
