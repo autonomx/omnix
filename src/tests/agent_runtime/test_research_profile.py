@@ -6,11 +6,22 @@ from app.agent_runtime.profiles import (
     get_agent_profile,
     resolve_profile_capabilities,
 )
-from app.assistant_context.models import AssistantContextItem
 from app.assistant_tools.config_store import default_assistant_tools_config
 from app.assistant_tools.gate import review_assistant_tool_request
 from app.assistant_tools.models import AssistantToolRequest
 from app.assistant_tools.research_adapter import run_research_tool_request
+
+
+class _FakeResearchItem:
+    def model_dump(self, *, mode: str):
+        assert mode == "json"
+        return {
+            "source_id": "web_search",
+            "title": "Result",
+            "content": "Grounded result",
+            "url": "https://example.com/result",
+            "metadata": {"provider": "test"},
+        }
 
 
 class _FakeResearchService:
@@ -19,15 +30,7 @@ class _FakeResearchService:
         assert max_results == 3
         assert identity == "agent-session"
         return SimpleNamespace(
-            items=[
-                AssistantContextItem(
-                    source_id="web_search",
-                    title="Result",
-                    content="Grounded result",
-                    url="https://example.com/result",
-                    metadata={"provider": "test"},
-                )
-            ],
+            items=[_FakeResearchItem()],
             diagnostics={"status": "completed", "provider": "test"},
             warnings=[],
             source_manifest_id="manifest-1",
