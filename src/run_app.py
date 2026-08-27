@@ -107,8 +107,14 @@ from app.tts_stream_audio import (
 # RPG imports
 
 # ============== CONFIG ==============
-HOST = "0.0.0.0"
+HOST = os.environ.get("OMNIX_LEGACY_HOST", "127.0.0.1").strip() or "127.0.0.1"
 PORT = 5000
+_LOCAL_BROWSER_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+]
 TTS_CHUNK_SIZE = 6  # ~0.5s (12000 samples at 24kHz) for stable streaming
 TTS_MIN_CHARS = 25  # Start TTS after this many chars
 TTS_MAX_CHARS = 80  # Max chars per TTS chunk
@@ -428,9 +434,10 @@ async def serve_generated_image(filename: str):
     image_dir = generated_images_root()
     file_path = image_dir / normalized
 
-    # Ensure the resolved path is still inside image_dir
+    # Ensure the resolved path is still inside image_dir, including through symlinks.
     resolved = file_path.resolve()
-    if not str(resolved).startswith(str(image_dir.resolve())):
+    resolved_root = image_dir.resolve()
+    if resolved != resolved_root and resolved_root not in resolved.parents:
         return JSONResponse({"ok": False, "error": "invalid_filename"}, status_code=400)
 
     if not file_path.exists() or not file_path.is_file():
@@ -444,9 +451,11 @@ async def serve_generated_image(filename: str):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=_LOCAL_BROWSER_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    max_age=86_400,
 )
 
 # Register all RPG routers directly
@@ -874,16 +883,21 @@ async def get_openrouter_models():
     import requests
     
     settings = shared.load_settings()
-    api_key = settings.get('openrouter', {}).get('api_key', '')
+    secrets = shared.load_secrets()
+    api_key = (
+        secrets.get('api_keys', {}).get('openrouter', '')
+        or settings.get('openrouter', {}).get('api_key', '')
+    )
     
     if not api_key:
         return {"success": False, "error": "No API key configured"}
     
     try:
-        response = requests.get(
+        response = await asyncio.to_thread(
+            requests.get,
             "https://openrouter.ai/api/v1/models",
             headers={"Authorization": f"Bearer {api_key}"},
-            timeout=10
+            timeout=10,
         )
         
         if response.status_code == 200:
@@ -2387,7 +2401,13 @@ async def llamacpp_status():
     cuda_available = False
     try:
         import subprocess as sp
-        result = sp.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=5)
+        result = await asyncio.to_thread(
+            sp.run,
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         cuda_available = result.returncode == 0 and result.stdout.strip() != ""
         gpu_name = result.stdout.strip() if cuda_available else None
     except:
@@ -2397,7 +2417,11 @@ async def llamacpp_status():
     server_running = False
     try:
         import requests
-        resp = requests.get("http://localhost:8080/v1/models", timeout=2)
+        resp = await asyncio.to_thread(
+            requests.get,
+            "http://localhost:8080/v1/models",
+            timeout=2,
+        )
         server_running = resp.status_code == 200
     except:
         pass
@@ -2576,11 +2600,23 @@ async def services_status():
     import requests
     tts_r, stt_r = False, False
     try: 
-        tts_r = requests.get(f"{shared.TTS_BASE_URL}/health", timeout=2).status_code == 200
+        tts_r = (
+            await asyncio.to_thread(
+                requests.get,
+                f"{shared.TTS_BASE_URL}/health",
+                timeout=2,
+            )
+        ).status_code == 200
     except: 
         pass
     try: 
-        stt_r = requests.get(f"{shared.STT_BASE_URL}/health", timeout=2).status_code == 200
+        stt_r = (
+            await asyncio.to_thread(
+                requests.get,
+                f"{shared.STT_BASE_URL}/health",
+                timeout=2,
+            )
+        ).status_code == 200
     except: 
         pass
     
@@ -2593,7 +2629,11 @@ async def get_xtts_logs():
     logs = []
     try:
         # Try Flask first
-        response = requests.get("http://127.0.0.1:5001/api/services/xtts/logs", timeout=5)
+        response = await asyncio.to_thread(
+            requests.get,
+            "http://127.0.0.1:5001/api/services/xtts/logs",
+            timeout=5,
+        )
         if response.ok:
             data = response.json()
             if data.get("logs"):
@@ -2603,7 +2643,11 @@ async def get_xtts_logs():
     
     # Check service directly
     try:
-        resp = requests.get(f"{shared.TTS_BASE_URL}/health", timeout=2)
+        resp = await asyncio.to_thread(
+            requests.get,
+            f"{shared.TTS_BASE_URL}/health",
+            timeout=2,
+        )
         if resp.status_code == 200:
             logs.append(f"[TTS] Service running on {shared.TTS_BASE_URL}")
     except Exception as e:
@@ -2618,7 +2662,11 @@ async def get_stt_logs():
     logs = []
     try:
         # Try Flask first
-        response = requests.get("http://127.0.0.1:5001/api/services/stt/logs", timeout=5)
+        response = await asyncio.to_thread(
+            requests.get,
+            "http://127.0.0.1:5001/api/services/stt/logs",
+            timeout=5,
+        )
         if response.ok:
             data = response.json()
             if data.get("logs"):
@@ -2628,7 +2676,11 @@ async def get_stt_logs():
     
     # Check service directly
     try:
-        resp = requests.get(f"{shared.STT_BASE_URL}/health", timeout=2)
+        resp = await asyncio.to_thread(
+            requests.get,
+            f"{shared.STT_BASE_URL}/health",
+            timeout=2,
+        )
         if resp.status_code == 200:
             logs.append(f"[STT] Service running on {shared.STT_BASE_URL}")
     except Exception as e:
@@ -2965,11 +3017,12 @@ async def stt_float32(request: Request):
 
         # Forward to STT service as multipart — the STT service requires a 'file' field
         stt_url = f"{shared.STT_BASE_URL}/transcribe"
-        response = requests.post(
+        response = await asyncio.to_thread(
+            requests.post,
             stt_url,
             files={'file': ('audio.wav', wav_bytes, 'audio/wav')},
             data={'sample_rate': sample_rate},
-            timeout=30
+            timeout=30,
         )
         
         if response.status_code == 200:
@@ -3015,7 +3068,12 @@ async def stt_endpoint(request: Request):
         # Forward to STT service
         stt_url = f"{shared.STT_BASE_URL}/transcribe"
         files = {'audio': (audio_file.filename, audio_bytes, audio_file.content_type)}
-        response = requests.post(stt_url, files=files, timeout=30)
+        response = await asyncio.to_thread(
+            requests.post,
+            stt_url,
+            files=files,
+            timeout=30,
+        )
         
         if response.status_code == 200:
             return response.json()
