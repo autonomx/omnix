@@ -77,6 +77,7 @@ import './features/podcast/PodcastWorkspaceLayoutFix.css';
 import './features/podcast/PodcastWorkspaceEditable.css';
 import './appearance-overrides.css';
 import './theme-presets.css';
+import './liquid-glass-theme.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
