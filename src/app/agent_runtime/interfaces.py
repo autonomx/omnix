@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
+from datetime import datetime
 
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 
@@ -51,3 +52,26 @@ class WorkflowRuntime(ABC):
 
     @abstractmethod
     def get_status(self, run_id: str) -> dict[str, object] | None: ...
+
+    @abstractmethod
+    def list_runs(
+        self,
+        *,
+        workflow_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def schedule(
+        self,
+        workflow_id: str,
+        input_payload: dict[str, object],
+        *,
+        run_at: datetime,
+        interval_seconds: int | None = None,
+        version: int | None = None,
+        schedule_id: str | None = None,
+    ) -> str: ...
+
+    @abstractmethod
+    def cancel_schedule(self, schedule_id: str) -> None: ...
