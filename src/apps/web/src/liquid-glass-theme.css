@@ -662,3 +662,705 @@
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
 }
+
+
+/* Liquid Glass light-mode hardening pass
+ * --------------------------------------
+ * The first Liquid Glass pass established the material, but several module
+ * styles still won the cascade in light mode because they use more specific
+ * selectors (and, in some cases, !important declarations or inline styles).
+ * These rules deliberately use explicit high-specificity selectors so the
+ * light theme is coherent across every routed workspace.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] {
+  --omnix-body-bg: #dbe5f1;
+  --omnix-body-surface:
+    radial-gradient(circle at 7% 0%, rgba(255, 255, 255, 0.96), transparent 24rem),
+    radial-gradient(circle at 34% 14%, rgba(194, 209, 228, 0.56), transparent 34rem),
+    radial-gradient(circle at 82% 4%, rgba(161, 183, 211, 0.34), transparent 31rem),
+    linear-gradient(112deg, #c9d6e5 0%, #dbe5f0 24%, #e9f0f7 53%, #dce7f2 77%, #cbd9e8 100%);
+  --omnix-text: #1d2d45;
+  --omnix-muted: #60738c;
+  --omnix-muted-text: #60738c;
+  --omnix-control-text: #1d2d45;
+  --omnix-panel-bg:
+    linear-gradient(160deg, rgba(252, 254, 255, 0.42), rgba(213, 226, 241, 0.28));
+  --omnix-panel-solid: rgba(239, 246, 253, 0.46);
+  --omnix-control-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(220, 232, 245, 0.42));
+  --omnix-sidebar-bg:
+    linear-gradient(180deg, rgba(248, 252, 255, 0.38), rgba(208, 222, 238, 0.29));
+  --omnix-topbar-bg:
+    linear-gradient(180deg, rgba(252, 254, 255, 0.42), rgba(211, 224, 239, 0.3));
+  --omnix-main-bg: rgba(207, 221, 238, 0.08);
+  --omnix-glass-panel: rgba(241, 248, 255, 0.32);
+  --omnix-glass-panel-strong: rgba(239, 247, 255, 0.44);
+  --omnix-glass-control: rgba(246, 251, 255, 0.48);
+  --omnix-glass-border: rgba(83, 114, 151, 0.2);
+  --omnix-glass-border-strong: rgba(90, 124, 164, 0.3);
+  --omnix-glass-highlight: rgba(255, 255, 255, 0.66);
+  --omnix-glass-shadow: 0 1rem 2.5rem rgba(49, 70, 98, 0.11);
+  --omnix-glass-shadow-soft: 0 0.5rem 1.25rem rgba(55, 76, 103, 0.08);
+  --omnix-glass-bevel:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 1px 0 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(76, 101, 133, 0.08);
+  --omnix-theme-gradient:
+    linear-gradient(180deg, rgba(239, 247, 255, 0.92) 0%, rgba(177, 199, 223, 0.88) 50%, rgba(124, 153, 187, 0.92) 100%);
+  --omnix-theme-gradient-hover:
+    linear-gradient(180deg, rgba(250, 253, 255, 0.96) 0%, rgba(190, 211, 232, 0.92) 50%, rgba(136, 165, 198, 0.94) 100%);
+  --omnix-theme-on-accent: #19314c;
+  --omnix-theme-line: rgba(78, 117, 161, 0.38);
+  --omnix-theme-shadow: rgba(55, 80, 111, 0.18);
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] body {
+  background: var(--omnix-body-surface) !important;
+  color: var(--omnix-text) !important;
+}
+
+/* Shell, platform pages, settings, and common routed surfaces. */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-topbar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-sidebar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .workspace-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .platform-section,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .workspace-grid article,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .feature-panel,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .feature-mini-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .provider-config-group,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .provider-settings-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-control-panel,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-section,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-status-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-status-row {
+  -webkit-backdrop-filter: blur(26px) saturate(132%) !important;
+  backdrop-filter: blur(26px) saturate(132%) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.08) 21%, rgba(203, 219, 238, 0.05) 72%),
+    var(--omnix-glass-panel) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main {
+  background: transparent !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-mode-tabs,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-theme-picker-trigger,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-theme-menu {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(221, 233, 246, 0.24)),
+    rgba(236, 245, 253, 0.32) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-mode-tabs button {
+  color: #50657f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-mode-tabs button.active {
+  background: var(--omnix-theme-gradient) !important;
+  border-color: var(--omnix-theme-line) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(66, 92, 124, 0.12),
+    0 0.5rem 1rem rgba(65, 89, 119, 0.12) !important;
+  color: var(--omnix-theme-on-accent) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-nav a,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-sidebar-nav button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-sidebar-list button {
+  color: #31465f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-nav-icon,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-sidebar-nav button span:first-child {
+  color: #5d7898 !important;
+}
+
+/* All ordinary controls inherit the light glass material instead of falling
+ * back to opaque white or dark module-specific controls.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main input,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main select,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main textarea,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main .feature-list button {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(218, 231, 245, 0.34)),
+    var(--omnix-glass-control) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 0.25rem 0.7rem rgba(64, 84, 108, 0.05) !important;
+  color: var(--omnix-control-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] option {
+  background: #edf4fb !important;
+  color: #1d2d45 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] input::placeholder,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] textarea::placeholder {
+  color: #7b8da4 !important;
+  opacity: 1;
+}
+
+/* Chat: remove every remaining dark-mode island. */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-sidebar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-main,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-tool-sidebar-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-view-panel,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-workspace-dashboard,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-workspace-activity,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-tools-grid {
+  -webkit-backdrop-filter: blur(27px) saturate(132%) !important;
+  backdrop-filter: blur(27px) saturate(132%) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), transparent 20%),
+    rgba(236, 245, 253, 0.3) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-header,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-composer,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-side-panel-toggle,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-sidebar-nav,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-sidebar-section {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(218, 231, 245, 0.16)) !important;
+  border-color: var(--omnix-glass-border) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-messages {
+  background: rgba(220, 232, 245, 0.04) !important;
+}
+
+/* Assistant responses are pale glass, never dark navy. The content div is the
+ * current renderer, while > p keeps compatibility with older snapshots.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-message:not(.user) .assistant-chat-bubble > p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-message:not(.user) .assistant-message-content {
+  -webkit-backdrop-filter: blur(18px) saturate(124%) !important;
+  backdrop-filter: blur(18px) saturate(124%) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(225, 236, 248, 0.34)),
+    rgba(237, 246, 254, 0.38) !important;
+  border-color: rgba(91, 121, 157, 0.2) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 0.5rem 1.15rem rgba(58, 78, 103, 0.07) !important;
+  color: #24364e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-content p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-content li,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-content dd,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-content td {
+  color: #24364e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-content blockquote {
+  color: #50647d !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-content pre,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-content code {
+  background: rgba(186, 204, 225, 0.24) !important;
+  border-color: rgba(87, 116, 151, 0.18) !important;
+  color: #20334d !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-content a,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-citation {
+  color: #356994 !important;
+}
+
+/* User messages retain stronger tint, but stay within the slate-blue palette. */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble {
+  background:
+    linear-gradient(180deg, rgba(204, 220, 237, 0.88), rgba(148, 176, 207, 0.78)) !important;
+  border-color: rgba(86, 124, 166, 0.31) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 0.7rem 1.4rem rgba(56, 80, 108, 0.12) !important;
+  color: #1c344e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-message.user .assistant-message-content,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-message.user .assistant-message-content p {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #1c344e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-bubble header,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-bubble time {
+  color: #73859d !important;
+}
+
+/* Message actions, suggestions, composer chips, injected research controls and
+ * the legacy Agent Chat inline-style button all share one light material.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-actions button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-suggestion-row button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-composer-controls label,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-composer-chip,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-mode,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-page-budget,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-desktop-inline,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .desktop-companion-control,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-chat-mode-button {
+  -webkit-backdrop-filter: blur(16px) saturate(125%) !important;
+  backdrop-filter: blur(16px) saturate(125%) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(210, 225, 241, 0.36)),
+    rgba(235, 244, 252, 0.36) !important;
+  border: 1px solid rgba(88, 120, 158, 0.22) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0.35rem 0.85rem rgba(57, 80, 108, 0.07) !important;
+  color: #263b55 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-mode span,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-page-budget > span,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-desktop-inline span,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-composer-chip span {
+  color: #687c95 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-desktop-inline strong,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-composer-chip strong {
+  color: #253a54 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-mode select,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-page-budget input {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(218, 232, 246, 0.38)) !important;
+  border-color: rgba(88, 120, 158, 0.2) !important;
+  color: #21364f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-input textarea {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(225, 236, 248, 0.34)),
+    rgba(241, 248, 254, 0.32) !important;
+  border-color: rgba(79, 117, 161, 0.27) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 0.65rem 1.4rem rgba(58, 80, 106, 0.07) !important;
+  color: #21354e !important;
+}
+
+/* Header identity controls: explicit selectors beat theme-presets.css and
+ * ChatIdentityModeControl.css, which otherwise leave purple/dark islands.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .chat-identity-mode-toggle,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .chat-identity-context-select {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(215, 229, 244, 0.38)),
+    rgba(238, 246, 253, 0.34) !important;
+  border-color: rgba(88, 120, 158, 0.23) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .chat-identity-mode-toggle button {
+  color: #536a84 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .chat-identity-mode-toggle button.active,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-side-panel-toggle button.active,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-pill,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-send-button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-mic-button {
+  background: var(--omnix-theme-gradient) !important;
+  border-color: var(--omnix-theme-line) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(54, 83, 118, 0.13),
+    0 0.52rem 1.05rem rgba(54, 80, 111, 0.13) !important;
+  color: var(--omnix-theme-on-accent) !important;
+}
+
+/* Live Voice card inner surfaces. */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-state,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-voice-input-indicator,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-draft,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-voice-toggle,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-audio-devices,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-audio-devices > div,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-voice-transcript p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-voice-status,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-fullscreen-button {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(219, 232, 246, 0.32)),
+    rgba(238, 246, 253, 0.34) !important;
+  border-color: rgba(89, 121, 158, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 0.35rem 0.85rem rgba(57, 77, 103, 0.06) !important;
+  color: #263b55 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-visual-stage {
+  background:
+    radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.7), transparent 36%),
+    linear-gradient(160deg, rgba(186, 204, 226, 0.5), rgba(111, 135, 168, 0.42)) !important;
+  border-color: rgba(91, 121, 157, 0.22) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    inset 0 -2rem 4rem rgba(63, 83, 111, 0.1) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-identity.active {
+  background: rgba(82, 166, 143, 0.12) !important;
+  border-color: rgba(65, 149, 127, 0.24) !important;
+  color: #2f806b !important;
+}
+
+/* RPG: replace fixed dark backgrounds and white-only text. */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-workstation,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-shell {
+  background:
+    radial-gradient(circle at 15% 2%, rgba(255, 255, 255, 0.34), transparent 26rem),
+    transparent !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-unified-header,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-panel,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-player-rail,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-world-rail,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-story-scene,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-session-launcher,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-item-panel {
+  -webkit-backdrop-filter: blur(22px) saturate(128%) !important;
+  backdrop-filter: blur(22px) saturate(128%) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(218, 231, 245, 0.24)),
+    rgba(236, 245, 253, 0.28) !important;
+  border-color: rgba(88, 120, 158, 0.2) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-workstation-header h2,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-workstation h3,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-hero-summary h3,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-stat-row strong,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-resource-grid strong,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-list-row strong,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-party-row strong,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-quest-row strong,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-dialogue-stack strong,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-journal-detail h3 {
+  color: #20344e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-workstation-header p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-hero-summary p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-list-row span,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-party-row span,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-quest-row span,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-workstation small,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-scene-copy,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-dialogue-stack p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-journal-detail p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-journal-detail li {
+  color: #63758e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .rpg-resource-grid div {
+  background: rgba(236, 245, 253, 0.3) !important;
+  border-color: rgba(88, 120, 158, 0.17) !important;
+}
+
+/* Storyteller: manuscripts and library panes should feel like translucent
+ * paper-glass, not inverted dark panels.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-library,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-controls,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-outline,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-project-header,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-manuscript,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-action-bar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-versions {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(219, 232, 246, 0.22)),
+    rgba(239, 247, 254, 0.3) !important;
+  border-color: rgba(88, 120, 158, 0.2) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: #22364f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-project-copy h1,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-panel-heading h3,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-manuscript h2 {
+  color: #20344e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-project-copy > p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-recent-list small,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-outline span,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-output-card small,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-action-bar span,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-versions span {
+  color: #63758e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-recent-list article,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-panel-heading.compact button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-project-actions button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-action-bar button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-versions button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-outline button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .storyteller-chip-row button {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(217, 230, 244, 0.31)) !important;
+  border-color: rgba(88, 120, 158, 0.18) !important;
+  color: #2e4561 !important;
+}
+
+/* Podcast: the module carries many hard-coded dark surfaces, so explicitly
+ * convert its cards, format choices, speaker rows and menus.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .podcast-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .generation-style-panel,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .speaker-table,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .speaker-menu {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(219, 232, 246, 0.24)),
+    rgba(238, 246, 253, 0.3) !important;
+  border-color: rgba(88, 120, 158, 0.2) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: #22364f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .podcast-card h3,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .live-transcript-section h4,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .podcast-card label,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .podcast-label {
+  color: #2d435e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .podcast-card small,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .podcast-field-stack small {
+  color: #687b94 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .format-card-grid button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .generation-style,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .speaker-header,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .speaker-actions button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .collapse-toggle,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .recent-actions button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .recent-card button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .quality-card button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .ghost-button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .live-command button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .asset-tile button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .download-grid button {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(217, 230, 244, 0.3)) !important;
+  border-color: rgba(88, 120, 158, 0.18) !important;
+  color: #2b415c !important;
+}
+
+/* Voice Studio and lower-level voice-cloning/STT views. */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .voice-studio-app,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .voice-side-nav,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .voice-panel-final,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .voice-credit-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .voice-user-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .script-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assignment-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .generate-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .now-playing-bar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .voice-clone-form {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(218, 231, 245, 0.24)),
+    rgba(238, 246, 253, 0.3) !important;
+  border-color: rgba(88, 120, 158, 0.2) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: #22364f !important;
+}
+
+/* Image Generation owns its own dark token namespace; remap that namespace in
+ * Liquid Glass light mode before overriding its hard-coded control surfaces.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .workspace-card.image-workspace {
+  --igw-bg: transparent;
+  --igw-panel: rgba(239, 247, 254, 0.32);
+  --igw-panel-strong: rgba(240, 248, 255, 0.46);
+  --igw-border: rgba(88, 120, 158, 0.2);
+  --igw-border-strong: rgba(83, 121, 165, 0.34);
+  --igw-muted: #687b94;
+  --igw-text: #21364f;
+  --igw-purple: #607fa8;
+  --igw-purple-soft: rgba(83, 121, 165, 0.12);
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-flow-banner,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-system-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-surface,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-job-card,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-readiness-inline,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-advanced-grid {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(218, 231, 245, 0.25)),
+    rgba(239, 247, 254, 0.3) !important;
+  border-color: rgba(88, 120, 158, 0.19) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: #22364f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-flow-banner p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-system-card small,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-section-heading p,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-field,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-aspect-fieldset legend,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-quality-fieldset legend {
+  color: #687b94 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-field input,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-field select,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-field textarea,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-provider-filter select,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-assets-search input,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-number-control,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-quality-control,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-advanced-options summary,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .image-aspect-grid button {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(217, 231, 245, 0.34)) !important;
+  border-color: rgba(88, 120, 158, 0.2) !important;
+  color: #263b55 !important;
+}
+
+/* Settings rails intentionally remain visually quieter than content cards. */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-category-rail,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-status-rail,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-control-header {
+  background: rgba(230, 240, 250, 0.18) !important;
+  border-color: rgba(88, 120, 158, 0.16) !important;
+  color: #263b55 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-category-rail nav button {
+  color: #425a75 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .settings-category-rail nav button.active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(192, 212, 234, 0.34)) !important;
+  border-color: rgba(81, 121, 166, 0.28) !important;
+  color: #20364f !important;
+}
+
+/* Trading's own light stylesheet uses opaque white surfaces and strong blue.
+ * Override the full terminal chrome with the same translucent slate material.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-workspace {
+  --trading-light-bg: transparent !important;
+  --trading-light-surface: rgba(239, 247, 254, 0.35) !important;
+  --trading-light-surface-muted: rgba(226, 237, 248, 0.28) !important;
+  --trading-light-line: rgba(88, 120, 158, 0.22) !important;
+  --trading-light-line-soft: rgba(88, 120, 158, 0.14) !important;
+  --trading-light-text: #21364f !important;
+  --trading-light-muted: #657991 !important;
+  background: transparent !important;
+  color: #21364f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-terminal-header,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-command-bar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-tool-shortcuts,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-body,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-tools,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-right-dock,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-side-panel,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-side-rail,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-grid-cell,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-panel,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-header,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-panel > footer,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-indicator-pane-controls,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-state,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-replay-mode-hint,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-replay-toolbar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-alerts-panel-header {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(215, 229, 244, 0.22)),
+    rgba(235, 244, 252, 0.3) !important;
+  border-color: rgba(88, 120, 158, 0.17) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: #21364f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-workspace button,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-workspace select,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-workspace input,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-workspace textarea {
+  border-color: rgba(88, 120, 158, 0.18) !important;
+  color: #263b55 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-symbol-trigger,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-type-control,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-indicator-manager > summary {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(218, 231, 245, 0.3)) !important;
+  border-color: rgba(88, 120, 158, 0.18) !important;
+  color: #263b55 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-shell {
+  background:
+    radial-gradient(circle at 15% 4%, rgba(128, 157, 194, 0.11), transparent 22rem),
+    rgba(220, 232, 245, 0.23) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-panel.active {
+  border-color: rgba(75, 123, 178, 0.52) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(91, 139, 191, 0.12),
+    var(--omnix-glass-shadow-soft) !important;
+}
+
+/* High-contrast content guardrails for generic data pages (providers, models,
+ * jobs, assets, reports, diagnostics, STT and voice-cloning).
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .workspace-card h1,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .workspace-card h2,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .workspace-card h3,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .workspace-card h4,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .platform-section h3,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .feature-panel h3,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .feature-mini-card h3 {
+  color: #20344e !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .platform-empty {
+  background: rgba(236, 245, 253, 0.26) !important;
+  border-color: rgba(88, 120, 158, 0.2) !important;
+  color: #63758e !important;
+}
+
+/* Keep destructive/error semantics visibly distinct while avoiding dark-mode
+ * backgrounds leaking into light mode.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .danger,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] [data-variant='danger'] {
+  color: #9d3145 !important;
+}
+
