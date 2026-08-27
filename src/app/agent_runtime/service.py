@@ -4,6 +4,7 @@ from __future__ import annotations
 from functools import lru_cache
 import hashlib
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import threading
@@ -12,10 +13,11 @@ from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
+from app.assistant_tools.repo_adapter import _github_repository_from_remote
 
 from .acceptance import evaluate_acceptance
 from .budget import AgentBudgetError, AgentBudgetManager
-from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
+from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ResourceScope
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
 from .workspace import WorkspaceAuthority
@@ -46,7 +48,7 @@ class AgentRunService:
 
     def start(self, spec: AgentRunSpec) -> AgentRunSnapshot:
         self._ensure_supervisor()
-        issued = self._prepare_workspace(spec)
+        issued = self._prepare_workspace(self._bind_github_repository_authority(spec))
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             snapshot = self._persist_starting_run(repository, issued)
@@ -81,7 +83,9 @@ class AgentRunService:
             child_spec = derive_child_spec(parent, request)
             existing = repository.list_children(parent_run_id)
             reserve_child_budget(parent, existing, child_spec)
-            issued = self._prepare_workspace(child_spec)
+            issued = self._prepare_workspace(
+                self._bind_github_repository_authority(child_spec)
+            )
             snapshot = self._persist_starting_run(repository, issued)
             work.commit()
         return self._launch_runtime(issued, snapshot)
@@ -582,6 +586,74 @@ class AgentRunService:
                 AgentEvent(run_id=run_id, event_type="worker.heartbeat", payload={"worker_id": self.worker_id})
             )
             work.commit()
+
+    @staticmethod
+    def _github_origin_repository(repository: str) -> str:
+        root = Path(repository).expanduser().resolve()
+        completed = subprocess.run(
+            ["git", "-C", str(root), "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            check=False,
+            shell=False,
+        )
+        if completed.returncode != 0:
+            raise ValueError("github authority requires a readable origin remote")
+        owner, name = _github_repository_from_remote(completed.stdout.strip())
+        return f"{owner}/{name}"
+
+    @classmethod
+    def _bind_github_repository_authority(
+        cls,
+        spec: AgentRunSpec,
+    ) -> AgentRunSpec:
+        github_capabilities = {
+            capability
+            for capability in spec.external_capabilities
+            if capability.startswith("github.")
+        }
+        if not github_capabilities:
+            return spec
+        workspace = spec.workspace
+        if workspace is None or not workspace.repository:
+            raise ValueError(
+                "GitHub capabilities require a repository-backed workspace"
+            )
+        repository = cls._github_origin_repository(workspace.repository)
+        scopes: list[ResourceScope] = []
+        explicitly_scoped: set[str] = set()
+        for scope in spec.resource_scopes:
+            if scope.capability not in github_capabilities:
+                scopes.append(scope)
+                continue
+            if (
+                scope.resource_type.casefold() not in {"repository", "repo"}
+                or scope.resource_id.casefold() != repository.casefold()
+            ):
+                raise ValueError(
+                    f"GitHub resource scope exceeds issued repository: {scope.capability}"
+                )
+            explicitly_scoped.add(scope.capability)
+            scopes.append(
+                scope.model_copy(
+                    update={
+                        "resource_type": "repository",
+                        "resource_id": repository,
+                    }
+                )
+            )
+        for capability in sorted(github_capabilities - explicitly_scoped):
+            scopes.append(
+                ResourceScope(
+                    capability=capability,
+                    resource_type="repository",
+                    resource_id=repository,
+                )
+            )
+        return spec.model_copy(update={"resource_scopes": scopes})
 
     @staticmethod
     def _prepare_workspace(spec: AgentRunSpec) -> AgentRunSpec:
