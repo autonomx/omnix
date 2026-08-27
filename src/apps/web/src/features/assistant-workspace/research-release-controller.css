@@ -60,3 +60,14 @@
     max-width: none;
   }
 }
+
+
+/* Omnix light appearance: research release controls */
+:root[data-omnix-appearance='light'] .assistant-research-fallback {
+  background: rgba(242,248,255,.74) !important;
+  border-color: rgba(86,112,148,.2) !important;
+  color: var(--omnix-text, #203049) !important;
+}
+:root[data-omnix-appearance='light'] .assistant-research-release-status {
+  color: var(--omnix-muted, #66778e) !important;
+}
