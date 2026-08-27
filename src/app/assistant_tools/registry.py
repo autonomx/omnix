@@ -1,5 +1,9 @@
-"""Backend mirror of the Chat assistant tool registry."""
+"""Backend projection of the canonical Omnix capability registry."""
 from __future__ import annotations
+
+from collections import defaultdict
+
+from app.agent_runtime.capabilities import Capability, default_capability_registry
 
 from .models import (
     ApprovalPolicy,
@@ -69,198 +73,65 @@ def tool_action(
     )
 
 
-def default_assistant_tools() -> list[AssistantToolSpec]:
-    """Return the canonical backend registry for Chat assistant tools."""
+def _action_category(capability: Capability) -> ToolActionCategory:
+    if capability.effect == "read":
+        return "read"
+    if capability.effect == "delete":
+        return "delete"
+    if capability.effect == "execute":
+        return "execute"
+    return "write"
 
-    return [
-        AssistantToolSpec(
-            id="gmail",
-            name="Gmail",
-            description="Read, draft, send, and delete Gmail messages with approval controls.",
-            category="communication",
-            provider="Google",
-            actions=[
-                tool_action(
-                    tool_id="gmail",
-                    action_id="gmail.read_email",
-                    label="Read email",
-                    description="Search and read Gmail messages and threads.",
-                    category="read",
-                ),
-                tool_action(
-                    tool_id="gmail",
-                    action_id="gmail.create_draft",
-                    label="Create drafts",
-                    description="Create reviewable Gmail drafts without sending.",
-                    category="write",
-                    risk_level="medium",
-                ),
-                tool_action(
-                    tool_id="gmail",
-                    action_id="gmail.send_email",
-                    label="Send email",
-                    description="Send or reply to Gmail messages.",
-                    category="write",
-                    risk_level="high",
-                    requires_confirmation=True,
-                ),
-                tool_action(
-                    tool_id="gmail",
-                    action_id="gmail.delete_email",
-                    label="Delete email",
-                    description="Move Gmail messages to Trash.",
-                    category="delete",
-                    risk_level="high",
-                    enabled=False,
-                    requires_confirmation=True,
-                    is_destructive=True,
-                ),
-            ],
-        ),
-        AssistantToolSpec(
-            id="calendar",
-            name="Google Calendar",
-            description="Read availability and manage calendar events.",
-            category="productivity",
-            provider="Google",
-            actions=[
-                tool_action(
-                    tool_id="calendar",
-                    action_id="calendar.read_availability",
-                    label="Read availability",
-                    description="Read calendar availability and event summaries.",
-                    category="read",
-                ),
-                tool_action(
-                    tool_id="calendar",
-                    action_id="calendar.create_event",
-                    label="Create events",
-                    description="Create Google Calendar events.",
-                    category="write",
-                    risk_level="medium",
-                    requires_confirmation=True,
-                ),
-                tool_action(
-                    tool_id="calendar",
-                    action_id="calendar.delete_event",
-                    label="Delete events",
-                    description="Delete Google Calendar events.",
-                    category="delete",
-                    risk_level="high",
-                    requires_confirmation=True,
-                    is_destructive=True,
-                ),
-            ],
-        ),
-        AssistantToolSpec(
-            id="contacts",
-            name="Google Contacts",
-            description="Resolve contacts for email and calendar workflows.",
-            category="productivity",
-            provider="Google",
-            actions=[
-                tool_action(
-                    tool_id="contacts",
-                    action_id="contacts.search_contacts",
-                    label="Search contacts",
-                    description="Search Google Contacts to resolve people and email addresses.",
-                    category="read",
-                ),
-                tool_action(
-                    tool_id="contacts",
-                    action_id="contacts.resolve_recipient",
-                    label="Resolve recipients",
-                    description="Use contact details to address emails or calendar invites.",
-                    category="read",
-                    risk_level="medium",
-                ),
-            ],
-        ),
-        AssistantToolSpec(
-            id="github",
-            name="GitHub",
-            description="Read repositories, manage pull requests, inspect CI, and perform governed repo actions.",
-            category="development",
-            provider="GitHub",
-            actions=[
-                tool_action(
-                    tool_id="github",
-                    action_id="github.read_repo",
-                    label="Read repositories",
-                    description="Read repository metadata, files, pull requests, and checks.",
-                    category="read",
-                ),
-                tool_action(
-                    tool_id="github",
-                    action_id="github.create_branch",
-                    label="Create branches",
-                    description="Create GitHub branches for implementation work.",
-                    category="write",
-                    risk_level="medium",
-                ),
-                tool_action(
-                    tool_id="github",
-                    action_id="github.create_pr",
-                    label="Open pull requests",
-                    description="Open pull requests from prepared branch changes.",
-                    category="write",
-                    risk_level="medium",
-                ),
-                tool_action(
-                    tool_id="github",
-                    action_id="github.merge_pr",
-                    label="Merge pull requests",
-                    description="Merge pull requests after required checks pass.",
-                    category="write",
-                    risk_level="high",
-                    requires_confirmation=True,
-                ),
-            ],
-        ),
-        AssistantToolSpec(
-            id="kasa",
-            name="TP-Link Kasa",
-            description="Discover, inspect, and control approved Kasa smart plugs on the local network.",
-            category="smart-home",
-            provider="TP-Link",
-            actions=[
-                tool_action(
-                    tool_id="kasa",
-                    action_id="kasa.discover_devices",
-                    label="Discover Kasa devices",
-                    description="Discover supported Kasa devices on the local network.",
-                    category="read",
-                ),
-                tool_action(
-                    tool_id="kasa",
-                    action_id="kasa.get_state",
-                    label="Read plug state",
-                    description="Read the verified on/off state of one Kasa device.",
-                    category="read",
-                ),
-                tool_action(
-                    tool_id="kasa",
-                    action_id="kasa.turn_on",
-                    label="Turn on plug",
-                    description="Turn on one selected Kasa plug and verify its resulting state.",
-                    category="write",
-                    risk_level="medium",
-                    requires_confirmation=True,
-                    approval_policy="always_ask",
-                ),
-                tool_action(
-                    tool_id="kasa",
-                    action_id="kasa.turn_off",
-                    label="Turn off plug",
-                    description="Turn off one selected Kasa plug and verify its resulting state.",
-                    category="write",
-                    risk_level="medium",
-                    requires_confirmation=True,
-                    approval_policy="always_ask",
-                ),
-            ],
-        ),
-    ]
+
+def default_assistant_tools() -> list[AssistantToolSpec]:
+    """Project browser-facing assistant tools from the canonical registry."""
+
+    grouped: dict[str, list[Capability]] = defaultdict(list)
+    for capability in default_capability_registry().assistant_projection():
+        grouped[capability.namespace].append(capability)
+
+    tools: list[AssistantToolSpec] = []
+    for tool_id, capabilities in grouped.items():
+        first = capabilities[0]
+        actions = [
+            tool_action(
+                tool_id=tool_id,
+                action_id=capability.id,
+                label=capability.name,
+                description=capability.description,
+                category=_action_category(capability),
+                risk_level=capability.risk,
+                enabled=capability.enabled,
+                requires_connection=capability.requires_connection,
+                requires_confirmation=capability.requires_confirmation,
+                is_destructive=capability.destructive,
+                approval_policy=capability.approval_policy,
+            )
+            for capability in capabilities
+        ]
+        tools.append(
+            AssistantToolSpec(
+                id=tool_id,
+                name={
+                    "gmail": "Gmail",
+                    "calendar": "Google Calendar",
+                    "contacts": "Google Contacts",
+                    "github": "GitHub",
+                    "kasa": "TP-Link Kasa",
+                }.get(tool_id, tool_id.replace("_", " ").title()),
+                description={
+                    "gmail": "Read, draft, send, and delete Gmail messages with approval controls.",
+                    "calendar": "Read availability and manage calendar events.",
+                    "contacts": "Resolve contacts for email and calendar workflows.",
+                    "github": "Read repositories, manage pull requests, inspect CI, and perform governed repo actions.",
+                    "kasa": "Discover, inspect, and control approved Kasa smart plugs on the local network.",
+                }.get(tool_id, f"Governed {tool_id} capabilities."),
+                category=first.category,
+                provider=first.provider,
+                actions=actions,
+            )
+        )
+    return tools
 
 
 def assistant_tool_registry_payload(
