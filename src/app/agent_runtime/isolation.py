@@ -112,7 +112,7 @@ class DockerStrongIsolation:
             "--workdir",
             "/workspace",
         ]
-        container_env = self._container_env(env)
+        container_env = self._container_env(spec, env)
         for key, value in sorted(container_env.items()):
             command.extend(["--env", f"{key}={value}"])
         command.extend([str(self.image), *rewritten])
@@ -144,11 +144,19 @@ class DockerStrongIsolation:
         return result
 
     @staticmethod
-    def _container_env(env: dict[str, str]) -> dict[str, str]:
+    def _container_env(
+        spec: AgentRunSpec,
+        env: dict[str, str],
+    ) -> dict[str, str]:
+        explicit = {
+            str(key or "").strip()
+            for key in spec.execution.allowed_environment_keys
+            if str(key or "").strip()
+        }
         allowed = {
             key: value
             for key, value in env.items()
-            if key.startswith("OMNIX_AGENT_")
+            if key.startswith("OMNIX_AGENT_") or key in explicit
         }
         allowed["OMNIX_AGENT_WORKSPACE"] = "/workspace"
         if os.environ.get("OMNIX_AGENT_CONTAINER_MODEL_GATEWAY_URL"):

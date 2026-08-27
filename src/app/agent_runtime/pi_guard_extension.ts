@@ -36,7 +36,14 @@ function globRegex(pattern: string): RegExp {
 }
 
 function matches(patterns: string[], relative: string): boolean {
-  return patterns.some((pattern) => pattern === "**" || globRegex(pattern).test(relative));
+  return patterns.some((pattern) => {
+    if (pattern === "**") return true;
+    const normalized = pattern.split("\\").join("/");
+    if (normalized.endsWith("/**") && relative === normalized.slice(0, -3)) {
+      return true;
+    }
+    return globRegex(normalized).test(relative);
+  });
 }
 
 function pathAllowed(value: unknown): boolean {
