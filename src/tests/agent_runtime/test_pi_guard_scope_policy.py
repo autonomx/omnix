@@ -28,3 +28,17 @@ def test_pi_guard_checks_option_embedded_paths_before_command_execution() -> Non
     assert 'if (token.startsWith("-")) {' in source
     assert "if (equalsIndex < 0) continue;" in source
     assert "token = token.slice(equalsIndex + 1);" in source
+
+
+def test_pi_guard_resolves_symlinks_before_authorizing_paths() -> None:
+    source = (
+        Path(__file__).parents[2]
+        / "app"
+        / "agent_runtime"
+        / "pi_guard_extension.ts"
+    ).read_text(encoding="utf-8")
+    assert 'import fs from "node:fs";' in source
+    assert "const realWorkspace = fs.realpathSync(workspace);" in source
+    assert "fs.lstatSync(probe);" in source
+    assert "realProbe = fs.realpathSync(probe);" in source
+    assert "realPathWithinWorkspace(value)" in source
