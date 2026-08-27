@@ -27,6 +27,7 @@ def test_open_ended_agentic_text_is_not_explicit_authority() -> None:
 
 def test_chat_profile_selection_is_semantic_and_bounded() -> None:
     assert _select_profile("fix the repository tests") == "coding"
+    assert _select_profile("fix the trading UI") == "coding"
     assert _select_profile("turn off the kitchen plug") == "house"
     assert _select_profile("check my calendar") == "personal-assistant"
     assert _select_profile("research this stock") == "trading-research"
