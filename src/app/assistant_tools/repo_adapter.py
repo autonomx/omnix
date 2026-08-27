@@ -9,6 +9,7 @@ import subprocess
 import uuid
 from dataclasses import dataclass, field
 from typing import Protocol
+from urllib.parse import urlparse
 
 from .models import AssistantToolRequest, AssistantToolResult
 
@@ -121,10 +122,38 @@ class GitHubCliRuntimeAdapter:
         return {"repository": repository, "branch": branch, "base_sha": base_sha, "ref": data.get("ref"), "created": True}
 
     def push(self, *, repository: str, worktree: str, branch: str, remote: str = "origin") -> dict[str, object]:
-        _repository_parts(repository)
+        expected_owner, expected_repo = _repository_parts(repository)
+        if remote != "origin":
+            raise ValueError("repository remote is Omnix-managed and must be origin")
         cwd = Path(worktree).expanduser().resolve()
+        if not cwd.is_dir():
+            raise ValueError("issued worktree does not exist")
+        remote_result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            check=False,
+            shell=False,
+        )
+        if remote_result.returncode != 0:
+            raise RuntimeError("git_remote_lookup_failed")
+        remote_owner, remote_repo = _github_repository_from_remote(
+            remote_result.stdout.strip()
+        )
+        if (
+            remote_owner.casefold(),
+            remote_repo.casefold(),
+        ) != (
+            expected_owner.casefold(),
+            expected_repo.casefold(),
+        ):
+            raise ValueError("repository_remote_mismatch")
         completed = subprocess.run(
-            ["git", "push", remote, f"HEAD:refs/heads/{branch}"],
+            ["git", "push", "origin", f"HEAD:refs/heads/{branch}"],
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -266,6 +295,18 @@ def _result(request: AssistantToolRequest, risk: str, changed: bool, summary: st
         result_summary=summary,
         output=output,
     )
+
+
+def _github_repository_from_remote(remote_url: str) -> tuple[str, str]:
+    value = str(remote_url or "").strip()
+    if value.startswith("git@github.com:"):
+        return _repository_parts(value.removeprefix("git@github.com:"))
+    parsed = urlparse(value)
+    if parsed.scheme not in {"https", "ssh", "git"} or (
+        parsed.hostname or ""
+    ).casefold() != "github.com":
+        raise ValueError("repository remote must be hosted on github.com")
+    return _repository_parts(parsed.path.strip("/"))
 
 
 def _repository_parts(repository: str) -> tuple[str, str]:
