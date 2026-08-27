@@ -445,7 +445,7 @@ class AgentRunService:
         with unit_of_work(self.database) as work:
             rows = work.connection.execute(
                 """
-                SELECT run_id
+                SELECT run.run_id
                   FROM omnix_agent_runs AS run
                   LEFT JOIN omnix_agent_worker_leases AS lease
                     ON lease.workspace_id = run.workspace_id AND lease.run_id = run.run_id
