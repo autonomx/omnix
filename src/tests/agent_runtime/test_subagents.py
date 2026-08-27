@@ -65,3 +65,33 @@ def test_child_cannot_drop_parent_resource_scope() -> None:
                 resource_scopes=[],
             ),
         )
+
+
+def test_child_reservation_accounts_for_parent_usage() -> None:
+    parent = _parent()
+    child = derive_child_spec(
+        parent,
+        ChildRunRequest(
+            task="Budgeted child",
+            capabilities=["workspace.read"],
+            limits=RunLimits(
+                max_steps=40,
+                max_wall_time_seconds=300,
+                max_tool_calls=40,
+                max_tokens=3000,
+                max_cost=1,
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="aggregate child max_steps"):
+        reserve_child_budget(
+            parent,
+            [],
+            child,
+            parent_usage={
+                "steps": 70,
+                "tool_calls": 0,
+                "output_tokens": 0,
+                "cost": 0,
+            },
+        )
