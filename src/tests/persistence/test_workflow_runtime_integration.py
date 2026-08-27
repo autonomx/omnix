@@ -205,3 +205,118 @@ def test_terminal_workflow_ignores_late_pause_resume_and_cancel() -> None:
     finally:
         runtime._supervisor_stop.set()
         database.close()
+
+
+
+def test_workflow_schedule_persists_fire_pins_version_and_dispatches_once() -> None:
+    database = _database()
+    runtime = PostgresWorkflowRuntime(database)
+    suffix = uuid.uuid4().hex[:10]
+    try:
+        first = WorkflowDefinition(
+            id=f"scheduled-{suffix}",
+            version=1,
+            name="Scheduled v1",
+            steps=[],
+        )
+        runtime.register(first)
+        scheduled_for = datetime.now(timezone.utc) - timedelta(seconds=5)
+        schedule_id = runtime.schedule(
+            first.id,
+            {"source": "scheduler-test"},
+            run_at=scheduled_for,
+            schedule_id=f"schedule-{suffix}",
+        )
+
+        runtime.register(
+            WorkflowDefinition(
+                id=first.id,
+                version=2,
+                name="Scheduled v2",
+                steps=[],
+            )
+        )
+
+        runtime._supervise_once()
+        runtime._supervise_once()
+
+        schedules = runtime.list_schedules()
+        schedule = next(row for row in schedules if row.schedule_id == schedule_id)
+        assert schedule.workflow_version == 1
+        assert schedule.enabled is False
+        assert schedule.next_run_at is None
+        assert schedule.last_enqueued_at is not None
+
+        history = runtime.list_runs(workflow_id=first.id)
+        scheduled_runs = [
+            row
+            for row in history
+            if str(row["input_payload"].get("idempotency_key", "")).startswith(
+                f"workflow-schedule:{schedule_id}:"
+            )
+        ]
+        assert len(scheduled_runs) == 1
+        assert scheduled_runs[0]["workflow_version"] == 1
+        assert scheduled_runs[0]["status"] == "completed"
+
+        with unit_of_work(database) as work:
+            fire = work.connection.execute(
+                """
+                SELECT status, run_id
+                  FROM omnix_workflow_schedule_fires
+                 WHERE workspace_id = %s AND schedule_id = %s
+                """,
+                (runtime.context.workspace_id, schedule_id),
+            ).fetchone()
+            work.rollback()
+        assert fire is not None
+        assert str(fire[0]) == "started"
+        assert str(fire[1]) == scheduled_runs[0]["run_id"]
+    finally:
+        runtime._supervisor_stop.set()
+        database.close()
+
+
+def test_workflow_schedule_rejects_unsafe_timing_and_reserved_idempotency() -> None:
+    database = _database()
+    runtime = PostgresWorkflowRuntime(database)
+    suffix = uuid.uuid4().hex[:10]
+    try:
+        definition = WorkflowDefinition(
+            id=f"schedule-policy-{suffix}",
+            version=1,
+            name="Schedule policy",
+            steps=[],
+        )
+        runtime.register(definition)
+        with pytest.raises(
+            WorkflowRuntimeError,
+            match="run_at_must_be_timezone_aware",
+        ):
+            runtime.schedule(
+                definition.id,
+                {},
+                run_at=datetime.now(),
+            )
+        with pytest.raises(
+            WorkflowRuntimeError,
+            match="interval_minimum_60_seconds",
+        ):
+            runtime.schedule(
+                definition.id,
+                {},
+                run_at=datetime.now(timezone.utc),
+                interval_seconds=30,
+            )
+        with pytest.raises(
+            WorkflowRuntimeError,
+            match="reserves_idempotency_key",
+        ):
+            runtime.schedule(
+                definition.id,
+                {"idempotency_key": "caller-controlled"},
+                run_at=datetime.now(timezone.utc),
+            )
+    finally:
+        runtime._supervisor_stop.set()
+        database.close()
