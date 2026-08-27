@@ -266,6 +266,21 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     """,
                     (self.context.workspace_id, run_id, step.id, ordinal),
                 )
+            self._append_event(
+                work.connection,
+                WorkflowEvent(
+                    run_id=run_id,
+                    event_type=(
+                        "workflow.run.started"
+                        if definition.steps
+                        else "workflow.run.completed"
+                    ),
+                    payload={
+                        "workflow_id": definition.id,
+                        "workflow_version": definition.version,
+                    },
+                ),
+            )
             work.commit()
         self._advance(run_id)
         return run_id
@@ -868,6 +883,15 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 """,
                 (self.worker_id, self.context.workspace_id, run_id, step_id),
             ).fetchone()
+            if row is not None:
+                self._append_event(
+                    work.connection,
+                    WorkflowEvent(
+                        run_id=run_id,
+                        event_type="workflow.step.started",
+                        payload={"step_id": step_id, "attempt": int(row[0])},
+                    ),
+                )
             work.commit()
         return int(row[0]) if row else None
 
