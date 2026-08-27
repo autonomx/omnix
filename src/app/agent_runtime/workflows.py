@@ -70,6 +70,10 @@ class WorkflowRunSnapshot(BaseModel):
     current_step_id: str | None = None
     input_payload: dict[str, Any] = Field(default_factory=dict)
     revision: int = 1
+    last_error: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class WorkflowScheduleSnapshot(BaseModel):
