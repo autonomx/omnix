@@ -12,6 +12,7 @@ from app.trading.paper import (
     PaperOrder,
     paper_fill_decision,
     paper_liquidity_allocation,
+    paper_observation_key,
     paper_protection_trigger,
 )
 from app.trading.providers.alpaca_iex_status import AlpacaIexStatusCache, AlpacaTradingStatus
@@ -79,6 +80,22 @@ def test_historical_fill_capacity_uses_bar_volume_when_no_book_size_exists() -> 
     )
     decision = paper_fill_decision(_order(), historical, policy)
     assert decision.fill_quantity == Decimal("50")
+
+
+def test_paper_observation_key_distinguishes_changed_book_at_same_source_time() -> None:
+    first = _observation()
+    second = first.model_copy(
+        update={
+            "price": Decimal("10.02"),
+            "bid": Decimal("10.01"),
+            "ask": Decimal("10.03"),
+            "bid_size": Decimal("400"),
+            "ask_size": Decimal("400"),
+        }
+    )
+
+    assert first.source_time == second.source_time
+    assert paper_observation_key(first) != paper_observation_key(second)
 
 
 def test_live_liquidity_budget_is_shared_across_multiple_paper_orders() -> None:
