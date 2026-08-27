@@ -1,7 +1,7 @@
 from __future__ import annotations
 import pytest
 
-from app.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef, RunLimits
+from app.agent_runtime.contracts import AgentRunSnapshot, AgentRunSpec, ModelRef, ResourceScope, RunLimits
 from app.agent_runtime.subagents import ChildRunRequest, derive_child_spec, reserve_child_budget
 
 
@@ -38,3 +38,30 @@ def test_child_aggregate_budget_is_bounded_by_parent() -> None:
     ))
     with pytest.raises(ValueError):
         reserve_child_budget(parent, [AgentRunSnapshot(run_id=first.run_id, spec=first)], second)
+
+
+def test_child_cannot_drop_parent_resource_scope() -> None:
+    parent = _parent().model_copy(
+        update={
+            "spec": _parent().spec.model_copy(
+                update={
+                    "resource_scopes": [
+                        ResourceScope(
+                            capability="github.read_repo",
+                            resource_type="repository",
+                            resource_id="autonomx/omnix",
+                        )
+                    ]
+                }
+            )
+        }
+    )
+    with pytest.raises(ValueError, match="cannot remove parent restrictions"):
+        derive_child_spec(
+            parent,
+            ChildRunRequest(
+                task="Inspect broadly",
+                external_capabilities=["github.read_repo"],
+                resource_scopes=[],
+            ),
+        )
