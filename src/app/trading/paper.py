@@ -143,6 +143,7 @@ class PaperMarketObservation(BaseModel):
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     execution_eligible: bool = True
     freshness_mode: str = "unknown"
+    provider_sequence: int | None = None
     rejection_reasons: tuple[str, ...] = ()
     halted: bool = False
 
@@ -497,7 +498,8 @@ def paper_observation_key(observation: PaperMarketObservation) -> str:
         f"{observation.high}|{observation.low}|{observation.volume}|"
         f"{observation.bar_start_time.isoformat() if observation.bar_start_time else None}|"
         f"{observation.execution_eligible}|{observation.freshness_mode}|"
-        f"{','.join(observation.rejection_reasons)}|{observation.halted}"
+        f"{observation.provider_sequence}|{','.join(observation.rejection_reasons)}|"
+        f"{observation.halted}"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
