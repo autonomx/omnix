@@ -1409,3 +1409,93 @@
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .workspace-card td {
   color: #2c4059 !important;
 }
+
+
+/* Liquid Glass performance budget
+ * -------------------------------
+ * Backdrop blur is one of the most expensive effects in a full-screen app:
+ * every blurred layer needs the browser to continuously capture and composite
+ * the pixels behind it. The visual theme previously applied blur to nested
+ * cards, controls, chat messages, and generic *-card/*-panel surfaces. On
+ * scrolling/animated views that creates a large stack of overlapping GPU
+ * surfaces and noticeably worse input/scroll latency than Aurora.
+ *
+ * Keep the "glass" look through translucent gradients, borders, highlights,
+ * and shadows, but reserve real backdrop filtering for small/stable shell
+ * chrome only.
+ */
+:root[data-omnix-theme='liquid-glass'] {
+  --omnix-glass-blur: 8px;
+  --omnix-glass-saturation: 116%;
+  --omnix-glass-shadow: 0 0.7rem 1.65rem rgba(2, 11, 25, 0.16);
+  --omnix-glass-shadow-soft: 0 0.32rem 0.8rem rgba(3, 14, 30, 0.1);
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] {
+  --omnix-glass-shadow: 0 0.7rem 1.65rem rgba(63, 82, 108, 0.09);
+  --omnix-glass-shadow-soft: 0 0.32rem 0.8rem rgba(67, 87, 112, 0.065);
+}
+
+/* Fixed background repainting plus nested backdrop filters was especially
+ * expensive during scroll. The gradient remains visually identical without
+ * pinning it to the viewport compositor.
+ */
+:root[data-omnix-theme='liquid-glass'] body {
+  background-attachment: scroll !important;
+}
+
+/* Disable real-time backdrop capture everywhere in routed content. This rule
+ * intentionally comes last and matches the specificity of the light-mode
+ * hardening selectors above.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-shell * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* A very small amount of real glass is retained only on stable shell chrome
+ * and the theme popup. These areas are small, rarely repaint, and do not
+ * overlap the scrolling application surface.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-topbar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-sidebar,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-theme-menu {
+  -webkit-backdrop-filter: blur(8px) saturate(116%) !important;
+  backdrop-filter: blur(8px) saturate(116%) !important;
+}
+
+/* Nested "glass" now uses cheap alpha/gradient compositing. Preserve the edge
+ * highlight so the material still reads as Liquid Glass without a live blur.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class$='-card'],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class*='-card '],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class$='-panel'],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class*='-panel '],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class$='-rail'],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class*='-rail '],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class$='-surface'],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class*='-surface '],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class$='-toolbar'],
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] .omnix-main [class*='-toolbar '] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Avoid promoting every interactive control into a separate compositing layer.
+ * Hover/focus keeps border and background feedback, but no blur is introduced.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance] :where(
+  input,
+  select,
+  textarea,
+  button,
+  .assistant-chat-bubble,
+  .assistant-message-content,
+  .assistant-live-visual-stage,
+  .chat-identity-mode-toggle,
+  .chat-identity-context-select,
+  .settings-theme-card
+) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
