@@ -18,6 +18,7 @@ function stringList(name: string, fallback: string[]): string[] {
 
 const allowedPaths = stringList("OMNIX_AGENT_ALLOWED_PATHS", ["**"]);
 const forbiddenPaths = stringList("OMNIX_AGENT_FORBIDDEN_PATHS", []);
+const localCapabilities = new Set(stringList("OMNIX_AGENT_LOCAL_CAPABILITIES", []));
 
 function relativeWorkspacePath(value: string): string | null {
   const cleaned = value.startsWith("@") ? value.slice(1) : value;
@@ -95,6 +96,28 @@ const safeCommandPrefixes = [
   "npx vitest", "npx tsc",
 ];
 
+const testCommandPrefixes = [
+  "python -m pytest", "pytest", "npm test", "npm run test", "npx vitest",
+];
+
+const gitStatusCommandPrefixes = ["git status"];
+const gitDiffCommandPrefixes = ["git diff"];
+
+function issuedCommandPrefixes(): string[] {
+  if (localCapabilities.has("workspace.command")) return safeCommandPrefixes;
+  const prefixes = new Set<string>();
+  if (localCapabilities.has("workspace.test")) {
+    for (const prefix of testCommandPrefixes) prefixes.add(prefix);
+  }
+  if (localCapabilities.has("workspace.git_status")) {
+    for (const prefix of gitStatusCommandPrefixes) prefixes.add(prefix);
+  }
+  if (localCapabilities.has("workspace.git_diff")) {
+    for (const prefix of gitDiffCommandPrefixes) prefixes.add(prefix);
+  }
+  return [...prefixes];
+}
+
 const forbiddenShellSyntax = /[\r\n;&|><`]/;
 const environmentExpansion = /(?:\$\{|\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%|~[\\/])/;
 
@@ -124,7 +147,7 @@ function commandAllowed(command: unknown): boolean {
   if (typeof command !== "string") return false;
   const normalized = command.trim().toLowerCase();
   if (!normalized || forbiddenShellSyntax.test(normalized) || normalized.includes("$(")) return false;
-  if (!safeCommandPrefixes.some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "))) return false;
+  if (!issuedCommandPrefixes().some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "))) return false;
   return commandScopeAllowed(command);
 }
 
