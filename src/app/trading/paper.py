@@ -295,6 +295,31 @@ def _liquidity_capacity(
     return observation.volume * policy.max_volume_participation_pct
 
 
+def paper_liquidity_capacity(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy | None = None,
+) -> Decimal | None:
+    """Return the maximum simulation participation for this observation bucket."""
+    return _liquidity_capacity(order, observation, policy or PaperExecutionPolicy())
+
+
+def paper_liquidity_allocation(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    requested_quantity: Decimal,
+    consumed: dict[str, Decimal],
+    policy: PaperExecutionPolicy | None = None,
+) -> tuple[Decimal, str | None]:
+    """Cap one paper fill by liquidity already consumed from the observation."""
+    capacity = paper_liquidity_capacity(order, observation, policy)
+    if capacity is None:
+        return requested_quantity, None
+    scope = paper_liquidity_scope(order, observation)
+    available = max(Decimal("0"), capacity - consumed.get(scope, Decimal("0")))
+    return min(requested_quantity, available), scope
+
+
 def paper_protection_trigger(
     *,
     is_long: bool,
