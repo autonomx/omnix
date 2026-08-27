@@ -1416,3 +1416,76 @@
   backdrop-filter: blur(8px) saturate(116%) !important;
 }
 
+
+
+/* Liquid Glass light-mode dark-surface leak guard */
+/* These components own legacy dark palettes and can be mounted dynamically.
+ * Keep the final theme layer authoritative without reintroducing backdrop blur.
+ */
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-progress,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.72), rgba(222,234,247,.42)),
+    rgba(238,246,253,.5) !important;
+  border-color: rgba(86,112,148,.2) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: var(--omnix-text) !important;
+}
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-heading h3,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-body,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-body :where(h1,h2,h3,h4,h5,h6,strong,p,li) {
+  color: var(--omnix-text) !important;
+}
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-body :where(p,ul,ol,blockquote,h1,h2,h3,h4,h5,h6) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-body p {
+  padding: 0 !important;
+}
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-meta,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-tools button {
+  color: var(--omnix-muted) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-card .assistant-voice-transcript {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.54), rgba(222,234,247,.3)),
+    rgba(238,246,253,.5) !important;
+  border-color: rgba(86,112,148,.19) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: var(--omnix-text) !important;
+}
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-card .assistant-voice-transcript-header {
+  background: rgba(238,246,253,.96) !important;
+  border-bottom-color: rgba(86,112,148,.17) !important;
+  color: var(--omnix-text) !important;
+}
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-card .assistant-voice-transcript-header :where(h3,button) {
+  color: var(--omnix-text) !important;
+}
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-live-card .assistant-voice-transcript p {
+  background: rgba(255,255,255,.38) !important;
+  border-color: rgba(86,112,148,.14) !important;
+  box-shadow: none !important;
+  color: #2d425d !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .live-chat-fullscreen-shell {
+  --immersive-bg: #dbe6f2;
+  --immersive-panel: rgba(241,248,255,.9);
+  --immersive-panel-soft: rgba(226,237,248,.74);
+  --immersive-border: rgba(86,112,148,.22);
+  --immersive-text: #203049;
+  --immersive-muted: #66778e;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255,255,255,.82), transparent 32rem),
+    radial-gradient(circle at 82% 92%, rgba(154,178,207,.28), transparent 30rem),
+    var(--immersive-bg) !important;
+  color: var(--immersive-text) !important;
+}
