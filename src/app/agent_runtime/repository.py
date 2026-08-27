@@ -467,6 +467,106 @@ class PostgresAgentRunRepository:
             for row in rows
         ]
 
+    def ensure_capability_execution(
+        self,
+        run_id: str,
+        execution_key: str,
+        capability_id: str,
+        request_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.connection.execute(
+            """
+            INSERT INTO omnix_agent_capability_executions (
+                workspace_id, run_id, execution_key, capability_id, state, request_payload
+            ) VALUES (%s, %s, %s, %s, 'created', %s::jsonb)
+            ON CONFLICT (workspace_id, run_id, execution_key) DO NOTHING
+            """,
+            (
+                self.context.workspace_id,
+                run_id,
+                execution_key,
+                capability_id,
+                _json(request_payload),
+            ),
+        )
+        row = self.connection.execute(
+            """
+            SELECT capability_id, state, request_payload, result_payload, error,
+                   state_changed, created_at, updated_at
+              FROM omnix_agent_capability_executions
+             WHERE workspace_id = %s AND run_id = %s AND execution_key = %s
+            """,
+            (self.context.workspace_id, run_id, execution_key),
+        ).fetchone()
+        if row is None:
+            raise AgentRunConcurrencyError("capability execution disappeared")
+        return {
+            "capability_id": str(row[0]),
+            "state": str(row[1]),
+            "request_payload": dict(row[2] or {}),
+            "result_payload": dict(row[3] or {}),
+            "error": str(row[4]) if row[4] else None,
+            "state_changed": bool(row[5]),
+            "created_at": row[6],
+            "updated_at": row[7],
+        }
+
+    def mark_capability_waiting_for_approval(
+        self,
+        run_id: str,
+        execution_key: str,
+    ) -> None:
+        self.connection.execute(
+            """
+            UPDATE omnix_agent_capability_executions
+               SET state = 'waiting_for_approval', updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND execution_key = %s
+               AND state = 'created'
+            """,
+            (self.context.workspace_id, run_id, execution_key),
+        )
+
+    def claim_capability_execution(self, run_id: str, execution_key: str) -> bool:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_capability_executions
+               SET state = 'running', updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND execution_key = %s
+               AND state IN ('created','waiting_for_approval')
+            RETURNING execution_key
+            """,
+            (self.context.workspace_id, run_id, execution_key),
+        ).fetchone()
+        return row is not None
+
+    def finish_capability_execution(
+        self,
+        run_id: str,
+        execution_key: str,
+        *,
+        result_payload: dict[str, Any],
+        error: str | None,
+        state_changed: bool,
+    ) -> None:
+        self.connection.execute(
+            """
+            UPDATE omnix_agent_capability_executions
+               SET state = %s, result_payload = %s::jsonb, error = %s,
+                   state_changed = %s, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND execution_key = %s
+               AND state = 'running'
+            """,
+            (
+                "failed" if error else "completed",
+                _json(result_payload),
+                error,
+                state_changed,
+                self.context.workspace_id,
+                run_id,
+                execution_key,
+            ),
+        )
+
     def acquire_lease(self, run_id: str, *, worker_id: str, ttl_seconds: int = 30) -> WorkerLease:
         token = uuid.uuid4().hex
         expires = datetime.now(timezone.utc) + timedelta(seconds=max(5, ttl_seconds))

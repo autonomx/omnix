@@ -41,15 +41,64 @@ class AgentRunService:
         issued = self._prepare_workspace(spec)
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
-            snapshot = repository.create_run(issued)
-            repository.acquire_lease(issued.run_id, worker_id=self.worker_id, ttl_seconds=90)
-            snapshot = repository.update_state(
-                issued.run_id,
-                expected_revision=snapshot.revision,
-                status="starting",
-                worker_id=self.worker_id,
-            )
+            snapshot = self._persist_starting_run(repository, issued)
             work.commit()
+        return self._launch_runtime(issued, snapshot)
+
+    def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
+        from .subagents import derive_child_spec, reserve_child_budget
+
+        self._ensure_supervisor()
+        initial_parent = self.get(parent_run_id)
+        if initial_parent is None:
+            raise KeyError(parent_run_id)
+        preliminary = derive_child_spec(initial_parent, request)
+
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            locked = work.connection.execute(
+                """
+                SELECT run_id
+                  FROM omnix_agent_runs
+                 WHERE workspace_id = %s AND run_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, parent_run_id),
+            ).fetchone()
+            if locked is None:
+                raise KeyError(parent_run_id)
+            parent = repository.get_run(parent_run_id)
+            if parent is None:
+                raise KeyError(parent_run_id)
+            if parent.status in {"completed", "failed", "cancelled"}:
+                raise ValueError("cannot start child from terminal parent")
+            child_spec = derive_child_spec(parent, request)
+            existing = repository.list_children(parent_run_id)
+            reserve_child_budget(parent, existing, child_spec)
+            issued = self._prepare_workspace(child_spec)
+            snapshot = self._persist_starting_run(repository, issued)
+            work.commit()
+        return self._launch_runtime(issued, snapshot)
+
+    def _persist_starting_run(
+        self,
+        repository: PostgresAgentRunRepository,
+        issued: AgentRunSpec,
+    ) -> AgentRunSnapshot:
+        snapshot = repository.create_run(issued)
+        repository.acquire_lease(issued.run_id, worker_id=self.worker_id, ttl_seconds=90)
+        return repository.update_state(
+            issued.run_id,
+            expected_revision=snapshot.revision,
+            status="starting",
+            worker_id=self.worker_id,
+        )
+
+    def _launch_runtime(
+        self,
+        issued: AgentRunSpec,
+        snapshot: AgentRunSnapshot,
+    ) -> AgentRunSnapshot:
         try:
             self.runtime.start(issued)
         except Exception as exc:
@@ -63,23 +112,10 @@ class AgentRunService:
                         status="failed",
                         last_error=f"{type(exc).__name__}: {exc}"[:2000],
                     )
+                self._maybe_finalize_parent_in_repository(repository, issued.run_id)
                 work.commit()
             raise
         return self.get(issued.run_id) or snapshot
-
-    def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
-        from .subagents import derive_child_spec, reserve_child_budget
-
-        parent = self.get(parent_run_id)
-        if parent is None:
-            raise KeyError(parent_run_id)
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
-            existing = repository.list_children(parent_run_id)
-            work.rollback()
-        child_spec = derive_child_spec(parent, request)
-        reserve_child_budget(parent, existing, child_spec)
-        return self.start(child_spec)
 
     def get(self, run_id: str) -> AgentRunSnapshot | None:
         self._ensure_supervisor()
@@ -116,6 +152,11 @@ class AgentRunService:
 
         if stored.command_type == "cancel":
             self._cancel_descendants(stored.run_id)
+        if current.status in {"completed", "failed", "cancelled"}:
+            with unit_of_work(self.database) as work:
+                repository = PostgresAgentRunRepository(work.connection, self.context)
+                self._maybe_finalize_parent_in_repository(repository, stored.run_id)
+                work.commit()
         return self.get(stored.run_id) or current
 
     def _apply_claimed_command(self, stored: AgentRunCommand) -> AgentRunSnapshot:
@@ -212,6 +253,32 @@ class AgentRunService:
             work.rollback()
             return rows
 
+    def _maybe_finalize_parent_in_repository(
+        self,
+        repository: PostgresAgentRunRepository,
+        child_run_id: str,
+    ) -> None:
+        child = repository.get_run(child_run_id)
+        if child is None or not child.spec.parent_run_id:
+            return
+        if child.status not in {"completed", "failed", "cancelled"}:
+            return
+        parent = repository.get_run(child.spec.parent_run_id)
+        if parent is None or parent.status != "waiting_for_children":
+            return
+        terminal, failed = self._children_terminal_state(repository, parent.run_id)
+        if not terminal:
+            return
+        if failed:
+            repository.update_state(
+                parent.run_id,
+                expected_revision=parent.revision,
+                status="failed",
+                last_error="acceptance_failed:child_run_failed",
+            )
+        else:
+            self._finalize_acceptance(repository, parent)
+
     @staticmethod
     def _children_terminal_state(repository: PostgresAgentRunRepository, run_id: str) -> tuple[bool, bool]:
         children = repository.list_children(run_id)
@@ -298,21 +365,7 @@ class AgentRunService:
                         worker_id=self.worker_id,
                         last_error=str(event.payload.get("error") or "Pi runtime failed")[:2000],
                     )
-                refreshed = repository.get_run(event.run_id)
-                if refreshed is not None and refreshed.spec.parent_run_id and refreshed.status in {"completed", "failed", "cancelled"}:
-                    parent = repository.get_run(refreshed.spec.parent_run_id)
-                    if parent is not None and parent.status == "waiting_for_children":
-                        terminal, failed = self._children_terminal_state(repository, parent.run_id)
-                        if terminal:
-                            if failed:
-                                repository.update_state(
-                                    parent.run_id,
-                                    expected_revision=parent.revision,
-                                    status="failed",
-                                    last_error="acceptance_failed:child_run_failed",
-                                )
-                            else:
-                                self._finalize_acceptance(repository, parent)
+                self._maybe_finalize_parent_in_repository(repository, event.run_id)
                 work.commit()
 
     def _capture_diff(self, repository: PostgresAgentRunRepository, spec: AgentRunSpec) -> None:
