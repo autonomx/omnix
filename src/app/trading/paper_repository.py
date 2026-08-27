@@ -25,6 +25,7 @@ from .paper import (
     paper_fill_is_fundable,
     paper_fill_decision,
     paper_fill_key,
+    paper_liquidity_allocation,
     paper_order_request_matches,
     paper_realized_pnl,
     paper_unrealized_pnl,
@@ -426,6 +427,29 @@ class TradingPaperRepository:
                 """,
                 (self.context.workspace_id, account_id, observation.instrument_id),
             ).fetchall()
+            existing_liquidity_rows = uow.connection.execute(
+                """
+                SELECT side, COALESCE(SUM(quantity), 0)
+                  FROM omnix_trading_paper_fills
+                 WHERE workspace_id = %s AND account_id = %s
+                   AND instrument_id = %s AND source_time = %s
+                 GROUP BY side
+                """,
+                (
+                    self.context.workspace_id,
+                    account_id,
+                    observation.instrument_id,
+                    observation.source_time,
+                ),
+            ).fetchall()
+            existing_by_side = {
+                str(row[0]): Decimal(row[1]) for row in existing_liquidity_rows
+            }
+            liquidity_consumed = {
+                "book:buy": existing_by_side.get("buy", Decimal("0")),
+                "book:sell": existing_by_side.get("sell", Decimal("0")),
+                "bar": sum(existing_by_side.values(), Decimal("0")),
+            }
 
             for row in order_rows:
                 order = _order(row)
@@ -437,9 +461,15 @@ class TradingPaperRepository:
                     or decision.fill_quantity <= 0
                 ):
                     continue
-                fill_quantity = min(
+                requested_fill_quantity = min(
                     decision.fill_quantity,
                     max(Decimal("0"), order.quantity - order.filled_quantity),
+                )
+                fill_quantity, liquidity_scope = paper_liquidity_allocation(
+                    order,
+                    observation,
+                    requested_fill_quantity,
+                    liquidity_consumed,
                 )
                 if fill_quantity <= 0:
                     continue
@@ -505,6 +535,11 @@ class TradingPaperRepository:
                 ).fetchone()
                 if inserted is None:
                     continue
+                if liquidity_scope is not None:
+                    liquidity_consumed[liquidity_scope] = (
+                        liquidity_consumed.get(liquidity_scope, Decimal("0"))
+                        + fill_quantity
+                    )
 
                 remaining_before = max(Decimal("0"), order.quantity - order.filled_quantity)
                 if order.side == "buy":
