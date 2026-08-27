@@ -92,10 +92,25 @@ def test_paper_observation_liquidity_is_aggregate_and_replay_safe() -> None:
         replay = repository.process_observation(account_id, observation)
         assert replay == []
 
+        changed_same_time = observation.model_copy(
+            update={
+                "price": Decimal("10.02"),
+                "bid": Decimal("10.01"),
+                "ask": Decimal("10.03"),
+                "bid_size": Decimal("400"),
+                "ask_size": Decimal("400"),
+            }
+        )
+        changed_fills = repository.process_observation(account_id, changed_same_time)
+        assert sum(
+            (fill.quantity for fill in changed_fills),
+            Decimal("0"),
+        ) == Decimal("40")
+
         snapshot = repository.snapshot(account_id)
         assert sum(
             (order.filled_quantity for order in snapshot.order_history),
             Decimal("0"),
-        ) == Decimal("30")
+        ) == Decimal("70")
     finally:
         database.close()
