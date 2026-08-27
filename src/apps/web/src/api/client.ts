@@ -43,6 +43,26 @@ export interface AgentRunSnapshot {
   };
 }
 
+export interface AgentRunEvent {
+  event_id: string;
+  run_id: string;
+  sequence?: number | null;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentArtifact {
+  artifact_id: string;
+  run_id: string;
+  kind: string;
+  name: string;
+  storage_ref?: string | null;
+  checksum?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface AgentApproval {
   approval_id: string;
   run_id: string;
@@ -351,6 +371,21 @@ export class OmnixApiClient {
 
   async getAgentRun(runId: string): Promise<AgentRunSnapshot> {
     return this.get<AgentRunSnapshot>(`/api/agent-runs/${encodeURIComponent(runId)}`);
+  }
+
+  async listAgentRunEvents(runId: string, afterSequence = 0): Promise<AgentRunEvent[]> {
+    const query = afterSequence > 0
+      ? `?after_sequence=${encodeURIComponent(String(afterSequence))}`
+      : '';
+    return this.get<AgentRunEvent[]>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/events${query}`,
+    );
+  }
+
+  async listAgentArtifacts(runId: string): Promise<AgentArtifact[]> {
+    return this.get<AgentArtifact[]>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/artifacts`,
+    );
   }
 
   async commandAgentRun(
