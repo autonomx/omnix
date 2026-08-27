@@ -158,6 +158,27 @@ def _request_within_resource_scopes(
     return False
 
 
+def _review_with_run_policy(
+    request: AssistantToolRequest,
+    run_policy: str,
+):
+    """Apply run policy as an approval floor, never as a weakening override."""
+    base_request = request.model_copy(update={"approval_policy": None})
+    base = review_assistant_tool_request(base_request)
+    if not base.allowed or run_policy == "allow_automatic":
+        return base_request, base
+    if run_policy == "disabled":
+        disabled_request = request.model_copy(update={"approval_policy": "disabled"})
+        return disabled_request, review_assistant_tool_request(disabled_request)
+    # If the canonical tool/action/config already requires approval, preserve
+    # that stronger decision rather than replacing it with a weaker run policy.
+    if base.approval_required:
+        return base_request, base
+    overlay_request = request.model_copy(update={"approval_policy": run_policy})
+    overlay = review_assistant_tool_request(overlay_request)
+    return overlay_request, overlay
+
+
 def _stored_response(
     capability_id: str,
     execution_key: str,
@@ -202,6 +223,16 @@ def execute_agent_capability(
     snapshot = service.get(run_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
+    if snapshot.status not in {"starting", "running", "waiting_for_approval"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent_run_not_runnable:{snapshot.status}",
+        )
+    if snapshot.desired_state != "running":
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent_run_not_runnable:{snapshot.desired_state}",
+        )
     capability = default_capability_registry().get(capability_id)
     if capability is None or capability.execution_zone != "broker":
         raise HTTPException(status_code=404, detail="agent_capability_not_found")
@@ -276,10 +307,12 @@ def execute_agent_capability(
             session_id=snapshot.spec.session_id or f"agent:{run_id}",
             proposal_id=execution_key,
             input=request.input,
-            approval_policy=snapshot.spec.approval_policy,
             approved=approved,
         )
-        decision = review_assistant_tool_request(tool_request)
+        tool_request, decision = _review_with_run_policy(
+            tool_request,
+            snapshot.spec.approval_policy,
+        )
         if not decision.allowed:
             repository.finish_capability_execution(
                 run_id,
