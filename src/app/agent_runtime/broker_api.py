@@ -158,6 +158,41 @@ def _request_within_resource_scopes(
     return False
 
 
+def _bind_authoritative_capability_input(
+    snapshot,
+    capability_id: str,
+    request: BrokerCapabilityRequest,
+) -> BrokerCapabilityRequest:
+    if capability_id != "github.push":
+        return request
+    workspace = snapshot.spec.workspace
+    if workspace is None:
+        raise HTTPException(
+            status_code=409,
+            detail="agent_push_requires_issued_workspace",
+        )
+    if "worktree" in request.input:
+        raise HTTPException(
+            status_code=403,
+            detail="agent_push_worktree_is_omnix_managed",
+        )
+    if "remote" in request.input:
+        raise HTTPException(
+            status_code=403,
+            detail="agent_push_remote_is_omnix_managed",
+        )
+    issued_worktree = workspace.worktree or workspace.root
+    return request.model_copy(
+        update={
+            "input": {
+                **request.input,
+                "worktree": issued_worktree,
+                "remote": "origin",
+            }
+        }
+    )
+
+
 def _review_with_run_policy(
     request: AssistantToolRequest,
     run_policy: str,
@@ -256,6 +291,11 @@ def execute_agent_capability(
     canonical = capability.id
     if canonical not in snapshot.spec.external_capabilities:
         raise HTTPException(status_code=403, detail="agent_capability_outside_run_spec")
+    request = _bind_authoritative_capability_input(
+        snapshot,
+        canonical,
+        request,
+    )
     if not _request_within_resource_scopes(snapshot, canonical, request.input):
         raise HTTPException(status_code=403, detail="agent_resource_scope_mismatch")
 
