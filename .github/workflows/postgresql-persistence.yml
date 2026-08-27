@@ -44,6 +44,9 @@ jobs:
           python -m pip install \
             pytest fastapi httpx pydantic requests python-multipart pillow playwright \
             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+      - name: Compile hardening modules
+        run: python -m py_compile src/run_app.py src/app/shared.py
+
       - name: Run PostgreSQL persistence tests
         run: |
           set -o pipefail
