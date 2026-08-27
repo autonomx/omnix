@@ -2,7 +2,8 @@ import hashlib
 import json
 import os
 import re
-from typing import Any, Dict, Optional
+import threading
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 # Base paths - project root (parent of src/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -43,6 +44,8 @@ _sessions_load_override = None
 _sessions_save_override = None
 _secrets_load_override = None
 _secrets_save_override = None
+_sessions_document_lock = threading.RLock()
+_SessionMutationResult = TypeVar("_SessionMutationResult")
 
 # Singleton Provider Instances
 _tts_provider_instance = None
@@ -352,7 +355,7 @@ def load_settings():
                 return settings
         except Exception as e:
             print(f"Error loading settings: {e}, using defaults")
-    return DEFAULT_SETTINGS.copy()
+    return json.loads(json.dumps(DEFAULT_SETTINGS))
 
 def save_settings(settings):
     settings = migrate_settings(dict(settings or {}))
@@ -403,6 +406,25 @@ def save_sessions(sessions):
     else:
         with open(SESSIONS_FILE, 'w') as f:
             json.dump(sessions, f, indent=2)
+
+
+def update_sessions(
+    mutator: Callable[[Dict[str, Any]], _SessionMutationResult],
+) -> _SessionMutationResult:
+    """Atomically apply one in-process read/modify/write session mutation.
+
+    Legacy chat sessions are stored as a bounded compatibility document. Keeping
+    the read and write under the same process lock prevents concurrent requests
+    and WebSocket completions from overwriting each other's changes.
+    """
+
+    global sessions_data
+    with _sessions_document_lock:
+        current = dict(load_sessions() or {})
+        result = mutator(current)
+        save_sessions(current)
+        sessions_data = current
+        return result
 
 def extract_thinking(content):
     """Extract thinking/analysis from content."""
