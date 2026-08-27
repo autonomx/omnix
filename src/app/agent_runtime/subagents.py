@@ -117,6 +117,8 @@ def _validate_limits(parent: RunLimits, child: RunLimits) -> None:
 
 
 def _validate_scopes(parent: list[ResourceScope], child: list[ResourceScope]) -> None:
+    if parent and not child:
+        raise ValueError("child resource scopes cannot remove parent restrictions")
     if not child:
         return
     parent_keys = {
