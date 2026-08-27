@@ -186,3 +186,54 @@ def test_terminal_agent_run_ignores_late_commands_and_runtime_events() -> None:
             work.rollback()
     finally:
         database.close()
+
+
+def test_terminal_parent_propagates_cancellation_to_running_child() -> None:
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        parent_id = f"agent-parent-{uuid.uuid4().hex}"
+        child_id = f"agent-child-{uuid.uuid4().hex}"
+        parent_spec = AgentRunSpec(
+            run_id=parent_id,
+            task="Parent",
+            model=ModelRef(provider_id="test", model_id="model"),
+        )
+        child_spec = AgentRunSpec(
+            run_id=child_id,
+            parent_run_id=parent_id,
+            task="Child",
+            model=ModelRef(provider_id="test", model_id="model"),
+        )
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            parent = repository.create_run(parent_spec)
+            repository.update_state(
+                parent_id,
+                expected_revision=parent.revision,
+                status="failed",
+                desired_state="cancelled",
+                last_error="parent_failed",
+            )
+            child = repository.create_run(child_spec)
+            repository.update_state(
+                child_id,
+                expected_revision=child.revision,
+                status="running",
+                worker_id="dead-child-worker",
+            )
+            work.commit()
+
+        service = AgentRunService(database, worker_id="parent-propagation-worker")
+        service._supervisor_started = True
+        service._supervise_once()
+
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            persisted = repository.get_run(child_id)
+            assert persisted is not None
+            assert persisted.status == "cancelled"
+            assert persisted.desired_state == "cancelled"
+            work.rollback()
+    finally:
+        database.close()
