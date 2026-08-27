@@ -1,0 +1,664 @@
+/*
+ * Omnix Liquid Glass
+ * ------------------
+ * A global glass material preset inspired by the supplied slate-blue dashboard
+ * reference. This file intentionally loads after every module stylesheet so the
+ * material is consistent across Chat, RPG, Storyteller, Podcast, Voice Studio,
+ * Image Generation, Trading, Settings, diagnostics, and lower-level platform
+ * views without requiring each feature to own a bespoke glass skin.
+ */
+
+:root[data-omnix-theme='liquid-glass'] {
+  --omnix-theme-gradient:
+    linear-gradient(180deg, rgba(137, 166, 202, 0.78) 0%, rgba(82, 111, 148, 0.74) 48%, rgba(47, 72, 105, 0.82) 100%);
+  --omnix-theme-gradient-hover:
+    linear-gradient(180deg, rgba(157, 186, 220, 0.84) 0%, rgba(96, 129, 168, 0.82) 48%, rgba(55, 84, 120, 0.88) 100%);
+  --omnix-theme-soft: rgba(107, 137, 176, 0.12);
+  --omnix-theme-soft-strong: rgba(116, 150, 193, 0.22);
+  --omnix-theme-line: rgba(163, 192, 227, 0.28);
+  --omnix-theme-shadow: rgba(2, 12, 29, 0.28);
+  --omnix-theme-on-accent: #f7fbff;
+  --omnix-theme-gloss:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(10, 25, 47, 0.2),
+    0 0.7rem 1.6rem rgba(3, 15, 34, 0.22);
+
+  --omnix-glass-blur: 26px;
+  --omnix-glass-saturation: 138%;
+  --omnix-glass-radius: 1rem;
+  --omnix-glass-panel: rgba(40, 58, 83, 0.43);
+  --omnix-glass-panel-strong: rgba(32, 49, 75, 0.58);
+  --omnix-glass-control: rgba(34, 51, 76, 0.5);
+  --omnix-glass-border: rgba(184, 205, 231, 0.16);
+  --omnix-glass-border-strong: rgba(194, 216, 241, 0.24);
+  --omnix-glass-highlight: rgba(255, 255, 255, 0.12);
+  --omnix-glass-shadow: 0 1rem 2.5rem rgba(2, 11, 25, 0.23);
+  --omnix-glass-shadow-soft: 0 0.55rem 1.4rem rgba(3, 14, 30, 0.16);
+  --omnix-glass-bevel:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 1px 0 0 rgba(255, 255, 255, 0.035),
+    inset 0 -1px 0 rgba(0, 8, 20, 0.18);
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='dark'] {
+  color-scheme: dark;
+  --omnix-body-bg: #0b1628;
+  --omnix-body-surface:
+    radial-gradient(circle at 11% 2%, rgba(151, 171, 198, 0.24), transparent 28rem),
+    radial-gradient(circle at 44% 18%, rgba(65, 88, 121, 0.18), transparent 36rem),
+    linear-gradient(110deg, #31405a 0%, #1d2b43 22%, #12213a 53%, #0d1a31 76%, #0a1528 100%);
+  --omnix-border: rgba(174, 197, 225, 0.16);
+  --omnix-strong-border: rgba(191, 213, 238, 0.25);
+  --omnix-text: #edf3fa;
+  --omnix-muted: #afbac9;
+  --omnix-muted-text: #afbac9;
+  --omnix-purple: #91a9c7;
+  --omnix-cyan: #7ca8dd;
+  --omnix-success: #72c4a5;
+  --omnix-main-bg: rgba(7, 16, 31, 0.16);
+  --omnix-sidebar-bg:
+    linear-gradient(180deg, rgba(66, 83, 109, 0.34), rgba(29, 45, 70, 0.33));
+  --omnix-panel-bg:
+    linear-gradient(160deg, rgba(65, 83, 108, 0.42), rgba(26, 43, 69, 0.4));
+  --omnix-panel-solid: rgba(31, 48, 73, 0.58);
+  --omnix-control-bg:
+    linear-gradient(180deg, rgba(57, 76, 102, 0.5), rgba(30, 47, 72, 0.52));
+  --omnix-control-text: #eef4fb;
+  --omnix-soft-bg: rgba(183, 205, 232, 0.055);
+  --omnix-topbar-bg:
+    linear-gradient(180deg, rgba(43, 60, 86, 0.48), rgba(22, 37, 60, 0.4));
+  --omnix-topbar-status-bg: rgba(91, 120, 158, 0.2);
+  --omnix-topbar-status-text: #e7f0fb;
+  --omnix-brand-core-bg: rgba(20, 36, 59, 0.88);
+  --omnix-page-panel:
+    linear-gradient(160deg, rgba(66, 84, 110, 0.4), rgba(26, 43, 69, 0.39));
+  --omnix-page-panel-flat: rgba(35, 52, 78, 0.46);
+  --omnix-page-panel-muted: rgba(40, 57, 82, 0.36);
+  --omnix-page-line: rgba(178, 202, 231, 0.15);
+  --omnix-page-line-strong: rgba(194, 218, 243, 0.24);
+  --omnix-page-shadow: var(--omnix-glass-shadow);
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] {
+  color-scheme: light;
+  --omnix-body-bg: #eaf0f8;
+  --omnix-body-surface:
+    radial-gradient(circle at 10% 2%, rgba(255, 255, 255, 0.92), transparent 28rem),
+    radial-gradient(circle at 73% 8%, rgba(184, 204, 228, 0.4), transparent 34rem),
+    linear-gradient(112deg, #d7e2f0 0%, #e8eef6 24%, #f2f6fb 55%, #e6edf7 78%, #dce6f2 100%);
+  --omnix-border: rgba(92, 117, 149, 0.18);
+  --omnix-strong-border: rgba(109, 136, 169, 0.27);
+  --omnix-text: #203049;
+  --omnix-muted: #66778e;
+  --omnix-muted-text: #66778e;
+  --omnix-purple: #5e789d;
+  --omnix-cyan: #4d78a8;
+  --omnix-success: #397d68;
+  --omnix-main-bg: rgba(226, 235, 246, 0.12);
+  --omnix-sidebar-bg:
+    linear-gradient(180deg, rgba(249, 252, 255, 0.48), rgba(215, 227, 240, 0.38));
+  --omnix-panel-bg:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.5), rgba(217, 229, 242, 0.36));
+  --omnix-panel-solid: rgba(244, 249, 254, 0.56);
+  --omnix-control-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(224, 234, 245, 0.5));
+  --omnix-control-text: #203049;
+  --omnix-soft-bg: rgba(83, 117, 157, 0.055);
+  --omnix-topbar-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(221, 231, 242, 0.4));
+  --omnix-topbar-status-bg: rgba(91, 121, 159, 0.1);
+  --omnix-topbar-status-text: #405773;
+  --omnix-brand-core-bg: rgba(245, 250, 255, 0.82);
+  --omnix-page-panel:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.5), rgba(216, 228, 242, 0.34));
+  --omnix-page-panel-flat: rgba(248, 251, 255, 0.48);
+  --omnix-page-panel-muted: rgba(217, 228, 240, 0.34);
+  --omnix-page-line: rgba(95, 121, 154, 0.18);
+  --omnix-page-line-strong: rgba(112, 141, 176, 0.28);
+  --omnix-page-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    0 1rem 2.5rem rgba(61, 80, 105, 0.12);
+
+  --omnix-glass-panel: rgba(247, 251, 255, 0.44);
+  --omnix-glass-panel-strong: rgba(242, 248, 255, 0.58);
+  --omnix-glass-control: rgba(248, 251, 255, 0.54);
+  --omnix-glass-border: rgba(103, 130, 164, 0.17);
+  --omnix-glass-border-strong: rgba(112, 142, 178, 0.27);
+  --omnix-glass-highlight: rgba(255, 255, 255, 0.72);
+  --omnix-glass-shadow: 0 1rem 2.4rem rgba(63, 82, 108, 0.12);
+  --omnix-glass-shadow-soft: 0 0.55rem 1.35rem rgba(67, 87, 112, 0.09);
+  --omnix-glass-bevel:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 1px 0 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(84, 108, 139, 0.08);
+
+  --omnix-theme-gradient:
+    linear-gradient(180deg, rgba(251, 254, 255, 0.82) 0%, rgba(203, 218, 235, 0.76) 52%, rgba(157, 179, 205, 0.78) 100%);
+  --omnix-theme-gradient-hover:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(216, 230, 244, 0.84) 52%, rgba(171, 193, 216, 0.84) 100%);
+  --omnix-theme-line: rgba(104, 139, 178, 0.34);
+  --omnix-theme-on-accent: #21364f;
+  --omnix-theme-shadow: rgba(70, 94, 125, 0.16);
+}
+
+/* The page itself remains visible through every glass layer. */
+:root[data-omnix-theme='liquid-glass'] body {
+  background-attachment: fixed;
+}
+
+:root[data-omnix-theme='liquid-glass'] .omnix-main {
+  background: transparent !important;
+}
+
+/* Shared glass material. */
+:root[data-omnix-theme='liquid-glass'] :where(
+  .omnix-topbar,
+  .omnix-sidebar,
+  .workspace-card,
+  .omnix-mode-tabs,
+  .omnix-theme-picker-trigger,
+  .omnix-theme-menu,
+  .assistant-chat-sidebar,
+  .assistant-chat-main,
+  .assistant-live-card,
+  .assistant-tool-sidebar-card,
+  .assistant-view-panel,
+  .assistant-workspace-dashboard,
+  .assistant-workspace-activity,
+  .assistant-live-tools-grid,
+  .assistant-supporting-panels > section,
+  .assistant-supporting-panels > div,
+  .settings-control-center,
+  .settings-category-rail,
+  .settings-status-rail,
+  .settings-action-header,
+  .settings-section,
+  .storyteller-library,
+  .storyteller-controls,
+  .storyteller-outline,
+  .storyteller-project-header,
+  .storyteller-manuscript,
+  .storyteller-action-bar,
+  .storyteller-versions,
+  .podcast-card,
+  .voice-studio-app,
+  .voice-side-nav,
+  .voice-panel-final,
+  .voice-credit-card,
+  .voice-user-card,
+  .script-card,
+  .assignment-card,
+  .generate-card,
+  .now-playing-bar,
+  .rpg-shell,
+  .rpg-panel,
+  .rpg-card,
+  .rpg-player-rail,
+  .rpg-world-rail,
+  .rpg-story-scene,
+  .rpg-session-launcher,
+  .rpg-item-panel,
+  .image-flow-banner,
+  .image-system-card,
+  .image-surface,
+  .platform-section,
+  .workspace-grid article,
+  .feature-panel,
+  .feature-mini-card,
+  .provider-config-group,
+  .provider-settings-card
+) {
+  -webkit-backdrop-filter: blur(var(--omnix-glass-blur)) saturate(var(--omnix-glass-saturation));
+  backdrop-filter: blur(var(--omnix-glass-blur)) saturate(var(--omnix-glass-saturation));
+  background:
+    linear-gradient(180deg, var(--omnix-glass-highlight), transparent 18%, rgba(255, 255, 255, 0.015) 55%, rgba(0, 8, 22, 0.045)),
+    var(--omnix-glass-panel) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow);
+  color: var(--omnix-text) !important;
+}
+
+/* Any feature card/panel following the app's naming convention gets the same material.
+ * Using exact class suffixes avoids accidentally styling headings such as *-card-title.
+ */
+:root[data-omnix-theme='liquid-glass'] .omnix-main :where(
+  [class$='-card'],
+  [class*='-card '],
+  [class$='-panel'],
+  [class*='-panel '],
+  [class$='-rail'],
+  [class*='-rail '],
+  [class$='-surface'],
+  [class*='-surface ']
+) {
+  -webkit-backdrop-filter: blur(calc(var(--omnix-glass-blur) * 0.78)) saturate(128%);
+  backdrop-filter: blur(calc(var(--omnix-glass-blur) * 0.78)) saturate(128%);
+  border-color: var(--omnix-glass-border) !important;
+}
+
+/* Nested cards should read as thinner sheets of glass instead of opaque boxes. */
+:root[data-omnix-theme='liquid-glass'] :where(
+  .assistant-sidebar-nav,
+  .assistant-sidebar-section,
+  .assistant-workspace-usage,
+  .assistant-live-draft,
+  .assistant-voice-toggle,
+  .assistant-voice-input-indicator,
+  .assistant-audio-devices,
+  .assistant-audio-devices div,
+  .assistant-message-action-menu,
+  .assistant-tool-connection-panel,
+  .assistant-tool-action-row,
+  .assistant-view-panel article,
+  .assistant-tool-config-list article,
+  .assistant-settings-list div,
+  .assistant-composer-controls label,
+  .assistant-composer-chip,
+  .settings-status-card,
+  .settings-status-row,
+  .settings-field,
+  .settings-toggle-list label,
+  .settings-theme-card,
+  .image-readiness-inline,
+  .relationship-edge-list p,
+  .relationship-map-clear,
+  .relationship-node-card,
+  .action-toast,
+  .platform-empty
+) {
+  -webkit-backdrop-filter: blur(18px) saturate(126%);
+  backdrop-filter: blur(18px) saturate(126%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), transparent 42%),
+    var(--omnix-glass-panel-strong) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: var(--omnix-text) !important;
+}
+
+/* Headers, composers and tab rails use a continuous glass sheet. */
+:root[data-omnix-theme='liquid-glass'] :where(
+  .assistant-chat-header,
+  .assistant-composer,
+  .assistant-side-panel-toggle,
+  .storyteller-panel-heading,
+  .settings-category-title-row
+) {
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  backdrop-filter: blur(20px) saturate(130%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent),
+    rgba(39, 56, 82, 0.24) !important;
+  border-color: var(--omnix-glass-border) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] :where(
+  .assistant-chat-header,
+  .assistant-composer,
+  .assistant-side-panel-toggle,
+  .storyteller-panel-heading,
+  .settings-category-title-row
+) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), transparent),
+    rgba(235, 243, 251, 0.28) !important;
+}
+
+/* Inputs and native controls become translucent, but retain clear focus treatment. */
+:root[data-omnix-theme='liquid-glass'] :where(input, select, textarea),
+:root[data-omnix-theme='liquid-glass'] :where(
+  .assistant-message-input textarea,
+  .assistant-chat-integrated-actions select,
+  .image-field input,
+  .image-field select,
+  .image-field textarea,
+  .image-provider-filter select,
+  .image-assets-search input
+) {
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  backdrop-filter: blur(14px) saturate(120%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 45%),
+    var(--omnix-glass-control) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0.3rem 0.8rem rgba(3, 14, 30, 0.08);
+  color: var(--omnix-control-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] :where(input, select, textarea) {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74), 0 0.3rem 0.8rem rgba(67, 87, 112, 0.06);
+}
+
+:root[data-omnix-theme='liquid-glass'] :where(input, select, textarea):focus {
+  border-color: rgba(138, 174, 217, 0.55) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 0.2rem rgba(102, 147, 201, 0.12) !important;
+  outline: none;
+}
+
+/* Button sheets and active-state highlights. */
+:root[data-omnix-theme='liquid-glass'] :where(
+  .omnix-theme-toggle,
+  .omnix-theme-picker-trigger,
+  .assistant-message-actions button,
+  .assistant-chat-header-actions button,
+  .assistant-message-action-menu button,
+  .assistant-voice-controls button,
+  .storyteller-panel-heading.compact button,
+  .storyteller-project-actions button,
+  .storyteller-action-bar button,
+  .storyteller-versions button,
+  .storyteller-trash,
+  .storyteller-outline button,
+  .storyteller-chip-row button,
+  .storyteller-chapter-controls button,
+  .storyteller-output-status button,
+  .speaker-preview button,
+  .quality-card button,
+  .recent-card .card-heading-row button,
+  .audio-transport-buttons button
+) {
+  -webkit-backdrop-filter: blur(14px) saturate(124%);
+  backdrop-filter: blur(14px) saturate(124%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 46%),
+    var(--omnix-glass-control) !important;
+  border: 1px solid var(--omnix-glass-border) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0.25rem 0.7rem rgba(3, 14, 30, 0.08);
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] :where(
+  .omnix-mode-tabs button.active,
+  .assistant-side-panel-toggle button.active,
+  .chat-identity-mode-toggle button.active,
+  .assistant-chat-integrated-actions .assistant-header-pill,
+  .assistant-send-button,
+  .assistant-mic-button,
+  .omnix-shell-toggle,
+  .omnix-new-chat-button
+) {
+  background: var(--omnix-theme-gradient) !important;
+  border-color: var(--omnix-theme-line) !important;
+  box-shadow: var(--omnix-theme-gloss) !important;
+  color: var(--omnix-theme-on-accent) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] :where(
+  .omnix-mode-tabs button.active,
+  .assistant-side-panel-toggle button.active,
+  .chat-identity-mode-toggle button.active,
+  .assistant-send-button,
+  .assistant-mic-button
+)::after {
+  opacity: 0.55;
+}
+
+/* System/Character identity control uses the same steel-blue liquid material. */
+:root[data-omnix-theme='liquid-glass'] .chat-identity-mode-toggle,
+:root[data-omnix-theme='liquid-glass'] .chat-identity-context-select {
+  -webkit-backdrop-filter: blur(18px) saturate(128%);
+  backdrop-filter: blur(18px) saturate(128%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 44%),
+    var(--omnix-glass-control) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] .chat-identity-context-select.character {
+  border-color: rgba(137, 177, 218, 0.32) !important;
+}
+
+/* Chat bubbles stay highly readable while still feeling suspended in glass. */
+:root[data-omnix-theme='liquid-glass'] .assistant-chat-message:not(.user) .assistant-chat-bubble p {
+  -webkit-backdrop-filter: blur(16px) saturate(124%);
+  backdrop-filter: blur(16px) saturate(124%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), transparent 44%),
+    var(--omnix-glass-panel-strong) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: var(--omnix-glass-bevel), 0 0.55rem 1.2rem rgba(3, 13, 28, 0.11) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-message:not(.user) .assistant-chat-bubble p {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 44%),
+    rgba(239, 246, 253, 0.46) !important;
+  box-shadow: var(--omnix-glass-bevel), 0 0.55rem 1.2rem rgba(66, 87, 112, 0.07) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] .assistant-chat-message.user .assistant-chat-bubble {
+  background:
+    linear-gradient(180deg, rgba(134, 165, 202, 0.72), rgba(65, 91, 126, 0.68)) !important;
+  border-color: rgba(169, 199, 231, 0.3) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 0.7rem 1.5rem rgba(4, 17, 36, 0.16) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble {
+  background:
+    linear-gradient(180deg, rgba(206, 222, 239, 0.82), rgba(157, 181, 208, 0.76)) !important;
+  color: #21354f !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble p {
+  color: #21354f !important;
+}
+
+/* Navigation selection is a subtle illuminated glass tile, matching the reference. */
+:root[data-omnix-theme='liquid-glass'] :where(
+  .omnix-nav a:hover,
+  .omnix-nav a:focus-visible,
+  .omnix-nav a.active,
+  .assistant-sidebar-nav button:hover,
+  .assistant-sidebar-nav button:focus-visible,
+  .assistant-sidebar-nav button.active,
+  .assistant-sidebar-list button:hover,
+  .assistant-sidebar-list button:focus-visible,
+  .assistant-sidebar-list button.active,
+  .assistant-sidebar-session-row.active > button:first-child
+) {
+  background:
+    linear-gradient(180deg, rgba(151, 179, 212, 0.18), rgba(74, 103, 140, 0.14)) !important;
+  border-color: rgba(147, 182, 222, 0.3) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0.4rem 1rem rgba(3, 14, 30, 0.08) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] :where(
+  .omnix-nav a:hover,
+  .omnix-nav a:focus-visible,
+  .omnix-nav a.active,
+  .assistant-sidebar-nav button:hover,
+  .assistant-sidebar-nav button:focus-visible,
+  .assistant-sidebar-nav button.active,
+  .assistant-sidebar-list button:hover,
+  .assistant-sidebar-list button:focus-visible,
+  .assistant-sidebar-list button.active,
+  .assistant-sidebar-session-row.active > button:first-child
+) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(180, 202, 226, 0.36)) !important;
+  border-color: rgba(108, 148, 192, 0.32) !important;
+}
+
+/* Theme picker itself should demonstrate the material instead of becoming opaque. */
+:root[data-omnix-theme='liquid-glass'] .omnix-theme-menu {
+  overflow: hidden;
+}
+
+:root[data-omnix-theme='liquid-glass'] .omnix-theme-option {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] .omnix-theme-option:hover,
+:root[data-omnix-theme='liquid-glass'] .omnix-theme-option.active {
+  background: rgba(126, 158, 197, 0.14) !important;
+  border-color: var(--omnix-glass-border) !important;
+}
+
+/* Settings theme cards need enough transparency for the selected material to be obvious. */
+:root[data-omnix-theme='liquid-glass'] .settings-theme-card {
+  min-height: 7.5rem;
+}
+
+:root[data-omnix-theme='liquid-glass'] .settings-theme-card.active {
+  border-color: rgba(128, 166, 211, 0.5) !important;
+  box-shadow:
+    var(--omnix-glass-bevel),
+    0 0 0 0.2rem rgba(111, 150, 197, 0.1),
+    var(--omnix-glass-shadow-soft) !important;
+}
+
+/* Trading has an intentionally self-contained visual stack; override its own
+ * light/dark surfaces so it participates in the global preset too.
+ */
+:root[data-omnix-theme='liquid-glass'] .trading-workspace {
+  --trading-light-bg: transparent;
+  --trading-light-surface: var(--omnix-glass-panel-strong);
+  --trading-light-surface-muted: var(--omnix-glass-panel);
+  --trading-light-line: var(--omnix-glass-border-strong);
+  --trading-light-line-soft: var(--omnix-glass-border);
+  --trading-light-text: var(--omnix-text);
+  --trading-light-muted: var(--omnix-muted);
+  background: transparent !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] :where(
+  .trading-terminal-header,
+  .trading-command-bar,
+  .trading-tool-shortcuts,
+  .trading-body,
+  .trading-tools,
+  .trading-right-dock,
+  .trading-side-panel,
+  .trading-side-rail,
+  .trading-chart-grid-cell,
+  .trading-chart-panel,
+  .trading-chart-header,
+  .trading-chart-panel > footer,
+  .trading-indicator-pane-controls,
+  .trading-chart-state,
+  .trading-replay-mode-hint,
+  .trading-replay-toolbar,
+  .trading-alerts-panel-header
+) {
+  -webkit-backdrop-filter: blur(18px) saturate(126%);
+  backdrop-filter: blur(18px) saturate(126%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.065), transparent 42%),
+    var(--omnix-glass-panel) !important;
+  border-color: var(--omnix-glass-border) !important;
+  box-shadow: var(--omnix-glass-bevel), var(--omnix-glass-shadow-soft) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] .trading-chart-shell {
+  background:
+    radial-gradient(circle at 16% 4%, rgba(107, 140, 180, 0.1), transparent 22rem),
+    rgba(11, 24, 43, 0.36) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .trading-chart-shell {
+  background:
+    radial-gradient(circle at 16% 4%, rgba(116, 152, 194, 0.1), transparent 22rem),
+    rgba(234, 241, 249, 0.4) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] .trading-chart-grid {
+  background: rgba(140, 169, 204, 0.11) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] .trading-chart-panel.active {
+  border-color: rgba(116, 166, 221, 0.6) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(137, 181, 228, 0.16),
+    var(--omnix-glass-shadow-soft) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] .trading-workspace :where(button, select, input, textarea) {
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'] .trading-workspace :where(
+  .trading-symbol-trigger,
+  .trading-chart-type-control,
+  .trading-indicator-manager > summary
+) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent),
+    var(--omnix-glass-control) !important;
+  border-color: var(--omnix-glass-border) !important;
+  color: var(--omnix-text) !important;
+}
+
+/* Keep modal/dialog/popover layers on-material across all modules. */
+:root[data-omnix-theme='liquid-glass'] :where(
+  [role='dialog'],
+  [role='menu'],
+  [role='listbox'],
+  .mantine-Modal-content,
+  .mantine-Popover-dropdown,
+  .mantine-Menu-dropdown
+) {
+  -webkit-backdrop-filter: blur(28px) saturate(135%);
+  backdrop-filter: blur(28px) saturate(135%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.085), transparent 38%),
+    var(--omnix-glass-panel-strong) !important;
+  border-color: var(--omnix-glass-border-strong) !important;
+  box-shadow: var(--omnix-glass-bevel), 0 1.25rem 3rem rgba(2, 12, 29, 0.28) !important;
+  color: var(--omnix-text) !important;
+}
+
+/* Scrollbars are intentionally understated like the reference dashboard. */
+:root[data-omnix-theme='liquid-glass'] {
+  scrollbar-color: rgba(151, 174, 202, 0.48) transparent;
+  scrollbar-width: thin;
+}
+
+:root[data-omnix-theme='liquid-glass'] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+:root[data-omnix-theme='liquid-glass'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:root[data-omnix-theme='liquid-glass'] ::-webkit-scrollbar-thumb {
+  background: rgba(151, 174, 202, 0.42);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+/* Graceful fallback for browsers without backdrop-filter support. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-omnix-theme='liquid-glass'] {
+    --omnix-glass-panel: rgba(34, 51, 76, 0.9);
+    --omnix-glass-panel-strong: rgba(29, 45, 70, 0.94);
+    --omnix-glass-control: rgba(34, 51, 76, 0.92);
+  }
+
+  :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] {
+    --omnix-glass-panel: rgba(239, 246, 253, 0.94);
+    --omnix-glass-panel-strong: rgba(245, 250, 255, 0.97);
+    --omnix-glass-control: rgba(246, 250, 255, 0.96);
+  }
+}
+
+/* Reduced motion keeps the material static without changing its appearance. */
+:root[data-omnix-theme='liquid-glass'].omnix-reduce-motion *,
+:root[data-omnix-theme='liquid-glass'].omnix-reduce-motion *::before,
+:root[data-omnix-theme='liquid-glass'].omnix-reduce-motion *::after {
+  transition-duration: 0.001ms !important;
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+}
