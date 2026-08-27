@@ -572,6 +572,18 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     """,
                     (self.context.workspace_id, run_id),
                 )
+            self._append_event(
+                work.connection,
+                WorkflowEvent(
+                    run_id=run_id,
+                    event_type=(
+                        "workflow.approval.approved"
+                        if approved
+                        else "workflow.approval.rejected"
+                    ),
+                    payload={"step_id": step_id},
+                ),
+            )
             work.commit()
 
     def get_status(self, run_id: str) -> dict[str, object] | None:
