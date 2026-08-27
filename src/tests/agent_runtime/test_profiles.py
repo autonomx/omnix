@@ -19,3 +19,21 @@ def test_profile_can_be_narrowed_but_not_widened() -> None:
     assert local == ["workspace.read"]
     with pytest.raises(ValueError):
         resolve_profile_capabilities(profile, requested=["github.merge_pr"])
+
+
+def test_coding_profile_keeps_publication_off_by_default_but_allows_explicit_request() -> None:
+    profile = get_agent_profile("coding")
+    _, default_external = resolve_profile_capabilities(profile)
+    assert default_external == []
+
+    _, issued = resolve_profile_capabilities(
+        profile,
+        requested_external=["github.push", "github.create_pr", "github.inspect_ci"],
+    )
+    assert issued == ["github.push", "github.create_pr", "github.inspect_ci"]
+
+    with pytest.raises(ValueError):
+        resolve_profile_capabilities(
+            profile,
+            requested_external=["gmail.send_email"],
+        )
