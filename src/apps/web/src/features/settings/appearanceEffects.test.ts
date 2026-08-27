@@ -61,6 +61,33 @@ describe('appearance theme effects', () => {
     expect(loadStoredAppearancePreferences()).toEqual({ mode: 'dark', theme: 'evergreen', textScale: 125 });
   });
 
+  it('applies and persists the Liquid Glass preset in both appearance modes', () => {
+    const dark = commitAppearanceSettings({
+      mode: 'dark',
+      theme: 'liquid-glass',
+      density: 'comfortable',
+      textScale: 100,
+      reduceMotion: false,
+    });
+
+    expect(dark.theme).toBe('liquid-glass');
+    expect(document.documentElement.dataset.omnixTheme).toBe('liquid-glass');
+    expect(document.documentElement.dataset.omnixAppearance).toBe('dark');
+    expect(window.localStorage.getItem(OMNIX_THEME_STORAGE_KEY)).toBe('liquid-glass');
+
+    const light = commitAppearanceSettings({
+      mode: 'light',
+      theme: 'liquid-glass',
+      density: 'comfortable',
+      textScale: 100,
+      reduceMotion: false,
+    });
+
+    expect(light).toMatchObject({ theme: 'liquid-glass', resolvedMode: 'light' });
+    expect(document.documentElement.dataset.omnixTheme).toBe('liquid-glass');
+    expect(document.documentElement.dataset.omnixAppearance).toBe('light');
+  });
+
   it('clamps and snaps text scaling to the supported accessibility range', () => {
     expect(normalizeTextScale(76)).toBe(80);
     expect(normalizeTextScale(112)).toBe(110);

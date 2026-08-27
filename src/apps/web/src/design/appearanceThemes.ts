@@ -12,6 +12,12 @@ export const OMNIX_THEME_PRESETS = [
     preview: 'linear-gradient(135deg, #f8fafc 0%, #9aa5b3 48%, #3f4a57 100%)',
   },
   {
+    id: 'liquid-glass',
+    label: 'Liquid Glass',
+    description: 'Translucent slate-blue glass with soft blur, edge highlights, and glossy depth.',
+    preview: 'linear-gradient(135deg, #d9e7f6 0%, #839ab7 36%, #425a79 68%, #14233a 100%)',
+  },
+  {
     id: 'evergreen',
     label: 'Evergreen',
     description: 'Calm emerald, mint, and deep forest accents.',

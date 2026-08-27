@@ -33,6 +33,14 @@ _RUNNABLE = {JobStatus.QUEUED, JobStatus.RETRYING, JobStatus.WAITING}
 _ACTIVE = {JobStatus.LEASED, JobStatus.RUNNING, JobStatus.CANCEL_REQUESTED}
 
 
+def _awaiting_plan_approval(job: JobRecord) -> bool:
+    return (
+        job.type == "assistant.deep_research"
+        and isinstance(job.input_payload, dict)
+        and job.input_payload.get("awaiting_plan_approval") is True
+    )
+
+
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -162,7 +170,11 @@ class InMemoryJobStore:
             active_gpu = any(job.resource_class.value.startswith("gpu:") for job in active)
             active_cpu = sum(1 for job in active if job.resource_class == ResourceClass.CPU)
             candidates = sorted(
-                (job for job in self._state.jobs.values() if job.status in _RUNNABLE),
+                (
+                    job
+                    for job in self._state.jobs.values()
+                    if job.status in _RUNNABLE and not _awaiting_plan_approval(job)
+                ),
                 key=lambda item: (-item.priority, item.created_at, item.id),
             )
             for job in candidates:
@@ -266,6 +278,72 @@ class InMemoryJobStore:
                     for stage in value.stages
                 ]
             self._save(value, "job.updated")
+            return deepcopy(value)
+
+    def update_job_input(
+        self,
+        job_id: str,
+        input_payload: dict[str, Any],
+        *,
+        compat: dict[str, Any] | None = None,
+    ) -> JobRecord | None:
+        with self._state.lock:
+            job = self._state.jobs.get(job_id)
+            if job is None or job.status in TERMINAL_STATUSES:
+                return deepcopy(job) if job is not None else None
+            value = deepcopy(job)
+            value.input_payload = deepcopy(input_payload)
+            if compat is not None:
+                value.compat = deepcopy(compat)
+            value.updated_at = _utcnow()
+            self._save(value, "job.updated")
+            return deepcopy(value)
+
+    def update_job_stages(self, job_id: str, stages: list[JobStage]) -> JobRecord | None:
+        with self._state.lock:
+            job = self._state.jobs.get(job_id)
+            if job is None or job.status in TERMINAL_STATUSES:
+                return deepcopy(job) if job is not None else None
+            value = deepcopy(job)
+            value.stages = deepcopy(stages)
+            value.updated_at = _utcnow()
+            self._save(value, "job.updated")
+            return deepcopy(value)
+
+    def finalize_cancel(self, job_id: str, reason: str) -> JobRecord | None:
+        with self._state.lock:
+            job = self._state.jobs.get(job_id)
+            if job is None:
+                return None
+            if job.status in TERMINAL_STATUSES:
+                return deepcopy(job)
+            value = deepcopy(job)
+            now = _utcnow()
+            value.status = JobStatus.CANCELED
+            value.updated_at = now
+            value.completed_at = now
+            value.lease = None
+            value.cancel = CancelState(
+                requested=True,
+                requested_at=value.cancel.requested_at or now,
+                acknowledged_at=now,
+                reason=value.cancel.reason or reason,
+            )
+            value.progress = JobProgress(
+                current=value.progress.current,
+                total=value.progress.total,
+                message="canceled",
+            )
+            value.stages = [
+                stage.model_copy(
+                    update={
+                        "status": JobStatus.CANCELED if stage.status == JobStatus.RUNNING else stage.status,
+                        "completed_at": now if stage.status == JobStatus.RUNNING else stage.completed_at,
+                    }
+                )
+                for stage in value.stages
+            ]
+            self._save(value, "job.canceled")
             return deepcopy(value)
 
     def complete_job(self, job_id: str, request: CompleteJobRequest) -> JobRecord | None:

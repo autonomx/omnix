@@ -41,3 +41,35 @@ def test_provider_credential_configured_checks_each_provider_independently(monke
     assert provider_chain.provider_credential_configured("tavily") is False
     assert provider_chain.provider_credential_configured("playwright") is True
     assert provider_chain.provider_credential_configured("duckduckgo") is True
+
+
+def test_fallback_chain_injects_protected_store_key_into_explicit_client_factory(monkeypatch) -> None:
+    captured: list[dict[str, object]] = []
+
+    class CapturingClient:
+        provider = "brave"
+
+        def __init__(self, **kwargs) -> None:
+            captured.append(dict(kwargs))
+
+        def search(self, query: str, max_results: int):
+            return [object()]
+
+    monkeypatch.setattr(
+        secret_store,
+        "load_research_provider_secrets",
+        lambda: {"brave": "protected-brave-key", "tavily": ""},
+    )
+
+    client = provider_chain.ProviderFallbackSearchClient(
+        providers=["brave"],
+        timeout_seconds=3.0,
+        client_factory=CapturingClient,
+    )
+
+    assert client.search("GameStop stock", 5)
+    assert captured == [{
+        "provider": "brave",
+        "timeout_seconds": 3.0,
+        "api_key": "protected-brave-key",
+    }]

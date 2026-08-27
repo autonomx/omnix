@@ -586,13 +586,74 @@
   font-size: 0.78rem;
 }
 
-.assistant-chat-bubble p {
+.assistant-chat-bubble > p,
+.assistant-message-content {
   background: rgba(20, 27, 48, 0.88);
   border: 1px solid rgba(132, 148, 196, 0.22);
   border-radius: 0.8rem;
   line-height: 1.5;
   margin: 0;
   padding: 0.75rem 0.95rem;
+}
+
+.assistant-message-content {
+  overflow-wrap: anywhere;
+}
+
+.assistant-message-content > :first-child {
+  margin-top: 0;
+}
+
+.assistant-message-content > :last-child {
+  margin-bottom: 0;
+}
+
+.assistant-message-content h1,
+.assistant-message-content h2,
+.assistant-message-content h3,
+.assistant-message-content h4,
+.assistant-message-content h5,
+.assistant-message-content h6 {
+  color: var(--omnix-text);
+  line-height: 1.2;
+  margin: 1.1rem 0 0.55rem;
+}
+
+.assistant-message-content h1 { font-size: 1.5rem; }
+.assistant-message-content h2 { font-size: 1.2rem; }
+.assistant-message-content h3 { font-size: 1.05rem; }
+.assistant-message-content p { margin: 0 0 0.85rem; }
+.assistant-message-content ul,
+.assistant-message-content ol { margin: 0 0 0.85rem; padding-left: 1.35rem; }
+.assistant-message-content li + li { margin-top: 0.35rem; }
+.assistant-message-content blockquote {
+  border-left: 3px solid var(--omnix-cyan);
+  color: #cbd5f5;
+  margin: 0 0 0.85rem;
+  padding-left: 0.85rem;
+}
+.assistant-message-content pre {
+  background: rgba(5, 9, 20, 0.72);
+  border: 1px solid rgba(132, 148, 196, 0.2);
+  border-radius: 0.55rem;
+  margin: 0 0 0.85rem;
+  overflow: auto;
+  padding: 0.75rem;
+}
+.assistant-message-content code {
+  background: rgba(5, 9, 20, 0.42);
+  border-radius: 0.25rem;
+  font-size: 0.9em;
+  padding: 0.1rem 0.25rem;
+}
+.assistant-message-content pre code { background: transparent; padding: 0; }
+.assistant-message-content a { color: #67e8f9; text-decoration: underline; }
+.assistant-research-citation {
+  color: #7dd3fc;
+  font-size: 0.78em;
+  font-weight: 800;
+  margin-left: 0.18rem;
+  white-space: nowrap;
 }
 
 .assistant-chat-message.user .assistant-chat-bubble {
@@ -614,7 +675,14 @@
   display: none;
 }
 
-.assistant-chat-message.user .assistant-chat-bubble p {
+.assistant-chat-message.user .assistant-chat-bubble > p,
+.assistant-chat-message.user .assistant-chat-bubble > .assistant-message-content {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.assistant-chat-message.assistant .assistant-research-report-host {
   background: transparent;
   border: 0;
   padding: 0;

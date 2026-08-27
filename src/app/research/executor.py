@@ -16,6 +16,7 @@ from .planner import (
     ResearchPlanner,
     ResearchPlanningBudget,
     ResearchPlanningRequest,
+    enforce_research_plan_budget,
 )
 from .source_store import ResearchSourceStore, default_research_source_store
 
@@ -99,14 +100,22 @@ class DeepResearchExecutor:
             max_extracts=request.max_extracts,
         )
         if checkpoint is None:
-            decision = self.planner.plan(
-                ResearchPlanningRequest(question=request.question, budget=budget)
-            )
+            if request.research_plan is not None:
+                plan = enforce_research_plan_budget(request.research_plan, budget)
+                planner_backend = request.planner_backend or "approved_plan"
+                planning_warnings: list[str] = []
+            else:
+                decision = self.planner.plan(
+                    ResearchPlanningRequest(question=request.question, budget=budget)
+                )
+                plan = decision.plan
+                planner_backend = decision.backend
+                planning_warnings = list(decision.warnings)
             state = ResearchExecutionCheckpoint(
-                objective=decision.plan.objective,
-                plan=decision.plan,
-                planner_backend=decision.backend,
-                warnings=list(decision.warnings),
+                objective=plan.objective,
+                plan=plan,
+                planner_backend=planner_backend,
+                warnings=planning_warnings,
             )
             self._save("planning", state, save_checkpoint)
         else:

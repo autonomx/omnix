@@ -8,14 +8,17 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from app.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
 from app.chat.research_citations import validate_completed_research_reply
 from app.chat.research_jobs import link_user_message_to_research_job
 from app.chat.research_release import apply_research_release_decision
-from app.jobs import CreateJobRequest, InMemoryJobStore, ResourceClass, default_job_store
+from app.jobs import CreateJobRequest, InMemoryJobStore, JobRecord, ResourceClass, default_job_store
+from app.jobs.research_inline import start_research_job
 from app.research.contracts import RESEARCH_JOB_TYPE
 from app.research.jobs import DeepResearchJobInput, create_deep_research_job_request
+from app.research.planner import ResearchPlanner, ResearchPlanningBudget, ResearchPlanningRequest
 from app.research.policy import ResearchPolicy
 from app.research.release_policy import (
     ResearchReleaseDecision,
@@ -33,6 +36,12 @@ from .service import AssistantContextService, default_assistant_context_service
 _ROUTE_NAME = "assistant_context_chat_message_endpoint"
 _STREAM_ROUTE_NAME = "assistant_context_stream_chat_message_endpoint"
 _STATUS_ROUTE_NAME = "assistant_research_runtime_status_endpoint"
+_PLAN_UPDATE_ROUTE_NAME = "assistant_deep_research_plan_update_endpoint"
+_PLAN_START_ROUTE_NAME = "assistant_deep_research_plan_start_endpoint"
+
+
+class DeepResearchPlanUpdateRequest(BaseModel):
+    max_pages: int = Field(ge=1, le=100)
 
 
 def register_assistant_context_routes(
@@ -61,6 +70,72 @@ def register_assistant_context_routes(
                 release_policy_factory(),
                 identity=session_id,
             )
+
+    if _PLAN_UPDATE_ROUTE_NAME not in route_names:
+
+        @app.patch(
+            "/api/assistant/context/research/jobs/{job_id}/plan",
+            response_model=JobRecord,
+            include_in_schema=False,
+            name=_PLAN_UPDATE_ROUTE_NAME,
+        )
+        async def update_deep_research_plan_endpoint(
+            job_id: str,
+            request: DeepResearchPlanUpdateRequest,
+        ) -> JobRecord:
+            job_store = job_store_factory()
+            job = job_store.get_job(job_id)
+            if job is None or job.type != RESEARCH_JOB_TYPE:
+                raise HTTPException(status_code=404, detail="deep research job not found")
+            try:
+                input_payload = DeepResearchJobInput.model_validate(job.input_payload or {})
+            except Exception as exc:
+                raise HTTPException(status_code=409, detail="deep research plan is invalid") from exc
+            if not input_payload.awaiting_plan_approval:
+                raise HTTPException(status_code=409, detail="deep research has already started")
+            settings = settings_factory()
+            updated_input = input_payload.model_copy(
+                update={
+                    "max_sources": request.max_pages,
+                    "max_queries": min(request.max_pages, settings.max_queries),
+                    "max_extracts": min(request.max_pages, settings.max_extracts),
+                }
+            )
+            updated_input = _with_research_plan(updated_input)
+            updated = _update_job_input(job_store, job, updated_input)
+            if updated is None:
+                raise HTTPException(status_code=409, detail="deep research plan could not be updated")
+            return updated
+
+    if _PLAN_START_ROUTE_NAME not in route_names:
+
+        @app.post(
+            "/api/assistant/context/research/jobs/{job_id}/start",
+            response_model=JobRecord,
+            include_in_schema=False,
+            name=_PLAN_START_ROUTE_NAME,
+        )
+        async def start_deep_research_plan_endpoint(job_id: str) -> JobRecord:
+            job_store = job_store_factory()
+            job = job_store.get_job(job_id)
+            if job is None or job.type != RESEARCH_JOB_TYPE:
+                raise HTTPException(status_code=404, detail="deep research job not found")
+            try:
+                input_payload = DeepResearchJobInput.model_validate(job.input_payload or {})
+            except Exception as exc:
+                raise HTTPException(status_code=409, detail="deep research plan is invalid") from exc
+            if not input_payload.awaiting_plan_approval:
+                return start_research_job(job_store, job)
+            approved_input = input_payload.model_copy(update={"awaiting_plan_approval": False})
+            updated = _update_job_input(
+                job_store,
+                job,
+                approved_input,
+                compat={**job.compat, "inline_execution": True},
+            )
+            if updated is None:
+                raise HTTPException(status_code=409, detail="deep research plan could not be started")
+            return start_research_job(job_store, updated)
 
     if _ROUTE_NAME in route_names:
         return
@@ -347,6 +422,7 @@ def _begin_deep_research(
 ) -> SendChatMessageResponse:
     research_provider = settings.effective_provider
     research_provider_chain = list(settings.effective_provider_chain)
+    max_pages = _deep_research_page_limit(request, settings)
     appended = chat_store.begin_user_message(
         session_id,
         _send_request(request),
@@ -365,33 +441,33 @@ def _begin_deep_research(
     if appended is None:
         raise HTTPException(status_code=404, detail="chat session not found")
     session, user_message = appended
-    job = job_store.create_job(
-        create_deep_research_job_request(
-            DeepResearchJobInput(
-                session_id=session.id,
-                user_message_id=user_message.id,
-                question=request.content,
-                provider_id=request.provider_id or session.provider_id,
-                model_id=request.model_id or session.model_id,
-                research_provider=research_provider,
-                research_provider_chain=research_provider_chain,
-                max_steps=settings.max_steps,
-                max_queries=settings.max_queries,
-                max_sources=settings.max_sources,
-                max_extracts=settings.max_extracts,
-                search_cache_ttl_seconds=policy.search_cache_ttl_seconds,
-                extraction_cache_ttl_seconds=policy.extraction_cache_ttl_seconds,
-                hermes_planner_enabled=decision.use_hermes_planner,
-                metadata={
-                    "agent_mode": request.agent_mode,
-                    "dry_run": request.dry_run,
-                    "diagnostics_enabled": settings.show_diagnostics,
-                    "research_release": decision.model_dump(mode="json"),
-                    "research_compatibility_warnings": request.internal_research_warnings,
-                },
-            )
+    research_input = _with_research_plan(
+        DeepResearchJobInput(
+            session_id=session.id,
+            user_message_id=user_message.id,
+            question=request.content,
+            provider_id=request.provider_id or session.provider_id,
+            model_id=request.model_id or session.model_id,
+            research_provider=research_provider,
+            research_provider_chain=research_provider_chain,
+            max_steps=settings.max_steps,
+            max_queries=min(max_pages, settings.max_queries),
+            max_sources=max_pages,
+            max_extracts=min(max_pages, settings.max_extracts),
+            search_cache_ttl_seconds=policy.search_cache_ttl_seconds,
+            extraction_cache_ttl_seconds=policy.extraction_cache_ttl_seconds,
+            hermes_planner_enabled=decision.use_hermes_planner,
+            awaiting_plan_approval=True,
+            metadata={
+                "agent_mode": request.agent_mode,
+                "dry_run": request.dry_run,
+                "diagnostics_enabled": settings.show_diagnostics,
+                "research_release": decision.model_dump(mode="json"),
+                "research_compatibility_warnings": request.internal_research_warnings,
+            },
         )
     )
+    job = job_store.create_job(create_deep_research_job_request(research_input))
     linked = link_user_message_to_research_job(
         chat_store,
         session.id,
@@ -401,6 +477,60 @@ def _begin_deep_research(
     if linked is not None:
         session, user_message = linked
     return SendChatMessageResponse(session=session, user_message=user_message, job=job)
+
+
+def _deep_research_page_limit(
+    request: AssistantContextChatRequest,
+    settings: ResearchRuntimeSettings,
+) -> int:
+    selected = request.deep_research_max_pages
+    value = settings.max_sources if selected is None else selected
+    return max(1, min(100, int(value)))
+
+
+def _with_research_plan(input_payload: DeepResearchJobInput) -> DeepResearchJobInput:
+    budget = ResearchPlanningBudget(
+        max_steps=input_payload.max_steps,
+        max_queries=input_payload.max_queries,
+        max_sources=input_payload.max_sources,
+        max_extracts=input_payload.max_extracts,
+    )
+    decision = ResearchPlanner(
+        prefer_hermes=input_payload.hermes_planner_enabled,
+        provider_id=input_payload.provider_id,
+        model_id=input_payload.model_id,
+        use_provider=True,
+    ).plan(
+        ResearchPlanningRequest(question=input_payload.question, budget=budget)
+    )
+    metadata = {
+        **input_payload.metadata,
+        "planner_warnings": decision.warnings,
+    }
+    return input_payload.model_copy(
+        update={
+            "research_plan": decision.plan,
+            "planner_backend": decision.backend,
+            "metadata": metadata,
+        }
+    )
+
+
+def _update_job_input(
+    job_store: InMemoryJobStore,
+    job: JobRecord,
+    input_payload: DeepResearchJobInput,
+    *,
+    compat: dict[str, Any] | None = None,
+) -> JobRecord | None:
+    update = getattr(job_store, "update_job_input", None)
+    if not callable(update):
+        return None
+    return update(
+        job.id,
+        input_payload.model_dump(mode="json"),
+        compat=compat,
+    )
 
 
 def _send_request(request: AssistantContextChatRequest) -> SendChatMessageRequest:

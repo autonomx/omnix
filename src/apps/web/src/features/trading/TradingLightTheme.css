@@ -109,6 +109,61 @@
   background: var(--trading-light-surface) !important;
 }
 
+/* Watchlist rows and hover actions need an explicit light palette because
+   their base styles intentionally use dark trading-terminal surfaces. */
+:root[data-omnix-appearance='light'] .trading-watchlist-columns {
+  border-color: var(--trading-light-line-soft) !important;
+  color: var(--trading-light-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist li {
+  border-color: var(--trading-light-line-soft) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist li.active,
+:root[data-omnix-appearance='light'] .trading-watchlist li > button:first-child:hover {
+  background: #eef6ff !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist li > button:first-child strong {
+  color: var(--trading-light-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist-price {
+  color: #34465a !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist-change.positive {
+  color: #087f5b !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist-change.negative {
+  color: #c43e4b !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist-change.neutral {
+  color: #536273 !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist-row-actions {
+  border-color: var(--trading-light-line) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 4px 12px rgba(50, 70, 92, 0.18) !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist-row-actions button {
+  border-color: var(--trading-light-line) !important;
+  background: #eef3f8 !important;
+  color: #40556b !important;
+}
+
+:root[data-omnix-appearance='light'] .trading-watchlist-row-actions button:hover,
+:root[data-omnix-appearance='light'] .trading-watchlist-row-actions button:focus-visible {
+  border-color: rgba(22, 136, 255, 0.58) !important;
+  background: #e6f2ff !important;
+  color: #155b91 !important;
+}
+
 :root[data-omnix-appearance='light'] .trading-chart-shell {
   background: var(--trading-light-bg) !important;
 }

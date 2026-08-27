@@ -1,4 +1,4 @@
-import { omnixApiClient, type JobListResponse } from '../../api/client';
+import { omnixApiClient, type JobListResponse, type ListJobsOptions } from '../../api/client';
 
 const VOICE_JOB_SUMMARIES_PATH = '/api/jobs/voice-summaries?limit=40';
 
@@ -13,8 +13,8 @@ export function installVoiceJobListGuard(): void {
   voiceWindow.__omnixVoiceJobListGuardInstalled = true;
 
   const originalListJobs = omnixApiClient.listJobs.bind(omnixApiClient);
-  omnixApiClient.listJobs = async (): Promise<JobListResponse> => {
-    if (!isVoiceStudioPath(window.location.pathname)) return originalListJobs();
+  omnixApiClient.listJobs = async (options: ListJobsOptions = {}): Promise<JobListResponse> => {
+    if (!isVoiceStudioPath(window.location.pathname)) return originalListJobs(options);
 
     try {
       const response = await window.fetch(VOICE_JOB_SUMMARIES_PATH, {

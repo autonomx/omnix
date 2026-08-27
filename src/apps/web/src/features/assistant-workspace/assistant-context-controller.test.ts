@@ -10,6 +10,7 @@ const {
   desktopStatusLabel,
   enhancedAssistantMessageUrl,
   isAssistantMessageRequest,
+  normalizeDeepResearchPageLimit,
   normalizeResearchMode,
   webResearchModeLabel,
 } = await import('./assistant-context-controller');
@@ -52,6 +53,13 @@ describe('assistant context control mounting', () => {
     expect(normalizeResearchMode('quick')).toBe('quick');
     expect(normalizeResearchMode('deep')).toBe('deep');
     expect(normalizeResearchMode('unknown')).toBe('disabled');
+  });
+
+  it('keeps the deep-research page budget within the hard per-run cap', () => {
+    expect(normalizeDeepResearchPageLimit(7)).toBe(7);
+    expect(normalizeDeepResearchPageLimit(0)).toBe(1);
+    expect(normalizeDeepResearchPageLimit(99)).toBe(30);
+    expect(normalizeDeepResearchPageLimit('invalid', 9)).toBe(9);
   });
 
   it('uses the three explicit user-facing labels', () => {

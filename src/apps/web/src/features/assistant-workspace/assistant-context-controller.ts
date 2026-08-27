@@ -33,10 +33,14 @@ const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
+const DEEP_RESEARCH_PAGES_STORAGE_KEY = 'omnix.deepResearch.maxPages';
+const DEFAULT_DEEP_RESEARCH_PAGES = 12;
+const MAX_DEEP_RESEARCH_PAGES = 30;
 const assistantContextWindow = window as AssistantContextWindow;
 
 let profileDefaultMode: ResearchMode = 'disabled';
 let researchMode: ResearchMode = 'disabled';
+let deepResearchMaxPages = DEFAULT_DEEP_RESEARCH_PAGES;
 let activeSessionId: string | null = null;
 let nativeFetch: typeof window.fetch | null = null;
 let desktopShare: DesktopShareSession | null = null;
@@ -95,6 +99,15 @@ export function webResearchModeLabel(mode: ResearchMode): string {
 export function normalizeResearchMode(value: unknown): ResearchMode {
   if (value === 'quick' || value === 'deep' || value === 'disabled') return value;
   return 'disabled';
+}
+
+export function normalizeDeepResearchPageLimit(
+  value: unknown,
+  fallback = DEFAULT_DEEP_RESEARCH_PAGES,
+): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  const candidate = Number.isFinite(numeric) ? Math.trunc(numeric) : fallback;
+  return Math.max(1, Math.min(MAX_DEEP_RESEARCH_PAGES, candidate));
 }
 
 export function desktopStatusLabel(isSharing: boolean, status: string): string {
@@ -188,6 +201,7 @@ function installFetchInterceptor(): void {
       body: JSON.stringify({
         ...payload,
         web_research_mode: researchMode,
+        deep_research_max_pages: researchMode === 'deep' ? deepResearchMaxPages : undefined,
         desktop_current_image_data_url: desktopPayload?.currentImageDataUrl,
         desktop_history_image_data_url: desktopPayload?.historyImageDataUrl,
         desktop_combined_image_data_url: desktopPayload?.combinedImageDataUrl,
@@ -230,6 +244,11 @@ async function loadProfileResearchDefault(): Promise<void> {
     const profile = asRecord(settings.settings_control_center);
     const assistant = asRecord(profile.assistant);
     profileDefaultMode = normalizeResearchMode(assistant.researchDefaultMode);
+    const persistedPageLimit = readStoredDeepResearchPageLimit();
+    deepResearchMaxPages = normalizeDeepResearchPageLimit(
+      persistedPageLimit ?? assistant.researchMaxSources,
+      deepResearchMaxPages,
+    );
     if (!activeSessionId) researchMode = profileDefaultMode;
     renderControls();
   } catch {
@@ -325,7 +344,28 @@ function injectControls(root: ParentNode): void {
     });
     webLabel.append(webCaption, webSelect);
 
-    container.append(webLabel);
+    const pageBudget = document.createElement('label');
+    pageBudget.className = 'assistant-context-page-budget';
+    pageBudget.setAttribute('data-omnix-deep-research-pages', 'true');
+    const pageCaption = document.createElement('span');
+    pageCaption.textContent = 'Max pages';
+    const pageInput = document.createElement('input');
+    pageInput.type = 'number';
+    pageInput.min = '1';
+    pageInput.max = String(MAX_DEEP_RESEARCH_PAGES);
+    pageInput.step = '1';
+    pageInput.inputMode = 'numeric';
+    pageInput.setAttribute('aria-label', 'Maximum pages to search');
+    pageInput.value = String(deepResearchMaxPages);
+    pageInput.addEventListener('change', () => {
+      deepResearchMaxPages = normalizeDeepResearchPageLimit(pageInput.value, deepResearchMaxPages);
+      pageInput.value = String(deepResearchMaxPages);
+      storeDeepResearchPageLimit(deepResearchMaxPages);
+      renderControls();
+    });
+    pageBudget.append(pageCaption, pageInput);
+
+    container.append(webLabel, pageBudget);
     contextHost.append(container);
   }
 
@@ -364,6 +404,12 @@ function assistantContextHost(
 function renderControls(): void {
   document.querySelectorAll<HTMLSelectElement>('select[aria-label="Web research mode"]').forEach((select) => {
     select.value = researchMode;
+  });
+  document.querySelectorAll<HTMLElement>('[data-omnix-deep-research-pages]').forEach((element) => {
+    element.hidden = researchMode !== 'deep';
+  });
+  document.querySelectorAll<HTMLInputElement>('input[aria-label="Maximum pages to search"]').forEach((input) => {
+    input.value = String(deepResearchMaxPages);
   });
   document.querySelectorAll<HTMLButtonElement>('.assistant-context-desktop').forEach((button) => {
     const active = desktopShare !== null;
@@ -475,6 +521,23 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function readStoredDeepResearchPageLimit(): number | null {
+  try {
+    const value = window.localStorage.getItem(DEEP_RESEARCH_PAGES_STORAGE_KEY);
+    return value === null ? null : normalizeDeepResearchPageLimit(value);
+  } catch {
+    return null;
+  }
+}
+
+function storeDeepResearchPageLimit(value: number): void {
+  try {
+    window.localStorage.setItem(DEEP_RESEARCH_PAGES_STORAGE_KEY, String(value));
+  } catch {
+    // Storage is optional; the chosen limit remains active for this page.
+  }
 }
 
 if (document.readyState === 'loading') {

@@ -1,6 +1,7 @@
 """Dedicated declarative planning for Deep Research."""
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections.abc import Callable
@@ -15,7 +16,7 @@ ResearchOperationType = Literal["web_search", "web_extract", "evaluate_evidence"
 class ResearchPlanningBudget(BaseModel):
     max_steps: int = Field(default=6, ge=1, le=12)
     max_queries: int = Field(default=5, ge=1, le=10)
-    max_sources: int = Field(default=12, ge=1, le=30)
+    max_sources: int = Field(default=12, ge=1, le=100)
     max_extracts: int = Field(default=8, ge=0, le=20)
 
 
@@ -35,7 +36,9 @@ class ResearchOperation(BaseModel):
 
 
 class ResearchPlan(BaseModel):
+    title: str = Field(default="Deep Research Plan", min_length=1, max_length=160)
     objective: str
+    steps: list[str] = Field(default_factory=list, max_length=8)
     operations: list[ResearchOperation] = Field(default_factory=list)
     completion_conditions: list[str] = Field(default_factory=list, max_length=8)
     stop_reason: str | None = None
@@ -43,7 +46,7 @@ class ResearchPlan(BaseModel):
 
 class ResearchPlannerDecision(BaseModel):
     plan: ResearchPlan
-    backend: Literal["hermes", "local_fallback", "local"]
+    backend: Literal["hermes", "provider", "local_fallback", "provider_fallback", "local"]
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -74,7 +77,9 @@ class LocalResearchPlanner:
         )
         return enforce_research_plan_budget(
             ResearchPlan(
+                title=_local_plan_title(request.question),
                 objective=request.question,
+                steps=_local_plan_steps(request.question),
                 operations=operations,
                 completion_conditions=[
                     "At least one relevant source was evaluated.",
@@ -95,16 +100,32 @@ class ResearchPlanner:
         hermes_factory: Callable[[], Any] | None = None,
         local_planner: LocalResearchPlanner | None = None,
         prefer_hermes: bool | None = None,
+        provider_id: str | None = None,
+        model_id: str | None = None,
+        use_provider: bool = False,
     ) -> None:
         self.hermes_factory = hermes_factory
         self.local_planner = local_planner or LocalResearchPlanner()
         self.prefer_hermes = _hermes_planner_enabled() if prefer_hermes is None else prefer_hermes
+        self.provider_id = provider_id
+        self.model_id = model_id
+        self.use_provider = use_provider
 
     def plan(self, request: ResearchPlanningRequest) -> ResearchPlannerDecision:
         if not self.prefer_hermes:
+            warnings: list[str] = []
+            if self.use_provider:
+                try:
+                    return ResearchPlannerDecision(
+                        plan=enforce_research_plan_budget(self._provider_plan(request), request.budget),
+                        backend="provider",
+                    )
+                except Exception as exc:
+                    warnings.append(f"provider_planner_unavailable:{type(exc).__name__}")
             return ResearchPlannerDecision(
                 plan=self.local_planner.plan_research(request),
-                backend="local",
+                backend="provider_fallback" if warnings else "local",
+                warnings=warnings,
             )
         warnings: list[str] = []
         try:
@@ -116,11 +137,73 @@ class ResearchPlanner:
             )
         except Exception as exc:
             warnings.append(f"hermes_planner_unavailable:{type(exc).__name__}")
-            return ResearchPlannerDecision(
-                plan=self.local_planner.plan_research(request),
-                backend="local_fallback",
-                warnings=warnings,
+        if self.use_provider:
+            try:
+                return ResearchPlannerDecision(
+                    plan=enforce_research_plan_budget(self._provider_plan(request), request.budget),
+                    backend="provider",
+                    warnings=warnings,
+                )
+            except Exception as exc:
+                warnings.append(f"provider_planner_unavailable:{type(exc).__name__}")
+        return ResearchPlannerDecision(
+            plan=self.local_planner.plan_research(request),
+            backend="provider_fallback" if self.use_provider else "local_fallback",
+            warnings=warnings,
+        )
+
+    def _provider_plan(self, request: ResearchPlanningRequest) -> ResearchPlan:
+        from app import shared
+        from app.providers import ChatMessage
+
+        provider = shared.get_provider(_provider_key(self.provider_id))
+        if provider is None:
+            raise RuntimeError("research_planner_provider_unavailable")
+        messages = [
+            ChatMessage(
+                role="system",
+                content=(
+                    "You are the planning phase of a deep research assistant. Return only one valid JSON object "
+                    "matching the supplied research schema. Do not search, browse, cite sources, or answer the "
+                    "question. Create a concise title and 3-6 concrete research steps that explain what must "
+                    "be investigated before writing the final answer. Keep operations declarative and limited "
+                    "to the supplied allowlist. Include at least one web_search operation with a concrete "
+                    "query; the plan will be executed only after the user approves it."
+                ),
+            ),
+            ChatMessage(
+                role="user",
+                content=json.dumps(research_planning_payload(request), sort_keys=True),
+            ),
+        ]
+        try:
+            response = provider.chat_completion(
+                messages=messages,
+                model=_model_key(self.model_id),
+                stream=False,
+                request_timeout_seconds=30,
+                temperature=0,
+                max_tokens=1_400,
             )
+        except TypeError:
+            response = provider.chat_completion(
+                messages=messages,
+                model=_model_key(self.model_id),
+                stream=False,
+            )
+        content = str(getattr(response, "content", "") or "").strip()
+        if not content:
+            raise RuntimeError("research_planner_provider_returned_no_text")
+        try:
+            plan = ResearchPlan.model_validate(json.loads(_strip_json_fence(content)))
+            if not any(
+                operation.operation == "web_search" and bool(operation.query)
+                for operation in plan.operations
+            ):
+                raise RuntimeError("research_planner_provider_returned_no_search_operations")
+            return plan
+        except Exception as exc:
+            raise RuntimeError("research_planner_provider_returned_invalid_plan") from exc
 
 
 def enforce_research_plan_budget(
@@ -166,6 +249,65 @@ def research_planning_payload(request: ResearchPlanningRequest) -> dict[str, Any
         "schema": research_plan_schema(),
         "request": request.model_dump(mode="json"),
     }
+
+
+def _local_plan_title(question: str) -> str:
+    subject = _plan_subject(question)
+    return f"{subject} Deep Research" if subject else "Deep Research Plan"
+
+
+def _local_plan_steps(question: str) -> list[str]:
+    subject = _plan_subject(question) or "the question"
+    return [
+        f"Collect recent, authoritative sources relevant to {subject}.",
+        "Gather the key data and context needed to answer it.",
+        "Analyze the strongest evidence, including uncertainty and opposing signals.",
+        "Cross-check sources and identify conflicts or information gaps.",
+        "Synthesize a cited answer with clear conclusions and limitations.",
+    ]
+
+
+def _plan_subject(value: str) -> str:
+    clean = " ".join(str(value or "").split()).strip()
+    if not clean:
+        return ""
+    without_lead = re.sub(
+        r"^(?:analy[sz]e|research|investigate|review|summari[sz]e|compare|look into)\s+",
+        "",
+        clean,
+        flags=re.IGNORECASE,
+    )
+    subject = re.split(
+        r"\b(?:and how|and whether|how should|is it|over the next|for the next|what should)\b|[?.!]",
+        without_lead,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip(" ,:;")
+    if not subject or subject.casefold() in {"this", "that", "it", "the topic"}:
+        return ""
+    return subject[:1].upper() + subject[1:]
+
+
+def _model_key(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    parts = text.split(":", 2)
+    if len(parts) == 3 and parts[0] == "llm":
+        return parts[2] or None
+    return text or None
+
+
+def _provider_key(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    return text.split(":", 1)[1] if text.startswith("llm:") else text or None
+
+
+def _strip_json_fence(content: str) -> str:
+    text = str(content or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    return text
 
 
 def _default_hermes_client() -> Any:

@@ -137,11 +137,25 @@ export async function startBlankChat(): Promise<ChatSession> {
     if (snapshot && hasInteractionSettings(snapshot)) {
       request = preservedNewChatRequest(snapshot, snapshot);
     } else {
-      const [session, interaction] = await Promise.all([
-        omnixApiClient.getChatSession(selectedSessionId),
-        characterClient.session(selectedSessionId),
-      ]);
-      request = preservedNewChatRequest(session, interaction);
+      try {
+        const [session, interaction] = await Promise.all([
+          omnixApiClient.getChatSession(selectedSessionId),
+          characterClient.session(selectedSessionId),
+        ]);
+        request = preservedNewChatRequest(session, interaction);
+      } catch {
+        // Creating a blank chat must not depend on optional settings from a
+        // stale or partially loaded current session. The new session can use
+        // the safe system defaults when that preservation read is unavailable.
+        request = {
+          title: 'New chat',
+          interaction_mode: 'system',
+          read_memory: false,
+          write_memory: false,
+          shared_memory_access: 'none',
+          transcript_policy: 'persistent',
+        };
+      }
     }
   }
 

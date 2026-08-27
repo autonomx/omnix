@@ -66,6 +66,46 @@
   color: #f8fafc;
 }
 
+.assistant-context-page-budget {
+  align-items: center;
+  background: rgba(17, 24, 39, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  color: #f8fafc;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.42rem;
+  min-height: 3.15rem;
+  padding: 0.42rem 0.58rem 0.42rem 0.75rem;
+}
+
+.assistant-context-page-budget > span {
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.assistant-context-page-budget input {
+  width: 3.25rem;
+  min-height: 2rem;
+  border: 1px solid rgba(219, 228, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(12, 18, 34, 0.34);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 820;
+  outline: none;
+  padding: 0 0.35rem 0 0.55rem;
+}
+
+.assistant-context-page-budget input:focus-visible {
+  border-color: rgba(96, 165, 250, 0.75);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.22);
+}
+
 .assistant-context-manual.active,
 .assistant-context-desktop.active {
   border-color: rgba(96, 165, 250, 0.75);
@@ -127,6 +167,10 @@
   .assistant-context-mode {
     min-width: 0;
     width: 100%;
+  }
+
+  .assistant-context-page-budget {
+    min-width: 0;
   }
 
   .assistant-context-mode select {

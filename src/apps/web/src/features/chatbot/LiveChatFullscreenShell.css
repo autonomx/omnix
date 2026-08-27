@@ -528,3 +528,64 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Omnix light appearance: fullscreen Live Voice */
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-shell {
+  --immersive-bg: #dbe6f2;
+  --immersive-panel: rgba(241,248,255,.9);
+  --immersive-panel-soft: rgba(226,237,248,.74);
+  --immersive-border: rgba(86,112,148,.22);
+  --immersive-text: #203049;
+  --immersive-muted: #66778e;
+  --immersive-accent: #597da6;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255,255,255,.82), transparent 32rem),
+    radial-gradient(circle at 82% 92%, rgba(154,178,207,.28), transparent 30rem),
+    var(--immersive-bg) !important;
+  color: var(--immersive-text) !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-brand > span,
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-topbar-actions > span,
+:root[data-omnix-appearance='light'] .live-chat-character-stage > header > span,
+:root[data-omnix-appearance='light'] .live-chat-stage-caption {
+  background: rgba(242,248,255,.72) !important;
+  border-color: var(--immersive-border) !important;
+  color: var(--immersive-text) !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-character-stage {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.2), rgba(188,207,229,.3)),
+    radial-gradient(circle at 50% 22%, rgba(130,160,197,.24), transparent 35%),
+    linear-gradient(145deg, #eaf1f8, #cbd9e9) !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-character-stage .eyebrow,
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-rail .eyebrow {
+  color: #55718f !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-rail {
+  background: var(--immersive-panel) !important;
+  border-color: var(--immersive-border) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 .8rem 1.8rem rgba(50,72,100,.1) !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-transcript article {
+  background: rgba(255,255,255,.58) !important;
+  border-color: rgba(86,112,148,.15) !important;
+  color: var(--immersive-text) !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-transcript article.user {
+  background: rgba(190,210,232,.54) !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-transcript article :where(strong,time,header span) {
+  color: #61758e !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-call-card,
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-composer textarea,
+:root[data-omnix-appearance='light'] .live-chat-fullscreen-composer > button {
+  background: rgba(244,249,255,.7) !important;
+  border-color: var(--immersive-border) !important;
+  color: var(--immersive-text) !important;
+}
+:root[data-omnix-appearance='light'] .live-chat-stage-avatar img {
+  filter: drop-shadow(0 .8rem 1rem rgba(62,83,109,.14));
+}

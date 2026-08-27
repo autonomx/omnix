@@ -465,7 +465,7 @@ export function TradingWatchlist({
                 <strong>{symbol}</strong>
               </button>
               <span className="trading-watchlist-price">{formatWatchlistPrice(quote?.price)}</span>
-              <span className={`trading-watchlist-change${quote?.changePercent != null ? (quote.changePercent >= 0 ? ' positive' : ' negative') : ''}`}>
+              <span className={`trading-watchlist-change${quote?.changePercent != null ? (quote.changePercent > 0 ? ' positive' : quote.changePercent < 0 ? ' negative' : ' neutral') : ''}`}>
                 {formatChange(quote?.changePercent)}
               </span>
               <span className={`trading-watchlist-row-actions${changeSort === 'manual' ? '' : ' is-sorted'}`}>

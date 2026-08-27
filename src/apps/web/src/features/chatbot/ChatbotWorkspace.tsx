@@ -38,6 +38,7 @@ import { liveChatSubmissionGateway } from '../assistant-workspace/live-chat-subm
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
+import { ChatIdentityModeControl } from './ChatIdentityModeControl';
 import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
 import { LiveChatFullscreenShell } from './LiveChatFullscreenShell';
 import { Live2DZoomControl } from './Live2DZoomControl';
@@ -46,6 +47,7 @@ import { MemoryManagementPanel } from './MemoryManagementPanel';
 import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from './liveCharacterAvatarBridge';
+import { isDeepResearchMessage, renderMarkdownHtml, renderResearchReportHtml } from './markdownRenderer';
 
 interface ChatbotFormValues {
   content: string;
@@ -244,6 +246,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [openMessageActionMenuId, setOpenMessageActionMenuId] = useState<string | null>(null);
   const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
+  const [quickSearchProgress, setQuickSearchProgress] = useState<string | null>(null);
+  const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
   const [callElapsedMs, setCallElapsedMs] = useState(0);
   const [voiceCaptureMode, setVoiceCaptureMode] = useState<VoiceCaptureMode>('idle');
@@ -396,11 +400,21 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       }
       return omnixApiClient.sendChatMessage(sessionId, { content: values.content, provider_id: providerId, model_id: modelId });
     },
-    onMutate: () => {
+    onMutate: (values) => {
       markVoiceTurnPerformance('chatSubmitStartedAt');
+      const researchMode = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]')?.value;
+      setQuickSearchProgress(researchMode === 'quick' ? values.content.trim() : null);
+      setPendingUserMessage({
+        id: `optimistic-user-${Date.now()}`,
+        role: 'user',
+        content: values.content,
+        created_at: new Date().toISOString(),
+      });
     },
     onSuccess: (_result, values) => {
       markVoiceTurnPerformance('chatResponseReceivedAt');
+      setQuickSearchProgress(null);
+      setPendingUserMessage(null);
       reset({ content: '', providerId: values.providerId, modelId: values.modelId });
       setLiveTranscript('');
       setLiveInterimTranscript('');
@@ -408,6 +422,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       void queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
     onError: (error, values) => {
+      setQuickSearchProgress(null);
+      setPendingUserMessage(null);
       const sessionId = selectedSessionId ?? undefined;
       const filter = createWorkspaceEventFilter(runtimeConfig, sessionId);
       const failureEvent = createChatbotFailureEvent({
@@ -448,6 +464,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
   const recentMessages = activeSession?.messages?.slice(-4) ?? [];
+  const displayedMessages = pendingUserMessage
+    ? [...(activeSession?.messages ?? []), pendingUserMessage]
+    : activeSession?.messages ?? [];
+  const displayedSessionId = activeSession?.id ?? selectedSessionId ?? 'pending-session';
   const visibleVoiceTranscriptMessages = recentMessages.filter((message) => !clearedVoiceTranscriptMessageIds[message.id]);
   const latestAssistantMessage = getLatestAssistantMessage(activeSession?.messages ?? []);
   const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
@@ -469,9 +489,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const ttsOutputLabel = `${runtimeConfig.ttsServiceUrl ? 'TTS service' : 'Voice Studio TTS job'}${activeVoiceLabel ? ` · ${activeVoiceLabel}` : ''}`;
 
   useEffect(() => {
-    if (!activeSession?.id || activeMessageCount === 0) return;
-    const scrollKey = `${activeSession.id}:${activeMessageCount}`;
-    const alreadyInSession = lastMessageScrollKeyRef.current.startsWith(`${activeSession.id}:`);
+    if (displayedMessages.length === 0) return;
+    const scrollKey = `${displayedSessionId}:${displayedMessages.length}`;
+    const alreadyInSession = lastMessageScrollKeyRef.current.startsWith(`${displayedSessionId}:`);
     lastMessageScrollKeyRef.current = scrollKey;
     if (alreadyInSession && !shouldStickToLatestMessageRef.current) return;
     const scheduleFrame: (callback: FrameRequestCallback) => number = typeof window.requestAnimationFrame === 'function'
@@ -485,7 +505,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       shouldStickToLatestMessageRef.current = true;
     });
     return () => cancelFrame(frameId);
-  }, [activeSession?.id, activeMessageCount]);
+  }, [displayedSessionId, displayedMessages.length]);
 
   useEffect(() => {
     if (callStartedAt === null) {
@@ -1722,28 +1742,45 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <header className="assistant-chat-header">
                 <div><p className="eyebrow">Current chat</p><h2>{activeSession?.title ?? 'Hey! How are you today?'}</h2></div>
                 <div className="assistant-chat-header-actions assistant-chat-integrated-actions">
-                  <label className="assistant-header-voice-select">
-                    <span>Voice</span>
-                    <select aria-label="Cloned voice" value={liveCallRuntime?.interaction_mode === 'character' ? currentLiveCallVoiceId() : assistantSettings.voiceId} disabled={liveCallRuntime?.interaction_mode === 'character'} onChange={(event) => updateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}>
-                      <option value="">{runtimeConfig.ttsVoice ? `Default (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>
-                      {voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}
-                    </select>
-                  </label>
-                  <button className="assistant-header-pill" type="button" onClick={() => showAssistantView('settings')}>Personality</button>
+                  <ChatIdentityModeControl
+                    sessionId={selectedSessionId}
+                    systemVoiceId={assistantSettings.voiceId}
+                    defaultVoiceLabel={runtimeConfig.ttsVoice ? `Default (${runtimeConfig.ttsVoice})` : 'Default voice'}
+                    voiceOptions={voiceProfiles.map((asset) => ({
+                      assetId: asset.id,
+                      value: voiceProfileId(asset),
+                      label: voiceProfileLabel(asset),
+                    }))}
+                    onSystemVoiceChange={(voiceId) => updateAssistantSettings({ ...assistantSettings, voiceId })}
+                    onSessionResolved={(sessionId) => setSelectedSessionId(sessionId)}
+                    onOpenSystemSettings={() => showAssistantView('settings')}
+                    onOpenCharacterSettings={() => showAssistantView('characters')}
+                  />
                 </div>
               </header>
               <div className="assistant-chat-messages" role="log" aria-live="polite" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
-                {activeSession?.messages?.length ? activeSession.messages.map((message) => (
+                {displayedMessages.length ? displayedMessages.map((message) => (
                   <article key={message.id} className={`assistant-chat-message ${message.role}`}>
                     {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
                     <div className="assistant-chat-bubble">
                       <header><strong>{message.role === 'assistant' ? 'Omnix Assistant' : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
-                      <p>{message.content}</p>
-                      {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={activeSession.id} onOpenTools={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }} />)}
+                      <div
+                        className={`assistant-message-content${isDeepResearchMessage(message.metadata) ? ' assistant-research-report-host' : ''}`}
+                        data-omnix-message-content="true"
+                        data-raw-content={message.content}
+                        data-message-id={message.id}
+                        dangerouslySetInnerHTML={{
+                          __html: isDeepResearchMessage(message.metadata)
+                            ? renderResearchReportHtml(message.content, message.metadata)
+                            : renderMarkdownHtml(message.content),
+                        }}
+                      />
+                      {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={displayedSessionId} onOpenTools={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }} />)}
                       {message.role === 'assistant' ? <div className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
                     </div>
                   </article>
                 )) : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
+                {quickSearchProgress ? <div className="assistant-quick-search-progress" role="status" aria-live="polite"><span className="assistant-quick-search-icon" aria-hidden="true">◎</span><span>Searching {quickSearchProgress}</span></div> : null}
                 <div ref={messagesEndRef} aria-hidden="true" />
               </div>
               <form className="assistant-composer" onSubmit={handleSubmit(submitComposerMessage)}>

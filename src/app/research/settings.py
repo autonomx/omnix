@@ -24,7 +24,7 @@ class ResearchRuntimeSettings(BaseModel):
     max_results: int = Field(default=5, ge=1, le=8)
     max_steps: int = Field(default=6, ge=1, le=12)
     max_queries: int = Field(default=5, ge=1, le=10)
-    max_sources: int = Field(default=12, ge=1, le=30)
+    max_sources: int = Field(default=12, ge=1, le=100)
     max_extracts: int = Field(default=8, ge=0, le=20)
     show_diagnostics: bool = True
     deep_enabled: bool = False

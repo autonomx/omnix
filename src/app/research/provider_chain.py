@@ -92,10 +92,23 @@ class ProviderFallbackSearchClient:
                 self.provider_errors[provider] = "deadline_exhausted"
                 break
             self.attempted_providers.append(provider)
+            client_kwargs: dict[str, Any] = {
+                "provider": provider,
+                "timeout_seconds": remaining,
+            }
+            if provider_requires_credential(provider):
+                client_kwargs["api_key"] = _provider_api_key(provider)
             try:
-                client = self.client_factory(provider=provider, timeout_seconds=remaining)
+                client = self.client_factory(**client_kwargs)
             except TypeError:
-                client = self.client_factory(provider=provider)
+                # Preserve compatibility with injected test/custom factories that only
+                # accept provider and timeout, while the built-in WebSearchClient receives
+                # credentials from the protected store above.
+                client_kwargs.pop("api_key", None)
+                try:
+                    client = self.client_factory(**client_kwargs)
+                except TypeError:
+                    client = self.client_factory(provider=provider)
             try:
                 items = client.search(query, max_results)
             except Exception as exc:  # provider boundary; fallback is intentional

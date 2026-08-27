@@ -53,6 +53,7 @@ class AssistantContextChatRequest(BaseModel):
     internal_research_policy: dict[str, Any] = Field(default_factory=dict, exclude=True)
     internal_research_warnings: list[str] = Field(default_factory=list, exclude=True)
     web_search_max_results: int = Field(default=5, ge=1, le=8)
+    deep_research_max_pages: int | None = Field(default=None, ge=1, le=100)
     desktop_image_data_url: str | None = None
     desktop_current_image_data_url: str | None = None
     desktop_history_image_data_url: str | None = None

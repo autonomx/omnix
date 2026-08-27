@@ -162,6 +162,8 @@ class PostgresJobStoreAdapter:
         current = self.get_job(job_id)
         if current is None:
             return None
+        if current.status == JobStatus.RUNNING:
+            return current
         if self._runs_without_worker_lease(current):
             with unit_of_work(self.database) as work:
                 record = work.jobs.mark_record_only_running(self.context, job_id=job_id)
@@ -304,6 +306,106 @@ class PostgresJobStoreAdapter:
                 ),
             ).fetchone()
         return self.get_job(job_id) if row is not None else None
+
+    def update_job_input(
+        self,
+        job_id: str,
+        input_payload: dict[str, Any],
+        *,
+        compat: dict[str, Any] | None = None,
+    ) -> JobRecord | None:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                "SELECT metadata FROM omnix_jobs WHERE id = %s AND workspace_id = %s",
+                (job_id, self.context.workspace_id),
+            ).fetchone()
+            if row is None:
+                return None
+            metadata = dict(row[0] or {})
+            contract = dict(metadata.get("compat_contract") or {})
+            if compat is not None:
+                contract["compat"] = dict(compat)
+            metadata["compat_contract"] = contract
+            updated = connection.execute(
+                """
+                UPDATE omnix_jobs
+                   SET input_payload = %s::jsonb,
+                       metadata = %s::jsonb,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = %s AND workspace_id = %s
+                RETURNING id
+                """,
+                (
+                    self._json(input_payload),
+                    self._json(metadata),
+                    job_id,
+                    self.context.workspace_id,
+                ),
+            ).fetchone()
+        return self.get_job(job_id) if updated is not None else None
+
+    def update_job_stages(self, job_id: str, stages: list[JobStage]) -> JobRecord | None:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                "SELECT metadata FROM omnix_jobs WHERE id = %s AND workspace_id = %s",
+                (job_id, self.context.workspace_id),
+            ).fetchone()
+            if row is None:
+                return None
+            metadata = dict(row[0] or {})
+            contract = dict(metadata.get("compat_contract") or {})
+            contract["stages"] = [stage.model_dump(mode="json") for stage in stages]
+            metadata["compat_contract"] = contract
+            updated = connection.execute(
+                """
+                UPDATE omnix_jobs
+                   SET metadata = %s::jsonb,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = %s AND workspace_id = %s
+                RETURNING id
+                """,
+                (self._json(metadata), job_id, self.context.workspace_id),
+            ).fetchone()
+        return self.get_job(job_id) if updated is not None else None
+
+    def finalize_cancel(self, job_id: str, reason: str) -> JobRecord | None:
+        now = _utcnow()
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                "SELECT metadata FROM omnix_jobs WHERE id = %s AND workspace_id = %s",
+                (job_id, self.context.workspace_id),
+            ).fetchone()
+            if row is None:
+                return None
+            metadata = dict(row[0] or {})
+            contract = dict(metadata.get("compat_contract") or {})
+            cancel = dict(contract.get("cancel") or {})
+            cancel.update(
+                {
+                    "requested": True,
+                    "requested_at": cancel.get("requested_at") or now,
+                    "acknowledged_at": now,
+                    "reason": cancel.get("reason") or reason,
+                }
+            )
+            contract["cancel"] = cancel
+            metadata["compat_contract"] = contract
+            updated = connection.execute(
+                """
+                UPDATE omnix_jobs
+                   SET status = 'canceled',
+                       lease_owner = NULL,
+                       lease_token = NULL,
+                       lease_expires_at = NULL,
+                       completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                       updated_at = CURRENT_TIMESTAMP,
+                       metadata = %s::jsonb
+                 WHERE id = %s AND workspace_id = %s
+                RETURNING id
+                """,
+                (self._json(metadata), job_id, self.context.workspace_id),
+            ).fetchone()
+        return self.get_job(job_id) if updated is not None else None
 
     def append_log(self, job_id: str, message: str) -> JobRecord | None:
         with unit_of_work(self.database) as work:

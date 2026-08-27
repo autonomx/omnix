@@ -42,7 +42,7 @@ class AssistantSettingsProfile(BaseModel):
     research_max_results: int = Field(default=5, ge=1, le=8, alias="researchMaxResults")
     research_max_steps: int = Field(default=6, ge=1, le=12, alias="researchMaxSteps")
     research_max_queries: int = Field(default=5, ge=1, le=10, alias="researchMaxQueries")
-    research_max_sources: int = Field(default=12, ge=1, le=30, alias="researchMaxSources")
+    research_max_sources: int = Field(default=12, ge=1, le=100, alias="researchMaxSources")
     research_max_extracts: int = Field(default=8, ge=0, le=20, alias="researchMaxExtracts")
     research_search_cache_ttl_seconds: int = Field(
         default=300,
