@@ -264,6 +264,15 @@ def _bar_evidence_is_causal(
     return observation.bar_start_time.astimezone(timezone.utc) >= activation
 
 
+def paper_liquidity_scope(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+) -> str:
+    """Return the shared simulation-liquidity bucket for one observation."""
+    displayed = observation.ask_size if order.side == "buy" else observation.bid_size
+    return f"book:{order.side}" if displayed is not None else "bar"
+
+
 def _liquidity_capacity(
     order: PaperOrder,
     observation: PaperMarketObservation,
