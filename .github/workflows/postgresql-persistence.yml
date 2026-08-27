@@ -44,10 +44,16 @@ jobs:
           python -m pip install \
             pytest fastapi httpx pydantic requests python-multipart pillow playwright \
             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+      - name: Compile hardening modules
+        run: python -m py_compile src/main.py src/run_app.py src/app/shared.py
+
       - name: Run PostgreSQL persistence tests
         run: |
           set -o pipefail
-          python -m pytest src/tests/persistence -q --tb=short 2>&1 | tee postgresql-pytest-output.txt
+          python -m pytest \
+            src/tests/persistence \
+            src/tests/unit/test_shared_state_safety.py \
+            -q --tb=short 2>&1 | tee postgresql-pytest-output.txt
       - name: Upload PostgreSQL pytest diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

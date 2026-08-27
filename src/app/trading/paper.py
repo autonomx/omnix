@@ -143,6 +143,7 @@ class PaperMarketObservation(BaseModel):
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     execution_eligible: bool = True
     freshness_mode: str = "unknown"
+    provider_sequence: int | None = None
     rejection_reasons: tuple[str, ...] = ()
     halted: bool = False
 
@@ -264,6 +265,15 @@ def _bar_evidence_is_causal(
     return observation.bar_start_time.astimezone(timezone.utc) >= activation
 
 
+def paper_liquidity_scope(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+) -> str:
+    """Return the shared simulation-liquidity bucket for one observation."""
+    displayed = observation.ask_size if order.side == "buy" else observation.bid_size
+    return f"book:{order.side}" if displayed is not None else "bar"
+
+
 def _liquidity_capacity(
     order: PaperOrder,
     observation: PaperMarketObservation,
@@ -284,6 +294,31 @@ def _liquidity_capacity(
     if not _bar_evidence_is_causal(order, observation, policy):
         return Decimal("0")
     return observation.volume * policy.max_volume_participation_pct
+
+
+def paper_liquidity_capacity(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    policy: PaperExecutionPolicy | None = None,
+) -> Decimal | None:
+    """Return the maximum simulation participation for this observation bucket."""
+    return _liquidity_capacity(order, observation, policy or PaperExecutionPolicy())
+
+
+def paper_liquidity_allocation(
+    order: PaperOrder,
+    observation: PaperMarketObservation,
+    requested_quantity: Decimal,
+    consumed: dict[str, Decimal],
+    policy: PaperExecutionPolicy | None = None,
+) -> tuple[Decimal, str | None]:
+    """Cap one paper fill by liquidity already consumed from the observation."""
+    capacity = paper_liquidity_capacity(order, observation, policy)
+    if capacity is None:
+        return requested_quantity, None
+    scope = paper_liquidity_scope(order, observation)
+    available = max(Decimal("0"), capacity - consumed.get(scope, Decimal("0")))
+    return min(requested_quantity, available), scope
 
 
 def paper_protection_trigger(
@@ -454,17 +489,27 @@ def paper_fill_is_fundable(
     return order.reserved_cash >= total_cost
 
 
+def paper_observation_key(observation: PaperMarketObservation) -> str:
+    """Stable identity for one distinct paper-execution market observation."""
+    raw = (
+        f"{observation.instrument_id}|{observation.binding_id}|{observation.provider}|"
+        f"{observation.source_time.isoformat()}|{observation.price}|"
+        f"{observation.bid}|{observation.ask}|{observation.bid_size}|{observation.ask_size}|"
+        f"{observation.high}|{observation.low}|{observation.volume}|"
+        f"{observation.bar_start_time.isoformat() if observation.bar_start_time else None}|"
+        f"{observation.execution_eligible}|{observation.freshness_mode}|"
+        f"{observation.provider_sequence}|{','.join(observation.rejection_reasons)}|"
+        f"{observation.halted}"
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def paper_fill_key(
     account_id: str,
     order_id: str,
     observation: PaperMarketObservation,
 ) -> str:
-    raw = (
-        f"{account_id}|{order_id}|{observation.instrument_id}|"
-        f"{observation.source_time.isoformat()}|{observation.price}|"
-        f"{observation.bid}|{observation.ask}|{observation.bid_size}|{observation.ask_size}|"
-        f"{observation.high}|{observation.low}|{observation.volume}|{observation.halted}"
-    )
+    raw = f"{account_id}|{order_id}|{paper_observation_key(observation)}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

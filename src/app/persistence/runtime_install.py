@@ -78,6 +78,7 @@ def _install_remaining_document_authority_adapters() -> None:
         load_empty_assistant_tool_credentials,
         load_empty_assistant_tool_oauth_clients,
         load_legacy_chat_sessions,
+        mutate_legacy_chat_sessions,
         no_assistant_tool_credential,
         postgres_assistant_memory_settings_store_class,
         postgres_live_conversation_profile_store_class,
@@ -96,6 +97,7 @@ def _install_remaining_document_authority_adapters() -> None:
         save_sessions_callback=save_legacy_chat_sessions,
         load_secrets_callback=load_provider_secrets,
         save_secrets_callback=save_provider_secrets,
+        update_sessions_callback=mutate_legacy_chat_sessions,
     )
     house_state_module.load_house_state = load_assist_house_state
     house_state_module.save_house_state = save_assist_house_state

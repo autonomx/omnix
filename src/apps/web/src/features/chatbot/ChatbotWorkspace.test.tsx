@@ -371,8 +371,8 @@ describe('ChatbotWorkspace', () => {
     expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument();
     expect(screen.getByText('Workspace activity')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Cloned voice'), { target: { value: 'ari-clone' } });
-    expect(screen.getByLabelText('Cloned voice')).toHaveValue('ari-clone');
+    fireEvent.change(screen.getByLabelText('System voice'), { target: { value: 'ari-clone' } });
+    expect(screen.getByLabelText('System voice')).toHaveValue('ari-clone');
     expect(JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') ?? '{}')).toMatchObject({ voiceId: 'ari-clone' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Settings view' }));

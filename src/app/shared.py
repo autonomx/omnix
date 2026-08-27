@@ -2,7 +2,8 @@ import hashlib
 import json
 import os
 import re
-from typing import Any, Dict, Optional
+import threading
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 # Base paths - project root (parent of src/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -41,8 +42,11 @@ _settings_load_override = None
 _settings_save_override = None
 _sessions_load_override = None
 _sessions_save_override = None
+_sessions_update_override = None
 _secrets_load_override = None
 _secrets_save_override = None
+_sessions_document_lock = threading.RLock()
+_SessionMutationResult = TypeVar("_SessionMutationResult")
 
 # Singleton Provider Instances
 _tts_provider_instance = None
@@ -308,26 +312,29 @@ def install_postgresql_document_callbacks(
     save_sessions_callback,
     load_secrets_callback,
     save_secrets_callback,
+    update_sessions_callback=None,
 ):
     global _settings_load_override, _settings_save_override
-    global _sessions_load_override, _sessions_save_override
+    global _sessions_load_override, _sessions_save_override, _sessions_update_override
     global _secrets_load_override, _secrets_save_override
     _settings_load_override = load_settings_callback
     _settings_save_override = save_settings_callback
     _sessions_load_override = load_sessions_callback
     _sessions_save_override = save_sessions_callback
+    _sessions_update_override = update_sessions_callback
     _secrets_load_override = load_secrets_callback
     _secrets_save_override = save_secrets_callback
 
 
 def clear_postgresql_document_callbacks():
     global _settings_load_override, _settings_save_override
-    global _sessions_load_override, _sessions_save_override
+    global _sessions_load_override, _sessions_save_override, _sessions_update_override
     global _secrets_load_override, _secrets_save_override
     _settings_load_override = None
     _settings_save_override = None
     _sessions_load_override = None
     _sessions_save_override = None
+    _sessions_update_override = None
     _secrets_load_override = None
     _secrets_save_override = None
 
@@ -352,7 +359,7 @@ def load_settings():
                 return settings
         except Exception as e:
             print(f"Error loading settings: {e}, using defaults")
-    return DEFAULT_SETTINGS.copy()
+    return json.loads(json.dumps(DEFAULT_SETTINGS))
 
 def save_settings(settings):
     settings = migrate_settings(dict(settings or {}))
@@ -403,6 +410,28 @@ def save_sessions(sessions):
     else:
         with open(SESSIONS_FILE, 'w') as f:
             json.dump(sessions, f, indent=2)
+
+
+def update_sessions(
+    mutator: Callable[[Dict[str, Any]], _SessionMutationResult],
+) -> _SessionMutationResult:
+    """Atomically apply one legacy-session mutation.
+
+    File fallback uses an in-process lock. PostgreSQL installs a transactional
+    mutation callback that locks the document row, making the update safe across
+    worker processes as well.
+    """
+
+    global sessions_data
+    with _sessions_document_lock:
+        if _sessions_update_override is not None:
+            current, result = _sessions_update_override(mutator)
+        else:
+            current = dict(load_sessions() or {})
+            result = mutator(current)
+            save_sessions(current)
+        sessions_data = current
+        return result
 
 def extract_thinking(content):
     """Extract thinking/analysis from content."""

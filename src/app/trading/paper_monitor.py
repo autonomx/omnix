@@ -80,6 +80,7 @@ def _paper_observation(execution: ExecutionObservation) -> PaperMarketObservatio
         evaluated_at=datetime.now(timezone.utc),
         execution_eligible=execution.execution_eligible,
         freshness_mode=execution.freshness_mode,
+        provider_sequence=execution.provider_sequence,
         rejection_reasons=execution.rejection_reasons,
         halted=execution.halted is True,
     )
