@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.research.quick_search import QuickSearchService
-
 from .models import AssistantToolRequest, AssistantToolResult
 
 
@@ -39,7 +37,15 @@ def run_research_tool_request(
         )
     max_results = max(1, min(max_results, 10))
 
-    runtime = service or QuickSearchService()
+    if service is None:
+        # Keep process initialization acyclic: Quick Search imports the
+        # assistant-context package, whose initialization can reach chat and
+        # live-agent hooks that depend on this Hermes bridge.
+        from app.research.quick_search import QuickSearchService
+
+        runtime = QuickSearchService()
+    else:
+        runtime = service
     try:
         execution = runtime.search(
             query,
