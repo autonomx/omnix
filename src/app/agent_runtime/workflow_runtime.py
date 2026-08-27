@@ -918,6 +918,14 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     """,
                     (self.context.workspace_id, run_id, step_id),
                 )
+                self._append_event(
+                    work.connection,
+                    WorkflowEvent(
+                        run_id=run_id,
+                        event_type="workflow.approval.requested",
+                        payload={"step_id": step_id},
+                    ),
+                )
             work.commit()
 
     def _set_step_retry(self, run_id: str, step_id: str, error: str) -> bool:
@@ -939,6 +947,15 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     self.worker_id,
                 ),
             ).fetchone()
+            if row is not None:
+                self._append_event(
+                    work.connection,
+                    WorkflowEvent(
+                        run_id=run_id,
+                        event_type="workflow.step.retry",
+                        payload={"step_id": step_id, "error": error},
+                    ),
+                )
             work.commit()
         return row is not None
 
@@ -962,6 +979,15 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     self.worker_id,
                 ),
             ).fetchone()
+            if row is not None:
+                self._append_event(
+                    work.connection,
+                    WorkflowEvent(
+                        run_id=run_id,
+                        event_type="workflow.step.failed",
+                        payload={"step_id": step_id, "error": error},
+                    ),
+                )
             work.commit()
         return row is not None
 
@@ -990,6 +1016,15 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     self.worker_id,
                 ),
             ).fetchone()
+            if row is not None:
+                self._append_event(
+                    work.connection,
+                    WorkflowEvent(
+                        run_id=run_id,
+                        event_type="workflow.step.completed",
+                        payload={"step_id": step_id, "result": result},
+                    ),
+                )
             work.commit()
         return row is not None
 
