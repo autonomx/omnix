@@ -17,6 +17,8 @@ from .contracts import (
     AgentRunSnapshot,
     AgentRunSpec,
     ModelRef,
+    ResourceScope,
+    RunLimits,
     SuccessCriterion,
     WorkspaceSpec,
 )
@@ -40,6 +42,16 @@ class StartAgentRunRequest(BaseModel):
     isolation_policy: str = "supervised_worktree"
     capabilities: list[str] | None = None
     external_capabilities: list[str] | None = None
+    resource_scopes: list[ResourceScope] = Field(default_factory=list)
+    approval_policy: Literal[
+        "allow_automatic",
+        "ask_sensitive",
+        "always_ask",
+        "disabled",
+    ] = "ask_sensitive"
+    limits: RunLimits = Field(default_factory=RunLimits)
+    allowed_paths: list[str] = Field(default_factory=lambda: ["**"])
+    forbidden_paths: list[str] = Field(default_factory=list)
     success_criteria: list[str] = Field(default_factory=list)
 
 
@@ -78,12 +90,20 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         capabilities=issued_capabilities,
         external_capabilities=issued_external,
         context_sources=list(profile.context_sources),
+        resource_scopes=request.resource_scopes,
+        approval_policy=request.approval_policy,
+        limits=request.limits,
         workspace=(
             WorkspaceSpec(
-                root=str(root), repository=request.repository, base_ref=request.base_ref,
+                root=str(root),
+                repository=request.repository,
+                base_ref=request.base_ref,
                 isolation_policy=request.isolation_policy,
+                allowed_paths=request.allowed_paths,
+                forbidden_paths=request.forbidden_paths,
             )
-            if root else WorkspaceSpec(root=".", isolation_policy=request.isolation_policy, allowed_paths=[])
+            if root
+            else None
         ),
         success_criteria=[
             SuccessCriterion(id=f"criterion-{index + 1}", description=value)

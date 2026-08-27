@@ -23,6 +23,12 @@ AgentRunStatus = Literal[
 ]
 AgentDesiredState = Literal["running", "paused", "cancelled"]
 AgentCommandType = Literal["steer", "pause", "resume", "cancel", "approve", "reject"]
+AgentApprovalPolicy = Literal[
+    "allow_automatic",
+    "ask_sensitive",
+    "always_ask",
+    "disabled",
+]
 AgentEventType = Literal[
     "run.created",
     "run.started",
@@ -137,7 +143,7 @@ class AgentRunSpec(BaseModel):
     workspace: WorkspaceSpec | None = None
     execution: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
     limits: RunLimits = Field(default_factory=RunLimits)
-    approval_policy: str = "ask_sensitive"
+    approval_policy: AgentApprovalPolicy = "ask_sensitive"
     context_sources: list[str] = Field(default_factory=list)
     artifact_policy: str = "metadata_in_postgres_blobs_external"
     expected_artifacts: list[ArtifactKind] = Field(default_factory=list)

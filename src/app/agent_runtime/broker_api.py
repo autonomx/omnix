@@ -77,6 +77,87 @@ def _approved_execution_key(
     return execution_key
 
 
+def _scope_candidate_values(
+    resource_type: str,
+    payload: dict[str, Any],
+) -> list[object]:
+    resource = str(resource_type or "").strip().casefold()
+    aliases: dict[str, tuple[str, ...]] = {
+        "repository": ("repository", "repo"),
+        "repo": ("repository", "repo"),
+        "device": ("device_id", "target", "id"),
+        "target": ("target", "id"),
+        "message": ("message_id", "id"),
+        "thread": ("thread_id", "id"),
+        "event": ("event_id", "id"),
+        "recipient": ("recipient", "to", "email"),
+        "contact": ("contact_id", "email", "id"),
+        "account": ("account_id", "id"),
+        "branch": ("branch",),
+        "pull_request": ("number", "pull_request_id", "id"),
+    }
+    keys = list(
+        dict.fromkeys(
+            (
+                resource,
+                f"{resource}_id" if resource else "",
+                "resource_id",
+                *aliases.get(resource, ()),
+            )
+        )
+    )
+    values: list[object] = []
+    for key in keys:
+        if not key or key not in payload:
+            continue
+        value = payload.get(key)
+        if isinstance(value, list):
+            values.extend(value)
+        else:
+            values.append(value)
+    return values
+
+
+def _constraint_matches(actual: object, expected: object) -> bool:
+    if isinstance(expected, list):
+        return any(_constraint_matches(actual, item) for item in expected)
+    if isinstance(actual, list):
+        return any(_constraint_matches(item, expected) for item in actual)
+    if isinstance(expected, str):
+        return str(actual or "").strip().casefold() == expected.strip().casefold()
+    return actual == expected
+
+
+def _request_within_resource_scopes(
+    snapshot,
+    capability_id: str,
+    payload: dict[str, Any],
+) -> bool:
+    registry = default_capability_registry()
+    scopes = [
+        scope
+        for scope in snapshot.spec.resource_scopes
+        if registry.canonical_id(scope.capability) == capability_id
+    ]
+    if not scopes:
+        return True
+    for scope in scopes:
+        if scope.resource_id != "*":
+            candidates = _scope_candidate_values(scope.resource_type, payload)
+            if not any(
+                _constraint_matches(candidate, scope.resource_id)
+                for candidate in candidates
+            ):
+                continue
+        if not all(
+            key in payload and _constraint_matches(payload.get(key), expected)
+            for key, expected in scope.constraints.items()
+        ):
+            continue
+        return True
+    return False
+
+
 def _stored_response(
     capability_id: str,
     execution_key: str,
@@ -127,6 +208,8 @@ def execute_agent_capability(
     canonical = capability.id
     if canonical not in snapshot.spec.external_capabilities:
         raise HTTPException(status_code=403, detail="agent_capability_outside_run_spec")
+    if not _request_within_resource_scopes(snapshot, canonical, request.input):
+        raise HTTPException(status_code=403, detail="agent_resource_scope_mismatch")
 
     execution_key = _execution_key(run_id, canonical, request)
     approved = False
@@ -193,6 +276,7 @@ def execute_agent_capability(
             session_id=snapshot.spec.session_id or f"agent:{run_id}",
             proposal_id=execution_key,
             input=request.input,
+            approval_policy=snapshot.spec.approval_policy,
             approved=approved,
         )
         decision = review_assistant_tool_request(tool_request)

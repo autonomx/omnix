@@ -259,9 +259,11 @@ def _agent_result(
 
     profile_id = _select_profile(str(user_message.content or ""))
     repository = os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
-    if profile_id in {"coding", "ops"} and not repository:
+    profile = get_agent_profile(profile_id)
+    if profile.requires_workspace and not repository:
         # Preserve the existing Hermes proposal-only path when no durable
-        # workspace authority is configured.
+        # workspace authority is configured. Never substitute the Omnix server
+        # working directory for an explicitly issued repository.
         return None
 
     resolved_provider = str(provider_id or getattr(session, "provider_id", None) or os.environ.get("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")).strip()
@@ -269,7 +271,6 @@ def _agent_result(
     if not resolved_provider or not resolved_model:
         return None
 
-    profile = get_agent_profile(profile_id)
     local, external = resolve_profile_capabilities(profile)
     task = re.sub(r"^(?:/agent\b|agent[,:]\s*|use (?:the )?agent\b\s*)", "", str(user_message.content or ""), flags=re.I).strip()
     task = task or str(user_message.content or "").strip()
@@ -280,7 +281,7 @@ def _agent_result(
             base_ref=os.environ.get("OMNIX_AGENT_DEFAULT_BASE_REF", "main").strip() or "main",
         )
         if repository and profile.requires_workspace
-        else WorkspaceSpec(root=".", allowed_paths=[])
+        else None
     )
     spec = AgentRunSpec(
         session_id=str(session.id),
