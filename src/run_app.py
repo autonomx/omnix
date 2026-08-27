@@ -2784,8 +2784,8 @@ async def chat_stream(request: Request):
     system_prompt = data.get('system_prompt', '')
     speaker = data.get('speaker', 'default')
     
-    # Reload provider from settings on each request to pick up changes
-    provider = shared.get_provider()
+    # Reload provider from settings on each request to pick up changes.
+    provider = await asyncio.to_thread(shared.get_provider)
     if not provider:
         return JSONResponse({"success": False, "error": "Provider not available"}, status_code=500)
     
@@ -2794,8 +2794,9 @@ async def chat_stream(request: Request):
     
     try:
         messages = []
-        if session_id in shared.sessions_data:
-            raw_messages = shared.sessions_data[session_id].get('messages', [])
+        persisted_sessions = await asyncio.to_thread(shared.load_sessions)
+        if session_id in persisted_sessions:
+            raw_messages = persisted_sessions[session_id].get('messages', [])
             for msg in raw_messages:
                 if isinstance(msg, dict):
                     messages.append(ChatMessage(role=msg.get('role', 'user'), content=msg.get('content', '')))
@@ -2812,42 +2813,41 @@ async def chat_stream(request: Request):
                 ai_message = ""
                 thinking = ""
                 
-                # Run the blocking stream generator in a thread pool to avoid blocking the event loop
-                loop = asyncio.get_event_loop()
-                
-                # Use async iteration pattern for non-blocking streaming
-                def get_chunks():
-                    return provider.chat_completion(
-                        messages=messages,
-                        model=model or provider.config.model,
-                        stream=True
-                    )
-                
-                # Run in executor to prevent blocking
-                stream_generator = await loop.run_in_executor(None, get_chunks)
-                
-                for response_chunk in stream_generator:
+                stream_generator = provider.chat_completion(
+                    messages=messages,
+                    model=model or provider.config.model,
+                    stream=True,
+                )
+
+                while True:
+                    response_chunk = await asyncio.to_thread(_next_stream_chunk, stream_generator)
+                    if response_chunk is _STREAM_END:
+                        break
                     if response_chunk.content:
                         ai_message += response_chunk.content
                         yield f"data: {json.dumps({'type': 'content', 'content': response_chunk.content})}\n\n"
-                    
+
                     if response_chunk.thinking or response_chunk.reasoning:
                         thinking += response_chunk.thinking or response_chunk.reasoning
-                
-                if session_id in shared.sessions_data:
-                    # Save user message
-                    shared.sessions_data[session_id]['messages'].append({
+
+                def append_stream_turn(current_sessions: Dict[str, Any]) -> bool:
+                    current = current_sessions.get(session_id)
+                    if current is None:
+                        return False
+                    current.setdefault('messages', []).append({
                         "role": "user",
-                        "content": user_message
+                        "content": user_message,
                     })
-                    # Save assistant message
-                    shared.sessions_data[session_id]['messages'].append({
+                    current['messages'].append({
                         "role": "assistant",
                         "content": ai_message,
-                        "thinking": thinking
+                        "thinking": thinking,
                     })
-                    shared.save_sessions(shared.sessions_data)
+                    current['updated_at'] = datetime.now().isoformat()
+                    return True
 
+                saved = await asyncio.to_thread(shared.update_sessions, append_stream_turn)
+                if saved:
                     try:
                         settings = shared.load_settings()
                         image_settings = dict((settings or {}).get("image") or {})
