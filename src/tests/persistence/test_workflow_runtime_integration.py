@@ -404,3 +404,61 @@ def test_cancel_schedule_suppresses_pending_fire() -> None:
     finally:
         runtime._supervisor_stop.set()
         database.close()
+
+
+
+def test_workflow_event_stream_is_durable_ordered_and_resumable() -> None:
+    database = _database()
+    runtime = PostgresWorkflowRuntime(database)
+    runtime._supervisor_started = True
+    suffix = uuid.uuid4().hex[:10]
+    try:
+        definition = WorkflowDefinition(
+            id=f"events-{suffix}",
+            version=1,
+            name="Event stream",
+            steps=[
+                WorkflowStepDefinition(
+                    id="condition",
+                    kind="condition",
+                    condition="input.ready",
+                )
+            ],
+        )
+        runtime.register(definition)
+        run_id = runtime.start(definition.id, {"ready": True})
+
+        events = runtime.stream_events(run_id)
+        assert [event.sequence for event in events] == list(
+            range(1, len(events) + 1)
+        )
+        assert [event.event_type for event in events] == [
+            "workflow.run.started",
+            "workflow.step.started",
+            "workflow.step.completed",
+            "workflow.run.completed",
+        ]
+
+        resumed = runtime.stream_events(
+            run_id,
+            after_sequence=int(events[1].sequence or 0),
+        )
+        assert [event.event_type for event in resumed] == [
+            "workflow.step.completed",
+            "workflow.run.completed",
+        ]
+
+        restarted = PostgresWorkflowRuntime(database)
+        restarted._supervisor_started = True
+        try:
+            replayed = restarted.stream_events(run_id)
+            assert [
+                event.model_dump(mode="json") for event in replayed
+            ] == [
+                event.model_dump(mode="json") for event in events
+            ]
+        finally:
+            restarted._supervisor_stop.set()
+    finally:
+        runtime._supervisor_stop.set()
+        database.close()
