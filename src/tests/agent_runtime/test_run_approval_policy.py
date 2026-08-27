@@ -14,11 +14,14 @@ def test_run_approval_policy_is_typed() -> None:
     assert spec.approval_policy == "always_ask"
 
 
-def test_broker_passes_run_policy_to_canonical_gate() -> None:
+def test_broker_applies_monotonic_run_policy_overlay() -> None:
     source = (
         Path(__file__).parents[2]
         / "app"
         / "agent_runtime"
         / "broker_api.py"
     ).read_text(encoding="utf-8")
-    assert "approval_policy=snapshot.spec.approval_policy" in source
+    execute_block = source.split("def execute_agent_capability", 1)[1]
+    assert "_review_with_run_policy(" in execute_block
+    assert "snapshot.spec.approval_policy" in execute_block
+    assert "approval_policy=snapshot.spec.approval_policy" not in execute_block
