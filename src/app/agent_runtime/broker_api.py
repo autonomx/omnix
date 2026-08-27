@@ -125,6 +125,14 @@ def execute_agent_capability(
                 )
             approved = approval.state == "approved"
 
+        if approval is None and stored["state"] == "waiting_for_approval":
+            approval = repository.find_capability_approval(
+                run_id,
+                canonical,
+                execution_key,
+            )
+            approved = approval is not None and approval.state == "approved"
+
         tool_request = AssistantToolRequest(
             tool_id=canonical.split(".", 1)[0],
             action_id=canonical,

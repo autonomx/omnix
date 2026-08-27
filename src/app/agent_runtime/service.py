@@ -129,7 +129,7 @@ class AgentRunService:
         self._ensure_supervisor()
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
-            stored, status = repository.enqueue_command(command)
+            stored, status = repository.enqueue_command_with_status(command)
             current = repository.get_run(command.run_id)
             if current is None:
                 raise KeyError(command.run_id)
@@ -493,6 +493,24 @@ class AgentRunService:
                 self.heartbeat(str(row[0]), ttl_seconds=90)
             except Exception:
                 continue
+
+        active_ids = self.runtime.active_run_ids()
+        if active_ids:
+            with unit_of_work(self.database) as work:
+                terminal_runtime_rows = work.connection.execute(
+                    """
+                    SELECT run_id
+                      FROM omnix_agent_runs
+                     WHERE workspace_id = %s
+                       AND run_id = ANY(%s)
+                       AND status IN ('completed','failed','cancelled')
+                    """,
+                    (self.context.workspace_id, list(active_ids)),
+                ).fetchall()
+                work.rollback()
+            for row in terminal_runtime_rows:
+                self.runtime.close_run(str(row[0]))
+
         self.recover_orphaned_runs()
 
     def heartbeat(self, run_id: str, *, ttl_seconds: int = 60) -> None:

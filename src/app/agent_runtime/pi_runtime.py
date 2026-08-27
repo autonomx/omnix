@@ -294,6 +294,17 @@ class PiAgentRuntime(AgentRuntime):
             self._snapshots[command.run_id] = snapshot
             return snapshot
 
+    def close_run(self, run_id: str) -> None:
+        with self._lock:
+            session = self._sessions.pop(run_id, None)
+            self._snapshots.pop(run_id, None)
+        if session is not None:
+            session.close()
+
+    def active_run_ids(self) -> set[str]:
+        with self._lock:
+            return set(self._sessions)
+
     def get_status(self, run_id: str) -> AgentRunSnapshot | None:
         return self._snapshots.get(run_id)
 

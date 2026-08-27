@@ -244,7 +244,11 @@ class PostgresAgentRunRepository:
             for row in rows
         ]
 
-    def enqueue_command(self, command: AgentRunCommand) -> tuple[AgentRunCommand, str]:
+    def enqueue_command(self, command: AgentRunCommand) -> AgentRunCommand:
+        stored, _ = self.enqueue_command_with_status(command)
+        return stored
+
+    def enqueue_command_with_status(self, command: AgentRunCommand) -> tuple[AgentRunCommand, str]:
         inserted = self.connection.execute(
             """
             INSERT INTO omnix_agent_run_commands (
@@ -511,6 +515,27 @@ class PostgresAgentRunRepository:
             "updated_at": row[7],
         }
 
+    def find_capability_approval(
+        self,
+        run_id: str,
+        capability_id: str,
+        execution_key: str,
+    ) -> AgentApproval | None:
+        row = self.connection.execute(
+            """
+            SELECT approval_id
+              FROM omnix_agent_approvals
+             WHERE workspace_id = %s AND run_id = %s AND capability_id = %s
+               AND request_payload ->> 'execution_key' = %s
+             ORDER BY created_at
+             LIMIT 1
+            """,
+            (self.context.workspace_id, run_id, capability_id, execution_key),
+        ).fetchone()
+        if row is None:
+            return None
+        return self.get_approval(run_id, str(row[0]))
+
     def mark_capability_waiting_for_approval(
         self,
         run_id: str,
@@ -554,7 +579,7 @@ class PostgresAgentRunRepository:
                SET state = %s, result_payload = %s::jsonb, error = %s,
                    state_changed = %s, updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND run_id = %s AND execution_key = %s
-               AND state = 'running'
+               AND state IN ('created','waiting_for_approval','running')
             """,
             (
                 "failed" if error else "completed",
