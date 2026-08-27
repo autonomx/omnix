@@ -140,3 +140,72 @@ def test_invalid_hermes_plan_falls_back_to_local_planner() -> None:
     assert decision.backend == "local_fallback"
     assert decision.warnings == ["hermes_planner_unavailable:RuntimeError"]
     assert decision.plan.operations[0].operation == "web_search"
+
+
+def test_selected_provider_generates_saved_title_steps_and_operations(monkeypatch) -> None:
+    class FakeProvider:
+        def chat_completion(self, **kwargs):
+            assert kwargs["model"] == "research-model"
+            assert kwargs["stream"] is False
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        "title": "Nvidia Stock Deep Research",
+                        "objective": "Analyze Nvidia stock",
+                        "steps": [
+                            "Collect filings and recent financial news.",
+                            "Compare valuation, earnings, and market risks.",
+                            "Synthesize a one-month outlook and risk-based approach.",
+                        ],
+                        "operations": [
+                            {"operation": "web_search", "query": "Nvidia latest earnings"},
+                            {"operation": "evaluate_evidence", "reason": "Compare source claims."},
+                            {"operation": "stop", "reason": "Plan complete."},
+                        ],
+                    }
+                )
+            )
+
+    monkeypatch.setattr("app.shared.get_provider", lambda provider_name=None: FakeProvider())
+    decision = ResearchPlanner(
+        prefer_hermes=False,
+        provider_id="lmstudio",
+        model_id="research-model",
+        use_provider=True,
+    ).plan(ResearchPlanningRequest(question="Analyze Nvidia stock"))
+
+    assert decision.backend == "provider"
+    assert decision.plan.title == "Nvidia Stock Deep Research"
+    assert decision.plan.steps[0] == "Collect filings and recent financial news."
+    assert decision.plan.operations[0].query == "Nvidia latest earnings"
+
+
+def test_selected_provider_without_search_operation_falls_back_to_bounded_local_plan(monkeypatch) -> None:
+    class StopOnlyProvider:
+        def chat_completion(self, **_kwargs):
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        "title": "NVIDIA Stock Research",
+                        "objective": "Assess NVIDIA.",
+                        "steps": ["Review NVIDIA fundamentals."],
+                        "operations": [{"operation": "stop", "reason": "Done."}],
+                    }
+                )
+            )
+
+    monkeypatch.setattr("app.shared.get_provider", lambda _provider=None: StopOnlyProvider())
+    decision = ResearchPlanner(
+        use_provider=True,
+        provider_id="chatgpt_codex",
+        model_id="gpt-5.6-luna",
+    ).plan(
+        ResearchPlanningRequest(
+            question="analyze Nvidia stock",
+            budget=ResearchPlanningBudget(max_steps=6, max_queries=5, max_sources=5, max_extracts=5),
+        )
+    )
+
+    assert decision.backend == "provider_fallback"
+    assert any(operation.operation == "web_search" for operation in decision.plan.operations)
+    assert "provider_planner_unavailable:RuntimeError" in decision.warnings

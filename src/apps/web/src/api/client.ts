@@ -15,6 +15,7 @@ export type CreateChatSessionRequest = Partial<GeneratedCreateChatSessionRequest
 export type CreateJobRequest = components['schemas']['CreateJobRequest'];
 export type DiagnosticsPayload = components['schemas']['DiagnosticsPayload'];
 export type JobListResponse = components['schemas']['JobListResponse'];
+export type ListJobsOptions = { limit?: number; full?: boolean };
 export type JobRecord = components['schemas']['JobRecord'];
 export type ModelResidencyDiagnostics = components['schemas']['ModelResidencyDiagnostics'];
 export type ModelResidencyRecord = components['schemas']['ModelResidencyRecord'];
@@ -32,6 +33,10 @@ export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse']
 export interface DeleteChatSessionResponse {
   ok: boolean;
   session_id: string;
+}
+
+export interface DeepResearchPlanUpdateRequest {
+  max_pages: number;
 }
 
 export interface AssetContentResponse {
@@ -310,6 +315,24 @@ export class OmnixApiClient {
     return this.post<SendChatMessageRequest, SendChatMessageResponse>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, request);
   }
 
+  async updateDeepResearchPlan(jobId: string, request: DeepResearchPlanUpdateRequest): Promise<JobRecord> {
+    return this.request<JobRecord>(
+      `/api/assistant/context/research/jobs/${encodeURIComponent(jobId)}/plan`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  async startDeepResearchPlan(jobId: string): Promise<JobRecord> {
+    return this.post<Record<string, never>, JobRecord>(
+      `/api/assistant/context/research/jobs/${encodeURIComponent(jobId)}/start`,
+      {},
+    );
+  }
+
   async listProviders(): Promise<ProviderFacadePayload> {
     return this.get<ProviderFacadePayload>('/api/providers');
   }
@@ -346,8 +369,12 @@ export class OmnixApiClient {
     return this.request<ModelResidencyDiagnostics>(`/api/model-residency/${encodeURIComponent(modelId)}`, { method: 'DELETE' });
   }
 
-  async listJobs(): Promise<JobListResponse> {
-    return this.get<JobListResponse>('/api/jobs');
+  async listJobs(options: ListJobsOptions = {}): Promise<JobListResponse> {
+    const query = new URLSearchParams();
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    if (options.full !== undefined) query.set('full', String(options.full));
+    const suffix = query.size ? `?${query.toString()}` : '';
+    return this.get<JobListResponse>(`/api/jobs${suffix}`);
   }
 
   async createJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord> {

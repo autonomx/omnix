@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   initializeChatSidebarManager,
   readChatSidebarState,
+  sortChatSidebarSessions,
   visibleChatSidebarSessions,
   writeChatSidebarState,
 } from './chat-sidebar-manager';
@@ -59,6 +60,20 @@ describe('chat sidebar manager', () => {
     vi.restoreAllMocks();
     window.localStorage.clear();
     document.body.innerHTML = '';
+  });
+
+  it('places the newest chat session first', () => {
+    const sessions = [
+      { id: 'chat:old', title: 'Older chat', updated_at: '2026-08-08T00:01:00Z' },
+      { id: 'chat:new', title: 'New chat', created_at: '2026-08-08T00:03:00Z' },
+      { id: 'chat:middle', title: 'Middle chat', updated_at: '2026-08-08T00:02:00Z' },
+    ];
+
+    expect(sortChatSidebarSessions(sessions).map((session) => session.id)).toEqual([
+      'chat:new',
+      'chat:middle',
+      'chat:old',
+    ]);
   });
 
   it('renders Pinned before Sessions with one New control and ChatGPT-style row actions', async () => {

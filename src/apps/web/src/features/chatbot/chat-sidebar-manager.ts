@@ -143,6 +143,14 @@ export function visibleChatSidebarSessions(sessions: SessionSummary[], state: Si
   return sessions.filter((session) => !state[session.id]?.archived && shouldShowSession(session));
 }
 
+export function sortChatSidebarSessions(sessions: SessionSummary[]): SessionSummary[] {
+  return [...sessions].sort((left, right) => {
+    const rightTime = Date.parse(right.updated_at || right.created_at || '') || 0;
+    const leftTime = Date.parse(left.updated_at || left.created_at || '') || 0;
+    return rightTime - leftTime;
+  });
+}
+
 function scheduleRefresh(delayMs = REFRESH_DELAY_MS): void {
   if (refreshTimer !== null) window.clearTimeout(refreshTimer);
   refreshTimer = window.setTimeout(() => {
@@ -176,7 +184,7 @@ async function refreshSidebar(): Promise<void> {
   if (generation !== refreshGeneration) return;
 
   const state = readChatSidebarState();
-  const visible = visibleChatSidebarSessions(sessions, state);
+  const visible = sortChatSidebarSessions(visibleChatSidebarSessions(sessions, state));
   const pinned = visible.filter((session) => state[session.id]?.pinned);
   const regular = visible.filter((session) => !state[session.id]?.pinned);
   host.replaceChildren(
@@ -491,7 +499,7 @@ function showSidebarStatus(message: string, danger = false): void {
     status.classList.remove('visible', 'danger');
     status.textContent = '';
     statusTimer = null;
-  }, 2400);
+  }, 6000);
 }
 
 function renderLoadFailure(host: HTMLElement, error: unknown): void {

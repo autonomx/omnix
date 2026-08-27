@@ -157,6 +157,7 @@
 
 :root[data-omnix-appearance='light'] .assistant-side-panel-toggle button.active,
 :root[data-omnix-appearance='light'] .omnix-mode-tabs button.active,
+:root[data-omnix-appearance='light'] .chat-identity-mode-toggle button.active,
 :root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-pill,
 :root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select,
 :root[data-omnix-appearance='light'] .assistant-send-button {

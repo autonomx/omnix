@@ -86,6 +86,42 @@ describe('research progress restoration', () => {
     expect(helpers.latestResearchJobId(researchSession().messages ?? [])).toBe('job:research-one');
   });
 
+  it('keeps a newly created approval job ahead of a stale completed job in chat history', () => {
+    const pending = researchJob({
+      id: 'job:new-outline',
+      status: 'queued',
+      input_payload: { awaiting_plan_approval: true },
+    });
+
+    expect(helpers.preferredResearchJobId(researchSession().messages ?? [], pending)).toBe('job:new-outline');
+  });
+
+  it('recovers the newest active outline for the current session from the durable ledger', () => {
+    const older = researchJob({
+      id: 'job:older-outline',
+      status: 'queued',
+      created_at: '2026-08-27T02:31:37Z',
+      input_payload: { session_id: 'chat:one', awaiting_plan_approval: true },
+    });
+    const newest = researchJob({
+      id: 'job:newest-outline',
+      status: 'queued',
+      created_at: '2026-08-27T03:13:31Z',
+      input_payload: { session_id: 'chat:one', awaiting_plan_approval: true },
+    });
+    const anotherSession = researchJob({
+      id: 'job:other-chat',
+      status: 'queued',
+      created_at: '2026-08-27T03:20:00Z',
+      input_payload: { session_id: 'chat:other', awaiting_plan_approval: true },
+    });
+
+    expect(helpers.latestActiveResearchJobForSession(
+      [older, anotherSession, newest],
+      'chat:one',
+    )?.id).toBe('job:newest-outline');
+  });
+
   it('uses the active stage label and bounded operational announcement', () => {
     const job = researchJob();
     expect(helpers.researchStageLabel(job)).toBe('Searching the web');
@@ -158,5 +194,111 @@ describe('research progress restoration', () => {
     expect(panel.querySelector('[data-omnix-research-close]')).toBeNull();
     expect(panel.querySelector('[data-omnix-research-cancel]')).not.toBeNull();
     panel.remove();
+  });
+
+  it('shows a ChatGPT-style outline and hard page limit before a deep-research job starts', async () => {
+    const panel = document.createElement('section');
+    const job = researchJob({
+      status: 'queued',
+      input_payload: {
+        awaiting_plan_approval: true,
+        max_sources: 4,
+        question: 'analyze Nvidia stock and how it may play out next month. is it a buy?',
+        research_plan: {
+          steps: [
+            'AI planner step: collect recent Nvidia filings and financial news.',
+            'AI planner step: gather current market data and price history.',
+            'AI planner step: analyze earnings, guidance, and valuation.',
+            'AI planner step: assess sentiment and downside risks.',
+            'AI planner step: synthesize a risk-based investment approach.',
+          ],
+          operations: [
+            { operation: 'web_search', query: 'current Iran US conflict latest' },
+            { operation: 'evaluate_evidence', reason: 'Compare source claims.' },
+            { operation: 'stop', reason: 'Plan complete.' },
+          ],
+        },
+      },
+    });
+
+    helpers.renderJobPanel(panel, job);
+
+    expect(panel.textContent).toContain('Nvidia stock Deep Research');
+    expect(panel.textContent).toContain('AI planner step: collect recent Nvidia filings');
+    expect(panel.textContent).toContain('AI planner step: synthesize a risk-based investment approach');
+    expect(panel.textContent).not.toContain('current Iran US conflict latest');
+    expect(panel.textContent).toContain('Max pages to search');
+    expect(panel.querySelector('[data-omnix-research-plan-start]')).not.toBeNull();
+    const pageInput = panel.querySelector<HTMLInputElement>('[aria-label="Research plan maximum pages"]');
+    expect(pageInput?.value).toBe('4');
+    expect(pageInput?.readOnly).toBe(true);
+    const edit = panel.querySelector<HTMLButtonElement>('[data-omnix-research-plan-update]');
+    expect(edit?.textContent).toBe('Edit');
+    edit?.click();
+    expect(pageInput?.readOnly).toBe(false);
+    expect(edit?.textContent).toBe('Save');
+    edit?.click();
+    await Promise.resolve();
+    expect(pageInput?.readOnly).toBe(true);
+    expect(edit?.textContent).toBe('Edit');
+    expect(edit?.disabled).toBe(false);
+  });
+
+  it('keeps the approved outline visible while marking completed areas', () => {
+    const panel = document.createElement('section');
+    const job = researchJob({
+      status: 'running',
+      input_payload: {
+        max_sources: 5,
+        research_plan: {
+          title: 'NVIDIA Stock Buy Assessment',
+          steps: [
+            'Gather recent NVIDIA financial results.',
+            'Investigate AI-chip demand and expected earnings.',
+            'Assess competition and regulatory risks.',
+            'Compare valuation with semiconductor peers.',
+            'Frame conclusions for different risk tolerances.',
+          ],
+        },
+      },
+      stages: (researchJob().stages ?? []).map((stage, index) => ({
+        ...stage,
+        status: index === 0 ? 'completed' : index === 1 ? 'running' : 'queued',
+      })),
+    });
+
+    helpers.renderJobPanel(panel, job);
+
+    expect(panel.textContent).toContain('NVIDIA Stock Buy Assessment');
+    expect(panel.textContent).toContain('Gather recent NVIDIA financial results.');
+    expect(panel.textContent).toContain('1 of 5 outline areas complete');
+    expect(panel.querySelectorAll('.assistant-research-plan-list li.is-completed')).toHaveLength(1);
+    expect(panel.querySelector('[data-omnix-research-cancel]')).not.toBeNull();
+  });
+
+  it('uses an explicit plan title when the planner provides one', () => {
+    const job = researchJob({
+      input_payload: {
+        question: 'research this',
+        research_plan: { title: 'Custom Research Outline' },
+      },
+    });
+
+    expect(helpers.researchPlanTitle(job)).toBe('Custom Research Outline');
+  });
+
+  it('offers to restart a worker that stopped before entering its first stage', () => {
+    const panel = document.createElement('section');
+    const job = researchJob({
+      input_payload: { max_sources: 5 },
+      stages: (researchJob().stages ?? []).map((stage) => ({ ...stage, status: 'queued' })),
+    });
+
+    expect(helpers.isStalledResearchJob(job)).toBe(true);
+    helpers.renderJobPanel(panel, job);
+
+    expect(panel.textContent).toContain('Research needs restarting');
+    expect(panel.textContent).toContain('5-page limit');
+    expect(panel.querySelector('[data-omnix-research-restart]')).not.toBeNull();
   });
 });

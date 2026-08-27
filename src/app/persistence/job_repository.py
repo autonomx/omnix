@@ -117,6 +117,10 @@ class PostgresJobRepository(_BaseJobRepository):
                    AND queued.available_at <= CURRENT_TIMESTAMP
                    AND queued.resource_class = ANY(%s)
                    AND queued.attempt_count < queued.max_attempts
+                   AND NOT (
+                       queued.job_type = 'assistant.deep_research'
+                       AND COALESCE(queued.input_payload ->> 'awaiting_plan_approval', 'false') = 'true'
+                   )
                  ORDER BY queued.priority DESC, queued.created_at ASC, queued.id ASC
                  FOR UPDATE SKIP LOCKED
                  LIMIT 1

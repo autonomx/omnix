@@ -358,6 +358,7 @@
 
 :root[data-omnix-theme][data-omnix-appearance='dark'] .omnix-mode-tabs button.active,
 :root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-side-panel-toggle button.active,
+:root[data-omnix-theme][data-omnix-appearance='dark'] .chat-identity-mode-toggle button.active,
 :root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-integrated-actions .assistant-header-pill,
 :root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-chat-integrated-actions .assistant-header-voice-select,
 :root[data-omnix-theme][data-omnix-appearance='dark'] .assistant-send-button,

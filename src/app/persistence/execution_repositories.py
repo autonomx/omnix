@@ -185,6 +185,10 @@ class PostgresJobRepository:
                    AND available_at <= CURRENT_TIMESTAMP
                    AND resource_class = ANY(%s)
                    AND attempt_count < max_attempts
+                   AND NOT (
+                       job_type = 'assistant.deep_research'
+                       AND COALESCE(input_payload ->> 'awaiting_plan_approval', 'false') = 'true'
+                   )
                  ORDER BY priority DESC, created_at ASC, id ASC
                  FOR UPDATE SKIP LOCKED
                  LIMIT 1

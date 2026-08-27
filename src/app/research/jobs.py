@@ -6,6 +6,7 @@ from typing import Any, TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 from .contracts import RESEARCH_JOB_MODULE, RESEARCH_JOB_TYPE
+from .planner import ResearchPlan
 
 if TYPE_CHECKING:
     from app.jobs.models import CreateJobRequest, JobStage, ResourceClass
@@ -25,11 +26,14 @@ class DeepResearchJobInput(BaseModel):
     source_manifest_id: str | None = None
     max_steps: int = Field(default=6, ge=1, le=12)
     max_queries: int = Field(default=5, ge=1, le=10)
-    max_sources: int = Field(default=12, ge=1, le=30)
+    max_sources: int = Field(default=12, ge=1, le=100)
     max_extracts: int = Field(default=8, ge=0, le=20)
     search_cache_ttl_seconds: int = Field(default=300, ge=1, le=86400)
     extraction_cache_ttl_seconds: int = Field(default=3600, ge=1, le=604800)
     hermes_planner_enabled: bool = False
+    research_plan: ResearchPlan | None = None
+    planner_backend: str = "local"
+    awaiting_plan_approval: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

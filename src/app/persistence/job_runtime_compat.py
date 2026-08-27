@@ -67,13 +67,33 @@ class PostgresJobStoreAdapter(_PostgresJobStoreAdapter):
         stage_id: str | None = None,
         stage_status: JobStatus = JobStatus.RUNNING,
     ) -> JobRecord | None:
-        del stage_id, stage_status
         value = progress or JobProgress(
             current=max(0, int(current or 0)),
             total=max(1, int(total or 1)),
             message=message,
         )
-        return super().update_progress(job_id, value)
+        updated = super().update_progress(job_id, value)
+        if not stage_id:
+            return updated
+        record = updated or self.get_job(job_id)
+        if record is None:
+            return None
+        stages = [
+            stage.model_copy(
+                update={
+                    "status": stage_status,
+                    "progress": JobProgress(
+                        current=1 if stage_status == JobStatus.COMPLETED else 0,
+                        total=1,
+                        message=message if message is not None else value.message,
+                    ),
+                }
+            )
+            if stage.id == stage_id
+            else stage
+            for stage in record.stages
+        ]
+        return self.update_job_stages(job_id, stages) or record
 
     def list_events(
         self,

@@ -5,7 +5,6 @@ import os
 import threading
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
@@ -17,16 +16,17 @@ from app.research.jobs import DeepResearchJobInput
 from app.research.synthesis import DeepResearchSynthesizer
 
 from .models import (
-    CancelState,
+    CancelJobRequest,
     CompleteJobRequest,
     FailJobRequest,
-    JobProgress,
     JobRecord,
     JobStatus,
 )
 from .inline_execution_compat import mark_inline_execution
 
 RESEARCH_EXECUTOR_ENV = "OMNIX_INLINE_RESEARCH_JOB_EXECUTOR"
+_RESEARCH_THREADS_LOCK = threading.Lock()
+_RESEARCH_THREAD_JOB_IDS: set[str] = set()
 ResearchWorkflow = Callable[
     [DeepResearchJobInput, Callable[[str, str], None], Callable[[], bool]],
     "DeepResearchWorkflowResult",
@@ -58,11 +58,12 @@ def install_research_job_execution(sqlite_job_store_cls: Any) -> None:
     original_create_job = sqlite_job_store_cls.create_job
 
     def create_job_with_research_execution(self: Any, request: Any) -> JobRecord:
-        if request.type == RESEARCH_JOB_TYPE and _executor_enabled():
+        awaiting_approval = _awaiting_plan_approval(request)
+        if request.type == RESEARCH_JOB_TYPE and _executor_enabled() and not awaiting_approval:
             request = mark_inline_execution(request)
         job = original_create_job(self, request)
-        if job.type == RESEARCH_JOB_TYPE and _executor_enabled():
-            _start_research_job(self, job)
+        if job.type == RESEARCH_JOB_TYPE and _executor_enabled() and not awaiting_approval:
+            start_research_job(self, job)
         return job
 
     sqlite_job_store_cls.create_job = create_job_with_research_execution
@@ -125,7 +126,14 @@ def execute_research_job(
         max_sources=request.max_sources,
         max_extracts=request.max_extracts,
     )
-    job_store.mark_running(job.id)
+    current = job_store.get_job(job.id)
+    if current is None:
+        deep_research_log(job.id, "job_missing_before_execution")
+        return job
+    if current.status == JobStatus.RUNNING:
+        job = current
+    else:
+        job = job_store.mark_running(job.id) or current
     _stage(job_store, job.id, "planning", "Planning research")
 
     def progress(stage_id: str, message: str) -> None:
@@ -245,15 +253,17 @@ def save_research_checkpoint(
     job = job_store.get_job(job_id)
     if job is None or job.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELED}:
         return job
-    now = datetime.now(timezone.utc).isoformat()
-    job.updated_at = now
-    job.stages = [
+    stages = [
         stage.model_copy(update={"checkpoint_ref": checkpoint.model_dump(mode="json")})
         if stage.id == stage_id
         else stage
         for stage in job.stages
     ]
-    return job_store._save_with_event(job, "job.updated")  # noqa: SLF001 - shared job adapter
+    update_stages = getattr(job_store, "update_job_stages", None)
+    if callable(update_stages):
+        return update_stages(job_id, stages)
+    deep_research_log(job_id, "checkpoint_not_persisted", stage_id=stage_id)
+    return job
 
 
 def load_research_checkpoint(
@@ -274,14 +284,56 @@ def load_research_checkpoint(
     return max(checkpoints, key=lambda item: item.next_operation_index, default=None)
 
 
-def _start_research_job(job_store: Any, job: JobRecord) -> None:
+def start_research_job(job_store: Any, job: JobRecord) -> JobRecord:
+    current = job_store.get_job(job.id) or job
+    if current.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELED}:
+        return current
+    if _awaiting_plan_approval(current):
+        deep_research_log(job.id, "job_waiting_for_plan_approval")
+        return current
+    with _RESEARCH_THREADS_LOCK:
+        if job.id in _RESEARCH_THREAD_JOB_IDS:
+            return current
+        _RESEARCH_THREAD_JOB_IDS.add(job.id)
+    running = job_store.mark_running(job.id) or current
+
+    def run() -> None:
+        try:
+            execute_research_job(job_store, running)
+        except Exception as exc:
+            deep_research_log(
+                job.id,
+                "worker_start_failed",
+                error_type=type(exc).__name__,
+                error=str(exc) or "Deep Research worker failed to start",
+            )
+            current = job_store.get_job(job.id) or running
+            try:
+                _fail(
+                    job_store,
+                    current,
+                    "research_worker_start_failed",
+                    str(exc) or "Deep Research worker failed to start",
+                    retryable=True,
+                )
+            except Exception as fail_exc:
+                deep_research_log(
+                    job.id,
+                    "worker_failure_not_persisted",
+                    error_type=type(fail_exc).__name__,
+                    error=str(fail_exc),
+                )
+        finally:
+            with _RESEARCH_THREADS_LOCK:
+                _RESEARCH_THREAD_JOB_IDS.discard(job.id)
+
     thread = threading.Thread(
-        target=execute_research_job,
-        args=(job_store, job),
+        target=run,
         name=f"omnix-research-{job.id.removeprefix('job:')[:8]}",
         daemon=True,
     )
     thread.start()
+    return running
 
 
 def _executor_enabled() -> bool:
@@ -328,30 +380,18 @@ def _finalize_canceled(job_store: Any, job_id: str, reason: str) -> JobRecord | 
     if job is None:
         deep_research_log(job_id, "cancel_missing_job", reason=reason)
         return None
-    now = datetime.now(timezone.utc).isoformat()
-    job.status = JobStatus.CANCELED
-    job.updated_at = now
-    job.completed_at = now
-    job.lease = None
-    job.cancel = CancelState(
-        requested=True,
-        requested_at=job.cancel.requested_at or now,
-        acknowledged_at=now,
-        reason=job.cancel.reason or reason,
-    )
-    job.progress = JobProgress(current=job.progress.current, total=job.progress.total, message="canceled")
-    job.stages = [
-        stage.model_copy(
-            update={
-                "status": JobStatus.CANCELED if stage.status == JobStatus.RUNNING else stage.status,
-                "completed_at": now if stage.status == JobStatus.RUNNING else stage.completed_at,
-            }
-        )
-        for stage in job.stages
-    ]
-    saved = job_store._save_with_event(job, "job.canceled")  # noqa: SLF001 - shared job adapter
+    finalize_cancel = getattr(job_store, "finalize_cancel", None)
+    if callable(finalize_cancel):
+        saved = finalize_cancel(job_id, reason)
+    else:
+        saved = job_store.cancel_job(job_id, CancelJobRequest(reason=reason))
     deep_research_log(job_id, "job_canceled", reason=reason)
-    return saved
+    return saved or job
+
+
+def _awaiting_plan_approval(request: Any) -> bool:
+    payload = getattr(request, "input_payload", None)
+    return isinstance(payload, dict) and payload.get("awaiting_plan_approval") is True
 
 
 def _fail(
