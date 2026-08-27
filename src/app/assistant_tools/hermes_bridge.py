@@ -5,6 +5,7 @@ from .calendar_adapter import run_calendar_tool_request
 from .contacts_adapter import run_contacts_tool_request
 from .gate import review_assistant_tool_request
 from .gmail_adapter import run_gmail_tool_request
+from .home_adapter import run_home_tool_request
 from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantToolReviewPayload
 from .kasa_adapter import run_kasa_tool_request
 from .ledger import (
@@ -54,6 +55,10 @@ def _run_assistant_tool_request(
         return result
     if request.tool_id == "kasa":
         result = run_kasa_tool_request(request)
+        result.risk_level = risk_level
+        return result
+    if request.tool_id == "home":
+        result = run_home_tool_request(request)
         result.risk_level = risk_level
         return result
     return AssistantToolResult(

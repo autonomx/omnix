@@ -79,7 +79,17 @@ class AgentRunService:
                 raise KeyError(command.run_id)
             desired = current.desired_state
             status = current.status
-            if stored.command_type == "pause":
+            if stored.command_type in {"approve", "reject"}:
+                approval_id = str(stored.payload.get("approval_id") or "")
+                if not approval_id:
+                    raise ValueError("approval_id is required")
+                repository.resolve_approval(
+                    command.run_id, approval_id,
+                    approved=stored.command_type == "approve",
+                    resolution_payload={"source": "agent_run_command"},
+                )
+                desired, status = "running", "running"
+            elif stored.command_type == "pause":
                 desired, status = "paused", "pause_requested"
             elif stored.command_type == "resume":
                 desired, status = "running", "resume_requested"
@@ -254,7 +264,18 @@ class AgentRunService:
     @staticmethod
     def _prepare_workspace(spec: AgentRunSpec) -> AgentRunSpec:
         workspace = spec.workspace
-        if workspace is None or not workspace.repository or workspace.worktree:
+        if workspace is None:
+            root = Path(os.environ.get(
+                "OMNIX_AGENT_WORKTREE_ROOT",
+                str(Path(tempfile.gettempdir()) / "omnix-agent-worktrees"),
+            )).expanduser().resolve()
+            target = root / spec.run_id
+            target.mkdir(parents=True, exist_ok=True)
+            from .contracts import WorkspaceSpec
+            return spec.model_copy(update={"workspace": WorkspaceSpec(
+                root=str(target), worktree=str(target), allowed_paths=[]
+            )})
+        if not workspace.repository or workspace.worktree:
             return spec
         root = Path(
             os.environ.get(

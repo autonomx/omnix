@@ -28,6 +28,10 @@ def pi_model_provider_extension_path() -> Path:
     return Path(__file__).with_name("pi_model_provider_extension.ts").resolve()
 
 
+def pi_broker_extension_path() -> Path:
+    return Path(__file__).with_name("pi_broker_extension.ts").resolve()
+
+
 def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     executable = shutil.which(pi_path) or pi_path
     model = f"{spec.model.provider_id}::{spec.model.model_id}"
@@ -49,10 +53,23 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
         str(pi_guard_extension_path()),
         "--extension",
         str(pi_model_provider_extension_path()),
+        "--extension",
+        str(pi_broker_extension_path()),
     ]
-    tools = ["read", "edit", "write", "grep", "find", "ls"]
-    tools.append("powershell" if os.name == "nt" else "bash")
-    argv.extend(["--tools", ",".join(tools)])
+    mapping = {
+        "workspace.read": "read",
+        "workspace.edit": "edit",
+        "workspace.write": "write",
+        "workspace.search": "grep",
+        "workspace.list": "ls",
+        "workspace.command": "powershell" if os.name == "nt" else "bash",
+        "workspace.test": "powershell" if os.name == "nt" else "bash",
+    }
+    tools = sorted({tool for capability, tool in mapping.items() if capability in spec.capabilities})
+    if tools:
+        argv.extend(["--tools", ",".join(tools)])
+    else:
+        argv.append("--no-builtin-tools")
     if spec.model.reasoning_effort:
         argv.extend(["--thinking", spec.model.reasoning_effort])
     return argv
@@ -126,6 +143,12 @@ class PiRpcSession:
                 "OMNIX_AGENT_MODEL_GATEWAY_URL",
                 "http://127.0.0.1:8000/api/agent-model/v1",
             ),
+            "OMNIX_AGENT_BROKER_URL": os.environ.get(
+                "OMNIX_AGENT_BROKER_URL",
+                "http://127.0.0.1:8000/api/agent-runs",
+            ),
+            "OMNIX_AGENT_EXTERNAL_CAPABILITIES": json.dumps(spec.external_capabilities),
+            "OMNIX_AGENT_REASONING_EFFORT": spec.model.reasoning_effort or "",
         }
         self.process = process_factory(
             pi_rpc_argv(spec, pi_path=pi_path),

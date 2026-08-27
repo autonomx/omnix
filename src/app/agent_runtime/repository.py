@@ -322,6 +322,54 @@ class PostgresAgentRunRepository:
         self.append_event(AgentEvent(run_id=approval.run_id, event_type="approval.requested", payload={"approval_id": approval.approval_id, "capability_id": approval.capability_id}))
         return approval
 
+    def get_approval(self, run_id: str, approval_id: str) -> AgentApproval | None:
+        row = self.connection.execute(
+            """
+            SELECT capability_id, state, request_payload, resolution_payload,
+                   created_at, resolved_at
+              FROM omnix_agent_approvals
+             WHERE workspace_id = %s AND run_id = %s AND approval_id = %s
+            """,
+            (self.context.workspace_id, run_id, approval_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return AgentApproval(
+            approval_id=approval_id, run_id=run_id, capability_id=str(row[0]),
+            state=str(row[1]), request_payload=dict(row[2] or {}),
+            resolution_payload=dict(row[3] or {}), created_at=row[4], resolved_at=row[5],
+        )
+
+    def resolve_approval(
+        self, run_id: str, approval_id: str, *, approved: bool,
+        resolution_payload: dict[str, Any] | None = None,
+    ) -> AgentApproval:
+        state = "approved" if approved else "rejected"
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_approvals
+               SET state = %s, resolution_payload = %s::jsonb, resolved_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND approval_id = %s AND state = 'pending'
+            RETURNING capability_id, request_payload, resolution_payload, created_at, resolved_at
+            """,
+            (state, _json(resolution_payload or {}), self.context.workspace_id, run_id, approval_id),
+        ).fetchone()
+        if row is None:
+            existing = self.get_approval(run_id, approval_id)
+            if existing is None:
+                raise KeyError(approval_id)
+            return existing
+        approval = AgentApproval(
+            approval_id=approval_id, run_id=run_id, capability_id=str(row[0]), state=state,
+            request_payload=dict(row[1] or {}), resolution_payload=dict(row[2] or {}),
+            created_at=row[3], resolved_at=row[4],
+        )
+        self.append_event(AgentEvent(
+            run_id=run_id, event_type="approval.resolved",
+            payload={"approval_id": approval_id, "state": state, "capability_id": approval.capability_id},
+        ))
+        return approval
+
     def add_artifact(self, artifact: AgentArtifact) -> AgentArtifact:
         self.connection.execute(
             """

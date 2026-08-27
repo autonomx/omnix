@@ -121,19 +121,19 @@ def save_assistant_tools_config(
 
 
 def _default_tool_enabled(tool_id: str) -> bool:
-    if tool_id == "kasa":
+    if tool_id in {"kasa", "home"}:
         return _flag("OMNIX_KASA_ENABLED")
     return False
 
 
 def _default_connection_status(tool_id: str, enabled: bool) -> ConnectionStatus:
-    if tool_id == "kasa" and enabled:
+    if tool_id in {"kasa", "home"} and enabled:
         return "connected"
     return "not_configured"
 
 
 def _default_account_label(tool_id: str) -> str | None:
-    if tool_id != "kasa":
+    if tool_id not in {"kasa", "home"}:
         return None
     return (
         os.environ.get("OMNIX_KASA_DEVICE_ALIAS", "").strip()

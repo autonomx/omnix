@@ -19,6 +19,7 @@ from .contracts import (
     SuccessCriterion,
     WorkspaceSpec,
 )
+from .profiles import get_agent_profile, resolve_profile_capabilities
 from .service import AgentRunService, default_agent_run_service
 
 router = APIRouter(prefix="/api/agent-runs", tags=["agent-runtime"])
@@ -34,19 +35,8 @@ class StartAgentRunRequest(BaseModel):
     repository: str | None = None
     workspace_root: str | None = None
     base_ref: str = "main"
-    capabilities: list[str] = Field(
-        default_factory=lambda: [
-            "workspace.read",
-            "workspace.list",
-            "workspace.search",
-            "workspace.edit",
-            "workspace.write",
-            "workspace.command",
-            "workspace.test",
-            "workspace.git_status",
-            "workspace.git_diff",
-        ]
-    )
+    capabilities: list[str] | None = None
+    external_capabilities: list[str] | None = None
     success_criteria: list[str] = Field(default_factory=list)
 
 
@@ -62,9 +52,17 @@ def _service() -> AgentRunService:
 
 @router.post("", response_model=AgentRunSnapshot)
 def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
+    try:
+        profile = get_agent_profile(request.profile)
+        issued_capabilities, issued_external = resolve_profile_capabilities(
+            profile, requested=request.capabilities,
+            requested_external=request.external_capabilities,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     root = request.workspace_root or request.repository
-    if not root:
-        raise HTTPException(status_code=422, detail="repository or workspace_root is required")
+    if profile.requires_workspace and not root:
+        raise HTTPException(status_code=422, detail="repository or workspace_root is required for this profile")
     spec = AgentRunSpec(
         task=request.task,
         objective=request.objective,
@@ -74,17 +72,18 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
             model_id=request.model_id,
             reasoning_effort=request.reasoning_effort,
         ),
-        capabilities=request.capabilities,
-        workspace=WorkspaceSpec(
-            root=root,
-            repository=request.repository,
-            base_ref=request.base_ref,
+        capabilities=issued_capabilities,
+        external_capabilities=issued_external,
+        context_sources=list(profile.context_sources),
+        workspace=(
+            WorkspaceSpec(root=str(root), repository=request.repository, base_ref=request.base_ref)
+            if root else None
         ),
         success_criteria=[
             SuccessCriterion(id=f"criterion-{index + 1}", description=value)
             for index, value in enumerate(request.success_criteria)
         ],
-        expected_artifacts=["diff"],
+        expected_artifacts=["diff"] if profile.requires_workspace else [],
     )
     try:
         return _service().start(spec)
