@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import json
 import os
@@ -17,7 +18,13 @@ from app.persistence.unit_of_work import unit_of_work
 
 from .capabilities import default_capability_registry
 from .interfaces import WorkflowRuntime
-from .workflows import WORKFLOW_END, WorkflowDefinition, WorkflowRunSnapshot, WorkflowStepDefinition
+from .workflows import (
+    WORKFLOW_END,
+    WorkflowDefinition,
+    WorkflowRunSnapshot,
+    WorkflowScheduleSnapshot,
+    WorkflowStepDefinition,
+)
 
 
 class WorkflowRuntimeError(RuntimeError):
@@ -143,6 +150,13 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         definition = self._definition(workflow_id)
         if definition is None:
             raise KeyError(workflow_id)
+        return self._start_definition(definition, input_payload)
+
+    def _start_definition(
+        self,
+        definition: WorkflowDefinition,
+        input_payload: dict[str, object],
+    ) -> str:
         run_id = uuid.uuid4().hex
         idempotency_key = str(input_payload.get("idempotency_key") or "").strip() or None
         with unit_of_work(self.database) as work:
@@ -171,7 +185,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     raise WorkflowRuntimeError("workflow_run_insert_conflict")
                 existing = work.connection.execute(
                     """
-                    SELECT run_id, workflow_id
+                    SELECT run_id, workflow_id, workflow_version
                       FROM omnix_workflow_runs
                      WHERE workspace_id = %s AND idempotency_key = %s
                     """,
@@ -179,7 +193,10 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 ).fetchone()
                 if existing is None:
                     raise WorkflowRuntimeError("workflow_idempotency_conflict")
-                if str(existing[1]) != definition.id:
+                if (
+                    str(existing[1]) != definition.id
+                    or int(existing[2]) != definition.version
+                ):
                     raise WorkflowRuntimeError(
                         f"workflow_idempotency_key_reused:{idempotency_key}"
                     )
@@ -197,6 +214,163 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             work.commit()
         self._advance(run_id)
         return run_id
+
+    def list_runs(
+        self,
+        *,
+        workflow_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, object]]:
+        bounded = max(1, min(int(limit), 1000))
+        with unit_of_work(self.database) as work:
+            if workflow_id is None:
+                rows = work.connection.execute(
+                    """
+                    SELECT run_id
+                      FROM omnix_workflow_runs
+                     WHERE workspace_id = %s
+                     ORDER BY created_at DESC, run_id DESC
+                     LIMIT %s
+                    """,
+                    (self.context.workspace_id, bounded),
+                ).fetchall()
+            else:
+                rows = work.connection.execute(
+                    """
+                    SELECT run_id
+                      FROM omnix_workflow_runs
+                     WHERE workspace_id = %s AND workflow_id = %s
+                     ORDER BY created_at DESC, run_id DESC
+                     LIMIT %s
+                    """,
+                    (self.context.workspace_id, workflow_id, bounded),
+                ).fetchall()
+            work.rollback()
+        result: list[dict[str, object]] = []
+        for row in rows:
+            state = self.get_status(str(row[0]))
+            if state is not None:
+                result.append(state)
+        return result
+
+    def schedule(
+        self,
+        workflow_id: str,
+        input_payload: dict[str, object],
+        *,
+        run_at: datetime,
+        interval_seconds: int | None = None,
+        version: int | None = None,
+        schedule_id: str | None = None,
+    ) -> str:
+        self._ensure_supervisor()
+        if run_at.tzinfo is None or run_at.utcoffset() is None:
+            raise WorkflowRuntimeError("workflow_schedule_run_at_must_be_timezone_aware")
+        if interval_seconds is not None and int(interval_seconds) < 60:
+            raise WorkflowRuntimeError("workflow_schedule_interval_minimum_60_seconds")
+        if "idempotency_key" in input_payload:
+            raise WorkflowRuntimeError("workflow_schedule_input_reserves_idempotency_key")
+        definition = self._definition(workflow_id, version=version)
+        if definition is None:
+            raise KeyError(workflow_id)
+        issued_id = str(schedule_id or uuid.uuid4().hex).strip()
+        if not issued_id:
+            raise WorkflowRuntimeError("workflow_schedule_id_required")
+        normalized_run_at = run_at.astimezone(timezone.utc)
+        interval = int(interval_seconds) if interval_seconds is not None else None
+        with unit_of_work(self.database) as work:
+            inserted = work.connection.execute(
+                """
+                INSERT INTO omnix_workflow_schedules (
+                    workspace_id, schedule_id, workflow_id, workflow_version,
+                    input_payload, interval_seconds, next_run_at, enabled
+                ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, TRUE)
+                ON CONFLICT (workspace_id, schedule_id) DO NOTHING
+                RETURNING schedule_id
+                """,
+                (
+                    self.context.workspace_id,
+                    issued_id,
+                    definition.id,
+                    definition.version,
+                    _json(input_payload),
+                    interval,
+                    normalized_run_at,
+                ),
+            ).fetchone()
+            if inserted is None:
+                existing = work.connection.execute(
+                    """
+                    SELECT workflow_id, workflow_version, input_payload,
+                           interval_seconds, next_run_at, enabled
+                      FROM omnix_workflow_schedules
+                     WHERE workspace_id = %s AND schedule_id = %s
+                    """,
+                    (self.context.workspace_id, issued_id),
+                ).fetchone()
+                if existing is None:
+                    raise WorkflowRuntimeError("workflow_schedule_conflict")
+                same = (
+                    str(existing[0]) == definition.id
+                    and int(existing[1]) == definition.version
+                    and dict(existing[2] or {}) == dict(input_payload)
+                    and (
+                        int(existing[3]) if existing[3] is not None else None
+                    ) == interval
+                    and existing[4] == normalized_run_at
+                    and bool(existing[5])
+                )
+                if not same:
+                    raise WorkflowRuntimeError(
+                        f"workflow_schedule_id_reused:{issued_id}"
+                    )
+                work.rollback()
+                return issued_id
+            work.commit()
+        return issued_id
+
+    def list_schedules(self) -> list[WorkflowScheduleSnapshot]:
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """
+                SELECT schedule_id, workflow_id, workflow_version, input_payload,
+                       interval_seconds, next_run_at, enabled, last_enqueued_at
+                  FROM omnix_workflow_schedules
+                 WHERE workspace_id = %s
+                 ORDER BY created_at, schedule_id
+                """,
+                (self.context.workspace_id,),
+            ).fetchall()
+            work.rollback()
+        return [
+            WorkflowScheduleSnapshot(
+                schedule_id=str(row[0]),
+                workflow_id=str(row[1]),
+                workflow_version=int(row[2]),
+                input_payload=dict(row[3] or {}),
+                interval_seconds=int(row[4]) if row[4] is not None else None,
+                next_run_at=row[5],
+                enabled=bool(row[6]),
+                last_enqueued_at=row[7],
+            )
+            for row in rows
+        ]
+
+    def cancel_schedule(self, schedule_id: str) -> None:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """
+                UPDATE omnix_workflow_schedules
+                   SET enabled = FALSE, next_run_at = NULL,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND schedule_id = %s
+                RETURNING schedule_id
+                """,
+                (self.context.workspace_id, schedule_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(schedule_id)
+            work.commit()
 
     def pause(self, run_id: str) -> None:
         self._ensure_supervisor()
@@ -776,6 +950,8 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             self._supervisor_stop.wait(30.0)
 
     def _supervise_once(self) -> None:
+        self._enqueue_due_schedule_fires()
+        self._dispatch_pending_schedule_fires()
         error = "step_outcome_unknown_after_worker_loss"
         resumable: list[str] = []
         with unit_of_work(self.database) as work:
@@ -865,6 +1041,134 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 # The run remains durable; the next supervisor pass retries only
                 # safe boundary states. In-flight side effects are never replayed.
                 continue
+
+    def _enqueue_due_schedule_fires(self) -> None:
+        now = datetime.now(timezone.utc)
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """
+                SELECT schedule_id, next_run_at, interval_seconds
+                  FROM omnix_workflow_schedules
+                 WHERE workspace_id = %s AND enabled
+                   AND next_run_at IS NOT NULL
+                   AND next_run_at <= CURRENT_TIMESTAMP
+                 ORDER BY next_run_at, schedule_id
+                 FOR UPDATE SKIP LOCKED
+                 LIMIT 50
+                """,
+                (self.context.workspace_id,),
+            ).fetchall()
+            for schedule_id, scheduled_for, interval_seconds in rows:
+                work.connection.execute(
+                    """
+                    INSERT INTO omnix_workflow_schedule_fires (
+                        workspace_id, schedule_id, scheduled_for, status
+                    ) VALUES (%s, %s, %s, 'pending')
+                    ON CONFLICT (workspace_id, schedule_id, scheduled_for)
+                    DO NOTHING
+                    """,
+                    (
+                        self.context.workspace_id,
+                        str(schedule_id),
+                        scheduled_for,
+                    ),
+                )
+                if interval_seconds is None:
+                    next_run_at = None
+                    enabled = False
+                else:
+                    next_run_at = scheduled_for + timedelta(
+                        seconds=int(interval_seconds)
+                    )
+                    enabled = True
+                work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_schedules
+                       SET last_enqueued_at = %s, next_run_at = %s,
+                           enabled = %s, updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND schedule_id = %s
+                    """,
+                    (
+                        scheduled_for,
+                        next_run_at,
+                        enabled,
+                        self.context.workspace_id,
+                        str(schedule_id),
+                    ),
+                )
+            work.commit()
+
+    def _dispatch_pending_schedule_fires(self) -> None:
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """
+                SELECT fire.schedule_id, fire.scheduled_for,
+                       schedule.workflow_id, schedule.workflow_version,
+                       schedule.input_payload
+                  FROM omnix_workflow_schedule_fires AS fire
+                  JOIN omnix_workflow_schedules AS schedule
+                    ON schedule.workspace_id = fire.workspace_id
+                   AND schedule.schedule_id = fire.schedule_id
+                 WHERE fire.workspace_id = %s AND fire.status = 'pending'
+                 ORDER BY fire.created_at, fire.schedule_id, fire.scheduled_for
+                 LIMIT 50
+                """,
+                (self.context.workspace_id,),
+            ).fetchall()
+            work.rollback()
+        for schedule_id, scheduled_for, workflow_id, version, input_payload in rows:
+            definition = self._definition(
+                str(workflow_id),
+                version=int(version),
+            )
+            if definition is None:
+                with unit_of_work(self.database) as work:
+                    work.connection.execute(
+                        """
+                        UPDATE omnix_workflow_schedule_fires
+                           SET status = 'failed',
+                               last_error = 'workflow_definition_missing',
+                               updated_at = CURRENT_TIMESTAMP
+                         WHERE workspace_id = %s AND schedule_id = %s
+                           AND scheduled_for = %s AND status = 'pending'
+                        """,
+                        (
+                            self.context.workspace_id,
+                            str(schedule_id),
+                            scheduled_for,
+                        ),
+                    )
+                    work.commit()
+                continue
+            payload = dict(input_payload or {})
+            payload["idempotency_key"] = (
+                f"workflow-schedule:{schedule_id}:"
+                f"{scheduled_for.astimezone(timezone.utc).isoformat()}"
+            )
+            try:
+                run_id = self._start_definition(definition, payload)
+            except Exception:
+                # Keep the fire pending. A later supervisor pass retries the
+                # durable dispatch; deterministic run idempotency prevents
+                # duplicate workflow execution if the first attempt committed.
+                continue
+            with unit_of_work(self.database) as work:
+                work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_schedule_fires
+                       SET status = 'started', run_id = %s, last_error = NULL,
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND schedule_id = %s
+                       AND scheduled_for = %s AND status = 'pending'
+                    """,
+                    (
+                        run_id,
+                        self.context.workspace_id,
+                        str(schedule_id),
+                        scheduled_for,
+                    ),
+                )
+                work.commit()
 
     def _definition(self, workflow_id: str, *, version: int | None = None) -> WorkflowDefinition | None:
         with unit_of_work(self.database) as work:
