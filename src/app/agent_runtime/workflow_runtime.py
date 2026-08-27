@@ -767,6 +767,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
 
     def _supervise_once(self) -> None:
         error = "step_outcome_unknown_after_worker_loss"
+        resumable: list[str] = []
         with unit_of_work(self.database) as work:
             work.connection.execute(
                 """
@@ -828,7 +829,32 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     """,
                     (error, self.context.workspace_id, str(run_id)),
                 )
+            resumable = [
+                str(row[0])
+                for row in work.connection.execute(
+                    """
+                    SELECT DISTINCT run.run_id
+                      FROM omnix_workflow_runs AS run
+                      JOIN omnix_workflow_step_runs AS step
+                        ON step.workspace_id = run.workspace_id
+                       AND step.run_id = run.run_id
+                       AND step.step_id = run.current_step_id
+                     WHERE run.workspace_id = %s
+                       AND run.status = 'running'
+                       AND step.status IN ('pending','approved','completed')
+                     ORDER BY run.run_id
+                    """,
+                    (self.context.workspace_id,),
+                ).fetchall()
+            ]
             work.commit()
+        for run_id in resumable:
+            try:
+                self._advance(run_id)
+            except Exception:
+                # The run remains durable; the next supervisor pass retries only
+                # safe boundary states. In-flight side effects are never replayed.
+                continue
 
     def _definition(self, workflow_id: str, *, version: int | None = None) -> WorkflowDefinition | None:
         with unit_of_work(self.database) as work:
