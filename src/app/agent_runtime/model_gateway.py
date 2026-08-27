@@ -30,6 +30,13 @@ def normalize_llm_provider_id(provider_id: str) -> str:
     return value.removeprefix("llm:") if value.startswith("llm:") else value
 
 
+def normalize_llm_model_id(provider_id: str, model_id: str) -> str:
+    provider = normalize_llm_provider_id(provider_id)
+    value = str(model_id or "").strip()
+    prefix = f"llm:{provider}:"
+    return value[len(prefix):] if value.startswith(prefix) else value
+
+
 def _next_stream_response(iterator: Any) -> Any:
     try:
         return next(iterator)
@@ -69,7 +76,10 @@ def _target_for_run(run_id: str, requested_model: str) -> tuple[str, str, str | 
         raise HTTPException(status_code=403, detail="agent_model_outside_run_spec")
     return (
         normalize_llm_provider_id(snapshot.spec.model.provider_id),
-        snapshot.spec.model.model_id,
+        normalize_llm_model_id(
+            snapshot.spec.model.provider_id,
+            snapshot.spec.model.model_id,
+        ),
         snapshot.spec.model.reasoning_effort,
     )
 

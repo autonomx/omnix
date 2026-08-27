@@ -507,34 +507,55 @@ def _generalized_result_events(
 
 
 def _governed_execution_events(user_message: ChatMessage, payload):
+    coordinator = default_assistant_turn_coordinator()
+    assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
+    if assistant_turn_id:
+        coordinator.mark_streaming(assistant_turn_id)
     result = payload.execution_result
     content = result.result_summary or ("Governed action failed." if result.error else "Governed action completed.")
     if result.error:
         content = f"{content} {result.error}".strip()
-    yield {"type": "text_chunk", "text": content}
-    yield {
-        "type": "complete",
-        "content": content,
-        "metadata": {
-            "generation_status": "completed",
-            "agent_mode": False,
-            "live_agent": False,
-            "review_required": False,
-            "executes": result.error is None,
-            "direct_execution": payload.model_dump(mode="json"),
-        },
-    }
+    try:
+        if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+            yield _interrupted(assistant_turn_id, "")
+            return
+        yield {"type": "text_chunk", "text": content}
+        yield {
+            "type": "complete",
+            "content": content,
+            "metadata": {
+                "generation_status": "completed",
+                "assistant_turn_id": assistant_turn_id or None,
+                "agent_mode": False,
+                "live_agent": False,
+                "review_required": False,
+                "executes": result.error is None,
+                "direct_execution": payload.model_dump(mode="json"),
+            },
+        }
+    except GeneratorExit:
+        if assistant_turn_id:
+            coordinator.request_cancel(assistant_turn_id, "client_disconnected")
+            coordinator.mark_provider_cancelled(assistant_turn_id)
+        raise
 
 
 def _governed_rejection_events(user_message: ChatMessage, request: AssistantToolRequest):
-    del user_message
+    coordinator = default_assistant_turn_coordinator()
+    assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
+    if assistant_turn_id:
+        coordinator.mark_streaming(assistant_turn_id)
     content = f"Cancelled. I did not execute {request.action_id}."
+    if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
+        yield _interrupted(assistant_turn_id, "")
+        return
     yield {"type": "text_chunk", "text": content}
     yield {
         "type": "complete",
         "content": content,
         "metadata": {
             "generation_status": "completed",
+            "assistant_turn_id": assistant_turn_id or None,
             "agent_mode": False,
             "live_agent": False,
             "review_required": False,
