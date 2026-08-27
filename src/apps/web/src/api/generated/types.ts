@@ -4,6 +4,210 @@
  */
 
 export interface paths {
+    "/api/agent-model/v1/chat/completions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Agent Chat Completion */
+        post: operations["agent_chat_completion_api_agent_model_v1_chat_completions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-model/v1/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Models */
+        get: operations["list_agent_models_api_agent_model_v1_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Agent Run */
+        post: operations["start_agent_run_api_agent_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Run */
+        get: operations["get_agent_run_api_agent_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Approvals */
+        get: operations["list_agent_approvals_api_agent_runs__run_id__approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Artifacts */
+        get: operations["list_agent_artifacts_api_agent_runs__run_id__artifacts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/budget/tool": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authorize Agent Tool Call */
+        post: operations["authorize_agent_tool_call_api_agent_runs__run_id__budget_tool_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/capabilities/{capability_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Agent Capability */
+        post: operations["execute_agent_capability_api_agent_runs__run_id__capabilities__capability_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Child Agent Run */
+        post: operations["start_child_agent_run_api_agent_runs__run_id__children_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Command Agent Run */
+        post: operations["command_agent_run_api_agent_runs__run_id__commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Events */
+        get: operations["list_agent_events_api_agent_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/events/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Agent Events */
+        get: operations["stream_agent_events_api_agent_runs__run_id__events_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets": {
         parameters: {
             query?: never;
@@ -66,6 +270,23 @@ export interface paths {
         put?: never;
         /** Legacy Non Image Asset Migration Dry Run */
         post: operations["legacy_non_image_asset_migration_dry_run_api_assets_migrations_legacy_non_image_dry_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assistant-routing/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Route */
+        post: operations["decide_route_api_assistant_routing_decide_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2620,6 +2841,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workflow-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workflow Run */
+        get: operations["get_workflow_run_api_workflow_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflow-runs/{run_id}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Command Workflow Run */
+        post: operations["command_workflow_run_api_workflow_runs__run_id__commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workflows */
+        get: operations["list_workflows_api_workflows_get"];
+        put?: never;
+        /** Register Workflow */
+        post: operations["register_workflow_api_workflows_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/{workflow_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Workflow */
+        post: operations["start_workflow_api_workflows__workflow_id__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -2641,6 +2931,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptancePlan */
+        AcceptancePlan: {
+            /** Allowed Modified Paths */
+            allowed_modified_paths?: string[];
+            /** Checks */
+            checks?: string[];
+            /** Forbidden Modified Paths */
+            forbidden_modified_paths?: string[];
+            /**
+             * Require Diff
+             * @default false
+             */
+            require_diff: boolean;
+            /** Required Artifacts */
+            required_artifacts?: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
+            /** Required Commands */
+            required_commands?: string[][];
+        };
         /** AccountRiskHealth */
         AccountRiskHealth: {
             /** Account Id */
@@ -2692,6 +3000,250 @@ export interface components {
          * @enum {string}
          */
         AdjustmentMode: "raw" | "split_adjusted" | "dividend_adjusted";
+        /** AgentApproval */
+        AgentApproval: {
+            /** Approval Id */
+            approval_id?: string;
+            /** Capability Id */
+            capability_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Request Payload */
+            request_payload?: {
+                [key: string]: unknown;
+            };
+            /** Resolution Payload */
+            resolution_payload?: {
+                [key: string]: unknown;
+            };
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * State
+             * @default pending
+             * @enum {string}
+             */
+            state: "pending" | "approved" | "rejected" | "expired";
+        };
+        /** AgentArtifact */
+        AgentArtifact: {
+            /** Artifact Id */
+            artifact_id?: string;
+            /** Checksum */
+            checksum?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "diff" | "test_result" | "log" | "report" | "file" | "other";
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Run Id */
+            run_id: string;
+            /** Storage Ref */
+            storage_ref?: string | null;
+        };
+        /** AgentChatCompletionRequest */
+        AgentChatCompletionRequest: {
+            /** Max Tokens */
+            max_tokens?: number | null;
+            /** Messages */
+            messages: components["schemas"]["AgentModelMessage"][];
+            /** Model */
+            model: string;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /**
+             * Stream
+             * @default false
+             */
+            stream: boolean;
+            /** Temperature */
+            temperature?: number | null;
+            /** Tool Choice */
+            tool_choice?: unknown;
+            /** Tools */
+            tools?: {
+                [key: string]: unknown;
+            }[] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentCommandRequest */
+        AgentCommandRequest: {
+            /**
+             * Command Type
+             * @enum {string}
+             */
+            command_type: "steer" | "pause" | "resume" | "cancel" | "approve" | "reject";
+            /** Idempotency Key */
+            idempotency_key?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
+        /** AgentEvent */
+        AgentEvent: {
+            /** Causation Id */
+            causation_id?: string | null;
+            /** Correlation Id */
+            correlation_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Event Id */
+            event_id?: string;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "worker.heartbeat";
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence?: number | null;
+        };
+        /** AgentModelMessage */
+        AgentModelMessage: {
+            /**
+             * Content
+             * @default
+             */
+            content: unknown;
+            /** Name */
+            name?: string | null;
+            /** Role */
+            role: string;
+            /** Tool Call Id */
+            tool_call_id?: string | null;
+            /** Tool Calls */
+            tool_calls?: {
+                [key: string]: unknown;
+            }[] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AgentRunSnapshot */
+        AgentRunSnapshot: {
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /**
+             * Desired State
+             * @default running
+             * @enum {string}
+             */
+            desired_state: "running" | "paused" | "cancelled";
+            /** Last Error */
+            last_error?: string | null;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /** Run Id */
+            run_id: string;
+            spec: components["schemas"]["AgentRunSpec"];
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @default queued
+             * @enum {string}
+             */
+            status: "queued" | "starting" | "running" | "pause_requested" | "paused" | "waiting_for_approval" | "waiting_for_children" | "resume_requested" | "cancel_requested" | "cancelled" | "completed" | "failed";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
+            /** Worker Id */
+            worker_id?: string | null;
+        };
+        /** AgentRunSpec */
+        AgentRunSpec: {
+            acceptance_plan?: components["schemas"]["AcceptancePlan"] | null;
+            /**
+             * Approval Policy
+             * @default ask_sensitive
+             * @enum {string}
+             */
+            approval_policy: "allow_automatic" | "ask_sensitive" | "always_ask" | "disabled";
+            /**
+             * Artifact Policy
+             * @default metadata_in_postgres_blobs_external
+             */
+            artifact_policy: string;
+            /** Capabilities */
+            capabilities?: string[];
+            /** Context Sources */
+            context_sources?: string[];
+            execution?: components["schemas"]["ExecutionPolicy"];
+            /** Expected Artifacts */
+            expected_artifacts?: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
+            /** External Capabilities */
+            external_capabilities?: string[];
+            limits?: components["schemas"]["RunLimits"];
+            model: components["schemas"]["ModelRef"];
+            /**
+             * Objective
+             * @default
+             */
+            objective: string;
+            /** Parent Run Id */
+            parent_run_id?: string | null;
+            /**
+             * Persistence Policy
+             * @default postgresql
+             */
+            persistence_policy: string;
+            /**
+             * Profile
+             * @default coding
+             */
+            profile: string;
+            /** Resource Scopes */
+            resource_scopes?: components["schemas"]["ResourceScope"][];
+            /** Run Id */
+            run_id?: string;
+            /**
+             * Runtime
+             * @default pi
+             */
+            runtime: string;
+            /** Session Id */
+            session_id?: string | null;
+            /** Success Criteria */
+            success_criteria?: components["schemas"]["SuccessCriterion"][];
+            /** Task */
+            task: string;
+            workspace?: components["schemas"]["WorkspaceSpec"] | null;
+        };
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: {
             /** Api Key Editable */
@@ -3853,6 +4405,57 @@ export interface components {
              */
             shadow_only: boolean;
         };
+        /** BrokerCapabilityRequest */
+        BrokerCapabilityRequest: {
+            /** Approval Id */
+            approval_id?: string | null;
+            /** Input */
+            input?: {
+                [key: string]: unknown;
+            };
+            /** Proposal Id */
+            proposal_id?: string | null;
+        };
+        /** BrokerCapabilityResponse */
+        BrokerCapabilityResponse: {
+            /** Approval Id */
+            approval_id?: string | null;
+            /**
+             * Approval Required
+             * @default false
+             */
+            approval_required: boolean;
+            /** Capability Id */
+            capability_id: string;
+            /**
+             * Executed
+             * @default false
+             */
+            executed: boolean;
+            /** Execution Key */
+            execution_key?: string | null;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            };
+        };
+        /** BrokerToolBudgetRequest */
+        BrokerToolBudgetRequest: {
+            /** Tool Name */
+            tool_name: string;
+        };
+        /** BrokerToolBudgetResponse */
+        BrokerToolBudgetResponse: {
+            /**
+             * Allowed
+             * @default true
+             */
+            allowed: boolean;
+            /** Usage */
+            usage?: {
+                [key: string]: unknown;
+            };
+        };
         /** CalibrationBin */
         CalibrationBin: {
             /** Count */
@@ -4352,6 +4955,31 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** ChildRunRequest */
+        ChildRunRequest: {
+            /** Capabilities */
+            capabilities?: string[];
+            /** External Capabilities */
+            external_capabilities?: string[];
+            limits?: components["schemas"]["RunLimits"] | null;
+            /** Model Id */
+            model_id?: string | null;
+            /**
+             * Objective
+             * @default
+             */
+            objective: string;
+            /** Provider Id */
+            provider_id?: string | null;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /** Resource Scopes */
+            resource_scopes?: components["schemas"]["ResourceScope"][] | null;
+            /** Success Criteria */
+            success_criteria?: string[];
+            /** Task */
+            task: string;
+        };
         /** ClaimJobRequest */
         ClaimJobRequest: {
             /**
@@ -4770,6 +5398,26 @@ export interface components {
              * Format: date-time
              */
             source_time: string;
+        };
+        /** ExecutionPolicy */
+        ExecutionPolicy: {
+            /** Allowed Environment Keys */
+            allowed_environment_keys?: string[];
+            /**
+             * Command Policy
+             * @default safe-development
+             */
+            command_policy: string;
+            /**
+             * Environment Policy
+             * @default minimal
+             */
+            environment_policy: string;
+            /**
+             * Network Policy
+             * @default broker-only
+             */
+            network_policy: string;
         };
         /** FailJobRequest */
         FailJobRequest: {
@@ -6529,6 +7177,19 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ModelRef */
+        ModelRef: {
+            /** Model Id */
+            model_id: string;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            /** Provider Id */
+            provider_id: string;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+        };
         /** ModelResidencyDiagnostics */
         ModelResidencyDiagnostics: {
             policy: components["schemas"]["GpuResidencyPolicy"];
@@ -6658,6 +7319,32 @@ export interface components {
              * @constant
              */
             shadow_only: true;
+        };
+        /** OmnixRouteDecision */
+        OmnixRouteDecision: {
+            /** Capability Id */
+            capability_id?: string | null;
+            /** Confidence */
+            confidence: number;
+            /**
+             * Explicit
+             * @default false
+             */
+            explicit: boolean;
+            /**
+             * Hermes Recommended
+             * @default false
+             */
+            hermes_recommended: boolean;
+            /**
+             * Lane
+             * @enum {string}
+             */
+            lane: "chat" | "direct" | "workflow" | "agent";
+            /** Reason */
+            reason: string;
+            /** Workflow Id */
+            workflow_id?: string | null;
         };
         /** PaperAccount */
         PaperAccount: {
@@ -8436,6 +9123,19 @@ export interface components {
          * @enum {string}
          */
         ResourceClass: "cpu" | "gpu:llm" | "gpu:tts" | "gpu:stt" | "gpu:image" | "network" | "rpg_campaign_genesis";
+        /** ResourceScope */
+        ResourceScope: {
+            /** Capability */
+            capability: string;
+            /** Constraints */
+            constraints?: {
+                [key: string]: unknown;
+            };
+            /** Resource Id */
+            resource_id: string;
+            /** Resource Type */
+            resource_type: string;
+        };
         /** RetryState */
         RetryState: {
             /**
@@ -8474,6 +9174,11 @@ export interface components {
             review_note: string;
             /** Source Validation Id */
             source_validation_id: string;
+        };
+        /** RouteRequest */
+        RouteRequest: {
+            /** Content */
+            content: string;
         };
         /** RpgFeatureOptions */
         RpgFeatureOptions: {
@@ -8644,6 +9349,28 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** RunLimits */
+        RunLimits: {
+            /** Max Cost */
+            max_cost?: number | null;
+            /**
+             * Max Steps
+             * @default 200
+             */
+            max_steps: number;
+            /** Max Tokens */
+            max_tokens?: number | null;
+            /**
+             * Max Tool Calls
+             * @default 500
+             */
+            max_tool_calls: number;
+            /**
+             * Max Wall Time Seconds
+             * @default 3600
+             */
+            max_wall_time_seconds: number;
+        };
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: {
             /** Compatibility */
@@ -8762,6 +9489,60 @@ export interface components {
              * @default true
              */
             success: boolean;
+        };
+        /** StartAgentRunRequest */
+        StartAgentRunRequest: {
+            /** Allowed Paths */
+            allowed_paths?: string[];
+            /**
+             * Approval Policy
+             * @default ask_sensitive
+             * @enum {string}
+             */
+            approval_policy: "allow_automatic" | "ask_sensitive" | "always_ask" | "disabled";
+            /**
+             * Base Ref
+             * @default main
+             */
+            base_ref: string;
+            /** Capabilities */
+            capabilities?: string[] | null;
+            /** External Capabilities */
+            external_capabilities?: string[] | null;
+            /** Forbidden Paths */
+            forbidden_paths?: string[];
+            /**
+             * Isolation Policy
+             * @default supervised_worktree
+             */
+            isolation_policy: string;
+            limits?: components["schemas"]["RunLimits"];
+            /** Model Id */
+            model_id: string;
+            /**
+             * Objective
+             * @default
+             */
+            objective: string;
+            /**
+             * Profile
+             * @default coding
+             */
+            profile: string;
+            /** Provider Id */
+            provider_id: string;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /** Repository */
+            repository?: string | null;
+            /** Resource Scopes */
+            resource_scopes?: components["schemas"]["ResourceScope"][];
+            /** Success Criteria */
+            success_criteria?: string[];
+            /** Task */
+            task: string;
+            /** Workspace Root */
+            workspace_root?: string | null;
         };
         /** StartTradingResearchInput */
         StartTradingResearchInput: {
@@ -9475,6 +10256,18 @@ export interface components {
             stop_price: string;
             /** Target Price */
             target_price: string;
+        };
+        /** SuccessCriterion */
+        SuccessCriterion: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
         };
         /** SupplyFact */
         SupplyFact: {
@@ -11004,6 +11797,102 @@ export interface components {
              */
             small_json_payloads: string;
         };
+        /** WorkflowCommandRequest */
+        WorkflowCommandRequest: {
+            /**
+             * Command
+             * @enum {string}
+             */
+            command: "pause" | "resume" | "cancel" | "approve" | "reject";
+            /** Step Id */
+            step_id?: string | null;
+        };
+        /** WorkflowDefinition */
+        WorkflowDefinition: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Steps */
+            steps?: components["schemas"]["WorkflowStepDefinition"][];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /** WorkflowStartRequest */
+        WorkflowStartRequest: {
+            /** Input */
+            input?: {
+                [key: string]: unknown;
+            };
+        };
+        /** WorkflowStepDefinition */
+        WorkflowStepDefinition: {
+            /** Capability Id */
+            capability_id?: string | null;
+            /** Condition */
+            condition?: string | null;
+            /** Id */
+            id: string;
+            /** Input Template */
+            input_template?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Kind
+             * @default capability
+             * @enum {string}
+             */
+            kind: "capability" | "condition" | "approval";
+            /** Next Step Id */
+            next_step_id?: string | null;
+            /** On False Step Id */
+            on_false_step_id?: string | null;
+            /** On True Step Id */
+            on_true_step_id?: string | null;
+            /**
+             * Requires Approval
+             * @default false
+             */
+            requires_approval: boolean;
+            /**
+             * Retry Limit
+             * @default 0
+             */
+            retry_limit: number;
+            /** Timeout Seconds */
+            timeout_seconds?: number | null;
+        };
+        /** WorkspaceSpec */
+        WorkspaceSpec: {
+            /** Allowed Paths */
+            allowed_paths?: string[];
+            /**
+             * Base Ref
+             * @default main
+             */
+            base_ref: string;
+            /** Forbidden Paths */
+            forbidden_paths?: string[];
+            /**
+             * Isolation Policy
+             * @default supervised_worktree
+             */
+            isolation_policy: string;
+            /** Repository */
+            repository?: string | null;
+            /** Root */
+            root: string;
+            /** Worktree */
+            worktree?: string | null;
+        };
         /** YahooGapperDiscoveryRequest */
         YahooGapperDiscoveryRequest: {
             /**
@@ -11043,6 +11932,409 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    agent_chat_completion_api_agent_model_v1_chat_completions_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Omnix-Agent-Run-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentChatCompletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_agent_models_api_agent_model_v1_models_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Omnix-Agent-Run-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_agent_run_api_agent_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartAgentRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_run_api_agent_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_agent_approvals_api_agent_runs__run_id__approvals_get: {
+        parameters: {
+            query?: {
+                state?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentApproval"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_agent_artifacts_api_agent_runs__run_id__artifacts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentArtifact"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    authorize_agent_tool_call_api_agent_runs__run_id__budget_tool_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrokerToolBudgetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrokerToolBudgetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_agent_capability_api_agent_runs__run_id__capabilities__capability_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                capability_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrokerCapabilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrokerCapabilityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_child_agent_run_api_agent_runs__run_id__children_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChildRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    command_agent_run_api_agent_runs__run_id__commands_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_agent_events_api_agent_runs__run_id__events_get: {
+        parameters: {
+            query?: {
+                after_sequence?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_agent_events_api_agent_runs__run_id__events_stream_get: {
+        parameters: {
+            query?: {
+                after_sequence?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     assets_api_assets_get: {
         parameters: {
             query?: never;
@@ -11119,6 +12411,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetLegacyImportDryRun"];
+                };
+            };
+        };
+    };
+    decide_route_api_assistant_routing_decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OmnixRouteDecision"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -16825,6 +18150,166 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkerPayloadPolicy"];
+                };
+            };
+        };
+    };
+    get_workflow_run_api_workflow_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    command_workflow_run_api_workflow_runs__run_id__commands_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workflows_api_workflows_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinition"][];
+                };
+            };
+        };
+    };
+    register_workflow_api_workflows_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowDefinition"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinition"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_workflow_api_workflows__workflow_id__runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

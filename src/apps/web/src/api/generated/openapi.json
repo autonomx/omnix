@@ -1,6 +1,64 @@
 {
   "components": {
     "schemas": {
+      "AcceptancePlan": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_modified_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Modified Paths",
+            "type": "array"
+          },
+          "checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "forbidden_modified_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Modified Paths",
+            "type": "array"
+          },
+          "require_diff": {
+            "default": false,
+            "title": "Require Diff",
+            "type": "boolean"
+          },
+          "required_artifacts": {
+            "items": {
+              "enum": [
+                "diff",
+                "test_result",
+                "log",
+                "report",
+                "file",
+                "other"
+              ],
+              "type": "string"
+            },
+            "title": "Required Artifacts",
+            "type": "array"
+          },
+          "required_commands": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Required Commands",
+            "type": "array"
+          }
+        },
+        "title": "AcceptancePlan",
+        "type": "object"
+      },
       "AccountRiskHealth": {
         "additionalProperties": false,
         "properties": {
@@ -125,6 +183,655 @@
         ],
         "title": "AdjustmentMode",
         "type": "string"
+      },
+      "AgentApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_id": {
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "capability_id": {
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "request_payload": {
+            "additionalProperties": true,
+            "title": "Request Payload",
+            "type": "object"
+          },
+          "resolution_payload": {
+            "additionalProperties": true,
+            "title": "Resolution Payload",
+            "type": "object"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "state": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "capability_id"
+        ],
+        "title": "AgentApproval",
+        "type": "object"
+      },
+      "AgentArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "diff",
+              "test_result",
+              "log",
+              "report",
+              "file",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          }
+        },
+        "required": [
+          "run_id",
+          "kind",
+          "name"
+        ],
+        "title": "AgentArtifact",
+        "type": "object"
+      },
+      "AgentChatCompletionRequest": {
+        "additionalProperties": true,
+        "properties": {
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AgentModelMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "stream": {
+            "default": false,
+            "title": "Stream",
+            "type": "boolean"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "tool_choice": {
+            "title": "Tool Choice"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "title": "AgentChatCompletionRequest",
+        "type": "object"
+      },
+      "AgentCommandRequest": {
+        "properties": {
+          "command_type": {
+            "enum": [
+              "steer",
+              "pause",
+              "resume",
+              "cancel",
+              "approve",
+              "reject"
+            ],
+            "title": "Command Type",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "command_type"
+        ],
+        "title": "AgentCommandRequest",
+        "type": "object"
+      },
+      "AgentEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "causation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Causation Id"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "run.created",
+              "run.started",
+              "run.settled",
+              "run.status",
+              "run.completed",
+              "run.failed",
+              "model.message",
+              "tool.requested",
+              "tool.started",
+              "tool.output",
+              "tool.completed",
+              "approval.requested",
+              "approval.resolved",
+              "artifact.created",
+              "steering.received",
+              "acceptance.started",
+              "acceptance.completed",
+              "worker.heartbeat"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence"
+          }
+        },
+        "required": [
+          "run_id",
+          "event_type"
+        ],
+        "title": "AgentEvent",
+        "type": "object"
+      },
+      "AgentModelMessage": {
+        "additionalProperties": true,
+        "properties": {
+          "content": {
+            "default": "",
+            "title": "Content"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Calls"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "AgentModelMessage",
+        "type": "object"
+      },
+      "AgentRunSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "desired_state": {
+            "default": "running",
+            "enum": [
+              "running",
+              "paused",
+              "cancelled"
+            ],
+            "title": "Desired State",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/AgentRunSpec"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "starting",
+              "running",
+              "pause_requested",
+              "paused",
+              "waiting_for_approval",
+              "waiting_for_children",
+              "resume_requested",
+              "cancel_requested",
+              "cancelled",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          }
+        },
+        "required": [
+          "run_id",
+          "spec"
+        ],
+        "title": "AgentRunSnapshot",
+        "type": "object"
+      },
+      "AgentRunSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcceptancePlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approval_policy": {
+            "default": "ask_sensitive",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "artifact_policy": {
+            "default": "metadata_in_postgres_blobs_external",
+            "title": "Artifact Policy",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "context_sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Context Sources",
+            "type": "array"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionPolicy"
+          },
+          "expected_artifacts": {
+            "items": {
+              "enum": [
+                "diff",
+                "test_result",
+                "log",
+                "report",
+                "file",
+                "other"
+              ],
+              "type": "string"
+            },
+            "title": "Expected Artifacts",
+            "type": "array"
+          },
+          "external_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "External Capabilities",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/RunLimits"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelRef"
+          },
+          "objective": {
+            "default": "",
+            "title": "Objective",
+            "type": "string"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "persistence_policy": {
+            "default": "postgresql",
+            "title": "Persistence Policy",
+            "type": "string"
+          },
+          "profile": {
+            "default": "coding",
+            "title": "Profile",
+            "type": "string"
+          },
+          "resource_scopes": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceScope"
+            },
+            "title": "Resource Scopes",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "runtime": {
+            "default": "pi",
+            "title": "Runtime",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "success_criteria": {
+            "items": {
+              "$ref": "#/components/schemas/SuccessCriterion"
+            },
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "task",
+          "model"
+        ],
+        "title": "AgentRunSpec",
+        "type": "object"
       },
       "AlpacaIexCredentialStatus": {
         "additionalProperties": false,
@@ -2834,6 +3541,118 @@
         "title": "BounceValidationMetrics",
         "type": "object"
       },
+      "BrokerCapabilityRequest": {
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          }
+        },
+        "title": "BrokerCapabilityRequest",
+        "type": "object"
+      },
+      "BrokerCapabilityResponse": {
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "approval_required": {
+            "default": false,
+            "title": "Approval Required",
+            "type": "boolean"
+          },
+          "capability_id": {
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "executed": {
+            "default": false,
+            "title": "Executed",
+            "type": "boolean"
+          },
+          "execution_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Key"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "capability_id"
+        ],
+        "title": "BrokerCapabilityResponse",
+        "type": "object"
+      },
+      "BrokerToolBudgetRequest": {
+        "properties": {
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_name"
+        ],
+        "title": "BrokerToolBudgetRequest",
+        "type": "object"
+      },
+      "BrokerToolBudgetResponse": {
+        "properties": {
+          "allowed": {
+            "default": true,
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "title": "BrokerToolBudgetResponse",
+        "type": "object"
+      },
       "CalibrationBin": {
         "additionalProperties": false,
         "properties": {
@@ -4018,6 +4837,102 @@
         "title": "CheckpointEnvelope",
         "type": "object"
       },
+      "ChildRunRequest": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "external_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "External Capabilities",
+            "type": "array"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunLimits"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "objective": {
+            "default": "",
+            "title": "Objective",
+            "type": "string"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "resource_scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ResourceScope"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Scopes"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "ChildRunRequest",
+        "type": "object"
+      },
       "ClaimJobRequest": {
         "properties": {
           "cpu_limit": {
@@ -5054,6 +5969,35 @@
           "source_time"
         ],
         "title": "ExecutionObservation",
+        "type": "object"
+      },
+      "ExecutionPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_environment_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Environment Keys",
+            "type": "array"
+          },
+          "command_policy": {
+            "default": "safe-development",
+            "title": "Command Policy",
+            "type": "string"
+          },
+          "environment_policy": {
+            "default": "minimal",
+            "title": "Environment Policy",
+            "type": "string"
+          },
+          "network_policy": {
+            "default": "broker-only",
+            "title": "Network Policy",
+            "type": "string"
+          }
+        },
+        "title": "ExecutionPolicy",
         "type": "object"
       },
       "FailJobRequest": {
@@ -8986,6 +9930,41 @@
         "title": "MarketResearchResult",
         "type": "object"
       },
+      "ModelRef": {
+        "additionalProperties": false,
+        "properties": {
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          }
+        },
+        "required": [
+          "provider_id",
+          "model_id"
+        ],
+        "title": "ModelRef",
+        "type": "object"
+      },
       "ModelResidencyDiagnostics": {
         "properties": {
           "policy": {
@@ -9295,6 +10274,70 @@
           "evidence_ids"
         ],
         "title": "NoveltyShadowAnnotation",
+        "type": "object"
+      },
+      "OmnixRouteDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "explicit": {
+            "default": false,
+            "title": "Explicit",
+            "type": "boolean"
+          },
+          "hermes_recommended": {
+            "default": false,
+            "title": "Hermes Recommended",
+            "type": "boolean"
+          },
+          "lane": {
+            "enum": [
+              "chat",
+              "direct",
+              "workflow",
+              "agent"
+            ],
+            "title": "Lane",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "workflow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Id"
+          }
+        },
+        "required": [
+          "lane",
+          "confidence",
+          "reason"
+        ],
+        "title": "OmnixRouteDecision",
         "type": "object"
       },
       "PaperAccount": {
@@ -13848,6 +14891,35 @@
         "title": "ResourceClass",
         "type": "string"
       },
+      "ResourceScope": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "constraints": {
+            "additionalProperties": true,
+            "title": "Constraints",
+            "type": "object"
+          },
+          "resource_id": {
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability",
+          "resource_type",
+          "resource_id"
+        ],
+        "title": "ResourceScope",
+        "type": "object"
+      },
       "RetryState": {
         "properties": {
           "attempts": {
@@ -13917,6 +14989,19 @@
           "confirm_execution_authority"
         ],
         "title": "ReviewValidationInput",
+        "type": "object"
+      },
+      "RouteRequest": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "RouteRequest",
         "type": "object"
       },
       "RpgFeatureOptions": {
@@ -14319,6 +15404,57 @@
         "title": "RpgRenameSessionRequest",
         "type": "object"
       },
+      "RunLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "max_cost": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Cost"
+          },
+          "max_steps": {
+            "default": 200,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "max_tool_calls": {
+            "default": 500,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Max Tool Calls",
+            "type": "integer"
+          },
+          "max_wall_time_seconds": {
+            "default": 3600,
+            "minimum": 1.0,
+            "title": "Max Wall Time Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "RunLimits",
+        "type": "object"
+      },
       "RuntimeStatusPayload": {
         "properties": {
           "compatibility": {
@@ -14588,6 +15724,152 @@
           }
         },
         "title": "SettingsSaveResponse",
+        "type": "object"
+      },
+      "StartAgentRunRequest": {
+        "properties": {
+          "allowed_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Paths",
+            "type": "array"
+          },
+          "approval_policy": {
+            "default": "ask_sensitive",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "base_ref": {
+            "default": "main",
+            "title": "Base Ref",
+            "type": "string"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "external_capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Capabilities"
+          },
+          "forbidden_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Paths",
+            "type": "array"
+          },
+          "isolation_policy": {
+            "default": "supervised_worktree",
+            "title": "Isolation Policy",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/RunLimits"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "objective": {
+            "default": "",
+            "title": "Objective",
+            "type": "string"
+          },
+          "profile": {
+            "default": "coding",
+            "title": "Profile",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "resource_scopes": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceScope"
+            },
+            "title": "Resource Scopes",
+            "type": "array"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "workspace_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Root"
+          }
+        },
+        "required": [
+          "task",
+          "provider_id",
+          "model_id"
+        ],
+        "title": "StartAgentRunRequest",
         "type": "object"
       },
       "StartTradingResearchInput": {
@@ -16245,6 +17527,30 @@
           "reason_code"
         ],
         "title": "StrategySignal",
+        "type": "object"
+      },
+      "SuccessCriterion": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "description"
+        ],
+        "title": "SuccessCriterion",
         "type": "object"
       },
       "SupplyFact": {
@@ -19910,6 +21216,254 @@
         "title": "WorkerPayloadPolicy",
         "type": "object"
       },
+      "WorkflowCommandRequest": {
+        "properties": {
+          "command": {
+            "enum": [
+              "pause",
+              "resume",
+              "cancel",
+              "approve",
+              "reject"
+            ],
+            "title": "Command",
+            "type": "string"
+          },
+          "step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Id"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "WorkflowCommandRequest",
+        "type": "object"
+      },
+      "WorkflowDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStepDefinition"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "WorkflowDefinition",
+        "type": "object"
+      },
+      "WorkflowStartRequest": {
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          }
+        },
+        "title": "WorkflowStartRequest",
+        "type": "object"
+      },
+      "WorkflowStepDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_template": {
+            "additionalProperties": true,
+            "title": "Input Template",
+            "type": "object"
+          },
+          "kind": {
+            "default": "capability",
+            "enum": [
+              "capability",
+              "condition",
+              "approval"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step Id"
+          },
+          "on_false_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On False Step Id"
+          },
+          "on_true_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On True Step Id"
+          },
+          "requires_approval": {
+            "default": false,
+            "title": "Requires Approval",
+            "type": "boolean"
+          },
+          "retry_limit": {
+            "default": 0,
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Retry Limit",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Seconds"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "WorkflowStepDefinition",
+        "type": "object"
+      },
+      "WorkspaceSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Paths",
+            "type": "array"
+          },
+          "base_ref": {
+            "default": "main",
+            "title": "Base Ref",
+            "type": "string"
+          },
+          "forbidden_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Paths",
+            "type": "array"
+          },
+          "isolation_policy": {
+            "default": "supervised_worktree",
+            "title": "Isolation Policy",
+            "type": "string"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "worktree": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worktree"
+          }
+        },
+        "required": [
+          "root"
+        ],
+        "title": "WorkspaceSpec",
+        "type": "object"
+      },
       "YahooGapperDiscoveryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -19990,6 +21544,616 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/agent-model/v1/chat/completions": {
+      "post": {
+        "operationId": "agent_chat_completion_api_agent_model_v1_chat_completions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omnix-Agent-Run-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Omnix-Agent-Run-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentChatCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Agent Chat Completion Api Agent Model V1 Chat Completions Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Chat Completion",
+        "tags": [
+          "agent-model"
+        ]
+      }
+    },
+    "/api/agent-model/v1/models": {
+      "get": {
+        "operationId": "list_agent_models_api_agent_model_v1_models_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omnix-Agent-Run-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Omnix-Agent-Run-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Agent Models Api Agent Model V1 Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Models",
+        "tags": [
+          "agent-model"
+        ]
+      }
+    },
+    "/api/agent-runs": {
+      "post": {
+        "operationId": "start_agent_run_api_agent_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAgentRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Agent Run",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}": {
+      "get": {
+        "operationId": "get_agent_run_api_agent_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Run",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/approvals": {
+      "get": {
+        "operationId": "list_agent_approvals_api_agent_runs__run_id__approvals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentApproval"
+                  },
+                  "title": "Response List Agent Approvals Api Agent Runs  Run Id  Approvals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Approvals",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/artifacts": {
+      "get": {
+        "operationId": "list_agent_artifacts_api_agent_runs__run_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentArtifact"
+                  },
+                  "title": "Response List Agent Artifacts Api Agent Runs  Run Id  Artifacts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Artifacts",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/budget/tool": {
+      "post": {
+        "operationId": "authorize_agent_tool_call_api_agent_runs__run_id__budget_tool_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerToolBudgetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerToolBudgetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Agent Tool Call",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/capabilities/{capability_id}": {
+      "post": {
+        "operationId": "execute_agent_capability_api_agent_runs__run_id__capabilities__capability_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "capability_id",
+            "required": true,
+            "schema": {
+              "title": "Capability Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerCapabilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerCapabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Agent Capability",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/children": {
+      "post": {
+        "operationId": "start_child_agent_run_api_agent_runs__run_id__children_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChildRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Child Agent Run",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/commands": {
+      "post": {
+        "operationId": "command_agent_run_api_agent_runs__run_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command Agent Run",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/events": {
+      "get": {
+        "operationId": "list_agent_events_api_agent_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentEvent"
+                  },
+                  "title": "Response List Agent Events Api Agent Runs  Run Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Events",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/events/stream": {
+      "get": {
+        "operationId": "stream_agent_events_api_agent_runs__run_id__events_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Agent Events",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
     "/api/assets": {
       "get": {
         "operationId": "assets_api_assets_get",
@@ -20071,6 +22235,47 @@
         "summary": "Legacy Non Image Asset Migration Dry Run",
         "tags": [
           "assets"
+        ]
+      }
+    },
+    "/api/assistant-routing/decide": {
+      "post": {
+        "operationId": "decide_route_api_assistant_routing_decide_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OmnixRouteDecision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Route",
+        "tags": [
+          "assistant-routing"
         ]
       }
     },
@@ -28046,6 +30251,222 @@
         "summary": "Worker Payload Policy",
         "tags": [
           "workers"
+        ]
+      }
+    },
+    "/api/workflow-runs/{run_id}": {
+      "get": {
+        "operationId": "get_workflow_run_api_workflow_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Workflow Run Api Workflow Runs  Run Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workflow Run",
+        "tags": [
+          "workflow-runtime"
+        ]
+      }
+    },
+    "/api/workflow-runs/{run_id}/commands": {
+      "post": {
+        "operationId": "command_workflow_run_api_workflow_runs__run_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Command Workflow Run Api Workflow Runs  Run Id  Commands Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command Workflow Run",
+        "tags": [
+          "workflow-runtime"
+        ]
+      }
+    },
+    "/api/workflows": {
+      "get": {
+        "operationId": "list_workflows_api_workflows_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowDefinition"
+                  },
+                  "title": "Response List Workflows Api Workflows Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Workflows",
+        "tags": [
+          "workflow-runtime"
+        ]
+      },
+      "post": {
+        "operationId": "register_workflow_api_workflows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDefinition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDefinition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Workflow",
+        "tags": [
+          "workflow-runtime"
+        ]
+      }
+    },
+    "/api/workflows/{workflow_id}/runs": {
+      "post": {
+        "operationId": "start_workflow_api_workflows__workflow_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Start Workflow Api Workflows  Workflow Id  Runs Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Workflow",
+        "tags": [
+          "workflow-runtime"
         ]
       }
     },
