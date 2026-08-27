@@ -63,6 +63,20 @@ class AgentRunService:
             raise
         return self.get(issued.run_id) or snapshot
 
+    def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
+        from .subagents import derive_child_spec, reserve_child_budget
+
+        parent = self.get(parent_run_id)
+        if parent is None:
+            raise KeyError(parent_run_id)
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            existing = repository.list_children(parent_run_id)
+            work.rollback()
+        child_spec = derive_child_spec(parent, request)
+        reserve_child_budget(parent, existing, child_spec)
+        return self.start(child_spec)
+
     def get(self, run_id: str) -> AgentRunSnapshot | None:
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -118,7 +132,38 @@ class AgentRunService:
                             desired_state=runtime_status.desired_state,
                         )
                 work.commit()
+        elif stored.command_type == "cancel":
+            with unit_of_work(self.database) as work:
+                repository = PostgresAgentRunRepository(work.connection, self.context)
+                persisted = repository.get_run(command.run_id)
+                if persisted is not None and persisted.status != "cancelled":
+                    current = repository.update_state(
+                        command.run_id,
+                        expected_revision=persisted.revision,
+                        status="cancelled",
+                        desired_state="cancelled",
+                    )
+                work.commit()
+        if stored.command_type == "cancel":
+            self._cancel_descendants(command.run_id)
         return self.get(command.run_id) or current
+
+    def _cancel_descendants(self, run_id: str) -> None:
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            children = repository.list_children(run_id)
+            work.rollback()
+        for child in children:
+            if child.status in {"completed", "failed", "cancelled"}:
+                continue
+            self.command(
+                AgentRunCommand(
+                    run_id=child.run_id,
+                    command_type="cancel",
+                    payload={"reason": f"parent_cancelled:{run_id}"},
+                    idempotency_key=f"parent-cancel:{run_id}:{child.run_id}",
+                )
+            )
 
     def events(self, run_id: str, *, after_sequence: int = 0) -> list[AgentEvent]:
         with unit_of_work(self.database) as work:
@@ -133,6 +178,50 @@ class AgentRunService:
             rows = repository.list_artifacts(run_id)
             work.rollback()
             return rows
+
+    @staticmethod
+    def _children_terminal_state(repository: PostgresAgentRunRepository, run_id: str) -> tuple[bool, bool]:
+        children = repository.list_children(run_id)
+        if not children:
+            return True, False
+        terminal = all(child.status in {"completed", "failed", "cancelled"} for child in children)
+        failed = any(child.status in {"failed", "cancelled"} for child in children)
+        return terminal, failed
+
+    def _finalize_acceptance(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+    ) -> None:
+        repository.append_event(
+            AgentEvent(run_id=current.run_id, event_type="acceptance.started", payload={"source": "omnix"})
+        )
+        self._capture_diff(repository, current.spec)
+        events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+        artifacts = repository.list_artifacts(current.run_id)
+        result = evaluate_acceptance(current.spec, events=events, artifacts=artifacts)
+        children_terminal, child_failed = self._children_terminal_state(repository, current.run_id)
+        failures = list(result.failures)
+        if not children_terminal:
+            failures.append("children_not_terminal")
+        if child_failed:
+            failures.append("child_run_failed")
+        passed = result.passed and not failures
+        repository.append_event(
+            AgentEvent(
+                run_id=current.run_id,
+                event_type="acceptance.completed",
+                payload={**result.model_dump(mode="json"), "passed": passed, "failures": failures},
+            )
+        )
+        latest = repository.get_run(current.run_id) or current
+        repository.update_state(
+            current.run_id,
+            expected_revision=latest.revision,
+            status="completed" if passed else "failed",
+            worker_id=self.worker_id,
+            last_error=None if passed else "acceptance_failed:" + ",".join(failures),
+        )
 
     def _persist_runtime_event(self, event: AgentEvent) -> None:
         with self._lock:
@@ -151,28 +240,16 @@ class AgentRunService:
                         worker_id=self.worker_id,
                     )
                 elif event.event_type == "run.completed":
-                    repository.append_event(
-                        AgentEvent(run_id=event.run_id, event_type="acceptance.started", payload={"source": "omnix"})
-                    )
-                    self._capture_diff(repository, current.spec)
-                    events = repository.list_events(event.run_id, after_sequence=0, limit=5000)
-                    artifacts = repository.list_artifacts(event.run_id)
-                    result = evaluate_acceptance(current.spec, events=events, artifacts=artifacts)
-                    repository.append_event(
-                        AgentEvent(
-                            run_id=event.run_id,
-                            event_type="acceptance.completed",
-                            payload=result.model_dump(mode="json"),
+                    children_terminal, _ = self._children_terminal_state(repository, event.run_id)
+                    if children_terminal:
+                        self._finalize_acceptance(repository, current)
+                    else:
+                        repository.update_state(
+                            event.run_id,
+                            expected_revision=current.revision,
+                            status="waiting_for_children",
+                            worker_id=self.worker_id,
                         )
-                    )
-                    current = repository.get_run(event.run_id) or current
-                    repository.update_state(
-                        event.run_id,
-                        expected_revision=current.revision,
-                        status="completed" if result.passed else "failed",
-                        worker_id=self.worker_id,
-                        last_error=None if result.passed else "acceptance_failed:" + ",".join(result.failures),
-                    )
                 elif event.event_type == "run.failed":
                     repository.update_state(
                         event.run_id,
@@ -181,6 +258,21 @@ class AgentRunService:
                         worker_id=self.worker_id,
                         last_error=str(event.payload.get("error") or "Pi runtime failed")[:2000],
                     )
+                refreshed = repository.get_run(event.run_id)
+                if refreshed is not None and refreshed.spec.parent_run_id and refreshed.status in {"completed", "failed", "cancelled"}:
+                    parent = repository.get_run(refreshed.spec.parent_run_id)
+                    if parent is not None and parent.status == "waiting_for_children":
+                        terminal, failed = self._children_terminal_state(repository, parent.run_id)
+                        if terminal:
+                            if failed:
+                                repository.update_state(
+                                    parent.run_id,
+                                    expected_revision=parent.revision,
+                                    status="failed",
+                                    last_error="acceptance_failed:child_run_failed",
+                                )
+                            else:
+                                self._finalize_acceptance(repository, parent)
                 work.commit()
 
     def _capture_diff(self, repository: PostgresAgentRunRepository, spec: AgentRunSpec) -> None:

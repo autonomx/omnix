@@ -96,6 +96,23 @@ class PostgresAgentRunRepository:
             updated_at=row[10],
         )
 
+    def list_children(self, parent_run_id: str) -> list[AgentRunSnapshot]:
+        rows = self.connection.execute(
+            """
+            SELECT run_id
+              FROM omnix_agent_runs
+             WHERE workspace_id = %s AND parent_run_id = %s
+             ORDER BY created_at, run_id
+            """,
+            (self.context.workspace_id, parent_run_id),
+        ).fetchall()
+        result: list[AgentRunSnapshot] = []
+        for row in rows:
+            snapshot = self.get_run(str(row[0]))
+            if snapshot is not None:
+                result.append(snapshot)
+        return result
+
     def update_state(
         self,
         run_id: str,

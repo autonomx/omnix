@@ -20,6 +20,7 @@ from .contracts import (
     WorkspaceSpec,
 )
 from .profiles import get_agent_profile, resolve_profile_capabilities
+from .subagents import ChildRunRequest
 from .service import AgentRunService, default_agent_run_service
 
 router = APIRouter(prefix="/api/agent-runs", tags=["agent-runtime"])
@@ -93,6 +94,16 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         return _service().start(spec)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"agent_start_failed:{type(exc).__name__}:{exc}") from exc
+
+
+@router.post("/{run_id}/children", response_model=AgentRunSnapshot)
+def start_child_agent_run(run_id: str, request: ChildRunRequest) -> AgentRunSnapshot:
+    try:
+        return _service().start_child(run_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/{run_id}", response_model=AgentRunSnapshot)

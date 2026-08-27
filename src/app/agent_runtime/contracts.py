@@ -14,6 +14,7 @@ AgentRunStatus = Literal[
     "pause_requested",
     "paused",
     "waiting_for_approval",
+    "waiting_for_children",
     "resume_requested",
     "cancel_requested",
     "cancelled",
