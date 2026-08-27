@@ -82,7 +82,13 @@ class AgentRunService:
                 raise ValueError("cannot start child from terminal parent")
             child_spec = derive_child_spec(parent, request)
             existing = repository.list_children(parent_run_id)
-            reserve_child_budget(parent, existing, child_spec)
+            parent_usage = repository.get_usage(parent_run_id)
+            reserve_child_budget(
+                parent,
+                existing,
+                child_spec,
+                parent_usage=parent_usage,
+            )
             issued = self._prepare_workspace(
                 self._bind_github_repository_authority(child_spec)
             )
