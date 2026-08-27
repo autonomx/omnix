@@ -14,6 +14,7 @@ from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payl
 from app.assistant_tools.models import AssistantToolRequest
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.unit_of_work import unit_of_work
 
 from .capabilities import default_capability_registry
@@ -21,6 +22,7 @@ from .interfaces import WorkflowRuntime
 from .workflows import (
     WORKFLOW_END,
     WorkflowDefinition,
+    WorkflowEvent,
     WorkflowRunSnapshot,
     WorkflowScheduleSnapshot,
     WorkflowStepDefinition,
@@ -51,6 +53,59 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         self._supervisor_started = False
         self._supervisor_lock = threading.Lock()
         self._supervisor_stop = threading.Event()
+
+    def _append_event(
+        self,
+        connection,
+        event: WorkflowEvent,
+    ) -> WorkflowEvent:
+        locked = connection.execute(
+            """
+            SELECT revision
+              FROM omnix_workflow_runs
+             WHERE workspace_id = %s AND run_id = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, event.run_id),
+        ).fetchone()
+        if locked is None:
+            raise KeyError(event.run_id)
+        row = connection.execute(
+            """
+            SELECT COALESCE(MAX(sequence), 0) + 1
+              FROM omnix_workflow_run_events
+             WHERE workspace_id = %s AND run_id = %s
+            """,
+            (self.context.workspace_id, event.run_id),
+        ).fetchone()
+        stored = event.model_copy(update={"sequence": int(row[0])})
+        connection.execute(
+            """
+            INSERT INTO omnix_workflow_run_events (
+                workspace_id, run_id, sequence, event_id,
+                event_type, payload, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)
+            """,
+            (
+                self.context.workspace_id,
+                stored.run_id,
+                stored.sequence,
+                stored.event_id,
+                stored.event_type,
+                _json(stored.payload),
+                stored.created_at,
+            ),
+        )
+        PostgresOutboxRepository(connection).append(
+            self.context,
+            aggregate_type="workflow_run",
+            aggregate_id=stored.run_id,
+            event_type=stored.event_type,
+            payload=stored.model_dump(mode="json"),
+            ordering_key=f"workflow:{stored.run_id}",
+            event_key=f"workflow:{stored.event_id}",
+        )
+        return stored
 
     def register(self, definition: WorkflowDefinition) -> WorkflowDefinition:
         self._validate_definition_capabilities(definition)
@@ -214,6 +269,41 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             work.commit()
         self._advance(run_id)
         return run_id
+
+    def stream_events(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int = 0,
+    ) -> list[WorkflowEvent]:
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """
+                SELECT event_id, sequence, event_type, payload, created_at
+                  FROM omnix_workflow_run_events
+                 WHERE workspace_id = %s AND run_id = %s
+                   AND sequence > %s
+                 ORDER BY sequence
+                 LIMIT 5000
+                """,
+                (
+                    self.context.workspace_id,
+                    run_id,
+                    max(0, int(after_sequence)),
+                ),
+            ).fetchall()
+            work.rollback()
+        return [
+            WorkflowEvent(
+                event_id=str(row[0]),
+                run_id=run_id,
+                sequence=int(row[1]),
+                event_type=str(row[2]),
+                payload=dict(row[3] or {}),
+                created_at=row[4],
+            )
+            for row in rows
+        ]
 
     def list_runs(
         self,
