@@ -40,3 +40,21 @@ CREATE TABLE IF NOT EXISTS omnix_workflow_schedule_fires (
 CREATE INDEX IF NOT EXISTS idx_omnix_workflow_schedule_fires_pending
     ON omnix_workflow_schedule_fires (workspace_id, status, created_at)
     WHERE status = 'pending';
+
+
+CREATE TABLE IF NOT EXISTS omnix_workflow_run_events (
+    workspace_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    sequence BIGINT NOT NULL CHECK (sequence >= 1),
+    event_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (workspace_id, run_id, sequence),
+    UNIQUE (workspace_id, event_id),
+    FOREIGN KEY (workspace_id, run_id)
+        REFERENCES omnix_workflow_runs(workspace_id, run_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_omnix_workflow_run_events_created
+    ON omnix_workflow_run_events (workspace_id, run_id, created_at, sequence);
