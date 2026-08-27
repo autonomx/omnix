@@ -299,7 +299,7 @@ def _agent_result(
                 description="Complete the user's requested task and report verifiable evidence.",
             )
         ],
-expected_artifacts=(
+        expected_artifacts=(
             ["diff"]
             if any(
                 capability in {"workspace.edit", "workspace.write"}
