@@ -97,3 +97,49 @@ def test_agent_budgets_are_durable_and_fail_closed() -> None:
         assert usage["output_tokens"] == 5
     finally:
         database.close()
+
+
+def test_parent_execution_budget_is_reduced_by_child_reservations() -> None:
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        parent_id = f"budget-parent-{uuid.uuid4().hex[:8]}"
+        child_id = f"budget-child-{uuid.uuid4().hex[:8]}"
+        parent_spec = AgentRunSpec(
+            run_id=parent_id,
+            task="parent",
+            model=ModelRef(provider_id="lmstudio", model_id="test"),
+            limits=RunLimits(
+                max_steps=2,
+                max_tool_calls=4,
+                max_tokens=20,
+            ),
+        )
+        child_spec = AgentRunSpec(
+            run_id=child_id,
+            parent_run_id=parent_id,
+            task="child",
+            model=ModelRef(provider_id="lmstudio", model_id="test"),
+            limits=RunLimits(
+                max_steps=1,
+                max_tool_calls=1,
+                max_tokens=5,
+            ),
+        )
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            parent = repository.create_run(parent_spec)
+            repository.update_state(
+                parent_id,
+                expected_revision=parent.revision,
+                status="running",
+            )
+            repository.create_run(child_spec)
+            work.commit()
+
+        manager = AgentBudgetManager(database, context=context)
+        manager.authorize_model_call(parent_id, provider_id="lmstudio")
+        with pytest.raises(AgentBudgetError, match="budget_max_steps_exceeded"):
+            manager.authorize_model_call(parent_id, provider_id="lmstudio")
+    finally:
+        database.close()
