@@ -119,6 +119,12 @@ TTS_CHUNK_SIZE = 6  # ~0.5s (12000 samples at 24kHz) for stable streaming
 TTS_MIN_CHARS = 25  # Start TTS after this many chars
 TTS_MAX_CHARS = 80  # Max chars per TTS chunk
 LLM_MAX_TOKENS = 60  # Max tokens before forcing TTS
+_STREAM_END = object()
+
+
+def _next_stream_chunk(stream: Any) -> Any:
+    """Pull one blocking provider stream item without leaking StopIteration."""
+    return next(stream, _STREAM_END)
 
 
 # ============== GLOBAL STATE ==============
@@ -630,10 +636,11 @@ async def _process_conversation(session: ConversationSession, user_text: str):
     session.tts_abort = False
     
     try:
-        # Get conversation history
+        # Get the latest persisted conversation history without blocking the event loop.
         messages = []
-        if session.session_id in shared.sessions_data:
-            raw_messages = shared.sessions_data[session.session_id].get('messages', [])
+        persisted_sessions = await asyncio.to_thread(shared.load_sessions)
+        if session.session_id in persisted_sessions:
+            raw_messages = persisted_sessions[session.session_id].get('messages', [])
             for msg in raw_messages:
                 if isinstance(msg, dict):
                     messages.append(ChatMessage(role=msg.get('role', 'user'), content=msg.get('content', '')))
@@ -650,17 +657,18 @@ async def _process_conversation(session: ConversationSession, user_text: str):
         
         start_time = time.time()
         
-        # Stream from LLM
+        # Stream from the blocking provider iterator one chunk at a time off-loop.
         stream_generator = provider.chat_completion(
             messages=messages,
             model=provider.config.model,
             stream=True
         )
-        
+
         first_token_time = None
-        
-        for response_chunk in stream_generator:
-            if session.stop_requested:
+
+        while True:
+            response_chunk = await asyncio.to_thread(_next_stream_chunk, stream_generator)
+            if response_chunk is _STREAM_END or session.stop_requested:
                 break
                 
             content = response_chunk.content if hasattr(response_chunk, 'content') else str(response_chunk)
@@ -776,19 +784,22 @@ async def _process_conversation(session: ConversationSession, user_text: str):
                 "total_time": total_ms
             })
         
-        # Save to history
-        if session.session_id in shared.sessions_data:
-            # Save user message
-            shared.sessions_data[session.session_id]['messages'].append({
-                "role": "user", 
-                "content": user_text
+        # Save to history through the atomic legacy-document mutation path.
+        def append_turn(current_sessions: Dict[str, Any]) -> None:
+            current = current_sessions.get(session.session_id)
+            if current is None:
+                return
+            current.setdefault('messages', []).append({
+                "role": "user",
+                "content": user_text,
             })
-            # Save assistant message
-            shared.sessions_data[session.session_id]['messages'].append({
-                "role": "assistant", 
-                "content": buffer
+            current['messages'].append({
+                "role": "assistant",
+                "content": buffer,
             })
-            shared.save_sessions(shared.sessions_data)
+            current['updated_at'] = datetime.now().isoformat()
+
+        await asyncio.to_thread(shared.update_sessions, append_turn)
             
     except Exception as e:
         import traceback
@@ -913,10 +924,10 @@ async def get_openrouter_models():
 @app.get("/api/sessions")
 async def get_sessions():
     """Get all sessions"""
-    shared.sessions_data = shared.load_sessions()
+    sessions_data = await asyncio.to_thread(shared.load_sessions)
     sl = sorted(
-        [{'id': k, 'title': v.get('title', 'New Chat'), 'updated_at': v.get('updated_at', '')} 
-         for k, v in shared.sessions_data.items()],
+        [{'id': k, 'title': v.get('title', 'New Chat'), 'updated_at': v.get('updated_at', '')}
+         for k, v in sessions_data.items()],
         key=lambda x: x['updated_at'],
         reverse=True
     )
@@ -926,53 +937,66 @@ async def get_sessions():
 @app.post("/api/sessions")
 async def create_session():
     """Create new session"""
-    shared.sessions_data = shared.load_sessions()
     sid = str(uuid.uuid4())[:8]
-    shared.sessions_data[sid] = {
-        'title': 'New Chat',
-        'messages': [],
-        'system_prompt': shared.get_global_system_prompt(),
-        'created_at': datetime.now().isoformat(),
-        'updated_at': datetime.now().isoformat()
-    }
-    shared.save_sessions(shared.sessions_data)
+    now = datetime.now().isoformat()
+    system_prompt = shared.get_global_system_prompt()
+
+    def create(current_sessions: Dict[str, Any]) -> None:
+        current_sessions[sid] = {
+            'title': 'New Chat',
+            'messages': [],
+            'system_prompt': system_prompt,
+            'created_at': now,
+            'updated_at': now,
+        }
+
+    await asyncio.to_thread(shared.update_sessions, create)
     return {"success": True, "session_id": sid}
 
 
 @app.get("/api/sessions/{session_id}")
 async def get_session(session_id: str):
     """Get session by ID"""
-    shared.sessions_data = shared.load_sessions()
-    if session_id not in shared.sessions_data:
+    sessions_data = await asyncio.to_thread(shared.load_sessions)
+    if session_id not in sessions_data:
         raise HTTPException(status_code=404, detail="Not found")
-    return {"success": True, "session": shared.sessions_data[session_id]}
+    return {"success": True, "session": sessions_data[session_id]}
 
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Delete session"""
-    shared.sessions_data = shared.load_sessions()
-    if session_id not in shared.sessions_data:
+    def delete(current_sessions: Dict[str, Any]) -> bool:
+        if session_id not in current_sessions:
+            return False
+        del current_sessions[session_id]
+        return True
+
+    deleted = await asyncio.to_thread(shared.update_sessions, delete)
+    if not deleted:
         raise HTTPException(status_code=404, detail="Not found")
-    del shared.sessions_data[session_id]
-    shared.save_sessions(shared.sessions_data)
     return {"success": True}
 
 
 @app.put("/api/sessions/{session_id}")
 async def update_session(session_id: str, request: Request):
     """Update session"""
-    shared.sessions_data = shared.load_sessions()
-    if session_id not in shared.sessions_data:
-        raise HTTPException(status_code=404, detail="Not found")
-    
     data = await request.json()
-    if 'title' in data:
-        shared.sessions_data[session_id]['title'] = data['title']
-    if 'system_prompt' in data:
-        shared.sessions_data[session_id]['system_prompt'] = data['system_prompt']
-    shared.sessions_data[session_id]['updated_at'] = datetime.now().isoformat()
-    shared.save_sessions(shared.sessions_data)
+
+    def update(current_sessions: Dict[str, Any]) -> bool:
+        current = current_sessions.get(session_id)
+        if current is None:
+            return False
+        if 'title' in data:
+            current['title'] = data['title']
+        if 'system_prompt' in data:
+            current['system_prompt'] = data['system_prompt']
+        current['updated_at'] = datetime.now().isoformat()
+        return True
+
+    updated = await asyncio.to_thread(shared.update_sessions, update)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Not found")
     return {"success": True}
 
 
@@ -1354,11 +1378,15 @@ async def clear_session(request: Request):
     """Clear session messages"""
     data = await request.json()
     sid = data.get('session_id', 'default')
-    shared.sessions_data = shared.load_sessions()
-    if sid in shared.sessions_data:
-        shared.sessions_data[sid]['messages'] = []
-        shared.sessions_data[sid]['updated_at'] = datetime.now().isoformat()
-        shared.save_sessions(shared.sessions_data)
+
+    def clear(current_sessions: Dict[str, Any]) -> None:
+        current = current_sessions.get(sid)
+        if current is None:
+            return
+        current['messages'] = []
+        current['updated_at'] = datetime.now().isoformat()
+
+    await asyncio.to_thread(shared.update_sessions, clear)
     return {"success": True}
 
 
