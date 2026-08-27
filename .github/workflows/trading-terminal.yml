@@ -32,7 +32,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   trading-terminal:
@@ -103,19 +103,5 @@ jobs:
             src/apps/web/src/api/generated/types.ts
           if-no-files-found: error
           retention-days: 7
-      - name: Sync generated API contract to PR branch
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          if git diff --quiet -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts; then
-            echo "Generated API contract is already current."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
-          git commit -m "chore: sync generated gateway API contract"
-          git push origin HEAD:${{ github.head_ref }}
-
       - name: Verify generated API contract is committed
         run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
