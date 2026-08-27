@@ -592,7 +592,8 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             row = work.connection.execute(
                 """
                 SELECT workflow_id, workflow_version, status, current_step_id,
-                       input_payload, revision
+                       input_payload, revision, last_error,
+                       created_at, updated_at, completed_at
                   FROM omnix_workflow_runs
                  WHERE workspace_id = %s AND run_id = %s
                 """,
@@ -609,6 +610,10 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             current_step_id=str(row[3]) if row[3] else None,
             input_payload=dict(row[4] or {}),
             revision=int(row[5]),
+            last_error=str(row[6]) if row[6] else None,
+            created_at=row[7],
+            updated_at=row[8],
+            completed_at=row[9],
         ).model_dump(mode="json")
 
     def _advance(self, run_id: str) -> None:
