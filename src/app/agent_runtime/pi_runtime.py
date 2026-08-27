@@ -81,6 +81,9 @@ def build_agent_environment(
                 "OMNIX_AGENT_BROKER_URL",
                 "http://127.0.0.1:8000/api/agent-runs",
             ),
+            "OMNIX_AGENT_LOCAL_CAPABILITIES": json.dumps(
+                spec.capabilities
+            ),
             "OMNIX_AGENT_EXTERNAL_CAPABILITIES": json.dumps(
                 spec.external_capabilities
             ),
@@ -140,6 +143,8 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
         "workspace.list": "ls",
         "workspace.command": "powershell" if os.name == "nt" else "bash",
         "workspace.test": "powershell" if os.name == "nt" else "bash",
+        "workspace.git_status": "powershell" if os.name == "nt" else "bash",
+        "workspace.git_diff": "powershell" if os.name == "nt" else "bash",
     }
     tools = sorted({tool for capability, tool in mapping.items() if capability in spec.capabilities})
     if tools:
