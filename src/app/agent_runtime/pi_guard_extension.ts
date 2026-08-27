@@ -69,8 +69,14 @@ function commandScopeAllowed(command: string): boolean {
   const tokens = command.match(/"[^"]*"|\'[^\']*\'|\S+/g) || [];
   for (const rawToken of tokens.slice(1)) {
     let token = rawToken.replace(/^["\']|["\']$/g, "");
-    if (!token || token.startsWith("-")) continue;
-    if (token.includes("=")) token = token.split("=", 2)[1] || "";
+    if (!token) continue;
+    const equalsIndex = token.indexOf("=");
+    if (token.startsWith("-")) {
+      if (equalsIndex < 0) continue;
+      token = token.slice(equalsIndex + 1);
+    } else if (equalsIndex >= 0) {
+      token = token.slice(equalsIndex + 1);
+    }
     if (!token) continue;
     const normalized = token.replace(/\\/g, "/");
     if (normalized === ".." || normalized.startsWith("../") || normalized.includes("/../")) return false;
