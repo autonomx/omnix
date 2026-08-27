@@ -200,6 +200,11 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
 
     def pause(self, run_id: str) -> None:
         self._ensure_supervisor()
+        state = self.get_status(run_id)
+        if state is None:
+            raise KeyError(run_id)
+        if state["status"] in {"completed", "failed", "cancelled"}:
+            return
         self._set_status(run_id, "paused")
 
     def resume(self, run_id: str) -> None:
@@ -214,6 +219,11 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
 
     def cancel(self, run_id: str) -> None:
         self._ensure_supervisor()
+        state = self.get_status(run_id)
+        if state is None:
+            raise KeyError(run_id)
+        if state["status"] in {"completed", "failed", "cancelled"}:
+            return
         self._set_status(run_id, "cancelled")
 
     def approve(self, run_id: str, step_id: str) -> None:
