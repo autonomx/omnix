@@ -14,6 +14,7 @@ from typing import Any
 
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from .interfaces import AgentRuntime
+from .isolation import launch_agent_process
 
 
 class PiRuntimeError(RuntimeError):
@@ -120,7 +121,7 @@ class PiRpcSession:
         *,
         pi_path: str = "pi",
         on_event: Callable[[AgentEvent], None] | None = None,
-        process_factory: Callable[..., subprocess.Popen[str]] = subprocess.Popen,
+        process_factory: Callable[..., subprocess.Popen[str]] | None = None,
     ) -> None:
         if spec.workspace is None:
             raise PiRuntimeError("Pi runtime requires an issued workspace")
@@ -150,18 +151,22 @@ class PiRpcSession:
             "OMNIX_AGENT_EXTERNAL_CAPABILITIES": json.dumps(spec.external_capabilities),
             "OMNIX_AGENT_REASONING_EFFORT": spec.model.reasoning_effort or "",
         }
-        self.process = process_factory(
-            pi_rpc_argv(spec, pi_path=pi_path),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=str(cwd),
-            env=env,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-        )
+        argv = pi_rpc_argv(spec, pi_path=pi_path)
+        if process_factory is not None:
+            self.process = process_factory(
+                argv,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(cwd),
+                env=env,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+            )
+        else:
+            self.process = launch_agent_process(spec, argv=argv, cwd=cwd, env=env)
         self._reader = threading.Thread(target=self._read_stdout, name=f"pi-rpc-{spec.run_id[:8]}", daemon=True)
         self._stderr = deque(maxlen=200)
         self._stderr_reader = threading.Thread(target=self._read_stderr, name=f"pi-stderr-{spec.run_id[:8]}", daemon=True)

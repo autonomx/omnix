@@ -35,6 +35,7 @@ class StartAgentRunRequest(BaseModel):
     repository: str | None = None
     workspace_root: str | None = None
     base_ref: str = "main"
+    isolation_policy: str = "supervised_worktree"
     capabilities: list[str] | None = None
     external_capabilities: list[str] | None = None
     success_criteria: list[str] = Field(default_factory=list)
@@ -76,8 +77,11 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         external_capabilities=issued_external,
         context_sources=list(profile.context_sources),
         workspace=(
-            WorkspaceSpec(root=str(root), repository=request.repository, base_ref=request.base_ref)
-            if root else None
+            WorkspaceSpec(
+                root=str(root), repository=request.repository, base_ref=request.base_ref,
+                isolation_policy=request.isolation_policy,
+            )
+            if root else WorkspaceSpec(root=".", isolation_policy=request.isolation_policy, allowed_paths=[])
         ),
         success_criteria=[
             SuccessCriterion(id=f"criterion-{index + 1}", description=value)
