@@ -9,7 +9,8 @@ from app.agent_runtime.broker_api import (
     BrokerCapabilityRequest,
     _bind_authoritative_capability_input,
 )
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.agent_runtime.contracts import AgentRunSpec, ModelRef, ResourceScope, WorkspaceSpec
+from app.agent_runtime.service import AgentRunService
 from app.assistant_tools.models import AssistantToolRequest
 from app.assistant_tools.repo_adapter import (
     FakeRepositoryRuntimeAdapter,
@@ -114,3 +115,56 @@ def test_github_remote_parser_binds_repository_identity(remote: str) -> None:
 def test_non_github_remote_is_rejected() -> None:
     with pytest.raises(ValueError):
         _github_repository_from_remote("https://example.com/autonomx/omnix.git")
+
+
+def test_service_automatically_scopes_github_authority_to_workspace_origin(monkeypatch) -> None:
+    monkeypatch.setattr(
+        AgentRunService,
+        "_github_origin_repository",
+        staticmethod(lambda _repository: "autonomx/omnix"),
+    )
+    spec = AgentRunSpec(
+        run_id="run-scope",
+        task="Publish prepared change",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(
+            root="/local/omnix",
+            repository="/local/omnix",
+        ),
+        external_capabilities=["github.create_pr", "github.merge_pr"],
+    )
+    bound = AgentRunService._bind_github_repository_authority(spec)
+    assert {
+        (scope.capability, scope.resource_type, scope.resource_id)
+        for scope in bound.resource_scopes
+    } == {
+        ("github.create_pr", "repository", "autonomx/omnix"),
+        ("github.merge_pr", "repository", "autonomx/omnix"),
+    }
+
+
+def test_service_rejects_github_scope_for_different_repository(monkeypatch) -> None:
+    monkeypatch.setattr(
+        AgentRunService,
+        "_github_origin_repository",
+        staticmethod(lambda _repository: "autonomx/omnix"),
+    )
+    spec = AgentRunSpec(
+        run_id="run-scope",
+        task="Publish prepared change",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(
+            root="/local/omnix",
+            repository="/local/omnix",
+        ),
+        external_capabilities=["github.create_pr"],
+        resource_scopes=[
+            ResourceScope(
+                capability="github.create_pr",
+                resource_type="repository",
+                resource_id="someone/else",
+            )
+        ],
+    )
+    with pytest.raises(ValueError, match="exceeds issued repository"):
+        AgentRunService._bind_github_repository_authority(spec)
