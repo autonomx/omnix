@@ -1,6 +1,7 @@
 """PostgreSQL-backed deterministic WorkflowRuntime."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from functools import lru_cache
 import json
 import uuid
@@ -13,7 +14,7 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .interfaces import WorkflowRuntime
-from .workflows import WorkflowDefinition, WorkflowRunSnapshot, WorkflowStepDefinition
+from .workflows import WORKFLOW_END, WorkflowDefinition, WorkflowRunSnapshot, WorkflowStepDefinition
 
 
 class WorkflowRuntimeError(RuntimeError):
@@ -47,16 +48,24 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 ON CONFLICT (workspace_id, workflow_id, version) DO UPDATE
                    SET name = EXCLUDED.name, definition = EXCLUDED.definition
                 """,
-                (
-                    self.context.workspace_id,
-                    definition.id,
-                    definition.version,
-                    definition.name,
-                    _json(definition),
-                ),
+                (self.context.workspace_id, definition.id, definition.version, definition.name, _json(definition)),
             )
             work.commit()
         return definition
+
+    def list_definitions(self) -> list[WorkflowDefinition]:
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """
+                SELECT DISTINCT ON (workflow_id) definition
+                  FROM omnix_workflow_definitions
+                 WHERE workspace_id = %s AND active
+                 ORDER BY workflow_id, version DESC
+                """,
+                (self.context.workspace_id,),
+            ).fetchall()
+            work.rollback()
+        return [WorkflowDefinition.model_validate(row[0]) for row in rows]
 
     def lookup(self, name_or_id: str) -> str | None:
         value = str(name_or_id or "").strip().casefold()
@@ -97,7 +106,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 INSERT INTO omnix_workflow_runs (
                     workspace_id, run_id, workflow_id, workflow_version,
                     input_payload, status, current_step_id, idempotency_key
-                ) VALUES (%s, %s, %s, %s, %s::jsonb, 'queued', %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s)
                 """,
                 (
                     self.context.workspace_id,
@@ -105,6 +114,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     definition.id,
                     definition.version,
                     _json(input_payload),
+                    "running" if definition.steps else "completed",
                     definition.steps[0].id if definition.steps else None,
                     idempotency_key,
                 ),
@@ -126,6 +136,11 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         self._set_status(run_id, "paused")
 
     def resume(self, run_id: str) -> None:
+        state = self.get_status(run_id)
+        if state is None:
+            raise KeyError(run_id)
+        if state["status"] in {"completed", "failed", "cancelled"}:
+            return
         self._set_status(run_id, "running")
         self._advance(run_id)
 
@@ -133,29 +148,60 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         self._set_status(run_id, "cancelled")
 
     def approve(self, run_id: str, step_id: str) -> None:
-        with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """
-                UPDATE omnix_workflow_step_runs
-                   SET status = 'approved'
-                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
-                   AND status = 'waiting_for_approval'
-                RETURNING step_id
-                """,
-                (self.context.workspace_id, run_id, step_id),
-            ).fetchone()
-            if row is None:
-                raise WorkflowRuntimeError("workflow step is not waiting for approval")
-            work.connection.execute(
-                """
-                UPDATE omnix_workflow_runs
-                   SET status = 'running', revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (self.context.workspace_id, run_id),
-            )
-            work.commit()
+        self._resolve_approval(run_id, step_id, approved=True)
         self._advance(run_id)
+
+    def reject(self, run_id: str, step_id: str) -> None:
+        self._resolve_approval(run_id, step_id, approved=False)
+
+    def _resolve_approval(self, run_id: str, step_id: str, *, approved: bool) -> None:
+        with unit_of_work(self.database) as work:
+            if approved:
+                row = work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_step_runs
+                       SET status = 'approved'
+                     WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                       AND status = 'waiting_for_approval'
+                    RETURNING step_id
+                    """,
+                    (self.context.workspace_id, run_id, step_id),
+                ).fetchone()
+                if row is None:
+                    raise WorkflowRuntimeError("workflow step is not waiting for approval")
+                work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_runs
+                       SET status = 'running', revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND run_id = %s
+                    """,
+                    (self.context.workspace_id, run_id),
+                )
+            else:
+                row = work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_step_runs
+                       SET status = 'failed', last_error = 'approval_rejected',
+                           completed_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                       AND status = 'waiting_for_approval'
+                    RETURNING step_id
+                    """,
+                    (self.context.workspace_id, run_id, step_id),
+                ).fetchone()
+                if row is None:
+                    raise WorkflowRuntimeError("workflow step is not waiting for approval")
+                work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_runs
+                       SET status = 'cancelled', last_error = 'approval_rejected',
+                           revision = revision + 1, updated_at = CURRENT_TIMESTAMP,
+                           completed_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND run_id = %s
+                    """,
+                    (self.context.workspace_id, run_id),
+                )
+            work.commit()
 
     def get_status(self, run_id: str) -> dict[str, object] | None:
         with unit_of_work(self.database) as work:
@@ -184,55 +230,104 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
     def _advance(self, run_id: str) -> None:
         while True:
             state = self.get_status(run_id)
-            if state is None or state["status"] in {"paused", "cancelled", "completed", "failed", "waiting_for_approval"}:
+            if state is None or state["status"] in {
+                "paused", "cancelled", "completed", "failed", "waiting_for_approval"
+            }:
                 return
             definition = self._definition(str(state["workflow_id"]), version=int(state["workflow_version"]))
             if definition is None:
                 self._set_status(run_id, "failed", error="workflow_definition_missing")
                 return
-            step_row = self._current_step(run_id)
+            current_step_id = str(state.get("current_step_id") or "")
+            if not current_step_id:
+                self._finish(run_id)
+                return
+            step = next((item for item in definition.steps if item.id == current_step_id), None)
+            if step is None:
+                self._set_status(run_id, "failed", error="workflow_current_step_missing")
+                return
+            step_row = self._step_state(run_id, step.id)
             if step_row is None:
-                self._set_status(run_id, "completed")
+                self._set_status(run_id, "failed", error="workflow_step_state_missing")
                 return
-            step = next(item for item in definition.steps if item.id == step_row["step_id"])
-            if step.requires_approval and step_row["status"] not in {"approved", "running"}:
-                self._set_step_status(run_id, step.id, "waiting_for_approval")
-                self._set_status(run_id, "waiting_for_approval")
+
+            approval_required = step.kind == "approval" or step.requires_approval
+            if approval_required and step_row["status"] not in {"approved", "running"}:
+                if step_row["status"] == "pending":
+                    self._set_waiting_for_approval(run_id, step.id)
                 return
+
+            claimed = self._claim_step(run_id, step.id)
+            if claimed is None:
+                # Another worker/thread owns this side-effecting step.
+                return
+            attempts = claimed
             try:
-                result = self._execute_step(run_id, step, state["input_payload"], approved=step_row["status"] == "approved")
+                context = self._context(run_id, dict(state["input_payload"]))
+                result = self._execute_with_timeout(
+                    run_id,
+                    step,
+                    context,
+                    approved=approval_required,
+                )
             except Exception as exc:
-                attempts = int(step_row["attempts"]) + 1
-                if attempts <= step.retry_limit:
-                    self._set_step_status(run_id, step.id, "pending", error=str(exc), attempts=attempts)
+                message = str(exc)[:1000]
+                unknown_outcome = message.startswith("step_timeout_outcome_unknown")
+                if not unknown_outcome and attempts <= step.retry_limit:
+                    self._set_step_retry(run_id, step.id, message)
                     continue
-                self._set_step_status(run_id, step.id, "failed", error=str(exc), attempts=attempts)
-                self._set_status(run_id, "failed", error=str(exc))
+                self._set_step_failed(run_id, step.id, message)
+                self._set_status(run_id, "failed", error=message)
                 return
-            self._set_step_status(run_id, step.id, "completed", result=result, attempts=int(step_row["attempts"]) + 1)
-            self._select_next(run_id)
+
+            self._set_step_completed(run_id, step.id, result)
+            target = self._next_target(definition, step, result)
+            self._transition(run_id, target)
+
+    def _execute_with_timeout(
+        self,
+        run_id: str,
+        step: WorkflowStepDefinition,
+        context: dict[str, Any],
+        *,
+        approved: bool,
+    ) -> dict[str, Any]:
+        if step.timeout_seconds is None:
+            return self._execute_step(run_id, step, context, approved=approved)
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"workflow-{step.id[:16]}")
+        future = executor.submit(self._execute_step, run_id, step, context, approved=approved)
+        try:
+            return future.result(timeout=step.timeout_seconds)
+        except FutureTimeout as exc:
+            future.cancel()
+            raise WorkflowRuntimeError(
+                f"step_timeout_outcome_unknown:{step.id}:{step.timeout_seconds}s"
+            ) from exc
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
 
     def _execute_step(
         self,
         run_id: str,
         step: WorkflowStepDefinition,
-        input_payload: dict[str, Any],
+        context: dict[str, Any],
         *,
         approved: bool,
     ) -> dict[str, Any]:
         if step.kind == "condition":
-            return {"condition": step.condition, "matched": self._condition(step.condition, input_payload)}
+            return {
+                "condition": step.condition,
+                "matched": self._condition(step.condition, context),
+            }
         if step.kind == "approval":
             return {"approved": approved}
-        if not step.capability_id:
-            raise WorkflowRuntimeError("capability step has no capability_id")
-        namespace = step.capability_id.split(".", 1)[0]
+        namespace = str(step.capability_id).split(".", 1)[0]
         request = AssistantToolRequest(
             tool_id=namespace,
-            action_id=step.capability_id,
+            action_id=str(step.capability_id),
             session_id=f"workflow:{run_id}",
             proposal_id=f"workflow:{run_id}:{step.id}",
-            input=self._render_input(step.input_template, input_payload),
+            input=self._render_input(step.input_template, context),
             approved=approved,
         )
         payload = self.capability_executor(f"workflow:{run_id}", request)
@@ -241,25 +336,226 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             raise WorkflowRuntimeError(execution.error)
         return execution.model_dump(mode="json")
 
-    @staticmethod
-    def _render_input(template: dict[str, Any], input_payload: dict[str, Any]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in template.items():
-            if isinstance(value, str) and value.startswith("$input."):
-                result[key] = input_payload.get(value.removeprefix("$input."))
-            else:
-                result[key] = value
-        return result
+    def _context(self, run_id: str, input_payload: dict[str, Any]) -> dict[str, Any]:
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """
+                SELECT step_id, result
+                  FROM omnix_workflow_step_runs
+                 WHERE workspace_id = %s AND run_id = %s AND result IS NOT NULL
+                 ORDER BY ordinal
+                """,
+                (self.context.workspace_id, run_id),
+            ).fetchall()
+            work.rollback()
+        return {
+            "input": input_payload,
+            "steps": {str(row[0]): dict(row[1] or {}) for row in rows},
+        }
+
+    @classmethod
+    def _render_input(cls, template: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+        return {key: cls._render_value(value, context) for key, value in template.items()}
+
+    @classmethod
+    def _render_value(cls, value: Any, context: dict[str, Any]) -> Any:
+        if isinstance(value, str) and value.startswith("$"):
+            return cls._lookup(context, value[1:])
+        if isinstance(value, list):
+            return [cls._render_value(item, context) for item in value]
+        if isinstance(value, dict):
+            return {key: cls._render_value(item, context) for key, item in value.items()}
+        return value
 
     @staticmethod
-    def _condition(expression: str | None, input_payload: dict[str, Any]) -> bool:
+    def _lookup(context: dict[str, Any], path: str) -> Any:
+        current: Any = context
+        for part in path.split("."):
+            if not part:
+                continue
+            if not isinstance(current, dict):
+                return None
+            current = current.get(part)
+        return current
+
+    @classmethod
+    def _condition(cls, expression: str | None, context: dict[str, Any]) -> bool:
         if not expression:
             return True
-        if "==" not in expression:
-            return bool(input_payload.get(expression.removeprefix("input.")))
-        left, right = [part.strip() for part in expression.split("==", 1)]
-        value = input_payload.get(left.removeprefix("input."))
-        return str(value).casefold() == right.strip("'\"").casefold()
+        if "!=" in expression:
+            left, right = [part.strip() for part in expression.split("!=", 1)]
+            return str(cls._lookup(context, left)).casefold() != right.strip("'\"").casefold()
+        if "==" in expression:
+            left, right = [part.strip() for part in expression.split("==", 1)]
+            return str(cls._lookup(context, left)).casefold() == right.strip("'\"").casefold()
+        return bool(cls._lookup(context, expression.strip()))
+
+    @staticmethod
+    def _next_target(
+        definition: WorkflowDefinition,
+        step: WorkflowStepDefinition,
+        result: dict[str, Any],
+    ) -> str | None:
+        if step.kind == "condition":
+            explicit = step.on_true_step_id if bool(result.get("matched")) else step.on_false_step_id
+            if explicit:
+                return None if explicit == WORKFLOW_END else explicit
+        if step.next_step_id:
+            return None if step.next_step_id == WORKFLOW_END else step.next_step_id
+        index = next(index for index, item in enumerate(definition.steps) if item.id == step.id)
+        return definition.steps[index + 1].id if index + 1 < len(definition.steps) else None
+
+    def _step_state(self, run_id: str, step_id: str) -> dict[str, Any] | None:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """
+                SELECT status, attempts
+                  FROM omnix_workflow_step_runs
+                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                """,
+                (self.context.workspace_id, run_id, step_id),
+            ).fetchone()
+            work.rollback()
+        return {"status": str(row[0]), "attempts": int(row[1])} if row else None
+
+    def _claim_step(self, run_id: str, step_id: str) -> int | None:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """
+                UPDATE omnix_workflow_step_runs
+                   SET status = 'running', attempts = attempts + 1,
+                       started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                       last_error = NULL
+                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                   AND status IN ('pending','approved')
+                RETURNING attempts
+                """,
+                (self.context.workspace_id, run_id, step_id),
+            ).fetchone()
+            work.commit()
+        return int(row[0]) if row else None
+
+    def _set_waiting_for_approval(self, run_id: str, step_id: str) -> None:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """
+                UPDATE omnix_workflow_step_runs
+                   SET status = 'waiting_for_approval'
+                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                   AND status = 'pending'
+                RETURNING step_id
+                """,
+                (self.context.workspace_id, run_id, step_id),
+            ).fetchone()
+            if row is not None:
+                work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_runs
+                       SET status = 'waiting_for_approval', revision = revision + 1,
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND run_id = %s
+                       AND current_step_id = %s
+                    """,
+                    (self.context.workspace_id, run_id, step_id),
+                )
+            work.commit()
+
+    def _set_step_retry(self, run_id: str, step_id: str, error: str) -> None:
+        with unit_of_work(self.database) as work:
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_step_runs
+                   SET status = 'pending', last_error = %s
+                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                   AND status = 'running'
+                """,
+                (error, self.context.workspace_id, run_id, step_id),
+            )
+            work.commit()
+
+    def _set_step_failed(self, run_id: str, step_id: str, error: str) -> None:
+        with unit_of_work(self.database) as work:
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_step_runs
+                   SET status = 'failed', last_error = %s, completed_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                """,
+                (error, self.context.workspace_id, run_id, step_id),
+            )
+            work.commit()
+
+    def _set_step_completed(self, run_id: str, step_id: str, result: dict[str, Any]) -> None:
+        with unit_of_work(self.database) as work:
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_step_runs
+                   SET status = 'completed', result = %s::jsonb, last_error = NULL,
+                       completed_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                   AND status = 'running'
+                """,
+                (_json(result), self.context.workspace_id, run_id, step_id),
+            )
+            work.commit()
+
+    def _transition(self, run_id: str, target: str | None) -> None:
+        if target is None:
+            self._finish(run_id)
+            return
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """
+                UPDATE omnix_workflow_runs
+                   SET current_step_id = %s, status = 'running',
+                       revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND run_id = %s
+                   AND status = 'running'
+                RETURNING run_id
+                """,
+                (target, self.context.workspace_id, run_id),
+            ).fetchone()
+            work.commit()
+        if row is None:
+            return
+
+    def _finish(self, run_id: str) -> None:
+        with unit_of_work(self.database) as work:
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_step_runs
+                   SET status = 'skipped', completed_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND run_id = %s AND status IN ('pending','approved')
+                """,
+                (self.context.workspace_id, run_id),
+            )
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_runs
+                   SET current_step_id = NULL, status = 'completed',
+                       revision = revision + 1, updated_at = CURRENT_TIMESTAMP,
+                       completed_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND run_id = %s
+                   AND status NOT IN ('failed','cancelled','completed')
+                """,
+                (self.context.workspace_id, run_id),
+            )
+            work.commit()
+
+    def _set_status(self, run_id: str, status: str, *, error: str | None = None) -> None:
+        terminal = status in {"completed", "failed", "cancelled"}
+        with unit_of_work(self.database) as work:
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_runs
+                   SET status = %s, last_error = %s, revision = revision + 1,
+                       updated_at = CURRENT_TIMESTAMP,
+                       completed_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE completed_at END
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (status, error, terminal, self.context.workspace_id, run_id),
+            )
+            work.commit()
 
     def _definition(self, workflow_id: str, *, version: int | None = None) -> WorkflowDefinition | None:
         with unit_of_work(self.database) as work:
@@ -282,94 +578,6 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 ).fetchone()
             work.rollback()
         return WorkflowDefinition.model_validate(row[0]) if row else None
-
-    def _current_step(self, run_id: str) -> dict[str, Any] | None:
-        with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """
-                SELECT step_id, status, attempts FROM omnix_workflow_step_runs
-                 WHERE workspace_id = %s AND run_id = %s
-                   AND status NOT IN ('completed','skipped')
-                 ORDER BY ordinal LIMIT 1
-                """,
-                (self.context.workspace_id, run_id),
-            ).fetchone()
-            work.rollback()
-        return {"step_id": str(row[0]), "status": str(row[1]), "attempts": int(row[2])} if row else None
-
-    def _set_status(self, run_id: str, status: str, *, error: str | None = None) -> None:
-        terminal = status in {"completed", "failed", "cancelled"}
-        with unit_of_work(self.database) as work:
-            work.connection.execute(
-                """
-                UPDATE omnix_workflow_runs
-                   SET status = %s, last_error = %s, revision = revision + 1,
-                       updated_at = CURRENT_TIMESTAMP,
-                       completed_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE completed_at END
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (status, error, terminal, self.context.workspace_id, run_id),
-            )
-            work.commit()
-
-    def _set_step_status(
-        self,
-        run_id: str,
-        step_id: str,
-        status: str,
-        *,
-        result: dict[str, Any] | None = None,
-        error: str | None = None,
-        attempts: int | None = None,
-    ) -> None:
-        with unit_of_work(self.database) as work:
-            work.connection.execute(
-                """
-                UPDATE omnix_workflow_step_runs
-                   SET status = %s, result = COALESCE(%s::jsonb, result),
-                       last_error = %s, attempts = COALESCE(%s, attempts),
-                       started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
-                       completed_at = CASE WHEN %s IN ('completed','failed','skipped') THEN CURRENT_TIMESTAMP ELSE completed_at END
-                 WHERE workspace_id = %s AND run_id = %s AND step_id = %s
-                """,
-                (
-                    status,
-                    _json(result) if result is not None else None,
-                    error,
-                    attempts,
-                    status,
-                    self.context.workspace_id,
-                    run_id,
-                    step_id,
-                ),
-            )
-            work.commit()
-
-    def _select_next(self, run_id: str) -> None:
-        with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """
-                SELECT step_id FROM omnix_workflow_step_runs
-                 WHERE workspace_id = %s AND run_id = %s AND status NOT IN ('completed','skipped')
-                 ORDER BY ordinal LIMIT 1
-                """,
-                (self.context.workspace_id, run_id),
-            ).fetchone()
-            work.connection.execute(
-                """
-                UPDATE omnix_workflow_runs
-                   SET current_step_id = %s, status = %s, revision = revision + 1,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (
-                    str(row[0]) if row else None,
-                    "running" if row else "completed",
-                    self.context.workspace_id,
-                    run_id,
-                ),
-            )
-            work.commit()
 
 
 @lru_cache(maxsize=1)
