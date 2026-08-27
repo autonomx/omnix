@@ -109,3 +109,69 @@ def test_workflow_versions_idempotency_and_stale_step_recovery() -> None:
     finally:
         runtime._supervisor_stop.set()
         database.close()
+
+
+def test_workflow_supervisor_resumes_completed_and_pending_safe_boundaries() -> None:
+    database = _database()
+    runtime = PostgresWorkflowRuntime(database)
+    suffix = uuid.uuid4().hex[:10]
+    try:
+        definition = WorkflowDefinition(
+            id=f"resume-safe-{suffix}",
+            version=1,
+            name="Resume safe boundary",
+            steps=[
+                WorkflowStepDefinition(
+                    id="first",
+                    kind="condition",
+                    condition="input.ready",
+                ),
+                WorkflowStepDefinition(
+                    id="second",
+                    kind="condition",
+                    condition="input.ready",
+                ),
+            ],
+        )
+        runtime.register(definition)
+        run_id = runtime.start(definition.id, {"ready": True})
+        assert runtime.get_status(run_id)["status"] == "completed"
+
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_runs
+                   SET status = 'running', current_step_id = 'first',
+                       completed_at = NULL
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (runtime.context.workspace_id, run_id),
+            )
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_step_runs
+                   SET status = CASE
+                       WHEN step_id = 'first' THEN 'completed'
+                       WHEN step_id = 'second' THEN 'pending'
+                       ELSE status
+                   END,
+                   worker_id = NULL, lease_expires_at = NULL,
+                   completed_at = CASE
+                       WHEN step_id = 'second' THEN NULL
+                       ELSE completed_at
+                   END
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (runtime.context.workspace_id, run_id),
+            )
+            work.commit()
+
+        runtime._supervise_once()
+
+        resumed = runtime.get_status(run_id)
+        assert resumed is not None
+        assert resumed["status"] == "completed"
+        assert resumed["current_step_id"] is None
+    finally:
+        runtime._supervisor_stop.set()
+        database.close()
