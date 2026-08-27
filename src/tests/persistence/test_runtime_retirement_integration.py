@@ -93,6 +93,12 @@ shared.save_settings({"provider": "lmstudio", "lmstudio": {"model": "runtime-mod
 assert shared.load_settings()["lmstudio"]["model"] == "runtime-model"
 shared.save_sessions({"legacy:runtime": {"title": "Runtime legacy route"}})
 assert shared.load_sessions()["legacy:runtime"]["title"] == "Runtime legacy route"
+
+def add_runtime_session(current):
+    current["legacy:mutated"] = {"title": "Transactional runtime route"}
+
+shared.update_sessions(add_runtime_session)
+assert shared.load_sessions()["legacy:mutated"]["title"] == "Transactional runtime route"
 assert shared.load_secrets() == {
     "api_keys": {
         "openrouter": "runtime-openrouter-key",
