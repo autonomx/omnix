@@ -179,6 +179,23 @@ def _review_with_run_policy(
     return overlay_request, overlay
 
 
+def _validate_execution_input(
+    request: BrokerCapabilityRequest,
+    stored: dict[str, Any],
+) -> None:
+    request_payload = stored.get("request_payload")
+    stored_input = (
+        request_payload.get("input")
+        if isinstance(request_payload, dict)
+        else None
+    )
+    if not isinstance(stored_input, dict) or stored_input != request.input:
+        raise HTTPException(
+            status_code=409,
+            detail="agent_execution_key_input_mismatch",
+        )
+
+
 def _stored_response(
     capability_id: str,
     execution_key: str,
@@ -268,6 +285,7 @@ def execute_agent_capability(
         )
         if stored["capability_id"] != canonical:
             raise HTTPException(status_code=409, detail="agent_execution_key_capability_mismatch")
+        _validate_execution_input(request, stored)
         if stored["state"] in {"completed", "failed"}:
             work.rollback()
             return _stored_response(canonical, execution_key, stored)
@@ -299,7 +317,14 @@ def execute_agent_capability(
                 canonical,
                 execution_key,
             )
-            approved = approval is not None and approval.state == "approved"
+            if approval is not None:
+                execution_key = _approved_execution_key(
+                    run_id,
+                    canonical,
+                    request,
+                    approval,
+                )
+                approved = approval.state == "approved"
 
         tool_request = AssistantToolRequest(
             tool_id=canonical.split(".", 1)[0],
