@@ -452,7 +452,15 @@ class AgentRunService:
                     pending = repository.list_pending_commands(run_id)
                     work.rollback()
                 for pending_command in pending:
-                    self.command(pending_command)
+                    current = self.command(pending_command)
+                    if current.status in {"completed", "failed", "cancelled"} or current.desired_state != "running":
+                        break
+                current = self.get(run_id)
+                if current is None:
+                    raise RuntimeError("recovered run disappeared")
+                if current.status in {"completed", "failed", "cancelled"} or current.desired_state != "running":
+                    recovered.append(run_id)
+                    continue
                 self.runtime.command(
                     AgentRunCommand(
                         run_id=run_id,
@@ -461,9 +469,39 @@ class AgentRunService:
                     )
                 )
                 recovered.append(run_id)
-            except Exception:
+            except Exception as exc:
+                self._fail_recovery(run_id, exc)
                 continue
         return recovered
+
+    def _fail_recovery(self, run_id: str, exc: Exception) -> None:
+        self.runtime.close_run(run_id)
+        with unit_of_work(self.database) as work:
+            locked = work.connection.execute(
+                """
+                SELECT run_id
+                  FROM omnix_agent_runs
+                 WHERE workspace_id = %s AND run_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, run_id),
+            ).fetchone()
+            if locked is None:
+                work.rollback()
+                return
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            current = repository.get_run(run_id)
+            if current is not None and current.status not in {"completed", "failed", "cancelled"}:
+                repository.update_state(
+                    run_id,
+                    expected_revision=current.revision,
+                    status="failed",
+                    desired_state="cancelled",
+                    worker_id=self.worker_id,
+                    last_error=f"recovery_failed:{type(exc).__name__}: {exc}"[:2000],
+                )
+                self._maybe_finalize_parent_in_repository(repository, run_id)
+            work.commit()
 
     def _ensure_supervisor(self) -> None:
         if self._supervisor_started:
