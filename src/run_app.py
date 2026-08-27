@@ -1346,7 +1346,8 @@ async def voice_studio_generate(request: Request):
         voice_clone_id = shared.custom_voices.get(clean_speaker, {}).get("voice_clone_id")
         final_speaker = voice_clone_id if voice_clone_id else clean_speaker
 
-        result = tts_generate_audio(
+        result = await asyncio.to_thread(
+            tts_generate_audio,
             text=text,
             speaker=final_speaker,
             language="en",
@@ -1988,10 +1989,11 @@ async def audiobook_generate(request: Request):
             final_speaker = vid if vid else v_name
 
             try:
-                result = tts_generate_audio(
+                result = await asyncio.to_thread(
+                    tts_generate_audio,
                     text=shared.remove_emojis(text),
                     speaker=final_speaker,
-                    language="en"
+                    language="en",
                 )
 
                 if result and result.get("success"):
@@ -2906,7 +2908,7 @@ async def chat_stream(request: Request):
 async def greeting(request: Request):
     """HTTP fallback for greeting"""
     try:
-        provider = _get_tts_provider()
+        provider = await asyncio.to_thread(_get_tts_provider)
         if not provider:
             return JSONResponse({"success": False, "error": "No TTS"}, status_code=503)
 
@@ -2915,9 +2917,19 @@ async def greeting(request: Request):
         greeting_text = "Hello! I'm listening. How can I help you today?"
         
         if hasattr(provider, 'generate_tts'):
-            result = provider.generate_tts(text=greeting_text, speaker=speaker, language="en")
+            result = await asyncio.to_thread(
+                provider.generate_tts,
+                text=greeting_text,
+                speaker=speaker,
+                language="en",
+            )
         else:
-            result = provider.generate_audio(text=greeting_text, speaker=speaker, language="en")
+            result = await asyncio.to_thread(
+                provider.generate_audio,
+                text=greeting_text,
+                speaker=speaker,
+                language="en",
+            )
         
         if result and result.get('success'):
             return {
@@ -3146,7 +3158,7 @@ async def stt_endpoint(request: Request):
 async def tts_endpoint(request: Request):
     """Standard TTS endpoint - returns complete audio."""
     try:
-        provider = _get_tts_provider()
+        provider = await asyncio.to_thread(_get_tts_provider)
         if not provider:
             return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
 
@@ -3158,9 +3170,19 @@ async def tts_endpoint(request: Request):
         final_speaker, language = resolve_speaker_tts(data)
 
         if hasattr(provider, "generate_tts"):
-            result = provider.generate_tts(text=text, speaker=final_speaker, language=language)
+            result = await asyncio.to_thread(
+                provider.generate_tts,
+                text=text,
+                speaker=final_speaker,
+                language=language,
+            )
         elif hasattr(provider, "generate_audio"):
-            result = provider.generate_audio(text=text, speaker=final_speaker, language=language)
+            result = await asyncio.to_thread(
+                provider.generate_audio,
+                text=text,
+                speaker=final_speaker,
+                language=language,
+            )
         else:
             return JSONResponse({"success": False, "error": "Provider missing TTS method"}, status_code=500)
 
@@ -3183,7 +3205,7 @@ async def tts_endpoint(request: Request):
 async def tts_stream_endpoint(request: Request):
     """Streaming TTS endpoint."""
     try:
-        provider = _get_tts_provider()
+        provider = await asyncio.to_thread(_get_tts_provider)
         if not provider:
             return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
 
@@ -3201,7 +3223,8 @@ async def tts_stream_endpoint(request: Request):
 
         async def generate():
             try:
-                for audio_chunk, sr, timing in provider.generate_audio_stream(
+                audio_stream = await asyncio.to_thread(
+                    provider.generate_audio_stream,
                     text=text,
                     speaker=final_speaker,
                     language=language,
@@ -3212,7 +3235,12 @@ async def tts_stream_endpoint(request: Request):
                     top_p=0.95,
                     append_silence=False,
                     max_new_tokens=1024,
-                ):
+                )
+                while True:
+                    item = await asyncio.to_thread(_next_stream_chunk, audio_stream)
+                    if item is _STREAM_END:
+                        break
+                    audio_chunk, sr, timing = item
                     if audio_chunk is not None and len(audio_chunk) > 0:
                         pcm_int16 = (audio_chunk * 32767).astype(np.int16).tobytes()
                         yield pcm_int16
@@ -3232,7 +3260,7 @@ async def tts_stream_sse_endpoint(request: Request):
     print("[TTS SSE] Request received")
 
     try:
-        provider = _get_tts_provider()
+        provider = await asyncio.to_thread(_get_tts_provider)
         if not provider:
             print("[TTS SSE] No TTS provider")
             return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
@@ -3271,7 +3299,8 @@ async def tts_stream_sse_endpoint(request: Request):
         async def generate():
             try:
                 print("[TTS SSE] Starting generation")
-                for audio_chunk, sr, timing in provider.generate_audio_stream(
+                audio_stream = await asyncio.to_thread(
+                    provider.generate_audio_stream,
                     text=text,
                     speaker=final_speaker,
                     language=language,
@@ -3282,7 +3311,12 @@ async def tts_stream_sse_endpoint(request: Request):
                     top_p=0.95,
                     append_silence=False,
                     max_new_tokens=1024,
-                ):
+                )
+                while True:
+                    item = await asyncio.to_thread(_next_stream_chunk, audio_stream)
+                    if item is _STREAM_END:
+                        break
+                    audio_chunk, sr, timing = item
                     if audio_chunk is not None and len(audio_chunk) > 0:
                         pcm_int16 = (audio_chunk * 32767).astype(np.int16)
                         audio_b64 = base64.b64encode(pcm_int16.tobytes()).decode("utf-8")
@@ -3527,14 +3561,14 @@ async def websocket_tts(websocket: WebSocket):
             # Reset abort flag for the new request
             abort_flag[0] = False
 
-            provider = _get_tts_provider()
+            provider = await asyncio.to_thread(_get_tts_provider)
             if not provider:
                 await websocket.send_json({"type": "error", "error": "No TTS provider loaded"})
                 await websocket.send_json({"type": "done"})
                 continue
 
             # Run TTS generation in a thread so we don't block the event loop
-            acquired = _ws_tts_semaphore.acquire(timeout=5)
+            acquired = await asyncio.to_thread(_ws_tts_semaphore.acquire, timeout=5)
             if not acquired:
                 await websocket.send_json({"type": "error", "error": "TTS busy"})
                 continue
