@@ -1,7 +1,7 @@
 """Deterministic workflow-domain contracts."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 import uuid
 
@@ -83,3 +83,16 @@ class WorkflowScheduleSnapshot(BaseModel):
     next_run_at: datetime | None = None
     enabled: bool = True
     last_enqueued_at: datetime | None = None
+
+
+class WorkflowEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    event_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    run_id: str
+    sequence: int | None = None
+    event_type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
