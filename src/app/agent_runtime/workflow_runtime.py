@@ -4,6 +4,8 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from functools import lru_cache
 import json
+import os
+import threading
 import uuid
 from typing import Any, Callable
 
@@ -13,6 +15,7 @@ from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
+from .capabilities import default_capability_registry
 from .interfaces import WorkflowRuntime
 from .workflows import WORKFLOW_END, WorkflowDefinition, WorkflowRunSnapshot, WorkflowStepDefinition
 
@@ -37,21 +40,70 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         self.database = database or default_database()
         self.context = bootstrap_local_tenant(self.database)
         self.capability_executor = capability_executor
+        self.worker_id = f"workflow:{os.getpid()}:{uuid.uuid4().hex[:12]}"
+        self._supervisor_started = False
+        self._supervisor_lock = threading.Lock()
+        self._supervisor_stop = threading.Event()
 
     def register(self, definition: WorkflowDefinition) -> WorkflowDefinition:
+        self._validate_definition_capabilities(definition)
         with unit_of_work(self.database) as work:
-            work.connection.execute(
+            inserted = work.connection.execute(
                 """
                 INSERT INTO omnix_workflow_definitions (
                     workspace_id, workflow_id, version, name, definition, active
                 ) VALUES (%s, %s, %s, %s, %s::jsonb, TRUE)
-                ON CONFLICT (workspace_id, workflow_id, version) DO UPDATE
-                   SET name = EXCLUDED.name, definition = EXCLUDED.definition
+                ON CONFLICT (workspace_id, workflow_id, version) DO NOTHING
+                RETURNING workflow_id
                 """,
-                (self.context.workspace_id, definition.id, definition.version, definition.name, _json(definition)),
-            )
+                (
+                    self.context.workspace_id,
+                    definition.id,
+                    definition.version,
+                    definition.name,
+                    _json(definition),
+                ),
+            ).fetchone()
+            if inserted is None:
+                row = work.connection.execute(
+                    """
+                    SELECT definition
+                      FROM omnix_workflow_definitions
+                     WHERE workspace_id = %s AND workflow_id = %s AND version = %s
+                    """,
+                    (self.context.workspace_id, definition.id, definition.version),
+                ).fetchone()
+                if row is None:
+                    raise WorkflowRuntimeError("workflow_version_conflict")
+                existing = WorkflowDefinition.model_validate(row[0])
+                if existing != definition:
+                    raise WorkflowRuntimeError(
+                        f"workflow_version_immutable:{definition.id}:v{definition.version}"
+                    )
+                work.rollback()
+                return existing
             work.commit()
         return definition
+
+    @staticmethod
+    def _validate_definition_capabilities(definition: WorkflowDefinition) -> None:
+        registry = default_capability_registry()
+        for step in definition.steps:
+            if step.kind != "capability":
+                continue
+            capability = registry.get(str(step.capability_id or ""))
+            if capability is None:
+                raise WorkflowRuntimeError(
+                    f"workflow_capability_unknown:{step.capability_id}"
+                )
+            if not capability.enabled:
+                raise WorkflowRuntimeError(
+                    f"workflow_capability_disabled:{capability.id}"
+                )
+            if capability.execution_zone != "broker":
+                raise WorkflowRuntimeError(
+                    f"workflow_capability_zone_unsupported:{capability.id}:{capability.execution_zone}"
+                )
 
     def list_definitions(self) -> list[WorkflowDefinition]:
         with unit_of_work(self.database) as work:
@@ -87,26 +139,21 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         return str(row[0]) if row else None
 
     def start(self, workflow_id: str, input_payload: dict[str, object]) -> str:
+        self._ensure_supervisor()
         definition = self._definition(workflow_id)
         if definition is None:
             raise KeyError(workflow_id)
         run_id = uuid.uuid4().hex
         idempotency_key = str(input_payload.get("idempotency_key") or "").strip() or None
         with unit_of_work(self.database) as work:
-            if idempotency_key:
-                existing = work.connection.execute(
-                    "SELECT run_id FROM omnix_workflow_runs WHERE workspace_id = %s AND idempotency_key = %s",
-                    (self.context.workspace_id, idempotency_key),
-                ).fetchone()
-                if existing:
-                    work.rollback()
-                    return str(existing[0])
-            work.connection.execute(
+            inserted = work.connection.execute(
                 """
                 INSERT INTO omnix_workflow_runs (
                     workspace_id, run_id, workflow_id, workflow_version,
                     input_payload, status, current_step_id, idempotency_key
                 ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+                ON CONFLICT (workspace_id, idempotency_key) DO NOTHING
+                RETURNING run_id
                 """,
                 (
                     self.context.workspace_id,
@@ -118,7 +165,26 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     definition.steps[0].id if definition.steps else None,
                     idempotency_key,
                 ),
-            )
+            ).fetchone()
+            if inserted is None:
+                if not idempotency_key:
+                    raise WorkflowRuntimeError("workflow_run_insert_conflict")
+                existing = work.connection.execute(
+                    """
+                    SELECT run_id, workflow_id
+                      FROM omnix_workflow_runs
+                     WHERE workspace_id = %s AND idempotency_key = %s
+                    """,
+                    (self.context.workspace_id, idempotency_key),
+                ).fetchone()
+                if existing is None:
+                    raise WorkflowRuntimeError("workflow_idempotency_conflict")
+                if str(existing[1]) != definition.id:
+                    raise WorkflowRuntimeError(
+                        f"workflow_idempotency_key_reused:{idempotency_key}"
+                    )
+                work.rollback()
+                return str(existing[0])
             for ordinal, step in enumerate(definition.steps):
                 work.connection.execute(
                     """
@@ -133,9 +199,11 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         return run_id
 
     def pause(self, run_id: str) -> None:
+        self._ensure_supervisor()
         self._set_status(run_id, "paused")
 
     def resume(self, run_id: str) -> None:
+        self._ensure_supervisor()
         state = self.get_status(run_id)
         if state is None:
             raise KeyError(run_id)
@@ -145,13 +213,16 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         self._advance(run_id)
 
     def cancel(self, run_id: str) -> None:
+        self._ensure_supervisor()
         self._set_status(run_id, "cancelled")
 
     def approve(self, run_id: str, step_id: str) -> None:
+        self._ensure_supervisor()
         self._resolve_approval(run_id, step_id, approved=True)
         self._advance(run_id)
 
     def reject(self, run_id: str, step_id: str) -> None:
+        self._ensure_supervisor()
         self._resolve_approval(run_id, step_id, approved=False)
 
     def _resolve_approval(self, run_id: str, step_id: str, *, approved: bool) -> None:
@@ -204,6 +275,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             work.commit()
 
     def get_status(self, run_id: str) -> dict[str, object] | None:
+        self._ensure_supervisor()
         with unit_of_work(self.database) as work:
             row = work.connection.execute(
                 """
@@ -228,13 +300,17 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         ).model_dump(mode="json")
 
     def _advance(self, run_id: str) -> None:
+        self._ensure_supervisor()
         while True:
             state = self.get_status(run_id)
             if state is None or state["status"] in {
                 "paused", "cancelled", "completed", "failed", "waiting_for_approval"
             }:
                 return
-            definition = self._definition(str(state["workflow_id"]), version=int(state["workflow_version"]))
+            definition = self._definition(
+                str(state["workflow_id"]),
+                version=int(state["workflow_version"]),
+            )
             if definition is None:
                 self._set_status(run_id, "failed", error="workflow_definition_missing")
                 return
@@ -242,7 +318,10 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             if not current_step_id:
                 self._finish(run_id)
                 return
-            step = next((item for item in definition.steps if item.id == current_step_id), None)
+            step = next(
+                (item for item in definition.steps if item.id == current_step_id),
+                None,
+            )
             if step is None:
                 self._set_status(run_id, "failed", error="workflow_current_step_missing")
                 return
@@ -251,15 +330,42 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 self._set_status(run_id, "failed", error="workflow_step_state_missing")
                 return
 
-            approval_required = step.kind == "approval" or step.requires_approval
-            if approval_required and step_row["status"] not in {"approved", "running"}:
-                if step_row["status"] == "pending":
+            step_status = str(step_row["status"])
+            if step_status == "completed":
+                result = dict(step_row.get("result") or {})
+                self._transition(
+                    run_id,
+                    self._next_target(definition, step, result),
+                )
+                continue
+            if step_status == "running":
+                # The owner heartbeat determines whether this is active or an
+                # abandoned unknown-outcome step. Never double-claim it.
+                return
+            if step_status in {"failed", "skipped"}:
+                self._set_status(
+                    run_id,
+                    "failed",
+                    error=f"workflow_step_not_runnable:{step.id}:{step_status}",
+                )
+                return
+
+            approval_required = self._step_requires_approval(step)
+            if approval_required and step_status != "approved":
+                if step_status == "pending":
                     self._set_waiting_for_approval(run_id, step.id)
+                elif step_status == "waiting_for_approval":
+                    self._set_status(run_id, "waiting_for_approval")
+                else:
+                    self._set_status(
+                        run_id,
+                        "failed",
+                        error=f"workflow_approval_state_invalid:{step.id}:{step_status}",
+                    )
                 return
 
             claimed = self._claim_step(run_id, step.id)
             if claimed is None:
-                # Another worker/thread owns this side-effecting step.
                 return
             attempts = claimed
             try:
@@ -273,16 +379,49 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             except Exception as exc:
                 message = str(exc)[:1000]
                 unknown_outcome = message.startswith("step_timeout_outcome_unknown")
-                if not unknown_outcome and attempts <= step.retry_limit:
-                    self._set_step_retry(run_id, step.id, message)
+                retry_safe = self._step_retry_safe(step)
+                latest = self.get_status(run_id)
+                if latest is not None and latest["status"] == "cancelled":
+                    return
+                if (
+                    not unknown_outcome
+                    and retry_safe
+                    and attempts <= step.retry_limit
+                    and self._set_step_retry(run_id, step.id, message)
+                ):
                     continue
                 self._set_step_failed(run_id, step.id, message)
                 self._set_status(run_id, "failed", error=message)
                 return
 
-            self._set_step_completed(run_id, step.id, result)
-            target = self._next_target(definition, step, result)
-            self._transition(run_id, target)
+            if not self._set_step_completed(run_id, step.id, result):
+                return
+            self._transition(
+                run_id,
+                self._next_target(definition, step, result),
+            )
+
+    @staticmethod
+    def _step_requires_approval(step: WorkflowStepDefinition) -> bool:
+        if step.kind == "approval" or step.requires_approval:
+            return True
+        if step.kind != "capability":
+            return False
+        capability = default_capability_registry().get(str(step.capability_id or ""))
+        return bool(
+            capability is not None
+            and (
+                capability.approval_policy != "allow_automatic"
+                or capability.requires_confirmation
+            )
+        )
+
+    @staticmethod
+    def _step_retry_safe(step: WorkflowStepDefinition) -> bool:
+        if step.kind != "capability":
+            return True
+        capability = default_capability_registry().get(str(step.capability_id or ""))
+        return bool(capability is not None and capability.effect == "read")
 
     def _execute_with_timeout(
         self,
@@ -409,14 +548,24 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         with unit_of_work(self.database) as work:
             row = work.connection.execute(
                 """
-                SELECT status, attempts
+                SELECT status, attempts, result, worker_id, lease_expires_at
                   FROM omnix_workflow_step_runs
                  WHERE workspace_id = %s AND run_id = %s AND step_id = %s
                 """,
                 (self.context.workspace_id, run_id, step_id),
             ).fetchone()
             work.rollback()
-        return {"status": str(row[0]), "attempts": int(row[1])} if row else None
+        return (
+            {
+                "status": str(row[0]),
+                "attempts": int(row[1]),
+                "result": dict(row[2] or {}),
+                "worker_id": str(row[3]) if row[3] else None,
+                "lease_expires_at": row[4],
+            }
+            if row
+            else None
+        )
 
     def _claim_step(self, run_id: str, step_id: str) -> int | None:
         with unit_of_work(self.database) as work:
@@ -425,12 +574,14 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 UPDATE omnix_workflow_step_runs
                    SET status = 'running', attempts = attempts + 1,
                        started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
-                       last_error = NULL
+                       last_error = NULL, worker_id = %s,
+                       lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '90 seconds',
+                       updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND run_id = %s AND step_id = %s
                    AND status IN ('pending','approved')
                 RETURNING attempts
                 """,
-                (self.context.workspace_id, run_id, step_id),
+                (self.worker_id, self.context.workspace_id, run_id, step_id),
             ).fetchone()
             work.commit()
         return int(row[0]) if row else None
@@ -460,44 +611,78 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 )
             work.commit()
 
-    def _set_step_retry(self, run_id: str, step_id: str, error: str) -> None:
+    def _set_step_retry(self, run_id: str, step_id: str, error: str) -> bool:
         with unit_of_work(self.database) as work:
-            work.connection.execute(
+            row = work.connection.execute(
                 """
                 UPDATE omnix_workflow_step_runs
-                   SET status = 'pending', last_error = %s
+                   SET status = 'pending', last_error = %s, worker_id = NULL,
+                       lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND run_id = %s AND step_id = %s
-                   AND status = 'running'
+                   AND status = 'running' AND worker_id = %s
+                RETURNING step_id
                 """,
-                (error, self.context.workspace_id, run_id, step_id),
-            )
+                (
+                    error,
+                    self.context.workspace_id,
+                    run_id,
+                    step_id,
+                    self.worker_id,
+                ),
+            ).fetchone()
             work.commit()
+        return row is not None
 
-    def _set_step_failed(self, run_id: str, step_id: str, error: str) -> None:
+    def _set_step_failed(self, run_id: str, step_id: str, error: str) -> bool:
         with unit_of_work(self.database) as work:
-            work.connection.execute(
+            row = work.connection.execute(
                 """
                 UPDATE omnix_workflow_step_runs
-                   SET status = 'failed', last_error = %s, completed_at = CURRENT_TIMESTAMP
+                   SET status = 'failed', last_error = %s,
+                       completed_at = CURRENT_TIMESTAMP, worker_id = NULL,
+                       lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                   AND status = 'running' AND worker_id = %s
+                RETURNING step_id
                 """,
-                (error, self.context.workspace_id, run_id, step_id),
-            )
+                (
+                    error,
+                    self.context.workspace_id,
+                    run_id,
+                    step_id,
+                    self.worker_id,
+                ),
+            ).fetchone()
             work.commit()
+        return row is not None
 
-    def _set_step_completed(self, run_id: str, step_id: str, result: dict[str, Any]) -> None:
+    def _set_step_completed(
+        self,
+        run_id: str,
+        step_id: str,
+        result: dict[str, Any],
+    ) -> bool:
         with unit_of_work(self.database) as work:
-            work.connection.execute(
+            row = work.connection.execute(
                 """
                 UPDATE omnix_workflow_step_runs
                    SET status = 'completed', result = %s::jsonb, last_error = NULL,
-                       completed_at = CURRENT_TIMESTAMP
+                       completed_at = CURRENT_TIMESTAMP, worker_id = NULL,
+                       lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND run_id = %s AND step_id = %s
-                   AND status = 'running'
+                   AND status = 'running' AND worker_id = %s
+                RETURNING step_id
                 """,
-                (_json(result), self.context.workspace_id, run_id, step_id),
-            )
+                (
+                    _json(result),
+                    self.context.workspace_id,
+                    run_id,
+                    step_id,
+                    self.worker_id,
+                ),
+            ).fetchone()
             work.commit()
+        return row is not None
 
     def _transition(self, run_id: str, target: str | None) -> None:
         if target is None:
@@ -524,7 +709,9 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             work.connection.execute(
                 """
                 UPDATE omnix_workflow_step_runs
-                   SET status = 'skipped', completed_at = CURRENT_TIMESTAMP
+                   SET status = 'skipped', completed_at = CURRENT_TIMESTAMP,
+                       worker_id = NULL, lease_expires_at = NULL,
+                       updated_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND run_id = %s AND status IN ('pending','approved')
                 """,
                 (self.context.workspace_id, run_id),
@@ -555,6 +742,92 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 """,
                 (status, error, terminal, self.context.workspace_id, run_id),
             )
+            work.commit()
+
+    def _ensure_supervisor(self) -> None:
+        if self._supervisor_started:
+            return
+        with self._supervisor_lock:
+            if self._supervisor_started:
+                return
+            self._supervisor_started = True
+            threading.Thread(
+                target=self._supervisor_loop,
+                name="omnix-workflow-supervisor",
+                daemon=True,
+            ).start()
+
+    def _supervisor_loop(self) -> None:
+        while not self._supervisor_stop.is_set():
+            try:
+                self._supervise_once()
+            except Exception:
+                pass
+            self._supervisor_stop.wait(30.0)
+
+    def _supervise_once(self) -> None:
+        error = "step_outcome_unknown_after_worker_loss"
+        with unit_of_work(self.database) as work:
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_step_runs
+                   SET lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '90 seconds',
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND worker_id = %s
+                   AND status = 'running'
+                """,
+                (self.context.workspace_id, self.worker_id),
+            )
+            stale = work.connection.execute(
+                """
+                SELECT step.run_id, step.step_id
+                  FROM omnix_workflow_step_runs AS step
+                  JOIN omnix_workflow_runs AS run
+                    ON run.workspace_id = step.workspace_id
+                   AND run.run_id = step.run_id
+                 WHERE step.workspace_id = %s
+                   AND run.status = 'running'
+                   AND run.current_step_id = step.step_id
+                   AND step.status = 'running'
+                   AND step.lease_expires_at <= CURRENT_TIMESTAMP
+                 FOR UPDATE OF step SKIP LOCKED
+                """,
+                (self.context.workspace_id,),
+            ).fetchall()
+            for run_id, step_id in stale:
+                claimed = work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_step_runs
+                       SET status = 'failed', last_error = %s,
+                           completed_at = CURRENT_TIMESTAMP,
+                           worker_id = NULL, lease_expires_at = NULL,
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND run_id = %s AND step_id = %s
+                       AND status = 'running'
+                       AND lease_expires_at <= CURRENT_TIMESTAMP
+                    RETURNING step_id
+                    """,
+                    (
+                        error,
+                        self.context.workspace_id,
+                        str(run_id),
+                        str(step_id),
+                    ),
+                ).fetchone()
+                if claimed is None:
+                    continue
+                work.connection.execute(
+                    """
+                    UPDATE omnix_workflow_runs
+                       SET status = 'failed', last_error = %s,
+                           revision = revision + 1,
+                           updated_at = CURRENT_TIMESTAMP,
+                           completed_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND run_id = %s
+                       AND status = 'running'
+                    """,
+                    (error, self.context.workspace_id, str(run_id)),
+                )
             work.commit()
 
     def _definition(self, workflow_id: str, *, version: int | None = None) -> WorkflowDefinition | None:

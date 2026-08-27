@@ -50,6 +50,23 @@ def _execution_key(run_id: str, capability_id: str, request: BrokerCapabilityReq
     return f"agent:{run_id}:{raw}"
 
 
+def _approved_execution_key(
+    run_id: str,
+    canonical: str,
+    request: BrokerCapabilityRequest,
+    approval: AgentApproval,
+) -> str:
+    if approval.capability_id != canonical:
+        raise HTTPException(status_code=403, detail="agent_approval_mismatch")
+    approved_input = approval.request_payload.get("input")
+    if not isinstance(approved_input, dict) or approved_input != request.input:
+        raise HTTPException(status_code=403, detail="agent_approval_input_mismatch")
+    execution_key = str(approval.request_payload.get("execution_key") or "").strip()
+    if not execution_key or not execution_key.startswith(f"agent:{run_id}:"):
+        raise HTTPException(status_code=409, detail="agent_approval_execution_identity_invalid")
+    return execution_key
+
+
 def _stored_response(
     capability_id: str,
     execution_key: str,
@@ -87,6 +104,18 @@ def execute_agent_capability(
 
     with unit_of_work(service.database) as work:
         repository = PostgresAgentRunRepository(work.connection, service.context)
+        if request.approval_id:
+            approval = repository.get_approval(run_id, request.approval_id)
+            if approval is None:
+                raise HTTPException(status_code=403, detail="agent_approval_mismatch")
+            execution_key = _approved_execution_key(
+                run_id,
+                canonical,
+                request,
+                approval,
+            )
+            approved = approval.state == "approved"
+
         stored = repository.ensure_capability_execution(
             run_id,
             execution_key,
@@ -105,25 +134,20 @@ def execute_agent_capability(
                 detail="agent_execution_outcome_unknown_or_in_progress",
             )
 
-        if request.approval_id:
-            approval = repository.get_approval(run_id, request.approval_id)
-            if approval is None or approval.capability_id != canonical:
-                raise HTTPException(status_code=403, detail="agent_approval_mismatch")
-            if approval.state == "rejected":
-                repository.finish_capability_execution(
-                    run_id,
-                    execution_key,
-                    result_payload={"error": "approval_rejected"},
-                    error="approval_rejected",
-                    state_changed=False,
-                )
-                work.commit()
-                return BrokerCapabilityResponse(
-                    capability_id=canonical,
-                    execution_key=execution_key,
-                    result={"error": "approval_rejected"},
-                )
-            approved = approval.state == "approved"
+        if approval is not None and approval.state == "rejected":
+            repository.finish_capability_execution(
+                run_id,
+                execution_key,
+                result_payload={"error": "approval_rejected"},
+                error="approval_rejected",
+                state_changed=False,
+            )
+            work.commit()
+            return BrokerCapabilityResponse(
+                capability_id=canonical,
+                execution_key=execution_key,
+                result={"error": "approval_rejected"},
+            )
 
         if approval is None and stored["state"] == "waiting_for_approval":
             approval = repository.find_capability_approval(
