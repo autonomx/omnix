@@ -1060,7 +1060,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 """,
                 (self.context.workspace_id, run_id),
             )
-            work.connection.execute(
+            row = work.connection.execute(
                 """
                 UPDATE omnix_workflow_runs
                    SET current_step_id = NULL, status = 'completed',
@@ -1068,24 +1068,43 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                        completed_at = CURRENT_TIMESTAMP
                  WHERE workspace_id = %s AND run_id = %s
                    AND status NOT IN ('failed','cancelled','completed')
+                RETURNING run_id
                 """,
                 (self.context.workspace_id, run_id),
-            )
+            ).fetchone()
+            if row is not None:
+                self._append_event(
+                    work.connection,
+                    WorkflowEvent(
+                        run_id=run_id,
+                        event_type="workflow.run.completed",
+                    ),
+                )
             work.commit()
 
     def _set_status(self, run_id: str, status: str, *, error: str | None = None) -> None:
         terminal = status in {"completed", "failed", "cancelled"}
         with unit_of_work(self.database) as work:
-            work.connection.execute(
+            row = work.connection.execute(
                 """
                 UPDATE omnix_workflow_runs
                    SET status = %s, last_error = %s, revision = revision + 1,
                        updated_at = CURRENT_TIMESTAMP,
                        completed_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE completed_at END
                  WHERE workspace_id = %s AND run_id = %s
+                RETURNING run_id
                 """,
                 (status, error, terminal, self.context.workspace_id, run_id),
-            )
+            ).fetchone()
+            if row is not None:
+                self._append_event(
+                    work.connection,
+                    WorkflowEvent(
+                        run_id=run_id,
+                        event_type=f"workflow.run.{status}",
+                        payload={"error": error} if error else {},
+                    ),
+                )
             work.commit()
 
     def _ensure_supervisor(self) -> None:
