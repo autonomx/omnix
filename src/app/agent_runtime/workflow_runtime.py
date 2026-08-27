@@ -584,6 +584,15 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     payload={"step_id": step_id},
                 ),
             )
+            if not approved:
+                self._append_event(
+                    work.connection,
+                    WorkflowEvent(
+                        run_id=run_id,
+                        event_type="workflow.run.cancelled",
+                        payload={"error": "approval_rejected"},
+                    ),
+                )
             work.commit()
 
     def get_status(self, run_id: str) -> dict[str, object] | None:
@@ -1199,7 +1208,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 ).fetchone()
                 if claimed is None:
                     continue
-                work.connection.execute(
+                failed_run = work.connection.execute(
                     """
                     UPDATE omnix_workflow_runs
                        SET status = 'failed', last_error = %s,
@@ -1208,9 +1217,30 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                            completed_at = CURRENT_TIMESTAMP
                      WHERE workspace_id = %s AND run_id = %s
                        AND status = 'running'
+                    RETURNING run_id
                     """,
                     (error, self.context.workspace_id, str(run_id)),
-                )
+                ).fetchone()
+                if failed_run is not None:
+                    self._append_event(
+                        work.connection,
+                        WorkflowEvent(
+                            run_id=str(run_id),
+                            event_type="workflow.step.failed",
+                            payload={
+                                "step_id": str(step_id),
+                                "error": error,
+                            },
+                        ),
+                    )
+                    self._append_event(
+                        work.connection,
+                        WorkflowEvent(
+                            run_id=str(run_id),
+                            event_type="workflow.run.failed",
+                            payload={"error": error},
+                        ),
+                    )
             resumable = [
                 str(row[0])
                 for row in work.connection.execute(
