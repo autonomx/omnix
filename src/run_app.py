@@ -107,7 +107,7 @@ from app.tts_stream_audio import (
 # RPG imports
 
 # ============== CONFIG ==============
-HOST = os.environ.get("OMNIX_LEGACY_HOST", "127.0.0.1").strip() or "127.0.0.1"
+HOST = "127.0.0.1"
 PORT = 5000
 _LOCAL_BROWSER_ORIGINS = [
     "http://localhost:5173",
