@@ -127,6 +127,16 @@ def _next_stream_chunk(stream: Any) -> Any:
     return next(stream, _STREAM_END)
 
 
+async def _accept_local_websocket(websocket: WebSocket) -> bool:
+    """Reject browser WebSockets from origins outside the local Omnix UI."""
+    origin = websocket.headers.get("origin")
+    if origin and origin not in _LOCAL_BROWSER_ORIGINS:
+        await websocket.close(code=1008, reason="origin_not_allowed")
+        return False
+    await websocket.accept()
+    return True
+
+
 # ============== GLOBAL STATE ==============
 @dataclass
 class ConversationSession:
@@ -545,7 +555,8 @@ async def rpg_log(request: Request):
 @app.websocket("/ws/conversation")
 async def websocket_conversation(websocket: WebSocket):
     """Main WebSocket endpoint for voice conversation"""
-    await websocket.accept()
+    if not await _accept_local_websocket(websocket):
+        return
     
     session_id = None
     session = None
@@ -3462,7 +3473,8 @@ def _generate_ws_tts(provider: Any, text: str, speaker: str, ws: WebSocket,
 @app.websocket("/ws/tts")
 async def websocket_tts(websocket: WebSocket):
     """Standalone TTS WebSocket — send text, receive streaming PCM audio."""
-    await websocket.accept()
+    if not await _accept_local_websocket(websocket):
+        return
     loop = asyncio.get_event_loop()
     abort_flag = [False]
 
@@ -3675,7 +3687,8 @@ async def websocket_audiobook(websocket: WebSocket):
     Server → Client  (binary):
         Raw PCM int16 bytes at 24 000 Hz, mono
     """
-    await websocket.accept()
+    if not await _accept_local_websocket(websocket):
+        return
     loop = asyncio.get_event_loop()
 
     try:
