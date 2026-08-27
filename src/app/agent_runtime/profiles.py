@@ -33,10 +33,23 @@ _PROFILES = {
         requires_workspace=True,
     ),
     "house": AgentProfile(id="house", description="Semantic smart-home inspection and governed control.", external_capabilities=("home.list_devices", "home.get_state", "home.set_state", "home.get_energy", "home.apply_scene")),
-    "research": AgentProfile(id="research", description="Read-oriented investigation using an explicitly issued repository/material workspace.", capabilities=("workspace.read", "workspace.list", "workspace.search"), external_capabilities=("github.read_repo",), context_sources=("assistant_memory",), requires_workspace=True),
+    "research": AgentProfile(
+        id="research",
+        description="Read-only investigation using governed Omnix research services.",
+        external_capabilities=("research.web_search",),
+        optional_external_capabilities=("github.read_repo",),
+        context_sources=("assistant_memory",),
+        requires_workspace=False,
+    ),
     "personal-assistant": AgentProfile(id="personal-assistant", description="Governed email, calendar, and contacts.", external_capabilities=("gmail.read_email", "gmail.create_draft", "gmail.send_email", "calendar.read_availability", "calendar.create_event", "contacts.search_contacts", "contacts.resolve_recipient"), context_sources=("assistant_memory",)),
     "ops": AgentProfile(id="ops", description="Workspace-scoped diagnostics and controlled commands.", capabilities=(*_READ, "workspace.command", "workspace.test"), requires_workspace=True),
-    "trading-research": AgentProfile(id="trading-research", description="Read-only analysis inside an explicitly issued workspace; broker/order mutation authority is intentionally absent.", capabilities=("workspace.read", "workspace.list", "workspace.search"), context_sources=("trading_research", "assistant_memory"), requires_workspace=True),
+    "trading-research": AgentProfile(
+        id="trading-research",
+        description="Read-only market investigation using governed research services; broker/order mutation authority is intentionally absent.",
+        external_capabilities=("research.web_search",),
+        context_sources=("trading_research", "assistant_memory"),
+        requires_workspace=False,
+    ),
 }
 
 
