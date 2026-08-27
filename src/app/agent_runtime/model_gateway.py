@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import queue
+import threading
 import time
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from app.providers.base import ChatMessage, ChatResponse
 from app.shared import get_provider
@@ -24,6 +26,8 @@ from .service import default_agent_run_service
 router = APIRouter(prefix="/api/agent-model/v1", tags=["agent-model"])
 
 _STREAM_END = object()
+_STREAM_ITEM = object()
+_STREAM_ERROR = object()
 
 
 def normalize_llm_provider_id(provider_id: str) -> str:
@@ -43,6 +47,54 @@ def _next_stream_response(iterator: Any) -> Any:
         return next(iterator)
     except StopIteration:
         return _STREAM_END
+
+
+async def _stream_responses(iterator: Any):
+    """Advance a synchronous provider iterator on one dedicated thread.
+
+    Some providers intentionally hold a thread-owned lock across generator
+    yields. Dispatching each ``next()`` independently through the shared
+    asyncio worker pool can resume the generator on a different thread and
+    make its context manager release a lock that thread did not acquire.
+    """
+
+    bridge: queue.Queue[tuple[object, Any]] = queue.Queue(maxsize=32)
+    stopped = threading.Event()
+
+    def publish(kind: object, value: Any) -> bool:
+        while not stopped.is_set():
+            try:
+                bridge.put((kind, value), timeout=0.1)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def consume() -> None:
+        try:
+            for response in iterator:
+                if not publish(_STREAM_ITEM, response):
+                    return
+        except BaseException as exc:
+            publish(_STREAM_ERROR, exc)
+        finally:
+            publish(_STREAM_END, None)
+
+    threading.Thread(
+        target=consume,
+        name="omnix-agent-model-stream",
+        daemon=True,
+    ).start()
+    try:
+        while True:
+            kind, value = await asyncio.to_thread(bridge.get)
+            if kind is _STREAM_END:
+                return
+            if kind is _STREAM_ERROR:
+                raise value
+            yield value
+    finally:
+        stopped.set()
 
 
 class AgentModelMessage(BaseModel):
@@ -223,6 +275,8 @@ async def agent_chat_completion(
         raise HTTPException(status_code=503, detail=f"agent_provider_unavailable:{provider_id}")
     messages = _messages(request.messages)
     kwargs = _kwargs(request, default_effort)
+    if provider_id == "chatgpt_codex":
+        kwargs["conversation_id"] = f"agent:{x_omnix_agent_run_id}"
     bounded_tokens = _bounded_max_tokens(
         kwargs.get("max_tokens"),
         remaining_tokens,
@@ -295,11 +349,9 @@ async def agent_chat_completion(
 
     async def generate():
         observed_output_tokens: int | None = None
+        observed_finish_reason = False
         try:
-            while True:
-                response = await asyncio.to_thread(_next_stream_response, iterator)
-                if response is _STREAM_END:
-                    break
+            async for response in _stream_responses(iterator):
                 if not isinstance(response, ChatResponse):
                     continue
                 current_output_tokens = _output_tokens(response)
@@ -308,6 +360,8 @@ async def agent_chat_completion(
                         observed_output_tokens or 0,
                         current_output_tokens,
                     )
+                if response.finish_reason:
+                    observed_finish_reason = True
                 payload = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -317,6 +371,21 @@ async def agent_chat_completion(
                 }
                 if response.usage:
                     payload["usage"] = response.usage
+                yield f"data: {json.dumps(payload, sort_keys=True)}\n\n"
+            if not observed_finish_reason:
+                payload = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": request.model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
                 yield f"data: {json.dumps(payload, sort_keys=True)}\n\n"
             if observed_output_tokens is None:
                 if await asyncio.to_thread(

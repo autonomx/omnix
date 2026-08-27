@@ -118,6 +118,7 @@ class AgentRunService:
         try:
             self.runtime.start(issued)
         except Exception as exc:
+            self.runtime.close_run(issued.run_id)
             with unit_of_work(self.database) as work:
                 repository = PostgresAgentRunRepository(work.connection, self.context)
                 current = repository.get_run(issued.run_id)
@@ -166,10 +167,15 @@ class AgentRunService:
             work.commit()
 
         try:
-            current = self._apply_claimed_command(stored)
-        except Exception:
-            # Leave "processing" durable. A future owner recovery resets abandoned
-            # processing commands after the worker lease expires.
+            # Runtime callbacks persist status changes from the Pi reader
+            # thread. Keep command-side desired-state changes and the
+            # corresponding runtime transition in the same critical section
+            # so a callback cannot advance the durable revision between our
+            # read and optimistic update.
+            with self._lock:
+                current = self._apply_claimed_command(stored)
+        except Exception as exc:
+            self._mark_command_failed(stored, exc)
             raise
         else:
             with unit_of_work(self.database) as work:
@@ -185,6 +191,33 @@ class AgentRunService:
                 self._maybe_finalize_parent_in_repository(repository, stored.run_id)
                 work.commit()
         return self.get(stored.run_id) or current
+
+    def _mark_command_failed(self, command: AgentRunCommand, error: Exception) -> None:
+        """Make transport/runtime command failures visible and terminal.
+
+        A command updates desired state before it reaches the local runtime. If
+        the runtime process has already exited, leaving that intermediate state
+        durable makes runs appear permanently paused or cancellation-pending.
+        """
+        self.runtime.close_run(command.run_id)
+        terminal_status = "cancelled" if command.command_type == "cancel" else "failed"
+        desired_state = "cancelled"
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            current = repository.get_run(command.run_id)
+            if current is not None and current.status not in {"completed", "failed", "cancelled"}:
+                repository.update_state(
+                    command.run_id,
+                    expected_revision=current.revision,
+                    status=terminal_status,
+                    desired_state=desired_state,
+                    worker_id=self.worker_id,
+                    last_error=f"command_failed:{type(error).__name__}: {error}"[:2000],
+                )
+            repository.complete_command(command.run_id, command.command_id)
+            work.commit()
+        if command.command_type == "cancel":
+            self._cancel_descendants(command.run_id)
 
     def _apply_claimed_command(self, stored: AgentRunCommand) -> AgentRunSnapshot:
         with unit_of_work(self.database) as work:
@@ -699,16 +732,10 @@ class AgentRunService:
     def _prepare_workspace(spec: AgentRunSpec) -> AgentRunSpec:
         workspace = spec.workspace
         if workspace is None:
-            root = Path(os.environ.get(
-                "OMNIX_AGENT_WORKTREE_ROOT",
-                str(Path(tempfile.gettempdir()) / "omnix-agent-worktrees"),
-            )).expanduser().resolve()
-            target = root / spec.run_id
-            target.mkdir(parents=True, exist_ok=True)
-            from .contracts import WorkspaceSpec
-            return spec.model_copy(update={"workspace": WorkspaceSpec(
-                root=str(target), worktree=str(target), allowed_paths=[]
-            )})
+            # Read-only research and other non-workspace profiles retain an
+            # explicit None workspace. PiRpcSession supplies an ephemeral cwd
+            # without turning it into repository authority.
+            return spec
         if not workspace.repository or workspace.worktree:
             return spec
         root = Path(

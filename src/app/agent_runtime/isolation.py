@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-from typing import Any
 
 from .contracts import AgentRunSpec
 

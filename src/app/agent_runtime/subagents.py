@@ -1,7 +1,6 @@
 """Parent/child agent authority narrowing and aggregate budget reservation."""
 from __future__ import annotations
 
-from pathlib import Path
 from pydantic import BaseModel, Field
 
 from .contracts import (

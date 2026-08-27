@@ -9,6 +9,7 @@ from pathlib import Path
 import queue
 import shutil
 import subprocess
+import tempfile
 import threading
 from typing import Any
 
@@ -112,7 +113,11 @@ def pi_broker_extension_path() -> Path:
 
 
 def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
-    executable = shutil.which(pi_path) or pi_path
+    # Keep the configured executable token intact. The subprocess launcher
+    # resolves bare names through the worker PATH; eagerly resolving it here
+    # can select an unrelated executable with the same name and also breaks
+    # Docker's argv rewriting.
+    executable = str(pi_path or "pi").strip() or "pi"
     model = f"{spec.model.provider_id}::{spec.model.model_id}"
     argv = [
         executable,
@@ -190,7 +195,12 @@ def normalize_pi_event(run_id: str, payload: dict[str, Any]) -> AgentEvent | Non
             },
         )
     if event_type in {"error", "agent_error"}:
-        return AgentEvent(run_id=run_id, event_type="run.failed", payload={"source": "pi", "raw": payload})
+        error = payload.get("error") or payload.get("message") or "Pi reported an agent error"
+        return AgentEvent(
+            run_id=run_id,
+            event_type="run.failed",
+            payload={"source": "pi", "error": str(error)[:2000], "raw": payload},
+        )
     return None
 
 
@@ -203,36 +213,50 @@ class PiRpcSession:
         on_event: Callable[[AgentEvent], None] | None = None,
         process_factory: Callable[..., subprocess.Popen[str]] | None = None,
     ) -> None:
-        if spec.workspace is None:
-            raise PiRuntimeError("Pi runtime requires an issued workspace")
         self.spec = spec
         self.on_event = on_event
         self._events: deque[AgentEvent] = deque(maxlen=10_000)
         self._responses: queue.Queue[dict[str, Any]] = queue.Queue()
         self._closed = False
-        cwd = Path(spec.workspace.worktree or spec.workspace.root).expanduser().resolve()
-        env = build_agent_environment(spec, cwd)
-        argv = pi_rpc_argv(spec, pi_path=pi_path)
-        if process_factory is not None:
-            self.process = process_factory(
-                argv,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=str(cwd),
-                env=env,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
+        self._terminal_seen = False
+        self._stderr: deque[str] = deque(maxlen=200)
+        self._temporary_cwd: Path | None = None
+        if spec.workspace is None:
+            self._temporary_cwd = Path(
+                tempfile.mkdtemp(prefix=f"omnix-agent-{spec.run_id[:8]}-")
             )
+            cwd = self._temporary_cwd
         else:
-            self.process = launch_agent_process(spec, argv=argv, cwd=cwd, env=env)
+            cwd = Path(spec.workspace.worktree or spec.workspace.root).expanduser().resolve()
+        try:
+            env = build_agent_environment(spec, cwd)
+            argv = pi_rpc_argv(spec, pi_path=pi_path)
+            if process_factory is not None:
+                self.process = process_factory(
+                    argv,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    cwd=str(cwd),
+                    env=env,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    bufsize=1,
+                )
+            else:
+                self.process = launch_agent_process(spec, argv=argv, cwd=cwd, env=env)
+        except Exception:
+            if self._temporary_cwd is not None:
+                shutil.rmtree(self._temporary_cwd, ignore_errors=True)
+                self._temporary_cwd = None
+            raise
         self._reader = threading.Thread(target=self._read_stdout, name=f"pi-rpc-{spec.run_id[:8]}", daemon=True)
-        self._stderr = deque(maxlen=200)
         self._stderr_reader = threading.Thread(target=self._read_stderr, name=f"pi-stderr-{spec.run_id[:8]}", daemon=True)
+        self._monitor = threading.Thread(target=self._monitor_process, name=f"pi-monitor-{spec.run_id[:8]}", daemon=True)
         self._reader.start()
         self._stderr_reader.start()
+        self._monitor.start()
 
     def prompt(self, message: str) -> None:
         self.send({"type": "prompt", "message": message})
@@ -265,6 +289,30 @@ class PiRpcSession:
                     self.process.kill()
                 except Exception:
                     pass
+        if self._temporary_cwd is not None:
+            shutil.rmtree(self._temporary_cwd, ignore_errors=True)
+            self._temporary_cwd = None
+
+    def _monitor_process(self) -> None:
+        try:
+            returncode = self.process.wait()
+            prefix = (
+                "Pi RPC process exited before completing the run "
+                f"(exit code {returncode})"
+            )
+        except Exception as exc:
+            prefix = f"Pi RPC process monitor failed: {type(exc).__name__}: {exc}"
+        if self._closed or self._terminal_seen:
+            return
+        detail = self._process_error(prefix)
+        event = AgentEvent(
+            run_id=self.spec.run_id,
+            event_type="run.failed",
+            payload={"source": "pi", "error": detail},
+        )
+        self._events.append(event)
+        if self.on_event is not None:
+            self.on_event(event)
 
     def _read_stdout(self) -> None:
         stream = self.process.stdout
@@ -289,6 +337,8 @@ class PiRpcSession:
             event = normalize_pi_event(self.spec.run_id, payload)
             if event is not None:
                 self._events.append(event)
+                if event.event_type in {"run.settled", "run.completed", "run.failed"}:
+                    self._terminal_seen = True
                 if self.on_event is not None:
                     self.on_event(event)
 
@@ -322,12 +372,33 @@ class PiAgentRuntime(AgentRuntime):
                 return self._snapshots[spec.run_id]
             snapshot = AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="starting")
             self._snapshots[spec.run_id] = snapshot
-            session = PiRpcSession(spec, pi_path=self.pi_path, on_event=self._on_event)
-            self._sessions[spec.run_id] = session
-            running = snapshot.model_copy(update={"status": "running", "revision": snapshot.revision + 1})
-            self._snapshots[spec.run_id] = running
-            session.prompt(self._initial_prompt(spec))
-            return running
+            session: PiRpcSession | None = None
+            try:
+                session = PiRpcSession(spec, pi_path=self.pi_path, on_event=self._on_event)
+                self._sessions[spec.run_id] = session
+                observed = self._snapshots.get(spec.run_id, snapshot)
+                if observed.status in {"failed", "cancelled", "completed"}:
+                    # The process monitor can report an immediate startup
+                    # failure before PiRpcSession.__init__ returns. Do not
+                    # overwrite that terminal observation with "running".
+                    self._sessions.pop(spec.run_id, None)
+                    session.close()
+                    self._snapshots.pop(spec.run_id, None)
+                    if observed.status == "failed":
+                        raise PiRuntimeError(
+                            observed.last_error or "Pi RPC process failed during startup"
+                        )
+                    return observed
+                running = snapshot.model_copy(update={"status": "running", "revision": snapshot.revision + 1})
+                self._snapshots[spec.run_id] = running
+                session.prompt(self._initial_prompt(spec))
+                return running
+            except Exception:
+                self._sessions.pop(spec.run_id, None)
+                self._snapshots.pop(spec.run_id, None)
+                if session is not None:
+                    session.close()
+                raise
 
     def command(self, command: AgentRunCommand) -> AgentRunSnapshot:
         with self._lock:
@@ -336,7 +407,11 @@ class PiAgentRuntime(AgentRuntime):
             if session is None or snapshot is None:
                 raise KeyError(command.run_id)
             if command.command_type == "steer":
-                session.steer(str(command.payload.get("message") or ""))
+                message = str(command.payload.get("message") or "")
+                session.steer(
+                    "Authoritative steering for the active task; this supersedes any conflicting "
+                    f"earlier scope or plan. Follow it immediately and report against it: {message}"
+                )
             elif command.command_type == "pause":
                 session.abort()
                 snapshot = snapshot.model_copy(update={"status": "paused", "desired_state": "paused", "revision": snapshot.revision + 1})
@@ -388,19 +463,31 @@ class PiAgentRuntime(AgentRuntime):
                         update={"status": "running", "desired_state": "running", "revision": snapshot.revision + 1}
                     )
                 elif event.event_type == "run.failed":
-                    self._snapshots[event.run_id] = snapshot.model_copy(update={"status": "failed", "revision": snapshot.revision + 1})
+                    self._snapshots[event.run_id] = snapshot.model_copy(
+                        update={
+                            "status": "failed",
+                            "revision": snapshot.revision + 1,
+                            "last_error": str(
+                                event.payload.get("error") or "Pi runtime failed"
+                            )[:2000],
+                        }
+                    )
         if self.event_sink is not None:
             self.event_sink(event)
 
     @staticmethod
     def _initial_prompt(spec: AgentRunSpec) -> str:
         criteria = "\n".join(f"- {item.description}" for item in spec.success_criteria)
-        authority = ", ".join(spec.capabilities)
+        local_authority = ", ".join(spec.capabilities)
+        external_authority = ", ".join(spec.external_capabilities)
         return (
             f"Task: {spec.task}\n"
             f"Objective: {spec.objective or spec.task}\n"
-            f"Issued capabilities: {authority or 'none'}\n"
+            f"Issued local capabilities: {local_authority or 'none'}\n"
+            f"Issued governed external capabilities: {external_authority or 'none'}\n"
             f"Success criteria:\n{criteria or '- Complete the requested task and report evidence.'}\n"
+            "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "
+            "and do not continue work that the steering supersedes.\n"
             "Stay inside the issued workspace. Do not publish, push, merge, send messages, control devices, "
             "or access external systems unless Omnix exposes an explicit governed capability."
         )

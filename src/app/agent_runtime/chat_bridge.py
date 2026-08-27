@@ -32,7 +32,17 @@ class GeneralizedChatResult:
 _TERMINAL_AGENT = {"completed", "failed", "cancelled"}
 _HOME_SET = re.compile(r"\bturn\s+(on|off)\s+(?:the\s+)?(.+?)[.!?]*$", re.I)
 _HOME_STATE = re.compile(r"\b(?:status|state)\s*(?:of|for)?\s*(?:the\s+)?(.+?)[.!?]*$", re.I)
-_CODE = re.compile(r"\b(?:code|repo|repository|branch|pull request|bug|test|refactor|implement|fix|debug)\b", re.I)
+_CODE = re.compile(
+    r"(?:"
+    r"\b(?:code|repo(?:sitory)?|branch|pull request|bug(?:s)?|test(?:s|ing)?|pytest|vitest|"
+    r"refactor(?:ing)?|implement(?:ation|ing)?|fix(?:es|ing)?|debug(?:ging)?|edit(?:ing)?|"
+    r"modify|patch|workspace|file(?:s)?|module|function|class)\b"
+    r"|\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b"
+    r"|\b(?:add|write|change|update|comment)\b.{0,120}\b(?:router|file|code|function|class|module|"
+    r"repository|repo|workspace|source)\b"
+    r")",
+    re.I,
+)
 _HOME = re.compile(r"\b(?:kasa|smart\s+plug|plug|outlet|lamp|light|thermostat|home)\b", re.I)
 _PERSONAL = re.compile(r"\b(?:gmail|email|calendar|meeting|contact|appointment|schedule)\b", re.I)
 _TRADING = re.compile(r"\b(?:stock|trading|trade|ticker|market|shares|equity)\b", re.I)
@@ -41,6 +51,21 @@ _REJECT = re.compile(r"^(?:no|cancel|reject|rejected|do not|don't|never mind|nev
 _PAUSE = re.compile(r"^(?:pause|hold)[.!\s]*$", re.I)
 _RESUME = re.compile(r"^(?:resume|continue)[.!\s]*$", re.I)
 _CANCEL = re.compile(r"^(?:cancel|stop|abort)[.!\s]*$", re.I)
+_CONTROL = re.compile(r"^(?:pause|hold|resume|continue|cancel|stop|abort)[.!\s]*$", re.I)
+_WORKSPACE_MUTATION = re.compile(
+    r"(?:\b(?:edit|modify|write|change|patch|commit|delete|remove|create)\b.{0,120}\b(?:repo(?:sitory)?|"
+    r"file|code|workspace|branch|source|module|script)\b|\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b|"
+    r"\b(?:git\s+push|push\s+to\s+origin|open\s+(?:a\s+)?pull\s+request)\b)",
+    re.I,
+)
+_TRADING_MUTATION = re.compile(
+    r"\b(?:buy|sell|purchase|short|cover)\b|\b(?:place|submit|cancel)\b.{0,60}\b(?:order|trade|position)\b",
+    re.I,
+)
+_PUBLICATION_REQUEST = re.compile(
+    r"\b(?:git\s+push|push\s+(?:the\s+)?(?:current\s+)?branch|open\s+(?:a\s+)?pull\s+request|create\s+(?:a\s+)?pull\s+request)\b",
+    re.I,
+)
 
 
 def route_typed_chat_turn(
@@ -249,36 +274,90 @@ def _agent_result(
     provider_id: str | None,
     model_id: str | None,
 ) -> GeneralizedChatResult | None:
+    content = str(user_message.content or "").strip()
+    profile_id = _select_profile(content)
+    profile = get_agent_profile(profile_id)
     try:
         service = default_agent_run_service()
-    except Exception:
-        return None
-    active = _latest_active_agent_run(service, session)
+    except Exception as exc:
+        return _agent_start_failure(
+            decision,
+            run_id=None,
+            profile=profile_id,
+            task=_agent_task(content),
+            error=exc,
+        )
+    latest = _latest_agent_run(service, session)
+    active = latest if latest is not None and latest.status not in _TERMINAL_AGENT else None
     if active is not None:
-        return _continue_agent_run(service, active, str(user_message.content or ""), decision)
+        return _continue_agent_run(service, active, content, decision)
+    if latest is not None and _CONTROL.fullmatch(content):
+        return GeneralizedChatResult(
+            content=f"Agent run {latest.run_id} is already {latest.status}.",
+            metadata={
+                "generation_status": "completed",
+                "agent_mode": True,
+                "omnix_route": decision.model_dump(mode="json"),
+                "agent_run": _agent_metadata(latest),
+            },
+        )
 
-    profile_id = _select_profile(str(user_message.content or ""))
     repository = os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
-    profile = get_agent_profile(profile_id)
     if profile.requires_workspace and not repository:
-        # Preserve the existing Hermes proposal-only path when no durable
-        # workspace authority is configured. Never substitute the Omnix server
-        # working directory for an explicitly issued repository.
-        return None
+        return _agent_start_failure(
+            decision,
+            run_id=None,
+            profile=profile_id,
+            task=_agent_task(content),
+            error=RuntimeError(
+                f"the {profile_id} profile requires OMNIX_AGENT_DEFAULT_REPOSITORY"
+            ),
+        )
 
     resolved_provider = str(provider_id or getattr(session, "provider_id", None) or os.environ.get("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")).strip()
     resolved_model = str(model_id or getattr(session, "model_id", None) or os.environ.get("OMNIX_AGENT_DEFAULT_MODEL_ID", "")).strip()
     if not resolved_provider or not resolved_model:
-        return None
+        return _agent_start_failure(
+            decision,
+            run_id=None,
+            profile=profile_id,
+            task=_agent_task(content),
+            error=RuntimeError("Agent provider/model is not configured"),
+        )
 
     local, external = resolve_profile_capabilities(profile)
-    task = re.sub(r"^(?:/agent\b|agent[,:]\s*|use (?:the )?agent\b\s*)", "", str(user_message.content or ""), flags=re.I).strip()
-    task = task or str(user_message.content or "").strip()
+    task = _agent_task(content)
+    if _PUBLICATION_REQUEST.search(content) and not {
+        "github.push",
+        "github.create_pr",
+    }.issubset(external):
+        return _agent_request_rejection(
+            decision,
+            profile=profile_id,
+            task=task,
+            reason="github_publication_capability_not_issued",
+            message=(
+                "I can't publish from a Chat-created coding run: GitHub push/PR "
+                "capabilities were not issued. Start a separately scoped, "
+                "approval-gated publication run."
+            ),
+        )
+    if profile_id in {"research", "trading-research"} and _TRADING_MUTATION.search(content):
+        return _agent_request_rejection(
+            decision,
+            profile=profile_id,
+            task=task,
+            reason="trading_execution_capability_not_issued",
+            message=(
+                "I can't place or manage trades from a research run: trading "
+                "execution authority was not issued."
+            ),
+        )
     workspace = (
         WorkspaceSpec(
             root=repository,
             repository=repository,
-            base_ref=os.environ.get("OMNIX_AGENT_DEFAULT_BASE_REF", "main").strip() or "main",
+            base_ref=os.environ.get("OMNIX_AGENT_DEFAULT_BASE_REF", "HEAD").strip() or "HEAD",
         )
         if repository and profile.requires_workspace
         else None
@@ -310,10 +389,20 @@ def _agent_result(
     )
     try:
         snapshot = service.start(spec)
-    except Exception:
-        return None
+    except Exception as exc:
+        return _agent_start_failure(
+            decision,
+            run_id=spec.run_id,
+            profile=profile_id,
+            task=task,
+            error=exc,
+            service=service,
+        )
     return GeneralizedChatResult(
-        content=f"Started {profile_id} Agent run {snapshot.run_id}. I’ll keep the run durable; send another Agent-mode message to steer it.",
+        content=(
+            f"Started {profile_id} Agent run {snapshot.run_id}. "
+            "I'll keep the run durable; send another Agent-mode message to steer it."
+        ),
         metadata={
             "generation_status": "completed",
             "agent_mode": True,
@@ -323,7 +412,110 @@ def _agent_result(
     )
 
 
+def _agent_task(content: str) -> str:
+    task = re.sub(
+        r"^(?:/agent\b|agent[,:]\s*|use (?:the )?agent\b\s*)",
+        "",
+        content,
+        flags=re.I,
+    ).strip()
+    return task or content
+
+
+def _agent_start_failure(
+    decision: OmnixRouteDecision,
+    *,
+    run_id: str | None,
+    profile: str,
+    task: str,
+    error: Exception,
+    service: Any | None = None,
+) -> GeneralizedChatResult:
+    persisted = None
+    if service is not None and run_id:
+        try:
+            persisted = service.get(run_id)
+        except Exception:
+            persisted = None
+    error_text = f"{type(error).__name__}: {error}"[:2000]
+    durable = persisted is not None
+    return GeneralizedChatResult(
+        content=(
+            f"Agent run {run_id} failed to start: {error_text}"
+            if run_id
+            else f"Agent request could not start: {error_text}"
+        ),
+        metadata={
+            "generation_status": "completed",
+            "agent_mode": True,
+            "omnix_route": decision.model_dump(mode="json"),
+            "agent_start": {
+                "status": "failed",
+                "durable": durable,
+                "error": error_text,
+            },
+            "agent_run": (
+                {
+                    "run_id": run_id,
+                    "status": str(persisted.status),
+                    "profile": str(persisted.spec.profile),
+                    "task": str(persisted.spec.task),
+                    "revision": persisted.revision,
+                    "last_error": persisted.last_error,
+                }
+                if persisted is not None
+                else {
+                    "run_id": run_id,
+                    "status": "failed",
+                    "profile": profile,
+                    "task": task,
+                    "revision": None,
+                    "last_error": error_text,
+                }
+            ),
+        },
+    )
+
+
+def _agent_request_rejection(
+    decision: OmnixRouteDecision,
+    *,
+    profile: str,
+    task: str,
+    reason: str,
+    message: str,
+) -> GeneralizedChatResult:
+    return GeneralizedChatResult(
+        content=message,
+        metadata={
+            "generation_status": "completed",
+            "agent_mode": True,
+            "omnix_route": decision.model_dump(mode="json"),
+            "agent_start": {
+                "status": "rejected",
+                "durable": False,
+                "reason": reason,
+            },
+            "agent_run": {
+                "run_id": None,
+                "status": "rejected",
+                "profile": profile,
+                "task": task,
+                "revision": None,
+                "last_error": reason,
+            },
+        },
+    )
+
+
 def _latest_active_agent_run(service: Any, session: Any):
+    snapshot = _latest_agent_run(service, session)
+    if snapshot is not None and snapshot.status not in _TERMINAL_AGENT:
+        return snapshot
+    return None
+
+
+def _latest_agent_run(service: Any, session: Any):
     for message in reversed(list(getattr(session, "messages", []) or [])):
         if getattr(message, "role", None) != "assistant":
             continue
@@ -338,12 +530,29 @@ def _latest_active_agent_run(service: Any, session: Any):
             snapshot = service.get(run_id)
         except Exception:
             continue
-        if snapshot is not None and snapshot.status not in _TERMINAL_AGENT:
+        if snapshot is not None:
             return snapshot
     return None
 
 
 def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: OmnixRouteDecision) -> GeneralizedChatResult:
+    rejection = _unauthorized_agent_command(snapshot, content)
+    if rejection is not None:
+        return GeneralizedChatResult(
+            content=rejection["message"],
+            metadata={
+                "generation_status": "completed",
+                "agent_mode": True,
+                "omnix_route": decision.model_dump(mode="json"),
+                "agent_run": _agent_metadata(snapshot),
+                "agent_command": {
+                    "accepted": False,
+                    "command_type": "steer",
+                    "reason": rejection["reason"],
+                    "required_capabilities": rejection["required_capabilities"],
+                },
+            },
+        )
     command_type = "steer"
     payload: dict[str, Any] = {"message": content}
     normalized = " ".join(content.strip().split())
@@ -366,6 +575,7 @@ def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: Omn
         payload=payload,
         idempotency_key=f"chat:{snapshot.run_id}:{command_type}:{command_digest}",
     )
+
     try:
         updated = service.command(command)
     except Exception as exc:
@@ -395,6 +605,46 @@ def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: Omn
             "agent_run": _agent_metadata(updated),
         },
     )
+
+
+def _unauthorized_agent_command(snapshot: Any, content: str) -> dict[str, Any] | None:
+    capabilities = {str(value) for value in (snapshot.spec.capabilities or [])}
+    external_capabilities = {str(value) for value in (snapshot.spec.external_capabilities or [])}
+    profile = str(snapshot.spec.profile or "")
+    if profile in {"research", "trading-research"} and _TRADING_MUTATION.search(content):
+        return {
+            "reason": "trading_execution_capability_not_issued",
+            "required_capabilities": ["trading.order"],
+            "message": (
+                "I can't place or manage trades from this read-only research run. "
+                "Start a separately scoped, approval-gated trading run if execution is intended."
+            ),
+        }
+    if (
+        not capabilities.intersection({"workspace.edit", "workspace.write", "workspace.command"})
+        and _WORKSPACE_MUTATION.search(content)
+    ):
+        return {
+            "reason": "workspace_mutation_capability_not_issued",
+            "required_capabilities": ["workspace.edit", "workspace.write"],
+            "message": (
+                f"I can't modify the repository from the {profile or 'current'} run because "
+                "workspace mutation authority was not issued. Start a new coding run."
+            ),
+        }
+    if _PUBLICATION_REQUEST.search(content) and not {
+        "github.push",
+        "github.create_pr",
+    }.issubset(external_capabilities):
+        return {
+            "reason": "github_publication_capability_not_issued",
+            "required_capabilities": ["github.push", "github.create_pr"],
+            "message": (
+                "I can't publish from this run: GitHub push/PR capabilities were not issued. "
+                "The local workspace authority does not grant publication authority."
+            ),
+        }
+    return None
 
 
 def _agent_metadata(snapshot: Any) -> dict[str, Any]:

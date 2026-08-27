@@ -282,6 +282,116 @@ def test_streaming_completion_yields_codex_deltas(monkeypatch):
     assert "".join(chunk.content for chunk in chunks) == "One two"
 
 
+def test_tool_enabled_completion_bridges_native_dynamic_tool_call(monkeypatch):
+    provider = _provider()
+    events = iter(
+        [
+            {
+                "id": 91,
+                "method": "item/tool/call",
+                "params": {
+                    "threadId": "thread-tools",
+                    "turnId": "turn-tools",
+                    "callId": "call_read",
+                    "tool": "omnix_read",
+                    "arguments": {"path": "src/app.py"},
+                },
+            },
+            {"method": "item/agentMessage/delta", "params": {"delta": "Reviewed"}},
+            {"method": "turn/completed", "params": {"turn": {}}},
+        ]
+    )
+    writes = []
+    monkeypatch.setattr(provider, "_ensure_app_server", lambda: None)
+    monkeypatch.setattr(provider, "_start_thread", lambda **_kwargs: "thread-tools")
+    monkeypatch.setattr(provider, "_request", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(provider, "_write_message", writes.append)
+    monkeypatch.setattr(provider, "_next_event", lambda _timeout, **_kwargs: next(events))
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "read",
+                "description": "Read a file",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
+            },
+        }
+    ]
+
+    try:
+        first_chunks = list(
+            provider.chat_completion(
+                [ChatMessage(role="user", content="Read the file")],
+                stream=True,
+                conversation_id="agent:1",
+                tools=tools,
+            )
+        )
+        second_chunks = list(
+            provider.chat_completion(
+                [
+                    ChatMessage(role="user", content="Read the file"),
+                    ChatMessage(
+                        role="tool",
+                        content="file contents",
+                        name="read",
+                        tool_call_id="call_read",
+                    ),
+                ],
+                stream=True,
+                conversation_id="agent:1",
+                tools=tools,
+            )
+        )
+    finally:
+        provider.close()
+
+    assert len(first_chunks) == 1
+    assert first_chunks[0].content == ""
+    assert first_chunks[0].finish_reason == "tool_calls"
+    assert first_chunks[0].tool_calls == [
+        {
+            "id": "call_read",
+            "type": "function",
+            "function": {
+                "name": "read",
+                "arguments": '{"path":"src/app.py"}',
+            },
+        }
+    ]
+    assert "".join(chunk.content for chunk in second_chunks) == "Reviewed"
+    assert writes == [
+        {
+            "id": 91,
+            "result": {
+                "success": True,
+                "contentItems": [{"type": "inputText", "text": "file contents"}],
+            },
+        }
+    ]
+
+
+def test_tool_result_prompt_preserves_tool_identity():
+    prompt = ChatGPTCodexProvider._turn_prompt(
+        [
+            ChatMessage(
+                role="tool",
+                content="file contents",
+                name="read",
+                tool_call_id="call_read",
+            )
+        ],
+        recover_history=False,
+    )
+
+    assert "Omnix executed read" in prompt
+    assert "file contents" in prompt
+
+
 def test_fresh_thread_recovery_marks_old_messages_as_history():
     prompt = ChatGPTCodexProvider._turn_prompt(
         [
