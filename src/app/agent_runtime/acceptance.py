@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shlex
 from typing import Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,8 +24,19 @@ def compile_acceptance_plan(spec: AgentRunSpec) -> AcceptancePlan:
     if spec.acceptance_plan is not None:
         return spec.acceptance_plan
     checks: list[str] = []
-    descriptions = " ".join(item.description.casefold() for item in spec.success_criteria)
-    if "test" in descriptions:
+    descriptions = " ".join(
+        item.description.casefold()
+        for item in spec.success_criteria
+        if item.required
+    )
+    mutating_code = (
+        spec.profile == "coding"
+        and any(
+            capability in {"workspace.edit", "workspace.write"}
+            for capability in spec.capabilities
+        )
+    )
+    if "test" in descriptions or mutating_code:
         checks.append("successful_test_command")
     if "typecheck" in descriptions or "type check" in descriptions:
         checks.append("successful_typecheck_command")
@@ -72,6 +84,16 @@ def evaluate_acceptance(
             failures.append(f"missing_artifact:{kind}")
 
     tool_calls = _completed_commands(event_rows)
+    for index, required_command in enumerate(plan.required_commands, start=1):
+        key = f"required_command:{index}"
+        ok = any(
+            success and _command_matches(command, required_command)
+            for command, success in tool_calls
+        )
+        checks[key] = ok
+        if not ok:
+            failures.append(key)
+
     for requirement in plan.checks:
         if requirement == "successful_test_command":
             ok = any(_is_test(command) and success for command, success in tool_calls)
@@ -165,3 +187,14 @@ def _is_typecheck(command: str) -> bool:
 def _is_lint(command: str) -> bool:
     value = command.casefold()
     return "ruff" in value or " lint" in value
+
+
+def _command_matches(command: str, required: list[str]) -> bool:
+    expected = [str(part) for part in required]
+    if not expected:
+        return False
+    try:
+        observed = shlex.split(command, posix=True)
+    except ValueError:
+        observed = command.split()
+    return observed == expected
