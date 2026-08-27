@@ -42,6 +42,7 @@ _settings_load_override = None
 _settings_save_override = None
 _sessions_load_override = None
 _sessions_save_override = None
+_sessions_update_override = None
 _secrets_load_override = None
 _secrets_save_override = None
 _sessions_document_lock = threading.RLock()
@@ -311,26 +312,29 @@ def install_postgresql_document_callbacks(
     save_sessions_callback,
     load_secrets_callback,
     save_secrets_callback,
+    update_sessions_callback=None,
 ):
     global _settings_load_override, _settings_save_override
-    global _sessions_load_override, _sessions_save_override
+    global _sessions_load_override, _sessions_save_override, _sessions_update_override
     global _secrets_load_override, _secrets_save_override
     _settings_load_override = load_settings_callback
     _settings_save_override = save_settings_callback
     _sessions_load_override = load_sessions_callback
     _sessions_save_override = save_sessions_callback
+    _sessions_update_override = update_sessions_callback
     _secrets_load_override = load_secrets_callback
     _secrets_save_override = save_secrets_callback
 
 
 def clear_postgresql_document_callbacks():
     global _settings_load_override, _settings_save_override
-    global _sessions_load_override, _sessions_save_override
+    global _sessions_load_override, _sessions_save_override, _sessions_update_override
     global _secrets_load_override, _secrets_save_override
     _settings_load_override = None
     _settings_save_override = None
     _sessions_load_override = None
     _sessions_save_override = None
+    _sessions_update_override = None
     _secrets_load_override = None
     _secrets_save_override = None
 
@@ -411,18 +415,21 @@ def save_sessions(sessions):
 def update_sessions(
     mutator: Callable[[Dict[str, Any]], _SessionMutationResult],
 ) -> _SessionMutationResult:
-    """Atomically apply one in-process read/modify/write session mutation.
+    """Atomically apply one legacy-session mutation.
 
-    Legacy chat sessions are stored as a bounded compatibility document. Keeping
-    the read and write under the same process lock prevents concurrent requests
-    and WebSocket completions from overwriting each other's changes.
+    File fallback uses an in-process lock. PostgreSQL installs a transactional
+    mutation callback that locks the document row, making the update safe across
+    worker processes as well.
     """
 
     global sessions_data
     with _sessions_document_lock:
-        current = dict(load_sessions() or {})
-        result = mutator(current)
-        save_sessions(current)
+        if _sessions_update_override is not None:
+            current, result = _sessions_update_override(mutator)
+        else:
+            current = dict(load_sessions() or {})
+            result = mutator(current)
+            save_sessions(current)
         sessions_data = current
         return result
 
