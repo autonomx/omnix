@@ -26,6 +26,7 @@ AgentCommandType = Literal["steer", "pause", "resume", "cancel", "approve", "rej
 AgentEventType = Literal[
     "run.created",
     "run.started",
+    "run.settled",
     "run.status",
     "run.completed",
     "run.failed",

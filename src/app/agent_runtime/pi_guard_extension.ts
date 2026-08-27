@@ -28,9 +28,12 @@ const safeCommandPrefixes = [
   "npx tsc",
 ];
 
+const forbiddenShellSyntax = /[\r\n;&|><`]/;
+
 function commandAllowed(command: unknown): boolean {
   if (typeof command !== "string") return false;
   const normalized = command.trim().toLowerCase();
+  if (!normalized || forbiddenShellSyntax.test(normalized) || normalized.includes("$(")) return false;
   return safeCommandPrefixes.some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "));
 }
 

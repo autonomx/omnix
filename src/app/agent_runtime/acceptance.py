@@ -138,7 +138,17 @@ def _completed_commands(events: list[AgentEvent]) -> list[tuple[str, bool]]:
         elif event.event_type == "tool.completed":
             call_id = str(event.payload.get("tool_call_id") or "")
             if call_id in starts:
-                results.append((starts[call_id], not bool(event.payload.get("is_error"))))
+                success = not bool(event.payload.get("is_error"))
+                result = event.payload.get("result")
+                if isinstance(result, dict):
+                    details = result.get("details") if isinstance(result.get("details"), dict) else result
+                    exit_code = details.get("exitCode", details.get("exit_code"))
+                    if exit_code is not None:
+                        try:
+                            success = success and int(exit_code) == 0
+                        except (TypeError, ValueError):
+                            success = False
+                results.append((starts[call_id], success))
     return results
 
 

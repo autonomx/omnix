@@ -32,13 +32,17 @@ class AgentRunService:
         self.worker_id = worker_id or f"agent-worker:{os.getpid()}"
         self.runtime = PiAgentRuntime(pi_path=pi_path or os.environ.get("OMNIX_PI_PATH", "pi"), event_sink=self._persist_runtime_event)
         self._lock = threading.RLock()
+        self._supervisor_lock = threading.Lock()
+        self._supervisor_started = False
+        self._supervisor_stop = threading.Event()
 
     def start(self, spec: AgentRunSpec) -> AgentRunSnapshot:
+        self._ensure_supervisor()
         issued = self._prepare_workspace(spec)
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             snapshot = repository.create_run(issued)
-            repository.acquire_lease(issued.run_id, worker_id=self.worker_id, ttl_seconds=60)
+            repository.acquire_lease(issued.run_id, worker_id=self.worker_id, ttl_seconds=90)
             snapshot = repository.update_state(
                 issued.run_id,
                 expected_revision=snapshot.revision,
@@ -78,6 +82,7 @@ class AgentRunService:
         return self.start(child_spec)
 
     def get(self, run_id: str) -> AgentRunSnapshot | None:
+        self._ensure_supervisor()
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             snapshot = repository.get_run(run_id)
@@ -85,12 +90,40 @@ class AgentRunService:
             return snapshot
 
     def command(self, command: AgentRunCommand) -> AgentRunSnapshot:
+        self._ensure_supervisor()
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
-            stored = repository.enqueue_command(command)
+            stored, status = repository.enqueue_command(command)
             current = repository.get_run(command.run_id)
             if current is None:
                 raise KeyError(command.run_id)
+            if status == "consumed" or not repository.claim_command(command.run_id, stored.command_id):
+                work.commit()
+                return current
+            work.commit()
+
+        try:
+            current = self._apply_claimed_command(stored)
+        except Exception:
+            # Leave "processing" durable. A future owner recovery resets abandoned
+            # processing commands after the worker lease expires.
+            raise
+        else:
+            with unit_of_work(self.database) as work:
+                repository = PostgresAgentRunRepository(work.connection, self.context)
+                repository.complete_command(stored.run_id, stored.command_id)
+                work.commit()
+
+        if stored.command_type == "cancel":
+            self._cancel_descendants(stored.run_id)
+        return self.get(stored.run_id) or current
+
+    def _apply_claimed_command(self, stored: AgentRunCommand) -> AgentRunSnapshot:
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            current = repository.get_run(stored.run_id)
+            if current is None:
+                raise KeyError(stored.run_id)
             desired = current.desired_state
             status = current.status
             if stored.command_type in {"approve", "reject"}:
@@ -98,7 +131,8 @@ class AgentRunService:
                 if not approval_id:
                     raise ValueError("approval_id is required")
                 repository.resolve_approval(
-                    command.run_id, approval_id,
+                    stored.run_id,
+                    approval_id,
                     approved=stored.command_type == "approve",
                     resolution_payload={"source": "agent_run_command"},
                 )
@@ -110,43 +144,42 @@ class AgentRunService:
             elif stored.command_type == "cancel":
                 desired, status = "cancelled", "cancel_requested"
             current = repository.update_state(
-                command.run_id,
+                stored.run_id,
                 expected_revision=current.revision,
                 status=status,
                 desired_state=desired,
             )
             work.commit()
-        active = self.runtime.get_status(command.run_id)
+
+        active = self.runtime.get_status(stored.run_id)
         if active is not None:
             self.runtime.command(stored)
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
-                current = repository.get_run(command.run_id)
-                if current is not None:
-                    runtime_status = self.runtime.get_status(command.run_id)
-                    if runtime_status is not None:
+            runtime_status = self.runtime.get_status(stored.run_id)
+            if runtime_status is not None:
+                with unit_of_work(self.database) as work:
+                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                    persisted = repository.get_run(stored.run_id)
+                    if persisted is not None:
                         current = repository.update_state(
-                            command.run_id,
-                            expected_revision=current.revision,
+                            stored.run_id,
+                            expected_revision=persisted.revision,
                             status=runtime_status.status,
                             desired_state=runtime_status.desired_state,
                         )
-                work.commit()
+                    work.commit()
         elif stored.command_type == "cancel":
             with unit_of_work(self.database) as work:
                 repository = PostgresAgentRunRepository(work.connection, self.context)
-                persisted = repository.get_run(command.run_id)
+                persisted = repository.get_run(stored.run_id)
                 if persisted is not None and persisted.status != "cancelled":
                     current = repository.update_state(
-                        command.run_id,
+                        stored.run_id,
                         expected_revision=persisted.revision,
                         status="cancelled",
                         desired_state="cancelled",
                     )
                 work.commit()
-        if stored.command_type == "cancel":
-            self._cancel_descendants(command.run_id)
-        return self.get(command.run_id) or current
+        return current
 
     def _cancel_descendants(self, run_id: str) -> None:
         with unit_of_work(self.database) as work:
@@ -239,17 +272,24 @@ class AgentRunService:
                         status="running",
                         worker_id=self.worker_id,
                     )
-                elif event.event_type == "run.completed":
-                    children_terminal, _ = self._children_terminal_state(repository, event.run_id)
-                    if children_terminal:
-                        self._finalize_acceptance(repository, current)
-                    else:
-                        repository.update_state(
-                            event.run_id,
-                            expected_revision=current.revision,
-                            status="waiting_for_children",
-                            worker_id=self.worker_id,
-                        )
+                elif event.event_type in {"run.settled", "run.completed"}:
+                    if current.status not in {
+                        "waiting_for_approval",
+                        "pause_requested",
+                        "paused",
+                        "cancel_requested",
+                        "cancelled",
+                    }:
+                        children_terminal, _ = self._children_terminal_state(repository, event.run_id)
+                        if children_terminal:
+                            self._finalize_acceptance(repository, current)
+                        else:
+                            repository.update_state(
+                                event.run_id,
+                                expected_revision=current.revision,
+                                status="waiting_for_children",
+                                worker_id=self.worker_id,
+                            )
                 elif event.event_type == "run.failed":
                     repository.update_state(
                         event.run_id,
@@ -284,13 +324,24 @@ class AgentRunService:
         except Exception:
             return
         digest = hashlib.sha256(diff.encode("utf-8")).hexdigest()
+        artifact_root = Path(
+            os.environ.get(
+                "OMNIX_AGENT_ARTIFACT_ROOT",
+                str(Path(tempfile.gettempdir()) / "omnix-agent-artifacts"),
+            )
+        ).expanduser().resolve() / spec.run_id
+        artifact_root.mkdir(parents=True, exist_ok=True)
+        artifact_path = artifact_root / "workspace.diff"
+        artifact_path.write_text(diff, encoding="utf-8")
+        preview_limit = 16_000
         repository.add_artifact(
             AgentArtifact(
                 run_id=spec.run_id,
                 kind="diff",
                 name="workspace.diff",
+                storage_ref=str(artifact_path),
                 checksum=digest,
-                metadata={"preview": diff[:200_000], "truncated": len(diff) > 200_000},
+                metadata={"preview": diff[:preview_limit], "truncated": len(diff) > preview_limit},
             )
         )
 
@@ -321,7 +372,8 @@ class AgentRunService:
             try:
                 with unit_of_work(self.database) as work:
                     repository = PostgresAgentRunRepository(work.connection, self.context)
-                    repository.acquire_lease(run_id, worker_id=self.worker_id, ttl_seconds=60)
+                    repository.acquire_lease(run_id, worker_id=self.worker_id, ttl_seconds=90)
+                    repository.reset_processing_commands(run_id)
                     current = repository.get_run(run_id)
                     if current is not None:
                         repository.update_state(
@@ -332,6 +384,12 @@ class AgentRunService:
                         )
                     work.commit()
                 self.runtime.start(snapshot.spec)
+                with unit_of_work(self.database) as work:
+                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                    pending = repository.list_pending_commands(run_id)
+                    work.rollback()
+                for pending_command in pending:
+                    self.command(pending_command)
                 self.runtime.command(
                     AgentRunCommand(
                         run_id=run_id,
@@ -343,6 +401,46 @@ class AgentRunService:
             except Exception:
                 continue
         return recovered
+
+    def _ensure_supervisor(self) -> None:
+        if self._supervisor_started:
+            return
+        with self._supervisor_lock:
+            if self._supervisor_started:
+                return
+            self._supervisor_started = True
+            threading.Thread(
+                target=self._supervisor_loop,
+                name="omnix-agent-supervisor",
+                daemon=True,
+            ).start()
+
+    def _supervisor_loop(self) -> None:
+        while not self._supervisor_stop.is_set():
+            try:
+                self._supervise_once()
+            except Exception:
+                pass
+            self._supervisor_stop.wait(30.0)
+
+    def _supervise_once(self) -> None:
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """
+                SELECT run_id
+                  FROM omnix_agent_runs
+                 WHERE workspace_id = %s AND worker_id = %s
+                   AND status NOT IN ('completed','failed','cancelled')
+                """,
+                (self.context.workspace_id, self.worker_id),
+            ).fetchall()
+            work.rollback()
+        for row in rows:
+            try:
+                self.heartbeat(str(row[0]), ttl_seconds=90)
+            except Exception:
+                continue
+        self.recover_orphaned_runs()
 
     def heartbeat(self, run_id: str, *, ttl_seconds: int = 60) -> None:
         with unit_of_work(self.database) as work:

@@ -22,6 +22,20 @@ from .service import default_agent_run_service
 
 router = APIRouter(prefix="/api/agent-model/v1", tags=["agent-model"])
 
+_STREAM_END = object()
+
+
+def normalize_llm_provider_id(provider_id: str) -> str:
+    value = str(provider_id or "").strip()
+    return value.removeprefix("llm:") if value.startswith("llm:") else value
+
+
+def _next_stream_response(iterator: Any) -> Any:
+    try:
+        return next(iterator)
+    except StopIteration:
+        return _STREAM_END
+
 
 class AgentModelMessage(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -54,7 +68,7 @@ def _target_for_run(run_id: str, requested_model: str) -> tuple[str, str, str | 
     if requested_model != expected:
         raise HTTPException(status_code=403, detail="agent_model_outside_run_spec")
     return (
-        snapshot.spec.model.provider_id,
+        normalize_llm_provider_id(snapshot.spec.model.provider_id),
         snapshot.spec.model.model_id,
         snapshot.spec.model.reasoning_effort,
     )
@@ -190,9 +204,8 @@ async def agent_chat_completion(
     async def generate():
         try:
             while True:
-                try:
-                    response = await asyncio.to_thread(next, iterator)
-                except StopIteration:
+                response = await asyncio.to_thread(_next_stream_response, iterator)
+                if response is _STREAM_END:
                     break
                 if not isinstance(response, ChatResponse):
                     continue

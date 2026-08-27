@@ -244,14 +244,15 @@ class PostgresAgentRunRepository:
             for row in rows
         ]
 
-    def enqueue_command(self, command: AgentRunCommand) -> AgentRunCommand:
-        self.connection.execute(
+    def enqueue_command(self, command: AgentRunCommand) -> tuple[AgentRunCommand, str]:
+        inserted = self.connection.execute(
             """
             INSERT INTO omnix_agent_run_commands (
                 workspace_id, run_id, command_id, command_type, payload,
                 idempotency_key, created_at
             ) VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s)
             ON CONFLICT (workspace_id, run_id, idempotency_key) DO NOTHING
+            RETURNING command_id
             """,
             (
                 self.context.workspace_id,
@@ -262,10 +263,10 @@ class PostgresAgentRunRepository:
                 command.idempotency_key,
                 command.created_at,
             ),
-        )
+        ).fetchone()
         row = self.connection.execute(
             """
-            SELECT command_id, command_type, payload, idempotency_key, created_at
+            SELECT command_id, command_type, payload, idempotency_key, created_at, status
               FROM omnix_agent_run_commands
              WHERE workspace_id = %s AND run_id = %s AND idempotency_key = %s
             """,
@@ -279,29 +280,60 @@ class PostgresAgentRunRepository:
             idempotency_key=str(row[3]),
             created_at=row[4],
         )
-        self.append_event(AgentEvent(run_id=command.run_id, event_type="steering.received" if stored.command_type == "steer" else "run.status", payload={"command_id": stored.command_id, "command_type": stored.command_type}))
-        return stored
+        if inserted is not None:
+            self.append_event(
+                AgentEvent(
+                    run_id=command.run_id,
+                    event_type="steering.received" if stored.command_type == "steer" else "run.status",
+                    payload={"command_id": stored.command_id, "command_type": stored.command_type},
+                )
+            )
+        return stored, str(row[5])
 
-    def claim_commands(self, run_id: str, *, limit: int = 20) -> list[AgentRunCommand]:
+    def claim_command(self, run_id: str, command_id: str) -> bool:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_run_commands
+               SET status = 'processing'
+             WHERE workspace_id = %s AND run_id = %s AND command_id = %s
+               AND status = 'pending'
+            RETURNING command_id
+            """,
+            (self.context.workspace_id, run_id, command_id),
+        ).fetchone()
+        return row is not None
+
+    def complete_command(self, run_id: str, command_id: str) -> None:
+        self.connection.execute(
+            """
+            UPDATE omnix_agent_run_commands
+               SET status = 'consumed', consumed_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND command_id = %s
+               AND status = 'processing'
+            """,
+            (self.context.workspace_id, run_id, command_id),
+        )
+
+    def reset_processing_commands(self, run_id: str) -> None:
+        self.connection.execute(
+            """
+            UPDATE omnix_agent_run_commands
+               SET status = 'pending', consumed_at = NULL
+             WHERE workspace_id = %s AND run_id = %s AND status = 'processing'
+            """,
+            (self.context.workspace_id, run_id),
+        )
+
+    def list_pending_commands(self, run_id: str, *, limit: int = 100) -> list[AgentRunCommand]:
         rows = self.connection.execute(
             """
-            WITH claimed AS (
-                SELECT command_id
-                  FROM omnix_agent_run_commands
-                 WHERE workspace_id = %s AND run_id = %s AND status = 'pending'
-                 ORDER BY created_at, command_id
-                 FOR UPDATE SKIP LOCKED
-                 LIMIT %s
-            )
-            UPDATE omnix_agent_run_commands AS command
-               SET status = 'consumed', consumed_at = CURRENT_TIMESTAMP
-              FROM claimed
-             WHERE command.workspace_id = %s AND command.run_id = %s
-               AND command.command_id = claimed.command_id
-            RETURNING command.command_id, command.command_type, command.payload,
-                      command.idempotency_key, command.created_at
+            SELECT command_id, command_type, payload, idempotency_key, created_at
+              FROM omnix_agent_run_commands
+             WHERE workspace_id = %s AND run_id = %s AND status = 'pending'
+             ORDER BY created_at, command_id
+             LIMIT %s
             """,
-            (self.context.workspace_id, run_id, max(1, min(limit, 100)), self.context.workspace_id, run_id),
+            (self.context.workspace_id, run_id, max(1, min(limit, 1000))),
         ).fetchall()
         return [
             AgentRunCommand(

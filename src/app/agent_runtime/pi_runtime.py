@@ -81,7 +81,7 @@ def normalize_pi_event(run_id: str, payload: dict[str, Any]) -> AgentEvent | Non
     if event_type == "agent_start":
         return AgentEvent(run_id=run_id, event_type="run.started", payload={"source": "pi"})
     if event_type == "agent_settled":
-        return AgentEvent(run_id=run_id, event_type="run.completed", payload={"source": "pi", "raw": payload})
+        return AgentEvent(run_id=run_id, event_type="run.settled", payload={"source": "pi", "raw": payload})
     if event_type in {"message_start", "message_update", "message_end", "turn_start", "turn_end"}:
         return AgentEvent(run_id=run_id, event_type="model.message", payload={"source": "pi", "raw": payload})
     if event_type == "tool_execution_start":
@@ -287,7 +287,10 @@ class PiAgentRuntime(AgentRuntime):
                 session.close()
                 snapshot = snapshot.model_copy(update={"status": "cancelled", "desired_state": "cancelled", "revision": snapshot.revision + 1})
             elif command.command_type in {"approve", "reject"}:
-                session.steer(f"Omnix approval decision: {command.command_type}. {command.payload}")
+                snapshot = snapshot.model_copy(
+                    update={"status": "running", "desired_state": "running", "revision": snapshot.revision + 1}
+                )
+                session.prompt(f"Omnix approval decision: {command.command_type}. {command.payload}")
             self._snapshots[command.run_id] = snapshot
             return snapshot
 
@@ -308,8 +311,10 @@ class PiAgentRuntime(AgentRuntime):
         with self._lock:
             snapshot = self._snapshots.get(event.run_id)
             if snapshot is not None:
-                if event.event_type == "run.completed":
-                    self._snapshots[event.run_id] = snapshot.model_copy(update={"status": "completed", "revision": snapshot.revision + 1})
+                if event.event_type == "run.started":
+                    self._snapshots[event.run_id] = snapshot.model_copy(
+                        update={"status": "running", "desired_state": "running", "revision": snapshot.revision + 1}
+                    )
                 elif event.event_type == "run.failed":
                     self._snapshots[event.run_id] = snapshot.model_copy(update={"status": "failed", "revision": snapshot.revision + 1})
         if self.event_sink is not None:
