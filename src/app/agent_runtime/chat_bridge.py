@@ -409,14 +409,16 @@ def _agent_metadata(snapshot: Any) -> dict[str, Any]:
 
 
 def _select_profile(content: str) -> str:
+    # Execution intent outranks the subject domain. "Fix the trading UI" is a
+    # coding task about trading, not a market-research task.
+    if _CODE.search(content):
+        return "coding"
     if _HOME.search(content):
         return "house"
     if _PERSONAL.search(content):
         return "personal-assistant"
     if _TRADING.search(content):
         return "trading-research"
-    if _CODE.search(content):
-        return "coding"
     return "research"
 
 
