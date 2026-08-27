@@ -136,6 +136,15 @@ def _cap(
 
 
 _DEFAULT_CAPABILITIES = (
+    _cap("workspace.read", "Read workspace file", "Read a UTF-8 file within the issued workspace scope.", zone="worker", effect="read", category="development", input_schema={"path": "workspace-relative path"}),
+    _cap("workspace.list", "List workspace", "List entries within the issued workspace scope.", zone="worker", effect="read", category="development", input_schema={"path": "workspace-relative directory"}),
+    _cap("workspace.search", "Search workspace", "Search text within the issued workspace scope.", zone="worker", effect="read", category="development", input_schema={"query": "string", "path": "workspace-relative path"}),
+    _cap("workspace.edit", "Edit workspace file", "Apply a bounded text replacement inside the issued workspace.", zone="worker", effect="mutate", risk="medium", category="development", input_schema={"path": "workspace-relative path"}),
+    _cap("workspace.write", "Write workspace file", "Write a file inside the issued workspace.", zone="worker", effect="mutate", risk="medium", category="development", input_schema={"path": "workspace-relative path"}),
+    _cap("workspace.command", "Run workspace command", "Run an argv-only command allowed by the workspace command policy.", zone="worker", effect="execute", risk="high", category="development", input_schema={"argv": "list of strings"}),
+    _cap("workspace.test", "Run workspace tests", "Run a configured test command in the issued workspace.", zone="worker", effect="execute", risk="medium", category="development", input_schema={"argv": "list of strings"}),
+    _cap("workspace.git_status", "Read local git status", "Read git status for the isolated worktree.", zone="worker", effect="read", category="development"),
+    _cap("workspace.git_diff", "Read local git diff", "Read the current isolated worktree diff.", zone="worker", effect="read", category="development"),
     _cap("gmail.read_email", "Read email", "Search and read Gmail messages and threads.", zone="broker", effect="read", network=True, credentials=True, connection=True, provider="Google", category="communication", assistant=True),
     _cap("gmail.create_draft", "Create drafts", "Create reviewable Gmail drafts without sending.", zone="broker", effect="create", risk="medium", network=True, credentials=True, connection=True, provider="Google", category="communication", assistant=True),
     _cap("gmail.send_email", "Send email", "Send or reply to Gmail messages.", zone="broker", effect="mutate", risk="high", network=True, credentials=True, connection=True, confirmation=True, provider="Google", category="communication", assistant=True),
