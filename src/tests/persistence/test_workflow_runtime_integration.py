@@ -106,6 +106,12 @@ def test_workflow_versions_idempotency_and_stale_step_recovery() -> None:
         recovered = runtime.get_status(guarded_run)
         assert recovered is not None
         assert recovered["status"] == "failed"
+        assert recovered["last_error"] == "step_outcome_unknown_after_worker_loss"
+        recovery_events = runtime.stream_events(guarded_run)
+        assert [event.event_type for event in recovery_events[-2:]] == [
+            "workflow.step.failed",
+            "workflow.run.failed",
+        ]
     finally:
         runtime._supervisor_stop.set()
         database.close()
