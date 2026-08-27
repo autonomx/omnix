@@ -1348,27 +1348,6 @@
 
 
 
-/* Liquid Glass light universal surface catcher
- * --------------------------------------------
- * Feature teams use many specialized card/panel names. This high-specificity
- * fallback is intentionally scoped to Liquid Glass light mode and only to
- * surface-like suffixes so newly added views inherit the material automatically.
- */
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class$='-card'],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class*='-card '],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class$='-panel'],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class*='-panel '],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class$='-rail'],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class*='-rail '],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class$='-surface'],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class*='-surface '],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class$='-toolbar'],
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main [class*='-toolbar '] {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  border-color: var(--omnix-glass-border) !important;
-}
-
 /* Preserve media/plot content while allowing the chrome around it to be glass. */
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main canvas,
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-main video,
