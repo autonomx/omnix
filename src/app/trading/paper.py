@@ -488,17 +488,26 @@ def paper_fill_is_fundable(
     return order.reserved_cash >= total_cost
 
 
+def paper_observation_key(observation: PaperMarketObservation) -> str:
+    """Stable identity for one distinct paper-execution market observation."""
+    raw = (
+        f"{observation.instrument_id}|{observation.binding_id}|{observation.provider}|"
+        f"{observation.source_time.isoformat()}|{observation.price}|"
+        f"{observation.bid}|{observation.ask}|{observation.bid_size}|{observation.ask_size}|"
+        f"{observation.high}|{observation.low}|{observation.volume}|"
+        f"{observation.bar_start_time.isoformat() if observation.bar_start_time else None}|"
+        f"{observation.execution_eligible}|{observation.freshness_mode}|"
+        f"{','.join(observation.rejection_reasons)}|{observation.halted}"
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def paper_fill_key(
     account_id: str,
     order_id: str,
     observation: PaperMarketObservation,
 ) -> str:
-    raw = (
-        f"{account_id}|{order_id}|{observation.instrument_id}|"
-        f"{observation.source_time.isoformat()}|{observation.price}|"
-        f"{observation.bid}|{observation.ask}|{observation.bid_size}|{observation.ask_size}|"
-        f"{observation.high}|{observation.low}|{observation.volume}|{observation.halted}"
-    )
+    raw = f"{account_id}|{order_id}|{paper_observation_key(observation)}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
