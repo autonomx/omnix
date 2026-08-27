@@ -1080,7 +1080,7 @@ Just return the title, nothing else."""
 async def get_tts_speakers():
     """Get available TTS speakers/voices"""
     try:
-        result = tts_speakers()
+        result = await asyncio.to_thread(tts_speakers)
         # tts_speakers() now always returns a dict (never raises)
         # but if it somehow indicates failure, still return 200 with the data
         return result
@@ -1377,7 +1377,7 @@ async def voice_studio_voices():
         })
 
     try:
-        remote = tts_speakers()
+        remote = await asyncio.to_thread(tts_speakers)
         for s in remote.get("speakers", []):
             sid = s.get("id", s.get("name", ""))
             if sid and not any(v["id"] == sid for v in voices):
@@ -2381,7 +2381,8 @@ async def story_generate(request: Request):
         settings = await asyncio.to_thread(shared.load_settings)
         image_settings = dict((settings or {}).get("image") or {})
         story_image_settings = dict(image_settings.get("story") or {})
-        maybe_enqueue_story_scene_image(
+        await asyncio.to_thread(
+            maybe_enqueue_story_scene_image,
             session_id=story_session_id,
             story_text=story_text,
             settings=story_image_settings,
@@ -2531,13 +2532,14 @@ async def llamacpp_start(request: Request):
             "--log-disable"
         ]
         
-        proc = sp.Popen(
+        proc = await asyncio.to_thread(
+            sp.Popen,
             cmd,
-            cwd=str(server_dir), 
-            stdout=sp.PIPE, 
+            cwd=str(server_dir),
+            stdout=sp.PIPE,
             stderr=sp.STDOUT,
             text=True,
-            bufsize=1
+            bufsize=1,
         )
         
         # Start thread to read and log server output to file
@@ -2591,7 +2593,7 @@ async def llamacpp_download(request: Request):
     
     download_id = str(uuid.uuid4())[:8]
     
-    async def progress_callback(status):
+    def progress_callback(status):
         shared.llamacpp_server_downloads[download_id] = {
             "id": download_id,
             "status": status.get("type", "downloading"),
@@ -2600,9 +2602,12 @@ async def llamacpp_download(request: Request):
         }
     
     try:
-        installer = get_installer()
+        installer = await asyncio.to_thread(get_installer)
         
-        result = installer.download_and_extract_server(progress_callback=progress_callback)
+        result = await asyncio.to_thread(
+            installer.download_and_extract_server,
+            progress_callback=progress_callback,
+        )
         
         if result.get("success"):
             shared.llamacpp_server_downloads[download_id] = {
@@ -2877,7 +2882,8 @@ async def chat_stream(request: Request):
                         settings = await asyncio.to_thread(shared.load_settings)
                         image_settings = dict((settings or {}).get("image") or {})
                         chat_image_settings = dict(image_settings.get("chat") or {})
-                        maybe_enqueue_chat_image(
+                        await asyncio.to_thread(
+                            maybe_enqueue_chat_image,
                             session_id=session_id,
                             user_text=user_message,
                             assistant_text=ai_message,
@@ -2985,7 +2991,7 @@ class _HttpTtsProvider:
     def get_speakers(self):
         from app.tts_http_client import tts_speakers
 
-        response = tts_speakers()
+        response = await asyncio.to_thread(tts_speakers)
         return response.get("speakers", [])
 
 
