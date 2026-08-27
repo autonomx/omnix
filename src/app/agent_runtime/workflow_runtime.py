@@ -370,6 +370,17 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             ).fetchone()
             if row is None:
                 raise KeyError(schedule_id)
+            work.connection.execute(
+                """
+                UPDATE omnix_workflow_schedule_fires
+                   SET status = 'cancelled',
+                       last_error = 'schedule_cancelled_before_dispatch',
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND schedule_id = %s
+                   AND status = 'pending'
+                """,
+                (self.context.workspace_id, schedule_id),
+            )
             work.commit()
 
     def pause(self, run_id: str) -> None:
@@ -1043,6 +1054,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 continue
 
     def _enqueue_due_schedule_fires(self) -> None:
+        now = datetime.now(timezone.utc)
         with unit_of_work(self.database) as work:
             rows = work.connection.execute(
                 """
@@ -1076,8 +1088,14 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     next_run_at = None
                     enabled = False
                 else:
+                    interval = int(interval_seconds)
+                    elapsed = max(
+                        0.0,
+                        (now - scheduled_for).total_seconds(),
+                    )
+                    intervals_to_advance = int(elapsed // interval) + 1
                     next_run_at = scheduled_for + timedelta(
-                        seconds=int(interval_seconds)
+                        seconds=interval * intervals_to_advance
                     )
                     enabled = True
                 work.connection.execute(
