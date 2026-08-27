@@ -177,14 +177,14 @@ async def lifespan(app: FastAPI):
     
     # Check TTS service status
     try:
-        tts_status = tts_health()
+        tts_status = await asyncio.to_thread(tts_health)
         print(f"[FASTAPI] TTS service status: {tts_status}")
     except Exception as e:
         print(f"[FASTAPI] ERROR checking TTS service: {e}")
     
     # Initialize LLM provider
     try:
-        llm_provider = shared.get_provider()
+        llm_provider = await asyncio.to_thread(shared.get_provider)
         if llm_provider:
             print(f"[FASTAPI] LLM provider loaded: {llm_provider.config.model}")
         else:
@@ -640,7 +640,7 @@ async def websocket_conversation(websocket: WebSocket):
 async def _process_conversation(session: ConversationSession, user_text: str):
     """Process conversation and stream response"""
     # Reload provider from settings on each request to pick up changes
-    provider = shared.get_provider()
+    provider = await asyncio.to_thread(shared.get_provider)
     if not provider:
         await session.websocket.send_json({"type": "error", "error": "No LLM provider"})
         return
@@ -672,10 +672,11 @@ async def _process_conversation(session: ConversationSession, user_text: str):
         start_time = time.time()
         
         # Stream from the blocking provider iterator one chunk at a time off-loop.
-        stream_generator = provider.chat_completion(
+        stream_generator = await asyncio.to_thread(
+            provider.chat_completion,
             messages=messages,
             model=provider.config.model,
-            stream=True
+            stream=True,
         )
 
         first_token_time = None
@@ -836,8 +837,10 @@ from fastapi import HTTPException, Request
 @app.get("/api/settings")
 async def get_settings():
     """Get settings"""
-    settings = shared.load_settings()
-    secrets = shared.load_secrets()
+    settings, secrets = await asyncio.gather(
+        asyncio.to_thread(shared.load_settings),
+        asyncio.to_thread(shared.load_secrets),
+    )
     
     # Add API keys from secrets to settings (for internal use)
     if 'api_keys' in secrets:
@@ -860,8 +863,10 @@ async def get_settings():
 async def save_settings(request: Request):
     """Save settings"""
     data = await request.json()
-    settings = shared.load_settings()
-    secrets = shared.load_secrets()
+    settings, secrets = await asyncio.gather(
+        asyncio.to_thread(shared.load_settings),
+        asyncio.to_thread(shared.load_secrets),
+    )
     
     if 'provider' in data:
         settings['provider'] = data['provider']
@@ -895,10 +900,10 @@ async def save_settings(request: Request):
         settings['llamacpp'].update(data['llamacpp'])
     
     # Save secrets (API keys)
-    shared.save_secrets(secrets)
+    await asyncio.to_thread(shared.save_secrets, secrets)
     
     # Save settings
-    shared.save_settings(settings)
+    await asyncio.to_thread(shared.save_settings, settings)
     return {"success": True}
 
 
@@ -907,8 +912,10 @@ async def get_openrouter_models():
     """Get available models from OpenRouter API"""
     import requests
     
-    settings = shared.load_settings()
-    secrets = shared.load_secrets()
+    settings, secrets = await asyncio.gather(
+        asyncio.to_thread(shared.load_settings),
+        asyncio.to_thread(shared.load_secrets),
+    )
     api_key = (
         secrets.get('api_keys', {}).get('openrouter', '')
         or settings.get('openrouter', {}).get('api_key', '')
@@ -953,7 +960,7 @@ async def create_session():
     """Create new session"""
     sid = str(uuid.uuid4())[:8]
     now = datetime.now().isoformat()
-    system_prompt = shared.get_global_system_prompt()
+    system_prompt = await asyncio.to_thread(shared.get_global_system_prompt)
 
     def create(current_sessions: Dict[str, Any]) -> None:
         current_sessions[sid] = {
@@ -1022,7 +1029,7 @@ async def generate_session_title(request: Request):
     ai_response = data.get('ai_response', '')
     
     # Reload provider from settings on each request to pick up changes
-    provider = shared.get_provider()
+    provider = await asyncio.to_thread(shared.get_provider)
     if not provider:
         return JSONResponse({"success": False, "error": "No LLM provider"}, status_code=500)
     
@@ -1038,10 +1045,11 @@ Just return the title, nothing else."""
 
         messages = [ChatMessage(role="user", content=title_prompt)]
         
-        response = await provider.chat_completion(
+        response = await asyncio.to_thread(
+            provider.chat_completion,
             messages=messages,
             model=provider.config.model,
-            stream=False
+            stream=False,
         )
         
         title = ""
@@ -1083,12 +1091,12 @@ async def get_tts_speakers():
 @app.get("/api/health")
 async def health_check():
     """Check health of current provider"""
-    provider = shared.get_provider()
+    provider = await asyncio.to_thread(shared.get_provider)
     if not provider:
         return {"status": "disconnected", "message": "Provider not available", "provider": "unknown"}
     
     try:
-        is_healthy = provider.test_connection()
+        is_healthy = await asyncio.to_thread(provider.test_connection)
         status = "connected" if is_healthy else "disconnected"
         return {
             "status": status,
@@ -1107,7 +1115,7 @@ async def health_check():
 async def providers_status():
     """Check status of all providers"""
     try:
-        llm_provider = shared.get_provider()
+        llm_provider = await asyncio.to_thread(shared.get_provider)
         llm_status = {
             "available": False,
             "provider": "unknown",
@@ -1116,7 +1124,7 @@ async def providers_status():
         
         if llm_provider:
             try:
-                is_healthy = llm_provider.test_connection()
+                is_healthy = await asyncio.to_thread(llm_provider.test_connection)
                 llm_status = {
                     "available": is_healthy,
                     "provider": llm_provider.provider_name,
@@ -1129,7 +1137,7 @@ async def providers_status():
                     "message": str(e)
                 }
 
-        remote_tts = tts_health()
+        remote_tts = await asyncio.to_thread(tts_health)
         tts_status = {
             "available": bool(remote_tts.get("ok")),
             "provider": remote_tts.get("provider", "tts-http"),
@@ -1949,7 +1957,7 @@ async def audiobook_generate(request: Request):
 
     async def gen():
         try:
-            tts_status = tts_health()
+            tts_status = await asyncio.to_thread(tts_health)
             if not tts_status.get("ok"):
                 yield f"data: {json.dumps({'type': 'error', 'error': 'TTS service not available. Please check your TTS settings.', 'code': 'TTS_UNAVAILABLE'})}\n\n"
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -2370,7 +2378,7 @@ async def story_generate(request: Request):
         return JSONResponse({"success": False, "error": "LLM output could not be parsed. Ensure the LLM is connected and responding correctly."}, status_code=500)
 
     try:
-        settings = shared.load_settings()
+        settings = await asyncio.to_thread(shared.load_settings)
         image_settings = dict((settings or {}).get("image") or {})
         story_image_settings = dict(image_settings.get("story") or {})
         maybe_enqueue_story_scene_image(
@@ -2508,7 +2516,8 @@ async def llamacpp_start(request: Request):
     try:
         port = 8080
         try: 
-            port = int(shared.load_settings().get('llamacpp', {}).get('base_url', '').split(':')[-1])
+            settings = await asyncio.to_thread(shared.load_settings)
+            port = int(settings.get('llamacpp', {}).get('base_url', '').split(':')[-1])
         except: pass
         
         import subprocess as sp
@@ -2563,7 +2572,8 @@ async def llamacpp_stop():
     try:
         port = 8080
         try: 
-            port = int(shared.load_settings().get('llamacpp', {}).get('base_url', '').split(':')[-1])
+            settings = await asyncio.to_thread(shared.load_settings)
+            port = int(settings.get('llamacpp', {}).get('base_url', '').split(':')[-1])
         except: pass
         return {"success": True, "message": f"Stopped port {port}"}
     except Exception as e:
@@ -2735,12 +2745,12 @@ async def get_stt_logs():
 @app.get("/api/models")
 async def get_models():
     """Get available models"""
-    provider = shared.get_provider()
+    provider = await asyncio.to_thread(shared.get_provider)
     if not provider:
         return JSONResponse({"success": False, "error": "Provider not available"}, status_code=500)
     
     try:
-        models = provider.get_models()
+        models = await asyncio.to_thread(provider.get_models)
         models_data = [{
             "id": m.id,
             "name": m.name,
@@ -2827,7 +2837,8 @@ async def chat_stream(request: Request):
                 ai_message = ""
                 thinking = ""
                 
-                stream_generator = provider.chat_completion(
+                stream_generator = await asyncio.to_thread(
+                    provider.chat_completion,
                     messages=messages,
                     model=model or provider.config.model,
                     stream=True,
@@ -2863,7 +2874,7 @@ async def chat_stream(request: Request):
                 saved = await asyncio.to_thread(shared.update_sessions, append_stream_turn)
                 if saved:
                     try:
-                        settings = shared.load_settings()
+                        settings = await asyncio.to_thread(shared.load_settings)
                         image_settings = dict((settings or {}).get("image") or {})
                         chat_image_settings = dict(image_settings.get("chat") or {})
                         maybe_enqueue_chat_image(
