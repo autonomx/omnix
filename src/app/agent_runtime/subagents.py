@@ -81,16 +81,47 @@ def reserve_child_budget(
     parent: AgentRunSnapshot,
     existing_children: list[AgentRunSnapshot],
     child: AgentRunSpec,
+    *,
+    parent_usage: dict[str, object] | None = None,
 ) -> None:
     limits = parent.spec.limits
+    usage = parent_usage or {}
     children = [item.spec.limits for item in existing_children]
-    _bounded_sum("max_steps", limits.max_steps, [item.max_steps for item in children] + [child.limits.max_steps])
-    _bounded_sum("max_tool_calls", limits.max_tool_calls, [item.max_tool_calls for item in children] + [child.limits.max_tool_calls])
-    _bounded_sum("max_wall_time_seconds", limits.max_wall_time_seconds, [item.max_wall_time_seconds for item in children] + [child.limits.max_wall_time_seconds])
+    _bounded_sum(
+        "max_steps",
+        limits.max_steps,
+        [int(usage.get("steps", 0)), *[item.max_steps for item in children], child.limits.max_steps],
+    )
+    _bounded_sum(
+        "max_tool_calls",
+        limits.max_tool_calls,
+        [int(usage.get("tool_calls", 0)), *[item.max_tool_calls for item in children], child.limits.max_tool_calls],
+    )
+    _bounded_sum(
+        "max_wall_time_seconds",
+        limits.max_wall_time_seconds,
+        [item.max_wall_time_seconds for item in children] + [child.limits.max_wall_time_seconds],
+    )
     if limits.max_tokens is not None:
-        _bounded_sum("max_tokens", limits.max_tokens, [item.max_tokens or 0 for item in children] + [child.limits.max_tokens or 0])
+        _bounded_sum(
+            "max_tokens",
+            limits.max_tokens,
+            [
+                int(usage.get("output_tokens", 0)),
+                *[item.max_tokens or 0 for item in children],
+                child.limits.max_tokens or 0,
+            ],
+        )
     if limits.max_cost is not None:
-        _bounded_sum("max_cost", limits.max_cost, [item.max_cost or 0 for item in children] + [child.limits.max_cost or 0])
+        _bounded_sum(
+            "max_cost",
+            limits.max_cost,
+            [
+                float(usage.get("cost", 0.0)),
+                *[item.max_cost or 0 for item in children],
+                child.limits.max_cost or 0,
+            ],
+        )
 
 
 def _default_child_limits(parent: RunLimits) -> RunLimits:
