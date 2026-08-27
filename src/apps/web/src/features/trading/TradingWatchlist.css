@@ -275,11 +275,15 @@
 }
 
 .trading-watchlist-change.positive {
-  color: #39d99a;
+  color: #39d99a !important;
 }
 
 .trading-watchlist-change.negative {
-  color: #ff7079;
+  color: #ff7079 !important;
+}
+
+.trading-watchlist-change.neutral {
+  color: #bdcbd8;
 }
 
 .trading-watchlist-row-actions {
