@@ -312,7 +312,8 @@ def _github_repository_from_remote(remote_url: str) -> tuple[str, str]:
 def _repository_parts(repository: str) -> tuple[str, str]:
     value = str(repository or "").strip()
     if value.startswith("https://github.com/"):
-        value = value.removeprefix("https://github.com/").removesuffix(".git").strip("/")
+        value = value.removeprefix("https://github.com/")
+    value = value.strip("/").removesuffix(".git")
     parts = value.split("/")
     if len(parts) != 2 or not all(parts):
         raise ValueError("repository must be owner/name")
