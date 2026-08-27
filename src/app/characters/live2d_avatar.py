@@ -1,10 +1,10 @@
 """Governed Live2D catalog, local installer, and Character avatar activation."""
 from __future__ import annotations
 
-import json
 import hashlib
 import hmac
 import io
+import json
 import mimetypes
 import posixpath
 import ssl
