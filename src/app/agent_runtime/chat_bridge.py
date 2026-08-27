@@ -7,6 +7,7 @@ requires the existing Agent Chat toggle or an explicit /agent-style request.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import os
 import re
 from typing import Any
@@ -248,7 +249,10 @@ def _agent_result(
     provider_id: str | None,
     model_id: str | None,
 ) -> GeneralizedChatResult | None:
-    service = default_agent_run_service()
+    try:
+        service = default_agent_run_service()
+    except Exception:
+        return None
     active = _latest_active_agent_run(service, session)
     if active is not None:
         return _continue_agent_run(service, active, str(user_message.content or ""), decision)
@@ -347,11 +351,12 @@ def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: Omn
             command_type = "approve" if _CONFIRM.fullmatch(normalized) else "reject"
             payload = {"approval_id": pending[0].approval_id}
 
+    command_digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
     command = AgentRunCommand(
         run_id=snapshot.run_id,
         command_type=command_type,
         payload=payload,
-        idempotency_key=f"chat:{snapshot.run_id}:{command_type}:{hash(normalized)}",
+        idempotency_key=f"chat:{snapshot.run_id}:{command_type}:{command_digest}",
     )
     try:
         updated = service.command(command)

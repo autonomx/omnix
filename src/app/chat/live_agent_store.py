@@ -87,18 +87,15 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 yield from _governed_rejection_events(user_message, request)
                 return
 
-            try:
-                from app.agent_runtime.chat_bridge import route_typed_chat_turn
+            from app.agent_runtime.chat_bridge import route_typed_chat_turn
 
-                generalized = route_typed_chat_turn(
-                    session,
-                    user_message,
-                    provider_id=provider_id,
-                    model_id=model_id,
-                    context_items=context_items,
-                )
-            except Exception:
-                generalized = None
+            generalized = route_typed_chat_turn(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items,
+            )
             if generalized is not None:
                 _persist_omnix_route(
                     self,
