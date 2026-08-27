@@ -741,10 +741,10 @@ class PostgresAgentRunRepository:
                    cost = cost + %s,
                    updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND run_id = %s
-               AND (%s IS NULL OR steps + %s <= %s)
-               AND (%s IS NULL OR tool_calls + %s <= %s)
-               AND (%s IS NULL OR output_tokens + %s <= %s)
-               AND (%s IS NULL OR cost + %s <= %s)
+               AND (%s::BIGINT IS NULL OR steps + %s <= %s::BIGINT)
+               AND (%s::BIGINT IS NULL OR tool_calls + %s <= %s::BIGINT)
+               AND (%s::BIGINT IS NULL OR output_tokens + %s <= %s::BIGINT)
+               AND (%s::NUMERIC IS NULL OR cost + %s <= %s::NUMERIC)
             RETURNING steps, tool_calls, model_calls, output_tokens, cost
             """,
             (
