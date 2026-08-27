@@ -1,7 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import fs from "node:fs";
 import path from "node:path";
 
 const workspace = path.resolve(process.env.OMNIX_AGENT_WORKSPACE || process.cwd());
+const realWorkspace = fs.realpathSync(workspace);
 const runId = process.env.OMNIX_AGENT_RUN_ID || "";
 const brokerUrl = process.env.OMNIX_AGENT_BROKER_URL || "http://127.0.0.1:8000/api/agent-runs";
 
@@ -46,10 +48,42 @@ function matches(patterns: string[], relative: string): boolean {
   });
 }
 
+function realPathWithinWorkspace(value: string): boolean {
+  const cleaned = value.startsWith("@") ? value.slice(1) : value;
+  const candidate = path.resolve(workspace, cleaned);
+  let probe = candidate;
+  while (true) {
+    try {
+      fs.lstatSync(probe);
+      break;
+    } catch {
+      const parent = path.dirname(probe);
+      if (parent === probe) return false;
+      probe = parent;
+    }
+  }
+  let realProbe: string;
+  try {
+    realProbe = fs.realpathSync(probe);
+  } catch {
+    // A dangling symlink (or other unresolvable existing path) is not a safe
+    // parent for a read/write target.
+    return false;
+  }
+  const suffix = path.relative(probe, candidate);
+  const reconstructed = path.resolve(realProbe, suffix);
+  const relative = path.relative(realWorkspace, reconstructed);
+  return !(
+    relative === ".."
+    || relative.startsWith(".." + path.sep)
+    || path.isAbsolute(relative)
+  );
+}
+
 function pathAllowed(value: unknown): boolean {
   if (typeof value !== "string" || !value.trim()) return true;
   const relative = relativeWorkspacePath(value);
-  if (relative === null) return false;
+  if (relative === null || !realPathWithinWorkspace(value)) return false;
   if (matches(forbiddenPaths, relative)) return false;
   return allowedPaths.length === 0 || matches(allowedPaths, relative);
 }
