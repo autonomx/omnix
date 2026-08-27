@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import threading
 
+from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -27,10 +28,12 @@ class AgentRunService:
         *,
         pi_path: str | None = None,
         worker_id: str | None = None,
+        blob_store: LocalBlobStore | None = None,
     ) -> None:
         self.database = database or default_database()
         self.context = bootstrap_local_tenant(self.database)
         self.worker_id = worker_id or f"agent-worker:{os.getpid()}"
+        self.blob_store = blob_store or LocalBlobStore()
         self.runtime = PiAgentRuntime(
             pi_path=pi_path or os.environ.get("OMNIX_PI_PATH", "pi"),
             event_sink=self._persist_runtime_event,
@@ -386,25 +389,29 @@ class AgentRunService:
             diff = WorkspaceAuthority(root).git_diff()
         except Exception:
             return
-        digest = hashlib.sha256(diff.encode("utf-8")).hexdigest()
-        artifact_root = Path(
-            os.environ.get(
-                "OMNIX_AGENT_ARTIFACT_ROOT",
-                str(Path(tempfile.gettempdir()) / "omnix-agent-artifacts"),
-            )
-        ).expanduser().resolve() / spec.run_id
-        artifact_root.mkdir(parents=True, exist_ok=True)
-        artifact_path = artifact_root / "workspace.diff"
-        artifact_path.write_text(diff, encoding="utf-8")
+        content = diff.encode("utf-8")
+        workspace_key = hashlib.sha256(
+            self.context.workspace_id.encode("utf-8")
+        ).hexdigest()[:16]
+        run_key = hashlib.sha256(spec.run_id.encode("utf-8")).hexdigest()
+        blob = self.blob_store.put_bytes(
+            f"agent/runs/{workspace_key}/{run_key}/workspace.diff",
+            content,
+        )
         preview_limit = 16_000
         repository.add_artifact(
             AgentArtifact(
                 run_id=spec.run_id,
                 kind="diff",
                 name="workspace.diff",
-                storage_ref=str(artifact_path),
-                checksum=digest,
-                metadata={"preview": diff[:preview_limit], "truncated": len(diff) > preview_limit},
+                storage_ref=str(blob["storage_key"]),
+                checksum=str(blob["checksum_sha256"]),
+                metadata={
+                    "storage_provider": str(blob["storage_provider"]),
+                    "byte_size": int(blob["byte_size"]),
+                    "preview": diff[:preview_limit],
+                    "truncated": len(diff) > preview_limit,
+                },
             )
         )
 
