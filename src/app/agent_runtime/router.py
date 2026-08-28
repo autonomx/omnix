@@ -37,7 +37,7 @@ _HYPOTHETICAL = re.compile(
     re.I,
 )
 _NEGATED_ACTION = re.compile(
-    r"(?:^(?:don'?t|do\s+not|never|no\s+need\s+to)\b|"
+    r"(?:\b(?:don'?t|do\s+not|never|no\s+need\s+to)\b|"
     r"\bi\s+(?:don'?t|do\s+not)\s+want\s+(?:you|the\s+agent)\s+to\b)",
     re.I,
 )
