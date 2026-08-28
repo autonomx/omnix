@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.trading.finviz_gapper_discovery import (
@@ -39,11 +39,12 @@ def test_parse_finviz_symbols_preserves_rank_and_deduplicates():
 
 
 def _chart_payload(now: datetime):
-    prior_open = now - timedelta(days=1, hours=5, minutes=50)
-    current_pre = now - timedelta(minutes=2)
+    # Fixed premarket-style evidence: prior regular-session close plus a current
+    # 09:18 ET print. Tests enlarge the current-only skew guard explicitly.
+    prior_regular = datetime(2026, 8, 27, 19, 59, tzinfo=timezone.utc)  # 15:59 ET
+    current_pre = datetime(2026, 8, 28, 13, 18, tzinfo=timezone.utc)  # 09:18 ET
     timestamps = [
-        int(prior_open.timestamp()),
-        int((prior_open + timedelta(hours=6)).timestamp()),
+        int(prior_regular.timestamp()),
         int(current_pre.timestamp()),
     ]
     return {
@@ -53,8 +54,8 @@ def _chart_payload(now: datetime):
                 "timestamp": timestamps,
                 "indicators": {
                     "quote": [{
-                        "close": [10.0, 10.0, 12.0],
-                        "volume": [100, 100, 1000],
+                        "close": [10.0, 12.0],
+                        "volume": [200, 1000],
                     }]
                 },
             }]
@@ -63,7 +64,11 @@ def _chart_payload(now: datetime):
 
 
 def test_finviz_discovery_uses_finviz_for_rank_and_yahoo_for_point_in_time_enrichment(monkeypatch):
-    now = datetime.now(timezone.utc)
+    now = datetime(2026, 8, 28, 13, 20, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        "app.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
+        10**9,
+    )
     finviz = Runtime([
         Response(text='<a href="quote.ashx?t=TEST">TEST</a>'),
     ])
