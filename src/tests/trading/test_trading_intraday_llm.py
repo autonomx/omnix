@@ -614,6 +614,49 @@ def test_monitor_persists_event_trigger_payload_mode_and_token_estimate():
     assert monitor.intraday_llm_call_count == 1
 
 
+def test_monitor_uses_delta_heartbeat_then_periodic_full_refresh():
+    repository = MemoryEventRepository()
+    analyzer = FixtureAnalyzer()
+    monitor = TradingStrategyMonitor(
+        intraday_llm_analyzer_factory=lambda: analyzer,
+        interval_seconds=30,
+    )
+    monitor.current_run_id = "run-refresh"
+    strategy = _llm_strategy()
+    universe = _llm_universe()
+
+    asyncio.run(
+        monitor._run_intraday_llm(
+            strategy,
+            repository,
+            universe,
+            [row("AAA", 1, observed_at=OBSERVED)],
+        )
+    )
+    assert analyzer.last_payload_modes == {"equity:NASDAQ:AAA": "full"}
+
+    asyncio.run(
+        monitor._run_intraday_llm(
+            strategy,
+            repository,
+            universe,
+            [row("AAA", 1, observed_at=OBSERVED + timedelta(minutes=10))],
+        )
+    )
+    assert analyzer.last_payload_modes == {"equity:NASDAQ:AAA": "delta"}
+
+    asyncio.run(
+        monitor._run_intraday_llm(
+            strategy,
+            repository,
+            universe,
+            [row("AAA", 1, observed_at=OBSERVED + timedelta(minutes=31))],
+        )
+    )
+    assert analyzer.last_payload_modes == {"equity:NASDAQ:AAA": "full"}
+    assert analyzer.calls == 3
+
+
 def test_monitor_failure_checkpoint_bounds_event_driven_provider_retries():
     repository = MemoryEventRepository()
     analyzer = FixtureAnalyzer(fail=True)
