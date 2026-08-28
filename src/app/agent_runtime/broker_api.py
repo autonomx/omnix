@@ -18,7 +18,12 @@ from app.persistence.unit_of_work import unit_of_work
 
 from .budget import AgentBudgetError, default_agent_budget_manager
 from .contracts import AgentApproval, AgentEvent
-from .evidence import build_evidence_receipt, is_evidence_capability
+from .evidence import (
+    build_evidence_receipt,
+    fallback_capabilities_for_requirement,
+    is_evidence_capability,
+    resolve_evidence_call,
+)
 from .repository import PostgresAgentRunRepository
 from .service import default_agent_run_service
 
@@ -181,9 +186,11 @@ def _bind_authoritative_capability_input(
     request: BrokerCapabilityRequest,
     *,
     policy=None,
+    requirement=None,
 ) -> BrokerCapabilityRequest:
     bounded = dict(request.input)
-    requirement = _evidence_requirement_for_capability(policy, capability_id) if policy is not None else None
+    if requirement is None and policy is not None:
+        requirement = _evidence_requirement_for_capability(policy, capability_id)
     subject = requirement.subject if requirement is not None else None
 
     def bind_exact(key: str, value: object) -> None:
@@ -442,11 +449,17 @@ def execute_agent_capability(
         service,
         snapshot,
     )
+    evidence_requirement, evidence_source_class = resolve_evidence_call(
+        policy,
+        canonical,
+        request.input,
+    )
     request = _bind_authoritative_capability_input(
         snapshot,
         canonical,
         request,
         policy=policy,
+        requirement=evidence_requirement,
     )
     if not _request_within_resource_scopes(snapshot, canonical, request.input):
         raise HTTPException(status_code=403, detail="agent_resource_scope_mismatch")
@@ -614,6 +627,15 @@ def execute_agent_capability(
     )
     result: AssistantToolResult = payload.execution_result
     result_payload = result.model_dump(mode="json")
+    if result.error is not None and evidence_requirement is not None:
+        fallbacks = fallback_capabilities_for_requirement(
+            evidence_requirement,
+            current_capability=canonical,
+            issued_capabilities=snapshot.spec.external_capabilities,
+        )
+        if fallbacks:
+            result_payload["evidence_fallback_capabilities"] = list(fallbacks)
+            result_payload["evidence_requirement_id"] = evidence_requirement.id
 
     with unit_of_work(service.database) as work:
         repository = PostgresAgentRunRepository(work.connection, service.context)
@@ -645,6 +667,10 @@ def execute_agent_capability(
             request_input=request.input,
             result_payload=result_payload,
             error=result.error,
+            requirement_id=(
+                evidence_requirement.id if evidence_requirement is not None else None
+            ),
+            source_class_hint=evidence_source_class,
         )
         if receipt is not None:
             repository.add_evidence_receipt(receipt)
@@ -659,6 +685,10 @@ def execute_agent_capability(
                     "state_changed": result.state_changed,
                     "error": result.error,
                     "result_summary": result.result_summary,
+                    "evidence_requirement_id": (
+                        evidence_requirement.id if evidence_requirement is not None else None
+                    ),
+                    "evidence_source_class": evidence_source_class,
                 },
             )
         )
