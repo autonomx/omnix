@@ -17,7 +17,6 @@ from collections import defaultdict
 from datetime import datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from .catalog import register_instrument
@@ -281,6 +280,7 @@ def discover_finviz_gappers(
             continue
 
         search_quote = _yahoo_exact_quote(yahoo, symbol)
+        enrichment_at = datetime.now(timezone.utc)
         quote_for_instrument = search_quote or {
             "symbol": symbol,
             "quoteType": "EQUITY",
@@ -300,10 +300,10 @@ def discover_finviz_gappers(
             GapperCandidate(
                 instrument_id=instrument.instrument_id,
                 binding_id=f"yahoo:historical_polling:{instrument.instrument_id}",
-                observed_at=received_at,
+                observed_at=enrichment_at,
                 evidence_observed_at={
                     "finviz_top_gainers": received_at,
-                    "yahoo_chart_enrichment": received_at,
+                    "yahoo_chart_enrichment": enrichment_at,
                 },
                 previous_close=previous_close,
                 premarket_price=price,
@@ -321,11 +321,12 @@ def discover_finviz_gappers(
     if not candidates:
         raise ProviderDataUnavailableError("Finviz Top Gainers produced no qualifying listed equities")
 
-    evaluation_et = evaluation.astimezone(_ET)
+    freeze_time = datetime.now(timezone.utc)
+    freeze_et = freeze_time.astimezone(_ET)
     return freeze_gapper_universe(
         universe_id=universe_id,
-        session_date=evaluation_et.date(),
-        evaluation_time=evaluation,
+        session_date=freeze_et.date(),
+        evaluation_time=freeze_time,
         discovery_source="finviz",
         candidates=candidates,
     )
