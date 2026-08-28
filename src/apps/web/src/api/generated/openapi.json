@@ -6158,6 +6158,25 @@
             "title": "Intraday Learning Enabled",
             "type": "boolean"
           },
+          "intraday_llm_enabled": {
+            "default": false,
+            "title": "Intraday Llm Enabled",
+            "type": "boolean"
+          },
+          "intraday_llm_interval_minutes": {
+            "default": 5,
+            "maximum": 60.0,
+            "minimum": 2.0,
+            "title": "Intraday Llm Interval Minutes",
+            "type": "integer"
+          },
+          "intraday_llm_top_n": {
+            "default": 8,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Intraday Llm Top N",
+            "type": "integer"
+          },
           "last_entry_et": {
             "default": "11:30:00",
             "format": "time",
@@ -6647,6 +6666,25 @@
             "default": false,
             "title": "Intraday Learning Enabled",
             "type": "boolean"
+          },
+          "intraday_llm_enabled": {
+            "default": false,
+            "title": "Intraday Llm Enabled",
+            "type": "boolean"
+          },
+          "intraday_llm_interval_minutes": {
+            "default": 5,
+            "maximum": 60.0,
+            "minimum": 2.0,
+            "title": "Intraday Llm Interval Minutes",
+            "type": "integer"
+          },
+          "intraday_llm_top_n": {
+            "default": 8,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Intraday Llm Top N",
+            "type": "integer"
           },
           "last_entry_et": {
             "default": "11:30:00",
