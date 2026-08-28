@@ -81,6 +81,12 @@ DEFAULT_FRESHNESS_SECONDS = {
     "software_release": 86400,
     "company_leadership": 86400,
     "general_current_web": 86400,
+    "company_filing": 86400,
+    "repo_contents": 300,
+    "home_state": 60,
+    "home_energy": 300,
+    "calendar_state": 300,
+    "email_state": 300,
 }
 
 def freshness_max_age_seconds(source_class: str) -> int | None:
@@ -407,12 +413,52 @@ def classify_evidence(
 
     adviser = semantic_adviser or _semantic_evidence_adviser
     advised = adviser(text, profile_id)
-    if advised is not None:
-        return advised
-
     potentially_current = profile_id in {"trading-research", "house", "personal-assistant"} and bool(
         _MARKET.search(text) or _HOME.search(text) or _CALENDAR.search(text) or _EMAIL.search(text)
     )
+    if advised is not None:
+        advised_policy = advised.policy.model_copy(
+            update={
+                "external_access": "forbidden"
+                if external_forbidden
+                else advised.policy.external_access,
+                "user_visible_attribution": (
+                    "required"
+                    if attribution == "required"
+                    else advised.policy.user_visible_attribution
+                ),
+            }
+        )
+        if (
+            potentially_current
+            and advised.confidence < 0.60
+            and advised_policy.requirement != "required"
+        ):
+            source = (
+                "market_news" if _MARKET.search(text)
+                else "home_state" if _HOME.search(text)
+                else "calendar_state" if _CALENDAR.search(text)
+                else "email_state"
+            )
+            return EvidenceDecision(
+                policy=EvidencePolicy(
+                    requirement="required",
+                    external_access="forbidden" if external_forbidden else "allowed",
+                    requirements=[
+                        _requirement(
+                            text,
+                            source,
+                            fallback="allow_fallback" if source == "market_news" else "fail_closed",
+                        )
+                    ],
+                    user_visible_attribution=attribution,
+                ),
+                confidence=advised.confidence,
+                reason=f"semantic_low_confidence_conservative_floor:{source}",
+                classifier="conservative",
+            )
+        return advised.model_copy(update={"policy": advised_policy})
+
     if potentially_current:
         source = (
             "market_news" if _MARKET.search(text)
@@ -626,6 +672,18 @@ def compile_evidence(profile: AgentProfile, decision: EvidenceDecision) -> Compi
     required_local: list[str] = []
     if policy.requirement == "required":
         for requirement in policy.requirements:
+            if requirement.freshness == "current" and requirement.max_age_seconds is None:
+                raise EvidenceCompilationError(
+                    "freshness_policy_unsatisfiable",
+                    f"current evidence source {requirement.source_class} has no maximum age",
+                    requirement_id=requirement.id,
+                )
+            if requirement.freshness == "as_of_date" and requirement.as_of_date is None:
+                raise EvidenceCompilationError(
+                    "freshness_policy_unsatisfiable",
+                    f"as-of evidence requirement {requirement.id} is missing as_of_date",
+                    requirement_id=requirement.id,
+                )
             capability, _trust = _resolve_requirement_capability(profile, requirement)
             if capability.startswith("workspace."):
                 required_local.append(capability)
@@ -737,7 +795,26 @@ def evaluate_evidence_set(
                 continue
             max_age = requirement.max_age_seconds
             freshness_time = receipt.freshest_source_at or receipt.observed_at
-            if max_age and (current - freshness_time).total_seconds() > max_age:
+            if requirement.freshness == "as_of_date":
+                if requirement.as_of_date is None or receipt.freshest_source_at is None:
+                    rejected.append(receipt.receipt_id)
+                    statuses.append("rejected")
+                    continue
+                as_of = requirement.as_of_date
+                if as_of.tzinfo is None:
+                    as_of = as_of.replace(tzinfo=timezone.utc)
+                else:
+                    as_of = as_of.astimezone(timezone.utc)
+                if freshness_time > as_of:
+                    rejected.append(receipt.receipt_id)
+                    statuses.append("rejected")
+                    continue
+                if max_age and (as_of - freshness_time).total_seconds() > max_age:
+                    stale.append(receipt.receipt_id)
+                    rejected.append(receipt.receipt_id)
+                    statuses.append("stale")
+                    continue
+            elif max_age and (current - freshness_time).total_seconds() > max_age:
                 stale.append(receipt.receipt_id)
                 rejected.append(receipt.receipt_id)
                 statuses.append("stale")

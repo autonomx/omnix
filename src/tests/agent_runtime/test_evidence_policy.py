@@ -18,9 +18,11 @@ from app.agent_runtime.contracts import (
     TaskRevision,
 )
 from app.agent_runtime.evidence import (
+    DEFAULT_FRESHNESS_SECONDS,
     EvidenceCompilationError,
     build_evidence_receipt,
     classify_evidence,
+    compile_evidence,
     compile_task_authority,
     evaluate_evidence_set,
     freshness_max_age_seconds,
@@ -529,7 +531,12 @@ def test_mixed_web_results_cannot_inherit_primary_filing_trust() -> None:
                     id="filing",
                     source_class="company_filing",
                     trust_floor="primary",
-                    subject=_security_subject("AAPL"),
+                    subject=SubjectRef(
+                        type="security",
+                        canonical_id="AAPL:US",
+                        display_name="AAPL",
+                        qualifiers={"ticker": "AAPL"},
+                    ),
                     acceptable_sources=[
                         EvidenceSourceOption(
                             source_class="company_filing",
@@ -555,3 +562,80 @@ def test_mixed_web_results_cannot_inherit_primary_filing_trust() -> None:
     )
     assert receipt is not None
     assert receipt.trust_level == "reputable"
+
+
+
+def test_semantic_adviser_cannot_override_no_external_constraint() -> None:
+    advised = EvidenceDecision(
+        policy=EvidencePolicy(requirement="none", external_access="allowed"),
+        confidence=0.9,
+        reason="semantic",
+        classifier="semantic",
+    )
+    decision = classify_evidence(
+        "Investigate my inbox without using the web",
+        profile_id="personal-assistant",
+        semantic_adviser=lambda _task, _profile: advised,
+    )
+    assert decision.policy.external_access == "forbidden"
+
+
+def test_low_confidence_semantic_none_gets_conservative_current_floor() -> None:
+    advised = EvidenceDecision(
+        policy=EvidencePolicy(requirement="none"),
+        confidence=0.4,
+        reason="uncertain",
+        classifier="semantic",
+    )
+    decision = classify_evidence(
+        "Investigate what is happening with my inbox",
+        profile_id="personal-assistant",
+        semantic_adviser=lambda _task, _profile: advised,
+    )
+    assert decision.policy.requirement == "required"
+    assert decision.policy.requirements[0].source_class == "email_state"
+    assert decision.classifier == "conservative"
+
+
+def test_as_of_date_requires_source_timestamp_and_enforces_boundary() -> None:
+    as_of = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            EvidenceRequirement(
+                id="historical",
+                source_class="general_current_web",
+                freshness="as_of_date",
+                as_of_date=as_of,
+                max_age_seconds=86400,
+            )
+        ],
+    )
+    no_source_time = _receipt(source_class="general_current_web")
+    assert not evaluate_evidence_set("run-1", policy, [no_source_time], now=as_of).passed
+
+    valid = no_source_time.model_copy(
+        update={"freshest_source_at": as_of - timedelta(hours=1)}
+    )
+    assert evaluate_evidence_set("run-1", policy, [valid], now=as_of).passed
+
+    future = no_source_time.model_copy(
+        update={"freshest_source_at": as_of + timedelta(hours=1)}
+    )
+    assert not evaluate_evidence_set("run-1", policy, [future], now=as_of).passed
+
+
+def test_current_semantic_source_without_freshness_policy_fails_compilation(monkeypatch) -> None:
+    monkeypatch.setitem(DEFAULT_FRESHNESS_SECONDS, "temporary_source", None)
+    requirement = EvidenceRequirement(
+        id="current-no-age",
+        source_class="general_current_web",
+        freshness="current",
+        max_age_seconds=None,
+    )
+    decision = EvidenceDecision(
+        policy=EvidencePolicy(requirement="required", requirements=[requirement])
+    )
+    with pytest.raises(EvidenceCompilationError) as caught:
+        compile_evidence(get_agent_profile("research"), decision)
+    assert caught.value.code == "freshness_policy_unsatisfiable"
