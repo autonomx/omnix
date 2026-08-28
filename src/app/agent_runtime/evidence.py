@@ -63,7 +63,11 @@ _WORKSPACE_EXECUTION = re.compile(
     r"\b(?:run|test|pytest|vitest|typecheck|lint|debug|diagnose|investigate|reproduce|verify)\b",
     re.I,
 )
-_HOME_MUTATION = re.compile(r"\b(?:turn|set|adjust|lower|raise|prepare|apply)\b", re.I)
+_HOME_MUTATION = re.compile(
+    r"\b(?:turn|set|adjust|lower|raise|prepare|apply|dim|brighten)\b|"
+    r"\b(?:shut|switch)\s+(?:on|off)\b",
+    re.I,
+)
 _EMAIL_SEND = re.compile(r"\b(?:send|reply|forward)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
 _EMAIL_DRAFT = re.compile(r"\b(?:draft|compose|write)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
 _CALENDAR_CREATE = re.compile(r"\b(?:schedule|create|book|add)\b.{0,80}\b(?:meeting|appointment|calendar event)\b", re.I)
