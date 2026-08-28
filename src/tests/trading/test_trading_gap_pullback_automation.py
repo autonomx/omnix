@@ -207,6 +207,7 @@ def test_finviz_source_cohort_participates_in_new_fingerprint_without_changing_l
     assert finviz.source_locator and "ta_topgainers" in finviz.source_locator
     assert finviz.source_fingerprint != legacy.source_fingerprint
 
+
 def test_split_normalized_gap_evidence_and_time_of_day_rvol_are_auditable() -> None:
     adjusted = candidate(
         previous_close=Decimal("5"),
