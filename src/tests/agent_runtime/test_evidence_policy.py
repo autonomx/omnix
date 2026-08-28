@@ -730,6 +730,12 @@ def test_allow_fallback_compiles_all_bounded_alternative_capabilities() -> None:
     )
     compiled = compile_evidence(get_agent_profile("research"), decision)
     assert compiled.external_groups == (("research.web_search", "github.read_repo"),)
+    task_compiled = compile_task_authority(
+        get_agent_profile("research"),
+        "Research the topic",
+        decision,
+    )
+    assert task_compiled.external_groups == compiled.external_groups
     assert set(compiled.required_external) == {
         "research.web_search",
         "github.read_repo",
@@ -776,3 +782,43 @@ def test_receipt_uses_explicit_requirement_source_binding() -> None:
     assert receipt is not None
     assert receipt.source_class == "company_filing"
     assert receipt.trust_level == "primary"
+    assert receipt.subject is not None
+    assert receipt.subject.qualifiers["ticker"] == "NVDA"
+
+
+
+def test_group_preflight_accepts_healthy_issued_fallback(monkeypatch) -> None:
+    from types import SimpleNamespace
+    import app.assistant_tools.gate as gate
+
+    def review(request):
+        if request.action_id == "github.read_repo":
+            return SimpleNamespace(allowed=True, reason=None)
+        return SimpleNamespace(allowed=False, reason="missing_connection")
+
+    monkeypatch.setattr(gate, "review_assistant_tool_request", review)
+    validate_required_evidence_capabilities(
+        ("research.web_search", "github.read_repo"),
+        alternative_groups=(("research.web_search", "github.read_repo"),),
+    )
+
+
+def test_fallback_helper_never_advertises_insufficient_trust_source() -> None:
+    requirement = EvidenceRequirement(
+        id="strict",
+        source_class="company_filing",
+        trust_floor="primary",
+        acceptable_sources=[
+            EvidenceSourceOption(
+                source_class="general_current_web",
+                trust_floor="reputable",
+                preference=100,
+            )
+        ],
+        fallback_policy="allow_fallback",
+    )
+    assert fallback_capabilities_for_requirement(
+        requirement,
+        current_capability="research.web_search",
+        issued_capabilities=("research.web_search",),
+    ) == ()
