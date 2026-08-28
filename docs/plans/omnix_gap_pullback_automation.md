@@ -288,4 +288,4 @@ It is an observational layer over the frozen morning population:
 - the canonical Yahoo-backed V2 qualification fingerprint remains isolated from a Finviz V2 learning experiment, so historical Yahoo evidence cannot promote the new cohort.
 - deterministic learning evaluates the full frozen cohort every finalized minute, while the default LLM is event-driven: material state/rank/VWAP/turnover/score changes trigger analysis, quiet top names receive a 10-minute heartbeat during the entry window, and `entry_ready` is always included;
 - normal LLM batches default to five active names, use compact deltas plus the previous thesis, and receive a periodic 30-minute full-context refresh;
-- runtime counters and batch events expose approximate input-token usage so token cost can be measured prospectively rather than guessed.
+- runtime counters and batch events expose provider-reported input/output/total token usage when available, with a labeled character/4 estimate fallback, so token cost can be measured prospectively rather than guessed.
