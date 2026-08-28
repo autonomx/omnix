@@ -305,13 +305,11 @@ def resolve_request_mode(
 def _extract_ticker(task: str) -> str | None:
     text = str(task or "")
     for pattern in (_TICKER_DOLLAR, _TICKER_AFTER_CONTEXT, _TICKER_BEFORE_CONTEXT):
-        match = pattern.search(text)
-        if not match:
-            continue
-        ticker = str(match.group(1)).upper()
-        if ticker in _NON_TICKER_TOKENS:
-            continue
-        return ticker
+        for match in pattern.finditer(text):
+            ticker = str(match.group(1)).upper()
+            if ticker in _NON_TICKER_TOKENS:
+                continue
+            return ticker
     return None
 
 
