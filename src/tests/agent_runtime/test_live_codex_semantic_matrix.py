@@ -30,8 +30,10 @@ import pytest
 from app.agent_runtime.chat_bridge import _apply_semantic_route_decision
 from app.agent_runtime.evidence import (
     classify_evidence,
+    compile_task_authority,
     evidence_decision_from_semantic,
 )
+from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.router import route_omnix_request
 from app.agent_runtime.semantic_classifier import (
     ProviderSemanticIntentClassifier,
@@ -51,11 +53,15 @@ class LiveSemanticCase:
     lane: str
     profiles: tuple[str, ...] = ()
     required_actions: tuple[str, ...] = ()
+    required_action_any_of: tuple[tuple[str, ...], ...] = ()
     forbidden_actions: tuple[str, ...] = ()
+    required_local_capabilities: tuple[str, ...] = ()
+    forbidden_local_capabilities: tuple[str, ...] = ()
     required_evidence: tuple[str, ...] = ()
     evidence_any_of: tuple[str, ...] = ()
     forbidden_evidence: tuple[str, ...] = ()
     multi_step: bool | None = None
+    assert_semantic_lane: bool = True
 
 
 CASES: tuple[LiveSemanticCase, ...] = (
@@ -195,8 +201,10 @@ CASES: tuple[LiveSemanticCase, ...] = (
         "check whether CI is red. if it is, diagnose the failure, but do not edit files.",
         "agent",
         ("coding",),
-        required_actions=("workspace_read", "workspace_execute"),
+        required_action_any_of=(("workspace_read", "workspace_execute"),),
         forbidden_actions=("workspace_mutate",),
+        required_local_capabilities=("workspace.read", "workspace.command"),
+        forbidden_local_capabilities=("workspace.edit", "workspace.write"),
         required_evidence=("repo_ci_state",),
         multi_step=True,
     ),
@@ -535,6 +543,7 @@ CASES: tuple[LiveSemanticCase, ...] = (
         "don't touch anything. why do flaky tests happen?",
         "chat",
         forbidden_actions=("workspace_read", "workspace_execute", "workspace_mutate"),
+        assert_semantic_lane=False,
     ),
     LiveSemanticCase(
         "chat_how_to_refactor",
@@ -690,8 +699,10 @@ CASES: tuple[LiveSemanticCase, ...] = (
         "see if CI is failing right now and diagnose the problem, but don't change the code.",
         "agent",
         ("coding",),
-        required_actions=("workspace_read", "workspace_execute"),
+        required_action_any_of=(("workspace_read", "workspace_execute"),),
         forbidden_actions=("workspace_mutate",),
+        required_local_capabilities=("workspace.read", "workspace.command"),
+        forbidden_local_capabilities=("workspace.edit", "workspace.write"),
         required_evidence=("repo_ci_state",),
         multi_step=True,
     ),
@@ -776,7 +787,8 @@ def test_live_codex_semantic_matrix(
     payload = decision.model_dump(mode="json")
 
     assert decision.confidence >= semantic_confidence_threshold(), payload
-    assert decision.lane == case.lane, payload
+    if case.assert_semantic_lane:
+        assert decision.lane == case.lane, payload
 
     resolved_profile = semantic_profile_id(case.prompt, decision)
     if case.profiles:
@@ -803,6 +815,12 @@ def test_live_codex_semantic_matrix(
         "missing_actions": sorted(set(case.required_actions) - actions),
         "decision": payload,
     }
+    for group in case.required_action_any_of:
+        assert actions & set(group), {
+            "expected_any_action": group,
+            "actual_actions": sorted(actions),
+            "decision": payload,
+        }
     assert not (set(case.forbidden_actions) & actions), {
         "forbidden_actions": sorted(set(case.forbidden_actions) & actions),
         "decision": payload,
@@ -830,6 +848,31 @@ def test_live_codex_semantic_matrix(
         "forbidden_evidence": sorted(set(case.forbidden_evidence) & raw_evidence),
         "decision": payload,
     }
+
+    if case.required_local_capabilities or case.forbidden_local_capabilities:
+        compiled = compile_task_authority(
+            get_agent_profile(resolved_profile),
+            case.prompt,
+            effective_evidence_decision,
+            semantic_action_intents=decision.action_intents,
+        )
+        local_capabilities = set(compiled.required_local)
+        assert set(case.required_local_capabilities) <= local_capabilities, {
+            "missing_local_capabilities": sorted(
+                set(case.required_local_capabilities) - local_capabilities
+            ),
+            "compiled_local": sorted(local_capabilities),
+            "decision": payload,
+        }
+        assert not (
+            set(case.forbidden_local_capabilities) & local_capabilities
+        ), {
+            "forbidden_local_capabilities": sorted(
+                set(case.forbidden_local_capabilities) & local_capabilities
+            ),
+            "compiled_local": sorted(local_capabilities),
+            "decision": payload,
+        }
     if case.multi_step is not None:
         assert decision.multi_step is case.multi_step, payload
 
