@@ -101,6 +101,8 @@ class GapperUniverseFreezeRequest(BaseModel):
     session_date: date
     evaluation_time: datetime
     discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"] = "import"
+    source_locator: str | None = Field(default=None, max_length=2_000)
+    source_candidate_symbols: list[str] = Field(default_factory=list, max_length=2_000)
     candidates: list[GapperCandidate] = Field(min_length=1, max_length=2_000)
 
 
@@ -665,6 +667,8 @@ def create_trading_strategy_router(
                 session_date=request.session_date,
                 evaluation_time=request.evaluation_time,
                 discovery_source=request.discovery_source,
+                source_locator=request.source_locator,
+                source_candidate_symbols=request.source_candidate_symbols,
                 candidates=request.candidates,
             )
             _validate_catalyst_provenance(snapshot, catalyst_repository_factory())
@@ -681,6 +685,8 @@ def create_trading_strategy_router(
                 session_date=snapshot.session_date,
                 evaluation_time=snapshot.evaluation_time,
                 discovery_source=snapshot.discovery_source,
+                source_locator=snapshot.source_locator,
+                source_candidate_symbols=snapshot.source_candidate_symbols,
                 candidates=snapshot.candidates,
             )
             if validated.source_fingerprint != snapshot.source_fingerprint:
