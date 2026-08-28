@@ -99,6 +99,8 @@ class GapperUniverseSnapshot(BaseModel):
     session_date: date
     evaluation_time: datetime
     discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"]
+    source_locator: str | None = Field(default=None, max_length=2000)
+    source_candidate_symbols: tuple[str, ...] = ()
     candidates: tuple[GapperCandidate, ...]
     source_fingerprint: str = Field(min_length=64, max_length=64)
 
@@ -155,6 +157,8 @@ def gapper_universe_fingerprint(
     evaluation_time: datetime,
     discovery_source: str,
     candidates: tuple[GapperCandidate, ...] | list[GapperCandidate],
+    source_locator: str | None = None,
+    source_candidate_symbols: tuple[str, ...] | list[str] = (),
 ) -> str:
     ordered = sorted(candidates, key=lambda item: (item.discovery_rank or 10**9, item.instrument_id))
     payload = {
@@ -162,6 +166,8 @@ def gapper_universe_fingerprint(
         "session_date": session_date.isoformat(),
         "evaluation_time": evaluation_time.astimezone(timezone.utc).isoformat(),
         "discovery_source": discovery_source,
+        "source_locator": source_locator,
+        "source_candidate_symbols": list(source_candidate_symbols),
         "candidates": [candidate.model_dump(mode="json") for candidate in ordered],
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
@@ -175,6 +181,8 @@ def freeze_gapper_universe(
     evaluation_time: datetime,
     discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"],
     candidates: list[GapperCandidate] | tuple[GapperCandidate, ...],
+    source_locator: str | None = None,
+    source_candidate_symbols: list[str] | tuple[str, ...] = (),
     allow_empty: bool = False,
 ) -> GapperUniverseSnapshot:
     if not candidates and not allow_empty:
@@ -194,12 +202,16 @@ def freeze_gapper_universe(
         evaluation_time=evaluation_time,
         discovery_source=discovery_source,
         candidates=ordered,
+        source_locator=source_locator,
+        source_candidate_symbols=source_candidate_symbols,
     )
     return GapperUniverseSnapshot(
         universe_id=universe_id,
         session_date=session_date,
         evaluation_time=evaluation_time,
         discovery_source=discovery_source,
+        source_locator=source_locator,
+        source_candidate_symbols=tuple(source_candidate_symbols),
         candidates=ordered,
         source_fingerprint=fingerprint,
     )
