@@ -73,9 +73,23 @@ _TICKER_BEFORE_CONTEXT = re.compile(
     r"\b([A-Z]{1,5})\b(?=.{0,32}\b(?:stock|shares?|ticker|price|quote|trading at|sec|filings?|catalysts?|news|headlines?)\b)"
 )
 _TICKER_AFTER_CONTEXT = re.compile(
-    r"\b(?:stock|ticker|price|quote|filing|catalyst|news)\s+(?:of\s+|for\s+)?([A-Z]{1,5})\b",
-    re.I,
+    r"\b(?i:stock|ticker|price|quote|filing|catalyst|news)\s+"
+    r"(?:(?i:of|for)\s+)?([A-Z]{1,5})\b"
 )
+_NON_TICKER_TOKENS = {
+    "SEC",
+    "CEO",
+    "CFO",
+    "CTO",
+    "NEWS",
+    "STOCK",
+    "PRICE",
+    "QUOTE",
+    "IPO",
+    "ETF",
+    "USD",
+    "USA",
+}
 _PR = re.compile(r"\bPR\s*#?(\d+)\b", re.I)
 
 TRUST_RANK = {"general": 0, "reputable": 1, "primary": 2, "authoritative": 3}
@@ -292,8 +306,12 @@ def _extract_ticker(task: str) -> str | None:
     text = str(task or "")
     for pattern in (_TICKER_DOLLAR, _TICKER_AFTER_CONTEXT, _TICKER_BEFORE_CONTEXT):
         match = pattern.search(text)
-        if match:
-            return str(match.group(1)).upper()
+        if not match:
+            continue
+        ticker = str(match.group(1)).upper()
+        if ticker in _NON_TICKER_TOKENS:
+            continue
+        return ticker
     return None
 
 
