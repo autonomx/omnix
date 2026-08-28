@@ -109,8 +109,11 @@ def _apply_semantic_route_decision(
 ) -> OmnixRouteDecision:
     if semantic is None or semantic.confidence < semantic_confidence_threshold():
         return deterministic
-    # Explicit user mode selection is authoritative. Semantic classification may
-    # still supply profile/evidence hints, but it cannot downgrade /agent.
+    # Explicit user mode selection and explicit no-action/hypothetical wording
+    # are authoritative. Semantic classification may interpret the turn, but it
+    # cannot turn a user's refusal or hypothetical into executable authority.
+    if deterministic.reason in {"negated_action", "hypothetical_or_conditional"}:
+        return deterministic
     if deterministic.explicit:
         return deterministic.model_copy(
             update={
