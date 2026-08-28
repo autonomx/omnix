@@ -166,6 +166,8 @@ Time-of-day RVOL compares current cumulative volume with prior sessions truncate
 
 When `intraday_learning_enabled=true`, the deterministic strategy monitor also writes research-only `intraday_learning` snapshots from finalized one-minute regular-session bars. The snapshots dynamically rank the frozen morning cohort across independent squeeze, failed-selloff, trend, gap-hold and risk dimensions. These events always carry `execution_authority=false` and cannot replace deterministic `entry_ready`, server risk, or Alpaca IEX execution eligibility.
 
+When `intraday_llm_enabled=true`, the monitor additionally sends a bounded batch of the highest-ranked active candidates to the configured default LLM at the configured minute cadence (default: top 8 every 5 minutes). The model receives only structured causal evidence plus its prior assessment. Its `intraday_llm` output is interpretation-only, always `execution_authority=false`, and provider/model failures never block or authorize deterministic paper execution.
+
 ## Paper simulation operations
 
 Paper simulation is not brokerage execution.
