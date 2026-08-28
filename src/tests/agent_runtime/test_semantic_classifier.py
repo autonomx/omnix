@@ -487,7 +487,11 @@ def test_semantic_classifier_cannot_override_explicit_negated_action() -> None:
         reason="deliberately wrong semantic proposal for the guard test",
     )
 
-    routed = _apply_semantic_route_decision(deterministic, semantic)
+    routed = _apply_semantic_route_decision(
+        deterministic,
+        semantic,
+        content=prompt,
+    )
 
     assert routed.lane == "chat"
     assert routed.reason == "negated_action"
