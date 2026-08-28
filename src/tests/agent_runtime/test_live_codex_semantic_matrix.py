@@ -812,7 +812,11 @@ def test_live_codex_semantic_matrix(
         assert decision.multi_step is case.multi_step, payload
 
     deterministic = route_omnix_request(case.prompt)
-    merged = _apply_semantic_route_decision(deterministic, decision)
+    merged = _apply_semantic_route_decision(
+        deterministic,
+        decision,
+        content=case.prompt,
+    )
     assert merged.lane == case.lane, {
         "deterministic": deterministic.model_dump(mode="json"),
         "semantic": payload,
