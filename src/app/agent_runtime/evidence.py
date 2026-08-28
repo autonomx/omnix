@@ -389,6 +389,132 @@ def _requirement(
     )
 
 
+def evidence_decision_from_semantic(task: str, semantic_decision: object) -> EvidenceDecision:
+    """Translate an untrusted semantic interpretation into an evidence proposal.
+
+    This function does not issue authority. Source classes are allowlisted here and
+    later compiled against the selected profile ceiling and trust/freshness policy.
+    """
+
+    text = " ".join(str(task or "").split())
+    requirements: list[EvidenceRequirement] = []
+    seen: set[str] = set()
+
+    def add(
+        source_class: str,
+        *,
+        freshness: str = "current",
+        trust: str | None = None,
+        fallback: str = "fail_closed",
+    ) -> None:
+        if source_class not in SOURCE_CAPABILITIES or source_class in seen:
+            return
+        seen.add(source_class)
+        requirements.append(
+            _requirement(
+                text,
+                source_class,
+                freshness=freshness if freshness in {"timeless", "current"} else "current",
+                trust=trust if trust in TRUST_RANK else None,
+                fallback=fallback if fallback in {"fail_closed", "allow_fallback"} else "fail_closed",
+            )
+        )
+
+    for row in list(getattr(semantic_decision, "evidence_requirements", []) or []):
+        add(
+            str(getattr(row, "source_class", "") or ""),
+            freshness=str(getattr(row, "freshness", "current") or "current").casefold(),
+            trust=str(getattr(row, "trust_floor", "") or "").casefold() or None,
+            fallback=str(getattr(row, "fallback_policy", "fail_closed") or "fail_closed").casefold(),
+        )
+
+    actions = {
+        str(value)
+        for value in (getattr(semantic_decision, "action_intents", []) or [])
+        if str(value)
+    }
+    if actions & {"home_read", "home_mutate"}:
+        add("home_state", trust="authoritative")
+    if actions & {"email_read", "email_draft", "email_send"}:
+        add("email_state", trust="authoritative")
+    if actions & {"calendar_read", "calendar_create"}:
+        add("calendar_state", trust="authoritative")
+    if "market_read" in actions and not any(
+        requirement.source_class in {"market_quote", "market_news", "company_filing", "market_status"}
+        for requirement in requirements
+    ):
+        add("market_news", trust="reputable", fallback="allow_fallback")
+    if "research_read" in actions and not requirements:
+        add(
+            "general_current_web",
+            freshness="timeless",
+            trust="reputable",
+            fallback="allow_fallback",
+        )
+
+    try:
+        confidence = max(0.0, min(float(getattr(semantic_decision, "confidence", 0.75)), 1.0))
+    except (TypeError, ValueError):
+        confidence = 0.75
+    reason = str(getattr(semantic_decision, "reason", "semantic_intent") or "semantic_intent")[:240]
+    return EvidenceDecision(
+        policy=EvidencePolicy(
+            requirement="required" if requirements else "none",
+            external_access="allowed",
+            requirements=requirements,
+            user_visible_attribution="when_used",
+            retrieval={"strategy": "adaptive"},
+        ),
+        confidence=confidence,
+        reason=f"semantic_intent:{reason}",
+        classifier="semantic",
+    )
+
+
+def _merge_requirements(
+    primary: list[EvidenceRequirement],
+    floors: list[EvidenceRequirement],
+) -> list[EvidenceRequirement]:
+    merged: list[EvidenceRequirement] = []
+    by_source: dict[str, int] = {}
+    for requirement in [*primary, *floors]:
+        existing_index = by_source.get(requirement.source_class)
+        if existing_index is None:
+            by_source[requirement.source_class] = len(merged)
+            merged.append(requirement)
+            continue
+        existing = merged[existing_index]
+        trust = (
+            requirement.trust_floor
+            if TRUST_RANK.get(requirement.trust_floor, 0) > TRUST_RANK.get(existing.trust_floor, 0)
+            else existing.trust_floor
+        )
+        freshness = (
+            "current"
+            if "current" in {existing.freshness, requirement.freshness}
+            else "timeless"
+        )
+        fallback = (
+            "fail_closed"
+            if "fail_closed" in {existing.fallback_policy, requirement.fallback_policy}
+            else "allow_fallback"
+        )
+        merged[existing_index] = existing.model_copy(
+            update={
+                "trust_floor": trust,
+                "freshness": freshness,
+                "fallback_policy": fallback,
+                "subject": existing.subject or requirement.subject,
+                "max_age_seconds": (
+                    freshness_max_age_seconds(existing.source_class)
+                    if freshness == "current"
+                    else None
+                ),
+            }
+        )
+    return merged
+
+
 def classify_evidence(
     task: str,
     *,
@@ -397,8 +523,9 @@ def classify_evidence(
 ) -> EvidenceDecision:
     text = " ".join(str(task or "").split())
     external_forbidden = bool(_NO_EXTERNAL.search(text))
-    attribution = "required" if re.search(r"\b(?:sourced|with sources|cite sources|citations)\b", text, re.I) else "when_used"
+    attribution = "required" if re.search(r"\\b(?:sourced|with sources|cite sources|citations)\\b", text, re.I) else "when_used"
     requirements: list[EvidenceRequirement] = []
+    hard_requirement_sources: set[str] = set()
 
     def add_requirement(
         source_class: str,
@@ -406,8 +533,11 @@ def classify_evidence(
         freshness: str = "current",
         trust: str | None = None,
         fallback: str = "fail_closed",
+        hard: bool = True,
     ) -> None:
         if any(row.source_class == source_class for row in requirements):
+            if hard:
+                hard_requirement_sources.add(source_class)
             return
         requirements.append(
             _requirement(
@@ -418,15 +548,17 @@ def classify_evidence(
                 fallback=fallback,
             )
         )
+        if hard:
+            hard_requirement_sources.add(source_class)
 
     market_signal = bool(_MARKET.search(text) or _extract_ticker(text))
     if market_signal and _QUOTE.search(text):
         add_requirement("market_quote", trust="authoritative")
     if _CI.search(text):
         add_requirement("repo_ci_state", trust="authoritative")
-    if _WEATHER.search(text) and (_CURRENT.search(text) or re.search(r"\boutside\b", text, re.I)):
+    if _WEATHER.search(text) and (_CURRENT.search(text) or re.search(r"\\boutside\\b", text, re.I)):
         add_requirement("weather_state", trust="authoritative")
-    if profile_id == "house" and re.search(r"\b(?:check|inspect|status|state|energy)\b", text, re.I):
+    if profile_id == "house" and re.search(r"\\b(?:check|inspect|status|state|energy)\\b", text, re.I):
         source = "home_energy" if "energy" in text.casefold() else "home_state"
         add_requirement(source, trust="authoritative")
     if profile_id == "personal-assistant" and _CALENDAR.search(text):
@@ -446,42 +578,19 @@ def classify_evidence(
     ):
         add_requirement("market_news", trust="reputable", fallback="allow_fallback")
     if not requirements and _CURRENT.search(text):
-        add_requirement("general_current_web", trust="reputable", fallback="allow_fallback")
+        add_requirement(
+            "general_current_web",
+            trust="reputable",
+            fallback="allow_fallback",
+            hard=False,
+        )
     elif not requirements and _SOURCE_REQUEST.search(text):
         add_requirement(
             "general_current_web",
             freshness="timeless",
             trust="reputable",
             fallback="allow_fallback",
-        )
-
-    if requirements:
-        policy = EvidencePolicy(
-            requirement="required",
-            external_access="forbidden" if external_forbidden else "allowed",
-            requirements=requirements,
-            user_visible_attribution=attribution,
-        )
-        return EvidenceDecision(
-            policy=policy,
-            confidence=0.98 if any(r.source_class != "general_current_web" for r in requirements) else 0.92,
-            reason=f"required:{','.join(r.source_class for r in requirements)}",
-            classifier="deterministic",
-        )
-
-    # Timeless conceptual questions default to model knowledge. Ambiguous tasks
-    # can use a semantic adviser, but low-confidence potentially-current tasks
-    # conservatively require read-only evidence rather than widening authority.
-    if _CONCEPTUAL.search(text):
-        return EvidenceDecision(
-            policy=EvidencePolicy(
-                requirement="none",
-                external_access="forbidden" if external_forbidden else "allowed",
-                user_visible_attribution=attribution,
-            ),
-            confidence=0.95,
-            reason="timeless_conceptual_request",
-            classifier="deterministic",
+            hard=False,
         )
 
     adviser = semantic_adviser or _semantic_evidence_adviser
@@ -489,12 +598,13 @@ def classify_evidence(
     potentially_current = profile_id in {"trading-research", "house", "personal-assistant"} and bool(
         market_signal or _HOME.search(text) or _CALENDAR.search(text) or _EMAIL.search(text)
     )
+
     if advised is not None:
         advised_policy = advised.policy.model_copy(
             update={
-                "external_access": "forbidden"
-                if external_forbidden
-                else advised.policy.external_access,
+                "external_access": (
+                    "forbidden" if external_forbidden else advised.policy.external_access
+                ),
                 "user_visible_attribution": (
                     "required"
                     if attribution == "required"
@@ -502,11 +612,54 @@ def classify_evidence(
                 ),
             }
         )
-        if (
-            potentially_current
-            and advised.confidence < 0.60
-            and advised_policy.requirement != "required"
-        ):
+
+        if advised.confidence >= 0.60:
+            semantic_requirements = (
+                list(advised_policy.requirements)
+                if advised_policy.requirement == "required"
+                else []
+            )
+            hard_floors = [
+                requirement
+                for requirement in requirements
+                if requirement.source_class in hard_requirement_sources
+            ]
+            merged = _merge_requirements(semantic_requirements, hard_floors)
+            if merged:
+                advised_policy = advised_policy.model_copy(
+                    update={
+                        "requirement": "required",
+                        "requirements": merged,
+                    }
+                )
+            else:
+                advised_policy = advised_policy.model_copy(update={"requirements": []})
+            return EvidenceDecision(
+                policy=advised_policy,
+                confidence=advised.confidence,
+                reason=(
+                    f"hybrid:{advised.reason}"
+                    if hard_floors
+                    else advised.reason
+                )[:240],
+                classifier="hybrid" if hard_floors else advised.classifier,
+            )
+
+        if requirements:
+            policy = EvidencePolicy(
+                requirement="required",
+                external_access="forbidden" if external_forbidden else "allowed",
+                requirements=requirements,
+                user_visible_attribution=attribution,
+            )
+            return EvidenceDecision(
+                policy=policy,
+                confidence=0.98 if any(r.source_class != "general_current_web" for r in requirements) else 0.92,
+                reason=f"deterministic_floor:{','.join(r.source_class for r in requirements)}",
+                classifier="deterministic",
+            )
+
+        if potentially_current and advised_policy.requirement != "required":
             source = (
                 "market_news" if market_signal
                 else "home_state" if _HOME.search(text)
@@ -532,6 +685,32 @@ def classify_evidence(
             )
         return advised.model_copy(update={"policy": advised_policy})
 
+    if requirements:
+        policy = EvidencePolicy(
+            requirement="required",
+            external_access="forbidden" if external_forbidden else "allowed",
+            requirements=requirements,
+            user_visible_attribution=attribution,
+        )
+        return EvidenceDecision(
+            policy=policy,
+            confidence=0.98 if any(r.source_class != "general_current_web" for r in requirements) else 0.92,
+            reason=f"required:{','.join(r.source_class for r in requirements)}",
+            classifier="deterministic",
+        )
+
+    if _CONCEPTUAL.search(text):
+        return EvidenceDecision(
+            policy=EvidencePolicy(
+                requirement="none",
+                external_access="forbidden" if external_forbidden else "allowed",
+                user_visible_attribution=attribution,
+            ),
+            confidence=0.95,
+            reason="timeless_conceptual_request",
+            classifier="deterministic",
+        )
+
     if potentially_current:
         source = (
             "market_news" if market_signal
@@ -543,7 +722,13 @@ def classify_evidence(
             policy=EvidencePolicy(
                 requirement="required",
                 external_access="forbidden" if external_forbidden else "allowed",
-                requirements=[_requirement(text, source, fallback="allow_fallback" if source == "market_news" else "fail_closed")],
+                requirements=[
+                    _requirement(
+                        text,
+                        source,
+                        fallback="allow_fallback" if source == "market_news" else "fail_closed",
+                    )
+                ],
                 user_visible_attribution=attribution,
             ),
             confidence=0.55,
@@ -676,9 +861,16 @@ def fallback_capabilities_for_requirement(
             rows.append(capability)
     return tuple(rows)
 
-def task_requires_workspace_mutation(task: str) -> bool:
+def task_requires_workspace_mutation(
+    task: str,
+    *,
+    semantic_action_intents: list[str] | tuple[str, ...] | set[str] | None = None,
+) -> bool:
+    intents = {str(value) for value in (semantic_action_intents or [])}
+    if "workspace_mutate" in intents:
+        return True
     text = str(task or "")
-    if re.search(r"\b(?:do not|don't|just explain|explain only|without changing)\b", text, re.I):
+    if re.search(r"\\b(?:do not|don't|just explain|explain only|without changing)\\b", text, re.I):
         return False
     return bool(_WORKSPACE_MUTATION.search(text))
 
@@ -687,14 +879,20 @@ def compile_task_authority(
     profile: AgentProfile,
     task: str,
     decision: EvidenceDecision,
+    *,
+    semantic_action_intents: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> CompiledEvidence:
-    """Compile minimum task authority while preserving the profile as ceiling.
+    """Compile minimum authority from deterministic policy plus semantic proposals.
 
-    Local coding authority is intentionally kept coarse in this phase; external
-    authority is minimized task-by-task.
+    Semantic action intents are untrusted requests for authority. They can help
+    Omnix understand arbitrary phrasing, but every resulting capability is still
+    checked against the selected profile ceiling before a run can start.
     """
+
     evidence = compile_evidence(profile, decision)
     text = str(task or "")
+    intents = {str(value) for value in (semantic_action_intents or [])}
+
     if profile.id == "coding":
         read_caps = [
             capability
@@ -708,7 +906,10 @@ def compile_task_authority(
             }
         ]
         local = list(read_caps)
-        if task_requires_workspace_mutation(text):
+        if task_requires_workspace_mutation(
+            text,
+            semantic_action_intents=intents,
+        ):
             local.extend(
                 capability
                 for capability in profile.capabilities
@@ -719,7 +920,7 @@ def compile_task_authority(
                     "workspace.test",
                 }
             )
-        elif _WORKSPACE_EXECUTION.search(text):
+        elif "workspace_execute" in intents or _WORKSPACE_EXECUTION.search(text):
             local.extend(
                 capability
                 for capability in profile.capabilities
@@ -727,16 +928,27 @@ def compile_task_authority(
             )
     else:
         local = list(profile.capabilities)
+
     external = list(evidence.required_external)
-    if profile.id == "house" and _HOME_MUTATION.search(text):
-        external.append("home.set_state")
+    if profile.id == "house":
+        if intents & {"home_read", "home_mutate"}:
+            external.append("home.get_state")
+        if "home_mutate" in intents or _HOME_MUTATION.search(text):
+            external.append("home.set_state")
     elif profile.id == "personal-assistant":
-        if _EMAIL_SEND.search(text):
+        if intents & {"email_read", "email_draft", "email_send"}:
+            external.append("gmail.read_email")
+        if "email_send" in intents or _EMAIL_SEND.search(text):
             external.append("gmail.send_email")
-        elif _EMAIL_DRAFT.search(text):
+        elif "email_draft" in intents or _EMAIL_DRAFT.search(text):
             external.append("gmail.create_draft")
-        if _CALENDAR_CREATE.search(text):
+        if intents & {"calendar_read", "calendar_create"}:
+            external.append("calendar.read_availability")
+        if "calendar_create" in intents or _CALENDAR_CREATE.search(text):
             external.append("calendar.create_event")
+        if "contacts_read" in intents:
+            external.extend(["contacts.search_contacts", "contacts.resolve_recipient"])
+
     ceiling = profile_external_ceiling(profile)
     outside = [cap for cap in external if cap not in ceiling]
     if outside:
