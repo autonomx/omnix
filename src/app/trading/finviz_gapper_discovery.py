@@ -14,7 +14,7 @@ snapshot for research/backtests.
 
 import re
 from collections import defaultdict
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -199,7 +199,9 @@ def _yahoo_chart_snapshot(
             continue
         observed = datetime.fromtimestamp(int(raw_timestamp), tz=timezone.utc).astimezone(_ET)
         clock = observed.timetz().replace(tzinfo=None)
-        if observed > evaluation_et:
+        # A Yahoo 1m timestamp is the bar start. Never let an in-progress bar
+        # leak into the frozen premarket evidence.
+        if observed + timedelta(minutes=1) > evaluation_et:
             continue
         if _PREMARKET_OPEN <= clock <= same_clock:
             cumulative_by_date[observed.date()] += volume or Decimal("0")
