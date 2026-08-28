@@ -23,7 +23,7 @@ class FakeRepository:
         return snapshot
 
 
-def strategy() -> TradingStrategyConfigDocument:
+def strategy(*, discovery_source="yahoo") -> TradingStrategyConfigDocument:
     return TradingStrategyConfigDocument(
         strategy_id="archive-test",
         account_id="paper-1",
@@ -33,6 +33,7 @@ def strategy() -> TradingStrategyConfigDocument:
         config=GapPullbackConfig(
             strategy_version="1.1.0",
             universe_scan_time_et=time(9, 20),
+            universe_discovery_source=discovery_source,
             auto_archive_daily_universe=True,
             universe_archive_grace_minutes=10,
         ),
@@ -98,3 +99,44 @@ def test_archiver_does_not_backfill_hours_after_configured_scan(monkeypatch) -> 
 
     assert archiver.archive_daily_universe_if_due(strategy(), repository, now=now) is None
     assert called is False
+
+
+
+def test_archiver_dispatches_to_finviz_when_configured(monkeypatch) -> None:
+    repository = FakeRepository()
+    yahoo_called = False
+    finviz_called = False
+
+    def yahoo(**kwargs):
+        nonlocal yahoo_called
+        yahoo_called = True
+        raise AssertionError("Yahoo discovery must not run for a Finviz strategy")
+
+    def finviz(**kwargs):
+        nonlocal finviz_called
+        finviz_called = True
+        observed = kwargs["evaluation_time"]
+        return freeze_gapper_universe(
+            universe_id=kwargs["universe_id"],
+            session_date=observed.date(),
+            evaluation_time=observed,
+            discovery_source="finviz",
+            candidates=[],
+            allow_empty=True,
+        )
+
+    monkeypatch.setattr(archiver, "discover_yahoo_gappers", yahoo)
+    monkeypatch.setattr(archiver, "discover_finviz_gappers", finviz)
+    now = datetime(2026, 8, 19, 13, 22, tzinfo=timezone.utc)
+
+    snapshot = archiver.archive_daily_universe_if_due(
+        strategy(discovery_source="finviz"),
+        repository,
+        now=now,
+    )
+
+    assert snapshot is not None
+    assert finviz_called is True
+    assert yahoo_called is False
+    assert snapshot.discovery_source == "finviz"
+    assert "-finviz-" in snapshot.universe_id
