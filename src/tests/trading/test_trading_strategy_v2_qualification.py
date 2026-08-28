@@ -131,7 +131,12 @@ def test_frozen_v2_profile_fingerprint_is_stable_and_exact() -> None:
     canonical = frozen_v2_config()
     assert v2_profile_fingerprint(canonical) == FROZEN_V2_PROFILE_FINGERPRINT
 
-    learning_only = canonical.model_copy(update={"intraday_learning_enabled": True})
+    learning_only = canonical.model_copy(update={
+        "intraday_learning_enabled": True,
+        "intraday_llm_enabled": True,
+        "intraday_llm_top_n": 12,
+        "intraday_llm_interval_minutes": 7,
+    })
     assert v2_profile_fingerprint(learning_only) == FROZEN_V2_PROFILE_FINGERPRINT
 
     finviz_experiment = canonical.model_copy(update={"universe_discovery_source": "finviz"})
