@@ -230,7 +230,7 @@ def default_semantic_intent_classifier(
         from app import shared
 
         provider = shared.get_provider(provider_name)
-        if provider is None:
+        if provider is None or not isinstance(provider, BaseProvider):
             return None
         model = (
             str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODEL", "") or "").strip()
