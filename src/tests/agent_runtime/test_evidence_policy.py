@@ -12,6 +12,7 @@ from app.agent_runtime.contracts import (
     EvidenceReceipt,
     EvidenceRequirement,
     EvidenceSourceOption,
+    WorkspaceSpec,
     ModelRef,
     SubjectRef,
     TaskRevision,
@@ -348,3 +349,89 @@ def test_evidence_freshness_uses_provider_source_timestamp() -> None:
     result = evaluate_evidence_set("run-1", policy, [receipt])
     assert not result.passed
     assert result.requirements[0].status == "stale"
+
+
+
+def test_source_fallback_uses_profile_compatible_alternative() -> None:
+    requirement = EvidenceRequirement(
+        id="repo-fallback",
+        source_class="repo_ci_state",
+        freshness="current",
+        trust_floor="reputable",
+        fallback_policy="allow_fallback",
+        acceptable_sources=[
+            EvidenceSourceOption(
+                source_class="general_current_web",
+                trust_floor="reputable",
+                preference=50,
+            )
+        ],
+    )
+    decision = EvidenceDecision(
+        policy=EvidencePolicy(requirement="required", requirements=[requirement]),
+        confidence=0.8,
+        reason="test",
+    )
+    compiled = compile_task_authority(
+        get_agent_profile("research"),
+        "check status",
+        decision,
+    )
+    assert compiled.required_external == ("research.web_search",)
+
+
+def test_fail_closed_source_does_not_use_fallback() -> None:
+    requirement = EvidenceRequirement(
+        id="repo-no-fallback",
+        source_class="repo_ci_state",
+        freshness="current",
+        trust_floor="reputable",
+        fallback_policy="fail_closed",
+        acceptable_sources=[
+            EvidenceSourceOption(
+                source_class="general_current_web",
+                trust_floor="reputable",
+                preference=50,
+            )
+        ],
+    )
+    decision = EvidenceDecision(
+        policy=EvidencePolicy(requirement="required", requirements=[requirement]),
+        confidence=0.8,
+        reason="test",
+    )
+    with pytest.raises(EvidenceCompilationError) as caught:
+        compile_task_authority(get_agent_profile("research"), "check status", decision)
+    assert caught.value.code == "required_source_outside_profile_ceiling"
+
+
+def test_repository_evidence_subject_is_bound_to_immutable_commit(monkeypatch, tmp_path) -> None:
+    from app.agent_runtime.service import AgentRunService
+
+    requirement = EvidenceRequirement(
+        id="ci",
+        source_class="repo_ci_state",
+        freshness="current",
+        trust_floor="authoritative",
+    )
+    policy = EvidencePolicy(requirement="required", requirements=[requirement])
+    workspace = WorkspaceSpec(
+        root=str(tmp_path),
+        repository=str(tmp_path),
+        base_ref="main",
+    )
+    monkeypatch.setattr(
+        AgentRunService,
+        "_resolve_repository_commit",
+        staticmethod(lambda _repository, _ref: "abc123"),
+    )
+    bound = AgentRunService._bind_repository_evidence_policy(
+        policy,
+        workspace=workspace,
+        repository_name="autonomx/omnix",
+    )
+    subject = bound.requirements[0].subject
+    assert subject is not None
+    assert subject.canonical_id == "autonomx/omnix"
+    assert subject.qualifiers["requested_ref"] == "main"
+    assert subject.qualifiers["resolved_commit"] == "abc123"

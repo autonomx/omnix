@@ -47,7 +47,7 @@ def test_research_profiles_are_read_only_external_authority_ceilings() -> None:
     trading = get_agent_profile("trading-research")
     local, external = resolve_profile_capabilities(trading)
     assert local == []
-    assert external == ["research.web_search"]
+    assert external == []
     assert trading.requires_workspace is False
     _, issued = resolve_profile_capabilities(
         research,

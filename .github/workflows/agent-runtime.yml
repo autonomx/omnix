@@ -21,6 +21,7 @@ on:
       - "src/app/persistence/migrations/*agent*.sql"
       - "src/app/persistence/migrations/*workflow*.sql"
       - "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"
+      - "src/apps/web/src/features/chatbot/sessionTools.ts"
       - "src/apps/web/src/features/chatbot/OmnixRunCard.*"
       - "src/apps/web/src/api/client.ts"
       - "src/apps/web/src/api/generated/**"
