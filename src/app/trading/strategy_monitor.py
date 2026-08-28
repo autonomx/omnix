@@ -403,6 +403,7 @@ class TradingStrategyMonitor:
             for rank, row in enumerate(ranked_learning, start=1)
         }
         analyzer = self.intraday_llm_analyzer_factory()
+        self.intraday_llm_call_count += 1
         try:
             result = await asyncio.to_thread(
                 analyzer.assess,
@@ -423,9 +424,28 @@ class TradingStrategyMonitor:
                 research_only=True,
                 execution_authority=False,
             )
+            # Persist the failed attempt as the batch cadence checkpoint so a
+            # temporarily unavailable/default provider is retried at the normal
+            # minute cadence instead of every monitor poll.
+            await self._event(
+                strategy_repository,
+                config,
+                instrument_id="__universe__",
+                event_type="intraday_llm_batch",
+                state="error",
+                reason_code="INTRADAY_LLM_BATCH_ERROR",
+                observed_at=observed_at,
+                payload={
+                    "universe_id": universe.universe_id,
+                    "error_type": type(exc).__name__,
+                    "detail": str(exc),
+                    "requested_instrument_ids": [row[0].instrument_id for row in selected],
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+            )
             return
 
-        self.intraday_llm_call_count += 1
         selected_by_id = {row[0].instrument_id: row for row in selected}
         for assessment in result.assessments:
             row = selected_by_id.get(assessment.instrument_id)
