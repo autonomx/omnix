@@ -51,7 +51,7 @@ from app.agent_runtime.router import route_omnix_request
         ("investigate this failure", "agent"),
         ("research semiconductor stocks", "agent"),
         ("check my calendar for conflicts", "agent"),
-        ("summarize my emails", "agent"),
+        ("summarize my emails", "chat"),
         ("set the thermostat to 19 degrees", "agent"),
         ("Turn off the desk light", "direct"),
         ("turn of the kitchen plug", "direct"),
@@ -295,7 +295,7 @@ def test_generic_equity_symbols_bind_security_subject(ticker: str) -> None:
     assert requirement.source_class == "market_quote"
     assert requirement.subject is not None
     assert requirement.subject.type == "security"
-    assert requirement.subject.canonical_id.startswith(f"{ticker}:")
+    assert requirement.subject.qualifiers["ticker"] == ticker
 
 
 @pytest.mark.parametrize("context_word", ["NEWS", "SEC", "PRICE", "QUOTE"])
@@ -307,7 +307,7 @@ def test_context_words_are_not_mistaken_for_tickers(context_word: str) -> None:
     )
     subjects = [item.subject for item in decision.policy.requirements if item.subject is not None]
     assert subjects
-    assert all(subject.canonical_id.startswith("AAPL:") for subject in subjects)
+    assert all(subject.qualifiers.get("ticker") == "AAPL" for subject in subjects)
 
 
 # ---------------------------------------------------------------------------
