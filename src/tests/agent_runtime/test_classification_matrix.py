@@ -199,3 +199,63 @@ def test_cancel_rejects_single_pending_approval_before_run_control() -> None:
     )
     assert service.command_type == "reject"
     assert result.content.startswith("Rejection sent")
+
+
+
+def test_auto_classifier_can_start_agent_without_explicit_authority_toggle(monkeypatch, tmp_path) -> None:
+    from app.agent_runtime import chat_bridge
+    from types import SimpleNamespace
+
+    started = []
+
+    class Service:
+        def get(self, _run_id):
+            return None
+
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                superseded_by_run_id=None,
+                spec=spec,
+            )
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    session = SimpleNamespace(id="chat-auto", provider_id="test", model_id="model", messages=[])
+    message = SimpleNamespace(
+        id="message-auto",
+        content="implement a small improvement to the router",
+        metadata={},
+    )
+    result = chat_bridge.route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+    )
+    assert result is not None
+    assert result.metadata["request_mode"]["source"] == "classifier"
+    assert result.metadata["agent_run"]["profile"] == "coding"
+    assert len(started) == 1
+
+
+def test_turn_deep_research_outranks_persistent_agent_mode() -> None:
+    from app.agent_runtime import chat_bridge
+    from types import SimpleNamespace
+
+    session = SimpleNamespace(id="chat-deep", provider_id="test", model_id="model", messages=[])
+    message = SimpleNamespace(
+        id="message-deep",
+        content="research NVIDIA's competitive position",
+        metadata={"agent_mode": True, "research_mode": "deep"},
+    )
+    assert chat_bridge.route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+    ) is None
