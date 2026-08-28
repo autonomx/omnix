@@ -129,6 +129,9 @@ class GapPullbackConfig(BaseModel):
     # Research-only learning loop. Existing persisted strategies remain opt-in.
     # This flag never changes deterministic entry/exit authorization.
     intraday_learning_enabled: bool = False
+    intraday_llm_enabled: bool = False
+    intraday_llm_top_n: int = Field(default=8, ge=1, le=20)
+    intraday_llm_interval_minutes: int = Field(default=5, ge=2, le=60)
 
     @model_validator(mode="after")
     def validate_range(self):
