@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from decimal import Decimal
 
 from app.trading.finviz_gapper_discovery import (
@@ -99,6 +100,8 @@ def test_finviz_discovery_uses_finviz_for_rank_and_yahoo_for_point_in_time_enric
     )
 
     assert snapshot.discovery_source == "finviz"
+    assert snapshot.source_candidate_symbols == ("TEST",)
+    assert snapshot.source_locator and "ta_topgainers" in snapshot.source_locator
     assert len(snapshot.candidates) == 1
     candidate = snapshot.candidates[0]
     assert candidate.discovery_rank == 1
@@ -109,3 +112,47 @@ def test_finviz_discovery_uses_finviz_for_rank_and_yahoo_for_point_in_time_enric
     assert candidate.float_shares == Decimal("5000000")
     assert candidate.spread_bps is not None
     assert "finviz_top_gainers" in candidate.evidence_observed_at
+
+
+
+class ExecutionProvider:
+    def execution_observation(self, instrument_id):
+        assert instrument_id == "equity:NASDAQ:TEST"
+        return SimpleNamespace(spread_bps=Decimal("42"))
+
+
+def test_finviz_discovery_can_use_alpaca_spread_as_research_evidence(monkeypatch):
+    now = datetime(2026, 8, 28, 13, 20, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        "app.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
+        10**9,
+    )
+    finviz = Runtime([Response(text='<a href="quote.ashx?t=TEST">TEST</a>')])
+    yahoo = Runtime([
+        Response(payload=_chart_payload(now)),
+        Response(payload={
+            "quotes": [{
+                "symbol": "TEST",
+                "quoteType": "EQUITY",
+                "exchange": "NMS",
+                "marketCap": 50000000,
+                "floatShares": 5000000,
+            }]
+        }),
+    ])
+
+    snapshot = discover_finviz_gappers(
+        universe_id="finviz-alpaca-spread",
+        evaluation_time=now,
+        count=1,
+        minimum_gap_pct=Decimal("10"),
+        minimum_price=Decimal("1"),
+        maximum_price=Decimal("20"),
+        finviz_runtime=finviz,
+        yahoo_runtime=yahoo,
+        execution_provider=ExecutionProvider(),
+    )
+
+    candidate = snapshot.candidates[0]
+    assert candidate.spread_bps == Decimal("42")
+    assert "alpaca_iex_research_quote" in candidate.evidence_observed_at
