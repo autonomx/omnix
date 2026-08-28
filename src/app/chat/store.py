@@ -163,6 +163,8 @@ class ChatSessionStore:
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
             }
+            if request.research_mode is not None:
+                message_metadata["research_mode"] = request.research_mode
             if context_sources:
                 message_metadata["context_sources"] = context_sources
             if context_diagnostics:
@@ -230,6 +232,8 @@ class ChatSessionStore:
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
             }
+            if request.research_mode is not None:
+                message_metadata["research_mode"] = request.research_mode
             if context_sources:
                 message_metadata["context_sources"] = context_sources
             if context_diagnostics:

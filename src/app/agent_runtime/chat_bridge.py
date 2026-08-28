@@ -30,12 +30,12 @@ class GeneralizedChatResult:
 
 
 _TERMINAL_AGENT = {"completed", "failed", "cancelled"}
-_HOME_SET = re.compile(r"\bturn\s+(on|off)\s+(?:the\s+)?(.+?)[.!?]*$", re.I)
+_HOME_SET = re.compile(r"\bturn\s+(on|off|of)\s+(?:the\s+)?(.+?)[.!?]*$", re.I)
 _HOME_STATE = re.compile(r"\b(?:status|state)\s*(?:of|for)?\s*(?:the\s+)?(.+?)[.!?]*$", re.I)
 _CODE = re.compile(
     r"(?:"
     r"\b(?:code|repo(?:sitory)?|branch|pull request|bug(?:s)?|test(?:s|ing)?|pytest|vitest|"
-    r"refactor(?:ing)?|implement(?:ation|ing)?|fix(?:es|ing)?|debug(?:ging)?|edit(?:ing)?|"
+    r"refactor(?:ing)?|implement(?:ation|ing)?|fix(?:es|ing)?|debugg?(?:ing)?|edit(?:ing)?|"
     r"modify|patch|workspace|file(?:s)?|module|function|class)\b"
     r"|\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b"
     r"|\b(?:add|write|change|update|comment)\b.{0,120}\b(?:router|file|code|function|class|module|"
@@ -43,9 +43,17 @@ _CODE = re.compile(
     r")",
     re.I,
 )
-_HOME = re.compile(r"\b(?:kasa|smart\s+plug|plug|outlet|lamp|light|thermostat|home)\b", re.I)
-_PERSONAL = re.compile(r"\b(?:gmail|email|calendar|meeting|contact|appointment|schedule)\b", re.I)
-_TRADING = re.compile(r"\b(?:stock|trading|trade|ticker|market|shares|equity)\b", re.I)
+_HOME = re.compile(r"\b(?:kasa|smart\s+plugs?|plugs?|outlets?|lamps?|lights?|thermostats?|home)\b", re.I)
+_PERSONAL = re.compile(r"\b(?:gmail|emails?|calendars?|meetings?|contacts?|appointments?|schedules?)\b", re.I)
+_TRADING = re.compile(
+    r"\b(?:stocks?|trading|trades?|tickers?|markets?|shares?|equities|gainers?|losers?|"
+    r"orders?|positions?|buy|sell|purchase|short|cover)\b",
+    re.I,
+)
+_TICKER_CONTEXT = re.compile(
+    r"\b(?:research|reseach|investigate|analy[sz]e|anlyze|buy|sell|purchase|short)\b"
+    r".{0,80}(?:\$[A-Z]{1,5}\b|\b(?:NVDA|GME|TSLA)\b)"
+)
 _CONFIRM = re.compile(r"^(?:yes|confirm|approve|approved|go ahead|proceed|do it)[.!\s]*$", re.I)
 _REJECT = re.compile(r"^(?:no|cancel|reject|rejected|do not|don't|never mind|nevermind)[.!\s]*$", re.I)
 _PAUSE = re.compile(r"^(?:pause|hold)[.!\s]*$", re.I)
@@ -81,10 +89,13 @@ def route_typed_chat_turn(
         return None
 
     content = str(user_message.content or "").strip()
-    explicit_agent = bool(user_message.metadata.get("agent_mode"))
+    metadata = getattr(user_message, "metadata", {}) or {}
+    explicit_agent = bool(metadata.get("agent_mode"))
+    research_mode = _message_research_mode(metadata)
     decision = route_omnix_request(
         content,
         workflow_lookup=_workflow_lookup,
+        research_mode=research_mode,
     )
     if explicit_agent and decision.lane != "agent":
         decision = OmnixRouteDecision(
@@ -193,6 +204,8 @@ def _direct_request(
         if match is None:
             return None
         state = match.group(1).casefold()
+        if state == "of":
+            state = "off"
         target = _clean_home_target(match.group(2))
         if not target:
             return None
@@ -414,7 +427,7 @@ def _agent_result(
 
 def _agent_task(content: str) -> str:
     task = re.sub(
-        r"^(?:/agent\b|agent[,:]\s*|use (?:the )?agent\b\s*)",
+        r"^(?:/agent\b|/agnet\b|agent[,:]\s*|use (?:the )?agent\b\s*)",
         "",
         content,
         flags=re.I,
@@ -560,13 +573,13 @@ def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: Omn
         command_type, payload = "pause", {}
     elif _RESUME.fullmatch(normalized) and snapshot.status == "paused":
         command_type, payload = "resume", {"message": "Resume from the current workspace state."}
-    elif _CANCEL.fullmatch(normalized):
-        command_type, payload = "cancel", {}
     elif snapshot.status == "waiting_for_approval" and (_CONFIRM.fullmatch(normalized) or _REJECT.fullmatch(normalized)):
         pending = service.approvals(snapshot.run_id, state="pending")
         if len(pending) == 1:
             command_type = "approve" if _CONFIRM.fullmatch(normalized) else "reject"
             payload = {"approval_id": pending[0].approval_id}
+    elif _CANCEL.fullmatch(normalized):
+        command_type, payload = "cancel", {}
 
     command_digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
     command = AgentRunCommand(
@@ -661,15 +674,27 @@ def _agent_metadata(snapshot: Any) -> dict[str, Any]:
 def _select_profile(content: str) -> str:
     # Execution intent outranks the subject domain. "Fix the trading UI" is a
     # coding task about trading, not a market-research task.
-    if _CODE.search(content):
+    if _CODE.search(content) or re.search(r"\bgit\b", content, re.I):
         return "coding"
     if _HOME.search(content):
         return "house"
     if _PERSONAL.search(content):
         return "personal-assistant"
-    if _TRADING.search(content):
+    if _TRADING.search(content) or _TICKER_CONTEXT.search(content):
         return "trading-research"
     return "research"
+
+
+def _message_research_mode(metadata: dict[str, Any]) -> str | None:
+    direct = metadata.get("research_mode") or metadata.get("web_research_mode")
+    if direct is not None:
+        return str(direct)
+    diagnostics = metadata.get("context_diagnostics")
+    if isinstance(diagnostics, dict):
+        value = diagnostics.get("research_effective_mode") or diagnostics.get("web_research_mode")
+        if value is not None:
+            return str(value)
+    return None
 
 
 def _is_live_voice(user_message: Any) -> bool:
