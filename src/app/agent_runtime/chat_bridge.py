@@ -33,6 +33,7 @@ from .semantic_classifier import (
     classify_semantic_intent_safely,
     default_semantic_intent_classifier,
     semantic_confidence_threshold,
+    semantic_profile_id,
 )
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
@@ -126,31 +127,6 @@ def _apply_semantic_route_decision(
         explicit=False,
         hermes_recommended=semantic.multi_step,
     )
-
-
-def _semantic_profile_id(
-    content: str,
-    semantic: SemanticIntentDecision | None,
-) -> str:
-    if semantic is None or semantic.confidence < semantic_confidence_threshold():
-        return select_agent_profile_id(content)
-    actions = {str(value) for value in semantic.action_intents}
-    if actions & {"workspace_read", "workspace_execute", "workspace_mutate"}:
-        return "coding"
-    if actions & {"home_read", "home_mutate"}:
-        return "house"
-    if actions & {
-        "email_read",
-        "email_draft",
-        "email_send",
-        "calendar_read",
-        "calendar_create",
-        "contacts_read",
-    }:
-        return "personal-assistant"
-    if "market_read" in actions:
-        return "trading-research"
-    return semantic.profile_id
 
 
 def route_typed_chat_turn(
@@ -408,7 +384,7 @@ def _agent_result(
     semantic_intent: SemanticIntentDecision | None = None,
 ) -> GeneralizedChatResult | None:
     content = str(user_message.content or "").strip()
-    profile_id = _semantic_profile_id(content, semantic_intent)
+    profile_id = semantic_profile_id(content, semantic_intent)
     profile = get_agent_profile(profile_id)
     try:
         service = default_agent_run_service()
