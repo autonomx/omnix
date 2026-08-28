@@ -5095,6 +5095,78 @@
         "title": "FeedType",
         "type": "string"
       },
+      "FinvizGapperDiscoveryRequest": {
+        "additionalProperties": false,
+        "description": "Same filtering contract, but Finviz determines the source-ranked cohort.",
+        "properties": {
+          "count": {
+            "default": 30,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "evaluation_time": {
+            "format": "date-time",
+            "title": "Evaluation Time",
+            "type": "string"
+          },
+          "maximum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Maximum Price"
+          },
+          "minimum_gap_pct": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Minimum Gap Pct"
+          },
+          "minimum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.50",
+            "title": "Minimum Price"
+          },
+          "universe_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Universe Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "universe_id"
+        ],
+        "title": "FinvizGapperDiscoveryRequest",
+        "type": "object"
+      },
       "FreezeDatasetRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6081,6 +6153,11 @@
             "default": "20",
             "title": "Higher Low Buffer Bps"
           },
+          "intraday_learning_enabled": {
+            "default": false,
+            "title": "Intraday Learning Enabled",
+            "type": "boolean"
+          },
           "last_entry_et": {
             "default": "11:30:00",
             "format": "time",
@@ -6364,6 +6441,15 @@
             "title": "Universe Discovery Count",
             "type": "integer"
           },
+          "universe_discovery_source": {
+            "default": "yahoo",
+            "enum": [
+              "yahoo",
+              "finviz"
+            ],
+            "title": "Universe Discovery Source",
+            "type": "string"
+          },
           "universe_scan_time_et": {
             "default": "09:20:00",
             "format": "time",
@@ -6557,6 +6643,11 @@
             "title": "Higher Low Buffer Bps",
             "type": "string"
           },
+          "intraday_learning_enabled": {
+            "default": false,
+            "title": "Intraday Learning Enabled",
+            "type": "boolean"
+          },
           "last_entry_et": {
             "default": "11:30:00",
             "format": "time",
@@ -6725,6 +6816,15 @@
             "minimum": 1.0,
             "title": "Universe Discovery Count",
             "type": "integer"
+          },
+          "universe_discovery_source": {
+            "default": "yahoo",
+            "enum": [
+              "yahoo",
+              "finviz"
+            ],
+            "title": "Universe Discovery Source",
+            "type": "string"
           },
           "universe_scan_time_et": {
             "default": "09:20:00",
@@ -7626,7 +7726,8 @@
               "manual",
               "import",
               "scanner",
-              "provider"
+              "provider",
+              "finviz"
             ],
             "title": "Discovery Source",
             "type": "string"
@@ -7640,6 +7741,26 @@
             "format": "date",
             "title": "Session Date",
             "type": "string"
+          },
+          "source_candidate_symbols": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Source Candidate Symbols",
+            "type": "array"
+          },
+          "source_locator": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Locator"
           },
           "universe_id": {
             "maxLength": 200,
@@ -7673,7 +7794,8 @@
               "manual",
               "import",
               "scanner",
-              "provider"
+              "provider",
+              "finviz"
             ],
             "title": "Discovery Source",
             "type": "string"
@@ -7688,11 +7810,31 @@
             "title": "Session Date",
             "type": "string"
           },
+          "source_candidate_symbols": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Candidate Symbols",
+            "type": "array"
+          },
           "source_fingerprint": {
             "maxLength": 64,
             "minLength": 64,
             "title": "Source Fingerprint",
             "type": "string"
+          },
+          "source_locator": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Locator"
           },
           "universe_id": {
             "maxLength": 200,
@@ -7728,7 +7870,8 @@
               "manual",
               "import",
               "scanner",
-              "provider"
+              "provider",
+              "finviz"
             ],
             "title": "Discovery Source",
             "type": "string"
@@ -7743,11 +7886,31 @@
             "title": "Session Date",
             "type": "string"
           },
+          "source_candidate_symbols": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Candidate Symbols",
+            "type": "array"
+          },
           "source_fingerprint": {
             "maxLength": 64,
             "minLength": 64,
             "title": "Source Fingerprint",
             "type": "string"
+          },
+          "source_locator": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Locator"
           },
           "universe_id": {
             "maxLength": 200,
@@ -26502,6 +26665,47 @@
           }
         },
         "summary": "Save Universe",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/universes/discover-finviz": {
+      "post": {
+        "operationId": "discover_finviz_universe_api_trading_strategies_universes_discover_finviz_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinvizGapperDiscoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapperUniverseSnapshot-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discover Finviz Universe",
         "tags": [
           "trading-strategies"
         ]
