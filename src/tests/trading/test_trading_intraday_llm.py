@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.trading.gapper_dataset import GapperCandidate
-from app.trading.strategies.models import GapPullbackFeatures, GapPullbackResult, StrategySignal
+from app.trading.strategies.models import GapPullbackConfig, GapPullbackFeatures, GapPullbackResult, StrategySignal
 from app.trading.strategy_intraday_learning import IntradayLearningSnapshot
 from app.trading.strategy_intraday_llm import (
     IntradayLLMAnalyzer,
@@ -212,4 +212,13 @@ def test_analyzer_fails_closed_when_provider_omits_requested_candidate():
         analyzer.assess(
             [row("AAA", 1)],
             ranks={"equity:NASDAQ:AAA": 1},
+        )
+
+
+
+def test_intraday_llm_requires_deterministic_learning_layer():
+    with pytest.raises(ValueError, match="requires intraday learning"):
+        GapPullbackConfig(
+            intraday_learning_enabled=False,
+            intraday_llm_enabled=True,
         )
