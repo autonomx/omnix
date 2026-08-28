@@ -249,6 +249,17 @@ def test_quiet_candidate_skips_llm_until_ten_minute_heartbeat():
     assert reasons["equity:NASDAQ:AAA"] == ("heartbeat",)
 
 
+def test_quiet_unassessed_top_name_does_not_call_llm_outside_entry_window():
+    selected, reasons = select_intraday_llm_candidates(
+        [row("AAA", 1)],
+        top_n=5,
+        heartbeat_minutes=10,
+        heartbeat_enabled=False,
+    )
+    assert selected == []
+    assert reasons == {}
+
+
 def test_heartbeat_can_be_disabled_outside_the_entry_window():
     selected, _ = select_intraday_llm_candidates(
         [row("AAA", 1)],
