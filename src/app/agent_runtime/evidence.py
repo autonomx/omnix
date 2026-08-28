@@ -66,10 +66,10 @@ _CALENDAR_CREATE = re.compile(r"\b(?:schedule|create|book|add)\b.{0,80}\b(?:meet
 _CONCEPTUAL = re.compile(r"^(?:what is|what are|explain|describe|teach me|how does|why does|compare)\b", re.I)
 _TICKER_DOLLAR = re.compile(r"\$([A-Z]{1,5})\b")
 _TICKER_BEFORE_CONTEXT = re.compile(
-    r"\b([A-Z]{1,5})\b(?=.{0,24}\b(?:stock|shares?|ticker|price|quote|trading at)\b)"
+    r"\b([A-Z]{1,5})\b(?=.{0,32}\b(?:stock|shares?|ticker|price|quote|trading at|sec|filings?|catalysts?|news|headlines?)\b)"
 )
 _TICKER_AFTER_CONTEXT = re.compile(
-    r"\b(?:stock|ticker|price|quote)\s+(?:of\s+|for\s+)?([A-Z]{1,5})\b",
+    r"\b(?:stock|ticker|price|quote|filing|catalyst|news)\s+(?:of\s+|for\s+)?([A-Z]{1,5})\b",
     re.I,
 )
 _PR = re.compile(r"\bPR\s*#?(\d+)\b", re.I)
@@ -639,11 +639,17 @@ def fallback_capabilities_for_requirement(
     rows: list[str] = []
     if requirement.fallback_policy == "fail_closed":
         return ()
-    for _preference, source_class, _option_trust in _requirement_source_candidates(requirement):
+    for _preference, source_class, option_trust in _requirement_source_candidates(requirement):
         resolved = SOURCE_CAPABILITIES.get(source_class)
         if resolved is None:
             continue
-        capability = resolved[0]
+        capability, source_trust = resolved
+        required_trust = max(
+            TRUST_RANK.get(requirement.trust_floor, 0),
+            TRUST_RANK.get(option_trust, 0),
+        )
+        if TRUST_RANK.get(source_trust, 0) < required_trust:
+            continue
         if capability == current_capability or capability not in issued:
             continue
         if capability not in rows:
@@ -722,6 +728,7 @@ def compile_task_authority(
         decision=decision,
         required_local=tuple(dict.fromkeys(local)),
         required_external=tuple(dict.fromkeys(external)),
+        external_groups=evidence.external_groups,
     )
 
 
