@@ -39,6 +39,10 @@ _NO_EXTERNAL = re.compile(
 _SOURCE_REQUEST = re.compile(r"\b(?:find|give|provide|include|cite)\b.{0,40}\b(?:sources?|citations?|evidence)\b|\bresearch\b", re.I)
 _MARKET = re.compile(r"\b(?:stock|stocks|ticker|market|shares?|equity|nvda|gme|tsla|\$[A-Z]{1,5})\b", re.I)
 _QUOTE = re.compile(r"\b(?:price|quote|trading at|last trade|bid|ask)\b", re.I)
+_MARKET_NEWS = re.compile(
+    r"\b(?:news|catalysts?|headlines?|developments?|why (?:is|did)|moving|momentum)\b",
+    re.I,
+)
 _CI = re.compile(r"\b(?:ci|github actions?|workflow checks?|checks? (?:failed|passing|status)|build status)\b", re.I)
 _REPO = re.compile(r"\b(?:repo(?:sitory)?|github|pull request|\bpr\s*#?\d+|branch|commit)\b", re.I)
 _WEATHER = re.compile(r"\b(?:weather|raining|rain|snow|temperature|forecast)\b", re.I)
@@ -224,6 +228,7 @@ class CompiledEvidence:
     decision: EvidenceDecision
     required_local: tuple[str, ...]
     required_external: tuple[str, ...]
+    external_groups: tuple[tuple[str, ...], ...] = ()
 
 
 def resolve_request_mode(
@@ -375,32 +380,60 @@ def classify_evidence(
     attribution = "required" if re.search(r"\b(?:sourced|with sources|cite sources|citations)\b", text, re.I) else "when_used"
     requirements: list[EvidenceRequirement] = []
 
+    def add_requirement(
+        source_class: str,
+        *,
+        freshness: str = "current",
+        trust: str | None = None,
+        fallback: str = "fail_closed",
+    ) -> None:
+        if any(row.source_class == source_class for row in requirements):
+            return
+        requirements.append(
+            _requirement(
+                text,
+                source_class,
+                freshness=freshness,
+                trust=trust,
+                fallback=fallback,
+            )
+        )
+
     market_signal = bool(_MARKET.search(text) or _extract_ticker(text))
     if market_signal and _QUOTE.search(text):
-        requirements.append(_requirement(text, "market_quote", trust="authoritative"))
-    elif _CI.search(text):
-        requirements.append(_requirement(text, "repo_ci_state", trust="authoritative"))
-    elif _WEATHER.search(text) and (_CURRENT.search(text) or re.search(r"\boutside\b", text, re.I)):
-        requirements.append(_requirement(text, "weather_state", trust="authoritative"))
-    elif profile_id == "house" and re.search(r"\b(?:check|inspect|status|state|energy)\b", text, re.I):
+        add_requirement("market_quote", trust="authoritative")
+    if _CI.search(text):
+        add_requirement("repo_ci_state", trust="authoritative")
+    if _WEATHER.search(text) and (_CURRENT.search(text) or re.search(r"\boutside\b", text, re.I)):
+        add_requirement("weather_state", trust="authoritative")
+    if profile_id == "house" and re.search(r"\b(?:check|inspect|status|state|energy)\b", text, re.I):
         source = "home_energy" if "energy" in text.casefold() else "home_state"
-        requirements.append(_requirement(text, source, trust="authoritative"))
-    elif profile_id == "personal-assistant" and _CALENDAR.search(text):
-        requirements.append(_requirement(text, "calendar_state", trust="authoritative"))
-    elif profile_id == "personal-assistant" and _EMAIL.search(text):
-        requirements.append(_requirement(text, "email_state", trust="authoritative"))
-    elif _FILINGS.search(text):
-        requirements.append(_requirement(text, "company_filing", trust="primary"))
-    elif _REPO.search(text) and _CURRENT.search(text):
-        requirements.append(_requirement(text, "repo_contents", trust="authoritative"))
-    elif _RELEASE.search(text) and _CURRENT.search(text):
-        requirements.append(_requirement(text, "software_release", trust="primary", fallback="allow_fallback"))
-    elif market_signal and (_CURRENT.search(text) or _SOURCE_REQUEST.search(text)):
-        requirements.append(_requirement(text, "market_news", trust="reputable", fallback="allow_fallback"))
-    elif _CURRENT.search(text):
-        requirements.append(_requirement(text, "general_current_web", trust="reputable", fallback="allow_fallback"))
-    elif _SOURCE_REQUEST.search(text):
-        requirements.append(_requirement(text, "general_current_web", freshness="timeless", trust="reputable", fallback="allow_fallback"))
+        add_requirement(source, trust="authoritative")
+    if profile_id == "personal-assistant" and _CALENDAR.search(text):
+        add_requirement("calendar_state", trust="authoritative")
+    if profile_id == "personal-assistant" and _EMAIL.search(text):
+        add_requirement("email_state", trust="authoritative")
+    if _FILINGS.search(text):
+        add_requirement("company_filing", trust="primary")
+    if _REPO.search(text) and _CURRENT.search(text) and not _CI.search(text):
+        add_requirement("repo_contents", trust="authoritative")
+    if _RELEASE.search(text) and _CURRENT.search(text):
+        add_requirement("software_release", trust="primary", fallback="allow_fallback")
+    if (
+        market_signal
+        and (_CURRENT.search(text) or _SOURCE_REQUEST.search(text))
+        and (_MARKET_NEWS.search(text) or (not _QUOTE.search(text) and not _FILINGS.search(text)))
+    ):
+        add_requirement("market_news", trust="reputable", fallback="allow_fallback")
+    if not requirements and _CURRENT.search(text):
+        add_requirement("general_current_web", trust="reputable", fallback="allow_fallback")
+    elif not requirements and _SOURCE_REQUEST.search(text):
+        add_requirement(
+            "general_current_web",
+            freshness="timeless",
+            trust="reputable",
+            fallback="allow_fallback",
+        )
 
     if requirements:
         policy = EvidencePolicy(
@@ -539,14 +572,16 @@ def capability_for_requirement(requirement: EvidenceRequirement) -> tuple[str, s
     )
 
 
-def _resolve_requirement_capability(
+def _resolve_requirement_capabilities(
     profile: AgentProfile,
     requirement: EvidenceRequirement,
-) -> tuple[str, str]:
+) -> list[tuple[str, str, str]]:
+    """Return all policy-permitted capability/source alternatives in preference order."""
     ceiling = profile_external_ceiling(profile)
     candidates = _requirement_source_candidates(requirement)
     if requirement.fallback_policy == "fail_closed":
         candidates = candidates[:1]
+    available: list[tuple[str, str, str]] = []
     unavailable: list[str] = []
     for _preference, source_class, option_trust in candidates:
         resolved = SOURCE_CAPABILITIES.get(source_class)
@@ -561,12 +596,18 @@ def _resolve_requirement_capability(
         if TRUST_RANK.get(source_trust, 0) < required_trust:
             unavailable.append(f"{source_class}:trust")
             continue
-        if capability.startswith("workspace."):
-            if capability in profile.capabilities:
-                return capability, source_trust
-        elif capability in ceiling:
-            return capability, source_trust
-        unavailable.append(f"{source_class}:{capability}")
+        permitted = (
+            capability in profile.capabilities
+            if capability.startswith("workspace.")
+            else capability in ceiling
+        )
+        if not permitted:
+            unavailable.append(f"{source_class}:{capability}")
+            continue
+        if not any(row[0] == capability for row in available):
+            available.append((capability, source_trust, source_class))
+    if available:
+        return available
     raise EvidenceCompilationError(
         "required_source_outside_profile_ceiling",
         (
@@ -575,6 +616,39 @@ def _resolve_requirement_capability(
         ),
         requirement_id=requirement.id,
     )
+
+
+def _resolve_requirement_capability(
+    profile: AgentProfile,
+    requirement: EvidenceRequirement,
+) -> tuple[str, str]:
+    capability, trust, _source_class = _resolve_requirement_capabilities(
+        profile,
+        requirement,
+    )[0]
+    return capability, trust
+
+
+def fallback_capabilities_for_requirement(
+    requirement: EvidenceRequirement,
+    *,
+    current_capability: str,
+    issued_capabilities: list[str] | tuple[str, ...] | set[str],
+) -> tuple[str, ...]:
+    issued = set(issued_capabilities)
+    rows: list[str] = []
+    if requirement.fallback_policy == "fail_closed":
+        return ()
+    for _preference, source_class, _option_trust in _requirement_source_candidates(requirement):
+        resolved = SOURCE_CAPABILITIES.get(source_class)
+        if resolved is None:
+            continue
+        capability = resolved[0]
+        if capability == current_capability or capability not in issued:
+            continue
+        if capability not in rows:
+            rows.append(capability)
+    return tuple(rows)
 
 def task_requires_workspace_mutation(task: str) -> bool:
     text = str(task or "")
@@ -651,23 +725,53 @@ def compile_task_authority(
     )
 
 
-def validate_required_evidence_capabilities(capabilities: tuple[str, ...] | list[str]) -> None:
-    """Fail preflight when a required connected evidence source is unavailable."""
+def validate_required_evidence_capabilities(
+    capabilities: tuple[str, ...] | list[str],
+    *,
+    alternative_groups: tuple[tuple[str, ...], ...] | list[tuple[str, ...]] = (),
+) -> None:
+    """Require one live capability per evidence requirement, not every fallback."""
     if not capabilities:
         return
     from app.assistant_tools.gate import review_assistant_tool_request
     from app.assistant_tools.models import AssistantToolRequest
 
-    for capability in capabilities:
-        if capability.startswith("workspace."):
-            continue
-        decision = review_assistant_tool_request(
+    allowed_set = set(capabilities)
+
+    def decision_for(capability: str):
+        return review_assistant_tool_request(
             AssistantToolRequest(
                 tool_id=capability.split(".", 1)[0],
                 action_id=capability,
                 input={},
             )
         )
+
+    grouped: set[str] = set()
+    for raw_group in alternative_groups:
+        group = tuple(cap for cap in raw_group if cap in allowed_set)
+        if not group:
+            continue
+        grouped.update(group)
+        decisions = [(cap, decision_for(cap)) for cap in group]
+        if any(decision.allowed for _cap, decision in decisions):
+            continue
+        reasons = {str(decision.reason or "") for _cap, decision in decisions}
+        code = (
+            "required_connection_unavailable"
+            if reasons and reasons <= {"missing_connection", "tool_disabled"}
+            else "evidence_required_but_unavailable"
+        )
+        raise EvidenceCompilationError(
+            code,
+            "required evidence alternatives are unavailable: "
+            + ", ".join(f"{cap}={decision.reason}" for cap, decision in decisions),
+        )
+
+    for capability in capabilities:
+        if capability in grouped or capability.startswith("workspace."):
+            continue
+        decision = decision_for(capability)
         if decision.allowed:
             continue
         code = (
@@ -680,7 +784,6 @@ def validate_required_evidence_capabilities(capabilities: tuple[str, ...] | list
             f"required evidence capability {capability} is unavailable: {decision.reason}",
         )
 
-
 def compile_evidence(profile: AgentProfile, decision: EvidenceDecision) -> CompiledEvidence:
     policy = decision.policy
     if policy.requirement == "required" and policy.external_access == "forbidden" and policy.requirements:
@@ -690,6 +793,7 @@ def compile_evidence(profile: AgentProfile, decision: EvidenceDecision) -> Compi
         )
     required_external: list[str] = []
     required_local: list[str] = []
+    external_groups: list[tuple[str, ...]] = []
     if policy.requirement == "required":
         for original_requirement in policy.requirements:
             requirement = original_requirement
@@ -710,15 +814,22 @@ def compile_evidence(profile: AgentProfile, decision: EvidenceDecision) -> Compi
                     f"as-of evidence requirement {requirement.id} is missing as_of_date",
                     requirement_id=requirement.id,
                 )
-            capability, _trust = _resolve_requirement_capability(profile, requirement)
-            if capability.startswith("workspace."):
-                required_local.append(capability)
-            else:
-                required_external.append(capability)
+            resolved = _resolve_requirement_capabilities(profile, requirement)
+            external_group: list[str] = []
+            for capability, _trust, _source_class in resolved:
+                if capability.startswith("workspace."):
+                    required_local.append(capability)
+                else:
+                    required_external.append(capability)
+                    if capability not in external_group:
+                        external_group.append(capability)
+            if external_group:
+                external_groups.append(tuple(external_group))
     return CompiledEvidence(
         decision=decision,
         required_local=tuple(dict.fromkeys(required_local)),
         required_external=tuple(dict.fromkeys(required_external)),
+        external_groups=tuple(external_groups),
     )
 
 
@@ -1027,6 +1138,53 @@ def _request_supports_subject(subject: SubjectRef | None, request_input: dict[st
     return any(token in serialized for token in meaningful)
 
 
+def _source_intent_score(source_class: str, text: str) -> int:
+    value = str(text or "")
+    if source_class == "company_filing":
+        return 100 if _FILINGS.search(value) else 0
+    if source_class == "software_release":
+        return 90 if _RELEASE.search(value) else 0
+    if source_class == "market_news":
+        return 80 if _MARKET_NEWS.search(value) else 20 if (_MARKET.search(value) or _extract_ticker(value)) else 0
+    if source_class == "general_current_web":
+        return 10
+    if source_class == "repo_ci_state":
+        return 100 if _CI.search(value) else 0
+    if source_class == "repo_contents":
+        return 70 if _REPO.search(value) else 0
+    return 50
+
+
+def resolve_evidence_call(
+    policy: EvidencePolicy,
+    capability_id: str,
+    request_input: dict[str, object],
+) -> tuple[EvidenceRequirement | None, str | None]:
+    """Bind one broker call to one requirement/source deterministically."""
+    serialized = json.dumps(request_input, sort_keys=True, default=str)
+    rows: list[tuple[int, int, EvidenceRequirement, str]] = []
+    for requirement in policy.requirements:
+        candidates = _requirement_source_candidates(requirement)
+        if requirement.fallback_policy == "fail_closed":
+            candidates = candidates[:1]
+        for preference, source_class, _option_trust in candidates:
+            resolved = SOURCE_CAPABILITIES.get(source_class)
+            if resolved is None or resolved[0] != capability_id:
+                continue
+            score = _source_intent_score(source_class, serialized)
+            if requirement.subject is not None and _request_supports_subject(
+                requirement.subject,
+                request_input,
+            ):
+                score += 25
+            rows.append((score, -preference, requirement, source_class))
+    if not rows:
+        return None, _REVERSE_SOURCE_CAPABILITIES.get(capability_id)
+    rows.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    _score, _preference, requirement, source_class = rows[0]
+    return requirement, source_class
+
+
 def build_evidence_receipt(
     *,
     run_id: str,
@@ -1036,13 +1194,20 @@ def build_evidence_receipt(
     request_input: dict[str, object],
     result_payload: dict[str, object],
     error: str | None,
+    requirement_id: str | None = None,
+    source_class_hint: str | None = None,
 ) -> EvidenceReceipt | None:
     if error:
         return None
-    source_class = _REVERSE_SOURCE_CAPABILITIES.get(capability_id)
+    source_class = source_class_hint or _REVERSE_SOURCE_CAPABILITIES.get(capability_id)
     subject: SubjectRef | None = None
     trust = "general"
-    for requirement in policy.requirements:
+    requirements = [
+        requirement
+        for requirement in policy.requirements
+        if requirement_id is None or requirement.id == requirement_id
+    ]
+    for requirement in requirements:
         candidates = _requirement_source_candidates(requirement)
         if requirement.fallback_policy == "fail_closed":
             candidates = candidates[:1]
@@ -1053,6 +1218,8 @@ def build_evidence_receipt(
                 continue
             resolved_capability, resolved_trust = resolved
             if resolved_capability != capability_id:
+                continue
+            if source_class_hint is not None and candidate_source != source_class_hint:
                 continue
             source_class = candidate_source
             subject = None
