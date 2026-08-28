@@ -543,7 +543,6 @@ CASES: tuple[LiveSemanticCase, ...] = (
         "don't touch anything. why do flaky tests happen?",
         "chat",
         forbidden_actions=("workspace_read", "workspace_execute", "workspace_mutate"),
-        assert_semantic_lane=False,
     ),
     LiveSemanticCase(
         "chat_how_to_refactor",
@@ -612,6 +611,7 @@ CASES: tuple[LiveSemanticCase, ...] = (
         "I might want to clean up the repo someday. give me a plan, but don't inspect or change anything now.",
         "chat",
         forbidden_actions=("workspace_read", "workspace_execute", "workspace_mutate"),
+        assert_semantic_lane=False,
     ),
     LiveSemanticCase(
         "chat_cache_explanation_no_repo",
