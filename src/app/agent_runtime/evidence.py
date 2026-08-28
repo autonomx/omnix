@@ -29,7 +29,13 @@ from .contracts import (
 from .profiles import AgentProfile, profile_external_ceiling
 
 _CURRENT = re.compile(r"\b(?:today|current(?:ly)?|latest|right now|this (?:week|month|year)|recent|newest|news)\b", re.I)
-_NO_EXTERNAL = re.compile(r"\b(?:without (?:the )?(?:internet|web)|do not (?:search|browse)|don't (?:search|browse)|from memory only)\b", re.I)
+_NO_EXTERNAL = re.compile(
+    r"\b(?:without (?:using )?(?:the )?(?:internet|web)|"
+    r"do not (?:use |search |browse )?(?:the )?(?:internet|web)?|"
+    r"don't (?:use |search |browse )?(?:the )?(?:internet|web)?|"
+    r"from memory only)\b",
+    re.I,
+)
 _SOURCE_REQUEST = re.compile(r"\b(?:find|give|provide|include|cite)\b.{0,40}\b(?:sources?|citations?|evidence)\b|\bresearch\b", re.I)
 _MARKET = re.compile(r"\b(?:stock|stocks|ticker|market|shares?|equity|nvda|gme|tsla|\$[A-Z]{1,5})\b", re.I)
 _QUOTE = re.compile(r"\b(?:price|quote|trading at|last trade|bid|ask)\b", re.I)
@@ -765,14 +771,31 @@ def build_evidence_receipt(
     subject: SubjectRef | None = None
     trust = "general"
     for requirement in policy.requirements:
-        try:
-            resolved_capability, resolved_trust = capability_for_requirement(requirement)
-        except EvidenceCompilationError:
-            continue
-        if resolved_capability == capability_id:
-            source_class = requirement.source_class
-            subject = requirement.subject if _request_supports_subject(requirement.subject, request_input) else None
-            trust = resolved_trust
+        candidates = _requirement_source_candidates(requirement)
+        if requirement.fallback_policy == "fail_closed":
+            candidates = candidates[:1]
+        matched_requirement = False
+        for _preference, candidate_source, option_trust in candidates:
+            resolved = SOURCE_CAPABILITIES.get(candidate_source)
+            if resolved is None:
+                continue
+            resolved_capability, resolved_trust = resolved
+            if resolved_capability != capability_id:
+                continue
+            source_class = candidate_source
+            subject = (
+                requirement.subject
+                if _request_supports_subject(requirement.subject, request_input)
+                else None
+            )
+            trust = (
+                option_trust
+                if TRUST_RANK.get(option_trust, 0) <= TRUST_RANK.get(resolved_trust, 0)
+                else resolved_trust
+            )
+            matched_requirement = True
+            break
+        if matched_requirement:
             break
     if source_class is None:
         return None
@@ -823,3 +846,8 @@ def build_evidence_receipt(
             "provider_atomicity": "omnix_local_commit_only",
         },
     )
+
+
+
+def is_evidence_capability(capability_id: str) -> bool:
+    return str(capability_id or "") in _REVERSE_SOURCE_CAPABILITIES

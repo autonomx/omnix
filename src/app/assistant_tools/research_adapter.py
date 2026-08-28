@@ -36,6 +36,16 @@ def run_research_tool_request(
             error="research_max_results_invalid",
         )
     max_results = max(1, min(max_results, 10))
+    try:
+        max_extracts = int(request.input.get("max_extracts", 2))
+    except (TypeError, ValueError):
+        return _result(
+            request,
+            "max_extracts must be an integer.",
+            {},
+            error="research_max_extracts_invalid",
+        )
+    max_extracts = max(0, min(max_extracts, 4))
 
     if service is None:
         # Keep process initialization acyclic: Quick Search imports the
@@ -43,7 +53,7 @@ def run_research_tool_request(
         # live-agent hooks that depend on this Hermes bridge.
         from app.research.quick_search import QuickSearchService
 
-        runtime = QuickSearchService()
+        runtime = QuickSearchService(max_extracts=max_extracts)
     else:
         runtime = service
     try:

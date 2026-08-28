@@ -417,10 +417,11 @@ class PiAgentRuntime(AgentRuntime):
                 )
                 session.steer(
                     "Authoritative steering for the active task; this supersedes any conflicting "
-                    f"earlier scope or plan. Follow it immediately. User instruction: {message}\n"
+                    "earlier scope or plan. Follow it immediately.\n"
                     f"Effective objective: {effective_objective or message}\n"
                     f"Omnix evidence contract: {evidence_text}\n"
-                    "Do not claim completion until the evidence contract is satisfied."
+                    "Do not claim completion until the evidence contract is satisfied.\n"
+                    f"{message}"
                 )
             elif command.command_type == "pause":
                 session.abort()

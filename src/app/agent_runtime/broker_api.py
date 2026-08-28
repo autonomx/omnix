@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -16,7 +17,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from .budget import AgentBudgetError, default_agent_budget_manager
 from .contracts import AgentApproval, AgentEvent
-from .evidence import build_evidence_receipt
+from .evidence import build_evidence_receipt, is_evidence_capability
 from .repository import PostgresAgentRunRepository
 from .service import default_agent_run_service
 
@@ -194,6 +195,64 @@ def _bind_authoritative_capability_input(
     )
 
 
+def _effective_evidence_context(service, snapshot):
+    with unit_of_work(service.database) as work:
+        repository = PostgresAgentRunRepository(work.connection, service.context)
+        latest_revision = repository.latest_task_revision(snapshot.run_id)
+        receipts = repository.list_evidence_receipts(snapshot.run_id)
+        work.rollback()
+    policy = (
+        latest_revision.evidence_decision.policy
+        if latest_revision is not None
+        else snapshot.spec.evidence_policy
+    )
+    revision_id = latest_revision.revision_id if latest_revision is not None else None
+    started_at = latest_revision.created_at if latest_revision is not None else snapshot.created_at
+    return policy, revision_id, started_at, receipts
+
+
+def _bind_evidence_retrieval_budget(
+    capability_id: str,
+    request: BrokerCapabilityRequest,
+    *,
+    policy,
+    revision_id: str | None,
+    started_at,
+    receipts,
+) -> BrokerCapabilityRequest:
+    if not is_evidence_capability(capability_id):
+        return request
+    retrieval = policy.retrieval
+    relevant = [receipt for receipt in receipts if receipt.task_revision_id == revision_id]
+    if len(relevant) >= retrieval.max_queries:
+        raise HTTPException(
+            status_code=429,
+            detail="agent_evidence_retrieval_query_budget_exceeded",
+        )
+    now = datetime.now(timezone.utc)
+    if started_at is not None:
+        age = (now - started_at.astimezone(timezone.utc)).total_seconds()
+        if age > retrieval.max_wall_time_seconds:
+            raise HTTPException(
+                status_code=429,
+                detail="agent_evidence_retrieval_wall_time_exceeded",
+            )
+    if capability_id != "research.web_search":
+        return request
+    bounded = dict(request.input)
+    try:
+        requested_results = int(bounded.get("max_results", 5))
+    except (TypeError, ValueError):
+        requested_results = 5
+    try:
+        requested_extracts = int(bounded.get("max_extracts", retrieval.max_extracts))
+    except (TypeError, ValueError):
+        requested_extracts = retrieval.max_extracts
+    bounded["max_results"] = max(1, min(requested_results, retrieval.max_sources, 10))
+    bounded["max_extracts"] = max(0, min(requested_extracts, retrieval.max_extracts, 4))
+    return request.model_copy(update={"input": bounded})
+
+
 def _review_with_run_policy(
     request: AssistantToolRequest,
     run_policy: str,
@@ -296,6 +355,18 @@ def execute_agent_capability(
         snapshot,
         canonical,
         request,
+    )
+    policy, task_revision_id, evidence_started_at, existing_receipts = _effective_evidence_context(
+        service,
+        snapshot,
+    )
+    request = _bind_evidence_retrieval_budget(
+        canonical,
+        request,
+        policy=policy,
+        revision_id=task_revision_id,
+        started_at=evidence_started_at,
+        receipts=existing_receipts,
     )
     if not _request_within_resource_scopes(snapshot, canonical, request.input):
         raise HTTPException(status_code=403, detail="agent_resource_scope_mismatch")
