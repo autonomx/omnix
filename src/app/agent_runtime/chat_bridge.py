@@ -22,11 +22,18 @@ from .evidence import (
     EvidenceCompilationError,
     classify_evidence,
     compile_task_authority,
+    evidence_decision_from_semantic,
     resolve_request_mode,
     task_requires_workspace_mutation,
 )
 from .profiles import get_agent_profile, select_agent_profile_id
 from .router import OmnixRouteDecision, route_omnix_request
+from .semantic_classifier import (
+    SemanticIntentDecision,
+    classify_semantic_intent_safely,
+    default_semantic_intent_classifier,
+    semantic_confidence_threshold,
+)
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
 
@@ -82,6 +89,68 @@ _PUBLICATION_REQUEST = re.compile(
     r"\b(?:git\s+push|push\s+(?:the\s+)?(?:current\s+)?branch|open\s+(?:a\s+)?pull\s+request|create\s+(?:a\s+)?pull\s+request)\b",
     re.I,
 )
+_SEMANTIC_AUTO = object()
+
+
+def _should_use_semantic_classifier(decision: OmnixRouteDecision, content: str) -> bool:
+    if not str(content or "").strip():
+        return False
+    if decision.reason == "casual_or_empty":
+        return False
+    if decision.lane in {"direct", "workflow"} and decision.confidence >= 0.95:
+        return False
+    return True
+
+
+def _apply_semantic_route_decision(
+    deterministic: OmnixRouteDecision,
+    semantic: SemanticIntentDecision | None,
+) -> OmnixRouteDecision:
+    if semantic is None or semantic.confidence < semantic_confidence_threshold():
+        return deterministic
+    # Explicit user mode selection is authoritative. Semantic classification may
+    # still supply profile/evidence hints, but it cannot downgrade /agent.
+    if deterministic.explicit:
+        return deterministic.model_copy(
+            update={
+                "reason": f"{deterministic.reason}+semantic:{semantic.primary_intent}"[:240],
+                "hermes_recommended": deterministic.hermes_recommended or semantic.multi_step,
+            }
+        )
+    if deterministic.lane in {"direct", "workflow"} and deterministic.confidence >= 0.95:
+        return deterministic
+    return OmnixRouteDecision(
+        lane=semantic.lane,
+        confidence=semantic.confidence,
+        reason=f"semantic:{semantic.primary_intent}"[:240],
+        explicit=False,
+        hermes_recommended=semantic.multi_step,
+    )
+
+
+def _semantic_profile_id(
+    content: str,
+    semantic: SemanticIntentDecision | None,
+) -> str:
+    if semantic is None or semantic.confidence < semantic_confidence_threshold():
+        return select_agent_profile_id(content)
+    actions = {str(value) for value in semantic.action_intents}
+    if actions & {"workspace_read", "workspace_execute", "workspace_mutate"}:
+        return "coding"
+    if actions & {"home_read", "home_mutate"}:
+        return "house"
+    if actions & {
+        "email_read",
+        "email_draft",
+        "email_send",
+        "calendar_read",
+        "calendar_create",
+        "contacts_read",
+    }:
+        return "personal-assistant"
+    if "market_read" in actions:
+        return "trading-research"
+    return semantic.profile_id
 
 
 def route_typed_chat_turn(
@@ -91,6 +160,7 @@ def route_typed_chat_turn(
     provider_id: str | None,
     model_id: str | None,
     context_items: list[dict[str, Any]] | None = None,
+    semantic_classifier: Any = _SEMANTIC_AUTO,
 ) -> GeneralizedChatResult | None:
     del context_items
     if _is_live_voice(user_message):
@@ -100,10 +170,41 @@ def route_typed_chat_turn(
     metadata = getattr(user_message, "metadata", {}) or {}
     explicit_agent = bool(metadata.get("agent_mode"))
     research_mode = _message_research_mode(metadata)
-    decision = route_omnix_request(
+    deterministic_decision = route_omnix_request(
         content,
         workflow_lookup=_workflow_lookup,
         research_mode=research_mode,
+    )
+    preliminary_mode = resolve_request_mode(
+        content,
+        turn_research_mode=research_mode,
+        persistent_agent=explicit_agent,
+        classifier_lane=deterministic_decision.lane,
+    )
+    # Quick/Deep is a separate bounded research lane and does not need Agent
+    # semantic classification. Explicit /agent still outranks a turn setting.
+    if preliminary_mode.mode in {"quick_research", "deep_research"}:
+        return None
+
+    semantic_intent: SemanticIntentDecision | None = None
+    if _should_use_semantic_classifier(deterministic_decision, content):
+        classifier = semantic_classifier
+        if classifier is _SEMANTIC_AUTO:
+            classifier = default_semantic_intent_classifier(
+                provider_id=(
+                    str(provider_id or getattr(session, "provider_id", None) or "").strip()
+                    or None
+                ),
+                model_id=(
+                    str(model_id or getattr(session, "model_id", None) or "").strip()
+                    or None
+                ),
+            )
+        semantic_intent = classify_semantic_intent_safely(classifier, content)
+
+    decision = _apply_semantic_route_decision(
+        deterministic_decision,
+        semantic_intent,
     )
     mode = resolve_request_mode(
         content,
@@ -121,6 +222,7 @@ def route_typed_chat_turn(
             confidence=1.0 if mode.source in {"explicit_command", "persistent_setting"} else decision.confidence,
             reason=f"request_mode:{mode.source}",
             explicit=mode.source == "explicit_command",
+            hermes_recommended=semantic_intent.multi_step if semantic_intent else False,
         )
 
     if decision.lane == "chat":
@@ -137,6 +239,7 @@ def route_typed_chat_turn(
         provider_id=provider_id,
         model_id=model_id,
         request_mode=mode,
+        semantic_intent=semantic_intent,
     )
 
 
@@ -302,9 +405,10 @@ def _agent_result(
     provider_id: str | None,
     model_id: str | None,
     request_mode: RequestModeSelection,
+    semantic_intent: SemanticIntentDecision | None = None,
 ) -> GeneralizedChatResult | None:
     content = str(user_message.content or "").strip()
-    profile_id = select_agent_profile_id(content)
+    profile_id = _semantic_profile_id(content, semantic_intent)
     profile = get_agent_profile(profile_id)
     try:
         service = default_agent_run_service()
@@ -378,9 +482,33 @@ def _agent_result(
                 "execution authority was not issued."
             ),
         )
+    semantic_evidence = (
+        evidence_decision_from_semantic(task, semantic_intent)
+        if semantic_intent is not None
+        else None
+    )
+    semantic_actions = (
+        list(semantic_intent.action_intents)
+        if semantic_intent is not None
+        and semantic_intent.confidence >= semantic_confidence_threshold()
+        else []
+    )
     try:
-        evidence_decision = classify_evidence(task, profile_id=profile_id)
-        compiled = compile_task_authority(profile, task, evidence_decision)
+        evidence_decision = classify_evidence(
+            task,
+            profile_id=profile_id,
+            semantic_adviser=(
+                (lambda _task, _profile: semantic_evidence)
+                if semantic_evidence is not None
+                else None
+            ),
+        )
+        compiled = compile_task_authority(
+            profile,
+            task,
+            evidence_decision,
+            semantic_action_intents=semantic_actions,
+        )
     except EvidenceCompilationError as exc:
         return _agent_request_rejection(
             decision,
@@ -420,7 +548,11 @@ def _agent_result(
         ],
         expected_artifacts=(
             ["diff"]
-            if profile_id == "coding" and task_requires_workspace_mutation(task)
+            if profile_id == "coding"
+            and task_requires_workspace_mutation(
+                task,
+                semantic_action_intents=semantic_actions,
+            )
             else []
         ),
     )
@@ -447,6 +579,11 @@ def _agent_result(
             "agent_run": _agent_metadata(snapshot),
             "request_mode": request_mode.model_dump(mode="json"),
             "evidence_decision": evidence_decision.model_dump(mode="json"),
+            "semantic_intent": (
+                semantic_intent.model_dump(mode="json")
+                if semantic_intent is not None
+                else None
+            ),
         },
     )
 
