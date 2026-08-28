@@ -6164,14 +6164,14 @@
             "type": "boolean"
           },
           "intraday_llm_interval_minutes": {
-            "default": 5,
+            "default": 10,
             "maximum": 60.0,
-            "minimum": 2.0,
+            "minimum": 5.0,
             "title": "Intraday Llm Interval Minutes",
             "type": "integer"
           },
           "intraday_llm_top_n": {
-            "default": 8,
+            "default": 5,
             "maximum": 20.0,
             "minimum": 1.0,
             "title": "Intraday Llm Top N",
@@ -6673,14 +6673,14 @@
             "type": "boolean"
           },
           "intraday_llm_interval_minutes": {
-            "default": 5,
+            "default": 10,
             "maximum": 60.0,
-            "minimum": 2.0,
+            "minimum": 5.0,
             "title": "Intraday Llm Interval Minutes",
             "type": "integer"
           },
           "intraday_llm_top_n": {
-            "default": 8,
+            "default": 5,
             "maximum": 20.0,
             "minimum": 1.0,
             "title": "Intraday Llm Top N",
