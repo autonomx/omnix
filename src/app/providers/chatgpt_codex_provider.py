@@ -337,16 +337,24 @@ class ChatGPTCodexProvider(BaseProvider):
         fast_mode = bool(kwargs.get("fast_mode", self.fast_mode))
         conversation_id = str(kwargs.get("conversation_id") or "").strip() or None
         tools = self._tool_definitions(kwargs.get("tools"))
+        structured_instruction = self._structured_response_instruction(
+            kwargs.get("response_format")
+        )
+        effective_messages = list(messages)
+        if structured_instruction:
+            effective_messages.append(
+                ChatMessage(role="system", content=structured_instruction)
+            )
         trace_row = provider_call_enter(
             provider=self.provider_name,
             method="chat_completion",
             model=selected_model,
-            messages=messages,
+            messages=effective_messages,
             extra={"stream": bool(stream), "conversation_id": conversation_id},
         )
         try:
             iterator = self._chat_stream(
-                messages,
+                effective_messages,
                 model=selected_model,
                 effort=effort,
                 fast_mode=fast_mode,
@@ -595,6 +603,35 @@ class ChatGPTCodexProvider(BaseProvider):
         if not thread_id:
             raise ConnectionError("Codex app-server did not return a thread id")
         return thread_id
+
+    @staticmethod
+    def _structured_response_instruction(value: Any) -> str:
+        if not isinstance(value, dict):
+            return ""
+        response_type = str(value.get("type") or "").strip().casefold()
+        if response_type == "json_schema":
+            wrapper = value.get("json_schema")
+            schema = (
+                wrapper.get("schema")
+                if isinstance(wrapper, dict) and isinstance(wrapper.get("schema"), dict)
+                else None
+            )
+            if schema is None:
+                return ""
+            return (
+                "STRUCTURED RESPONSE CONTRACT: Return exactly one JSON object and no "
+                "markdown, prose, code fences, contract metadata, or wrapper object. "
+                "The object must validate against this JSON Schema exactly. Do not add "
+                "fields that are not allowed by the schema. JSON Schema: "
+                + json.dumps(schema, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            )
+        if response_type == "json_object":
+            return (
+                "STRUCTURED RESPONSE CONTRACT: Return exactly one valid JSON object and "
+                "nothing else. Do not use markdown or code fences."
+            )
+        return ""
+
 
     @staticmethod
     def _system_instructions(messages: List[ChatMessage]) -> str:
