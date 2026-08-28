@@ -327,6 +327,11 @@ def select_intraday_llm_candidates(
             selected_ids.add(instrument_id)
             ordinary_count += 1
 
+    rank_order = {
+        row[0].instrument_id: rank
+        for rank, row in enumerate(ordered, start=1)
+    }
+    selected.sort(key=lambda row: rank_order[row[0].instrument_id])
     return selected, {
         instrument_id: reasons
         for instrument_id, reasons in reasons_by_instrument.items()
