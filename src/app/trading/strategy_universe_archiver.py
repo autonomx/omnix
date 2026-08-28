@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .gapper_dataset import GapperUniverseSnapshot, freeze_gapper_universe
+from .finviz_gapper_discovery import discover_finviz_gappers
 from .gapper_discovery import discover_yahoo_gappers
 from .providers.errors import ProviderDataUnavailableError
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
@@ -19,7 +20,8 @@ def _archive_universe_id(config: TradingStrategyConfigDocument, now_et: datetime
     digest = hashlib.sha256(config.strategy_id.encode("utf-8")).hexdigest()[:10]
     return (
         f"auto-archive-{now_et.date().isoformat()}-"
-        f"{config.config.universe_scan_time_et.strftime('%H%M')}-{digest}"
+        f"{config.config.universe_scan_time_et.strftime('%H%M')}-"
+        f"{config.config.universe_discovery_source}-{digest}"
     )
 
 
@@ -63,8 +65,10 @@ def archive_daily_universe_if_due(
     else:
         return None
 
+    discovery_source = config.config.universe_discovery_source
+    discover = discover_finviz_gappers if discovery_source == "finviz" else discover_yahoo_gappers
     try:
-        snapshot = discover_yahoo_gappers(
+        snapshot = discover(
             universe_id=universe_id,
             evaluation_time=observed.astimezone(timezone.utc),
             count=config.config.universe_discovery_count,
@@ -79,7 +83,7 @@ def archive_daily_universe_if_due(
             universe_id=universe_id,
             session_date=now_et.date(),
             evaluation_time=observed.astimezone(timezone.utc),
-            discovery_source="provider",
+            discovery_source="finviz" if discovery_source == "finviz" else "provider",
             candidates=[],
             allow_empty=True,
         )
@@ -96,6 +100,7 @@ def archive_daily_universe_if_due(
         candidate_count=len(saved.candidates),
         zero_candidate_scan=len(saved.candidates) == 0,
         configured_scan_time_et=config.config.universe_scan_time_et,
+        configured_discovery_source=config.config.universe_discovery_source,
         grace_minutes=config.config.universe_archive_grace_minutes,
         execution_authority=False,
     )
