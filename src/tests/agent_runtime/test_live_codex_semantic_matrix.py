@@ -407,7 +407,8 @@ CASES: tuple[LiveSemanticCase, ...] = (
         "can you check whether anything downstairs is still on and shut off what doesn't need to be?",
         "agent",
         ("house",),
-        required_actions=("home_read", "home_mutate"),
+        required_external_capabilities=("home.get_state", "home.set_state"),
+        required_evidence=("home_state",),
         multi_step=True,
     ),
     LiveSemanticCase(
