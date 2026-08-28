@@ -48,6 +48,8 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "intraday_llm_call_count": 0,
             "intraday_llm_assessment_count": 0,
             "intraday_llm_error_count": 0,
+            "intraday_llm_input_character_count": 0,
+            "intraday_llm_estimated_input_token_count": 0,
         },
     }
     assert payload["deep_recovery_shadow_monitor"] == {
