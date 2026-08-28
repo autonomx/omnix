@@ -91,7 +91,8 @@ The default minimum is `7/10`, but the score is **not** a substitute for mandato
 
 US-equity research and execution deliberately use different providers:
 
-- **Yahoo** supplies symbol discovery, historical/chart bars, current top-gainer research universes and current-only headline research. Yahoo can never authorize a paper fill.
+- **Finviz Top Gainers** can supply the ordered point-in-time morning discovery cohort for the learning experiment; it never supplies execution evidence.
+- **Yahoo** supplies independent chart/history/current-price enrichment and current-only headline research. Legacy Yahoo Day Gainers discovery remains available for the canonical V2 cohort. Yahoo can never authorize a paper fill.
 - **Alpaca IEX** supplies the authoritative real-time bid/ask/trade observation for US-equity paper execution. IEX is explicitly recorded as a **partial-market** feed and is never described as consolidated SIP/NBBO coverage.
 - If Alpaca credentials are missing, a quote is stale/future-dated/bookless/over-wide, the recurring US-equity calendar says the session is closed, or provider trading-status evidence says the symbol is halted, execution fails closed.
 
@@ -285,3 +286,6 @@ It is an observational layer over the frozen morning population:
 - every finalized one-minute regular-session prefix can update research-only dynamic scores;
 - learning events do not alter deterministic strategy state or authorize orders;
 - the canonical Yahoo-backed V2 qualification fingerprint remains isolated from a Finviz V2 learning experiment, so historical Yahoo evidence cannot promote the new cohort.
+- deterministic learning evaluates the full frozen cohort every finalized minute, while the default LLM is event-driven: material state/rank/VWAP/turnover/score changes trigger analysis, quiet top names receive a 10-minute heartbeat during the entry window, and `entry_ready` is always included;
+- normal LLM batches default to five active names, use compact deltas plus the previous thesis, and receive a periodic 30-minute full-context refresh;
+- runtime counters and batch events expose approximate input-token usage so token cost can be measured prospectively rather than guessed.
