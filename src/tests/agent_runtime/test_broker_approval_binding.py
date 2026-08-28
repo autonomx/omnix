@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from app.agent_runtime.broker_api import BrokerCapabilityRequest, _approved_execution_key
+from app.agent_runtime.broker_api import (
+    BrokerCapabilityRequest,
+    _approved_execution_key,
+    _revision_scoped_evidence_execution_key,
+)
 from app.agent_runtime.contracts import AgentApproval
 
 
@@ -82,3 +86,14 @@ def test_authoritative_market_subject_overrides_missing_ticker_and_rejects_confl
             policy=policy,
         )
     assert caught.value.status_code == 403
+
+
+
+def test_evidence_execution_identity_is_scoped_to_task_revision() -> None:
+    base = "agent:run-1:tool-call-1"
+    first = _revision_scoped_evidence_execution_key(base, "revision-1")
+    replay = _revision_scoped_evidence_execution_key(base, "revision-1")
+    second = _revision_scoped_evidence_execution_key(base, "revision-2")
+    assert first == replay
+    assert first != second
+    assert first.startswith(base + ":evidence-revision:")
