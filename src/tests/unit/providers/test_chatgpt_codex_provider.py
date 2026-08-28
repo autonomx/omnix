@@ -198,6 +198,60 @@ def test_non_streaming_completion_uses_app_server_events(monkeypatch):
     assert response.usage == {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}
 
 
+def test_json_schema_response_format_is_projected_into_codex_system_prompt(
+    monkeypatch,
+):
+    provider = _provider()
+    captured = {}
+
+    def fake_stream(messages, **_kwargs):
+        captured["messages"] = messages
+        yield SimpleNamespace(
+            content='{"lane":"chat"}',
+            model="gpt-5.6-sol",
+            usage=None,
+            tool_calls=None,
+            finish_reason="stop",
+        )
+
+    monkeypatch.setattr(provider, "_chat_stream", fake_stream)
+    try:
+        response = provider.chat_completion(
+            [ChatMessage(role="user", content="Classify this.")],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "semantic_intent",
+                    "strict": False,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "lane": {
+                                "type": "string",
+                                "enum": ["chat", "agent"],
+                            }
+                        },
+                        "required": ["lane"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+        )
+    finally:
+        provider.close()
+
+    system_text = "\n".join(
+        message.content
+        for message in captured["messages"]
+        if message.role == "system"
+    )
+    assert response.content == '{"lane":"chat"}'
+    assert "STRUCTURED RESPONSE CONTRACT" in system_text
+    assert '"additionalProperties":false' in system_text
+    assert '"lane"' in system_text
+    assert "contract metadata" in system_text
+
+
 def test_fast_mode_uses_codex_fast_service_tier(monkeypatch):
     provider = _provider(fast_mode=True, reasoning_effort="none")
     events = iter([
