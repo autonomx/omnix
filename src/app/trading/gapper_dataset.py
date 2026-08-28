@@ -98,7 +98,9 @@ class GapperUniverseSnapshot(BaseModel):
     universe_id: str = Field(min_length=1, max_length=200)
     session_date: date
     evaluation_time: datetime
-    discovery_source: Literal["manual", "import", "scanner", "provider"]
+    discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"]
+    source_locator: str | None = Field(default=None, max_length=2000)
+    source_candidate_symbols: tuple[str, ...] = ()
     candidates: tuple[GapperCandidate, ...]
     source_fingerprint: str = Field(min_length=64, max_length=64)
 
@@ -137,7 +139,7 @@ def _validate_point_in_time_candidate(
     evaluation = evaluation_time.astimezone(timezone.utc)
     if candidate.observed_at is not None and candidate.observed_at > evaluation:
         raise ValueError(f"candidate observation occurs after universe freeze: {candidate.instrument_id}")
-    if discovery_source in {"scanner", "provider"} and candidate.observed_at is None:
+    if discovery_source in {"scanner", "provider", "finviz"} and candidate.observed_at is None:
         raise ValueError(
             f"provider/scanner candidate requires observed_at: {candidate.instrument_id}"
         )
@@ -155,6 +157,8 @@ def gapper_universe_fingerprint(
     evaluation_time: datetime,
     discovery_source: str,
     candidates: tuple[GapperCandidate, ...] | list[GapperCandidate],
+    source_locator: str | None = None,
+    source_candidate_symbols: tuple[str, ...] | list[str] = (),
 ) -> str:
     ordered = sorted(candidates, key=lambda item: (item.discovery_rank or 10**9, item.instrument_id))
     payload = {
@@ -164,6 +168,11 @@ def gapper_universe_fingerprint(
         "discovery_source": discovery_source,
         "candidates": [candidate.model_dump(mode="json") for candidate in ordered],
     }
+    # Keep fingerprints for pre-0049 universes stable. Discovery provenance only
+    # participates in the fingerprint when it was actually captured.
+    if source_locator is not None or source_candidate_symbols:
+        payload["source_locator"] = source_locator
+        payload["source_candidate_symbols"] = list(source_candidate_symbols)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -173,8 +182,10 @@ def freeze_gapper_universe(
     universe_id: str,
     session_date: date,
     evaluation_time: datetime,
-    discovery_source: Literal["manual", "import", "scanner", "provider"],
+    discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"],
     candidates: list[GapperCandidate] | tuple[GapperCandidate, ...],
+    source_locator: str | None = None,
+    source_candidate_symbols: list[str] | tuple[str, ...] = (),
     allow_empty: bool = False,
 ) -> GapperUniverseSnapshot:
     if not candidates and not allow_empty:
@@ -194,12 +205,16 @@ def freeze_gapper_universe(
         evaluation_time=evaluation_time,
         discovery_source=discovery_source,
         candidates=ordered,
+        source_locator=source_locator,
+        source_candidate_symbols=source_candidate_symbols,
     )
     return GapperUniverseSnapshot(
         universe_id=universe_id,
         session_date=session_date,
         evaluation_time=evaluation_time,
         discovery_source=discovery_source,
+        source_locator=source_locator,
+        source_candidate_symbols=tuple(source_candidate_symbols),
         candidates=ordered,
         source_fingerprint=fingerprint,
     )

@@ -11,6 +11,7 @@ export type GapPullbackConfig = {
   structure_interval: StrategyBarInterval;
   execution_interval: StrategyBarInterval;
   universe_scan_time_et?: string;
+  universe_discovery_source?: 'yahoo' | 'finviz';
   auto_archive_daily_universe?: boolean;
   universe_archive_grace_minutes?: number;
   universe_discovery_count?: number;
@@ -55,6 +56,10 @@ export type GapPullbackConfig = {
   exit_rsi_threshold: string | number;
   entry_start_et: string;
   last_entry_et: string;
+  intraday_learning_enabled?: boolean;
+  intraday_llm_enabled?: boolean;
+  intraday_llm_top_n?: number;
+  intraday_llm_interval_minutes?: number;
 };
 
 export type StrategyRiskProfile = {
@@ -115,7 +120,9 @@ export type GapperUniverse = {
   universe_id: string;
   session_date: string;
   evaluation_time: string;
-  discovery_source: 'manual' | 'import' | 'scanner' | 'provider';
+  discovery_source: 'manual' | 'import' | 'scanner' | 'provider' | 'finviz';
+  source_locator?: string | null;
+  source_candidate_symbols?: string[];
   candidates: GapperCandidate[];
   source_fingerprint: string;
 };
@@ -130,6 +137,8 @@ export type YahooGapperDiscoveryInput = {
   minimum_price: string | number;
   maximum_price: string | number;
 };
+
+export type FinvizGapperDiscoveryInput = YahooGapperDiscoveryInput;
 
 export type StrategyEvent = {
   strategy_id: string;

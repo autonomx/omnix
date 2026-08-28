@@ -127,7 +127,23 @@ def frozen_v2_config() -> GapPullbackConfig:
 
 
 def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
-    payload = config.model_dump(mode="json")
+    # Preserve the execution-profile identity that was frozen before intraday
+    # learning existed. The learning toggle is observational only. Yahoo remains
+    # the legacy/canonical V2 discovery source; opting into a different cohort
+    # source (currently Finviz) deliberately produces a new, non-canonical
+    # fingerprint so old Yahoo prospective evidence cannot authorize it.
+    payload = config.model_dump(
+        mode="json",
+        exclude={
+            "intraday_learning_enabled",
+            "intraday_llm_enabled",
+            "intraday_llm_top_n",
+            "intraday_llm_interval_minutes",
+            "universe_discovery_source",
+        },
+    )
+    if config.universe_discovery_source != "yahoo":
+        payload["universe_discovery_source"] = config.universe_discovery_source
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 

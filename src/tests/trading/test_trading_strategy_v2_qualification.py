@@ -128,8 +128,21 @@ def _economic_review(events: list[StrategyEvent], *, suffix: str = "economic-rev
 
 
 def test_frozen_v2_profile_fingerprint_is_stable_and_exact() -> None:
-    assert v2_profile_fingerprint(frozen_v2_config()) == FROZEN_V2_PROFILE_FINGERPRINT
-    changed = frozen_v2_config().model_copy(update={"v2_maximum_l2_to_signal_minutes": 9})
+    canonical = frozen_v2_config()
+    assert v2_profile_fingerprint(canonical) == FROZEN_V2_PROFILE_FINGERPRINT
+
+    learning_only = canonical.model_copy(update={
+        "intraday_learning_enabled": True,
+        "intraday_llm_enabled": True,
+        "intraday_llm_top_n": 12,
+        "intraday_llm_interval_minutes": 7,
+    })
+    assert v2_profile_fingerprint(learning_only) == FROZEN_V2_PROFILE_FINGERPRINT
+
+    finviz_experiment = canonical.model_copy(update={"universe_discovery_source": "finviz"})
+    assert v2_profile_fingerprint(finviz_experiment) != FROZEN_V2_PROFILE_FINGERPRINT
+
+    changed = canonical.model_copy(update={"v2_maximum_l2_to_signal_minutes": 9})
     assert v2_profile_fingerprint(changed) != FROZEN_V2_PROFILE_FINGERPRINT
 
 
