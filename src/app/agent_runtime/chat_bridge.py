@@ -132,6 +132,24 @@ def _apply_semantic_route_decision(
     )
 
 
+def _mark_chat_route(
+    user_message: Any,
+    decision: OmnixRouteDecision,
+    *,
+    semantic_intent: SemanticIntentDecision | None = None,
+    request_mode: RequestModeSelection | None = None,
+) -> None:
+    metadata = getattr(user_message, "metadata", None)
+    if not isinstance(metadata, dict):
+        return
+    metadata["omnix_chat_routed"] = True
+    metadata["omnix_route"] = decision.model_dump(mode="json")
+    if semantic_intent is not None:
+        metadata["semantic_intent"] = semantic_intent.model_dump(mode="json")
+    if request_mode is not None:
+        metadata["request_mode"] = request_mode.model_dump(mode="json")
+
+
 def route_typed_chat_turn(
     session: Any,
     user_message: Any,
@@ -163,6 +181,11 @@ def route_typed_chat_turn(
     # Quick/Deep is a separate bounded research lane and does not need Agent
     # semantic classification. Explicit /agent still outranks a turn setting.
     if preliminary_mode.mode in {"quick_research", "deep_research"}:
+        _mark_chat_route(
+            user_message,
+            deterministic_decision,
+            request_mode=preliminary_mode,
+        )
         return None
 
     semantic_intent: SemanticIntentDecision | None = None
@@ -194,6 +217,12 @@ def route_typed_chat_turn(
     # A narrower per-turn Quick/Deep selection outranks the persistent Agent
     # toggle. An explicit /agent command outranks both.
     if mode.mode in {"quick_research", "deep_research"}:
+        _mark_chat_route(
+            user_message,
+            decision,
+            semantic_intent=semantic_intent,
+            request_mode=mode,
+        )
         return None
     if mode.mode == "agent" and decision.lane != "agent":
         decision = OmnixRouteDecision(
@@ -205,6 +234,12 @@ def route_typed_chat_turn(
         )
 
     if decision.lane == "chat":
+        _mark_chat_route(
+            user_message,
+            decision,
+            semantic_intent=semantic_intent,
+            request_mode=mode,
+        )
         return None
 
     if decision.lane == "direct":
