@@ -31,7 +31,7 @@ def archive_daily_universe_if_due(
     *,
     now: datetime | None = None,
 ) -> GapperUniverseSnapshot | None:
-    """Create one raw Yahoo morning archive when due, otherwise return ``None``.
+    """Create one configured point-in-time morning archive when due, otherwise return ``None``.
 
     Archival is evidence-only: it never changes ``active_universe_id`` and cannot
     authorize a trade. A completed scan with zero qualifying names is stored as an
