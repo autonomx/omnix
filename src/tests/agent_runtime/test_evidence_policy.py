@@ -25,7 +25,9 @@ from app.agent_runtime.evidence import (
     compile_evidence,
     compile_task_authority,
     evaluate_evidence_set,
+    fallback_capabilities_for_requirement,
     freshness_max_age_seconds,
+    resolve_evidence_call,
     resolve_request_mode,
     validate_required_evidence_capabilities,
 )
@@ -639,3 +641,138 @@ def test_current_semantic_source_without_freshness_policy_fails_compilation(monk
     with pytest.raises(EvidenceCompilationError) as caught:
         compile_evidence(get_agent_profile("research"), decision)
     assert caught.value.code == "freshness_policy_unsatisfiable"
+
+
+
+def test_compound_market_request_compiles_multiple_evidence_requirements() -> None:
+    decision = classify_evidence(
+        "Give me NVDA's current quote, today's catalysts, and latest SEC filing",
+        profile_id="trading-research",
+    )
+    assert decision.policy.requirement == "required"
+    assert [row.source_class for row in decision.policy.requirements] == [
+        "market_quote",
+        "company_filing",
+        "market_news",
+    ]
+    compiled = compile_evidence(get_agent_profile("trading-research"), decision)
+    assert set(compiled.required_external) == {
+        "trading.market_quote",
+        "research.web_search",
+    }
+
+
+def test_shared_web_transport_binds_call_to_specific_requirement() -> None:
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            EvidenceRequirement(
+                id="news",
+                source_class="market_news",
+                subject=SubjectRef(
+                    type="security",
+                    canonical_id="NVDA:US",
+                    qualifiers={"ticker": "NVDA"},
+                ),
+                freshness="current",
+                max_age_seconds=3600,
+                trust_floor="reputable",
+            ),
+            EvidenceRequirement(
+                id="filing",
+                source_class="company_filing",
+                subject=SubjectRef(
+                    type="security",
+                    canonical_id="NVDA:US",
+                    qualifiers={"ticker": "NVDA"},
+                ),
+                freshness="current",
+                max_age_seconds=86400,
+                trust_floor="primary",
+            ),
+        ],
+    )
+    requirement, source = resolve_evidence_call(
+        policy,
+        "research.web_search",
+        {"query": "NVDA latest SEC filing 10-Q"},
+    )
+    assert requirement is not None
+    assert requirement.id == "filing"
+    assert source == "company_filing"
+
+    requirement, source = resolve_evidence_call(
+        policy,
+        "research.web_search",
+        {"query": "NVDA catalysts and headlines today"},
+    )
+    assert requirement is not None
+    assert requirement.id == "news"
+    assert source == "market_news"
+
+
+def test_allow_fallback_compiles_all_bounded_alternative_capabilities() -> None:
+    requirement = EvidenceRequirement(
+        id="fallback",
+        source_class="general_current_web",
+        trust_floor="reputable",
+        acceptable_sources=[
+            EvidenceSourceOption(
+                source_class="repo_contents",
+                trust_floor="reputable",
+                preference=100,
+            )
+        ],
+        fallback_policy="allow_fallback",
+    )
+    decision = EvidenceDecision(
+        policy=EvidencePolicy(requirement="required", requirements=[requirement])
+    )
+    compiled = compile_evidence(get_agent_profile("research"), decision)
+    assert compiled.external_groups == (("research.web_search", "github.read_repo"),)
+    assert set(compiled.required_external) == {
+        "research.web_search",
+        "github.read_repo",
+    }
+    assert fallback_capabilities_for_requirement(
+        requirement,
+        current_capability="research.web_search",
+        issued_capabilities=compiled.required_external,
+    ) == ("github.read_repo",)
+
+
+def test_receipt_uses_explicit_requirement_source_binding() -> None:
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            EvidenceRequirement(
+                id="news",
+                source_class="market_news",
+                trust_floor="reputable",
+            ),
+            EvidenceRequirement(
+                id="filing",
+                source_class="company_filing",
+                trust_floor="primary",
+            ),
+        ],
+    )
+    receipt = build_evidence_receipt(
+        run_id="run-1",
+        task_revision_id="rev-1",
+        policy=policy,
+        capability_id="research.web_search",
+        request_input={"query": "NVDA 10-Q SEC filing"},
+        result_payload={
+            "output": {
+                "items": [{"url": "https://www.sec.gov/example"}],
+                "diagnostics": {"provider": "test"},
+            }
+        },
+        error=None,
+        requirement_id="filing",
+        source_class_hint="company_filing",
+    )
+    assert receipt is not None
+    assert receipt.source_class == "company_filing"
+    assert receipt.trust_level == "primary"
