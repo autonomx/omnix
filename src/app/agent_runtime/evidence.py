@@ -28,7 +28,7 @@ from .contracts import (
 )
 from .profiles import AgentProfile, profile_external_ceiling
 
-_CURRENT = re.compile(r"\b(?:today|current(?:ly)?|latest|right now|this (?:week|month|year)|recent|newest|news)\b", re.I)
+_CURRENT = re.compile(r"\b(?:today|tomorrow|tonight|current(?:ly)?|latest|right now|this (?:morning|afternoon|evening|week|month|year)|next (?:morning|day|week|month)|recent|newest|news)\b", re.I)
 _NO_EXTERNAL = re.compile(
     r"\b(?:without (?:using )?(?:the )?(?:internet|web)|"
     r"do not (?:use (?:the )?(?:internet|web)|"
@@ -523,7 +523,7 @@ def classify_evidence(
 ) -> EvidenceDecision:
     text = " ".join(str(task or "").split())
     external_forbidden = bool(_NO_EXTERNAL.search(text))
-    attribution = "required" if re.search(r"\\b(?:sourced|with sources|cite sources|citations)\\b", text, re.I) else "when_used"
+    attribution = "required" if re.search(r"\b(?:sourced|with sources|cite sources|citations)\b", text, re.I) else "when_used"
     requirements: list[EvidenceRequirement] = []
     hard_requirement_sources: set[str] = set()
 
@@ -556,9 +556,9 @@ def classify_evidence(
         add_requirement("market_quote", trust="authoritative")
     if _CI.search(text):
         add_requirement("repo_ci_state", trust="authoritative")
-    if _WEATHER.search(text) and (_CURRENT.search(text) or re.search(r"\\boutside\\b", text, re.I)):
+    if _WEATHER.search(text) and (_CURRENT.search(text) or re.search(r"\boutside\b", text, re.I)):
         add_requirement("weather_state", trust="authoritative")
-    if profile_id == "house" and re.search(r"\\b(?:check|inspect|status|state|energy)\\b", text, re.I):
+    if profile_id == "house" and re.search(r"\b(?:check|inspect|status|state|energy)\b", text, re.I):
         source = "home_energy" if "energy" in text.casefold() else "home_state"
         add_requirement(source, trust="authoritative")
     if profile_id == "personal-assistant" and _CALENDAR.search(text):
@@ -870,7 +870,7 @@ def task_requires_workspace_mutation(
     if "workspace_mutate" in intents:
         return True
     text = str(task or "")
-    if re.search(r"\\b(?:do not|don't|just explain|explain only|without changing)\\b", text, re.I):
+    if re.search(r"\b(?:do not|don't|just explain|explain only|without changing)\b", text, re.I):
         return False
     return bool(_WORKSPACE_MUTATION.search(text))
 
