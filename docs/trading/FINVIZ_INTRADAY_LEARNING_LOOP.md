@@ -141,6 +141,61 @@ The research layer can classify the current causal prefix as:
 
 These labels are descriptive research states. They are not strategy signals.
 
+## LLM intraday analyst
+
+When `intraday_llm_enabled=true`, Omnix adds a second, explicitly
+non-authoritative interpretation layer on top of the deterministic learning
+snapshot.
+
+The LLM does not receive raw broker authority or permission to trade. It receives
+only structured causal evidence that Omnix has already observed:
+
+- frozen morning gap/price/volume/float/supply/catalyst facts;
+- deterministic strategy state, reason code, transitions and features;
+- the current deterministic intraday-learning snapshot;
+- the current live research rank;
+- the previous LLM assessment for that same instrument, when one exists.
+
+The runtime uses the application's configured **default LLM provider/model**.
+This means LM Studio, ChatGPT Codex, OpenRouter, Cerebras, llama.cpp, or another
+configured provider can supply the interpretation without creating a
+trading-specific provider configuration.
+
+To avoid calling the model for every stock on every bar, Omnix uses a bounded
+batch:
+
+- deterministic learning still evaluates every candidate on every finalized
+  one-minute prefix;
+- the top `intraday_llm_top_n` candidates are selected for LLM interpretation;
+- any deterministic `entry_ready` candidate is included even when it falls
+  outside that top-N research rank;
+- the whole selected set is sent in one LLM call every
+  `intraday_llm_interval_minutes` (default 5 minutes).
+
+Each model assessment returns:
+
+- current market regime;
+- squeeze probability;
+- failed-selloff probability;
+- trend-continuation probability;
+- distribution probability;
+- confidence;
+- whether the thesis strengthened, weakened, flipped or stayed unchanged;
+- concise bull case;
+- concise bear case;
+- explicit evidence that would change the model's mind.
+
+The prompt forbids execution instructions. The schema hard-codes
+`execution_authority=false`. Unknown symbols, malformed JSON, missing requested
+assessments, unavailable providers and provider errors all fail open for trading:
+Omnix logs the research error and continues using the deterministic strategy
+only.
+
+The model output is persisted as `intraday_llm` events. A separate
+`intraday_llm_batch` event establishes the completed batch timestamp used to
+enforce the cadence. The next batch receives the prior assessment so the model
+can reason longitudinally rather than reclassifying each snapshot in isolation.
+
 ## Dynamic rank
 
 After all candidates have been evaluated for the current finalized-bar prefix,
