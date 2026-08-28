@@ -342,6 +342,10 @@ def _normalize_semantic_decision(
                 and bool(re.search(r"\b(?:tests?|testing|validate|verify)\b", text, re.I))
             )
             or (
+                "home_mutate" in actions
+                and bool(re.search(r"\band\b.{0,120}\bmake\s+sure\b", text, re.I))
+            )
+            or (
                 bool(actions & {"research_read", "market_read"})
                 and len(decision.evidence_requirements) >= 2
             )
