@@ -5290,12 +5290,12 @@ export interface components {
             intraday_llm_enabled: boolean;
             /**
              * Intraday Llm Interval Minutes
-             * @default 5
+             * @default 10
              */
             intraday_llm_interval_minutes: number;
             /**
              * Intraday Llm Top N
-             * @default 8
+             * @default 5
              */
             intraday_llm_top_n: number;
             /**
@@ -5579,12 +5579,12 @@ export interface components {
             intraday_llm_enabled: boolean;
             /**
              * Intraday Llm Interval Minutes
-             * @default 5
+             * @default 10
              */
             intraday_llm_interval_minutes: number;
             /**
              * Intraday Llm Top N
-             * @default 8
+             * @default 5
              */
             intraday_llm_top_n: number;
             /**
