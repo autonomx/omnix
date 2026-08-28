@@ -16,8 +16,15 @@ from app.assistant_tools.gate import review_assistant_tool_request
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolRequest
 
-from .contracts import AgentRunCommand, AgentRunSpec, ModelRef, SuccessCriterion, WorkspaceSpec
-from .profiles import get_agent_profile, resolve_profile_capabilities
+from .contracts import AgentRunCommand, AgentRunSpec, ModelRef, RequestModeSelection, SuccessCriterion, WorkspaceSpec
+from .evidence import (
+    EvidenceCompilationError,
+    classify_evidence,
+    compile_task_authority,
+    resolve_request_mode,
+    task_requires_workspace_mutation,
+)
+from .profiles import get_agent_profile, select_agent_profile_id
 from .router import OmnixRouteDecision, route_omnix_request
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
@@ -97,23 +104,25 @@ def route_typed_chat_turn(
         workflow_lookup=_workflow_lookup,
         research_mode=research_mode,
     )
-    research_chat = (
-        str(research_mode or "").strip().casefold() == "quick"
-        and decision.lane == "chat"
+    mode = resolve_request_mode(
+        content,
+        turn_research_mode=research_mode,
+        persistent_agent=explicit_agent,
+        classifier_lane=decision.lane,
     )
-    if explicit_agent and decision.lane != "agent" and not research_chat:
+    # A narrower per-turn Quick/Deep selection outranks the persistent Agent
+    # toggle. An explicit /agent command outranks both.
+    if mode.mode in {"quick_research", "deep_research"}:
+        return None
+    if mode.mode == "agent" and decision.lane != "agent":
         decision = OmnixRouteDecision(
             lane="agent",
-            confidence=1.0,
-            reason="explicit_agent_mode",
-            explicit=True,
+            confidence=1.0 if mode.source in {"explicit_command", "persistent_setting"} else decision.confidence,
+            reason=f"request_mode:{mode.source}",
+            explicit=mode.source == "explicit_command",
         )
 
     if decision.lane == "chat":
-        return None
-    # Open-ended execution never escalates from ordinary typed Chat solely from
-    # a verb such as "fix". Require explicit Agent mode or explicit /agent text.
-    if decision.lane == "agent" and not (explicit_agent or decision.explicit):
         return None
 
     if decision.lane == "direct":
@@ -126,6 +135,7 @@ def route_typed_chat_turn(
         decision,
         provider_id=provider_id,
         model_id=model_id,
+        request_mode=mode,
     )
 
 
@@ -290,9 +300,10 @@ def _agent_result(
     *,
     provider_id: str | None,
     model_id: str | None,
+    request_mode: RequestModeSelection,
 ) -> GeneralizedChatResult | None:
     content = str(user_message.content or "").strip()
-    profile_id = _select_profile(content)
+    profile_id = select_agent_profile_id(content)
     profile = get_agent_profile(profile_id)
     try:
         service = default_agent_run_service()
@@ -342,12 +353,8 @@ def _agent_result(
             error=RuntimeError("Agent provider/model is not configured"),
         )
 
-    local, external = resolve_profile_capabilities(profile)
     task = _agent_task(content)
-    if _PUBLICATION_REQUEST.search(content) and not {
-        "github.push",
-        "github.create_pr",
-    }.issubset(external):
+    if _PUBLICATION_REQUEST.search(content):
         return _agent_request_rejection(
             decision,
             profile=profile_id,
@@ -370,6 +377,19 @@ def _agent_result(
                 "execution authority was not issued."
             ),
         )
+    try:
+        evidence_decision = classify_evidence(task, profile_id=profile_id)
+        compiled = compile_task_authority(profile, task, evidence_decision)
+    except EvidenceCompilationError as exc:
+        return _agent_request_rejection(
+            decision,
+            profile=profile_id,
+            task=task,
+            reason=exc.code,
+            message=f"I can't safely compile this Agent task: {exc}",
+        )
+    local = list(compiled.required_local)
+    external = list(compiled.required_external)
     workspace = (
         WorkspaceSpec(
             root=repository,
@@ -388,6 +408,8 @@ def _agent_result(
         capabilities=local,
         external_capabilities=external,
         context_sources=list(profile.context_sources),
+        request_mode=request_mode,
+        evidence_policy=evidence_decision.policy,
         workspace=workspace,
         success_criteria=[
             SuccessCriterion(
@@ -397,10 +419,7 @@ def _agent_result(
         ],
         expected_artifacts=(
             ["diff"]
-            if any(
-                capability in {"workspace.edit", "workspace.write"}
-                for capability in local
-            )
+            if profile_id == "coding" and task_requires_workspace_mutation(task)
             else []
         ),
     )
@@ -425,6 +444,8 @@ def _agent_result(
             "agent_mode": True,
             "omnix_route": decision.model_dump(mode="json"),
             "agent_run": _agent_metadata(snapshot),
+            "request_mode": request_mode.model_dump(mode="json"),
+            "evidence_decision": evidence_decision.model_dump(mode="json"),
         },
     )
 
@@ -605,6 +626,20 @@ def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: Omn
                 "agent_run": _agent_metadata(snapshot),
             },
         )
+    if command_type == "steer" and updated.run_id != snapshot.run_id:
+        return GeneralizedChatResult(
+            content=(
+                f"Started superseding Agent run {updated.run_id} because the revised task "
+                "requires a different authority/evidence contract."
+            ),
+            metadata={
+                "generation_status": "completed",
+                "agent_mode": True,
+                "omnix_route": decision.model_dump(mode="json"),
+                "agent_run": _agent_metadata(updated),
+                "supersedes_run_id": snapshot.run_id,
+            },
+        )
     verb = {
         "steer": "Steering sent to",
         "pause": "Pause requested for",
@@ -637,18 +672,6 @@ def _unauthorized_agent_command(snapshot: Any, content: str) -> dict[str, Any] |
                 "Start a separately scoped, approval-gated trading run if execution is intended."
             ),
         }
-    if (
-        not capabilities.intersection({"workspace.edit", "workspace.write", "workspace.command"})
-        and _WORKSPACE_MUTATION.search(content)
-    ):
-        return {
-            "reason": "workspace_mutation_capability_not_issued",
-            "required_capabilities": ["workspace.edit", "workspace.write"],
-            "message": (
-                f"I can't modify the repository from the {profile or 'current'} run because "
-                "workspace mutation authority was not issued. Start a new coding run."
-            ),
-        }
     if _PUBLICATION_REQUEST.search(content) and not {
         "github.push",
         "github.create_pr",
@@ -672,21 +695,16 @@ def _agent_metadata(snapshot: Any) -> dict[str, Any]:
         "task": snapshot.spec.task,
         "revision": snapshot.revision,
         "last_error": snapshot.last_error,
+        "superseded_by_run_id": getattr(snapshot, "superseded_by_run_id", None),
+        "supersedes_run_id": getattr(snapshot.spec, "supersedes_run_id", None),
+        "request_mode": snapshot.spec.request_mode.model_dump(mode="json") if snapshot.spec.request_mode else None,
+        "evidence_policy": snapshot.spec.evidence_policy.model_dump(mode="json"),
     }
 
 
 def _select_profile(content: str) -> str:
-    # Execution intent outranks the subject domain. "Fix the trading UI" is a
-    # coding task about trading, not a market-research task.
-    if _CODE.search(content) or re.search(r"\bgit\b", content, re.I):
-        return "coding"
-    if _HOME.search(content):
-        return "house"
-    if _PERSONAL.search(content):
-        return "personal-assistant"
-    if _TRADING.search(content) or _TICKER_CONTEXT.search(content):
-        return "trading-research"
-    return "research"
+    """Compatibility wrapper around the shared deterministic profile classifier."""
+    return select_agent_profile_id(content)
 
 
 def _message_research_mode(metadata: dict[str, Any]) -> str | None:

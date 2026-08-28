@@ -22,6 +22,7 @@ from .contracts import (
     SuccessCriterion,
     WorkspaceSpec,
 )
+from .evidence import EvidenceCompilationError, classify_evidence, compile_task_authority, task_requires_workspace_mutation
 from .profiles import get_agent_profile, resolve_profile_capabilities
 from .subagents import ChildRunRequest
 from .service import AgentRunService, default_agent_run_service
@@ -69,11 +70,21 @@ def _service() -> AgentRunService:
 def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
     try:
         profile = get_agent_profile(request.profile)
-        issued_capabilities, issued_external = resolve_profile_capabilities(
-            profile, requested=request.capabilities,
-            requested_external=request.external_capabilities,
+        effective_task = request.objective or request.task
+        evidence_decision = classify_evidence(effective_task, profile_id=request.profile)
+        compiled = compile_task_authority(profile, effective_task, evidence_decision)
+        requested_local = request.capabilities if request.capabilities is not None else list(compiled.required_local)
+        requested_external = (
+            request.external_capabilities
+            if request.external_capabilities is not None
+            else list(compiled.required_external)
         )
-    except ValueError as exc:
+        issued_capabilities, issued_external = resolve_profile_capabilities(
+            profile,
+            requested=requested_local,
+            requested_external=requested_external,
+        )
+    except (ValueError, EvidenceCompilationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     root = request.workspace_root or request.repository
     if profile.requires_workspace and not root:
@@ -90,6 +101,7 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         capabilities=issued_capabilities,
         external_capabilities=issued_external,
         context_sources=list(profile.context_sources),
+        evidence_policy=evidence_decision.policy,
         resource_scopes=request.resource_scopes,
         approval_policy=request.approval_policy,
         limits=request.limits,
@@ -111,10 +123,7 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         ],
         expected_artifacts=(
             ["diff"]
-            if any(
-                capability in {"workspace.edit", "workspace.write"}
-                for capability in issued_capabilities
-            )
+            if request.profile == "coding" and task_requires_workspace_mutation(effective_task)
             else []
         ),
     )
