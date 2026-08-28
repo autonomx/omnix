@@ -68,6 +68,18 @@ def _execution_key(run_id: str, capability_id: str, request: BrokerCapabilityReq
     return f"agent:{run_id}:{raw}"
 
 
+def _revision_scoped_evidence_execution_key(
+    execution_key: str,
+    task_revision_id: str | None,
+) -> str:
+    if not task_revision_id:
+        return execution_key
+    revision_digest = hashlib.sha256(
+        task_revision_id.encode("utf-8")
+    ).hexdigest()[:16]
+    return f"{execution_key}:evidence-revision:{revision_digest}"
+
+
 def _approved_execution_key(
     run_id: str,
     canonical: str,
@@ -465,6 +477,11 @@ def execute_agent_capability(
         raise HTTPException(status_code=403, detail="agent_resource_scope_mismatch")
 
     execution_key = _execution_key(run_id, canonical, request)
+    if task_revision_id and is_evidence_capability(canonical):
+        execution_key = _revision_scoped_evidence_execution_key(
+            execution_key,
+            task_revision_id,
+        )
     approved = False
     approval = None
 
@@ -718,6 +735,7 @@ def execute_agent_capability(
                         evidence_requirement.id if evidence_requirement is not None else None
                     ),
                     "evidence_source_class": evidence_source_class,
+                    "task_revision_id": task_revision_id,
                 },
             )
         )
