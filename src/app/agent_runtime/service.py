@@ -297,14 +297,30 @@ class AgentRunService:
             classifier="deterministic",
         )
         compiled = compile_task_authority(profile, spec.objective or spec.task, decision)
-        missing_external = set(compiled.required_external) - set(spec.external_capabilities)
-        if missing_external:
+        issued = set(spec.external_capabilities)
+        missing_groups = [
+            group
+            for group in compiled.external_groups
+            if not issued.intersection(group)
+        ]
+        if missing_groups:
             raise EvidenceCompilationError(
                 "evidence_required_but_unavailable",
-                "RunSpec does not issue required external evidence authority: "
-                + ", ".join(sorted(missing_external)),
+                "RunSpec does not issue any permitted capability for required evidence: "
+                + "; ".join(",".join(group) for group in missing_groups),
             )
-        validate_required_evidence_capabilities(compiled.required_external)
+        issued_groups = tuple(
+            tuple(cap for cap in group if cap in issued)
+            for group in compiled.external_groups
+            if issued.intersection(group)
+        )
+        evidence_caps = tuple(
+            cap for cap in compiled.required_external if cap in issued
+        )
+        validate_required_evidence_capabilities(
+            evidence_caps,
+            alternative_groups=issued_groups,
+        )
 
     def _compile_steering(self, current: AgentRunSnapshot, command: AgentRunCommand) -> dict[str, object]:
         message = str(command.payload.get("message") or "").strip()
