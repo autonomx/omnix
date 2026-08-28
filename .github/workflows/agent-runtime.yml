@@ -15,6 +15,8 @@ on:
       - "src/app/assistant_tools/registry.py"
       - "src/app/assistant_tools/hermes_bridge.py"
       - "src/app/assistant_tools/home_adapter.py"
+      - "src/app/assistant_tools/trading_adapter.py"
+      - "src/app/assistant_tools/config_store.py"
       - "src/app/assistant_tools/repo_adapter.py"
       - "src/app/persistence/migrations/*agent*.sql"
       - "src/app/persistence/migrations/*workflow*.sql"

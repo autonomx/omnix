@@ -586,7 +586,8 @@ def evaluate_evidence_set(
                 statuses.append("insufficient_trust")
                 continue
             max_age = requirement.max_age_seconds
-            if max_age and (current - receipt.observed_at).total_seconds() > max_age:
+            freshness_time = receipt.freshest_source_at or receipt.observed_at
+            if max_age and (current - freshness_time).total_seconds() > max_age:
                 stale.append(receipt.receipt_id)
                 rejected.append(receipt.receipt_id)
                 statuses.append("stale")
@@ -737,6 +738,17 @@ def build_evidence_receipt(
         trust = "authoritative"
 
     now = datetime.now(timezone.utc)
+    freshest_source_at = None
+    raw_source_time = output.get("source_time")
+    if isinstance(raw_source_time, str) and raw_source_time.strip():
+        try:
+            freshest_source_at = datetime.fromisoformat(raw_source_time.replace("Z", "+00:00"))
+            if freshest_source_at.tzinfo is None:
+                freshest_source_at = freshest_source_at.replace(tzinfo=timezone.utc)
+            else:
+                freshest_source_at = freshest_source_at.astimezone(timezone.utc)
+        except ValueError:
+            freshest_source_at = None
     return EvidenceReceipt(
         run_id=run_id,
         task_revision_id=task_revision_id,
@@ -750,6 +762,7 @@ def build_evidence_receipt(
         source_count=source_count,
         executed_at=now,
         observed_at=now,
+        freshest_source_at=freshest_source_at,
         trust_level=trust,
         result_digest=result_digest(result_payload),
         metadata={

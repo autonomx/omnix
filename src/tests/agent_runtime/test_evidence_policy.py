@@ -24,6 +24,7 @@ from app.agent_runtime.evidence import (
     evaluate_evidence_set,
     freshness_max_age_seconds,
     resolve_request_mode,
+    validate_required_evidence_capabilities,
 )
 from app.agent_runtime.profiles import get_agent_profile
 
@@ -106,15 +107,34 @@ def test_explicit_source_request_requires_attribution_ready_evidence() -> None:
     assert "user_visible_attribution_unavailable" in missing.failures
 
 
-def test_market_quote_fails_closed_without_authoritative_capability() -> None:
+def test_market_quote_compiles_to_read_only_authoritative_market_capability() -> None:
     decision = classify_evidence("What is NVDA trading at today?", profile_id="trading-research")
     assert decision.policy.requirements[0].source_class == "market_quote"
-    with pytest.raises(EvidenceCompilationError, match="outside profile"):
-        compile_task_authority(
-            get_agent_profile("trading-research"),
-            "What is NVDA trading at today?",
-            decision,
-        )
+    compiled = compile_task_authority(
+        get_agent_profile("trading-research"),
+        "What is NVDA trading at today?",
+        decision,
+    )
+    assert compiled.required_external == ("trading.market_quote",)
+
+
+def test_required_connected_evidence_fails_preflight_when_connection_is_unavailable(monkeypatch) -> None:
+    from app.assistant_tools import gate
+    from app.assistant_tools.models import AssistantToolReviewDecision
+
+    monkeypatch.setattr(
+        gate,
+        "review_assistant_tool_request",
+        lambda request: AssistantToolReviewDecision(
+            tool_id=request.tool_id,
+            action_id=request.action_id,
+            allowed=False,
+            reason="missing_connection",
+        ),
+    )
+    with pytest.raises(EvidenceCompilationError) as caught:
+        validate_required_evidence_capabilities(["trading.market_quote"])
+    assert caught.value.code == "required_connection_unavailable"
 
 
 def test_external_forbidden_conflict_fails_before_agent_execution() -> None:
@@ -302,3 +322,29 @@ def test_revision_aware_acceptance_uses_latest_effective_policy() -> None:
     )
     assert result.passed
     assert "successful_test_command" not in result.checks
+
+
+
+def test_evidence_freshness_uses_provider_source_timestamp() -> None:
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            EvidenceRequirement(
+                id="quote-source-time",
+                source_class="market_quote",
+                freshness="current",
+                trust_floor="authoritative",
+                max_age_seconds=60,
+            )
+        ],
+    )
+    receipt = _receipt(source_class="market_quote", trust="authoritative")
+    receipt = receipt.model_copy(
+        update={
+            "freshest_source_at": datetime.now(timezone.utc) - timedelta(seconds=61),
+            "observed_at": datetime.now(timezone.utc),
+        }
+    )
+    result = evaluate_evidence_set("run-1", policy, [receipt])
+    assert not result.passed
+    assert result.requirements[0].status == "stale"
