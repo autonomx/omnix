@@ -231,7 +231,7 @@ class IntradayLLMAnalyzer:
             ),
             ChatMessage(role="user", content=json.dumps(payload, sort_keys=True)),
         ]
-        model = getattr(getattr(provider, "config", None), "model", None)
+        model = getattr(getattr(provider, "config", None), "model", None) or None
         try:
             response = provider.chat_completion(
                 messages=messages,
