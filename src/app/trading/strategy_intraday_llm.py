@@ -241,7 +241,7 @@ def intraday_llm_trigger_reasons(
     if previous is None:
         if deterministic.state == "entry_ready":
             reasons.append("entry_ready")
-        if current_rank <= top_n:
+        if heartbeat_enabled and current_rank <= top_n:
             reasons.append("initial_top_rank")
         elif learning.opportunity_score >= 9 and learning.pattern != "unresolved":
             reasons.append("emergent_high_opportunity")
