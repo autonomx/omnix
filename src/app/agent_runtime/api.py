@@ -16,10 +16,13 @@ from .contracts import (
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
+    EvidenceReceipt,
+    EvidenceSet,
     ModelRef,
     ResourceScope,
     RunLimits,
     SuccessCriterion,
+    TaskRevision,
     WorkspaceSpec,
 )
 from .evidence import EvidenceCompilationError, classify_evidence, compile_task_authority, task_requires_workspace_mutation
@@ -181,6 +184,28 @@ def list_agent_approvals(run_id: str, state: str | None = None) -> list[AgentApp
 @router.get("/{run_id}/artifacts", response_model=list[AgentArtifact])
 def list_agent_artifacts(run_id: str) -> list[AgentArtifact]:
     return _service().artifacts(run_id)
+
+@router.get("/{run_id}/task-revisions", response_model=list[TaskRevision])
+def list_agent_task_revisions(run_id: str) -> list[TaskRevision]:
+    if _service().get(run_id) is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    return _service().task_revisions(run_id)
+
+
+@router.get("/{run_id}/evidence/receipts", response_model=list[EvidenceReceipt])
+def list_agent_evidence_receipts(run_id: str) -> list[EvidenceReceipt]:
+    if _service().get(run_id) is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    return _service().evidence_receipts(run_id)
+
+
+@router.get("/{run_id}/evidence", response_model=EvidenceSet)
+def get_agent_evidence_set(run_id: str) -> EvidenceSet:
+    try:
+        return _service().evidence_set(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
+
 
 
 @router.get("/{run_id}/events/stream")

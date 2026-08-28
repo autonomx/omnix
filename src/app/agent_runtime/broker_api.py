@@ -16,6 +16,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from .budget import AgentBudgetError, default_agent_budget_manager
 from .contracts import AgentApproval, AgentEvent
+from .evidence import build_evidence_receipt
 from .repository import PostgresAgentRunRepository
 from .service import default_agent_run_service
 
@@ -440,6 +441,23 @@ def execute_agent_capability(
             error=result.error,
             state_changed=result.state_changed,
         )
+        latest_revision = repository.latest_task_revision(run_id)
+        effective_policy = (
+            latest_revision.evidence_decision.policy
+            if latest_revision is not None
+            else snapshot.spec.evidence_policy
+        )
+        receipt = build_evidence_receipt(
+            run_id=run_id,
+            task_revision_id=latest_revision.revision_id if latest_revision else None,
+            policy=effective_policy,
+            capability_id=canonical,
+            request_input=request.input,
+            result_payload=result_payload,
+            error=result.error,
+        )
+        if receipt is not None:
+            repository.add_evidence_receipt(receipt)
         repository.append_event(
             AgentEvent(
                 run_id=run_id,

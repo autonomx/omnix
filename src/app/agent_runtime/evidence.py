@@ -11,6 +11,7 @@ import hashlib
 import json
 import re
 from typing import Callable
+from urllib.parse import urlparse
 
 from .contracts import (
     EvidenceDecision,
@@ -507,3 +508,116 @@ def request_digest(payload: dict[str, object]) -> str:
 
 def result_digest(payload: dict[str, object]) -> str:
     return request_digest(payload)
+
+
+_REVERSE_SOURCE_CAPABILITIES: dict[str, str] = {
+    "research.web_search": "general_current_web",
+    "github.read_repo": "repo_contents",
+    "github.inspect_ci": "repo_ci_state",
+    "home.get_state": "home_state",
+    "home.get_energy": "home_energy",
+    "calendar.read_availability": "calendar_state",
+    "gmail.read_email": "email_state",
+}
+
+
+def _result_output(result_payload: dict[str, object]) -> dict[str, object]:
+    value = result_payload.get("output")
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _actual_web_trust(output: dict[str, object]) -> str:
+    items = output.get("items")
+    urls: list[str] = []
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict) and item.get("url"):
+                urls.append(str(item["url"]))
+    domains = {urlparse(value).netloc.casefold().removeprefix("www.") for value in urls}
+    if any(
+        domain == "sec.gov"
+        or domain.endswith(".sec.gov")
+        or domain in {"postgresql.org", "github.com"}
+        for domain in domains
+    ):
+        return "primary"
+    return "reputable"
+
+
+def _request_supports_subject(subject: SubjectRef | None, request_input: dict[str, object]) -> bool:
+    if subject is None:
+        return True
+    serialized = json.dumps(request_input, sort_keys=True, default=str).casefold()
+    tokens = [
+        subject.canonical_id,
+        subject.display_name or "",
+        *[str(value) for value in subject.qualifiers.values()],
+    ]
+    meaningful = [token.casefold() for token in tokens if token and token not in {"current_repository", "current_home", "primary_calendar", "primary_mailbox", "user_location"}]
+    if not meaningful:
+        return True
+    return any(token in serialized for token in meaningful)
+
+
+def build_evidence_receipt(
+    *,
+    run_id: str,
+    task_revision_id: str | None,
+    policy: EvidencePolicy,
+    capability_id: str,
+    request_input: dict[str, object],
+    result_payload: dict[str, object],
+    error: str | None,
+) -> EvidenceReceipt | None:
+    if error:
+        return None
+    source_class = _REVERSE_SOURCE_CAPABILITIES.get(capability_id)
+    subject: SubjectRef | None = None
+    trust = "general"
+    for requirement in policy.requirements:
+        try:
+            resolved_capability, resolved_trust = capability_for_requirement(requirement)
+        except EvidenceCompilationError:
+            continue
+        if resolved_capability == capability_id:
+            source_class = requirement.source_class
+            subject = requirement.subject if _request_supports_subject(requirement.subject, request_input) else None
+            trust = resolved_trust
+            break
+    if source_class is None:
+        return None
+
+    output = _result_output(result_payload)
+    diagnostics = output.get("diagnostics")
+    diagnostics = dict(diagnostics) if isinstance(diagnostics, dict) else {}
+    provider = str(diagnostics.get("provider") or output.get("provider") or "").strip() or None
+    source_manifest_id = str(output.get("source_manifest_id") or "").strip() or None
+    items = output.get("items")
+    source_count = len(items) if isinstance(items, list) else int(output.get("source_count") or 0)
+    origin = provider
+    if capability_id == "research.web_search":
+        trust = _actual_web_trust(output)
+    elif capability_id.startswith(("github.", "home.", "calendar.", "gmail.")):
+        trust = "authoritative"
+
+    now = datetime.now(timezone.utc)
+    return EvidenceReceipt(
+        run_id=run_id,
+        task_revision_id=task_revision_id,
+        capability_id=capability_id,
+        source_class=source_class,
+        subject=subject,
+        request_digest=request_digest(request_input),
+        provider=provider,
+        origin=origin,
+        source_manifest_id=source_manifest_id,
+        source_count=source_count,
+        executed_at=now,
+        observed_at=now,
+        trust_level=trust,
+        result_digest=result_digest(result_payload),
+        metadata={
+            "broker": True,
+            "provider_atomicity": "omnix_local_commit_only",
+        },
+    )

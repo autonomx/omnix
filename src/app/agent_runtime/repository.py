@@ -119,6 +119,10 @@ class PostgresAgentRunRepository:
 
     def add_task_revision(self, revision: TaskRevision) -> TaskRevision:
         self.connection.execute(
+            "SELECT revision FROM omnix_agent_runs WHERE workspace_id = %s AND run_id = %s FOR UPDATE",
+            (self.context.workspace_id, revision.run_id),
+        ).fetchone()
+        inserted = self.connection.execute(
             """
             INSERT INTO omnix_agent_task_revisions (
                 workspace_id, run_id, revision_id, sequence, previous_revision_id,
@@ -131,7 +135,8 @@ class PostgresAgentRunRepository:
                 %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb,
                 %s::jsonb, %s::jsonb, %s
             )
-            ON CONFLICT (workspace_id, run_id, revision_id) DO NOTHING
+            ON CONFLICT DO NOTHING
+            RETURNING revision_id
             """,
             (
                 self.context.workspace_id,
@@ -151,6 +156,27 @@ class PostgresAgentRunRepository:
                 revision.created_at,
             ),
         )
+        row = inserted.fetchone()
+        if row is None:
+            existing = self.connection.execute(
+                """
+                SELECT revision_id
+                  FROM omnix_agent_task_revisions
+                 WHERE workspace_id = %s AND run_id = %s
+                   AND (revision_id = %s OR source_command_id = %s)
+                 LIMIT 1
+                """,
+                (
+                    self.context.workspace_id,
+                    revision.run_id,
+                    revision.revision_id,
+                    revision.source_command_id,
+                ),
+            ).fetchone()
+            if existing is None:
+                raise AgentRunConcurrencyError("task revision sequence conflict")
+            rows = self.list_task_revisions(revision.run_id)
+            return next(item for item in rows if item.revision_id == str(existing[0]))
         self.append_event(AgentEvent(
             run_id=revision.run_id,
             event_type="task.revised",

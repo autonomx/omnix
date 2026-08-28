@@ -7,7 +7,7 @@ from typing import Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .contracts import AcceptancePlan, AgentArtifact, AgentEvent, AgentRunSpec
+from .contracts import AcceptancePlan, AgentArtifact, AgentEvent, AgentRunSpec, EvidenceSet, TaskRevision
 from .workspace import WorkspaceAuthority
 
 
@@ -20,33 +20,35 @@ class AcceptanceResult(BaseModel):
     modified_paths: list[str] = Field(default_factory=list)
 
 
-def compile_acceptance_plan(spec: AgentRunSpec) -> AcceptancePlan:
-    if spec.acceptance_plan is not None:
+def compile_acceptance_plan(spec: AgentRunSpec, *, task_revision: TaskRevision | None = None) -> AcceptancePlan:
+    if spec.acceptance_plan is not None and task_revision is None:
         return spec.acceptance_plan
     checks: list[str] = []
+    criteria = task_revision.effective_success_criteria if task_revision is not None else spec.success_criteria
     descriptions = " ".join(
         item.description.casefold()
-        for item in spec.success_criteria
+        for item in criteria
         if item.required
     )
-    mutating_code = (
-        spec.profile == "coding"
-        and any(
-            capability in {"workspace.edit", "workspace.write"}
-            for capability in spec.capabilities
-        )
+    expected_artifacts = (
+        list(task_revision.expected_artifacts)
+        if task_revision is not None
+        else list(spec.expected_artifacts)
     )
+    mutating_code = spec.profile == "coding" and "diff" in expected_artifacts
     if "test" in descriptions or mutating_code:
         checks.append("successful_test_command")
     if "typecheck" in descriptions or "type check" in descriptions:
         checks.append("successful_typecheck_command")
     if "lint" in descriptions:
         checks.append("successful_lint_command")
+    if task_revision is not None:
+        checks.extend(value for value in task_revision.acceptance_checks if value not in checks)
     return AcceptancePlan(
         allowed_modified_paths=list(spec.workspace.allowed_paths if spec.workspace else ["**"]),
         forbidden_modified_paths=list(spec.workspace.forbidden_paths if spec.workspace else []),
-        required_artifacts=list(spec.expected_artifacts),
-        require_diff="diff" in spec.expected_artifacts,
+        required_artifacts=expected_artifacts,
+        require_diff="diff" in expected_artifacts,
         checks=checks,
     )
 
@@ -56,13 +58,26 @@ def evaluate_acceptance(
     *,
     events: Iterable[AgentEvent],
     artifacts: Iterable[AgentArtifact],
+    task_revision: TaskRevision | None = None,
+    evidence_set: EvidenceSet | None = None,
 ) -> AcceptanceResult:
-    plan = compile_acceptance_plan(spec)
+    plan = compile_acceptance_plan(spec, task_revision=task_revision)
     event_rows = list(events)
     artifact_rows = list(artifacts)
     checks: dict[str, bool] = {}
     failures: list[str] = []
     modified_paths = _modified_paths(spec)
+
+    effective_policy = (
+        task_revision.evidence_decision.policy
+        if task_revision is not None
+        else spec.evidence_policy
+    )
+    if effective_policy.requirement == "required":
+        evidence_ok = evidence_set is not None and evidence_set.passed
+        checks["required_evidence"] = evidence_ok
+        if not evidence_ok:
+            failures.append("evidence_requirements_unsatisfied")
 
     checks["modified_paths_in_scope"] = _paths_allowed(
         modified_paths,

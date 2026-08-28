@@ -20,6 +20,7 @@ from .evidence import (
     EvidenceCompilationError,
     classify_evidence,
     compile_task_authority,
+    evaluate_evidence_set,
     revise_objective,
     task_requires_workspace_mutation,
 )
@@ -476,6 +477,33 @@ class AgentRunService:
             work.rollback()
             return rows
 
+    def task_revisions(self, run_id: str) -> list[TaskRevision]:
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            rows = repository.list_task_revisions(run_id)
+            work.rollback()
+            return rows
+
+    def evidence_receipts(self, run_id: str):
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            rows = repository.list_evidence_receipts(run_id)
+            work.rollback()
+            return rows
+
+    def evidence_set(self, run_id: str):
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            snapshot = repository.get_run(run_id)
+            if snapshot is None:
+                work.rollback()
+                raise KeyError(run_id)
+            revision = repository.latest_task_revision(run_id)
+            receipts = repository.list_evidence_receipts(run_id)
+            work.rollback()
+        policy = revision.evidence_decision.policy if revision is not None else snapshot.spec.evidence_policy
+        return evaluate_evidence_set(run_id, policy, receipts)
+
     def _maybe_finalize_parent_in_repository(
         self,
         repository: PostgresAgentRunRepository,
@@ -522,7 +550,21 @@ class AgentRunService:
         self._capture_diff(repository, current.spec)
         events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
         artifacts = repository.list_artifacts(current.run_id)
-        result = evaluate_acceptance(current.spec, events=events, artifacts=artifacts)
+        task_revision = repository.latest_task_revision(current.run_id)
+        receipts = repository.list_evidence_receipts(current.run_id)
+        effective_policy = (
+            task_revision.evidence_decision.policy
+            if task_revision is not None
+            else current.spec.evidence_policy
+        )
+        evidence_set = evaluate_evidence_set(current.run_id, effective_policy, receipts)
+        result = evaluate_acceptance(
+            current.spec,
+            events=events,
+            artifacts=artifacts,
+            task_revision=task_revision,
+            evidence_set=evidence_set,
+        )
         children_terminal, child_failed = self._children_terminal_state(repository, current.run_id)
         failures = list(result.failures)
         if not children_terminal:
@@ -534,7 +576,13 @@ class AgentRunService:
             AgentEvent(
                 run_id=current.run_id,
                 event_type="acceptance.completed",
-                payload={**result.model_dump(mode="json"), "passed": passed, "failures": failures},
+                payload={
+                    **result.model_dump(mode="json"),
+                    "passed": passed,
+                    "failures": failures,
+                    "task_revision_id": task_revision.revision_id if task_revision else None,
+                    "evidence_set": evidence_set.model_dump(mode="json"),
+                },
             )
         )
         latest = repository.get_run(current.run_id) or current
