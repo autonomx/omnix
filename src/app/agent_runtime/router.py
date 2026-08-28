@@ -42,11 +42,11 @@ _NEGATED_ACTION = re.compile(
     re.I,
 )
 _QUOTED_SPAN = re.compile(
-    r'"[^"\\r\\n]*"'
-    r"|“[^”\\r\\n]*”"
-    r"|‘[^’\\r\\n]*’"
-    r"|\`[^\`\\r\\n]*\`"
-    r"|(?<!\\w)'[^'\\r\\n]+'(?!\\w)"
+    r'"[^"\r\n]*"'
+    r"|“[^”\r\n]*”"
+    r"|‘[^’\r\n]*’"
+    r"|`[^`\r\n]*`"
+    r"|(?<!\w)'[^'\r\n]+'(?!\w)"
 )
 
 _BROAD_SEMANTIC = re.compile(r"\b(?:take care of|anything important|whatever needs|prepare everything|handle everything)\b", re.I)
