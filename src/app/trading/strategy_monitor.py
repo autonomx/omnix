@@ -856,7 +856,7 @@ class TradingStrategyMonitor:
                         execution_authority=False,
                     )
                 else:
-                    learning_rows.append((candidate, result, observed_at, learning))
+                    # Learning follows the latest finalized *1-minute* prefix even\n                    # when the deterministic strategy uses 5-minute structure bars.\n                    learning_rows.append((candidate, result, base_bars[-1].end_time, learning))
             if result.state == "entry_ready" and result.signal is not None:
                 self.signal_count += 1
                 if config.config.strategy_version == "1.2.0":
