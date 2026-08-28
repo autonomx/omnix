@@ -393,6 +393,123 @@ def test_actionless_semantic_agent_cannot_promote_default_chat() -> None:
     assert routed.lane == "chat"
 
 
+def test_actionless_home_evidence_resolves_house_profile_and_authority() -> None:
+    prompt = (
+        "can you check whether anything downstairs is still on and "
+        "shut off what doesn't need to be?"
+    )
+    decision = SemanticIntentDecision(
+        lane="agent",
+        profile_id="research",
+        primary_intent="check_then_shut_off",
+        action_intents=[],
+        evidence_requirements=[
+            SemanticEvidenceHint(
+                source_class="home_state",
+                freshness="current",
+                trust_floor="authoritative",
+                fallback_policy="fail_closed",
+            )
+        ],
+        multi_step=False,
+        confidence=0.98,
+        reason="The model understood the home state requirement but omitted actions.",
+    )
+
+    normalized = ProviderSemanticIntentClassifier(
+        _StructuredFakeProvider(decision.model_dump(mode="json")),
+        model="fake-model",
+        timeout_seconds=2,
+    ).classify(prompt)
+
+    assert normalized.multi_step is True
+    assert semantic_profile_id(prompt, normalized) == "house"
+
+    semantic_evidence = evidence_decision_from_semantic(prompt, normalized)
+    effective = classify_evidence(
+        prompt,
+        profile_id="house",
+        semantic_adviser=lambda *_: semantic_evidence,
+    )
+    compiled = compile_task_authority(
+        get_agent_profile("house"),
+        prompt,
+        effective,
+        semantic_action_intents=normalized.action_intents,
+    )
+
+    assert "home.get_state" in compiled.required_external
+    assert "home.set_state" in compiled.required_external
+
+
+def test_bounded_current_public_verification_stays_chat() -> None:
+    provider = _StructuredFakeProvider(
+        {
+            "lane": "agent",
+            "profile_id": "research",
+            "primary_intent": "verify_current_release",
+            "action_intents": ["research_read"],
+            "evidence_requirements": [
+                {
+                    "source_class": "software_release",
+                    "freshness": "current",
+                    "trust_floor": "primary",
+                    "fallback_policy": "allow_fallback",
+                }
+            ],
+            "multi_step": True,
+            "confidence": 0.99,
+            "reason": "Verify the current claim before explaining it.",
+        }
+    )
+    classifier = ProviderSemanticIntentClassifier(
+        provider,
+        model="fake-model",
+        timeout_seconds=2,
+    )
+
+    decision = classifier.classify(
+        "I saw people saying a new OpenAI model dropped today. verify that before you explain it."
+    )
+
+    assert decision.lane == "chat"
+    assert decision.action_intents == ["research_read"]
+    assert semantic_profile_id("verify the release", decision) == "research"
+
+
+def test_open_ended_research_read_remains_agent() -> None:
+    provider = _StructuredFakeProvider(
+        {
+            "lane": "agent",
+            "profile_id": "research",
+            "primary_intent": "compare_ai_agent_changes",
+            "action_intents": ["research_read"],
+            "evidence_requirements": [
+                {
+                    "source_class": "general_current_web",
+                    "freshness": "current",
+                    "trust_floor": "reputable",
+                    "fallback_policy": "allow_fallback",
+                }
+            ],
+            "multi_step": True,
+            "confidence": 0.99,
+            "reason": "Open-ended comparison across recent developments.",
+        }
+    )
+    classifier = ProviderSemanticIntentClassifier(
+        provider,
+        model="fake-model",
+        timeout_seconds=2,
+    )
+
+    decision = classifier.classify(
+        "spend some time comparing the biggest AI coding-agent changes this month and tell me what actually matters."
+    )
+
+    assert decision.lane == "agent"
+
+
 def test_semantic_classifier_can_upgrade_arbitrary_language_to_agent() -> None:
     prompt = "could you make this behave better whenever the cache starts cold?"
     deterministic = route_omnix_request(prompt)
