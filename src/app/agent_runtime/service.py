@@ -27,7 +27,7 @@ from .evidence import (
     task_requires_workspace_mutation,
     validate_required_evidence_capabilities,
 )
-from .profiles import get_agent_profile, resolve_profile_capabilities, select_agent_profile_id
+from .profiles import get_agent_profile, resolve_profile_capabilities
 from .budget import AgentBudgetError, AgentBudgetManager
 from .contracts import (
     AgentArtifact,
