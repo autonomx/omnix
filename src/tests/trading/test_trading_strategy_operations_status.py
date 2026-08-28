@@ -44,6 +44,7 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "evaluation_count": 0,
             "signal_count": 0,
             "paper_order_count": 0,
+            "intraday_learning_snapshot_count": 0,
         },
     }
     assert payload["deep_recovery_shadow_monitor"] == {
