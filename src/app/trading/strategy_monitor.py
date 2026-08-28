@@ -28,6 +28,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
+from .strategy_intraday_learning import build_intraday_learning_snapshot
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
@@ -299,6 +300,7 @@ class TradingStrategyMonitor:
         self.signal_count = 0
         self.paper_order_count = 0
         self.rejection_count = 0
+        self.intraday_learning_snapshot_count = 0
 
     def start(self) -> None:
         if self._task is None:
@@ -760,6 +762,7 @@ class TradingStrategyMonitor:
         universe,
     ) -> list[_EntryProposal]:
         proposals: list[_EntryProposal] = []
+        learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, object]] = []
         for candidate in universe.candidates:
             try:
                 response = await asyncio.to_thread(
@@ -837,6 +840,23 @@ class TradingStrategyMonitor:
                     "latest_execution_bar": _bar_audit_payload(execution_bars[-1]),
                 },
             )
+            if config.config.intraday_learning_enabled:
+                try:
+                    learning = build_intraday_learning_snapshot(candidate, result, structure_bars)
+                except Exception as exc:
+                    trade_log(
+                        "auto_trading",
+                        "intraday_learning_snapshot_error",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        universe_id=universe.universe_id,
+                        instrument_id=candidate.instrument_id,
+                        error_type=type(exc).__name__,
+                        detail=str(exc),
+                        execution_authority=False,
+                    )
+                else:
+                    learning_rows.append((candidate, result, observed_at, learning))
             if result.state == "entry_ready" and result.signal is not None:
                 self.signal_count += 1
                 if config.config.strategy_version == "1.2.0":
@@ -915,6 +935,62 @@ class TradingStrategyMonitor:
                         observed_at=observed_at,
                     )
                 )
+        if learning_rows:
+            ranked_learning = sorted(
+                learning_rows,
+                key=lambda row: (
+                    -row[3].opportunity_score,
+                    -row[3].execution_quality_score,
+                    row[0].discovery_rank or 10**9,
+                    row[0].instrument_id,
+                ),
+            )
+            for rank, (candidate, result, observed_at, learning) in enumerate(ranked_learning, start=1):
+                persisted = await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="intraday_learning",
+                    state=learning.pattern,
+                    reason_code="INTRADAY_LEARNING_SNAPSHOT",
+                    observed_at=observed_at,
+                    payload={
+                        "rank": rank,
+                        "universe_id": universe.universe_id,
+                        "universe_discovery_source": universe.discovery_source,
+                        "morning_discovery_rank": candidate.discovery_rank,
+                        "strategy_version": config.config.strategy_version,
+                        "deterministic_state": result.state,
+                        "deterministic_reason_code": result.reason_code,
+                        "learning": learning.model_dump(mode="json"),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                )
+                self.intraday_learning_snapshot_count += int(persisted)
+            trade_log(
+                "auto_trading",
+                "intraday_learning_ranked",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                universe_id=universe.universe_id,
+                candidate_count=len(ranked_learning),
+                ranks=[
+                    {
+                        "instrument_id": row[0].instrument_id,
+                        "rank": index,
+                        "pattern": row[3].pattern,
+                        "opportunity_score": row[3].opportunity_score,
+                        "squeeze_probability_score": row[3].squeeze_probability_score,
+                        "failed_selloff_probability_score": row[3].failed_selloff_probability_score,
+                        "trend_continuation_score": row[3].trend_continuation_score,
+                        "gap_retention_score": row[3].gap_retention_score,
+                    }
+                    for index, row in enumerate(ranked_learning, start=1)
+                ],
+                execution_authority=False,
+            )
+
         proposals.sort(key=lambda proposal: proposal.priority)
         trade_log(
             "auto_trading",
