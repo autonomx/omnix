@@ -213,9 +213,12 @@ rolling context without retransmitting the complete deterministic feature dump
 on every call. The next batch therefore reasons longitudinally rather than
 reclassifying each snapshot in isolation.
 
-Runtime counters expose LLM call count, assessment count, errors, total input
-characters and a conservative character/4 input-token estimate so operators can
-measure the actual cost of the learning loop.
+Runtime counters expose LLM call count, assessment count, errors and token
+usage. When the configured provider returns prompt/completion/total token usage,
+Omnix records those provider-reported values. Providers that do not expose usage
+fall back to a clearly labeled character/4 estimate for input and output. This
+makes the learning loop's actual token footprint measurable instead of inferred
+from call count alone.
 
 ## Dynamic rank
 
