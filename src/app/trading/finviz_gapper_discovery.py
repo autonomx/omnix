@@ -328,6 +328,8 @@ def discover_finviz_gappers(
         session_date=freeze_et.date(),
         evaluation_time=freeze_time,
         discovery_source="finviz",
+        source_locator=FINVIZ_TOP_GAINERS_SOURCE_URL,
+        source_candidate_symbols=symbols,
         candidates=candidates,
     )
 
