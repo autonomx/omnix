@@ -3114,7 +3114,7 @@ export interface components {
              * Event Type
              * @enum {string}
              */
-            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "worker.heartbeat";
+            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded";
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -3177,6 +3177,8 @@ export interface components {
              * @enum {string}
              */
             status: "queued" | "starting" | "running" | "pause_requested" | "paused" | "waiting_for_approval" | "waiting_for_children" | "resume_requested" | "cancel_requested" | "cancelled" | "completed" | "failed";
+            /** Superseded By Run Id */
+            superseded_by_run_id?: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -3203,6 +3205,7 @@ export interface components {
             capabilities?: string[];
             /** Context Sources */
             context_sources?: string[];
+            evidence_policy?: components["schemas"]["EvidencePolicy"];
             execution?: components["schemas"]["ExecutionPolicy"];
             /** Expected Artifacts */
             expected_artifacts?: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
@@ -3227,6 +3230,7 @@ export interface components {
              * @default coding
              */
             profile: string;
+            request_mode?: components["schemas"]["RequestModeSelection"] | null;
             /** Resource Scopes */
             resource_scopes?: components["schemas"]["ResourceScope"][];
             /** Run Id */
@@ -3240,6 +3244,8 @@ export interface components {
             session_id?: string | null;
             /** Success Criteria */
             success_criteria?: components["schemas"]["SuccessCriterion"][];
+            /** Supersedes Run Id */
+            supersedes_run_id?: string | null;
             /** Task */
             task: string;
             workspace?: components["schemas"]["WorkspaceSpec"] | null;
@@ -5285,6 +5291,85 @@ export interface components {
             /** Status */
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
+        };
+        /** EvidencePolicy */
+        EvidencePolicy: {
+            /**
+             * External Access
+             * @default allowed
+             * @enum {string}
+             */
+            external_access: "allowed" | "forbidden";
+            /**
+             * Requirement
+             * @default none
+             * @enum {string}
+             */
+            requirement: "none" | "optional" | "required";
+            /** Requirements */
+            requirements?: components["schemas"]["EvidenceRequirement"][];
+            retrieval?: components["schemas"]["RetrievalPolicy"];
+            /**
+             * User Visible Attribution
+             * @default when_used
+             * @enum {string}
+             */
+            user_visible_attribution: "none" | "when_used" | "required";
+        };
+        /** EvidenceRequirement */
+        EvidenceRequirement: {
+            /** Acceptable Sources */
+            acceptable_sources?: components["schemas"]["EvidenceSourceOption"][];
+            /** As Of Date */
+            as_of_date?: string | null;
+            /**
+             * Fallback Policy
+             * @default fail_closed
+             * @enum {string}
+             */
+            fallback_policy: "fail_closed" | "allow_fallback";
+            /**
+             * Freshness
+             * @default timeless
+             * @enum {string}
+             */
+            freshness: "timeless" | "current" | "as_of_date";
+            /** Id */
+            id: string;
+            /** Max Age Seconds */
+            max_age_seconds?: number | null;
+            /**
+             * Minimum Matches
+             * @default 1
+             */
+            minimum_matches: number;
+            /** Source Class */
+            source_class: string;
+            subject?: components["schemas"]["SubjectRef"] | null;
+            /**
+             * Trust Floor
+             * @default general
+             * @enum {string}
+             */
+            trust_floor: "authoritative" | "primary" | "reputable" | "general";
+        };
+        /** EvidenceSourceOption */
+        EvidenceSourceOption: {
+            /**
+             * Preference
+             * @default 100
+             */
+            preference: number;
+            /** Provider Hint */
+            provider_hint?: string | null;
+            /** Source Class */
+            source_class: string;
+            /**
+             * Trust Floor
+             * @default general
+             * @enum {string}
+             */
+            trust_floor: "authoritative" | "primary" | "reputable" | "general";
         };
         /** ExecutionHealth */
         ExecutionHealth: {
@@ -8810,6 +8895,38 @@ export interface components {
             /** Reports */
             reports?: components["schemas"]["ReportArtifact"][];
         };
+        /** RequestModeCandidate */
+        RequestModeCandidate: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "chat" | "quick_research" | "deep_research" | "agent" | "auto";
+            /** Priority */
+            priority: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "explicit_command" | "turn_setting" | "persistent_setting" | "classifier" | "default";
+        };
+        /** RequestModeSelection */
+        RequestModeSelection: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "chat" | "quick_research" | "deep_research" | "agent" | "auto";
+            /** Priority */
+            priority: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "explicit_command" | "turn_setting" | "persistent_setting" | "classifier" | "default";
+            /** Suppressed */
+            suppressed?: components["schemas"]["RequestModeCandidate"][];
+        };
         /** ResearchActionRecord */
         ResearchActionRecord: {
             /** Action Id */
@@ -9135,6 +9252,35 @@ export interface components {
             resource_id: string;
             /** Resource Type */
             resource_type: string;
+        };
+        /** RetrievalPolicy */
+        RetrievalPolicy: {
+            /**
+             * Max Extracts
+             * @default 4
+             */
+            max_extracts: number;
+            /**
+             * Max Queries
+             * @default 4
+             */
+            max_queries: number;
+            /**
+             * Max Sources
+             * @default 10
+             */
+            max_sources: number;
+            /**
+             * Max Wall Time Seconds
+             * @default 60
+             */
+            max_wall_time_seconds: number;
+            /**
+             * Strategy
+             * @default adaptive
+             * @enum {string}
+             */
+            strategy: "lookup" | "bounded" | "adaptive";
         };
         /** RetryState */
         RetryState: {
@@ -10256,6 +10402,19 @@ export interface components {
             stop_price: string;
             /** Target Price */
             target_price: string;
+        };
+        /** SubjectRef */
+        SubjectRef: {
+            /** Canonical Id */
+            canonical_id: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Qualifiers */
+            qualifiers?: {
+                [key: string]: unknown;
+            };
+            /** Type */
+            type: string;
         };
         /** SuccessCriterion */
         SuccessCriterion: {
