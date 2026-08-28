@@ -251,7 +251,7 @@ def test_direct_route_uses_targeted_user_metadata_update(monkeypatch) -> None:
     }]
 
 
-def test_typed_chat_never_auto_routes_even_for_action_wording(monkeypatch) -> None:
+def test_typed_chat_uses_generalized_chat_route_before_legacy_live_agent(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_LIVE_AGENT_ENABLED", "1")
     monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
     monkeypatch.setenv("HERMES_ENABLED", "1")
@@ -268,4 +268,6 @@ def test_typed_chat_never_auto_routes_even_for_action_wording(monkeypatch) -> No
 
     completion = next(event for event in events if event["type"] == "complete")
     assert store.provider_calls == 1
-    assert completion["metadata"]["live_agent_route"]["reason"] == "not_live_voice"
+    assert "live_agent_route" not in completion["metadata"]
+    assert message.metadata["omnix_route"]["lane"] == "chat"
+    assert message.metadata["omnix_chat_routed"] is True
