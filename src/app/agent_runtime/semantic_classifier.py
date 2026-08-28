@@ -129,6 +129,12 @@ _MULTI_STEP_LANGUAGE = re.compile(
     r"get\s+it\s+green|sort\s+it\s+out)\b",
     re.I,
 )
+_CREATIVE_EMAIL_COMPOSITION = re.compile(
+    r"(?:\b(?:fictional|imaginary|sample|example|mock)\b.{0,100}\bemail\b|"
+    r"\bemail\b.{0,100}\b(?:fictional|imaginary|novel|story|scene|script)\b|"
+    r"\bfor\s+(?:a|the)\s+(?:novel|story|scene|script)\b)",
+    re.I,
+)
 
 
 def _profile_from_actions(actions: set[str]) -> str:
@@ -325,15 +331,35 @@ def _normalize_semantic_decision(
     such as market quotes and weather remain eligible for Chat.
     """
 
+    text = " ".join(str(content or "").split())
     actions = set(decision.action_intents)
     updates: dict[str, Any] = {}
-    effective_lane = decision.lane
-    if decision.lane == "chat" and actions & _STATEFUL_AGENT_ACTIONS:
+
+    if _CREATIVE_EMAIL_COMPOSITION.search(text):
+        filtered_actions = [
+            action
+            for action in decision.action_intents
+            if action not in {"email_draft", "email_send"}
+        ]
+        if filtered_actions != decision.action_intents:
+            updates["action_intents"] = filtered_actions
+            actions = set(filtered_actions)
+        filtered_evidence = [
+            requirement
+            for requirement in decision.evidence_requirements
+            if requirement.source_class != "email_state"
+        ]
+        if filtered_evidence != decision.evidence_requirements:
+            updates["evidence_requirements"] = filtered_evidence
+        if decision.lane == "agent" and not (actions & _STATEFUL_AGENT_ACTIONS):
+            updates["lane"] = "chat"
+
+    effective_lane = str(updates.get("lane") or decision.lane)
+    if effective_lane == "chat" and actions & _STATEFUL_AGENT_ACTIONS:
         effective_lane = "agent"
         updates["lane"] = "agent"
 
     if not decision.multi_step and effective_lane == "agent":
-        text = " ".join(str(content or "").split())
         inferred = (
             len(actions) >= 2
             or bool(_MULTI_STEP_LANGUAGE.search(text))
@@ -627,6 +653,8 @@ def semantic_profile_id(
         return "personal-assistant"
     if "market_read" in actions:
         return "trading-research"
+    if "research_read" in actions:
+        return "research"
     return semantic.profile_id
 
 
