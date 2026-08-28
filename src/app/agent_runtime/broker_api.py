@@ -541,6 +541,15 @@ def execute_agent_capability(
                 error="approval_rejected",
                 state_changed=False,
             )
+            if task_revision_id and is_evidence_capability(canonical):
+                repository.finish_evidence_query(
+                    run_id,
+                    task_revision_id,
+                    execution_key,
+                    actual_sources=0,
+                    actual_extracts=0,
+                    failed=True,
+                )
             work.commit()
             return BrokerCapabilityResponse(
                 capability_id=canonical,
@@ -576,18 +585,38 @@ def execute_agent_capability(
             snapshot.spec.approval_policy,
         )
         if not decision.allowed:
+            error = decision.reason or "not_allowed"
+            result_payload: dict[str, Any] = {"error": error}
+            if evidence_requirement is not None and error in {"missing_connection", "tool_disabled"}:
+                fallbacks = fallback_capabilities_for_requirement(
+                    evidence_requirement,
+                    current_capability=canonical,
+                    issued_capabilities=snapshot.spec.external_capabilities,
+                )
+                if fallbacks:
+                    result_payload["evidence_fallback_capabilities"] = list(fallbacks)
+                    result_payload["evidence_requirement_id"] = evidence_requirement.id
             repository.finish_capability_execution(
                 run_id,
                 execution_key,
-                result_payload={"error": decision.reason or "not_allowed"},
-                error=decision.reason or "not_allowed",
+                result_payload=result_payload,
+                error=error,
                 state_changed=False,
             )
+            if task_revision_id and is_evidence_capability(canonical):
+                repository.finish_evidence_query(
+                    run_id,
+                    task_revision_id,
+                    execution_key,
+                    actual_sources=0,
+                    actual_extracts=0,
+                    failed=True,
+                )
             work.commit()
             return BrokerCapabilityResponse(
                 capability_id=canonical,
                 execution_key=execution_key,
-                result={"error": decision.reason or "not_allowed"},
+                result=result_payload,
             )
         if decision.approval_required and not approved:
             repository.mark_capability_waiting_for_approval(run_id, execution_key)
