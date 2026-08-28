@@ -9,18 +9,26 @@ from types import SimpleNamespace
 import pytest
 
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
-from app.trading.strategies.models import GapPullbackConfig, GapPullbackFeatures, GapPullbackResult, StrategySignal
-from app.trading.strategy_monitor import TradingStrategyMonitor
-from app.trading.strategy_repository import TradingStrategyConfigDocument
+from app.trading.strategies.models import (
+    GapPullbackConfig,
+    GapPullbackFeatures,
+    GapPullbackResult,
+    StrategySignal,
+)
 from app.trading.strategy_intraday_learning import IntradayLearningSnapshot
 from app.trading.strategy_intraday_llm import (
+    EVENT_BATCH_COOLDOWN_MINUTES,
+    FULL_REFRESH_MINUTES,
     IntradayLLMAssessment,
     IntradayLLMAnalyzer,
     IntradayLLMResult,
     build_intraday_llm_payload,
+    intraday_llm_trigger_reasons,
     select_intraday_llm_candidates,
     should_run_intraday_llm_batch,
 )
+from app.trading.strategy_monitor import TradingStrategyMonitor
+from app.trading.strategy_repository import TradingStrategyConfigDocument
 
 
 OBSERVED = datetime(2026, 8, 28, 14, 0, tzinfo=timezone.utc)
@@ -72,8 +80,13 @@ def result(symbol: str, *, state: str = "higher_low_confirmed") -> GapPullbackRe
     )
 
 
-def learning(*, opportunity: int = 8, pattern: str = "failed_selloff_watch") -> IntradayLearningSnapshot:
-    return IntradayLearningSnapshot(
+def learning(
+    *,
+    opportunity: int = 8,
+    pattern: str = "failed_selloff_watch",
+    **updates,
+) -> IntradayLearningSnapshot:
+    base = IntradayLearningSnapshot(
         catalyst_quality_score=8,
         supply_risk_score=3,
         float_structure_risk_score=7,
@@ -99,23 +112,24 @@ def learning(*, opportunity: int = 8, pattern: str = "failed_selloff_watch") -> 
         deterministic_reason_code="WAITING",
         execution_authority=False,
     )
+    return base.model_copy(update=updates)
 
 
-def row(symbol: str, rank: int, *, state: str = "higher_low_confirmed", opportunity: int = 8):
-    return (candidate(symbol, rank), result(symbol, state=state), OBSERVED, learning(opportunity=opportunity))
-
-
-class FakeProvider:
-    provider_name = "fixture"
-
-    def __init__(self, payload):
-        self.payload = payload
-        self.config = SimpleNamespace(model="fixture-model")
-        self.messages = None
-
-    def chat_completion(self, *, messages, model=None, stream=False, **kwargs):
-        self.messages = messages
-        return SimpleNamespace(content=json.dumps(self.payload), model=model or "fixture-model")
+def row(
+    symbol: str,
+    rank: int,
+    *,
+    state: str = "higher_low_confirmed",
+    opportunity: int = 8,
+    observed_at: datetime = OBSERVED,
+    learning_updates: dict | None = None,
+):
+    return (
+        candidate(symbol, rank),
+        result(symbol, state=state),
+        observed_at,
+        learning(opportunity=opportunity, **(learning_updates or {})),
+    )
 
 
 def assessment(instrument_id: str):
@@ -136,57 +150,235 @@ def assessment(instrument_id: str):
     }
 
 
-def test_llm_batch_cadence_is_bounded():
+def previous_payload(
+    symbol: str,
+    *,
+    rank: int = 1,
+    state: str = "higher_low_confirmed",
+    source_learning: IntradayLearningSnapshot | None = None,
+    payload_mode: str = "delta",
+):
+    source = source_learning or learning()
+    return {
+        "live_research_rank": rank,
+        "deterministic_state": state,
+        "deterministic_reason_code": "WAITING",
+        "source_learning": source.model_dump(mode="json"),
+        "assessment": assessment(f"equity:NASDAQ:{symbol}"),
+        "payload_mode": payload_mode,
+    }
+
+
+class FakeProvider:
+    provider_name = "fixture"
+
+    def __init__(self, payload):
+        self.payload = payload
+        self.config = SimpleNamespace(model="fixture-model")
+        self.messages = None
+
+    def chat_completion(self, *, messages, model=None, stream=False, **kwargs):
+        self.messages = messages
+        return SimpleNamespace(content=json.dumps(self.payload), model=model or "fixture-model")
+
+
+def test_event_batch_cooldown_is_bounded_but_not_the_heartbeat():
     assert should_run_intraday_llm_batch(
         observed_at=OBSERVED,
         previous_batch_at=None,
-        minimum_interval_minutes=5,
+        minimum_interval_minutes=EVENT_BATCH_COOLDOWN_MINUTES,
     )
     assert not should_run_intraday_llm_batch(
         observed_at=OBSERVED,
-        previous_batch_at=OBSERVED - timedelta(minutes=4, seconds=59),
-        minimum_interval_minutes=5,
+        previous_batch_at=OBSERVED - timedelta(minutes=1, seconds=59),
+        minimum_interval_minutes=EVENT_BATCH_COOLDOWN_MINUTES,
     )
     assert should_run_intraday_llm_batch(
         observed_at=OBSERVED,
-        previous_batch_at=OBSERVED - timedelta(minutes=5),
-        minimum_interval_minutes=5,
+        previous_batch_at=OBSERVED - timedelta(minutes=2),
+        minimum_interval_minutes=EVENT_BATCH_COOLDOWN_MINUTES,
     )
 
 
-def test_selection_uses_top_n_but_also_keeps_entry_ready_candidate():
+def test_initial_selection_uses_top_n_and_always_keeps_entry_ready_candidate():
     rows = [
         row("AAA", 1, opportunity=10),
         row("BBB", 2, opportunity=9),
         row("CCC", 3, state="entry_ready", opportunity=3),
     ]
-    selected = select_intraday_llm_candidates(rows, top_n=2)
+    selected, reasons = select_intraday_llm_candidates(rows, top_n=2)
     assert [item[0].instrument_id for item in selected] == [
         "equity:NASDAQ:AAA",
         "equity:NASDAQ:BBB",
         "equity:NASDAQ:CCC",
     ]
+    assert reasons["equity:NASDAQ:AAA"] == ("initial_top_rank",)
+    assert "entry_ready" in reasons["equity:NASDAQ:CCC"]
 
 
-def test_payload_includes_previous_assessment_without_granting_execution_authority():
-    rows = [row("AAA", 1)]
-    previous = {
-        "equity:NASDAQ:AAA": {
-            "assessment": {
-                **assessment("equity:NASDAQ:AAA"),
-                "summary": "Earlier thesis.",
-            }
-        }
-    }
-    payload = build_intraday_llm_payload(
-        rows,
-        ranks={"equity:NASDAQ:AAA": 1},
+def test_quiet_candidate_skips_llm_until_ten_minute_heartbeat():
+    current = row("AAA", 1)
+    previous = {"equity:NASDAQ:AAA": previous_payload("AAA")}
+
+    selected, _ = select_intraday_llm_candidates(
+        [current],
+        top_n=5,
         previous_by_instrument=previous,
+        previous_observed_at_by_instrument={
+            "equity:NASDAQ:AAA": OBSERVED - timedelta(minutes=9, seconds=59)
+        },
+        heartbeat_minutes=10,
     )
-    item = payload["candidates"][0]
-    assert item["live_research_rank"] == 1
-    assert item["previous_llm_assessment"]["summary"] == "Earlier thesis."
-    assert item["intraday_learning"]["execution_authority"] is False
+    assert selected == []
+
+    selected, reasons = select_intraday_llm_candidates(
+        [current],
+        top_n=5,
+        previous_by_instrument=previous,
+        previous_observed_at_by_instrument={
+            "equity:NASDAQ:AAA": OBSERVED - timedelta(minutes=10)
+        },
+        heartbeat_minutes=10,
+    )
+    assert [item[0].instrument_id for item in selected] == ["equity:NASDAQ:AAA"]
+    assert reasons["equity:NASDAQ:AAA"] == ("heartbeat",)
+
+
+def test_heartbeat_can_be_disabled_outside_the_entry_window():
+    selected, _ = select_intraday_llm_candidates(
+        [row("AAA", 1)],
+        top_n=5,
+        previous_by_instrument={"equity:NASDAQ:AAA": previous_payload("AAA")},
+        previous_observed_at_by_instrument={
+            "equity:NASDAQ:AAA": OBSERVED - timedelta(minutes=30)
+        },
+        heartbeat_minutes=10,
+        heartbeat_enabled=False,
+    )
+    assert selected == []
+
+
+def test_material_state_change_outside_top_n_triggers_llm():
+    current = row("CCC", 8, state="entry_ready")
+    selected, reasons = select_intraday_llm_candidates(
+        [row("AAA", 1), current],
+        top_n=1,
+        previous_by_instrument={
+            "equity:NASDAQ:AAA": previous_payload("AAA", rank=1),
+            "equity:NASDAQ:CCC": previous_payload("CCC", rank=8),
+        },
+        previous_observed_at_by_instrument={
+            "equity:NASDAQ:AAA": OBSERVED - timedelta(minutes=1),
+            "equity:NASDAQ:CCC": OBSERVED - timedelta(minutes=1),
+        },
+        heartbeat_minutes=10,
+    )
+    assert [item[0].instrument_id for item in selected] == ["equity:NASDAQ:CCC"]
+    assert "entry_ready" in reasons["equity:NASDAQ:CCC"]
+    assert "deterministic_state_changed" in reasons["equity:NASDAQ:CCC"]
+
+
+def test_turnover_threshold_and_vwap_cross_are_material_events():
+    prior_learning = learning(
+        turnover_to_float=Decimal("0.9"),
+        current_price=Decimal("10.2"),
+        session_vwap=Decimal("10.4"),
+    )
+    current = row(
+        "AAA",
+        6,
+        learning_updates={
+            "turnover_to_float": Decimal("1.1"),
+            "current_price": Decimal("10.6"),
+            "session_vwap": Decimal("10.4"),
+        },
+    )
+    reasons = intraday_llm_trigger_reasons(
+        current,
+        current_rank=6,
+        top_n=5,
+        previous=previous_payload("AAA", rank=6, source_learning=prior_learning),
+        previous_observed_at=OBSERVED - timedelta(minutes=1),
+        heartbeat_minutes=10,
+    )
+    assert "turnover_threshold_crossed" in reasons
+    assert "vwap_side_changed" in reasons
+
+
+def test_material_score_change_can_surface_name_outside_top_n():
+    previous = previous_payload(
+        "CCC",
+        rank=9,
+        source_learning=learning(
+            opportunity=5,
+            squeeze_probability_score=4,
+            failed_selloff_probability_score=5,
+        ),
+    )
+    current = row(
+        "CCC",
+        8,
+        opportunity=9,
+        learning_updates={
+            "squeeze_probability_score": 8,
+            "failed_selloff_probability_score": 8,
+        },
+    )
+    selected, reasons = select_intraday_llm_candidates(
+        [row("AAA", 1), current],
+        top_n=1,
+        previous_by_instrument={
+            "equity:NASDAQ:AAA": previous_payload("AAA"),
+            "equity:NASDAQ:CCC": previous,
+        },
+        previous_observed_at_by_instrument={
+            "equity:NASDAQ:AAA": OBSERVED - timedelta(minutes=1),
+            "equity:NASDAQ:CCC": OBSERVED - timedelta(minutes=1),
+        },
+        heartbeat_minutes=10,
+    )
+    assert [item[0].instrument_id for item in selected] == ["equity:NASDAQ:CCC"]
+    assert "material_score_change" in reasons["equity:NASDAQ:CCC"]
+
+
+def test_delta_payload_is_smaller_and_omits_repeated_full_feature_dump():
+    current = row(
+        "AAA",
+        1,
+        opportunity=9,
+        learning_updates={"squeeze_probability_score": 9},
+    )
+    previous = {"equity:NASDAQ:AAA": previous_payload("AAA")}
+    common = {
+        "ranks": {"equity:NASDAQ:AAA": 1},
+        "previous_by_instrument": previous,
+        "trigger_reasons_by_instrument": {
+            "equity:NASDAQ:AAA": ("material_score_change",)
+        },
+    }
+    delta = build_intraday_llm_payload(
+        [current],
+        **common,
+        payload_modes_by_instrument={"equity:NASDAQ:AAA": "delta"},
+    )
+    full = build_intraday_llm_payload(
+        [current],
+        **common,
+        payload_modes_by_instrument={"equity:NASDAQ:AAA": "full"},
+    )
+
+    delta_item = delta["candidates"][0]
+    assert "full_context" not in delta_item
+    assert "changed_since_previous_llm" in delta_item
+    assert delta_item["previous_llm_assessment"]["summary"]
+    assert "schema" not in delta
+    assert "output_fields" in delta
+    assert len(json.dumps(delta)) < len(json.dumps(full))
+    assert "deterministic_features" in full["candidates"][0]["full_context"]
+
+
+def test_full_refresh_constant_is_periodic_not_every_call():
+    assert FULL_REFRESH_MINUTES == 30
 
 
 def test_analyzer_uses_default_provider_contract_and_returns_strict_research_assessment():
@@ -197,16 +389,21 @@ def test_analyzer_uses_default_provider_contract_and_returns_strict_research_ass
     output = analyzer.assess(
         [row("AAA", 1)],
         ranks={instrument_id: 1},
+        trigger_reasons_by_instrument={instrument_id: ("initial_top_rank",)},
+        payload_modes_by_instrument={instrument_id: "full"},
     )
 
     assert output.provider == "fixture"
     assert output.model == "fixture-model"
+    assert output.input_characters > 0
     assert output.assessments[0].instrument_id == instrument_id
     assert output.assessments[0].execution_authority is False
     assert provider.messages is not None
-    assert "Never say buy, sell" in provider.messages[0].content
+    assert "Never say" in provider.messages[0].content
     user_payload = json.loads(provider.messages[1].content)
-    assert user_payload["candidates"][0]["deterministic_strategy"]["state"] == "higher_low_confirmed"
+    item = user_payload["candidates"][0]
+    assert item["current"]["deterministic_state"] == "higher_low_confirmed"
+    assert item["payload_mode"] == "full"
 
 
 def test_analyzer_fails_closed_when_provider_omits_requested_candidate():
@@ -220,7 +417,6 @@ def test_analyzer_fails_closed_when_provider_omits_requested_candidate():
         )
 
 
-
 def test_intraday_llm_requires_deterministic_learning_layer():
     with pytest.raises(ValueError, match="requires intraday learning"):
         GapPullbackConfig(
@@ -228,6 +424,11 @@ def test_intraday_llm_requires_deterministic_learning_layer():
             intraday_llm_enabled=True,
         )
 
+
+def test_default_llm_policy_reduces_top_n_and_uses_ten_minute_heartbeat():
+    config = GapPullbackConfig()
+    assert config.intraday_llm_top_n == 5
+    assert config.intraday_llm_interval_minutes == 10
 
 
 class MemoryEventRepository:
@@ -249,22 +450,33 @@ class FixtureAnalyzer:
     def __init__(self, *, fail=False):
         self.fail = fail
         self.calls = 0
+        self.last_trigger_reasons = None
+        self.last_payload_modes = None
 
-    def assess(self, rows, *, ranks, previous_by_instrument=None):
+    def assess(
+        self,
+        rows,
+        *,
+        ranks,
+        previous_by_instrument=None,
+        trigger_reasons_by_instrument=None,
+        payload_modes_by_instrument=None,
+    ):
+        del ranks, previous_by_instrument
         self.calls += 1
+        self.last_trigger_reasons = trigger_reasons_by_instrument
+        self.last_payload_modes = payload_modes_by_instrument
         if self.fail:
             raise RuntimeError("fixture provider unavailable")
-        assessments = []
-        for candidate_, *_ in rows:
-            assessments.append(
-                IntradayLLMAssessment.model_validate(
-                    assessment(candidate_.instrument_id)
-                )
-            )
+        assessments = [
+            IntradayLLMAssessment.model_validate(assessment(candidate_.instrument_id))
+            for candidate_, *_ in rows
+        ]
         return IntradayLLMResult(
             assessments=tuple(assessments),
             provider="fixture",
             model="fixture-model",
+            input_characters=800,
         )
 
 
@@ -275,7 +487,7 @@ def _llm_strategy() -> TradingStrategyConfigDocument:
         intraday_learning_enabled=True,
         intraday_llm_enabled=True,
         intraday_llm_top_n=1,
-        intraday_llm_interval_minutes=5,
+        intraday_llm_interval_minutes=10,
     )
     return TradingStrategyConfigDocument(
         strategy_id="intraday-llm-test",
@@ -299,7 +511,7 @@ def _llm_universe():
     )
 
 
-def test_monitor_persists_llm_assessment_and_uses_batch_event_as_cadence_checkpoint():
+def test_monitor_persists_event_trigger_payload_mode_and_token_estimate():
     repository = MemoryEventRepository()
     analyzer = FixtureAnalyzer()
     monitor = TradingStrategyMonitor(
@@ -326,11 +538,15 @@ def test_monitor_persists_llm_assessment_and_uses_batch_event_as_cadence_checkpo
         "intraday_llm_batch",
     ]
     llm_event = repository.events[0]
+    batch_event = repository.events[1]
     assert llm_event.payload["execution_authority"] is False
     assert llm_event.payload["assessment"]["execution_authority"] is False
+    assert llm_event.payload["trigger_reasons"] == ["initial_top_rank"]
+    assert llm_event.payload["payload_mode"] == "full"
+    assert batch_event.payload["heartbeat_minutes"] == 10
+    assert batch_event.payload["estimated_input_tokens_char4"] == 200
 
-    # Same causal minute cannot re-call the LLM because the persisted batch
-    # checkpoint is at the same observed_at.
+    # Same causal minute has neither a material change nor a heartbeat.
     asyncio.run(
         monitor._run_intraday_llm(
             _llm_strategy(),
@@ -343,7 +559,7 @@ def test_monitor_persists_llm_assessment_and_uses_batch_event_as_cadence_checkpo
     assert monitor.intraday_llm_call_count == 1
 
 
-def test_monitor_persists_failed_batch_checkpoint_to_bound_provider_retries():
+def test_monitor_failure_checkpoint_bounds_event_driven_provider_retries():
     repository = MemoryEventRepository()
     analyzer = FixtureAnalyzer(fail=True)
     monitor = TradingStrategyMonitor(
@@ -378,3 +594,34 @@ def test_monitor_persists_failed_batch_checkpoint_to_bound_provider_retries():
         )
     )
     assert analyzer.calls == 1
+
+
+def test_entry_ready_can_bypass_short_batch_cooldown():
+    repository = MemoryEventRepository()
+    failing = FixtureAnalyzer(fail=True)
+    monitor = TradingStrategyMonitor(
+        intraday_llm_analyzer_factory=lambda: failing,
+        interval_seconds=30,
+    )
+    monitor.current_run_id = "run-entry-ready"
+    asyncio.run(
+        monitor._run_intraday_llm(
+            _llm_strategy(),
+            repository,
+            _llm_universe(),
+            [row("AAA", 1)],
+        )
+    )
+    assert failing.calls == 1
+
+    succeeding = FixtureAnalyzer()
+    monitor.intraday_llm_analyzer_factory = lambda: succeeding
+    asyncio.run(
+        monitor._run_intraday_llm(
+            _llm_strategy(),
+            repository,
+            _llm_universe(),
+            [row("AAA", 1, state="entry_ready")],
+        )
+    )
+    assert succeeding.calls == 1
