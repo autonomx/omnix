@@ -186,7 +186,7 @@ def create_trading_strategy_operations_router(
                 getattr(state, "_omnix_trading_strategy_monitor", None),
                 expected_type=TradingStrategyMonitor,
                 configured_enabled=trading_strategy_monitor_enabled(),
-                counter_names=("evaluation_count", "signal_count", "paper_order_count"),
+                counter_names=("evaluation_count", "signal_count", "paper_order_count", "intraday_learning_snapshot_count"),
             ),
             deep_recovery_shadow_monitor=_monitor_status(
                 getattr(state, "_omnix_trading_strategy_deep_recovery_shadow_monitor", None),
