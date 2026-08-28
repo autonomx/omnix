@@ -1,4 +1,5 @@
 import type {
+  FinvizGapperDiscoveryInput,
   GapperUniverse,
   GapperUniverseFreezeInput,
   ProspectiveEconomicHoldoutReviewInput,
@@ -157,6 +158,10 @@ export const tradingStrategyApi = {
     ),
   discoverYahooUniverse: (input: YahooGapperDiscoveryInput) => requestJson<GapperUniverse>(
     '/api/trading/strategies/universes/discover-yahoo',
+    { method: 'POST', body: JSON.stringify(input) },
+  ),
+  discoverFinvizUniverse: (input: FinvizGapperDiscoveryInput) => requestJson<GapperUniverse>(
+    '/api/trading/strategies/universes/discover-finviz',
     { method: 'POST', body: JSON.stringify(input) },
   ),
   freezeUniverse: (input: GapperUniverseFreezeInput) =>
