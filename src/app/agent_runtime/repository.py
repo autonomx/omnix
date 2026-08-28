@@ -921,6 +921,168 @@ class PostgresAgentRunRepository:
             ),
         )
 
+    def reserve_evidence_query(
+        self,
+        run_id: str,
+        task_revision_id: str,
+        execution_key: str,
+        *,
+        max_queries: int,
+        max_sources: int,
+        max_extracts: int,
+        requested_sources: int,
+        requested_extracts: int,
+    ) -> dict[str, Any]:
+        """Atomically reserve one evidence attempt and aggregate source/extract capacity."""
+        locked = self.connection.execute(
+            """
+            SELECT revision_id
+              FROM omnix_agent_task_revisions
+             WHERE workspace_id = %s AND run_id = %s AND revision_id = %s
+             FOR UPDATE
+            """,
+            (self.context.workspace_id, run_id, task_revision_id),
+        ).fetchone()
+        if locked is None:
+            raise KeyError(task_revision_id)
+
+        existing = self.connection.execute(
+            """
+            SELECT reserved_sources, reserved_extracts, actual_sources,
+                   actual_extracts, state
+              FROM omnix_agent_evidence_query_reservations
+             WHERE workspace_id = %s AND run_id = %s
+               AND task_revision_id = %s AND execution_key = %s
+            """,
+            (
+                self.context.workspace_id,
+                run_id,
+                task_revision_id,
+                execution_key,
+            ),
+        ).fetchone()
+        if existing is not None:
+            return {
+                "allowed": True,
+                "reused": True,
+                "reserved_sources": int(existing[0] or 0),
+                "reserved_extracts": int(existing[1] or 0),
+                "actual_sources": int(existing[2] or 0),
+                "actual_extracts": int(existing[3] or 0),
+                "state": str(existing[4]),
+            }
+
+        aggregate = self.connection.execute(
+            """
+            SELECT COUNT(*),
+                   COALESCE(SUM(reserved_sources), 0),
+                   COALESCE(SUM(reserved_extracts), 0)
+              FROM omnix_agent_evidence_query_reservations
+             WHERE workspace_id = %s AND run_id = %s
+               AND task_revision_id = %s
+            """,
+            (self.context.workspace_id, run_id, task_revision_id),
+        ).fetchone()
+        queries = int(aggregate[0] or 0)
+        used_sources = int(aggregate[1] or 0)
+        used_extracts = int(aggregate[2] or 0)
+        if queries >= max_queries:
+            return {"allowed": False, "reason": "query_budget_exceeded"}
+
+        remaining_sources = max(0, max_sources - used_sources)
+        remaining_extracts = max(0, max_extracts - used_extracts)
+        sources = min(max(0, requested_sources), remaining_sources)
+        extracts = min(max(0, requested_extracts), remaining_extracts)
+        if requested_sources > 0 and sources <= 0:
+            return {"allowed": False, "reason": "source_budget_exceeded"}
+        if requested_extracts > 0 and extracts <= 0:
+            extracts = 0
+
+        self.connection.execute(
+            """
+            INSERT INTO omnix_agent_evidence_query_reservations (
+                workspace_id, run_id, task_revision_id, execution_key,
+                reserved_sources, reserved_extracts
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                self.context.workspace_id,
+                run_id,
+                task_revision_id,
+                execution_key,
+                sources,
+                extracts,
+            ),
+        )
+        return {
+            "allowed": True,
+            "reused": False,
+            "reserved_sources": sources,
+            "reserved_extracts": extracts,
+            "actual_sources": 0,
+            "actual_extracts": 0,
+            "state": "reserved",
+        }
+
+    def finish_evidence_query(
+        self,
+        run_id: str,
+        task_revision_id: str,
+        execution_key: str,
+        *,
+        actual_sources: int,
+        actual_extracts: int,
+        failed: bool,
+    ) -> None:
+        self.connection.execute(
+            """
+            UPDATE omnix_agent_evidence_query_reservations
+               SET reserved_sources = LEAST(reserved_sources, %s),
+                   reserved_extracts = LEAST(reserved_extracts, %s),
+                   actual_sources = %s,
+                   actual_extracts = %s,
+                   state = %s,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s
+               AND task_revision_id = %s AND execution_key = %s
+            """,
+            (
+                max(0, actual_sources),
+                max(0, actual_extracts),
+                max(0, actual_sources),
+                max(0, actual_extracts),
+                "failed" if failed else "completed",
+                self.context.workspace_id,
+                run_id,
+                task_revision_id,
+                execution_key,
+            ),
+        )
+
+    def reclaim_stale_read_capability_execution(
+        self,
+        run_id: str,
+        execution_key: str,
+        *,
+        stale_before: datetime,
+    ) -> bool:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_capability_executions
+               SET state = 'created', updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND execution_key = %s
+               AND state = 'running' AND updated_at <= %s
+            RETURNING execution_key
+            """,
+            (
+                self.context.workspace_id,
+                run_id,
+                execution_key,
+                stale_before,
+            ),
+        ).fetchone()
+        return row is not None
+
     def get_usage(self, run_id: str) -> dict[str, Any]:
         self.connection.execute(
             """

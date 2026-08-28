@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -251,24 +252,25 @@ def _effective_evidence_context(service, snapshot):
     return policy, revision_id, started_at, receipts
 
 
-def _bind_evidence_retrieval_budget(
+def _reserve_evidence_retrieval_budget(
+    repository: PostgresAgentRunRepository,
+    run_id: str,
     capability_id: str,
+    execution_key: str,
     request: BrokerCapabilityRequest,
     *,
     policy,
     revision_id: str | None,
     started_at,
-    receipts,
 ) -> BrokerCapabilityRequest:
     if not is_evidence_capability(capability_id):
         return request
-    retrieval = policy.retrieval
-    relevant = [receipt for receipt in receipts if receipt.task_revision_id == revision_id]
-    if len(relevant) >= retrieval.max_queries:
+    if not revision_id:
         raise HTTPException(
-            status_code=429,
-            detail="agent_evidence_retrieval_query_budget_exceeded",
+            status_code=409,
+            detail="agent_evidence_task_revision_unavailable",
         )
+    retrieval = policy.retrieval
     now = datetime.now(timezone.utc)
     if started_at is not None:
         age = (now - started_at.astimezone(timezone.utc)).total_seconds()
@@ -277,20 +279,65 @@ def _bind_evidence_retrieval_budget(
                 status_code=429,
                 detail="agent_evidence_retrieval_wall_time_exceeded",
             )
-    if capability_id != "research.web_search":
-        return request
+
     bounded = dict(request.input)
-    try:
-        requested_results = int(bounded.get("max_results", 5))
-    except (TypeError, ValueError):
-        requested_results = 5
-    try:
-        requested_extracts = int(bounded.get("max_extracts", retrieval.max_extracts))
-    except (TypeError, ValueError):
-        requested_extracts = retrieval.max_extracts
-    bounded["max_results"] = max(1, min(requested_results, retrieval.max_sources, 10))
-    bounded["max_extracts"] = max(0, min(requested_extracts, retrieval.max_extracts, 4))
+    if capability_id == "research.web_search":
+        try:
+            requested_sources = int(bounded.get("max_results", 5))
+        except (TypeError, ValueError):
+            requested_sources = 5
+        try:
+            requested_extracts = int(bounded.get("max_extracts", retrieval.max_extracts))
+        except (TypeError, ValueError):
+            requested_extracts = retrieval.max_extracts
+        requested_sources = max(1, min(requested_sources, 10))
+        requested_extracts = max(0, min(requested_extracts, 4))
+    else:
+        requested_sources = 1
+        requested_extracts = 0
+
+    reservation = repository.reserve_evidence_query(
+        run_id,
+        revision_id,
+        execution_key,
+        max_queries=retrieval.max_queries,
+        max_sources=retrieval.max_sources,
+        max_extracts=retrieval.max_extracts,
+        requested_sources=requested_sources,
+        requested_extracts=requested_extracts,
+    )
+    if not reservation.get("allowed"):
+        reason = str(reservation.get("reason") or "query_budget_exceeded")
+        detail = {
+            "query_budget_exceeded": "agent_evidence_retrieval_query_budget_exceeded",
+            "source_budget_exceeded": "agent_evidence_retrieval_source_budget_exceeded",
+        }.get(reason, "agent_evidence_retrieval_budget_exceeded")
+        raise HTTPException(status_code=429, detail=detail)
+
+    if capability_id == "research.web_search":
+        bounded["max_results"] = int(reservation["reserved_sources"])
+        bounded["max_extracts"] = int(reservation["reserved_extracts"])
     return request.model_copy(update={"input": bounded})
+
+
+def _evidence_result_usage(result_payload: dict[str, Any], *, failed: bool) -> tuple[int, int]:
+    if failed:
+        return 0, 0
+    output = result_payload.get("output")
+    output = dict(output) if isinstance(output, dict) else {}
+    diagnostics = output.get("diagnostics")
+    diagnostics = dict(diagnostics) if isinstance(diagnostics, dict) else {}
+    items = output.get("items")
+    source_count = diagnostics.get("source_count", output.get("source_count"))
+    try:
+        sources = int(source_count)
+    except (TypeError, ValueError):
+        sources = len(items) if isinstance(items, list) else 1
+    try:
+        extracts = int(diagnostics.get("extracted_pages", 0))
+    except (TypeError, ValueError):
+        extracts = 0
+    return max(0, sources), max(0, extracts)
 
 
 def _review_with_run_policy(
@@ -401,14 +448,6 @@ def execute_agent_capability(
         request,
         policy=policy,
     )
-    request = _bind_evidence_retrieval_budget(
-        canonical,
-        request,
-        policy=policy,
-        revision_id=task_revision_id,
-        started_at=evidence_started_at,
-        receipts=existing_receipts,
-    )
     if not _request_within_resource_scopes(snapshot, canonical, request.input):
         raise HTTPException(status_code=403, detail="agent_resource_scope_mismatch")
 
@@ -418,6 +457,16 @@ def execute_agent_capability(
 
     with unit_of_work(service.database) as work:
         repository = PostgresAgentRunRepository(work.connection, service.context)
+        request = _reserve_evidence_retrieval_budget(
+            repository,
+            run_id,
+            canonical,
+            execution_key,
+            request,
+            policy=policy,
+            revision_id=task_revision_id,
+            started_at=evidence_started_at,
+        )
         if request.approval_id:
             approval = repository.get_approval(run_id, request.approval_id)
             if approval is None:
@@ -443,11 +492,33 @@ def execute_agent_capability(
             work.rollback()
             return _stored_response(canonical, execution_key, stored)
         if stored["state"] == "running":
-            work.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail="agent_execution_outcome_unknown_or_in_progress",
-            )
+            reclaimed = False
+            if capability.effect == "read":
+                try:
+                    retry_after = max(
+                        1,
+                        int(os.environ.get("OMNIX_AGENT_READ_RETRY_AFTER_SECONDS", "30")),
+                    )
+                except ValueError:
+                    retry_after = 30
+                reclaimed = repository.reclaim_stale_read_capability_execution(
+                    run_id,
+                    execution_key,
+                    stale_before=datetime.now(timezone.utc) - timedelta(seconds=retry_after),
+                )
+                if reclaimed:
+                    stored = repository.ensure_capability_execution(
+                        run_id,
+                        execution_key,
+                        canonical,
+                        {"input": request.input, "approval_id": request.approval_id},
+                    )
+            if not reclaimed:
+                work.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail="agent_execution_outcome_unknown_or_in_progress",
+                )
 
         if approval is not None and approval.state == "rejected":
             repository.finish_capability_execution(
@@ -553,6 +624,19 @@ def execute_agent_capability(
             error=result.error,
             state_changed=result.state_changed,
         )
+        if task_revision_id and is_evidence_capability(canonical):
+            actual_sources, actual_extracts = _evidence_result_usage(
+                result_payload,
+                failed=result.error is not None,
+            )
+            repository.finish_evidence_query(
+                run_id,
+                task_revision_id,
+                execution_key,
+                actual_sources=actual_sources,
+                actual_extracts=actual_extracts,
+                failed=result.error is not None,
+            )
         receipt = build_evidence_receipt(
             run_id=run_id,
             task_revision_id=task_revision_id,
