@@ -184,6 +184,10 @@ function universeImport(raw: string, fallbackUniverseId: string | null): GapperU
     session_date: typeof object.session_date === 'string' ? object.session_date : today,
     evaluation_time: typeof object.evaluation_time === 'string' ? object.evaluation_time : now.toISOString(),
     discovery_source: discovery as GapperUniverseFreezeInput['discovery_source'],
+    source_locator: typeof object.source_locator === 'string' ? object.source_locator : null,
+    source_candidate_symbols: Array.isArray(object.source_candidate_symbols)
+      ? object.source_candidate_symbols.map((item) => String(item))
+      : [],
     candidates: object.candidates as GapperCandidate[],
   };
 }
