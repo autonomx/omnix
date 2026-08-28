@@ -78,7 +78,11 @@ def test_initial_prompt_names_governed_external_capabilities() -> None:
 
 def test_runtime_marks_steering_as_scope_superseding() -> None:
     received: list[str] = []
-    session = type("Session", (), {"steer": lambda _self, message: received.append(message)})()
+    session = type(
+        "Session",
+        (),
+        {"steer": lambda _self, message, **_kwargs: received.append(message)},
+    )()
     spec = AgentRunSpec(
         run_id="run-steer",
         task="Review routing",

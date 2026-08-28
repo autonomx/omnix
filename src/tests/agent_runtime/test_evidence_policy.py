@@ -482,9 +482,9 @@ def test_revision_filters_do_not_reuse_prior_tool_or_evidence_rows() -> None:
         revision,
     ) == [current_artifact]
 
-    prior_receipt = _receipt()
+    prior_receipt = _receipt(source_class="general_current_web")
     prior_receipt = prior_receipt.model_copy(update={"task_revision_id": "rev-old"})
-    current_receipt = _receipt()
+    current_receipt = _receipt(source_class="general_current_web")
     current_receipt = current_receipt.model_copy(update={"task_revision_id": revision.revision_id})
     assert AgentRunService._receipts_for_revision(
         [prior_receipt, current_receipt],
@@ -588,12 +588,12 @@ def test_low_confidence_semantic_none_gets_conservative_current_floor() -> None:
         classifier="semantic",
     )
     decision = classify_evidence(
-        "Investigate what is happening with my inbox",
-        profile_id="personal-assistant",
+        "Investigate GME momentum",
+        profile_id="trading-research",
         semantic_adviser=lambda _task, _profile: advised,
     )
     assert decision.policy.requirement == "required"
-    assert decision.policy.requirements[0].source_class == "email_state"
+    assert decision.policy.requirements[0].source_class == "market_news"
     assert decision.classifier == "conservative"
 
 
@@ -626,7 +626,7 @@ def test_as_of_date_requires_source_timestamp_and_enforces_boundary() -> None:
 
 
 def test_current_semantic_source_without_freshness_policy_fails_compilation(monkeypatch) -> None:
-    monkeypatch.setitem(DEFAULT_FRESHNESS_SECONDS, "temporary_source", None)
+    monkeypatch.setitem(DEFAULT_FRESHNESS_SECONDS, "general_current_web", None)
     requirement = EvidenceRequirement(
         id="current-no-age",
         source_class="general_current_web",

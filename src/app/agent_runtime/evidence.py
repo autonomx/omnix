@@ -356,7 +356,8 @@ def classify_evidence(
     attribution = "required" if re.search(r"\b(?:sourced|with sources|cite sources|citations)\b", text, re.I) else "when_used"
     requirements: list[EvidenceRequirement] = []
 
-    if _MARKET.search(text) and _QUOTE.search(text):
+    market_signal = bool(_MARKET.search(text) or _extract_ticker(text))
+    if market_signal and _QUOTE.search(text):
         requirements.append(_requirement(text, "market_quote", trust="authoritative"))
     elif _CI.search(text):
         requirements.append(_requirement(text, "repo_ci_state", trust="authoritative"))
@@ -375,7 +376,7 @@ def classify_evidence(
         requirements.append(_requirement(text, "repo_contents", trust="authoritative"))
     elif _RELEASE.search(text) and _CURRENT.search(text):
         requirements.append(_requirement(text, "software_release", trust="primary", fallback="allow_fallback"))
-    elif _MARKET.search(text) and (_CURRENT.search(text) or _SOURCE_REQUEST.search(text)):
+    elif market_signal and (_CURRENT.search(text) or _SOURCE_REQUEST.search(text)):
         requirements.append(_requirement(text, "market_news", trust="reputable", fallback="allow_fallback"))
     elif _CURRENT.search(text):
         requirements.append(_requirement(text, "general_current_web", trust="reputable", fallback="allow_fallback"))
@@ -414,7 +415,7 @@ def classify_evidence(
     adviser = semantic_adviser or _semantic_evidence_adviser
     advised = adviser(text, profile_id)
     potentially_current = profile_id in {"trading-research", "house", "personal-assistant"} and bool(
-        _MARKET.search(text) or _HOME.search(text) or _CALENDAR.search(text) or _EMAIL.search(text)
+        market_signal or _HOME.search(text) or _CALENDAR.search(text) or _EMAIL.search(text)
     )
     if advised is not None:
         advised_policy = advised.policy.model_copy(
@@ -435,7 +436,7 @@ def classify_evidence(
             and advised_policy.requirement != "required"
         ):
             source = (
-                "market_news" if _MARKET.search(text)
+                "market_news" if market_signal
                 else "home_state" if _HOME.search(text)
                 else "calendar_state" if _CALENDAR.search(text)
                 else "email_state"
@@ -461,7 +462,7 @@ def classify_evidence(
 
     if potentially_current:
         source = (
-            "market_news" if _MARKET.search(text)
+            "market_news" if market_signal
             else "home_state" if _HOME.search(text)
             else "calendar_state" if _CALENDAR.search(text)
             else "email_state"
@@ -671,12 +672,18 @@ def compile_evidence(profile: AgentProfile, decision: EvidenceDecision) -> Compi
     required_external: list[str] = []
     required_local: list[str] = []
     if policy.requirement == "required":
-        for requirement in policy.requirements:
+        for original_requirement in policy.requirements:
+            requirement = original_requirement
             if requirement.freshness == "current" and requirement.max_age_seconds is None:
-                raise EvidenceCompilationError(
-                    "freshness_policy_unsatisfiable",
-                    f"current evidence source {requirement.source_class} has no maximum age",
-                    requirement_id=requirement.id,
+                configured_age = freshness_max_age_seconds(requirement.source_class)
+                if configured_age is None:
+                    raise EvidenceCompilationError(
+                        "freshness_policy_unsatisfiable",
+                        f"current evidence source {requirement.source_class} has no maximum age",
+                        requirement_id=requirement.id,
+                    )
+                requirement = requirement.model_copy(
+                    update={"max_age_seconds": configured_age}
                 )
             if requirement.freshness == "as_of_date" and requirement.as_of_date is None:
                 raise EvidenceCompilationError(
