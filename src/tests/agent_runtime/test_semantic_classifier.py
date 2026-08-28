@@ -160,6 +160,90 @@ def test_provider_semantic_classifier_uses_typed_structured_contract() -> None:
     assert len(provider.calls) == 1
 
 
+def test_provider_semantic_classifier_repairs_common_codex_contract_drift() -> None:
+    provider = _StructuredFakeProvider(
+        {
+            "contract_id": "agent_runtime.semantic_intent",
+            "contract_version": 1,
+            "lane": "agent",
+            "profile_id": None,
+            "primary_intent": "repair_ci",
+            "action_intents": [
+                "workspace_read",
+                "workspace_execute",
+                "workspace_mutate",
+                "made_up_action",
+            ],
+            "evidence_requirements": [
+                "repo_ci_state",
+                {
+                    "source_class": "repo_contents",
+                    "freshness": "current",
+                    "reason": "extra model commentary",
+                },
+                {"source_class": "contacts_state"},
+            ],
+            "subject_hints": "current repository",
+            "multi_step": False,
+            "confidence": 0.99,
+            "reason": "Inspect CI, diagnose it, and fix the repository.",
+        }
+    )
+    classifier = ProviderSemanticIntentClassifier(
+        provider,
+        model="fake-model",
+        timeout_seconds=2,
+    )
+
+    decision = classifier.classify(
+        "CI is red. inspect what's failing, diagnose it, and fix the repo."
+    )
+
+    assert decision.lane == "agent"
+    assert decision.profile_id == "coding"
+    assert decision.multi_step is True
+    assert set(decision.action_intents) == {
+        "workspace_read",
+        "workspace_execute",
+        "workspace_mutate",
+    }
+    assert {
+        row.source_class for row in decision.evidence_requirements
+    } == {"repo_ci_state", "repo_contents"}
+    assert decision.subject_hints == ["current repository"]
+
+
+def test_semantic_contract_unwraps_nested_object_and_defaults_missing_lane() -> None:
+    decision = SemanticIntentDecision.model_validate(
+        {
+            "primary_intent": {
+                "profile_id": None,
+                "primary_intent": "explain_stock_split",
+                "action_intents": [],
+                "evidence_requirements": [],
+                "confidence": 0.98,
+            },
+            "contract_version": "agent_runtime_semantic_intent_v1",
+            "reason": "The user is asking for a timeless conceptual explanation.",
+        }
+    )
+
+    assert decision.lane == "chat"
+    assert decision.profile_id == "research"
+    assert decision.primary_intent == "explain_stock_split"
+    assert decision.action_intents == []
+    assert decision.evidence_requirements == []
+
+
+def test_single_quoted_command_example_is_not_routed_direct() -> None:
+    decision = route_omnix_request(
+        "here's a sentence: 'turn off the kitchen light'. can you explain its grammar?"
+    )
+
+    assert decision.lane == "chat"
+    assert decision.capability_id is None
+
+
 def test_semantic_classifier_can_upgrade_arbitrary_language_to_agent() -> None:
     prompt = "could you make this behave better whenever the cache starts cold?"
     deterministic = route_omnix_request(prompt)
