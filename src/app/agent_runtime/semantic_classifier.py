@@ -252,6 +252,35 @@ def classify_semantic_intent_safely(
         return None
 
 
+def semantic_profile_id(
+    content: str,
+    semantic: SemanticIntentDecision | None,
+) -> str:
+    """Resolve a semantic profile proposal with deterministic action precedence."""
+
+    from .profiles import select_agent_profile_id
+
+    if semantic is None or semantic.confidence < semantic_confidence_threshold():
+        return select_agent_profile_id(content)
+    actions = {str(value) for value in semantic.action_intents}
+    if actions & {"workspace_read", "workspace_execute", "workspace_mutate"}:
+        return "coding"
+    if actions & {"home_read", "home_mutate"}:
+        return "house"
+    if actions & {
+        "email_read",
+        "email_draft",
+        "email_send",
+        "calendar_read",
+        "calendar_create",
+        "contacts_read",
+    }:
+        return "personal-assistant"
+    if "market_read" in actions:
+        return "trading-research"
+    return semantic.profile_id
+
+
 def semantic_confidence_threshold() -> float:
     raw = str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MIN_CONFIDENCE", "0.60") or "0.60")
     try:
@@ -269,4 +298,5 @@ __all__ = [
     "classify_semantic_intent_safely",
     "default_semantic_intent_classifier",
     "semantic_confidence_threshold",
+    "semantic_profile_id",
 ]
