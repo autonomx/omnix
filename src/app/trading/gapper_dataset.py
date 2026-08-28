@@ -166,10 +166,13 @@ def gapper_universe_fingerprint(
         "session_date": session_date.isoformat(),
         "evaluation_time": evaluation_time.astimezone(timezone.utc).isoformat(),
         "discovery_source": discovery_source,
-        "source_locator": source_locator,
-        "source_candidate_symbols": list(source_candidate_symbols),
         "candidates": [candidate.model_dump(mode="json") for candidate in ordered],
     }
+    # Keep fingerprints for pre-0049 universes stable. Discovery provenance only
+    # participates in the fingerprint when it was actually captured.
+    if source_locator is not None or source_candidate_symbols:
+        payload["source_locator"] = source_locator
+        payload["source_candidate_symbols"] = list(source_candidate_symbols)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
