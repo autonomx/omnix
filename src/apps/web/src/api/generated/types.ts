@@ -5284,6 +5284,21 @@ export interface components {
              */
             intraday_learning_enabled: boolean;
             /**
+             * Intraday Llm Enabled
+             * @default false
+             */
+            intraday_llm_enabled: boolean;
+            /**
+             * Intraday Llm Interval Minutes
+             * @default 5
+             */
+            intraday_llm_interval_minutes: number;
+            /**
+             * Intraday Llm Top N
+             * @default 8
+             */
+            intraday_llm_top_n: number;
+            /**
              * Last Entry Et
              * Format: time
              * @default 11:30:00
@@ -5557,6 +5572,21 @@ export interface components {
              * @default false
              */
             intraday_learning_enabled: boolean;
+            /**
+             * Intraday Llm Enabled
+             * @default false
+             */
+            intraday_llm_enabled: boolean;
+            /**
+             * Intraday Llm Interval Minutes
+             * @default 5
+             */
+            intraday_llm_interval_minutes: number;
+            /**
+             * Intraday Llm Top N
+             * @default 8
+             */
+            intraday_llm_top_n: number;
             /**
              * Last Entry Et
              * Format: time
