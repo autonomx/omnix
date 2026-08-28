@@ -314,8 +314,15 @@ class AgentRunService:
             for group in compiled.external_groups
             if issued.intersection(group)
         )
+        grouped_evidence_caps = {
+            cap
+            for group in compiled.external_groups
+            for cap in group
+        }
         evidence_caps = tuple(
-            cap for cap in compiled.required_external if cap in issued
+            cap
+            for cap in compiled.required_external
+            if cap in issued and cap in grouped_evidence_caps
         )
         validate_required_evidence_capabilities(
             evidence_caps,
