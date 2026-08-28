@@ -68,24 +68,25 @@ _EMAIL_SEND = re.compile(r"\b(?:send|reply|forward)\b.{0,80}\b(?:email|gmail|mes
 _EMAIL_DRAFT = re.compile(r"\b(?:draft|compose|write)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
 _CALENDAR_CREATE = re.compile(r"\b(?:schedule|create|book|add)\b.{0,80}\b(?:meeting|appointment|calendar event)\b", re.I)
 _WORKSPACE_MUTATION_FORBIDDEN = re.compile(
-    r"\b(?:do not|don't|never)\b.{0,80}\b(?:edit|modify|write|change|patch|update|create|delete|remove)\b|"
+    r"\b(?:do not|don't|never)\s+(?:(?:please|make\s+any)\s+)?"
+    r"(?:edit|modify|write|change|patch|update|create|delete|remove|changes?)\b|"
     r"\b(?:without changing|read[- ]only|no changes?)\b",
     re.I,
 )
 _HOME_MUTATION_FORBIDDEN = re.compile(
-    r"\b(?:do not|don't|never)\b.{0,80}\b(?:turn|set|adjust|lower|raise|apply)\b",
+    r"\b(?:do not|don't|never)\s+(?:please\s+)?(?:turn|set|adjust|lower|raise|apply)\b",
     re.I,
 )
 _EMAIL_SEND_FORBIDDEN = re.compile(
-    r"\b(?:do not|don't|never)\b.{0,80}\b(?:send|reply|forward)\b",
+    r"\b(?:do not|don't|never)\s+(?:please\s+)?(?:send|reply|forward)\b",
     re.I,
 )
 _EMAIL_DRAFT_FORBIDDEN = re.compile(
-    r"\b(?:do not|don't|never)\b.{0,80}\b(?:draft|compose|write)\b.{0,80}\b(?:email|gmail|message)\b",
+    r"\b(?:do not|don't|never)\s+(?:please\s+)?(?:draft|compose|write)\b",
     re.I,
 )
 _CALENDAR_CREATE_FORBIDDEN = re.compile(
-    r"\b(?:do not|don't|never)\b.{0,80}\b(?:schedule|create|book|add)\b.{0,80}\b(?:meeting|appointment|event)\b",
+    r"\b(?:do not|don't|never)\s+(?:please\s+)?(?:schedule|create|book|add)\b",
     re.I,
 )
 _CONCEPTUAL = re.compile(r"^(?:what is|what are|explain|describe|teach me|how does|why does|compare)\b", re.I)
