@@ -153,9 +153,18 @@ Legacy scanner limits remain:
 
 Cancel scans that exceed provider policy or operational expectations. Do not broaden the legacy scanner universe dynamically beyond the stored allowlist.
 
-Gap-pullback discovery is a separate point-in-time flow. `POST /api/trading/strategies/universes/discover-yahoo` obtains the **current** Yahoo top-gainer research set and freezes it immediately. It intentionally refuses historical screener reconstruction. Each provider/scanner candidate requires an observation timestamp, and field-level evidence timestamps later than the universe freeze are rejected.
+Gap-pullback discovery is a separate point-in-time flow. Two current-only discovery adapters are available:
+
+- `POST /api/trading/strategies/universes/discover-finviz` uses Finviz Top Gainers only to establish the ordered source cohort, then independently enriches prices/volume/instrument identity from Yahoo before freezing the universe.
+- `POST /api/trading/strategies/universes/discover-yahoo` retains the legacy Yahoo Day Gainers discovery path.
+
+Neither adapter reconstructs a historical screener later. Each provider/scanner candidate requires an observation timestamp, and field-level evidence timestamps later than the universe freeze are rejected. Finviz archives additionally retain the source locator plus the exact ordered source-symbol cohort so missing enrichment cannot silently erase the original discovery population.
+
+`GapPullbackConfig.universe_discovery_source` selects the automatic morning archive source. Finviz is recommended for the microcap/top-gainer research experiment; Yahoo remains available for legacy/canonical V2 qualification and fallback research.
 
 Time-of-day RVOL compares current cumulative volume with prior sessions truncated at the same New York clock minute. Missing secondary evidence remains explicit rather than causing the candidate to disappear from the denominator.
+
+When `intraday_learning_enabled=true`, the deterministic strategy monitor also writes research-only `intraday_learning` snapshots from finalized one-minute regular-session bars. The snapshots dynamically rank the frozen morning cohort across independent squeeze, failed-selloff, trend, gap-hold and risk dimensions. These events always carry `execution_authority=false` and cannot replace deterministic `entry_ready`, server risk, or Alpaca IEX execution eligibility.
 
 ## Paper simulation operations
 
@@ -180,7 +189,7 @@ The thesis is **buy the first failed sell-off**, not the first sell-off. `gap_pu
 
 Operational sequence:
 
-1. Before trading, freeze a point-in-time daily gapper universe through the Yahoo discovery API or **Trading → Strategies → Freeze point-in-time gapper universe**. Preserve every candidate captured at that time, including eventual fades/failures.
+1. Before trading, freeze a point-in-time daily gapper universe through the configured Finviz/Yahoo discovery API or **Trading → Strategies → Freeze point-in-time gapper universe**. Preserve every candidate captured at that time, including eventual fades/failures. Finviz learning experiments preserve the raw ordered source cohort separately from the enriched/qualified candidate subset.
 2. Candidate evidence should include previous close, premarket/current price and gap, premarket volume/dollar volume, time-of-day RVOL, spread when available, market cap/float when available, catalyst evidence IDs, dilution flags, discovery rank, and observation timestamps when provider/scanner sourced.
 3. Any referenced catalyst evidence must have both publication and capture timestamps no later than the universe evaluation time.
 4. Start new configurations in `shadow`. Inspect candidate state/reason codes and rejected candidates before enabling `auto_paper`.
