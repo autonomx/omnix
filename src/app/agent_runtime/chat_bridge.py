@@ -90,6 +90,11 @@ _PUBLICATION_REQUEST = re.compile(
     r"\b(?:git\s+push|push\s+(?:the\s+)?(?:current\s+)?branch|open\s+(?:a\s+)?pull\s+request|create\s+(?:a\s+)?pull\s+request)\b",
     re.I,
 )
+_CLASSIFIER_STEERING = re.compile(
+    r"(?:\b(?:ignore|disregard|override)\b.{0,100}\b(?:classifier|routing|router|rules?)\b|"
+    r"\b(?:label|classify|route)\s+(?:this|it)\s+(?:as\s+)?(?:chat|agent)\b)",
+    re.I,
+)
 _SEMANTIC_AUTO = object()
 
 
@@ -185,6 +190,18 @@ def _apply_semantic_route_decision(
         and _negated_action_allows_semantic_agent(content, semantic)
     ):
         return deterministic
+    if (
+        content is not None
+        and deterministic.lane == "agent"
+        and semantic.lane == "chat"
+        and _CLASSIFIER_STEERING.search(content)
+    ):
+        return deterministic.model_copy(
+            update={
+                "reason": f"{deterministic.reason}+classifier_steering_ignored"[:240],
+                "hermes_recommended": deterministic.hermes_recommended or semantic.multi_step,
+            }
+        )
     if deterministic.explicit:
         return deterministic.model_copy(
             update={
