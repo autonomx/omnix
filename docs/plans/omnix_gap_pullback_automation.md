@@ -56,14 +56,14 @@ There is no live-broker mode. AI catalyst classification and statistical model s
 
 The Strategies UI exposes the complete daily workflow as six visible phases rather than hiding automation behind one on/off switch:
 
-1. **Scan & freeze** — perform current-only Yahoo gapper discovery and freeze the raw point-in-time candidate population, including eventual fades/failures.
+1. **Scan & freeze** — perform current-only configured gapper discovery. Finviz Top Gainers is supported as a source-ranked morning cohort with independent Yahoo enrichment; legacy Yahoo Day Gainers remains available. Freeze the raw point-in-time population, including eventual fades/failures.
 2. **Research & narrow** — collect timestamped catalyst evidence, inspect float/liquidity/spread/supply flags, supplement Yahoo headline evidence with SEC/company evidence when available, and explicitly select candidates to retain.
 3. **LLM research** — optionally classify only the stored evidence. Results are cited, persisted as research events and remain shadow-only.
 4. **Deterministic setup** — monitor the failed-selloff state machine and expose each candidate's current state/reason, including volume contraction, L1/B1/L2, VWAP, breakout and hold confirmation.
 5. **Daily selection** — only candidates that pass all mandatory hard gates and the configured quality threshold can reach `entry_ready`; the operator can freeze a smaller daily universe before arming automation.
 6. **AUTO PAPER** — apply server risk, authoritative Alpaca IEX execution evidence, deterministic paper fills, persisted protection and end-of-day flattening.
 
-The candidate workbench shows gap, price, TOD RVOL, dollar volume, float, spread, catalyst evidence count, deterministic supply flags, LLM research result, latest deterministic state/reason and quality score. The current universe JSON remains inspectable for provenance and external evidence integration.
+The candidate workbench shows gap, price, TOD RVOL, dollar volume, float, spread, catalyst evidence count, deterministic supply flags, LLM research result, latest deterministic state/reason and quality score. For configurations with intraday learning enabled it also shows the latest research-only dynamic rank/pattern plus squeeze, failed-selloff, trend and gap-retention scores. The current universe JSON remains inspectable for provenance and external evidence integration.
 
 ## Point-in-time catalyst research
 
@@ -273,3 +273,15 @@ Final roadmap hardening makes the following contracts release requirements rathe
 - **Risk history:** equity/risk snapshots are emitted when protection state or stop levels change, not only when balances/positions mutate.
 
 The paper strategy dashboard is therefore an evidence console for prospective promotion and implementation-loss measurement; it is not a generic brokerage performance screen and historical/reconstructed results remain research evidence rather than a profitability guarantee.
+
+
+## Finviz intraday learning extension
+
+The Finviz learning loop is documented in `docs/trading/FINVIZ_INTRADAY_LEARNING_LOOP.md`.
+
+It is an observational layer over the frozen morning population:
+
+- the source cohort is captured once before the open rather than re-scraped after winners emerge;
+- every finalized one-minute regular-session prefix can update research-only dynamic scores;
+- learning events do not alter deterministic strategy state or authorize orders;
+- the canonical Yahoo-backed V2 qualification fingerprint remains isolated from a Finviz V2 learning experiment, so historical Yahoo evidence cannot promote the new cohort.
