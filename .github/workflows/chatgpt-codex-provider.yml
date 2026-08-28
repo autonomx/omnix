@@ -11,6 +11,7 @@ on:
       - "src/app/gateway/main.py"
       - "src/app/shared.py"
       - "src/app/providers/chatgpt_codex_provider.py"
+      - "src/app/providers/structured/**"
       - "src/app/providers/registry.py"
       - "src/app/providers/facade.py"
       - "src/app/providers/__init__.py"
