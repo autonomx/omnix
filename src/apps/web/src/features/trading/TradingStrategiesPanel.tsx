@@ -73,7 +73,7 @@ const frozenV2Config = (): GapPullbackConfig => ({
   structure_interval: '1m',
   execution_interval: '1m',
   universe_scan_time_et: '09:20:00',
-  universe_discovery_source: 'finviz',
+  universe_discovery_source: 'yahoo',
   auto_archive_daily_universe: true,
   universe_archive_grace_minutes: 10,
   universe_discovery_count: 50,
@@ -119,6 +119,12 @@ const frozenV2Config = (): GapPullbackConfig => ({
   exit_rsi_threshold: '50',
   entry_start_et: '09:35:00',
   last_entry_et: '11:30:00',
+  intraday_learning_enabled: false,
+});
+
+const finvizLearningV2Config = (): GapPullbackConfig => ({
+  ...frozenV2Config(),
+  universe_discovery_source: 'finviz',
   intraday_learning_enabled: true,
 });
 
@@ -419,6 +425,20 @@ export function TradingStrategiesPanel() {
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
     setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode and cleared any selected universe so qualification uses the strategy-owned raw morning archive. Structure: 1m L1→B1→higher-L2, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Evidence is mixed: the 58-session revealed sample was positive, the April/May frozen block produced only two positive trades, and the older March/April stress block produced 5 trades at -0.546R expectancy. Keep 2.0 in prospective SHADOW until captured live evidence is reviewed; do not promote from historical reconstruction alone.');
+  };
+
+  const loadFinvizLearningV2 = () => {
+    if (!draft) return;
+    const config = finvizLearningV2Config();
+    setDraft({
+      ...draft,
+      strategy_version: '2.0.0',
+      mode: 'shadow',
+      active_universe_id: null,
+      config,
+      risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
+    });
+    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. The 09:20 ET Finviz Top Gainers cohort is frozen automatically, then every finalized 1-minute bar produces research-only dynamic scores/ranks. This non-canonical cohort cannot inherit the frozen Yahoo V2 AUTO PAPER qualification.');
   };
 
   const reviewV2Qualification = async () => {
@@ -761,6 +781,7 @@ export function TradingStrategiesPanel() {
                 {draft.config.strategy_version === '1.0.0' ? <button type="button" onClick={upgradeToStrictV11}>Load v1.1 baseline</button> : null}
                 {draft.config.strategy_version === '1.1.0' && htrPromotionAllowed ? <button type="button" onClick={loadReviewedV12}>Load reviewed HTR v1.2</button> : null}
                 <button type="button" onClick={loadFrozenV2}>{draft.config.strategy_version === '2.0.0' ? 'Reload frozen V11 v2' : 'Load frozen V11 v2 shadow'}</button>
+                <button type="button" onClick={loadFinvizLearningV2}>Load Finviz learning V2</button>
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
                 {strategies.some((item) => item.strategy_id === draft.strategy_id) && !draft.archived_at ? <button type="button" className="danger" onClick={() => void archiveStrategy()} disabled={status === 'saving'}>Archive</button> : null}
                 <button type="button" className="primary" onClick={() => void save()} disabled={status === 'saving' || Boolean(draft.archived_at)}>{status === 'saving' ? 'Saving…' : draft.archived_at ? 'Archived' : 'Save strategy'}</button>
