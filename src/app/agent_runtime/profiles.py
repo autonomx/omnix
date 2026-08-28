@@ -1,6 +1,8 @@
 """Built-in profiles compiled into immutable RunSpec authority."""
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -82,3 +84,33 @@ def resolve_profile_capabilities(profile: AgentProfile, *, requested: list[str] 
     if not set(external).issubset(external_allowed):
         raise ValueError("requested external capabilities exceed selected profile")
     return local, external
+
+
+_CODE_INTENT = re.compile(
+    r"(?:\b(?:code|repo(?:sitory)?|branch|pull request|bug(?:s)?|test(?:s|ing)?|pytest|vitest|"
+    r"refactor(?:ing)?|implement(?:ation|ing)?|fix(?:es|ing)?|debugg?(?:ing)?|edit(?:ing)?|"
+    r"modify|patch|workspace|file(?:s)?|module|function|class)\b|"
+    r"\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b)",
+    re.I,
+)
+_HOME_INTENT = re.compile(r"\b(?:kasa|smart\s+plugs?|plugs?|outlets?|lamps?|lights?|thermostats?|home)\b", re.I)
+_PERSONAL_INTENT = re.compile(r"\b(?:gmail|emails?|calendars?|meetings?|contacts?|appointments?|schedules?)\b", re.I)
+_TRADING_INTENT = re.compile(
+    r"\b(?:stocks?|trading|trades?|tickers?|markets?|shares?|equities|gainers?|losers?|"
+    r"orders?|positions?|buy|sell|purchase|short|cover|nvda|gme|tsla)\b",
+    re.I,
+)
+
+
+def select_agent_profile_id(content: str) -> str:
+    """Shared deterministic profile precedence used by Chat and steering."""
+    text = str(content or "")
+    if _CODE_INTENT.search(text):
+        return "coding"
+    if _HOME_INTENT.search(text):
+        return "house"
+    if _PERSONAL_INTENT.search(text):
+        return "personal-assistant"
+    if _TRADING_INTENT.search(text):
+        return "trading-research"
+    return "research"

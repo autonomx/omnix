@@ -39,6 +39,14 @@ _CALENDAR = re.compile(r"\b(?:calendar|meeting|appointment|schedule)\b", re.I)
 _EMAIL = re.compile(r"\b(?:gmail|email|inbox|message)\b", re.I)
 _FILINGS = re.compile(r"\b(?:10-k|10-q|8-k|sec filing|company filing|filings)\b", re.I)
 _RELEASE = re.compile(r"\b(?:release|version|changelog|released)\b", re.I)
+_WORKSPACE_MUTATION = re.compile(
+    r"\b(?:implement|fix|refactor|edit|modify|patch|write|change|update|create|delete|remove)\b",
+    re.I,
+)
+_HOME_MUTATION = re.compile(r"\b(?:turn|set|adjust|lower|raise|prepare|apply)\b", re.I)
+_EMAIL_SEND = re.compile(r"\b(?:send|reply|forward)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
+_EMAIL_DRAFT = re.compile(r"\b(?:draft|compose|write)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
+_CALENDAR_CREATE = re.compile(r"\b(?:schedule|create|book|add)\b.{0,80}\b(?:meeting|appointment|calendar event)\b", re.I)
 _CONCEPTUAL = re.compile(r"^(?:what is|what are|explain|describe|teach me|how does|why does|compare)\b", re.I)
 _TICKER = re.compile(r"(?:\$([A-Z]{1,5})\b|\b(NVDA|GME|TSLA)\b)")
 _PR = re.compile(r"\bPR\s*#?(\d+)\b", re.I)
@@ -298,6 +306,50 @@ def capability_for_requirement(requirement: EvidenceRequirement) -> tuple[str, s
         "evidence_required_but_unavailable",
         f"no capability mapping exists for evidence source {requirement.source_class}",
         requirement_id=requirement.id,
+    )
+
+
+def task_requires_workspace_mutation(task: str) -> bool:
+    text = str(task or "")
+    if re.search(r"\b(?:do not|don't|just explain|explain only|without changing)\b", text, re.I):
+        return False
+    return bool(_WORKSPACE_MUTATION.search(text))
+
+
+def compile_task_authority(
+    profile: AgentProfile,
+    task: str,
+    decision: EvidenceDecision,
+) -> CompiledEvidence:
+    """Compile minimum task authority while preserving the profile as ceiling.
+
+    Local coding authority is intentionally kept coarse in this phase; external
+    authority is minimized task-by-task.
+    """
+    evidence = compile_evidence(profile, decision)
+    local = list(profile.capabilities)
+    external = list(evidence.required_external)
+    text = str(task or "")
+    if profile.id == "house" and _HOME_MUTATION.search(text):
+        external.append("home.set_state")
+    elif profile.id == "personal-assistant":
+        if _EMAIL_SEND.search(text):
+            external.append("gmail.send_email")
+        elif _EMAIL_DRAFT.search(text):
+            external.append("gmail.create_draft")
+        if _CALENDAR_CREATE.search(text):
+            external.append("calendar.create_event")
+    ceiling = profile_external_ceiling(profile)
+    outside = [cap for cap in external if cap not in ceiling]
+    if outside:
+        raise EvidenceCompilationError(
+            "required_source_outside_profile_ceiling",
+            f"required capabilities outside profile {profile.id}: {', '.join(outside)}",
+        )
+    return CompiledEvidence(
+        decision=decision,
+        required_local=tuple(dict.fromkeys(local)),
+        required_external=tuple(dict.fromkeys(external)),
     )
 
 

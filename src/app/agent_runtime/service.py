@@ -16,8 +16,26 @@ from app.persistence.unit_of_work import unit_of_work
 from app.assistant_tools.repo_adapter import _github_repository_from_remote
 
 from .acceptance import evaluate_acceptance
+from .evidence import (
+    EvidenceCompilationError,
+    classify_evidence,
+    compile_task_authority,
+    revise_objective,
+    task_requires_workspace_mutation,
+)
+from .profiles import get_agent_profile, select_agent_profile_id
 from .budget import AgentBudgetError, AgentBudgetManager
-from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ResourceScope
+from .contracts import (
+    AgentArtifact,
+    AgentEvent,
+    AgentRunCommand,
+    AgentRunSnapshot,
+    AgentRunSpec,
+    EvidenceDecision,
+    ResourceScope,
+    SuccessCriterion,
+    TaskRevision,
+)
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
 from .workspace import WorkspaceAuthority
@@ -48,6 +66,7 @@ class AgentRunService:
 
     def start(self, spec: AgentRunSpec) -> AgentRunSnapshot:
         self._ensure_supervisor()
+        self._validate_evidence_authority(spec)
         issued = self._prepare_workspace(self._bind_github_repository_authority(spec))
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -144,6 +163,32 @@ class AgentRunService:
 
     def command(self, command: AgentRunCommand) -> AgentRunSnapshot:
         self._ensure_supervisor()
+        if command.command_type == "steer":
+            current = self.get(command.run_id)
+            if current is None:
+                raise KeyError(command.run_id)
+            steering = self._compile_steering(current, command)
+            if steering["superseding_spec"] is not None:
+                replacement = self.start(steering["superseding_spec"])
+                with unit_of_work(self.database) as work:
+                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                    repository.mark_superseded(current.run_id, replacement.run_id)
+                    work.commit()
+                self.runtime.close_run(current.run_id)
+                return replacement
+            revision = steering["revision"]
+            with unit_of_work(self.database) as work:
+                repository = PostgresAgentRunRepository(work.connection, self.context)
+                repository.add_task_revision(revision)
+                work.commit()
+            command = command.model_copy(update={
+                "payload": {
+                    **command.payload,
+                    "task_revision_id": revision.revision_id,
+                    "effective_objective": revision.effective_objective,
+                    "evidence_policy": revision.evidence_decision.policy.model_dump(mode="json"),
+                }
+            })
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             stored, status = repository.enqueue_command_with_status(command)
@@ -191,6 +236,117 @@ class AgentRunService:
                 self._maybe_finalize_parent_in_repository(repository, stored.run_id)
                 work.commit()
         return self.get(stored.run_id) or current
+
+    def _validate_evidence_authority(self, spec: AgentRunSpec) -> None:
+        if spec.evidence_policy.requirement != "required":
+            return
+        profile = get_agent_profile(spec.profile)
+        decision = EvidenceDecision(
+            policy=spec.evidence_policy,
+            confidence=1.0,
+            reason="run_spec_validation",
+            classifier="deterministic",
+        )
+        compiled = compile_task_authority(profile, spec.objective or spec.task, decision)
+        missing_external = set(compiled.required_external) - set(spec.external_capabilities)
+        if missing_external:
+            raise EvidenceCompilationError(
+                "evidence_required_but_unavailable",
+                "RunSpec does not issue required external evidence authority: "
+                + ", ".join(sorted(missing_external)),
+            )
+
+    def _compile_steering(self, current: AgentRunSnapshot, command: AgentRunCommand) -> dict[str, object]:
+        message = str(command.payload.get("message") or "").strip()
+        if not message:
+            raise ValueError("steering message is required")
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            latest = repository.latest_task_revision(current.run_id)
+            work.rollback()
+        previous_objective = (
+            latest.effective_objective
+            if latest is not None
+            else (current.spec.objective or current.spec.task)
+        )
+        effective = revise_objective(previous_objective, message)
+        target_profile_id = select_agent_profile_id(effective)
+        target_profile = get_agent_profile(target_profile_id)
+        decision = classify_evidence(effective, profile_id=target_profile_id)
+        compiled = compile_task_authority(target_profile, effective, decision)
+        required_local = set(compiled.required_local)
+        required_external = set(compiled.required_external)
+        issued_local = set(current.spec.capabilities)
+        issued_external = set(current.spec.external_capabilities)
+        fits = (
+            target_profile_id == current.spec.profile
+            and required_local.issubset(issued_local)
+            and required_external.issubset(issued_external)
+        )
+        expected_artifacts = (
+            ["diff"]
+            if target_profile_id == "coding" and task_requires_workspace_mutation(effective)
+            else []
+        )
+        checks = ["successful_test_command"] if expected_artifacts else []
+        sequence = (latest.sequence + 1) if latest is not None else 2
+        digest = hashlib.sha256(
+            f"{current.run_id}:{command.idempotency_key}".encode("utf-8")
+        ).hexdigest()
+        revision = TaskRevision(
+            revision_id=digest,
+            run_id=current.run_id,
+            sequence=sequence,
+            previous_revision_id=latest.revision_id if latest else None,
+            source_command_id=command.idempotency_key,
+            user_instruction=message,
+            effective_objective=effective,
+            effective_success_criteria=[
+                SuccessCriterion(
+                    id="user-request",
+                    description="Complete the latest effective user task and report verifiable evidence.",
+                )
+            ],
+            evidence_decision=decision,
+            required_local_capabilities=list(compiled.required_local),
+            required_external_capabilities=list(compiled.required_external),
+            expected_artifacts=expected_artifacts,
+            acceptance_checks=checks,
+        )
+        if fits:
+            return {"revision": revision, "superseding_spec": None}
+
+        workspace = current.spec.workspace
+        if target_profile.requires_workspace and workspace is None:
+            raise EvidenceCompilationError(
+                "required_workspace_unavailable",
+                f"steering requires profile {target_profile_id}, but this run has no issued workspace",
+            )
+        replacement = AgentRunSpec(
+            session_id=current.spec.session_id,
+            task=effective,
+            objective=effective,
+            profile=target_profile_id,
+            model=current.spec.model,
+            capabilities=list(compiled.required_local),
+            external_capabilities=list(compiled.required_external),
+            context_sources=list(target_profile.context_sources),
+            workspace=workspace if target_profile.requires_workspace else None,
+            execution=current.spec.execution,
+            limits=current.spec.limits,
+            approval_policy=current.spec.approval_policy,
+            request_mode=current.spec.request_mode,
+            evidence_policy=decision.policy,
+            supersedes_run_id=current.run_id,
+            success_criteria=[
+                SuccessCriterion(
+                    id="user-request",
+                    description="Complete the latest effective user task and report verifiable evidence.",
+                )
+            ],
+            expected_artifacts=expected_artifacts,
+        )
+        return {"revision": revision, "superseding_spec": replacement}
 
     def _mark_command_failed(self, command: AgentRunCommand, error: Exception) -> None:
         """Make transport/runtime command failures visible and terminal.
