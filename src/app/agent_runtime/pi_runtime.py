@@ -161,7 +161,12 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     return argv
 
 
-def normalize_pi_event(run_id: str, payload: dict[str, Any]) -> AgentEvent | None:
+def normalize_pi_event(
+    run_id: str,
+    payload: dict[str, Any],
+    *,
+    task_revision_id: str | None = None,
+) -> AgentEvent | None:
     event_type = str(payload.get("type") or "")
     if event_type == "agent_start":
         return AgentEvent(run_id=run_id, event_type="run.started", payload={"source": "pi"})
@@ -178,6 +183,7 @@ def normalize_pi_event(run_id: str, payload: dict[str, Any]) -> AgentEvent | Non
                 "tool_call_id": payload.get("toolCallId"),
                 "tool": payload.get("toolName"),
                 "args": payload.get("args") or {},
+                "task_revision_id": task_revision_id,
             },
         )
     if event_type == "tool_execution_update":
@@ -192,6 +198,7 @@ def normalize_pi_event(run_id: str, payload: dict[str, Any]) -> AgentEvent | Non
                 "tool": payload.get("toolName"),
                 "is_error": bool(payload.get("isError")),
                 "result": payload.get("result"),
+                "task_revision_id": task_revision_id,
             },
         )
     if event_type in {"error", "agent_error"}:
@@ -217,6 +224,8 @@ class PiRpcSession:
         self.on_event = on_event
         self._events: deque[AgentEvent] = deque(maxlen=10_000)
         self._responses: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._task_revision_id: str | None = None
+        self._tool_revision_ids: dict[str, str | None] = {}
         self._closed = False
         self._terminal_seen = False
         self._stderr: deque[str] = deque(maxlen=200)
@@ -261,7 +270,9 @@ class PiRpcSession:
     def prompt(self, message: str) -> None:
         self.send({"type": "prompt", "message": message})
 
-    def steer(self, message: str) -> None:
+    def steer(self, message: str, *, task_revision_id: str | None = None) -> None:
+        if task_revision_id is not None:
+            self._task_revision_id = task_revision_id
         self.send({"type": "steer", "message": message})
 
     def abort(self) -> None:
@@ -334,7 +345,21 @@ class PiRpcSession:
             if payload.get("type") == "response":
                 self._responses.put(payload)
                 continue
-            event = normalize_pi_event(self.spec.run_id, payload)
+            event_type = str(payload.get("type") or "")
+            tool_call_id = str(payload.get("toolCallId") or "")
+            revision_id = self._task_revision_id
+            if event_type == "tool_execution_start" and tool_call_id:
+                self._tool_revision_ids[tool_call_id] = self._task_revision_id
+                revision_id = self._tool_revision_ids[tool_call_id]
+            elif event_type in {"tool_execution_update", "tool_execution_end"} and tool_call_id:
+                revision_id = self._tool_revision_ids.get(tool_call_id)
+            event = normalize_pi_event(
+                self.spec.run_id,
+                payload,
+                task_revision_id=revision_id,
+            )
+            if event_type == "tool_execution_end" and tool_call_id:
+                self._tool_revision_ids.pop(tool_call_id, None)
             if event is not None:
                 self._events.append(event)
                 if event.event_type in {"run.settled", "run.completed", "run.failed"}:
@@ -421,7 +446,8 @@ class PiAgentRuntime(AgentRuntime):
                     f"Effective objective: {effective_objective or message}\n"
                     f"Omnix evidence contract: {evidence_text}\n"
                     "Do not claim completion until the evidence contract is satisfied.\n"
-                    f"{message}"
+                    f"{message}",
+                    task_revision_id=str(command.payload.get("task_revision_id") or "") or None,
                 )
             elif command.command_type == "pause":
                 session.abort()

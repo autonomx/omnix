@@ -11,6 +11,10 @@ from .contracts import AcceptancePlan, AgentArtifact, AgentEvent, AgentRunSpec, 
 from .workspace import WorkspaceAuthority
 
 
+class WorkspaceInspectionError(RuntimeError):
+    pass
+
+
 class AcceptanceResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -76,7 +80,14 @@ def evaluate_acceptance(
     artifact_rows = list(artifacts)
     checks: dict[str, bool] = {}
     failures: list[str] = []
-    modified_paths = _modified_paths(spec)
+    try:
+        modified_paths = _modified_paths(spec)
+        workspace_inspection_ok = True
+    except WorkspaceInspectionError:
+        modified_paths = []
+        workspace_inspection_ok = False
+        checks["workspace_inspection"] = False
+        failures.append("workspace_inspection_failed")
 
     effective_policy = (
         task_revision.evidence_decision.policy
@@ -98,7 +109,7 @@ def evaluate_acceptance(
         if not attribution_ready:
             failures.append("user_visible_attribution_unavailable")
 
-    checks["modified_paths_in_scope"] = _paths_allowed(
+    checks["modified_paths_in_scope"] = workspace_inspection_ok and _paths_allowed(
         modified_paths,
         allowed=plan.allowed_modified_paths,
         forbidden=plan.forbidden_modified_paths,
@@ -155,8 +166,10 @@ def _modified_paths(spec: AgentRunSpec) -> list[str]:
     root = spec.workspace.worktree or spec.workspace.root
     try:
         status = WorkspaceAuthority(root).git_status()
-    except Exception:
-        return []
+    except Exception as exc:
+        raise WorkspaceInspectionError(
+            f"unable to inspect authoritative workspace status: {type(exc).__name__}: {exc}"
+        ) from exc
     rows: list[str] = []
     for line in status.splitlines():
         if len(line) < 4:

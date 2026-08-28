@@ -565,6 +565,7 @@ class AgentRunService:
             receipts = repository.list_evidence_receipts(run_id)
             work.rollback()
         policy = revision.evidence_decision.policy if revision is not None else snapshot.spec.evidence_policy
+        receipts = self._receipts_for_revision(receipts, revision)
         return evaluate_evidence_set(run_id, policy, receipts)
 
     def _maybe_finalize_parent_in_repository(
@@ -607,14 +608,26 @@ class AgentRunService:
         repository: PostgresAgentRunRepository,
         current: AgentRunSnapshot,
     ) -> None:
-        repository.append_event(
-            AgentEvent(run_id=current.run_id, event_type="acceptance.started", payload={"source": "omnix"})
-        )
-        self._capture_diff(repository, current.spec)
-        events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
-        artifacts = repository.list_artifacts(current.run_id)
         task_revision = repository.latest_task_revision(current.run_id)
-        receipts = repository.list_evidence_receipts(current.run_id)
+        revision_id = task_revision.revision_id if task_revision is not None else None
+        repository.append_event(
+            AgentEvent(
+                run_id=current.run_id,
+                event_type="acceptance.started",
+                payload={"source": "omnix", "task_revision_id": revision_id},
+            )
+        )
+        self._capture_diff(
+            repository,
+            current.spec,
+            task_revision_id=revision_id,
+        )
+        all_events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+        all_artifacts = repository.list_artifacts(current.run_id)
+        all_receipts = repository.list_evidence_receipts(current.run_id)
+        events = self._events_for_revision(all_events, task_revision)
+        artifacts = self._artifacts_for_revision(all_artifacts, task_revision)
+        receipts = self._receipts_for_revision(all_receipts, task_revision)
         effective_policy = (
             task_revision.evidence_decision.policy
             if task_revision is not None
@@ -705,7 +718,59 @@ class AgentRunService:
                 self._maybe_finalize_parent_in_repository(repository, event.run_id)
                 work.commit()
 
-    def _capture_diff(self, repository: PostgresAgentRunRepository, spec: AgentRunSpec) -> None:
+    @staticmethod
+    def _events_for_revision(
+        events: list[AgentEvent],
+        task_revision: TaskRevision | None,
+    ) -> list[AgentEvent]:
+        if task_revision is None or task_revision.sequence <= 1:
+            return [
+                event
+                for event in events
+                if event.event_type not in {"tool.started", "tool.completed", "tool.output"}
+                or event.payload.get("task_revision_id") in {None, task_revision.revision_id}
+            ]
+        return [
+            event
+            for event in events
+            if event.event_type not in {"tool.started", "tool.completed", "tool.output"}
+            or event.payload.get("task_revision_id") == task_revision.revision_id
+        ]
+
+    @staticmethod
+    def _artifacts_for_revision(
+        artifacts: list[AgentArtifact],
+        task_revision: TaskRevision | None,
+    ) -> list[AgentArtifact]:
+        if task_revision is None or task_revision.sequence <= 1:
+            return [
+                artifact
+                for artifact in artifacts
+                if artifact.metadata.get("task_revision_id") in {None, task_revision.revision_id if task_revision else None}
+            ]
+        return [
+            artifact
+            for artifact in artifacts
+            if artifact.metadata.get("task_revision_id") == task_revision.revision_id
+        ]
+
+    @staticmethod
+    def _receipts_for_revision(receipts, task_revision: TaskRevision | None):
+        if task_revision is None:
+            return [receipt for receipt in receipts if receipt.task_revision_id is None]
+        return [
+            receipt
+            for receipt in receipts
+            if receipt.task_revision_id == task_revision.revision_id
+        ]
+
+    def _capture_diff(
+        self,
+        repository: PostgresAgentRunRepository,
+        spec: AgentRunSpec,
+        *,
+        task_revision_id: str | None = None,
+    ) -> None:
         if spec.workspace is None:
             return
         root = spec.workspace.worktree or spec.workspace.root
@@ -731,6 +796,7 @@ class AgentRunService:
                 storage_ref=str(blob["storage_key"]),
                 checksum=str(blob["checksum_sha256"]),
                 metadata={
+                    "task_revision_id": task_revision_id,
                     "storage_provider": str(blob["storage_provider"]),
                     "byte_size": int(blob["byte_size"]),
                     "preview": diff[:preview_limit],

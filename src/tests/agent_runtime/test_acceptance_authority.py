@@ -68,3 +68,26 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
     assert repository.artifact.storage_ref == service.blob_store.storage_key
     assert repository.artifact.checksum == "abc123"
     assert repository.artifact.metadata["storage_provider"] == "fake"
+
+
+
+def test_workspace_inspection_failure_fails_closed(monkeypatch, tmp_path) -> None:
+    from app.agent_runtime.acceptance import evaluate_acceptance
+    from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+    from app.agent_runtime.workspace import WorkspaceAuthority
+
+    monkeypatch.setattr(
+        WorkspaceAuthority,
+        "git_status",
+        lambda _self: (_ for _ in ()).throw(RuntimeError("git unavailable")),
+    )
+    spec = AgentRunSpec(
+        task="Inspect code",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read"],
+        workspace=WorkspaceSpec(root=str(tmp_path)),
+    )
+    result = evaluate_acceptance(spec, events=[], artifacts=[])
+    assert result.passed is False
+    assert "workspace_inspection_failed" in result.failures

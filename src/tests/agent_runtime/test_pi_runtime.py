@@ -178,3 +178,32 @@ def test_pi_session_emits_failure_when_process_exits_without_terminal_event() ->
     failure = next(event for event in received if event.event_type == "run.failed")
     assert "exit code 1" in str(failure.payload["error"])
     session.close()
+
+
+
+def test_tool_events_keep_revision_that_authorized_the_tool_call() -> None:
+    from app.agent_runtime.pi_runtime import normalize_pi_event
+
+    started = normalize_pi_event(
+        "run-1",
+        {
+            "type": "tool_execution_start",
+            "toolCallId": "tool-1",
+            "toolName": "bash",
+            "args": {"command": "pytest"},
+        },
+        task_revision_id="rev-old",
+    )
+    completed = normalize_pi_event(
+        "run-1",
+        {
+            "type": "tool_execution_end",
+            "toolCallId": "tool-1",
+            "toolName": "bash",
+            "isError": False,
+            "result": {"exitCode": 0},
+        },
+        task_revision_id="rev-old",
+    )
+    assert started is not None and started.payload["task_revision_id"] == "rev-old"
+    assert completed is not None and completed.payload["task_revision_id"] == "rev-old"

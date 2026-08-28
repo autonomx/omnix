@@ -435,3 +435,56 @@ def test_repository_evidence_subject_is_bound_to_immutable_commit(monkeypatch, t
     assert subject.canonical_id == "autonomx/omnix"
     assert subject.qualifiers["requested_ref"] == "main"
     assert subject.qualifiers["resolved_commit"] == "abc123"
+
+
+
+def test_revision_filters_do_not_reuse_prior_tool_or_evidence_rows() -> None:
+    from app.agent_runtime.contracts import AgentArtifact, AgentEvent, TaskRevision
+    from app.agent_runtime.service import AgentRunService
+
+    revision = TaskRevision(
+        run_id="run-1",
+        sequence=2,
+        user_instruction="new task",
+        effective_objective="new task",
+    )
+    prior_event = AgentEvent(
+        run_id="run-1",
+        event_type="tool.completed",
+        payload={"tool_call_id": "old", "task_revision_id": "rev-old"},
+    )
+    current_event = AgentEvent(
+        run_id="run-1",
+        event_type="tool.completed",
+        payload={"tool_call_id": "new", "task_revision_id": revision.revision_id},
+    )
+    assert AgentRunService._events_for_revision(
+        [prior_event, current_event],
+        revision,
+    ) == [current_event]
+
+    prior_artifact = AgentArtifact(
+        run_id="run-1",
+        kind="diff",
+        name="old.diff",
+        metadata={"task_revision_id": "rev-old"},
+    )
+    current_artifact = AgentArtifact(
+        run_id="run-1",
+        kind="diff",
+        name="new.diff",
+        metadata={"task_revision_id": revision.revision_id},
+    )
+    assert AgentRunService._artifacts_for_revision(
+        [prior_artifact, current_artifact],
+        revision,
+    ) == [current_artifact]
+
+    prior_receipt = _receipt()
+    prior_receipt = prior_receipt.model_copy(update={"task_revision_id": "rev-old"})
+    current_receipt = _receipt()
+    current_receipt = current_receipt.model_copy(update={"task_revision_id": revision.revision_id})
+    assert AgentRunService._receipts_for_revision(
+        [prior_receipt, current_receipt],
+        revision,
+    ) == [current_receipt]
