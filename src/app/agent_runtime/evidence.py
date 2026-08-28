@@ -31,8 +31,12 @@ from .profiles import AgentProfile, profile_external_ceiling
 _CURRENT = re.compile(r"\b(?:today|current(?:ly)?|latest|right now|this (?:week|month|year)|recent|newest|news)\b", re.I)
 _NO_EXTERNAL = re.compile(
     r"\b(?:without (?:using )?(?:the )?(?:internet|web)|"
-    r"do not (?:use |search |browse )?(?:the )?(?:internet|web)?|"
-    r"don't (?:use |search |browse )?(?:the )?(?:internet|web)?|"
+    r"do not (?:use (?:the )?(?:internet|web)|"
+    r"search (?:the )?(?:internet|web)|"
+    r"browse(?: (?:the )?(?:internet|web))?)|"
+    r"don't (?:use (?:the )?(?:internet|web)|"
+    r"search (?:the )?(?:internet|web)|"
+    r"browse(?: (?:the )?(?:internet|web))?)|"
     r"from memory only)\b",
     re.I,
 )
@@ -286,7 +290,7 @@ def resolve_request_mode(
 
 def _extract_ticker(task: str) -> str | None:
     text = str(task or "")
-    for pattern in (_TICKER_DOLLAR, _TICKER_BEFORE_CONTEXT, _TICKER_AFTER_CONTEXT):
+    for pattern in (_TICKER_DOLLAR, _TICKER_AFTER_CONTEXT, _TICKER_BEFORE_CONTEXT):
         match = pattern.search(text)
         if match:
             return str(match.group(1)).upper()
@@ -1119,7 +1123,11 @@ def _observed_subject(
         )
     if capability_id == "research.web_search":
         query = str(request_input.get("query") or "")
-        return resolve_subject(query, source_class)
+        subject = resolve_subject(query, source_class)
+        if subject is not None:
+            return subject
+        ticker = _extract_ticker(query)
+        return _security_subject(ticker) if ticker else None
     if source_class == "home_state":
         return SubjectRef(type="home", canonical_id="current_home", display_name="current home")
     if source_class == "home_energy":
