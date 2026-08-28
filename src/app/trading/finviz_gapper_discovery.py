@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 from .catalog import register_instrument
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe, time_of_day_relative_volume
 from .instrument_catalog_service import _dynamic_bindings, _equity_instrument
+from .providers.alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
 
@@ -247,6 +248,7 @@ def discover_finviz_gappers(
     maximum_price: Decimal = Decimal("20"),
     finviz_runtime: ProviderHttpRuntime | None = None,
     yahoo_runtime: ProviderHttpRuntime | None = None,
+    execution_provider: Any | None = None,
 ) -> GapperUniverseSnapshot:
     """Discover Finviz Top Gainers and freeze Yahoo-enriched point-in-time evidence."""
 
@@ -261,6 +263,9 @@ def discover_finviz_gappers(
 
     finviz = finviz_runtime or ProviderHttpRuntime("finviz_gapper_discovery", max_concurrency=1)
     yahoo = yahoo_runtime or ProviderHttpRuntime("finviz_yahoo_enrichment", max_concurrency=2)
+    alpaca = execution_provider
+    if alpaca is None and alpaca_iex_configured():
+        alpaca = AlpacaIexExecutionProvider()
     symbols, received_at = _finviz_symbols(finviz, count=count)
 
     candidates: list[GapperCandidate] = []
@@ -295,16 +300,35 @@ def discover_finviz_gappers(
         ask = _decimal(search_quote.get("ask")) if search_quote else None
         market_cap = _decimal(search_quote.get("marketCap")) if search_quote else None
         float_shares = _decimal(search_quote.get("floatShares")) if search_quote else None
+        spread_bps = _spread_bps(bid, ask)
+        evidence_times = {
+            "finviz_top_gainers": received_at,
+            "yahoo_chart_enrichment": enrichment_at,
+        }
+
+        # Yahoo search does not reliably expose a premarket bid/ask for every
+        # small-cap name. When Alpaca IEX is configured, capture its point-in-time
+        # spread as additional *research evidence*. The observation's eligibility
+        # is deliberately ignored here: discovery cannot grant execution authority.
+        # AUTO PAPER later fetches a fresh Alpaca IEX observation and fails closed.
+        if alpaca is not None:
+            try:
+                execution = alpaca.execution_observation(instrument.instrument_id)
+            except Exception:
+                pass
+            else:
+                if execution.spread_bps is not None:
+                    spread_bps = execution.spread_bps
+                alpaca_at = datetime.now(timezone.utc)
+                evidence_times["alpaca_iex_research_quote"] = alpaca_at
+                enrichment_at = max(enrichment_at, alpaca_at)
 
         candidates.append(
             GapperCandidate(
                 instrument_id=instrument.instrument_id,
                 binding_id=f"yahoo:historical_polling:{instrument.instrument_id}",
                 observed_at=enrichment_at,
-                evidence_observed_at={
-                    "finviz_top_gainers": received_at,
-                    "yahoo_chart_enrichment": enrichment_at,
-                },
+                evidence_observed_at=evidence_times,
                 previous_close=previous_close,
                 premarket_price=price,
                 gap_pct=gap_pct,
@@ -313,7 +337,7 @@ def discover_finviz_gappers(
                 tod_rvol=tod_rvol,
                 market_cap=market_cap if market_cap is not None and market_cap >= 0 else None,
                 float_shares=float_shares if float_shares is not None and float_shares > 0 else None,
-                spread_bps=_spread_bps(bid, ask),
+                spread_bps=spread_bps,
                 discovery_rank=raw_rank,
             )
         )
