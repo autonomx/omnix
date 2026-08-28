@@ -313,6 +313,8 @@ class TradingStrategyMonitor:
         self.intraday_llm_call_count = 0
         self.intraday_llm_assessment_count = 0
         self.intraday_llm_error_count = 0
+        self.intraday_llm_input_character_count = 0
+        self.intraday_llm_estimated_input_token_count = 0
 
     def start(self) -> None:
         if self._task is None:
@@ -554,6 +556,8 @@ class TradingStrategyMonitor:
             self.intraday_llm_assessment_count += int(persisted)
 
         estimated_input_tokens = (result.input_characters + 3) // 4
+        self.intraday_llm_input_character_count += result.input_characters
+        self.intraday_llm_estimated_input_token_count += estimated_input_tokens
         await self._event(
             strategy_repository,
             config,
