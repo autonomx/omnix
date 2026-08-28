@@ -35,12 +35,6 @@ from .semantic_classifier import (
     semantic_confidence_threshold,
     semantic_profile_id,
 )
-from .semantic_classifier import (
-    SemanticIntentDecision,
-    classify_semantic_intent_safely,
-    default_semantic_intent_classifier,
-    semantic_confidence_threshold,
-)
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
 
@@ -96,66 +90,6 @@ _PUBLICATION_REQUEST = re.compile(
     r"\b(?:git\s+push|push\s+(?:the\s+)?(?:current\s+)?branch|open\s+(?:a\s+)?pull\s+request|create\s+(?:a\s+)?pull\s+request)\b",
     re.I,
 )
-_SEMANTIC_AUTO = object()
-
-
-def _should_use_semantic_classifier(decision: OmnixRouteDecision, content: str) -> bool:
-    if not str(content or "").strip():
-        return False
-    if decision.reason == "casual_or_empty":
-        return False
-    if decision.lane in {"direct", "workflow"} and decision.confidence >= 0.95:
-        return False
-    return True
-
-
-def _apply_semantic_route_decision(
-    deterministic: OmnixRouteDecision,
-    semantic: SemanticIntentDecision | None,
-) -> OmnixRouteDecision:
-    if semantic is None or semantic.confidence < semantic_confidence_threshold():
-        return deterministic
-    # Explicit user mode selection and explicit no-action/hypothetical wording
-    # are authoritative. Semantic classification may interpret the turn, but it
-    # cannot turn a user's refusal or hypothetical into executable authority.
-    if deterministic.reason in {"negated_action", "hypothetical_or_conditional"}:
-        return deterministic
-    if deterministic.explicit:
-        return deterministic.model_copy(
-            update={
-                "reason": f"{deterministic.reason}+semantic:{semantic.primary_intent}"[:240],
-                "hermes_recommended": deterministic.hermes_recommended or semantic.multi_step,
-            }
-        )
-    if deterministic.lane in {"direct", "workflow"} and deterministic.confidence >= 0.95:
-        return deterministic
-    return OmnixRouteDecision(
-        lane=semantic.lane,
-        confidence=semantic.confidence,
-        reason=f"semantic:{semantic.primary_intent}"[:240],
-        explicit=False,
-        hermes_recommended=semantic.multi_step,
-    )
-
-
-def _mark_chat_route(
-    user_message: Any,
-    decision: OmnixRouteDecision,
-    *,
-    semantic_intent: SemanticIntentDecision | None = None,
-    request_mode: RequestModeSelection | None = None,
-) -> None:
-    metadata = getattr(user_message, "metadata", None)
-    if not isinstance(metadata, dict):
-        return
-    metadata["omnix_chat_routed"] = True
-    metadata["omnix_route"] = decision.model_dump(mode="json")
-    if semantic_intent is not None:
-        metadata["semantic_intent"] = semantic_intent.model_dump(mode="json")
-    if request_mode is not None:
-        metadata["request_mode"] = request_mode.model_dump(mode="json")
-
-
 def route_typed_chat_turn(
     session: Any,
     user_message: Any,
@@ -251,7 +185,7 @@ def _should_use_semantic_classifier(
 
     if str(research_mode or "").strip().casefold() in {"quick", "deep"}:
         return False
-    if decision.explicit or decision.lane in {"direct", "workflow"}:
+    if decision.lane in {"direct", "workflow"}:
         return False
     if decision.reason in {
         "casual_or_empty",
