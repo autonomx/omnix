@@ -769,7 +769,7 @@ class TradingStrategyMonitor:
                     market_service.bars,
                     candidate.instrument_id,
                     "1m",
-                    240,
+                    500,
                     candidate.binding_id,
                 )
                 base_bars = [bar for bar in response.bars if bar.is_final]
@@ -842,7 +842,7 @@ class TradingStrategyMonitor:
             )
             if config.config.intraday_learning_enabled:
                 try:
-                    learning = build_intraday_learning_snapshot(candidate, result, structure_bars)
+                    learning = build_intraday_learning_snapshot(candidate, result, base_bars)
                 except Exception as exc:
                     trade_log(
                         "auto_trading",
