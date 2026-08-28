@@ -211,6 +211,17 @@ def _apply_semantic_route_decision(
         )
     if deterministic.lane in {"direct", "workflow"} and deterministic.confidence >= 0.95:
         return deterministic
+    if (
+        deterministic.lane == "chat"
+        and semantic.lane == "agent"
+        and not semantic.action_intents
+    ):
+        # A semantic Agent label without any executable semantic action is too
+        # weak to promote a conversational request into an autonomous run.
+        # This preserves deterministic Chat for planning-only or malformed
+        # classifier outputs while still allowing action-bearing semantic
+        # upgrades for indirect coding, personal-assistant, home, and research work.
+        return deterministic
     return OmnixRouteDecision(
         lane=semantic.lane,
         confidence=semantic.confidence,
