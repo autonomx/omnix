@@ -313,13 +313,19 @@ def select_intraday_llm_candidates(
     candidates.sort(key=lambda item: (item[0], item[1]))
     selected: list[tuple[GapperCandidate, Any, datetime, IntradayLearningSnapshot]] = []
     selected_ids: set[str] = set()
+    ordinary_count = 0
     for priority, _, row in candidates:
         instrument_id = row[0].instrument_id
         if instrument_id in selected_ids:
             continue
-        if len(selected) < top_n or priority == 0:
+        if priority == 0:
             selected.append(row)
             selected_ids.add(instrument_id)
+            continue
+        if ordinary_count < top_n:
+            selected.append(row)
+            selected_ids.add(instrument_id)
+            ordinary_count += 1
 
     return selected, {
         instrument_id: reasons
