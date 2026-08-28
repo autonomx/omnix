@@ -173,6 +173,40 @@ def test_frozen_gapper_universe_is_order_independent_and_point_in_time() -> None
     assert [item.discovery_rank for item in first.candidates] == [1, 2]
 
 
+
+def test_finviz_source_cohort_participates_in_new_fingerprint_without_changing_legacy_fingerprint() -> None:
+    evaluation = datetime(2026, 8, 28, 13, 20, tzinfo=timezone.utc)
+    legacy = freeze_gapper_universe(
+        universe_id="legacy",
+        session_date=date(2026, 8, 28),
+        evaluation_time=evaluation,
+        discovery_source="import",
+        candidates=[candidate()],
+    )
+    legacy_again = freeze_gapper_universe(
+        universe_id="legacy",
+        session_date=date(2026, 8, 28),
+        evaluation_time=evaluation,
+        discovery_source="import",
+        candidates=[candidate()],
+        source_locator=None,
+        source_candidate_symbols=(),
+    )
+    assert legacy.source_fingerprint == legacy_again.source_fingerprint
+
+    finviz = freeze_gapper_universe(
+        universe_id="finviz",
+        session_date=date(2026, 8, 28),
+        evaluation_time=evaluation,
+        discovery_source="finviz",
+        source_locator="https://finviz.com/screener?v=340&s=ta_topgainers",
+        source_candidate_symbols=("TEST", "TEST2"),
+        candidates=[candidate(observed_at=evaluation)],
+    )
+    assert finviz.source_candidate_symbols == ("TEST", "TEST2")
+    assert finviz.source_locator and "ta_topgainers" in finviz.source_locator
+    assert finviz.source_fingerprint != legacy.source_fingerprint
+
 def test_split_normalized_gap_evidence_and_time_of_day_rvol_are_auditable() -> None:
     adjusted = candidate(
         previous_close=Decimal("5"),
