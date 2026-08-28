@@ -220,7 +220,15 @@ def default_semantic_intent_classifier(
         return None
 
     override_provider = str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", "") or "").strip()
-    provider_name = _provider_key(override_provider or provider_id)
+    raw_provider = override_provider or str(provider_id or "").strip()
+    # Browser Chat stores persist provider identities as llm:<provider>. Requiring
+    # that canonical namespace for automatic resolution keeps legacy/unit-test
+    # placeholder IDs from accidentally opening a real model connection. A
+    # deployment can still opt a plain provider ID in explicitly via the env
+    # override above.
+    if not override_provider and not raw_provider.startswith("llm:"):
+        return None
+    provider_name = _provider_key(raw_provider)
     if not provider_name:
         return None
     if not override_provider and provider_name.casefold() not in _BUILTIN_PROVIDER_IDS:
