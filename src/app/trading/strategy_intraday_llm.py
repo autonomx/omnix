@@ -36,7 +36,7 @@ LLMRegime = Literal[
 
 # These are implementation safety bounds rather than execution parameters.
 # The user-facing heartbeat/top-N remain configurable on GapPullbackConfig.
-EVENT_BATCH_COOLDOWN_MINUTES = 2
+EVENT_BATCH_COOLDOWN_MINUTES = 5
 FULL_REFRESH_MINUTES = 30
 MATERIAL_SCORE_DELTA = 2
 MATERIAL_RANK_JUMP = 3
