@@ -16,6 +16,9 @@ from .contracts import (
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
+    EvidenceDecision,
+    EvidenceReceipt,
+    TaskRevision,
     WorkerLease,
 )
 
@@ -44,9 +47,9 @@ class PostgresAgentRunRepository:
         row = self.connection.execute(
             """
             INSERT INTO omnix_agent_runs (
-                workspace_id, run_id, session_id, parent_run_id, spec,
+                workspace_id, run_id, session_id, parent_run_id, supersedes_run_id, spec,
                 status, desired_state
-            ) VALUES (%s, %s, %s, %s, %s::jsonb, 'queued', 'running')
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, 'queued', 'running')
             ON CONFLICT (workspace_id, run_id) DO NOTHING
             RETURNING run_id
             """,
@@ -55,6 +58,7 @@ class PostgresAgentRunRepository:
                 spec.run_id,
                 spec.session_id,
                 spec.parent_run_id,
+                spec.supersedes_run_id,
                 _json(spec),
             ),
         ).fetchone()
@@ -68,13 +72,29 @@ class PostgresAgentRunRepository:
         snapshot = self.get_run(spec.run_id)
         assert snapshot is not None
         self.append_event(AgentEvent(run_id=spec.run_id, event_type="run.created", payload={"profile": spec.profile, "runtime": spec.runtime}))
+        self.add_task_revision(TaskRevision(
+            run_id=spec.run_id,
+            sequence=1,
+            user_instruction=spec.task,
+            effective_objective=spec.objective or spec.task,
+            effective_success_criteria=list(spec.success_criteria),
+            evidence_decision=EvidenceDecision(
+                policy=spec.evidence_policy,
+                confidence=1.0,
+                reason="compiled_run_spec",
+                classifier="deterministic",
+            ),
+            required_local_capabilities=list(spec.capabilities),
+            required_external_capabilities=list(spec.external_capabilities),
+            expected_artifacts=list(spec.expected_artifacts),
+        ))
         return snapshot
 
     def get_run(self, run_id: str) -> AgentRunSnapshot | None:
         row = self.connection.execute(
             """
             SELECT run_id, spec, status, desired_state, revision, worker_id,
-                   started_at, completed_at, last_error, created_at, updated_at
+                   superseded_by_run_id, started_at, completed_at, last_error, created_at, updated_at
               FROM omnix_agent_runs
              WHERE workspace_id = %s AND run_id = %s
             """,
@@ -89,12 +109,207 @@ class PostgresAgentRunRepository:
             desired_state=str(row[3]),
             revision=int(row[4]),
             worker_id=str(row[5]) if row[5] else None,
-            started_at=row[6],
-            completed_at=row[7],
-            last_error=str(row[8]) if row[8] else None,
-            created_at=row[9],
-            updated_at=row[10],
+            superseded_by_run_id=str(row[6]) if row[6] else None,
+            started_at=row[7],
+            completed_at=row[8],
+            last_error=str(row[9]) if row[9] else None,
+            created_at=row[10],
+            updated_at=row[11],
         )
+
+    def add_task_revision(self, revision: TaskRevision) -> TaskRevision:
+        self.connection.execute(
+            """
+            INSERT INTO omnix_agent_task_revisions (
+                workspace_id, run_id, revision_id, sequence, previous_revision_id,
+                source_command_id, user_instruction, effective_objective,
+                effective_success_criteria, evidence_decision,
+                required_local_capabilities, required_external_capabilities,
+                expected_artifacts, acceptance_checks, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s,
+                %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb,
+                %s::jsonb, %s::jsonb, %s
+            )
+            ON CONFLICT (workspace_id, run_id, revision_id) DO NOTHING
+            """,
+            (
+                self.context.workspace_id,
+                revision.run_id,
+                revision.revision_id,
+                revision.sequence,
+                revision.previous_revision_id,
+                revision.source_command_id,
+                revision.user_instruction,
+                revision.effective_objective,
+                _json(revision.effective_success_criteria),
+                _json(revision.evidence_decision),
+                _json(revision.required_local_capabilities),
+                _json(revision.required_external_capabilities),
+                _json(revision.expected_artifacts),
+                _json(revision.acceptance_checks),
+                revision.created_at,
+            ),
+        )
+        self.append_event(AgentEvent(
+            run_id=revision.run_id,
+            event_type="task.revised",
+            payload={
+                "revision_id": revision.revision_id,
+                "sequence": revision.sequence,
+                "source_command_id": revision.source_command_id,
+                "evidence_reason": revision.evidence_decision.reason,
+            },
+        ))
+        return revision
+
+    def list_task_revisions(self, run_id: str) -> list[TaskRevision]:
+        rows = self.connection.execute(
+            """
+            SELECT revision_id, sequence, previous_revision_id, source_command_id,
+                   user_instruction, effective_objective, effective_success_criteria,
+                   evidence_decision, required_local_capabilities,
+                   required_external_capabilities, expected_artifacts,
+                   acceptance_checks, created_at
+              FROM omnix_agent_task_revisions
+             WHERE workspace_id = %s AND run_id = %s
+             ORDER BY sequence
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchall()
+        return [
+            TaskRevision(
+                revision_id=str(row[0]),
+                run_id=run_id,
+                sequence=int(row[1]),
+                previous_revision_id=str(row[2]) if row[2] else None,
+                source_command_id=str(row[3]) if row[3] else None,
+                user_instruction=str(row[4]),
+                effective_objective=str(row[5]),
+                effective_success_criteria=list(row[6] or []),
+                evidence_decision=EvidenceDecision.model_validate(row[7] or {}),
+                required_local_capabilities=list(row[8] or []),
+                required_external_capabilities=list(row[9] or []),
+                expected_artifacts=list(row[10] or []),
+                acceptance_checks=list(row[11] or []),
+                created_at=row[12],
+            )
+            for row in rows
+        ]
+
+    def latest_task_revision(self, run_id: str) -> TaskRevision | None:
+        rows = self.list_task_revisions(run_id)
+        return rows[-1] if rows else None
+
+    def add_evidence_receipt(self, receipt: EvidenceReceipt) -> EvidenceReceipt:
+        self.connection.execute(
+            """
+            INSERT INTO omnix_agent_evidence_receipts (
+                workspace_id, run_id, receipt_id, task_revision_id, capability_id,
+                source_class, subject, request_digest, provider, origin,
+                source_manifest_id, source_count, executed_at, observed_at,
+                freshest_source_at, trust_level, result_digest, metadata
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s::jsonb
+            )
+            ON CONFLICT (workspace_id, run_id, receipt_id) DO NOTHING
+            """,
+            (
+                self.context.workspace_id, receipt.run_id, receipt.receipt_id,
+                receipt.task_revision_id, receipt.capability_id, receipt.source_class,
+                _json(receipt.subject.model_dump(mode="json") if receipt.subject else None),
+                receipt.request_digest, receipt.provider, receipt.origin,
+                receipt.source_manifest_id, receipt.source_count, receipt.executed_at,
+                receipt.observed_at, receipt.freshest_source_at, receipt.trust_level,
+                receipt.result_digest, _json(receipt.metadata),
+            ),
+        )
+        self.append_event(AgentEvent(
+            run_id=receipt.run_id,
+            event_type="evidence.receipt",
+            payload={
+                "receipt_id": receipt.receipt_id,
+                "task_revision_id": receipt.task_revision_id,
+                "capability_id": receipt.capability_id,
+                "source_class": receipt.source_class,
+                "subject": receipt.subject.model_dump(mode="json") if receipt.subject else None,
+                "provider": receipt.provider,
+                "observed_at": receipt.observed_at.isoformat(),
+                "trust_level": receipt.trust_level,
+            },
+        ))
+        return receipt
+
+    def list_evidence_receipts(self, run_id: str) -> list[EvidenceReceipt]:
+        rows = self.connection.execute(
+            """
+            SELECT receipt_id, task_revision_id, capability_id, source_class,
+                   subject, request_digest, provider, origin, source_manifest_id,
+                   source_count, executed_at, observed_at, freshest_source_at,
+                   trust_level, result_digest, metadata
+              FROM omnix_agent_evidence_receipts
+             WHERE workspace_id = %s AND run_id = %s
+             ORDER BY observed_at, receipt_id
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchall()
+        return [
+            EvidenceReceipt(
+                receipt_id=str(row[0]),
+                run_id=run_id,
+                task_revision_id=str(row[1]) if row[1] else None,
+                capability_id=str(row[2]),
+                source_class=str(row[3]),
+                subject=row[4],
+                request_digest=str(row[5]),
+                provider=str(row[6]) if row[6] else None,
+                origin=str(row[7]) if row[7] else None,
+                source_manifest_id=str(row[8]) if row[8] else None,
+                source_count=int(row[9] or 0),
+                executed_at=row[10],
+                observed_at=row[11],
+                freshest_source_at=row[12],
+                trust_level=str(row[13]),
+                result_digest=str(row[14]),
+                metadata=dict(row[15] or {}),
+            )
+            for row in rows
+        ]
+
+    def mark_superseded(self, run_id: str, superseded_by_run_id: str) -> AgentRunSnapshot:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_runs
+               SET superseded_by_run_id = %s,
+                   status = 'cancelled',
+                   desired_state = 'cancelled',
+                   completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                   last_error = %s,
+                   revision = revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s
+               AND status NOT IN ('completed','failed','cancelled')
+            RETURNING revision
+            """,
+            (
+                superseded_by_run_id,
+                f"superseded_by:{superseded_by_run_id}",
+                self.context.workspace_id,
+                run_id,
+            ),
+        ).fetchone()
+        current = self.get_run(run_id)
+        if current is None:
+            raise KeyError(run_id)
+        if row is not None:
+            self.append_event(AgentEvent(
+                run_id=run_id,
+                event_type="run.superseded",
+                payload={"superseded_by_run_id": superseded_by_run_id},
+            ))
+            current = self.get_run(run_id) or current
+        return current
 
     def list_children(self, parent_run_id: str) -> list[AgentRunSnapshot]:
         rows = self.connection.execute(
