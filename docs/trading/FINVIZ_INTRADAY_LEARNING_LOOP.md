@@ -161,16 +161,26 @@ This means LM Studio, ChatGPT Codex, OpenRouter, Cerebras, llama.cpp, or another
 configured provider can supply the interpretation without creating a
 trading-specific provider configuration.
 
-To avoid calling the model for every stock on every bar, Omnix uses a bounded
-batch:
+To avoid calling the model for every stock on every bar, Omnix uses an
+**event-driven bounded batch**:
 
 - deterministic learning still evaluates every candidate on every finalized
   one-minute prefix;
-- the top `intraday_llm_top_n` candidates are selected for LLM interpretation;
+- the default LLM cohort is reduced to the top **5** research candidates;
+- a candidate can be pulled into the LLM batch immediately when material
+  evidence changes, including a deterministic state transition, VWAP-side
+  change, turnover crossing 1×/2×/5× float, a material score/rank improvement,
+  a new high-opportunity regime, or `entry_ready`;
 - any deterministic `entry_ready` candidate is included even when it falls
-  outside that top-N research rank;
-- the whole selected set is sent in one LLM call every
-  `intraday_llm_interval_minutes` (default 5 minutes).
+  outside the top-N research rank;
+- quiet top-ranked names receive a heartbeat every
+  `intraday_llm_interval_minutes` (**10 minutes by default**) during the
+  configured entry window;
+- outside the entry window, deterministic learning continues every minute but
+  quiet heartbeat calls stop; material changes can still trigger LLM analysis;
+- ordinary event batches use a short two-minute debounce so several adjacent
+  one-minute changes collapse into one model call, while a new `entry_ready`
+  transition can bypass that debounce.
 
 Each model assessment returns:
 
@@ -192,9 +202,20 @@ Omnix logs the research error and continues using the deterministic strategy
 only.
 
 The model output is persisted as `intraday_llm` events. A separate
-`intraday_llm_batch` event establishes the completed batch timestamp used to
-enforce the cadence. The next batch receives the prior assessment so the model
-can reason longitudinally rather than reclassifying each snapshot in isolation.
+`intraday_llm_batch` event records the completed batch, trigger reasons,
+heartbeat/cooldown policy, payload mode and an approximate input-token estimate.
+
+Most calls use a compact **delta payload** containing only stable context,
+current high-value features, materially changed fields and the previous LLM
+assessment. A **full context refresh** is sent at first assessment and then at
+least every 30 minutes when that candidate is evaluated again. This preserves
+rolling context without retransmitting the complete deterministic feature dump
+on every call. The next batch therefore reasons longitudinally rather than
+reclassifying each snapshot in isolation.
+
+Runtime counters expose LLM call count, assessment count, errors, total input
+characters and a conservative character/4 input-token estimate so operators can
+measure the actual cost of the learning loop.
 
 ## Dynamic rank
 
