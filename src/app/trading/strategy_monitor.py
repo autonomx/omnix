@@ -373,11 +373,31 @@ class TradingStrategyMonitor:
             return
 
         observed_at = max(row[2] for row in ranked_learning)
-        recent_events = await asyncio.to_thread(
-            strategy_repository.recent_events,
-            config.strategy_id,
-            2_000,
-        )
+        if hasattr(strategy_repository, "events_by_types_between"):
+            session_start_et = datetime(
+                universe.session_date.year,
+                universe.session_date.month,
+                universe.session_date.day,
+                tzinfo=_ET,
+            )
+            recent_events = list(
+                reversed(
+                    await asyncio.to_thread(
+                        strategy_repository.events_by_types_between,
+                        config.strategy_id,
+                        event_types=("intraday_llm", "intraday_llm_batch"),
+                        start_time=session_start_et.astimezone(timezone.utc),
+                        end_time=observed_at.astimezone(timezone.utc) + timedelta(seconds=1),
+                        limit=5_000,
+                    )
+                )
+            )
+        else:
+            recent_events = await asyncio.to_thread(
+                strategy_repository.recent_events,
+                config.strategy_id,
+                2_000,
+            )
         previous_by_instrument: dict[str, dict[str, Any]] = {}
         previous_observed_at_by_instrument: dict[str, datetime] = {}
         last_full_refresh_at_by_instrument: dict[str, datetime] = {}
