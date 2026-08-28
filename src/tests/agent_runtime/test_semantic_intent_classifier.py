@@ -120,12 +120,9 @@ def test_semantic_classifier_understands_weather_inside_background_context() -> 
 
     assert result is None
     assert classifier.calls == [prompt]
+    assert user_message.metadata["omnix_chat_routed"] is True
+    assert user_message.metadata["omnix_route"]["lane"] == "chat"
     assert user_message.metadata["semantic_intent"]["primary_intent"] == "weather_lookup"
-    evidence = user_message.metadata["semantic_evidence"]
-    assert evidence["policy"]["requirement"] == "required"
-    assert {
-        row["source_class"] for row in evidence["policy"]["requirements"]
-    } == {"weather_state"}
 
 
 def test_semantics_can_correct_a_deterministic_false_positive_back_to_chat() -> None:
@@ -186,7 +183,7 @@ def test_semantics_can_promote_indirect_coding_language_to_agent(monkeypatch, tm
     assert "workspace.write" in spec.capabilities
     assert "workspace.test" in spec.capabilities
     assert spec.expected_artifacts == ["diff"]
-    assert result.metadata["omnix_route"]["reason"].startswith("semantic_intent:")
+    assert result.metadata["omnix_route"]["reason"].startswith("semantic:")
 
 
 def test_explicit_agent_keeps_authoritative_lane_but_uses_semantics_for_profile(monkeypatch, tmp_path) -> None:
@@ -256,7 +253,7 @@ def test_exact_direct_fast_path_does_not_call_semantic_classifier() -> None:
     assert decision.lane == "direct"
     assert chat_bridge._should_use_semantic_classifier(
         decision,
-        research_mode=None,
+        "Turn off the desk light",
     ) is False
 
 
