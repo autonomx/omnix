@@ -172,14 +172,19 @@ def previous_payload(
 class FakeProvider:
     provider_name = "fixture"
 
-    def __init__(self, payload):
+    def __init__(self, payload, *, usage=None):
         self.payload = payload
+        self.usage = usage
         self.config = SimpleNamespace(model="fixture-model")
         self.messages = None
 
     def chat_completion(self, *, messages, model=None, stream=False, **kwargs):
         self.messages = messages
-        return SimpleNamespace(content=json.dumps(self.payload), model=model or "fixture-model")
+        return SimpleNamespace(
+            content=json.dumps(self.payload),
+            model=model or "fixture-model",
+            usage=self.usage,
+        )
 
 
 def test_event_batch_cooldown_is_bounded_but_not_the_heartbeat():
@@ -396,6 +401,10 @@ def test_analyzer_uses_default_provider_contract_and_returns_strict_research_ass
     assert output.provider == "fixture"
     assert output.model == "fixture-model"
     assert output.input_characters > 0
+    assert output.input_tokens > 0
+    assert output.output_tokens > 0
+    assert output.total_tokens == output.input_tokens + output.output_tokens
+    assert output.usage_source == "estimated"
     assert output.assessments[0].instrument_id == instrument_id
     assert output.assessments[0].execution_authority is False
     assert provider.messages is not None
@@ -404,6 +413,25 @@ def test_analyzer_uses_default_provider_contract_and_returns_strict_research_ass
     item = user_payload["candidates"][0]
     assert item["current"]["deterministic_state"] == "higher_low_confirmed"
     assert item["payload_mode"] == "full"
+
+
+def test_analyzer_prefers_provider_reported_token_usage_when_available():
+    instrument_id = "equity:NASDAQ:AAA"
+    provider = FakeProvider(
+        {"assessments": [assessment(instrument_id)]},
+        usage={"prompt_tokens": 321, "completion_tokens": 87, "total_tokens": 408},
+    )
+    analyzer = IntradayLLMAnalyzer(provider_factory=lambda: provider)
+
+    output = analyzer.assess(
+        [row("AAA", 1)],
+        ranks={instrument_id: 1},
+    )
+
+    assert output.usage_source == "provider"
+    assert output.input_tokens == 321
+    assert output.output_tokens == 87
+    assert output.total_tokens == 408
 
 
 def test_analyzer_fails_closed_when_provider_omits_requested_candidate():
@@ -477,6 +505,11 @@ class FixtureAnalyzer:
             provider="fixture",
             model="fixture-model",
             input_characters=800,
+            output_characters=200,
+            input_tokens=200,
+            output_tokens=50,
+            total_tokens=250,
+            usage_source="estimated",
         )
 
 
@@ -544,7 +577,18 @@ def test_monitor_persists_event_trigger_payload_mode_and_token_estimate():
     assert llm_event.payload["trigger_reasons"] == ["initial_top_rank"]
     assert llm_event.payload["payload_mode"] == "full"
     assert batch_event.payload["heartbeat_minutes"] == 10
-    assert batch_event.payload["estimated_input_tokens_char4"] == 200
+    assert batch_event.payload["token_usage"] == {
+        "source": "estimated",
+        "input_characters": 800,
+        "output_characters": 200,
+        "input_tokens": 200,
+        "output_tokens": 50,
+        "total_tokens": 250,
+    }
+    assert monitor.intraday_llm_input_token_count == 200
+    assert monitor.intraday_llm_output_token_count == 50
+    assert monitor.intraday_llm_total_token_count == 250
+    assert monitor.intraday_llm_estimated_usage_count == 1
 
     # Same causal minute has neither a material change nor a heartbeat.
     asyncio.run(
