@@ -337,6 +337,9 @@ class ChatGPTCodexProvider(BaseProvider):
         fast_mode = bool(kwargs.get("fast_mode", self.fast_mode))
         conversation_id = str(kwargs.get("conversation_id") or "").strip() or None
         tools = self._tool_definitions(kwargs.get("tools"))
+        request_timeout = self._request_timeout_seconds(
+            kwargs.get("request_timeout_seconds")
+        )
         structured_instruction = self._structured_response_instruction(
             kwargs.get("response_format")
         )
@@ -360,6 +363,7 @@ class ChatGPTCodexProvider(BaseProvider):
                 fast_mode=fast_mode,
                 conversation_id=conversation_id,
                 tools=tools,
+                request_timeout_seconds=request_timeout,
             )
             if stream:
                 def traced_stream() -> Iterator[ChatResponse]:
@@ -407,6 +411,7 @@ class ChatGPTCodexProvider(BaseProvider):
         fast_mode: bool,
         conversation_id: str | None,
         tools: list[dict[str, Any]],
+        request_timeout_seconds: float,
     ) -> Iterator[ChatResponse]:
         system_instructions = self._system_instructions(messages)
         fingerprint = hashlib.sha256(system_instructions.encode("utf-8")).hexdigest()
@@ -436,6 +441,7 @@ class ChatGPTCodexProvider(BaseProvider):
                     model=model,
                     system_instructions=system_instructions,
                     tools=tools,
+                    timeout_seconds=request_timeout_seconds,
                 )
                 if conversation_id:
                     self._threads[conversation_id] = {
@@ -458,24 +464,45 @@ class ChatGPTCodexProvider(BaseProvider):
                     params["effort"] = effort
                 if fast_mode and model == DEFAULT_CODEX_MODEL:
                     params["serviceTier"] = FAST_SERVICE_TIER
-                self._request("turn/start", params, timeout=min(float(self.config.timeout), 60.0))
+                turn_result = self._request(
+                    "turn/start",
+                    params,
+                    timeout=min(request_timeout_seconds, 60.0),
+                )
+                turn_id = self._turn_id_from_result(turn_result)
+
+            if resuming_dynamic_call:
+                turn_id = str(pending.get("turn_id") or "").strip() or None
 
             full_text = ""
             completed_text = ""
             usage: dict[str, int] | None = None
-            timeout_at = time.monotonic() + float(self.config.timeout)
+            timeout_at = time.monotonic() + request_timeout_seconds
             while True:
                 remaining = timeout_at - time.monotonic()
                 if remaining <= 0:
                     raise ConnectionError("Timed out waiting for Codex turn completion")
-                event = (
-                    self._next_event(
-                        remaining,
-                        passthrough_server_methods={"item/tool/call"},
+                try:
+                    event = (
+                        self._next_event(
+                            remaining,
+                            passthrough_server_methods={"item/tool/call"},
+                        )
+                        if tools
+                        else self._next_event(remaining)
                     )
-                    if tools
-                    else self._next_event(remaining)
-                )
+                except ConnectionError:
+                    if time.monotonic() >= timeout_at:
+                        self._reset_process_state()
+                    raise
+                if not self._event_matches_turn(
+                    event,
+                    thread_id=thread_id,
+                    turn_id=turn_id,
+                ):
+                    if "id" in event and "method" in event:
+                        self._deny_server_request(event)
+                    continue
                 method = str(event.get("method") or "")
                 params = event.get("params") if isinstance(event.get("params"), dict) else {}
 
@@ -507,6 +534,7 @@ class ChatGPTCodexProvider(BaseProvider):
                     self._pending_dynamic_calls[conversation_id] = {
                         "request_id": event.get("id"),
                         "thread_id": thread_id,
+                        "turn_id": turn_id,
                         "call_id": call_id,
                         "tool": tool_name,
                     }
@@ -565,6 +593,7 @@ class ChatGPTCodexProvider(BaseProvider):
         model: str,
         system_instructions: str,
         tools: list[dict[str, Any]],
+        timeout_seconds: float | None = None,
     ) -> str:
         base = system_instructions.strip() or "You are a helpful AI assistant."
         params: dict[str, Any] = {
@@ -597,7 +626,15 @@ class ChatGPTCodexProvider(BaseProvider):
                 }
                 for row in tools
             ]
-        result = self._request("thread/start", params, timeout=min(float(self.config.timeout), 60.0))
+        result = self._request(
+            "thread/start",
+            params,
+            timeout=min(
+                float(self.config.timeout),
+                float(timeout_seconds or self.config.timeout),
+                60.0,
+            ),
+        )
         thread = result.get("thread") if isinstance(result, dict) and isinstance(result.get("thread"), dict) else {}
         thread_id = str(thread.get("id") or (result.get("threadId") if isinstance(result, dict) else "") or "").strip()
         if not thread_id:
@@ -631,6 +668,81 @@ class ChatGPTCodexProvider(BaseProvider):
                 "nothing else. Do not use markdown or code fences."
             )
         return ""
+
+
+    def _request_timeout_seconds(self, value: Any) -> float:
+        configured = max(0.25, float(self.config.timeout))
+        if value is None:
+            return configured
+        try:
+            requested = max(0.25, float(value))
+        except (TypeError, ValueError):
+            return configured
+        # StructuredOutputGateway waits on a worker thread using this same
+        # deadline. Leave a small margin so the provider can unwind/reset its
+        # app-server state before the gateway itself abandons the worker.
+        bounded = min(configured, requested)
+        margin = min(0.5, bounded * 0.1)
+        return max(0.25, bounded - margin)
+
+    @staticmethod
+    def _turn_id_from_result(result: dict[str, Any] | None) -> str | None:
+        if not isinstance(result, dict):
+            return None
+        turn = result.get("turn")
+        if isinstance(turn, dict):
+            value = turn.get("id") or turn.get("turnId") or turn.get("turn_id")
+            if value:
+                return str(value)
+        value = result.get("turnId") or result.get("turn_id")
+        return str(value) if value else None
+
+    @staticmethod
+    def _event_identity(event: dict[str, Any]) -> tuple[str | None, str | None]:
+        params = event.get("params") if isinstance(event.get("params"), dict) else {}
+        item = params.get("item") if isinstance(params.get("item"), dict) else {}
+        turn = params.get("turn") if isinstance(params.get("turn"), dict) else {}
+
+        thread_value = (
+            params.get("threadId")
+            or params.get("thread_id")
+            or item.get("threadId")
+            or item.get("thread_id")
+            or turn.get("threadId")
+            or turn.get("thread_id")
+            or event.get("threadId")
+            or event.get("thread_id")
+        )
+        turn_value = (
+            params.get("turnId")
+            or params.get("turn_id")
+            or item.get("turnId")
+            or item.get("turn_id")
+            or turn.get("id")
+            or turn.get("turnId")
+            or turn.get("turn_id")
+            or event.get("turnId")
+            or event.get("turn_id")
+        )
+        return (
+            str(thread_value) if thread_value else None,
+            str(turn_value) if turn_value else None,
+        )
+
+    @classmethod
+    def _event_matches_turn(
+        cls,
+        event: dict[str, Any],
+        *,
+        thread_id: str | None,
+        turn_id: str | None,
+    ) -> bool:
+        event_thread_id, event_turn_id = cls._event_identity(event)
+        if thread_id and event_thread_id and event_thread_id != thread_id:
+            return False
+        if turn_id and event_turn_id and event_turn_id != turn_id:
+            return False
+        return True
 
 
     @staticmethod
