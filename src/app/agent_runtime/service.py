@@ -101,6 +101,7 @@ class AgentRunService:
             if parent.status in {"completed", "failed", "cancelled"}:
                 raise ValueError("cannot start child from terminal parent")
             child_spec = derive_child_spec(parent, request)
+            self._validate_evidence_authority(child_spec)
             existing = repository.list_children(parent_run_id)
             parent_usage = repository.get_usage(parent_run_id)
             reserve_child_budget(
@@ -718,6 +719,7 @@ class AgentRunService:
                 with unit_of_work(self.database) as work:
                     repository = PostgresAgentRunRepository(work.connection, self.context)
                     pending = repository.list_pending_commands(run_id)
+                    latest_revision = repository.latest_task_revision(run_id)
                     work.rollback()
                 for pending_command in pending:
                     current = self.command(pending_command)
@@ -729,11 +731,20 @@ class AgentRunService:
                 if current.status in {"completed", "failed", "cancelled"} or current.desired_state != "running":
                     recovered.append(run_id)
                     continue
+                recovery_payload = {
+                    "message": "This run was recovered after a worker restart. Reinspect the current workspace before continuing.",
+                }
+                if latest_revision is not None:
+                    recovery_payload.update({
+                        "effective_objective": latest_revision.effective_objective,
+                        "evidence_policy": latest_revision.evidence_decision.policy.model_dump(mode="json"),
+                        "task_revision_id": latest_revision.revision_id,
+                    })
                 self.runtime.command(
                     AgentRunCommand(
                         run_id=run_id,
                         command_type="steer",
-                        payload={"message": "This run was recovered after a worker restart. Reinspect the current workspace before continuing."},
+                        payload=recovery_payload,
                     )
                 )
                 recovered.append(run_id)

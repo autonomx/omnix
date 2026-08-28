@@ -88,6 +88,15 @@ def evaluate_acceptance(
         checks["required_evidence"] = evidence_ok
         if not evidence_ok:
             failures.append("evidence_requirements_unsatisfied")
+    if effective_policy.user_visible_attribution == "required":
+        attribution_ready = bool(
+            evidence_set is not None
+            and evidence_set.passed
+            and evidence_set.source_manifest_ids
+        )
+        checks["user_visible_attribution_ready"] = attribution_ready
+        if not attribution_ready:
+            failures.append("user_visible_attribution_unavailable")
 
     checks["modified_paths_in_scope"] = _paths_allowed(
         modified_paths,

@@ -408,9 +408,19 @@ class PiAgentRuntime(AgentRuntime):
                 raise KeyError(command.run_id)
             if command.command_type == "steer":
                 message = str(command.payload.get("message") or "")
+                effective_objective = str(command.payload.get("effective_objective") or "").strip()
+                evidence_policy = command.payload.get("evidence_policy")
+                evidence_text = (
+                    json.dumps(evidence_policy, sort_keys=True, default=str)
+                    if isinstance(evidence_policy, dict)
+                    else "{}"
+                )
                 session.steer(
                     "Authoritative steering for the active task; this supersedes any conflicting "
-                    f"earlier scope or plan. Follow it immediately and report against it: {message}"
+                    f"earlier scope or plan. Follow it immediately. User instruction: {message}\n"
+                    f"Effective objective: {effective_objective or message}\n"
+                    f"Omnix evidence contract: {evidence_text}\n"
+                    "Do not claim completion until the evidence contract is satisfied."
                 )
             elif command.command_type == "pause":
                 session.abort()
@@ -480,12 +490,17 @@ class PiAgentRuntime(AgentRuntime):
         criteria = "\n".join(f"- {item.description}" for item in spec.success_criteria)
         local_authority = ", ".join(spec.capabilities)
         external_authority = ", ".join(spec.external_capabilities)
+        evidence_policy = spec.evidence_policy.model_dump(mode="json")
+        evidence_text = json.dumps(evidence_policy, sort_keys=True, default=str)
         return (
             f"Task: {spec.task}\n"
             f"Objective: {spec.objective or spec.task}\n"
             f"Issued local capabilities: {local_authority or 'none'}\n"
             f"Issued governed external capabilities: {external_authority or 'none'}\n"
+            f"Omnix evidence contract: {evidence_text}\n"
             f"Success criteria:\n{criteria or '- Complete the requested task and report evidence.'}\n"
+            "Use only the issued capabilities to satisfy the evidence contract. "
+            "If evidence is required, gather evidence that matches its subject, trust, and freshness requirements.\n"
             "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "
             "and do not continue work that the steering supersedes.\n"
             "Stay inside the issued workspace. Do not publish, push, merge, send messages, control devices, "

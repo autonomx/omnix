@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 import re
 from typing import Callable
 from urllib.parse import urlparse
@@ -53,7 +54,7 @@ _TICKER = re.compile(r"(?:\$([A-Z]{1,5})\b|\b(NVDA|GME|TSLA)\b)")
 _PR = re.compile(r"\bPR\s*#?(\d+)\b", re.I)
 
 TRUST_RANK = {"general": 0, "reputable": 1, "primary": 2, "authoritative": 3}
-FRESHNESS_SECONDS = {
+DEFAULT_FRESHNESS_SECONDS = {
     "market_quote": 60,
     "market_status": 60,
     "repo_ci_state": 300,
@@ -64,6 +65,31 @@ FRESHNESS_SECONDS = {
     "company_leadership": 86400,
     "general_current_web": 86400,
 }
+
+def freshness_max_age_seconds(source_class: str) -> int | None:
+    """Resolve source-specific freshness from policy configuration.
+
+    Environment overrides keep classification semantic while making acceptance
+    freshness deploy-time policy rather than classifier code.
+    """
+    key = "OMNIX_AGENT_EVIDENCE_MAX_AGE_" + re.sub(r"[^A-Z0-9]+", "_", source_class.upper())
+    raw = str(os.environ.get(key, "") or "").strip()
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise EvidenceCompilationError(
+                "freshness_policy_unsatisfiable",
+                f"{key} must be a positive integer",
+            ) from exc
+        if value <= 0:
+            raise EvidenceCompilationError(
+                "freshness_policy_unsatisfiable",
+                f"{key} must be a positive integer",
+            )
+        return value
+    return DEFAULT_FRESHNESS_SECONDS.get(source_class)
+
 
 SOURCE_CAPABILITIES: dict[str, tuple[str, str]] = {
     "general_current_web": ("research.web_search", "reputable"),
@@ -184,7 +210,7 @@ def _requirement(
             EvidenceSourceOption(source_class=source_class, trust_floor=source_trust)
         ],
         fallback_policy=fallback,
-        max_age_seconds=FRESHNESS_SECONDS.get(source_class) if freshness == "current" else None,
+        max_age_seconds=freshness_max_age_seconds(source_class) if freshness == "current" else None,
     )
 
 

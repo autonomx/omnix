@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from .evidence import classify_evidence, compile_task_authority, task_requires_workspace_mutation
+from .profiles import get_agent_profile
 from .contracts import (
     AgentRunSnapshot,
     AgentRunSpec,
@@ -29,8 +31,12 @@ class ChildRunRequest(BaseModel):
 
 def derive_child_spec(parent: AgentRunSnapshot, request: ChildRunRequest) -> AgentRunSpec:
     parent_spec = parent.spec
-    local = list(dict.fromkeys(request.capabilities))
-    external = list(dict.fromkeys(request.external_capabilities))
+    effective_task = request.objective or request.task
+    profile = get_agent_profile(parent_spec.profile)
+    evidence_decision = classify_evidence(effective_task, profile_id=parent_spec.profile)
+    compiled = compile_task_authority(profile, effective_task, evidence_decision)
+    local = list(dict.fromkeys([*compiled.required_local, *request.capabilities]))
+    external = list(dict.fromkeys([*compiled.required_external, *request.external_capabilities]))
     if not set(local).issubset(set(parent_spec.capabilities)):
         raise ValueError("child local capabilities exceed parent authority")
     if not set(external).issubset(set(parent_spec.external_capabilities)):
@@ -65,13 +71,15 @@ def derive_child_spec(parent: AgentRunSnapshot, request: ChildRunRequest) -> Age
         capabilities=local,
         resource_scopes=scopes,
         external_capabilities=external,
+        request_mode=parent_spec.request_mode,
+        evidence_policy=evidence_decision.policy,
         workspace=workspace,
         execution=parent_spec.execution,
         limits=limits,
         approval_policy=parent_spec.approval_policy,
         context_sources=list(parent_spec.context_sources),
         artifact_policy=parent_spec.artifact_policy,
-        expected_artifacts=["diff"] if any(item in {"workspace.edit", "workspace.write"} for item in local) else [],
+        expected_artifacts=["diff"] if parent_spec.profile == "coding" and task_requires_workspace_mutation(effective_task) else [],
         persistence_policy=parent_spec.persistence_policy,
     )
 
