@@ -110,6 +110,85 @@ SOURCE_CAPABILITIES: dict[str, tuple[str, str]] = {
     "weather_state": ("weather.current", "authoritative"),
 }
 
+_SEMANTIC_SOURCE_CLASSES = frozenset(SOURCE_CAPABILITIES)
+
+
+def _semantic_evidence_adviser(task: str, profile_id: str) -> EvidenceDecision | None:
+    enabled = str(os.environ.get("OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER", "") or "").strip().casefold()
+    if enabled not in {"1", "true", "yes", "hermes"}:
+        return None
+    try:
+        from app.assist_core.hermes_client import HermesSidecarClient
+
+        client = HermesSidecarClient(
+            base_url=str(os.environ.get("OMNIX_HERMES_URL", "http://127.0.0.1:8642")),
+            api_key=os.environ.get("OMNIX_HERMES_API_KEY"),
+            timeout=float(os.environ.get("OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT", "15")),
+        )
+        payload = client.classify_agent_evidence(task, profile_id)
+    except Exception:
+        # Advisory failures never weaken the policy. The caller falls back to
+        # conservative Omnix classification.
+        return None
+
+    requirement = str(payload.get("requirement") or "none").casefold()
+    if requirement not in {"none", "optional", "required"}:
+        return None
+    external_access = str(payload.get("external_access") or "allowed").casefold()
+    if external_access not in {"allowed", "forbidden"}:
+        external_access = "allowed"
+    attribution = str(payload.get("user_visible_attribution") or "when_used").casefold()
+    if attribution not in {"none", "when_used", "required"}:
+        attribution = "when_used"
+    requirements: list[EvidenceRequirement] = []
+    for row in payload.get("requirements") or []:
+        if not isinstance(row, dict):
+            continue
+        source_class = str(row.get("source_class") or "").strip()
+        if source_class not in _SEMANTIC_SOURCE_CLASSES:
+            continue
+        freshness = str(row.get("freshness") or "timeless").casefold()
+        if freshness not in {"timeless", "current"}:
+            freshness = "timeless"
+        trust = str(row.get("trust_floor") or SOURCE_CAPABILITIES[source_class][1]).casefold()
+        if trust not in TRUST_RANK:
+            trust = SOURCE_CAPABILITIES[source_class][1]
+        fallback = str(row.get("fallback_policy") or "fail_closed").casefold()
+        if fallback not in {"fail_closed", "allow_fallback"}:
+            fallback = "fail_closed"
+        requirements.append(
+            _requirement(
+                task,
+                source_class,
+                freshness=freshness,
+                trust=trust,
+                fallback=fallback,
+            )
+        )
+    if requirement == "required" and not requirements:
+        return None
+    confidence = payload.get("confidence", 0.75)
+    try:
+        parsed_confidence = max(0.0, min(float(confidence), 1.0))
+    except (TypeError, ValueError):
+        parsed_confidence = 0.75
+    strategy = str(payload.get("retrieval_strategy") or "adaptive").casefold()
+    if strategy not in {"lookup", "bounded", "adaptive"}:
+        strategy = "adaptive"
+    return EvidenceDecision(
+        policy=EvidencePolicy(
+            requirement=requirement,
+            external_access=external_access,
+            requirements=requirements,
+            user_visible_attribution=attribution,
+            retrieval={"strategy": strategy},
+        ),
+        confidence=parsed_confidence,
+        reason=str(payload.get("reason") or "hermes_semantic_evidence_adviser")[:240],
+        classifier="semantic",
+    )
+
+
 class EvidenceCompilationError(ValueError):
     def __init__(self, code: str, message: str, *, requirement_id: str | None = None) -> None:
         super().__init__(message)
@@ -280,10 +359,10 @@ def classify_evidence(
             classifier="deterministic",
         )
 
-    if semantic_adviser is not None:
-        advised = semantic_adviser(text, profile_id)
-        if advised is not None:
-            return advised
+    adviser = semantic_adviser or _semantic_evidence_adviser
+    advised = adviser(text, profile_id)
+    if advised is not None:
+        return advised
 
     potentially_current = profile_id in {"trading-research", "house", "personal-assistant"} and bool(
         _MARKET.search(text) or _HOME.search(text) or _CALENDAR.search(text) or _EMAIL.search(text)

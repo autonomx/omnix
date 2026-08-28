@@ -35,7 +35,9 @@ def derive_child_spec(parent: AgentRunSnapshot, request: ChildRunRequest) -> Age
     profile = get_agent_profile(parent_spec.profile)
     evidence_decision = classify_evidence(effective_task, profile_id=parent_spec.profile)
     compiled = compile_task_authority(profile, effective_task, evidence_decision)
-    local = list(dict.fromkeys([*compiled.required_local, *request.capabilities]))
+    # Child local authority stays explicitly narrowed by the parent request.
+    # Evidence compilation only contributes required external read authority.
+    local = list(dict.fromkeys(request.capabilities))
     external = list(dict.fromkeys([*compiled.required_external, *request.external_capabilities]))
     if not set(local).issubset(set(parent_spec.capabilities)):
         raise ValueError("child local capabilities exceed parent authority")
