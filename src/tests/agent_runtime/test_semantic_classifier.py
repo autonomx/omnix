@@ -23,7 +23,8 @@ from app.agent_runtime.semantic_classifier import (
     SemanticIntentDecision,
     default_semantic_intent_classifier,
 )
-from app.providers.base import ChatResponse
+from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.providers.base import BaseProvider, ChatResponse, ProviderConfig
 
 
 class _StructuredFakeProvider:
@@ -48,6 +49,35 @@ class _StructuredFakeProvider:
             model=model or "fake-model",
             finish_reason="stop",
         )
+
+
+class _ContractFakeProvider(BaseProvider):
+    provider_name = "lmstudio"
+
+    def __init__(self, payload: dict) -> None:
+        self.payload = payload
+        self.calls = []
+        super().__init__(
+            ProviderConfig(
+                provider_type="lmstudio",
+                base_url="http://example.test",
+                model="configured-model",
+            )
+        )
+
+    def chat_completion(self, messages, model=None, stream=False, **kwargs):
+        self.calls.append({"messages": messages, "model": model, "kwargs": kwargs})
+        return ChatResponse(
+            content=json.dumps(self.payload),
+            model=model or "configured-model",
+            finish_reason="stop",
+        )
+
+    def get_models(self):
+        return []
+
+    def test_connection(self) -> bool:
+        return True
 
 
 class _RecordingService:
@@ -346,3 +376,96 @@ def test_unknown_test_provider_keeps_local_matrix_llm_free(monkeypatch) -> None:
         provider_id="test-provider",
         model_id="test-model",
     ) is None
+
+
+def test_namespaced_ui_provider_identity_resolves_semantic_classifier(monkeypatch) -> None:
+    import app.shared as shared
+
+    provider = _ContractFakeProvider(
+        {
+            "lane": "chat",
+            "profile_id": "research",
+            "primary_intent": "weather_lookup",
+            "action_intents": [],
+            "evidence_requirements": [
+                {
+                    "source_class": "weather_state",
+                    "freshness": "current",
+                    "trust_floor": "authoritative",
+                    "fallback_policy": "fail_closed",
+                }
+            ],
+            "temporal_scope": "tomorrow morning",
+            "subject_hints": ["user location"],
+            "multi_step": False,
+            "confidence": 0.98,
+            "reason": "fresh forecast request",
+        }
+    )
+    requested = []
+    monkeypatch.setattr(
+        shared,
+        "get_provider",
+        lambda provider_name=None: requested.append(provider_name) or provider,
+    )
+
+    classifier = default_semantic_intent_classifier(
+        provider_id="llm:lmstudio",
+        model_id="llm:lmstudio:qwen-test",
+    )
+
+    assert classifier is not None
+    decision = classifier.classify("Will I need an umbrella tomorrow morning?")
+    assert requested == ["lmstudio"]
+    assert decision.primary_intent == "weather_lookup"
+    assert provider.calls[0]["model"] == "qwen-test"
+
+
+def test_non_streaming_chat_uses_generalized_semantic_router(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="coding",
+        primary_intent="repository_change",
+        action_intents=["workspace_mutate"],
+        evidence_requirements=[],
+        multi_step=True,
+        confidence=0.97,
+        reason="The user is asking for a repository change in indirect language.",
+    )
+    service = _RecordingService()
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_semantic_intent_classifier",
+        lambda **_kwargs: (lambda _content: semantic),
+    )
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+
+    store = ChatSessionStore(tmp_path / "chat.json")
+    session = store.create_session(
+        CreateChatSessionRequest(
+            title="Semantic routing",
+            provider_id="test-provider",
+            model_id="test-model",
+        )
+    )
+    appended = store.append_user_message(
+        session.id,
+        SendChatMessageRequest(
+            content="could you make this behave better whenever the cache starts cold?",
+            provider_id="test-provider",
+            model_id="test-model",
+        ),
+    )
+
+    assert appended is not None
+    assert len(service.started) == 1
+    assert service.started[0].profile == "coding"
+    assert "workspace.edit" in service.started[0].capabilities
+    stored = store.get_session(session.id)
+    assert stored is not None
+    assert stored.messages[-2].metadata["omnix_route"]["lane"] == "agent"
+    assert stored.messages[-1].metadata["semantic_intent"]["primary_intent"] == "repository_change"
