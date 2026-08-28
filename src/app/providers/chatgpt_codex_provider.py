@@ -413,6 +413,7 @@ class ChatGPTCodexProvider(BaseProvider):
         tools: list[dict[str, Any]],
         request_timeout_seconds: float,
     ) -> Iterator[ChatResponse]:
+        deadline_at = time.monotonic() + request_timeout_seconds
         system_instructions = self._system_instructions(messages)
         fingerprint = hashlib.sha256(system_instructions.encode("utf-8")).hexdigest()
         tool_fingerprint = hashlib.sha256(
@@ -437,12 +438,20 @@ class ChatGPTCodexProvider(BaseProvider):
             if new_thread:
                 if pending is not None:
                     raise ConnectionError("Codex dynamic tool state lost its conversation thread")
-                thread_id = self._start_thread(
-                    model=model,
-                    system_instructions=system_instructions,
-                    tools=tools,
-                    timeout_seconds=request_timeout_seconds,
-                )
+                try:
+                    thread_id = self._start_thread(
+                        model=model,
+                        system_instructions=system_instructions,
+                        tools=tools,
+                        timeout_seconds=max(
+                            0.25,
+                            deadline_at - time.monotonic(),
+                        ),
+                    )
+                except ConnectionError:
+                    if time.monotonic() >= deadline_at:
+                        self._reset_process_state()
+                    raise
                 if conversation_id:
                     self._threads[conversation_id] = {
                         "thread_id": thread_id,
@@ -464,11 +473,19 @@ class ChatGPTCodexProvider(BaseProvider):
                     params["effort"] = effort
                 if fast_mode and model == DEFAULT_CODEX_MODEL:
                     params["serviceTier"] = FAST_SERVICE_TIER
-                turn_result = self._request(
-                    "turn/start",
-                    params,
-                    timeout=min(request_timeout_seconds, 60.0),
-                )
+                try:
+                    turn_result = self._request(
+                        "turn/start",
+                        params,
+                        timeout=min(
+                            max(0.25, deadline_at - time.monotonic()),
+                            60.0,
+                        ),
+                    )
+                except ConnectionError:
+                    if time.monotonic() >= deadline_at:
+                        self._reset_process_state()
+                    raise
                 turn_id = self._turn_id_from_result(turn_result)
 
             if resuming_dynamic_call:
@@ -477,7 +494,7 @@ class ChatGPTCodexProvider(BaseProvider):
             full_text = ""
             completed_text = ""
             usage: dict[str, int] | None = None
-            timeout_at = time.monotonic() + request_timeout_seconds
+            timeout_at = deadline_at
             while True:
                 remaining = timeout_at - time.monotonic()
                 if remaining <= 0:
