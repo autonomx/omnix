@@ -21,6 +21,7 @@ from .evidence import (
     EvidenceCompilationError,
     classify_evidence,
     compile_task_authority,
+    evidence_decision_from_semantic,
     evaluate_evidence_set,
     revise_objective,
     task_requires_workspace_mutation,
@@ -44,6 +45,12 @@ from .contracts import (
 )
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
+from .semantic_classifier import (
+    classify_semantic_intent_safely,
+    default_semantic_intent_classifier,
+    semantic_confidence_threshold,
+    semantic_profile_id,
+)
 from .workspace import WorkspaceAuthority
 
 
@@ -343,9 +350,35 @@ class AgentRunService:
             else (current.spec.objective or current.spec.task)
         )
         effective = revise_objective(previous_objective, message)
-        target_profile_id = select_agent_profile_id(effective)
+        semantic = classify_semantic_intent_safely(
+            default_semantic_intent_classifier(
+                provider_id=current.spec.model.provider_id,
+                model_id=current.spec.model.model_id,
+            ),
+            effective,
+        )
+        target_profile_id = semantic_profile_id(effective, semantic)
         target_profile = get_agent_profile(target_profile_id)
-        decision = classify_evidence(effective, profile_id=target_profile_id)
+        semantic_evidence = (
+            evidence_decision_from_semantic(effective, semantic)
+            if semantic is not None
+            else None
+        )
+        semantic_actions = (
+            list(semantic.action_intents)
+            if semantic is not None
+            and semantic.confidence >= semantic_confidence_threshold()
+            else []
+        )
+        decision = classify_evidence(
+            effective,
+            profile_id=target_profile_id,
+            semantic_adviser=(
+                (lambda _task, _profile: semantic_evidence)
+                if semantic_evidence is not None
+                else None
+            ),
+        )
         if (
             current.spec.workspace is not None
             and current.spec.workspace.repository
@@ -359,7 +392,12 @@ class AgentRunService:
                     repository_name=repository_name,
                 )
             })
-        compiled = compile_task_authority(target_profile, effective, decision)
+        compiled = compile_task_authority(
+            target_profile,
+            effective,
+            decision,
+            semantic_action_intents=semantic_actions,
+        )
         required_local = set(compiled.required_local)
         required_external = set(compiled.required_external)
         issued_local = set(current.spec.capabilities)
@@ -371,7 +409,11 @@ class AgentRunService:
         )
         expected_artifacts = (
             ["diff"]
-            if target_profile_id == "coding" and task_requires_workspace_mutation(effective)
+            if target_profile_id == "coding"
+            and task_requires_workspace_mutation(
+                effective,
+                semantic_action_intents=semantic_actions,
+            )
             else []
         )
         checks = ["successful_test_command"] if expected_artifacts else []
