@@ -8,6 +8,7 @@ import pytest
 
 from app.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRevision
 from app.agent_runtime.repository import PostgresAgentRunRepository
+from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -16,9 +17,23 @@ from app.persistence.unit_of_work import unit_of_work
 DATABASE_URL = os.environ.get("OMNIX_TEST_DATABASE_URL")
 
 
+def _database() -> PostgresDatabase:
+    assert DATABASE_URL
+    return PostgresDatabase(
+        DatabaseSettings(
+            url=DATABASE_URL,
+            pool_min=1,
+            pool_max=3,
+            connect_timeout_seconds=10,
+            statement_timeout_ms=30_000,
+            application_name="omnix-agent-evidence-budget-tests",
+        )
+    )
+
+
 @pytest.mark.skipif(not DATABASE_URL, reason="requires PostgreSQL integration database")
 def test_evidence_query_reservations_are_idempotent_and_aggregate_bounded() -> None:
-    database = PostgresDatabase(DATABASE_URL)
+    database = _database()
     context = bootstrap_local_tenant(database)
     run_id = f"evidence-budget-{uuid.uuid4().hex}"
     spec = AgentRunSpec(
@@ -87,7 +102,7 @@ def test_evidence_query_reservations_are_idempotent_and_aggregate_bounded() -> N
 
 @pytest.mark.skipif(not DATABASE_URL, reason="requires PostgreSQL integration database")
 def test_stale_read_capability_execution_can_be_reclaimed() -> None:
-    database = PostgresDatabase(DATABASE_URL)
+    database = _database()
     context = bootstrap_local_tenant(database)
     run_id = f"read-reclaim-{uuid.uuid4().hex}"
     spec = AgentRunSpec(

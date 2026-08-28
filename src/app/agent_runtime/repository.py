@@ -23,10 +23,21 @@ from .contracts import (
 )
 
 
+def _json_default(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    return str(value)
+
+
 def _json(value: Any) -> str:
     if hasattr(value, "model_dump"):
         value = value.model_dump(mode="json")
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=_json_default,
+    )
 
 
 class AgentRunConcurrencyError(RuntimeError):
