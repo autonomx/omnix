@@ -30,6 +30,8 @@ from .strategy_repository import (
 )
 from .strategy_intraday_learning import IntradayLearningSnapshot, build_intraday_learning_snapshot
 from .strategy_intraday_llm import (
+    EVENT_BATCH_COOLDOWN_MINUTES,
+    FULL_REFRESH_MINUTES,
     IntradayLLMAnalyzer,
     select_intraday_llm_candidates,
     should_run_intraday_llm_batch,
@@ -377,6 +379,8 @@ class TradingStrategyMonitor:
             2_000,
         )
         previous_by_instrument: dict[str, dict[str, Any]] = {}
+        previous_observed_at_by_instrument: dict[str, datetime] = {}
+        last_full_refresh_at_by_instrument: dict[str, datetime] = {}
         previous_batch_at: datetime | None = None
         for event in recent_events:
             payload = event.payload if isinstance(event.payload, dict) else {}
@@ -384,24 +388,63 @@ class TradingStrategyMonitor:
                 continue
             if event.event_type == "intraday_llm_batch" and previous_batch_at is None:
                 previous_batch_at = event.observed_at
-            if event.event_type == "intraday_llm" and event.instrument_id not in previous_by_instrument:
+            if event.event_type != "intraday_llm":
+                continue
+            if event.instrument_id not in previous_by_instrument:
                 previous_by_instrument[event.instrument_id] = payload
+                previous_observed_at_by_instrument[event.instrument_id] = event.observed_at
+            if (
+                payload.get("payload_mode") == "full"
+                and event.instrument_id not in last_full_refresh_at_by_instrument
+            ):
+                last_full_refresh_at_by_instrument[event.instrument_id] = event.observed_at
 
-        if not should_run_intraday_llm_batch(
-            observed_at=observed_at,
-            previous_batch_at=previous_batch_at,
-            minimum_interval_minutes=config.config.intraday_llm_interval_minutes,
+        observed_et = observed_at.astimezone(_ET).time()
+        heartbeat_enabled = (
+            config.config.entry_start_et <= observed_et <= config.config.last_entry_et
+        )
+        selected, trigger_reasons = select_intraday_llm_candidates(
+            ranked_learning,
+            top_n=config.config.intraday_llm_top_n,
+            previous_by_instrument=previous_by_instrument,
+            previous_observed_at_by_instrument=previous_observed_at_by_instrument,
+            heartbeat_minutes=config.config.intraday_llm_interval_minutes,
+            heartbeat_enabled=heartbeat_enabled,
+        )
+        if not selected:
+            return
+
+        urgent_entry_ready = any(
+            "entry_ready" in trigger_reasons.get(row[0].instrument_id, ())
+            for row in selected
+        )
+        if (
+            not urgent_entry_ready
+            and not should_run_intraday_llm_batch(
+                observed_at=observed_at,
+                previous_batch_at=previous_batch_at,
+                minimum_interval_minutes=EVENT_BATCH_COOLDOWN_MINUTES,
+            )
         ):
             return
 
-        selected = select_intraday_llm_candidates(
-            ranked_learning,
-            top_n=config.config.intraday_llm_top_n,
-        )
         ranks = {
             row[0].instrument_id: rank
             for rank, row in enumerate(ranked_learning, start=1)
         }
+        payload_modes: dict[str, str] = {}
+        for candidate, _, row_observed_at, _ in selected:
+            instrument_id = candidate.instrument_id
+            previous = previous_by_instrument.get(instrument_id)
+            last_full = last_full_refresh_at_by_instrument.get(instrument_id)
+            payload_modes[instrument_id] = (
+                "full"
+                if previous is None
+                or last_full is None
+                or row_observed_at >= last_full + timedelta(minutes=FULL_REFRESH_MINUTES)
+                else "delta"
+            )
+
         analyzer = self.intraday_llm_analyzer_factory()
         self.intraday_llm_call_count += 1
         try:
@@ -410,6 +453,8 @@ class TradingStrategyMonitor:
                 selected,
                 ranks=ranks,
                 previous_by_instrument=previous_by_instrument,
+                trigger_reasons_by_instrument=trigger_reasons,
+                payload_modes_by_instrument=payload_modes,
             )
         except Exception as exc:
             self.intraday_llm_error_count += 1
@@ -421,12 +466,14 @@ class TradingStrategyMonitor:
                 universe_id=universe.universe_id,
                 error_type=type(exc).__name__,
                 detail=str(exc),
+                trigger_reasons=trigger_reasons,
                 research_only=True,
                 execution_authority=False,
             )
-            # Persist the failed attempt as the batch cadence checkpoint so a
-            # temporarily unavailable/default provider is retried at the normal
-            # minute cadence instead of every monitor poll.
+            # A failed event-driven batch is still a short cooldown checkpoint so
+            # a temporarily unavailable default provider is not hammered every
+            # monitor poll. ENTRY_READY can bypass this cooldown on a new state
+            # transition.
             await self._event(
                 strategy_repository,
                 config,
@@ -440,6 +487,9 @@ class TradingStrategyMonitor:
                     "error_type": type(exc).__name__,
                     "detail": str(exc),
                     "requested_instrument_ids": [row[0].instrument_id for row in selected],
+                    "trigger_reasons": trigger_reasons,
+                    "heartbeat_enabled": heartbeat_enabled,
+                    "event_cooldown_minutes": EVENT_BATCH_COOLDOWN_MINUTES,
                     "research_only": True,
                     "execution_authority": False,
                 },
@@ -467,8 +517,14 @@ class TradingStrategyMonitor:
                     "live_research_rank": ranks.get(assessment.instrument_id),
                     "provider": result.provider,
                     "model": result.model,
+                    "trigger_reasons": list(
+                        trigger_reasons.get(assessment.instrument_id, ())
+                    ),
+                    "payload_mode": payload_modes.get(assessment.instrument_id, "delta"),
                     "deterministic_state": deterministic.state,
                     "deterministic_reason_code": deterministic.reason_code,
+                    # Persist full causal state for future delta construction even
+                    # when only a compact delta was sent to the provider.
                     "source_learning": learning.model_dump(mode="json"),
                     "assessment": assessment.model_dump(mode="json"),
                     "research_only": True,
@@ -477,6 +533,7 @@ class TradingStrategyMonitor:
             )
             self.intraday_llm_assessment_count += int(persisted)
 
+        estimated_input_tokens = (result.input_characters + 3) // 4
         await self._event(
             strategy_repository,
             config,
@@ -492,7 +549,14 @@ class TradingStrategyMonitor:
                 "requested_instrument_ids": [row[0].instrument_id for row in selected],
                 "assessment_count": len(result.assessments),
                 "top_n": config.config.intraday_llm_top_n,
-                "interval_minutes": config.config.intraday_llm_interval_minutes,
+                "heartbeat_minutes": config.config.intraday_llm_interval_minutes,
+                "heartbeat_enabled": heartbeat_enabled,
+                "event_cooldown_minutes": EVENT_BATCH_COOLDOWN_MINUTES,
+                "full_refresh_minutes": FULL_REFRESH_MINUTES,
+                "trigger_reasons": trigger_reasons,
+                "payload_modes": payload_modes,
+                "input_characters": result.input_characters,
+                "estimated_input_tokens_char4": estimated_input_tokens,
                 "research_only": True,
                 "execution_authority": False,
             },
