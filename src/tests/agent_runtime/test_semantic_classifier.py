@@ -311,6 +311,88 @@ def test_classifier_directed_steering_cannot_downgrade_coding_agent() -> None:
     assert semantic_profile_id(prompt, semantic) == "coding"
 
 
+def test_research_read_action_resolves_research_profile() -> None:
+    decision = SemanticIntentDecision(
+        lane="chat",
+        profile_id="coding",
+        primary_intent="software_release_lookup",
+        action_intents=["research_read"],
+        evidence_requirements=[
+            SemanticEvidenceHint(
+                source_class="software_release",
+                freshness="current",
+                trust_floor="authoritative",
+                fallback_policy="fail_closed",
+            )
+        ],
+        multi_step=False,
+        confidence=0.99,
+        reason="The model chose the wrong profile label but the research action is correct.",
+    )
+
+    assert semantic_profile_id("what's the latest stable Python release?", decision) == "research"
+
+
+def test_fictional_email_composition_does_not_become_gmail_action() -> None:
+    provider = _StructuredFakeProvider(
+        {
+            "lane": "agent",
+            "profile_id": "personal-assistant",
+            "primary_intent": "draft_fictional_email",
+            "action_intents": ["email_draft"],
+            "evidence_requirements": [
+                {
+                    "source_class": "email_state",
+                    "freshness": "current",
+                    "trust_floor": "authoritative",
+                    "fallback_policy": "fail_closed",
+                }
+            ],
+            "multi_step": False,
+            "confidence": 0.99,
+            "reason": "The user asked to draft an email.",
+        }
+    )
+    classifier = ProviderSemanticIntentClassifier(
+        provider,
+        model="fake-model",
+        timeout_seconds=2,
+    )
+
+    decision = classifier.classify(
+        "draft a fictional email for a novel where the CEO resigns."
+    )
+
+    assert decision.lane == "chat"
+    assert decision.action_intents == []
+    assert decision.evidence_requirements == []
+
+
+def test_actionless_semantic_agent_cannot_promote_default_chat() -> None:
+    prompt = "give me a general project organization plan for someday."
+    deterministic = route_omnix_request(prompt)
+    assert deterministic.lane == "chat"
+
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="research",
+        primary_intent="future_plan",
+        action_intents=[],
+        evidence_requirements=[],
+        multi_step=True,
+        confidence=0.99,
+        reason="The model treated planning as agent-like.",
+    )
+
+    routed = _apply_semantic_route_decision(
+        deterministic,
+        semantic,
+        content=prompt,
+    )
+
+    assert routed.lane == "chat"
+
+
 def test_semantic_classifier_can_upgrade_arbitrary_language_to_agent() -> None:
     prompt = "could you make this behave better whenever the cache starts cold?"
     deterministic = route_omnix_request(prompt)
