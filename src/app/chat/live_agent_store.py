@@ -106,7 +106,31 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 yield from _generalized_result_events(user_message, generalized.content, generalized.metadata)
                 return
 
-            pending = _pending_kasa_proposal(session, user_message.id)
+            # A generalized Chat decision is still a completed routing decision:
+            # continue with the provider, but do not let the legacy Live Agent
+            # router reinterpret the same user prompt. Preserve pending legacy
+            # Kasa confirmations until they have been approved/rejected.
+            routed_chat = bool(user_message.metadata.get("omnix_chat_routed"))
+            routed_chat_decision = user_message.metadata.get("omnix_route")
+            legacy_pending = _pending_kasa_proposal(session, user_message.id)
+            if routed_chat and legacy_pending is None:
+                _persist_omnix_route(
+                    self,
+                    session.id,
+                    user_message,
+                    routed_chat_decision,
+                )
+                yield from _original(
+                    self,
+                    session,
+                    user_message,
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    context_items=context_items,
+                )
+                return
+
+            pending = legacy_pending
             choice = _confirmation_choice(user_message.content) if pending else None
             if pending and choice == "approve":
                 proposal_message, request = pending
