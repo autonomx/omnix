@@ -18,6 +18,7 @@ from .catalyst_discovery import discover_yahoo_catalyst_headlines
 from .catalyst_evidence import CatalystShadowClassification
 from .catalyst_repository import TradingCatalystRepository, default_catalyst_repository
 from .catalyst_shadow import generate_catalyst_shadow_classification
+from .finviz_gapper_discovery import discover_finviz_gappers
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe
 from .gapper_discovery import discover_yahoo_gappers
 from .models import MarketBar
@@ -99,7 +100,7 @@ class GapperUniverseFreezeRequest(BaseModel):
     universe_id: str = Field(min_length=1, max_length=200)
     session_date: date
     evaluation_time: datetime
-    discovery_source: Literal["manual", "import", "scanner", "provider"] = "import"
+    discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"] = "import"
     candidates: list[GapperCandidate] = Field(min_length=1, max_length=2_000)
 
 
@@ -111,6 +112,10 @@ class YahooGapperDiscoveryRequest(BaseModel):
     minimum_gap_pct: Decimal = Field(default=Decimal("20"), ge=0, le=1000)
     minimum_price: Decimal = Field(default=Decimal("0.50"), gt=0)
     maximum_price: Decimal = Field(default=Decimal("20"), gt=0)
+
+
+class FinvizGapperDiscoveryRequest(YahooGapperDiscoveryRequest):
+    """Same filtering contract, but Finviz determines the source-ranked cohort."""
 
 
 class GapPullbackBacktestRequest(BaseModel):
@@ -622,6 +627,24 @@ def create_trading_strategy_router(
                 raise ValueError("maximum_price must exceed minimum_price")
             snapshot = await asyncio.to_thread(
                 discover_yahoo_gappers,
+                universe_id=request.universe_id,
+                evaluation_time=request.evaluation_time,
+                count=request.count,
+                minimum_gap_pct=request.minimum_gap_pct,
+                minimum_price=request.minimum_price,
+                maximum_price=request.maximum_price,
+            )
+            return await asyncio.to_thread(repository_factory().save_universe, snapshot)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/universes/discover-finviz", response_model=GapperUniverseSnapshot, status_code=201)
+    async def discover_finviz_universe(request: FinvizGapperDiscoveryRequest):
+        try:
+            if request.maximum_price <= request.minimum_price:
+                raise ValueError("maximum_price must exceed minimum_price")
+            snapshot = await asyncio.to_thread(
+                discover_finviz_gappers,
                 universe_id=request.universe_id,
                 evaluation_time=request.evaluation_time,
                 count=request.count,
