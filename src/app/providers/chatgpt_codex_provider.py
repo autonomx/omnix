@@ -481,6 +481,7 @@ class ChatGPTCodexProvider(BaseProvider):
             while True:
                 remaining = timeout_at - time.monotonic()
                 if remaining <= 0:
+                    self._reset_process_state()
                     raise ConnectionError("Timed out waiting for Codex turn completion")
                 try:
                     event = (
