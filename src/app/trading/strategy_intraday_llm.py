@@ -74,6 +74,11 @@ class IntradayLLMResult(BaseModel):
     provider: str
     model: str | None = None
     input_characters: int = Field(default=0, ge=0)
+    output_characters: int = Field(default=0, ge=0)
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    total_tokens: int = Field(default=0, ge=0)
+    usage_source: Literal["provider", "estimated"] = "estimated"
 
 
 def _strip_json_fence(value: str) -> str:
@@ -90,6 +95,48 @@ def _default_provider():
     from app import shared
 
     return shared.get_provider()
+
+
+def _usage_int(usage: Any, *keys: str) -> int | None:
+    if not isinstance(usage, dict):
+        return None
+    for key in keys:
+        raw = usage.get(key)
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value >= 0:
+            return value
+    return None
+
+
+def _normalized_usage(
+    usage: Any,
+    *,
+    input_characters: int,
+    output_characters: int,
+) -> tuple[int, int, int, Literal["provider", "estimated"]]:
+    input_tokens = _usage_int(usage, "prompt_tokens", "input_tokens")
+    output_tokens = _usage_int(usage, "completion_tokens", "output_tokens")
+    total_tokens = _usage_int(usage, "total_tokens")
+
+    if input_tokens is not None or output_tokens is not None or total_tokens is not None:
+        normalized_input = input_tokens or 0
+        normalized_output = output_tokens or 0
+        normalized_total = total_tokens
+        if normalized_total is None:
+            normalized_total = normalized_input + normalized_output
+        return normalized_input, normalized_output, normalized_total, "provider"
+
+    estimated_input = (input_characters + 3) // 4
+    estimated_output = (output_characters + 3) // 4
+    return (
+        estimated_input,
+        estimated_output,
+        estimated_input + estimated_output,
+        "estimated",
+    )
 
 
 def should_run_intraday_llm_batch(
@@ -620,6 +667,12 @@ class IntradayLLMAnalyzer:
         content = str(getattr(response, "content", "") or "").strip()
         if not content:
             raise RuntimeError("intraday_llm_provider_returned_no_text")
+        output_characters = len(content)
+        input_tokens, output_tokens, total_tokens, usage_source = _normalized_usage(
+            getattr(response, "usage", None),
+            input_characters=input_characters,
+            output_characters=output_characters,
+        )
         try:
             parsed = IntradayLLMBatchResponse.model_validate_json(_strip_json_fence(content))
         except Exception as exc:
@@ -643,6 +696,11 @@ class IntradayLLMAnalyzer:
             provider=provider_name,
             model=response_model,
             input_characters=input_characters,
+            output_characters=output_characters,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            usage_source=usage_source,
         )
 
 
