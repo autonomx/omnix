@@ -48,9 +48,37 @@ AgentEventType = Literal[
     "acceptance.started",
     "acceptance.completed",
     "worker.heartbeat",
+    "task.revised",
+    "evidence.receipt",
+    "run.superseded",
 ]
 AgentApprovalState = Literal["pending", "approved", "rejected", "expired"]
 ArtifactKind = Literal["diff", "test_result", "log", "report", "file", "other"]
+EvidenceRequirementLevel = Literal["none", "optional", "required"]
+ExternalEvidenceAccess = Literal["allowed", "forbidden"]
+EvidenceFreshness = Literal["timeless", "current", "as_of_date"]
+EvidenceTrust = Literal["authoritative", "primary", "reputable", "general"]
+EvidenceFallbackPolicy = Literal["fail_closed", "allow_fallback"]
+EvidenceAttribution = Literal["none", "when_used", "required"]
+RetrievalStrategy = Literal["lookup", "bounded", "adaptive"]
+EvidenceClassifier = Literal["deterministic", "semantic", "conservative"]
+EvidenceEvaluationStatus = Literal[
+    "satisfied",
+    "missing",
+    "unavailable",
+    "stale",
+    "wrong_subject",
+    "insufficient_trust",
+    "rejected",
+]
+RequestMode = Literal["chat", "quick_research", "deep_research", "agent", "auto"]
+RequestModeSource = Literal[
+    "explicit_command",
+    "turn_setting",
+    "persistent_setting",
+    "classifier",
+    "default",
+]
 
 
 def utc_now() -> datetime:
@@ -64,6 +92,149 @@ class ModelRef(BaseModel):
     model_id: str
     reasoning_effort: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class SubjectRef(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: str
+    canonical_id: str
+    display_name: str | None = None
+    qualifiers: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvidenceSourceOption(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_class: str
+    trust_floor: EvidenceTrust = "general"
+    provider_hint: str | None = None
+
+
+class EvidenceRequirement(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str
+    source_class: str
+    subject: SubjectRef | None = None
+    freshness: EvidenceFreshness = "timeless"
+    trust_floor: EvidenceTrust = "general"
+    acceptable_sources: list[EvidenceSourceOption] = Field(default_factory=list)
+    minimum_matches: int = Field(default=1, ge=1, le=100)
+    fallback_policy: EvidenceFallbackPolicy = "fail_closed"
+    as_of_date: datetime | None = None
+    max_age_seconds: int | None = Field(default=None, ge=1)
+
+
+class RetrievalPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    strategy: RetrievalStrategy = "adaptive"
+    max_queries: int = Field(default=4, ge=1, le=100)
+    max_sources: int = Field(default=10, ge=1, le=200)
+    max_extracts: int = Field(default=4, ge=0, le=50)
+    max_wall_time_seconds: int = Field(default=60, ge=1, le=3600)
+
+
+class EvidencePolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    requirement: EvidenceRequirementLevel = "none"
+    external_access: ExternalEvidenceAccess = "allowed"
+    requirements: list[EvidenceRequirement] = Field(default_factory=list)
+    user_visible_attribution: EvidenceAttribution = "when_used"
+    retrieval: RetrievalPolicy = Field(default_factory=RetrievalPolicy)
+
+
+class EvidenceDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy: EvidencePolicy = Field(default_factory=EvidencePolicy)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    reason: str = "model_knowledge_sufficient"
+    classifier: EvidenceClassifier = "deterministic"
+
+
+class RequestModeCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mode: RequestMode
+    source: RequestModeSource
+    priority: int
+
+
+class RequestModeSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mode: RequestMode
+    source: RequestModeSource
+    priority: int
+    suppressed: list[RequestModeCandidate] = Field(default_factory=list)
+
+
+class TaskRevision(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    revision_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    run_id: str
+    sequence: int = Field(ge=1)
+    previous_revision_id: str | None = None
+    source_command_id: str | None = None
+    user_instruction: str
+    effective_objective: str
+    effective_success_criteria: list[SuccessCriterion] = Field(default_factory=list)
+    evidence_decision: EvidenceDecision = Field(default_factory=EvidenceDecision)
+    required_local_capabilities: list[str] = Field(default_factory=list)
+    required_external_capabilities: list[str] = Field(default_factory=list)
+    expected_artifacts: list[ArtifactKind] = Field(default_factory=list)
+    acceptance_checks: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class EvidenceReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    receipt_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    run_id: str
+    task_revision_id: str | None = None
+    capability_id: str
+    source_class: str
+    subject: SubjectRef | None = None
+    request_digest: str
+    provider: str | None = None
+    origin: str | None = None
+    source_manifest_id: str | None = None
+    source_count: int = Field(default=0, ge=0)
+    executed_at: datetime = Field(default_factory=utc_now)
+    observed_at: datetime = Field(default_factory=utc_now)
+    freshest_source_at: datetime | None = None
+    trust_level: EvidenceTrust = "general"
+    result_digest: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvidenceRequirementEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    requirement_id: str
+    status: EvidenceEvaluationStatus
+    matching_receipt_ids: list[str] = Field(default_factory=list)
+    rejected_receipt_ids: list[str] = Field(default_factory=list)
+    reason: str | None = None
+
+
+class EvidenceSet(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run_id: str
+    evaluated_at: datetime = Field(default_factory=utc_now)
+    requirements: list[EvidenceRequirementEvaluation] = Field(default_factory=list)
+    missing_requirements: list[str] = Field(default_factory=list)
+    stale_receipts: list[str] = Field(default_factory=list)
+    wrong_subject_receipts: list[str] = Field(default_factory=list)
+    insufficient_trust_receipts: list[str] = Field(default_factory=list)
+    source_manifest_ids: list[str] = Field(default_factory=list)
+    passed: bool = True
 
 
 class ResourceScope(BaseModel):
@@ -140,6 +311,9 @@ class AgentRunSpec(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     resource_scopes: list[ResourceScope] = Field(default_factory=list)
     external_capabilities: list[str] = Field(default_factory=list)
+    request_mode: RequestModeSelection | None = None
+    evidence_policy: EvidencePolicy = Field(default_factory=EvidencePolicy)
+    supersedes_run_id: str | None = None
     workspace: WorkspaceSpec | None = None
     execution: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
     limits: RunLimits = Field(default_factory=RunLimits)
@@ -210,6 +384,7 @@ class AgentRunSnapshot(BaseModel):
     desired_state: AgentDesiredState = "running"
     revision: int = 1
     worker_id: str | None = None
+    superseded_by_run_id: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     last_error: str | None = None

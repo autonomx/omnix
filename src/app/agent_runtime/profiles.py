@@ -65,13 +65,18 @@ def list_agent_profiles() -> list[AgentProfile]:
     return list(_PROFILES.values())
 
 
+def profile_external_ceiling(profile: AgentProfile) -> set[str]:
+    """Maximum external authority a task compiled for this profile may receive."""
+    return set(profile.external_capabilities) | set(profile.optional_external_capabilities)
+
+
 def resolve_profile_capabilities(profile: AgentProfile, *, requested: list[str] | None = None, requested_external: list[str] | None = None) -> tuple[list[str], list[str]]:
     local_allowed = set(profile.capabilities)
-    external_allowed = set(profile.external_capabilities) | set(
-        profile.optional_external_capabilities
-    )
+    external_allowed = profile_external_ceiling(profile)
     local = list(profile.capabilities) if requested is None else list(dict.fromkeys(requested))
-    external = list(profile.external_capabilities) if requested_external is None else list(dict.fromkeys(requested_external))
+    # Profiles are ceilings, not grants. External authority is issued only when
+    # a compiled task explicitly requests it.
+    external = [] if requested_external is None else list(dict.fromkeys(requested_external))
     if not set(local).issubset(local_allowed):
         raise ValueError("requested local capabilities exceed selected profile")
     if not set(external).issubset(external_allowed):
