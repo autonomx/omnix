@@ -372,6 +372,24 @@ class ChatSessionStore:
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        from app.agent_runtime.chat_bridge import route_typed_chat_turn
+
+        generalized = route_typed_chat_turn(
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+        )
+        if generalized is not None:
+            route = generalized.metadata.get("omnix_route")
+            if isinstance(route, dict):
+                user_message.metadata["omnix_route"] = route
+            return {
+                "content": generalized.content,
+                "metadata": generalized.metadata,
+            }
+
         if request.agent_mode and not _quick_research_uses_chat_lane(
             user_message.content,
             request.research_mode,
