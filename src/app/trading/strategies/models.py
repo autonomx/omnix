@@ -25,7 +25,7 @@ GapPullbackState = Literal[
     "expired",
 ]
 FloatPreferenceMode = Literal["ignore", "score", "require"]
-StrategyBarInterval = Literal["1m", "5m"]
+StrategyBarInterval = Literal["1m", "5m"]\nGapperDiscoverySource = Literal["yahoo", "finviz"]
 
 
 class StrategyRiskProfile(BaseModel):
