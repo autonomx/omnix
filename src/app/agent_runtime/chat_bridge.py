@@ -103,16 +103,87 @@ def _should_use_semantic_classifier(decision: OmnixRouteDecision, content: str) 
     return True
 
 
+def _negated_action_allows_semantic_agent(
+    content: str,
+    semantic: SemanticIntentDecision,
+) -> bool:
+    """Distinguish total refusal from a narrow prohibition plus allowed work."""
+
+    if semantic.lane != "agent":
+        return False
+    actions = {str(value) for value in semantic.action_intents}
+    if not actions:
+        return False
+
+    text = " ".join(str(content or "").split())
+    if re.match(
+        r"^(?:don'?t|do\s+not)\s+just\s+(?:tell|explain|describe)\b",
+        text,
+        re.I,
+    ):
+        return True
+
+    # A broad refusal such as "don't touch anything" still blocks semantic
+    # promotion. Narrow prohibitions below only remove the forbidden action;
+    # another requested action may still justify Agent.
+    if re.match(
+        r"^(?:don'?t|do\s+not|never)\s+(?:touch|access)\s+anything\b",
+        text,
+        re.I,
+    ):
+        return False
+
+    forbidden: set[str] = set()
+    if re.search(r"\b(?:don'?t|do\s+not|never)\s+(?:send|reply|forward)\b", text, re.I):
+        forbidden.add("email_send")
+    if re.search(r"\b(?:don'?t|do\s+not|never)\s+(?:draft|compose)\b", text, re.I):
+        forbidden.add("email_draft")
+    if re.search(
+        r"\b(?:don'?t|do\s+not|never)\s+(?:schedule|book|create|add)\b.{0,80}"
+        r"\b(?:calendar|meeting|appointment|event)\b",
+        text,
+        re.I,
+    ):
+        forbidden.add("calendar_create")
+    if re.search(
+        r"\b(?:don'?t|do\s+not|never)\s+(?:turn|set|adjust|lower|raise|dim|brighten|change)\b.{0,80}"
+        r"\b(?:light|lamp|plug|outlet|thermostat|home)\b",
+        text,
+        re.I,
+    ) or re.search(
+        r"\b(?:don'?t|do\s+not|never)\s+change\s+(?:the\s+)?(?:lights?|lamps?)\b",
+        text,
+        re.I,
+    ):
+        forbidden.add("home_mutate")
+    if re.search(
+        r"\b(?:don'?t|do\s+not|never)\s+(?:edit|modify|write|change|patch|update|delete|remove)\b",
+        text,
+        re.I,
+    ):
+        forbidden.add("workspace_mutate")
+
+    return bool(actions - forbidden)
+
+
 def _apply_semantic_route_decision(
     deterministic: OmnixRouteDecision,
     semantic: SemanticIntentDecision | None,
+    *,
+    content: str | None = None,
 ) -> OmnixRouteDecision:
     if semantic is None or semantic.confidence < semantic_confidence_threshold():
         return deterministic
-    # Explicit user mode selection and explicit no-action/hypothetical wording
-    # are authoritative. Semantic classification may interpret the turn, but it
-    # cannot turn a user's refusal or hypothetical into executable authority.
-    if deterministic.reason in {"negated_action", "hypothetical_or_conditional"}:
+    # Hypotheticals remain non-executing. A broad no-action request also stays
+    # Chat, but a narrow prohibition (for example "don't send; draft instead")
+    # must not suppress a separately requested allowed Agent action. Capability
+    # compilation still enforces the explicit prohibition deterministically.
+    if deterministic.reason == "hypothetical_or_conditional":
+        return deterministic
+    if deterministic.reason == "negated_action" and not (
+        content is not None
+        and _negated_action_allows_semantic_agent(content, semantic)
+    ):
         return deterministic
     if deterministic.explicit:
         return deterministic.model_copy(
@@ -207,6 +278,7 @@ def route_typed_chat_turn(
     decision = _apply_semantic_route_decision(
         deterministic_decision,
         semantic_intent,
+        content=content,
     )
     mode = resolve_request_mode(
         content,
