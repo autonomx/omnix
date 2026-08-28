@@ -822,3 +822,36 @@ def test_fallback_helper_never_advertises_insufficient_trust_source() -> None:
         current_capability="research.web_search",
         issued_capabilities=("research.web_search",),
     ) == ()
+
+
+
+def test_generic_do_not_instruction_does_not_forbid_external_evidence() -> None:
+    decision = classify_evidence(
+        "Research the latest PostgreSQL release but do not change code",
+        profile_id="research",
+    )
+    assert decision.policy.requirement == "required"
+    assert decision.policy.external_access == "allowed"
+
+
+def test_explicit_no_web_instruction_still_forbids_external_evidence() -> None:
+    decision = classify_evidence(
+        "Research the latest PostgreSQL release but do not use the web",
+        profile_id="research",
+    )
+    assert decision.policy.requirement == "required"
+    assert decision.policy.external_access == "forbidden"
+
+
+def test_filing_for_ticker_does_not_treat_sec_as_the_security() -> None:
+    decision = classify_evidence(
+        "Find the latest SEC filing for NVDA",
+        profile_id="trading-research",
+    )
+    requirement = next(
+        row
+        for row in decision.policy.requirements
+        if row.source_class == "company_filing"
+    )
+    assert requirement.subject is not None
+    assert requirement.subject.qualifiers["ticker"] == "NVDA"
