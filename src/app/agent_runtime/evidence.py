@@ -1174,9 +1174,16 @@ def resolve_evidence_call(
         candidates = _requirement_source_candidates(requirement)
         if requirement.fallback_policy == "fail_closed":
             candidates = candidates[:1]
-        for preference, source_class, _option_trust in candidates:
+        for preference, source_class, option_trust in candidates:
             resolved = SOURCE_CAPABILITIES.get(source_class)
             if resolved is None or resolved[0] != capability_id:
+                continue
+            _resolved_capability, source_trust = resolved
+            required_trust = max(
+                TRUST_RANK.get(requirement.trust_floor, 0),
+                TRUST_RANK.get(option_trust, 0),
+            )
+            if TRUST_RANK.get(source_trust, 0) < required_trust:
                 continue
             score = _source_intent_score(source_class, serialized)
             if requirement.subject is not None and _request_supports_subject(
@@ -1225,6 +1232,12 @@ def build_evidence_receipt(
                 continue
             resolved_capability, resolved_trust = resolved
             if resolved_capability != capability_id:
+                continue
+            required_trust = max(
+                TRUST_RANK.get(requirement.trust_floor, 0),
+                TRUST_RANK.get(option_trust, 0),
+            )
+            if TRUST_RANK.get(resolved_trust, 0) < required_trust:
                 continue
             if source_class_hint is not None and candidate_source != source_class_hint:
                 continue
@@ -1292,6 +1305,8 @@ def build_evidence_receipt(
         metadata={
             "broker": True,
             "provider_atomicity": "omnix_local_commit_only",
+            "evidence_requirement_id": requirement_id,
+            "evidence_source_class": source_class,
         },
     )
 
