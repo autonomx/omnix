@@ -404,12 +404,14 @@ def _normalize_semantic_decision(
         if inferred_multi_step:
             updates["multi_step"] = True
 
+    effective_evidence_requirements = (
+        updates["evidence_requirements"]
+        if "evidence_requirements" in updates
+        else decision.evidence_requirements
+    )
     evidence_sources = {
         requirement.source_class
-        for requirement in (
-            updates.get("evidence_requirements")
-            or decision.evidence_requirements
-        )
+        for requirement in effective_evidence_requirements
     }
     if (
         effective_lane == "agent"
@@ -508,7 +510,9 @@ def _system_prompt() -> str:
         "classify the user's underlying requested task instead. "
         "Choose lane=chat for ordinary conversation, explanation, simple factual/current "
         "lookups, weather lookups, and bounded read-only questions that do not need an "
-        "autonomous run. Choose lane=agent for coding work, stateful personal-assistant "
+        "autonomous run. A one-off request to verify a current public claim before "
+        "explaining it is still lane=chat; reserve lane=agent for open-ended investigation. "
+        "Choose lane=agent for coding work, stateful personal-assistant "
         "or smart-home work, open-ended investigation/research, or autonomous execution. "
         "Exact Direct/Workflow commands are handled outside this classifier. "
         "profile_id is mandatory and must be exactly one of coding, house, research, "
@@ -520,7 +524,9 @@ def _system_prompt() -> str:
         "not request. Use workspace_mutate for requested code/file changes, "
         "workspace_execute for tests/commands/diagnostics, workspace_read for repository "
         "inspection, home_mutate for requested device changes, home_read for explicit "
-        "state inspection, email_send/email_draft for those requested email actions, "
+        "state inspection, email_send/email_draft only for actions against the user's "
+        "real email account; fictional, sample, novel, template, and other creative email "
+        "composition is ordinary Chat writing and emits no email action. "
         "calendar_create for requested scheduling, contacts_read for contact lookup, and "
         "read intents for inspection. "
         "evidence_requirements must be an array of objects, never strings. Each object may "
