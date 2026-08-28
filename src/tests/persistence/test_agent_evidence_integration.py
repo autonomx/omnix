@@ -249,3 +249,75 @@ def test_task_revision_source_command_is_idempotent() -> None:
             work.rollback()
     finally:
         database.close()
+
+
+
+def test_superseding_steering_is_idempotent_and_audited(monkeypatch) -> None:
+    database = _database()
+    if database is None:
+        pytest.skip("requires PostgreSQL integration database")
+    context = bootstrap_local_tenant(database)
+    run_id = f"supersede-steer-{uuid.uuid4().hex}"
+    initial = AgentRunSpec(
+        run_id=run_id,
+        task="Explain TCP",
+        objective="Explain TCP",
+        profile="research",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    with unit_of_work(database) as work:
+        repository = PostgresAgentRunRepository(work.connection, context)
+        snapshot = repository.create_run(initial)
+        repository.update_state(
+            run_id,
+            expected_revision=snapshot.revision,
+            status="running",
+        )
+        work.commit()
+
+    service = AgentRunService(database, worker_id="superseding-test")
+    monkeypatch.setattr(service, "_ensure_supervisor", lambda: None)
+    monkeypatch.setattr(service.runtime, "close_run", lambda _run_id: None)
+    monkeypatch.setattr(
+        service,
+        "_launch_runtime",
+        lambda _issued, snapshot: snapshot,
+    )
+    command = AgentRunCommand(
+        run_id=run_id,
+        command_type="steer",
+        payload={"message": "Research NVDA today"},
+        idempotency_key="same-steering-key",
+    )
+    first = service.command(command)
+    second = service.command(command)
+    assert first.run_id == second.run_id
+    assert first.spec.supersedes_run_id == run_id
+
+    with unit_of_work(database) as work:
+        repository = PostgresAgentRunRepository(work.connection, context)
+        old = repository.get_run(run_id)
+        assert old is not None
+        assert old.superseded_by_run_id == first.run_id
+        revisions = repository.list_task_revisions(run_id)
+        assert sum(
+            1 for row in revisions
+            if row.source_command_id == "same-steering-key"
+        ) == 1
+        events = repository.list_events(run_id, after_sequence=0, limit=5000)
+        steering_events = [
+            event for event in events
+            if event.event_type == "steering.received"
+            and event.payload.get("task_revision_id") == revisions[-1].revision_id
+        ]
+        assert len(steering_events) == 1
+        count = work.connection.execute(
+            """
+            SELECT COUNT(*)
+              FROM omnix_agent_runs
+             WHERE workspace_id = %s AND supersedes_run_id = %s
+            """,
+            (context.workspace_id, run_id),
+        ).fetchone()
+        assert int(count[0]) == 1
+        work.rollback()

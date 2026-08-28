@@ -178,13 +178,12 @@ class AgentRunService:
                 raise KeyError(command.run_id)
             steering = self._compile_steering(current, command)
             if steering["superseding_spec"] is not None:
-                replacement = self.start(steering["superseding_spec"])
-                with unit_of_work(self.database) as work:
-                    repository = PostgresAgentRunRepository(work.connection, self.context)
-                    repository.mark_superseded(current.run_id, replacement.run_id)
-                    work.commit()
-                self.runtime.close_run(current.run_id)
-                return replacement
+                return self._start_superseding_revision(
+                    current,
+                    command,
+                    steering["revision"],
+                    steering["superseding_spec"],
+                )
             revision = steering["revision"]
             with unit_of_work(self.database) as work:
                 repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -386,7 +385,11 @@ class AgentRunService:
                 "required_workspace_unavailable",
                 f"steering requires profile {target_profile_id}, but this run has no issued workspace",
             )
+        replacement_run_id = hashlib.sha256(
+            f"supersede:{current.run_id}:{command.idempotency_key}".encode("utf-8")
+        ).hexdigest()
         replacement = AgentRunSpec(
+            run_id=replacement_run_id,
             session_id=current.spec.session_id,
             task=effective,
             objective=effective,
@@ -411,6 +414,68 @@ class AgentRunService:
             expected_artifacts=expected_artifacts,
         )
         return {"revision": revision, "superseding_spec": replacement}
+
+    def _start_superseding_revision(
+        self,
+        current: AgentRunSnapshot,
+        command: AgentRunCommand,
+        revision: TaskRevision,
+        replacement_spec: AgentRunSpec,
+    ) -> AgentRunSnapshot:
+        """Atomically reserve a superseding run and its steering audit trail."""
+        self._validate_run_spec_authority(replacement_spec)
+        self._validate_evidence_authority(replacement_spec)
+        issued = self._prepare_workspace(
+            self._bind_github_repository_authority(replacement_spec)
+        )
+
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            locked = work.connection.execute(
+                """
+                SELECT superseded_by_run_id
+                  FROM omnix_agent_runs
+                 WHERE workspace_id = %s AND run_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, current.run_id),
+            ).fetchone()
+            if locked is None:
+                raise KeyError(current.run_id)
+            existing_replacement_id = str(locked[0]) if locked[0] else None
+            if existing_replacement_id:
+                replacement = repository.get_run(existing_replacement_id)
+                if replacement is None:
+                    raise RuntimeError("superseding run link points to missing run")
+                work.rollback()
+                return replacement
+
+            stored, command_status = repository.enqueue_command_with_status(command)
+            repository.add_task_revision(revision)
+            repository.append_event(
+                AgentEvent(
+                    run_id=current.run_id,
+                    event_type="steering.received",
+                    payload={
+                        "command_id": stored.command_id,
+                        "idempotency_key": stored.idempotency_key,
+                        "task_revision_id": revision.revision_id,
+                        "superseding_run_id": issued.run_id,
+                    },
+                )
+            )
+            if command_status != "consumed" and repository.claim_command(
+                current.run_id,
+                stored.command_id,
+            ):
+                repository.complete_command(current.run_id, stored.command_id)
+
+            snapshot = self._persist_starting_run(repository, issued)
+            repository.mark_superseded(current.run_id, issued.run_id)
+            work.commit()
+
+        self.runtime.close_run(current.run_id)
+        return self._launch_runtime(issued, snapshot)
 
     def _mark_command_failed(self, command: AgentRunCommand, error: Exception) -> None:
         """Make transport/runtime command failures visible and terminal.
