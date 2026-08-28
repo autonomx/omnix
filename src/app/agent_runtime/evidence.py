@@ -659,8 +659,12 @@ def classify_evidence(
             return EvidenceDecision(
                 policy=advised_policy,
                 confidence=advised.confidence,
-                reason=(f"hybrid:{advised.reason}" if hard_floors else advised.reason)[:240],
-                classifier="hybrid" if hard_floors else advised.classifier,
+                reason=(
+                    f"hybrid:{advised.reason}"
+                    if hard_floors
+                    else advised.reason
+                )[:240],
+                classifier="semantic" if hard_floors else advised.classifier,
             )
 
         if requirements:
@@ -764,6 +768,7 @@ def classify_evidence(
         reason="model_knowledge_sufficient",
         classifier="conservative",
     )
+
 
 def _requirement_source_candidates(requirement: EvidenceRequirement) -> list[tuple[int, str, str]]:
     rows: list[tuple[int, str, str]] = [(0, requirement.source_class, requirement.trust_floor)]
@@ -883,10 +888,14 @@ def task_requires_workspace_mutation(
     *,
     semantic_action_intents: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> bool:
-    text = str(task or "")
-    if _WORKSPACE_MUTATION_FORBIDDEN.search(text):
-        return False
     intents = {str(value) for value in (semantic_action_intents or [])}
+    text = str(task or "")
+    if _WORKSPACE_MUTATION_FORBIDDEN.search(text) or re.search(
+        r"\b(?:just explain|explain only)\b",
+        text,
+        re.I,
+    ):
+        return False
     if "workspace_mutate" in intents:
         return True
     return bool(_WORKSPACE_MUTATION.search(text))
@@ -950,25 +959,29 @@ def compile_task_authority(
     if profile.id == "house":
         if intents & {"home_read", "home_mutate"}:
             external.append("home.get_state")
-        if not _HOME_MUTATION_FORBIDDEN.search(text) and (
-            "home_mutate" in intents or _HOME_MUTATION.search(text)
+        if (
+            not _HOME_MUTATION_FORBIDDEN.search(text)
+            and ("home_mutate" in intents or _HOME_MUTATION.search(text))
         ):
             external.append("home.set_state")
     elif profile.id == "personal-assistant":
         if intents & {"email_read", "email_draft", "email_send"}:
             external.append("gmail.read_email")
-        if not _EMAIL_SEND_FORBIDDEN.search(text) and (
-            "email_send" in intents or _EMAIL_SEND.search(text)
+        if (
+            not _EMAIL_SEND_FORBIDDEN.search(text)
+            and ("email_send" in intents or _EMAIL_SEND.search(text))
         ):
             external.append("gmail.send_email")
-        elif not _EMAIL_DRAFT_FORBIDDEN.search(text) and (
-            "email_draft" in intents or _EMAIL_DRAFT.search(text)
+        elif (
+            not _EMAIL_DRAFT_FORBIDDEN.search(text)
+            and ("email_draft" in intents or _EMAIL_DRAFT.search(text))
         ):
             external.append("gmail.create_draft")
         if intents & {"calendar_read", "calendar_create"}:
             external.append("calendar.read_availability")
-        if not _CALENDAR_CREATE_FORBIDDEN.search(text) and (
-            "calendar_create" in intents or _CALENDAR_CREATE.search(text)
+        if (
+            not _CALENDAR_CREATE_FORBIDDEN.search(text)
+            and ("calendar_create" in intents or _CALENDAR_CREATE.search(text))
         ):
             external.append("calendar.create_event")
         if "contacts_read" in intents:
@@ -987,6 +1000,7 @@ def compile_task_authority(
         required_external=tuple(dict.fromkeys(external)),
         external_groups=evidence.external_groups,
     )
+
 
 def validate_required_evidence_capabilities(
     capabilities: tuple[str, ...] | list[str],
