@@ -89,7 +89,7 @@ def resolve_profile_capabilities(profile: AgentProfile, *, requested: list[str] 
 _CODE_INTENT = re.compile(
     r"(?:\b(?:code|repo(?:sitory)?|branch|pull request|bug(?:s)?|test(?:s|ing)?|pytest|vitest|"
     r"refactor(?:ing)?|implement(?:ation|ing)?|fix(?:es|ing)?|debugg?(?:ing)?|edit(?:ing)?|"
-    r"modify|patch|workspace|file(?:s)?|module|function|class)\b|"
+    r"modify|patch|workspace|file(?:s)?|module|function|class|git)\b|"
     r"\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b)",
     re.I,
 )

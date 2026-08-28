@@ -185,21 +185,21 @@ def list_agent_approvals(run_id: str, state: str | None = None) -> list[AgentApp
 def list_agent_artifacts(run_id: str) -> list[AgentArtifact]:
     return _service().artifacts(run_id)
 
-@router.get("/{run_id}/task-revisions", response_model=list[TaskRevision])
+@router.get("/{run_id}/task-revisions", response_model=list[TaskRevision], include_in_schema=False)
 def list_agent_task_revisions(run_id: str) -> list[TaskRevision]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().task_revisions(run_id)
 
 
-@router.get("/{run_id}/evidence/receipts", response_model=list[EvidenceReceipt])
+@router.get("/{run_id}/evidence/receipts", response_model=list[EvidenceReceipt], include_in_schema=False)
 def list_agent_evidence_receipts(run_id: str) -> list[EvidenceReceipt]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().evidence_receipts(run_id)
 
 
-@router.get("/{run_id}/evidence", response_model=EvidenceSet)
+@router.get("/{run_id}/evidence", response_model=EvidenceSet, include_in_schema=False)
 def get_agent_evidence_set(run_id: str) -> EvidenceSet:
     try:
         return _service().evidence_set(run_id)

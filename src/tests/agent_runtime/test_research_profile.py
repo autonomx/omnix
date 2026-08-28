@@ -37,11 +37,11 @@ class _FakeResearchService:
         )
 
 
-def test_research_profiles_default_to_read_only_broker_authority() -> None:
+def test_research_profiles_are_read_only_external_authority_ceilings() -> None:
     research = get_agent_profile("research")
     local, external = resolve_profile_capabilities(research)
     assert local == []
-    assert external == ["research.web_search"]
+    assert external == []
     assert research.requires_workspace is False
 
     trading = get_agent_profile("trading-research")
@@ -49,7 +49,12 @@ def test_research_profiles_default_to_read_only_broker_authority() -> None:
     assert local == []
     assert external == ["research.web_search"]
     assert trading.requires_workspace is False
-    assert not any("order" in value or "trade" in value for value in external)
+    _, issued = resolve_profile_capabilities(
+        research,
+        requested_external=["research.web_search"],
+    )
+    assert issued == ["research.web_search"]
+    assert not any("order" in value or "trade" in value for value in trading.external_capabilities)
 
 
 def test_research_tool_is_credentialless_enabled_and_automatic_by_default() -> None:

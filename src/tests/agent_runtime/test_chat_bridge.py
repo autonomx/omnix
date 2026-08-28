@@ -269,7 +269,7 @@ def test_trade_execution_request_is_rejected_before_start(monkeypatch) -> None:
     assert started == []
 
 
-def test_read_only_runs_reject_workspace_and_trading_mutations() -> None:
+def test_read_only_runs_defer_workspace_mutation_to_revision_compiler_and_reject_trading_mutation() -> None:
     def snapshot(profile: str):
         return SimpleNamespace(
             run_id="run-1",
@@ -292,8 +292,7 @@ def test_read_only_runs_reject_workspace_and_trading_mutations() -> None:
     )
     trading_rejection = _unauthorized_agent_command(snapshot("trading-research"), "Buy 10 shares.")
 
-    assert workspace_rejection is not None
-    assert workspace_rejection["reason"] == "workspace_mutation_capability_not_issued"
+    assert workspace_rejection is None
     assert trading_rejection is not None
     assert trading_rejection["reason"] == "trading_execution_capability_not_issued"
 

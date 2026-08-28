@@ -35,7 +35,17 @@ def compile_acceptance_plan(spec: AgentRunSpec, *, task_revision: TaskRevision |
         if task_revision is not None
         else list(spec.expected_artifacts)
     )
-    mutating_code = spec.profile == "coding" and "diff" in expected_artifacts
+    mutating_code = (
+        spec.profile == "coding"
+        and (
+            "diff" in expected_artifacts
+            if task_revision is not None
+            else any(
+                capability in {"workspace.edit", "workspace.write"}
+                for capability in spec.capabilities
+            )
+        )
+    )
     if "test" in descriptions or mutating_code:
         checks.append("successful_test_command")
     if "typecheck" in descriptions or "type check" in descriptions:

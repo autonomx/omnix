@@ -2,11 +2,16 @@ from __future__ import annotations
 import pytest
 from app.agent_runtime.profiles import get_agent_profile, resolve_profile_capabilities
 
-def test_house_profile_has_external_home_authority_without_workspace_tools() -> None:
+def test_house_profile_is_an_external_authority_ceiling_not_an_automatic_grant() -> None:
     profile = get_agent_profile("house")
     local, external = resolve_profile_capabilities(profile)
     assert local == []
-    assert "home.get_state" in external and "home.set_state" in external
+    assert external == []
+    _, issued = resolve_profile_capabilities(
+        profile,
+        requested_external=["home.get_state", "home.set_state"],
+    )
+    assert issued == ["home.get_state", "home.set_state"]
 
 def test_trading_research_profile_has_no_order_authority() -> None:
     profile = get_agent_profile("trading-research")
