@@ -314,7 +314,10 @@ class TradingStrategyMonitor:
         self.intraday_llm_assessment_count = 0
         self.intraday_llm_error_count = 0
         self.intraday_llm_input_character_count = 0
-        self.intraday_llm_estimated_input_token_count = 0
+        self.intraday_llm_input_token_count = 0
+        self.intraday_llm_output_token_count = 0
+        self.intraday_llm_total_token_count = 0
+        self.intraday_llm_estimated_usage_count = 0
 
     def start(self) -> None:
         if self._task is None:
@@ -555,9 +558,12 @@ class TradingStrategyMonitor:
             )
             self.intraday_llm_assessment_count += int(persisted)
 
-        estimated_input_tokens = (result.input_characters + 3) // 4
         self.intraday_llm_input_character_count += result.input_characters
-        self.intraday_llm_estimated_input_token_count += estimated_input_tokens
+        self.intraday_llm_input_token_count += result.input_tokens
+        self.intraday_llm_output_token_count += result.output_tokens
+        self.intraday_llm_total_token_count += result.total_tokens
+        if result.usage_source == "estimated":
+            self.intraday_llm_estimated_usage_count += 1
         await self._event(
             strategy_repository,
             config,
@@ -579,8 +585,14 @@ class TradingStrategyMonitor:
                 "full_refresh_minutes": FULL_REFRESH_MINUTES,
                 "trigger_reasons": trigger_reasons,
                 "payload_modes": payload_modes,
-                "input_characters": result.input_characters,
-                "estimated_input_tokens_char4": estimated_input_tokens,
+                "token_usage": {
+                    "source": result.usage_source,
+                    "input_characters": result.input_characters,
+                    "output_characters": result.output_characters,
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                    "total_tokens": result.total_tokens,
+                },
                 "research_only": True,
                 "execution_authority": False,
             },
