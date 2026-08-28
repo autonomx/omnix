@@ -86,6 +86,20 @@ _SEMANTIC_ACTIONS = {
     "research_read",
     "market_read",
 }
+
+_STATEFUL_AGENT_ACTIONS = {
+    "workspace_read",
+    "workspace_execute",
+    "workspace_mutate",
+    "home_read",
+    "home_mutate",
+    "email_read",
+    "email_draft",
+    "email_send",
+    "calendar_read",
+    "calendar_create",
+    "contacts_read",
+}
 _SEMANTIC_SOURCES = {
     "general_current_web",
     "breaking_news",
@@ -304,27 +318,38 @@ def _normalize_semantic_decision(
     content: str,
     decision: "SemanticIntentDecision",
 ) -> "SemanticIntentDecision":
-    """Apply deterministic floors to advisory metadata after LLM understanding."""
+    """Apply deterministic consistency floors after LLM understanding.
 
-    if decision.multi_step or decision.lane != "agent":
-        return decision
+    Semantic output is advisory, but its own fields must be internally coherent.
+    Stateful/private actions cannot execute in the Chat lane. Public bounded reads
+    such as market quotes and weather remain eligible for Chat.
+    """
+
     actions = set(decision.action_intents)
-    text = " ".join(str(content or "").split())
-    inferred = (
-        len(actions) >= 2
-        or bool(_MULTI_STEP_LANGUAGE.search(text))
-        or (
-            "workspace_mutate" in actions
-            and bool(re.search(r"\b(?:tests?|testing|validate|verify)\b", text, re.I))
+    updates: dict[str, Any] = {}
+    effective_lane = decision.lane
+    if decision.lane == "chat" and actions & _STATEFUL_AGENT_ACTIONS:
+        effective_lane = "agent"
+        updates["lane"] = "agent"
+
+    if not decision.multi_step and effective_lane == "agent":
+        text = " ".join(str(content or "").split())
+        inferred = (
+            len(actions) >= 2
+            or bool(_MULTI_STEP_LANGUAGE.search(text))
+            or (
+                "workspace_mutate" in actions
+                and bool(re.search(r"\b(?:tests?|testing|validate|verify)\b", text, re.I))
+            )
+            or (
+                bool(actions & {"research_read", "market_read"})
+                and len(decision.evidence_requirements) >= 2
+            )
         )
-        or (
-            bool(actions & {"research_read", "market_read"})
-            and len(decision.evidence_requirements) >= 2
-        )
-    )
-    if not inferred:
-        return decision
-    return decision.model_copy(update={"multi_step": True})
+        if inferred:
+            updates["multi_step"] = True
+
+    return decision.model_copy(update=updates) if updates else decision
 
 _BUILTIN_PROVIDER_IDS = {
     "lmstudio",
@@ -457,7 +482,7 @@ class ProviderSemanticIntentClassifier:
     ) -> None:
         self.provider = provider
         self.model = model or getattr(getattr(provider, "config", None), "model", None)
-        self.timeout_seconds = max(0.25, min(float(timeout_seconds), 45.0))
+        self.timeout_seconds = max(0.25, min(float(timeout_seconds), 60.0))
         self.gateway = StructuredOutputGateway(provider)
 
     def classify(self, content: str) -> SemanticIntentDecision:
@@ -574,6 +599,12 @@ def semantic_profile_id(
     if semantic is None or semantic.confidence < semantic_confidence_threshold():
         return select_agent_profile_id(content)
     actions = {str(value) for value in semantic.action_intents}
+    if not actions:
+        # A high-confidence lane/profile label without any supporting action is
+        # too weak to override deterministic domain selection. This matters for
+        # classifier-directed prompt injection and other malformed advisory
+        # outputs while preserving semantic action precedence when present.
+        return select_agent_profile_id(content)
     if actions & {"workspace_read", "workspace_execute", "workspace_mutate"}:
         return "coding"
     if actions & {"home_read", "home_mutate"}:
