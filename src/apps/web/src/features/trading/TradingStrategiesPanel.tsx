@@ -66,8 +66,8 @@ const strictV11Config = (): GapPullbackConfig => ({
   last_entry_et: '11:30:00',
   intraday_learning_enabled: true,
   intraday_llm_enabled: true,
-  intraday_llm_top_n: 8,
-  intraday_llm_interval_minutes: 5,
+  intraday_llm_top_n: 5,
+  intraday_llm_interval_minutes: 10,
 });
 
 const frozenV2Config = (): GapPullbackConfig => ({
@@ -124,8 +124,8 @@ const frozenV2Config = (): GapPullbackConfig => ({
   last_entry_et: '11:30:00',
   intraday_learning_enabled: false,
   intraday_llm_enabled: false,
-  intraday_llm_top_n: 8,
-  intraday_llm_interval_minutes: 5,
+  intraday_llm_top_n: 5,
+  intraday_llm_interval_minutes: 10,
 });
 
 const finvizLearningV2Config = (): GapPullbackConfig => ({
@@ -133,8 +133,8 @@ const finvizLearningV2Config = (): GapPullbackConfig => ({
   universe_discovery_source: 'finviz',
   intraday_learning_enabled: true,
   intraday_llm_enabled: true,
-  intraday_llm_top_n: 8,
-  intraday_llm_interval_minutes: 5,
+  intraday_llm_top_n: 5,
+  intraday_llm_interval_minutes: 10,
 });
 
 const defaultStrategy = (accountId: string): TradingStrategyConfig => ({
@@ -463,7 +463,7 @@ export function TradingStrategiesPanel() {
       config,
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
-    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. Every finalized 1-minute bar updates deterministic research scores/ranks; the configured default LLM then reviews the top active names in one bounded batch every 5 minutes. LLM output is research-only and cannot authorize an order. This non-canonical Finviz cohort cannot inherit the frozen Yahoo V2 AUTO PAPER qualification.');
+    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. Every finalized 1-minute bar updates deterministic research scores/ranks; the configured default LLM runs on material changes with a 10-minute top-name heartbeat and compact delta payloads. LLM output is research-only and cannot authorize an order. This non-canonical Finviz cohort cannot inherit the frozen Yahoo V2 AUTO PAPER qualification.');
   };
 
   const reviewV2Qualification = async () => {
@@ -892,8 +892,8 @@ export function TradingStrategiesPanel() {
                     <label><span>Discovery source<small>morning cohort only</small></span><select value={draft.config.universe_discovery_source ?? 'yahoo'} onChange={(event) => setConfig('universe_discovery_source', event.target.value as 'yahoo' | 'finviz')}><option value="finviz">Finviz Top Gainers</option><option value="yahoo">Yahoo Day Gainers</option></select></label>
                     <label className="toggle-field"><span>Intraday learning<small>research-only dynamic ranking; never order authority</small></span><input type="checkbox" checked={draft.config.intraday_learning_enabled ?? true} onChange={(event) => setConfig('intraday_learning_enabled', event.target.checked)} /></label>
                     <label className="toggle-field"><span>Intraday LLM analyst<small>default LLM; interpretation only, never order authority</small></span><input type="checkbox" checked={draft.config.intraday_llm_enabled ?? false} onChange={(event) => setConfig('intraday_llm_enabled', event.target.checked)} /></label>
-                    <label><span>LLM active candidates<small>top-ranked names per batch</small></span><input type="number" min="1" max="20" value={draft.config.intraday_llm_top_n ?? 8} onChange={(event) => setConfig('intraday_llm_top_n', Number(event.target.value))} /></label>
-                    <label><span>LLM cadence<small>minutes; batched across active names</small></span><input type="number" min="2" max="60" value={draft.config.intraday_llm_interval_minutes ?? 5} onChange={(event) => setConfig('intraday_llm_interval_minutes', Number(event.target.value))} /></label>
+                    <label><span>LLM active candidates<small>material events first; heartbeat uses top-ranked names</small></span><input type="number" min="1" max="20" value={draft.config.intraday_llm_top_n ?? 5} onChange={(event) => setConfig('intraday_llm_top_n', Number(event.target.value))} /></label>
+                    <label><span>LLM heartbeat<small>minutes for quiet top names; material events run sooner</small></span><input type="number" min="5" max="60" value={draft.config.intraday_llm_interval_minutes ?? 10} onChange={(event) => setConfig('intraday_llm_interval_minutes', Number(event.target.value))} /></label>
                     <label className="toggle-field"><span>Auto-archive morning universe<small>evidence only; never authorizes orders</small></span><input type="checkbox" checked={draft.config.auto_archive_daily_universe ?? true} onChange={(event) => setConfig('auto_archive_daily_universe', event.target.checked)} /></label>
                     <label><span>Archive grace<small>minutes after scan time</small></span><input type="number" min="1" max="60" value={draft.config.universe_archive_grace_minutes ?? 10} onChange={(event) => setConfig('universe_archive_grace_minutes', Number(event.target.value))} /></label>
                     <label><span>Discovery candidates<small>raw top-gainer count</small></span><input type="number" min="1" max="100" value={draft.config.universe_discovery_count ?? 50} onChange={(event) => setConfig('universe_discovery_count', Number(event.target.value))} /></label>
