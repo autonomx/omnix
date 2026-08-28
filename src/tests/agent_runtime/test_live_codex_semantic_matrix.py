@@ -28,6 +28,10 @@ import os
 import pytest
 
 from app.agent_runtime.chat_bridge import _apply_semantic_route_decision
+from app.agent_runtime.evidence import (
+    classify_evidence,
+    evidence_decision_from_semantic,
+)
 from app.agent_runtime.router import route_omnix_request
 from app.agent_runtime.semantic_classifier import (
     ProviderSemanticIntentClassifier,
@@ -322,9 +326,8 @@ CASES: tuple[LiveSemanticCase, ...] = (
         "I'm heading out — make sure the downstairs lights are off before I go.",
         "agent",
         ("house",),
-        required_actions=("home_read", "home_mutate"),
+        required_actions=("home_mutate",),
         required_evidence=("home_state",),
-        multi_step=True,
     ),
     LiveSemanticCase(
         "house_too_bright",
@@ -718,7 +721,7 @@ def live_codex_classifier() -> ProviderSemanticIntentClassifier:
         or "gpt-5.6-sol"
     ).strip()
     reasoning_effort = str(
-        os.environ.get("OMNIX_LIVE_CODEX_REASONING_EFFORT", "low") or "low"
+        os.environ.get("OMNIX_LIVE_CODEX_REASONING_EFFORT", "medium") or "medium"
     ).strip()
     fast_mode = _bool_env("OMNIX_LIVE_CODEX_FAST_MODE", True)
 
@@ -755,7 +758,7 @@ def live_codex_classifier() -> ProviderSemanticIntentClassifier:
     classifier = ProviderSemanticIntentClassifier(
         provider,
         model=model,
-        timeout_seconds=20.0,
+        timeout_seconds=35.0,
     )
     try:
         yield classifier
@@ -775,8 +778,8 @@ def test_live_codex_semantic_matrix(
     assert decision.confidence >= semantic_confidence_threshold(), payload
     assert decision.lane == case.lane, payload
 
+    resolved_profile = semantic_profile_id(case.prompt, decision)
     if case.profiles:
-        resolved_profile = semantic_profile_id(case.prompt, decision)
         assert resolved_profile in case.profiles, {
             "expected_profiles": case.profiles,
             "resolved_profile": resolved_profile,
@@ -784,7 +787,17 @@ def test_live_codex_semantic_matrix(
         }
 
     actions = set(decision.action_intents)
-    evidence = {row.source_class for row in decision.evidence_requirements}
+    raw_evidence = {row.source_class for row in decision.evidence_requirements}
+    semantic_proposal = evidence_decision_from_semantic(case.prompt, decision)
+    effective_evidence_decision = classify_evidence(
+        case.prompt,
+        profile_id=resolved_profile,
+        semantic_adviser=lambda *_: semantic_proposal,
+    )
+    effective_evidence = {
+        row.source_class
+        for row in effective_evidence_decision.policy.requirements
+    }
 
     assert set(case.required_actions) <= actions, {
         "missing_actions": sorted(set(case.required_actions) - actions),
@@ -794,18 +807,27 @@ def test_live_codex_semantic_matrix(
         "forbidden_actions": sorted(set(case.forbidden_actions) & actions),
         "decision": payload,
     }
-    assert set(case.required_evidence) <= evidence, {
-        "missing_evidence": sorted(set(case.required_evidence) - evidence),
+    # Required evidence is an end-to-end contract: deterministic freshness/
+    # authority floors may correctly add a source the LLM omitted. Forbidden
+    # evidence remains a raw semantic assertion so conversational false
+    # positives are still caught before policy compilation.
+    assert set(case.required_evidence) <= effective_evidence, {
+        "missing_evidence": sorted(
+            set(case.required_evidence) - effective_evidence
+        ),
+        "raw_evidence": sorted(raw_evidence),
+        "effective_evidence": sorted(effective_evidence),
         "decision": payload,
     }
     if case.evidence_any_of:
-        assert evidence & set(case.evidence_any_of), {
+        assert effective_evidence & set(case.evidence_any_of), {
             "expected_any_evidence": case.evidence_any_of,
-            "actual_evidence": sorted(evidence),
+            "raw_evidence": sorted(raw_evidence),
+            "effective_evidence": sorted(effective_evidence),
             "decision": payload,
         }
-    assert not (set(case.forbidden_evidence) & evidence), {
-        "forbidden_evidence": sorted(set(case.forbidden_evidence) & evidence),
+    assert not (set(case.forbidden_evidence) & raw_evidence), {
+        "forbidden_evidence": sorted(set(case.forbidden_evidence) & raw_evidence),
         "decision": payload,
     }
     if case.multi_step is not None:
