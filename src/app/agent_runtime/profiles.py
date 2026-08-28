@@ -48,7 +48,7 @@ _PROFILES = {
     "trading-research": AgentProfile(
         id="trading-research",
         description="Read-only market investigation using governed research services; broker/order mutation authority is intentionally absent.",
-        external_capabilities=("research.web_search",),
+        external_capabilities=("research.web_search", "trading.market_quote"),
         context_sources=("trading_research", "assistant_memory"),
         requires_workspace=False,
     ),

@@ -105,7 +105,7 @@ SOURCE_CAPABILITIES: dict[str, tuple[str, str]] = {
     "email_state": ("gmail.read_email", "authoritative"),
     # Intentionally no web fallback: a quote/weather request fails compilation
     # until an authoritative provider capability exists in the profile ceiling.
-    "market_quote": ("market.quote", "authoritative"),
+    "market_quote": ("trading.market_quote", "authoritative"),
     "market_status": ("market.status", "authoritative"),
     "weather_state": ("weather.current", "authoritative"),
 }
@@ -459,6 +459,36 @@ def compile_task_authority(
     )
 
 
+def validate_required_evidence_capabilities(capabilities: tuple[str, ...] | list[str]) -> None:
+    """Fail preflight when a required connected evidence source is unavailable."""
+    if not capabilities:
+        return
+    from app.assistant_tools.gate import review_assistant_tool_request
+    from app.assistant_tools.models import AssistantToolRequest
+
+    for capability in capabilities:
+        if capability.startswith("workspace."):
+            continue
+        decision = review_assistant_tool_request(
+            AssistantToolRequest(
+                tool_id=capability.split(".", 1)[0],
+                action_id=capability,
+                input={},
+            )
+        )
+        if decision.allowed:
+            continue
+        code = (
+            "required_connection_unavailable"
+            if decision.reason in {"missing_connection", "tool_disabled"}
+            else "evidence_required_but_unavailable"
+        )
+        raise EvidenceCompilationError(
+            code,
+            f"required evidence capability {capability} is unavailable: {decision.reason}",
+        )
+
+
 def compile_evidence(profile: AgentProfile, decision: EvidenceDecision) -> CompiledEvidence:
     policy = decision.policy
     if policy.requirement == "required" and policy.external_access == "forbidden" and policy.requirements:
@@ -617,6 +647,7 @@ def result_digest(payload: dict[str, object]) -> str:
 
 _REVERSE_SOURCE_CAPABILITIES: dict[str, str] = {
     "research.web_search": "general_current_web",
+    "trading.market_quote": "market_quote",
     "github.read_repo": "repo_contents",
     "github.inspect_ci": "repo_ci_state",
     "home.get_state": "home_state",

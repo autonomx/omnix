@@ -23,6 +23,7 @@ from .evidence import (
     evaluate_evidence_set,
     revise_objective,
     task_requires_workspace_mutation,
+    validate_required_evidence_capabilities,
 )
 from .profiles import get_agent_profile, select_agent_profile_id
 from .budget import AgentBudgetError, AgentBudgetManager
@@ -257,6 +258,7 @@ class AgentRunService:
                 "RunSpec does not issue required external evidence authority: "
                 + ", ".join(sorted(missing_external)),
             )
+        validate_required_evidence_capabilities(compiled.required_external)
 
     def _compile_steering(self, current: AgentRunSnapshot, command: AgentRunCommand) -> dict[str, object]:
         message = str(command.payload.get("message") or "").strip()

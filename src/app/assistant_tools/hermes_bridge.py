@@ -17,6 +17,7 @@ from .ledger import (
 from .models import AssistantToolRequest, AssistantToolResult, ToolRiskLevel
 from .repo_adapter import run_repository_tool_request
 from .research_adapter import run_research_tool_request
+from .trading_adapter import run_trading_tool_request
 from .result_context import tool_result_to_chat_context
 
 
@@ -64,6 +65,10 @@ def _run_assistant_tool_request(
         return result
     if request.tool_id == "research":
         result = run_research_tool_request(request)
+        result.risk_level = risk_level
+        return result
+    if request.tool_id == "trading":
+        result = run_trading_tool_request(request)
         result.risk_level = risk_level
         return result
     return AssistantToolResult(

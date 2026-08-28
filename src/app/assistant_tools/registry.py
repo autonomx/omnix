@@ -118,6 +118,7 @@ def default_assistant_tools() -> list[AssistantToolSpec]:
                     "contacts": "Google Contacts",
                     "github": "GitHub",
                     "kasa": "TP-Link Kasa",
+                    "trading": "Trading Market Data",
                 }.get(tool_id, tool_id.replace("_", " ").title()),
                 description={
                     "gmail": "Read, draft, send, and delete Gmail messages with approval controls.",
@@ -125,6 +126,7 @@ def default_assistant_tools() -> list[AssistantToolSpec]:
                     "contacts": "Resolve contacts for email and calendar workflows.",
                     "github": "Read repositories, manage pull requests, inspect CI, and perform governed repo actions.",
                     "kasa": "Discover, inspect, and control approved Kasa smart plugs on the local network.",
+                    "trading": "Read authoritative market data without order or broker mutation authority.",
                 }.get(tool_id, f"Governed {tool_id} capabilities."),
                 category=first.category,
                 provider=first.provider,
