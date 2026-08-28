@@ -812,7 +812,6 @@ def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: Omn
 
 
 def _unauthorized_agent_command(snapshot: Any, content: str) -> dict[str, Any] | None:
-    capabilities = {str(value) for value in (snapshot.spec.capabilities or [])}
     external_capabilities = {str(value) for value in (snapshot.spec.external_capabilities or [])}
     profile = str(snapshot.spec.profile or "")
     if profile in {"research", "trading-research"} and _TRADING_MUTATION.search(content):
