@@ -642,7 +642,7 @@ def classify_evidence(
                     if hard_floors
                     else advised.reason
                 )[:240],
-                classifier="hybrid" if hard_floors else advised.classifier,
+                classifier="semantic" if hard_floors else advised.classifier,
             )
 
         if requirements:
