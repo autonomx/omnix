@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .gapper_dataset import GapperCandidate
 from .models import MarketBar
-from .strategies.gap_pullback import session_vwap
+from .strategies.gap_pullback import _regular_bars, session_vwap
 from .strategies.models import GapPullbackResult
 
 
@@ -150,7 +150,7 @@ def build_intraday_learning_snapshot(
     result: GapPullbackResult,
     bars: list[MarketBar] | tuple[MarketBar, ...],
 ) -> IntradayLearningSnapshot:
-    regular = list(bars)
+    regular = _regular_bars(list(bars))
     if not regular:
         raise ValueError("intraday learning requires at least one finalized regular-session bar")
 
