@@ -67,6 +67,27 @@ _HOME_MUTATION = re.compile(r"\b(?:turn|set|adjust|lower|raise|prepare|apply)\b"
 _EMAIL_SEND = re.compile(r"\b(?:send|reply|forward)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
 _EMAIL_DRAFT = re.compile(r"\b(?:draft|compose|write)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
 _CALENDAR_CREATE = re.compile(r"\b(?:schedule|create|book|add)\b.{0,80}\b(?:meeting|appointment|calendar event)\b", re.I)
+_WORKSPACE_MUTATION_FORBIDDEN = re.compile(
+    r"\b(?:do not|don't|never)\b.{0,80}\b(?:edit|modify|write|change|patch|update|create|delete|remove)\b|"
+    r"\b(?:without changing|read[- ]only|no changes?)\b",
+    re.I,
+)
+_HOME_MUTATION_FORBIDDEN = re.compile(
+    r"\b(?:do not|don't|never)\b.{0,80}\b(?:turn|set|adjust|lower|raise|apply)\b",
+    re.I,
+)
+_EMAIL_SEND_FORBIDDEN = re.compile(
+    r"\b(?:do not|don't|never)\b.{0,80}\b(?:send|reply|forward)\b",
+    re.I,
+)
+_EMAIL_DRAFT_FORBIDDEN = re.compile(
+    r"\b(?:do not|don't|never)\b.{0,80}\b(?:draft|compose|write)\b.{0,80}\b(?:email|gmail|message)\b",
+    re.I,
+)
+_CALENDAR_CREATE_FORBIDDEN = re.compile(
+    r"\b(?:do not|don't|never)\b.{0,80}\b(?:schedule|create|book|add)\b.{0,80}\b(?:meeting|appointment|event)\b",
+    re.I,
+)
 _CONCEPTUAL = re.compile(r"^(?:what is|what are|explain|describe|teach me|how does|why does|compare)\b", re.I)
 _TICKER_DOLLAR = re.compile(r"\$([A-Z]{1,5})\b")
 _TICKER_BEFORE_CONTEXT = re.compile(
@@ -867,11 +888,15 @@ def task_requires_workspace_mutation(
     semantic_action_intents: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> bool:
     intents = {str(value) for value in (semantic_action_intents or [])}
+    text = str(task or "")
+    if _WORKSPACE_MUTATION_FORBIDDEN.search(text) or re.search(
+        r"\b(?:just explain|explain only)\b",
+        text,
+        re.I,
+    ):
+        return False
     if "workspace_mutate" in intents:
         return True
-    text = str(task or "")
-    if re.search(r"\b(?:do not|don't|just explain|explain only|without changing)\b", text, re.I):
-        return False
     return bool(_WORKSPACE_MUTATION.search(text))
 
 
@@ -933,18 +958,30 @@ def compile_task_authority(
     if profile.id == "house":
         if intents & {"home_read", "home_mutate"}:
             external.append("home.get_state")
-        if "home_mutate" in intents or _HOME_MUTATION.search(text):
+        if (
+            not _HOME_MUTATION_FORBIDDEN.search(text)
+            and ("home_mutate" in intents or _HOME_MUTATION.search(text))
+        ):
             external.append("home.set_state")
     elif profile.id == "personal-assistant":
         if intents & {"email_read", "email_draft", "email_send"}:
             external.append("gmail.read_email")
-        if "email_send" in intents or _EMAIL_SEND.search(text):
+        if (
+            not _EMAIL_SEND_FORBIDDEN.search(text)
+            and ("email_send" in intents or _EMAIL_SEND.search(text))
+        ):
             external.append("gmail.send_email")
-        elif "email_draft" in intents or _EMAIL_DRAFT.search(text):
+        elif (
+            not _EMAIL_DRAFT_FORBIDDEN.search(text)
+            and ("email_draft" in intents or _EMAIL_DRAFT.search(text))
+        ):
             external.append("gmail.create_draft")
         if intents & {"calendar_read", "calendar_create"}:
             external.append("calendar.read_availability")
-        if "calendar_create" in intents or _CALENDAR_CREATE.search(text):
+        if (
+            not _CALENDAR_CREATE_FORBIDDEN.search(text)
+            and ("calendar_create" in intents or _CALENDAR_CREATE.search(text))
+        ):
             external.append("calendar.create_event")
         if "contacts_read" in intents:
             external.extend(["contacts.search_contacts", "contacts.resolve_recipient"])
