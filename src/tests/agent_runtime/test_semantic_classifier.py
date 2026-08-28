@@ -581,6 +581,35 @@ def test_semantic_classifier_cannot_override_explicit_negated_action() -> None:
     assert routed.reason == "negated_action"
 
 
+def test_future_repo_plan_stays_chat_even_if_semantic_lane_is_agent() -> None:
+    prompt = (
+        "I might want to clean up the repo someday. give me a plan, "
+        "but don't inspect or change anything now."
+    )
+    deterministic = route_omnix_request(prompt)
+    assert deterministic.reason == "negated_action"
+
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="coding",
+        primary_intent="future_repository_plan",
+        action_intents=[],
+        evidence_requirements=[],
+        multi_step=True,
+        confidence=0.99,
+        reason="The model interpreted the requested plan as agent-like planning.",
+    )
+
+    routed = _apply_semantic_route_decision(
+        deterministic,
+        semantic,
+        content=prompt,
+    )
+
+    assert routed.lane == "chat"
+    assert routed.reason == "negated_action"
+
+
 def test_narrow_email_send_negation_can_still_route_to_agent_for_drafting() -> None:
     prompt = "don't send anything. read the latest message from Maya and draft the response she needs."
     deterministic = route_omnix_request(prompt)
