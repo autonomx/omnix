@@ -537,132 +537,6 @@ def _merge_requirements(
     return merged
 
 
-def evidence_decision_from_semantic(task: str, semantic_decision: object) -> EvidenceDecision:
-    """Translate an untrusted semantic interpretation into an evidence proposal.
-
-    This function does not issue authority. Source classes are allowlisted here and
-    later compiled against the selected profile ceiling and trust/freshness policy.
-    """
-
-    text = " ".join(str(task or "").split())
-    requirements: list[EvidenceRequirement] = []
-    seen: set[str] = set()
-
-    def add(
-        source_class: str,
-        *,
-        freshness: str = "current",
-        trust: str | None = None,
-        fallback: str = "fail_closed",
-    ) -> None:
-        if source_class not in SOURCE_CAPABILITIES or source_class in seen:
-            return
-        seen.add(source_class)
-        requirements.append(
-            _requirement(
-                text,
-                source_class,
-                freshness=freshness if freshness in {"timeless", "current"} else "current",
-                trust=trust if trust in TRUST_RANK else None,
-                fallback=fallback if fallback in {"fail_closed", "allow_fallback"} else "fail_closed",
-            )
-        )
-
-    for row in list(getattr(semantic_decision, "evidence_requirements", []) or []):
-        add(
-            str(getattr(row, "source_class", "") or ""),
-            freshness=str(getattr(row, "freshness", "current") or "current").casefold(),
-            trust=str(getattr(row, "trust_floor", "") or "").casefold() or None,
-            fallback=str(getattr(row, "fallback_policy", "fail_closed") or "fail_closed").casefold(),
-        )
-
-    actions = {
-        str(value)
-        for value in (getattr(semantic_decision, "action_intents", []) or [])
-        if str(value)
-    }
-    if actions & {"home_read", "home_mutate"}:
-        add("home_state", trust="authoritative")
-    if actions & {"email_read", "email_draft", "email_send"}:
-        add("email_state", trust="authoritative")
-    if actions & {"calendar_read", "calendar_create"}:
-        add("calendar_state", trust="authoritative")
-    if "market_read" in actions and not any(
-        requirement.source_class in {"market_quote", "market_news", "company_filing", "market_status"}
-        for requirement in requirements
-    ):
-        add("market_news", trust="reputable", fallback="allow_fallback")
-    if "research_read" in actions and not requirements:
-        add(
-            "general_current_web",
-            freshness="timeless",
-            trust="reputable",
-            fallback="allow_fallback",
-        )
-
-    try:
-        confidence = max(0.0, min(float(getattr(semantic_decision, "confidence", 0.75)), 1.0))
-    except (TypeError, ValueError):
-        confidence = 0.75
-    reason = str(getattr(semantic_decision, "reason", "semantic_intent") or "semantic_intent")[:240]
-    return EvidenceDecision(
-        policy=EvidencePolicy(
-            requirement="required" if requirements else "none",
-            external_access="allowed",
-            requirements=requirements,
-            user_visible_attribution="when_used",
-            retrieval={"strategy": "adaptive"},
-        ),
-        confidence=confidence,
-        reason=f"semantic_intent:{reason}",
-        classifier="semantic",
-    )
-
-
-def _merge_requirements(
-    primary: list[EvidenceRequirement],
-    floors: list[EvidenceRequirement],
-) -> list[EvidenceRequirement]:
-    merged: list[EvidenceRequirement] = []
-    by_source: dict[str, int] = {}
-    for requirement in [*primary, *floors]:
-        existing_index = by_source.get(requirement.source_class)
-        if existing_index is None:
-            by_source[requirement.source_class] = len(merged)
-            merged.append(requirement)
-            continue
-        existing = merged[existing_index]
-        trust = (
-            requirement.trust_floor
-            if TRUST_RANK.get(requirement.trust_floor, 0) > TRUST_RANK.get(existing.trust_floor, 0)
-            else existing.trust_floor
-        )
-        freshness = (
-            "current"
-            if "current" in {existing.freshness, requirement.freshness}
-            else "timeless"
-        )
-        fallback = (
-            "fail_closed"
-            if "fail_closed" in {existing.fallback_policy, requirement.fallback_policy}
-            else "allow_fallback"
-        )
-        merged[existing_index] = existing.model_copy(
-            update={
-                "trust_floor": trust,
-                "freshness": freshness,
-                "fallback_policy": fallback,
-                "subject": existing.subject or requirement.subject,
-                "max_age_seconds": (
-                    freshness_max_age_seconds(existing.source_class)
-                    if freshness == "current"
-                    else None
-                ),
-            }
-        )
-    return merged
-
-
 def classify_evidence(
     task: str,
     *,
@@ -1009,12 +883,12 @@ def task_requires_workspace_mutation(
     *,
     semantic_action_intents: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> bool:
+    text = str(task or "")
+    if _WORKSPACE_MUTATION_FORBIDDEN.search(text):
+        return False
     intents = {str(value) for value in (semantic_action_intents or [])}
     if "workspace_mutate" in intents:
         return True
-    text = str(task or "")
-    if re.search(r"\b(?:do not|don't|just explain|explain only|without changing)\b", text, re.I):
-        return False
     return bool(_WORKSPACE_MUTATION.search(text))
 
 
@@ -1076,18 +950,26 @@ def compile_task_authority(
     if profile.id == "house":
         if intents & {"home_read", "home_mutate"}:
             external.append("home.get_state")
-        if "home_mutate" in intents or _HOME_MUTATION.search(text):
+        if not _HOME_MUTATION_FORBIDDEN.search(text) and (
+            "home_mutate" in intents or _HOME_MUTATION.search(text)
+        ):
             external.append("home.set_state")
     elif profile.id == "personal-assistant":
         if intents & {"email_read", "email_draft", "email_send"}:
             external.append("gmail.read_email")
-        if "email_send" in intents or _EMAIL_SEND.search(text):
+        if not _EMAIL_SEND_FORBIDDEN.search(text) and (
+            "email_send" in intents or _EMAIL_SEND.search(text)
+        ):
             external.append("gmail.send_email")
-        elif "email_draft" in intents or _EMAIL_DRAFT.search(text):
+        elif not _EMAIL_DRAFT_FORBIDDEN.search(text) and (
+            "email_draft" in intents or _EMAIL_DRAFT.search(text)
+        ):
             external.append("gmail.create_draft")
         if intents & {"calendar_read", "calendar_create"}:
             external.append("calendar.read_availability")
-        if "calendar_create" in intents or _CALENDAR_CREATE.search(text):
+        if not _CALENDAR_CREATE_FORBIDDEN.search(text) and (
+            "calendar_create" in intents or _CALENDAR_CREATE.search(text)
+        ):
             external.append("calendar.create_event")
         if "contacts_read" in intents:
             external.extend(["contacts.search_contacts", "contacts.resolve_recipient"])
