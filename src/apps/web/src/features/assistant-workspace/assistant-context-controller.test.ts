@@ -26,6 +26,12 @@ describe('assistant context control mounting', () => {
     contextControls.setAttribute('data-omnix-context-controls', 'true');
     root.querySelector('.assistant-composer')?.append(contextControls);
 
+    expect(assistantContextControlsMissing(root)).toBe(true);
+
+    const contextTools = document.createElement('div');
+    contextTools.setAttribute('data-omnix-context-tools', 'true');
+    contextControls.append(contextTools);
+
     const desktopAction = document.createElement('button');
     desktopAction.setAttribute('data-omnix-desktop-action', 'true');
     root.querySelector('.assistant-composer-actions')?.append(desktopAction);

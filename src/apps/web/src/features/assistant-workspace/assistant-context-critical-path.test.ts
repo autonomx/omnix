@@ -12,6 +12,30 @@ afterEach(() => {
 });
 
 describe('assistant context live-chat critical path', () => {
+  it('mounts a plus menu that selects the same research modes used by chat requests', async () => {
+    vi.resetModules();
+    delete (window as AssistantContextTestWindow).__omnixAssistantContextInitialized;
+    document.body.innerHTML = '<form class="assistant-composer"><div class="assistant-composer-controls"></div><label class="assistant-message-input"><textarea></textarea></label><div class="assistant-composer-actions"></div></form><div class="assistant-audio-devices"></div>';
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ settings: {} }), { status: 200 }))) as unknown as typeof fetch);
+
+    await import('./assistant-context-controller');
+
+    const addButton = document.querySelector<HTMLButtonElement>('.assistant-context-add-button');
+    const menu = document.querySelector<HTMLElement>('.assistant-context-tool-menu');
+    expect(addButton).toBeTruthy();
+    expect(menu).toBeTruthy();
+    expect(menu?.hidden).toBe(true);
+    expect(menu?.querySelector('[data-omnix-context-tool-desktop]')).toBeTruthy();
+
+    addButton?.click();
+    expect(menu?.hidden).toBe(false);
+    menu?.querySelector<HTMLButtonElement>('[data-omnix-context-tool-mode="quick"]')?.click();
+
+    expect(menu?.hidden).toBe(true);
+    expect(document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]')?.value).toBe('quick');
+    expect(document.querySelector('.assistant-context-tool-summary')?.textContent).toContain('Quick search');
+  });
+
   it('opens the chat response before deferred research-mode persistence completes', async () => {
     vi.resetModules();
     delete (window as AssistantContextTestWindow).__omnixAssistantContextInitialized;

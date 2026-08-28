@@ -28,6 +28,7 @@ type DisplayMediaDevices = MediaDevices & {
 };
 
 const CONTEXT_CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
+const CONTEXT_TOOLS_ATTRIBUTE = 'data-omnix-context-tools';
 const DESKTOP_ACTION_ATTRIBUTE = 'data-omnix-desktop-action';
 const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
@@ -45,6 +46,7 @@ let activeSessionId: string | null = null;
 let nativeFetch: typeof window.fetch | null = null;
 let desktopShare: DesktopShareSession | null = null;
 let desktopStatus = 'Off';
+let openContextToolsMenu: { addButton: HTMLButtonElement; menu: HTMLElement; tools: HTMLElement } | null = null;
 const knownResearchModes = new Map<string, ResearchMode>();
 const researchModePersistenceQueues = new Map<string, Promise<void>>();
 
@@ -54,6 +56,7 @@ export function initializeAssistantContextController(root: ParentNode = document
   installFetchInterceptor();
   void loadProfileResearchDefault();
   injectControls(root);
+  document.addEventListener('pointerdown', handleContextToolsOutsidePointerDown);
   const observer = new MutationObserver(() => {
     if (assistantContextControlsMissing(root)) injectControls(root);
   });
@@ -68,13 +71,14 @@ export function assistantContextControlsMissing(root: ParentNode = document): bo
   const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
   const contextHost = assistantContextHost(composerActions, composerControls);
   const composerMissing = Boolean(contextHost && !contextHost.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`));
+  const toolsMissing = Boolean(contextHost && !contextHost.querySelector(`[${CONTEXT_TOOLS_ATTRIBUTE}]`));
   const desktopActionMissing = Boolean(
     composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`),
   );
   const desktopStatusMissing = Boolean(
     audioDevices && !audioDevices.querySelector(`[${DESKTOP_STATUS_ATTRIBUTE}]`),
   );
-  return composerMissing || desktopActionMissing || desktopStatusMissing;
+  return composerMissing || toolsMissing || desktopActionMissing || desktopStatusMissing;
 }
 
 export function isAssistantMessageRequest(url: string, method: string): boolean {
@@ -337,11 +341,7 @@ function injectControls(root: ParentNode): void {
       webSelect.append(option);
     }
     webSelect.value = researchMode;
-    webSelect.addEventListener('change', () => {
-      researchMode = normalizeResearchMode(webSelect.value);
-      if (activeSessionId) scheduleConversationResearchModePersistence(activeSessionId, researchMode);
-      renderControls();
-    });
+    webSelect.addEventListener('change', () => setResearchMode(webSelect.value));
     webLabel.append(webCaption, webSelect);
 
     const pageBudget = document.createElement('label');
@@ -365,8 +365,15 @@ function injectControls(root: ParentNode): void {
     });
     pageBudget.append(pageCaption, pageInput);
 
+    webLabel.hidden = true;
+    pageBudget.hidden = true;
     container.append(webLabel, pageBudget);
     contextHost.append(container);
+  }
+
+  const contextControls = contextHost?.querySelector<HTMLElement>(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`);
+  if (contextControls && !contextControls.querySelector(`[${CONTEXT_TOOLS_ATTRIBUTE}]`)) {
+    injectContextToolsMenu(contextControls);
   }
 
   if (composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`)) {
@@ -394,6 +401,180 @@ function injectControls(root: ParentNode): void {
   renderControls();
 }
 
+function injectContextToolsMenu(container: HTMLElement): void {
+  const tools = document.createElement('div');
+  tools.className = 'assistant-context-tools';
+  tools.setAttribute(CONTEXT_TOOLS_ATTRIBUTE, 'true');
+
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'assistant-context-add-button';
+  addButton.setAttribute('aria-label', 'Add tools');
+  addButton.setAttribute('aria-controls', 'assistant-context-tool-menu');
+  addButton.setAttribute('aria-expanded', 'false');
+  addButton.title = 'Add tools';
+  addButton.textContent = '+';
+
+  const summary = document.createElement('span');
+  summary.className = 'assistant-context-tool-summary';
+  summary.setAttribute('aria-live', 'polite');
+
+  const menu = document.createElement('div');
+  menu.id = 'assistant-context-tool-menu';
+  menu.className = 'assistant-context-tool-menu';
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', 'Chat tools');
+  menu.hidden = true;
+
+  const heading = document.createElement('div');
+  heading.className = 'assistant-context-tool-menu-heading';
+  heading.textContent = 'Add to this chat';
+  menu.append(heading);
+  menu.append(
+    createResearchToolItem('disabled', 'No web research', 'Use the assistant without live web results.'),
+    createResearchToolItem('quick', 'Quick search', 'Search the web for current information.'),
+    createResearchToolItem('deep', 'Deep research', 'Build a detailed, source-backed report.'),
+  );
+
+  const divider = document.createElement('div');
+  divider.className = 'assistant-context-tool-menu-divider';
+  divider.setAttribute('role', 'separator');
+  menu.append(divider, createDesktopToolItem());
+
+  const pageBudget = container.querySelector<HTMLElement>('[data-omnix-deep-research-pages]');
+  if (pageBudget) {
+    pageBudget.classList.add('assistant-context-page-budget-menu');
+    pageBudget.hidden = true;
+    menu.append(pageBudget);
+  }
+
+  addButton.addEventListener('click', () => {
+    const isOpen = !menu.hidden;
+    if (!isOpen && openContextToolsMenu && openContextToolsMenu.menu !== menu) {
+      closeContextToolsMenu(openContextToolsMenu.addButton, openContextToolsMenu.menu);
+    }
+    menu.hidden = isOpen;
+    addButton.setAttribute('aria-expanded', String(!isOpen));
+    openContextToolsMenu = isOpen ? null : { addButton, menu, tools };
+    if (!isOpen) {
+      menu.querySelector<HTMLButtonElement>('[role="menuitemradio"], [role="menuitemcheckbox"]')?.focus();
+    }
+  });
+  addButton.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !menu.hidden) {
+      closeContextToolsMenu(addButton, menu);
+      event.preventDefault();
+    }
+  });
+  menu.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeContextToolsMenu(addButton, menu);
+      addButton.focus();
+      event.preventDefault();
+    }
+  });
+
+  tools.append(addButton, summary, menu);
+  container.prepend(tools);
+}
+
+function createResearchToolItem(
+  mode: ResearchMode,
+  title: string,
+  description: string,
+): HTMLButtonElement {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item';
+  item.setAttribute('role', 'menuitemradio');
+  item.setAttribute('data-omnix-context-tool-mode', mode);
+  item.setAttribute('aria-checked', 'false');
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = title;
+  const detail = document.createElement('small');
+  detail.textContent = description;
+  copy.append(label, detail);
+
+  const check = document.createElement('span');
+  check.className = 'assistant-context-tool-check';
+  check.setAttribute('aria-hidden', 'true');
+  check.textContent = '✓';
+  item.append(copy, check);
+  item.addEventListener('click', () => {
+    chooseResearchMode(mode);
+    closeContextToolsMenuForItem(item);
+  });
+  return item;
+}
+
+function createDesktopToolItem(): HTMLButtonElement {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item';
+  item.setAttribute('role', 'menuitemcheckbox');
+  item.setAttribute('data-omnix-context-tool-desktop', 'true');
+  item.setAttribute('aria-checked', 'false');
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = 'Desktop';
+  const detail = document.createElement('small');
+  detail.textContent = 'Share a live desktop view with the assistant.';
+  copy.append(label, detail);
+
+  const check = document.createElement('span');
+  check.className = 'assistant-context-tool-check';
+  check.setAttribute('aria-hidden', 'true');
+  check.textContent = '✓';
+  item.append(copy, check);
+  item.addEventListener('click', () => {
+    void toggleDesktopShare();
+    closeContextToolsMenuForItem(item);
+  });
+  return item;
+}
+
+function closeContextToolsMenuForItem(item: HTMLElement): void {
+  const menu = item.closest<HTMLElement>('.assistant-context-tool-menu');
+  const addButton = menu?.parentElement?.querySelector<HTMLButtonElement>('.assistant-context-add-button');
+  if (menu && addButton) closeContextToolsMenu(addButton, menu);
+}
+
+function closeContextToolsMenu(addButton: HTMLButtonElement, menu: HTMLElement): void {
+  menu.hidden = true;
+  addButton.setAttribute('aria-expanded', 'false');
+  if (openContextToolsMenu?.menu === menu) openContextToolsMenu = null;
+}
+
+function handleContextToolsOutsidePointerDown(event: PointerEvent): void {
+  const openMenu = openContextToolsMenu;
+  const target = event.target;
+  if (!openMenu || !(target instanceof Node) || openMenu.tools.contains(target)) return;
+  closeContextToolsMenu(openMenu.addButton, openMenu.menu);
+}
+
+function setResearchMode(value: unknown): void {
+  researchMode = normalizeResearchMode(value);
+  if (activeSessionId) scheduleConversationResearchModePersistence(activeSessionId, researchMode);
+  renderControls();
+}
+
+function chooseResearchMode(mode: ResearchMode): void {
+  const select = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
+  const option = select?.querySelector<HTMLOptionElement>(`option[value="${mode}"]`);
+  if (option?.disabled) return;
+  if (!select) {
+    setResearchMode(mode);
+    return;
+  }
+  select.value = mode;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function assistantContextHost(
   composerActions: HTMLElement | null,
   composerControls: HTMLElement | null,
@@ -410,6 +591,30 @@ function renderControls(): void {
   });
   document.querySelectorAll<HTMLInputElement>('input[aria-label="Maximum pages to search"]').forEach((input) => {
     input.value = String(deepResearchMaxPages);
+  });
+  const researchSelect = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
+  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-mode]').forEach((item) => {
+    const active = item.getAttribute('data-omnix-context-tool-mode') === researchMode;
+    const option = researchSelect?.querySelector<HTMLOptionElement>(`option[value="${item.dataset.omnixContextToolMode}"]`);
+    const unavailable = option?.disabled ?? false;
+    item.classList.toggle('active', active);
+    item.classList.toggle('unavailable', unavailable);
+    item.disabled = unavailable;
+    item.setAttribute('aria-checked', String(active));
+    item.setAttribute('aria-disabled', String(unavailable));
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-desktop]').forEach((item) => {
+    const active = desktopShare !== null;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-checked', String(active));
+  });
+  document.querySelectorAll<HTMLElement>('.assistant-context-tool-summary').forEach((element) => {
+    const activeTools = [
+      researchMode !== 'disabled' ? webResearchModeLabel(researchMode) : '',
+      desktopShare !== null ? 'Desktop sharing' : '',
+    ].filter(Boolean);
+    element.textContent = activeTools.join(' · ');
+    element.toggleAttribute('hidden', activeTools.length === 0);
   });
   document.querySelectorAll<HTMLButtonElement>('.assistant-context-desktop').forEach((button) => {
     const active = desktopShare !== null;
