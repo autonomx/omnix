@@ -34,7 +34,7 @@ describe('OmnixRunCard', () => {
       status: 'completed',
       desired_state: 'running',
       revision: 5,
-      spec: { profile: 'coding', task: 'Fix tests' },
+      spec: { profile: 'coding', task: 'Fix tests', request_mode: { mode: 'agent', source: 'classifier' }, evidence_policy: { requirements: [] } },
     });
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
       {
@@ -66,6 +66,31 @@ describe('OmnixRunCard', () => {
         created_at: '2026-08-27T00:00:02Z',
       },
     ]);
+    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([{
+      revision_id: 'revision-1',
+      run_id: 'run-evidence',
+      sequence: 1,
+      user_instruction: 'Fix tests',
+      effective_objective: 'Fix tests',
+      evidence_decision: { confidence: 0.98, reason: 'required:repo_ci_state', classifier: 'deterministic', policy: {} },
+      required_local_capabilities: [],
+      required_external_capabilities: [],
+      expected_artifacts: ['diff'],
+      acceptance_checks: ['successful_test_command'],
+      created_at: '2026-08-27T00:00:00Z',
+    }]);
+    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+      run_id: 'run-evidence',
+      evaluated_at: '2026-08-27T00:00:02Z',
+      requirements: [],
+      missing_requirements: [],
+      stale_receipts: [],
+      wrong_subject_receipts: [],
+      insufficient_trust_receipts: [],
+      source_manifest_ids: [],
+      passed: true,
+    });
+    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
     vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([
       {
         artifact_id: 'artifact-1',
@@ -93,5 +118,6 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('✓ Acceptance passed')).toBeTruthy();
     expect(screen.getByText('View tests')).toBeTruthy();
     expect(screen.getByText('View diff')).toBeTruthy();
+    expect(screen.getByText('Authority & evidence')).toBeTruthy();
   });
 });

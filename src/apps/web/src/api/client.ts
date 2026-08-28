@@ -36,10 +36,14 @@ export interface AgentRunSnapshot {
   desired_state: string;
   revision: number;
   last_error?: string | null;
+  superseded_by_run_id?: string | null;
   spec: {
     profile: string;
     task: string;
     objective?: string;
+    supersedes_run_id?: string | null;
+    request_mode?: Record<string, unknown> | null;
+    evidence_policy?: Record<string, unknown>;
   };
 }
 
@@ -72,6 +76,60 @@ export interface AgentApproval {
   resolution_payload: Record<string, unknown>;
   created_at: string;
   resolved_at?: string | null;
+}
+
+export interface AgentTaskRevision {
+  revision_id: string;
+  run_id: string;
+  sequence: number;
+  previous_revision_id?: string | null;
+  source_command_id?: string | null;
+  user_instruction: string;
+  effective_objective: string;
+  evidence_decision: {
+    confidence: number;
+    reason: string;
+    classifier: string;
+    policy: Record<string, unknown>;
+  };
+  required_local_capabilities: string[];
+  required_external_capabilities: string[];
+  expected_artifacts: string[];
+  acceptance_checks: string[];
+  created_at: string;
+}
+
+export interface AgentEvidenceReceipt {
+  receipt_id: string;
+  run_id: string;
+  task_revision_id?: string | null;
+  capability_id: string;
+  source_class: string;
+  subject?: Record<string, unknown> | null;
+  provider?: string | null;
+  origin?: string | null;
+  source_manifest_id?: string | null;
+  source_count: number;
+  observed_at: string;
+  trust_level: string;
+}
+
+export interface AgentEvidenceSet {
+  run_id: string;
+  evaluated_at: string;
+  requirements: Array<{
+    requirement_id: string;
+    status: string;
+    matching_receipt_ids: string[];
+    rejected_receipt_ids: string[];
+    reason?: string | null;
+  }>;
+  missing_requirements: string[];
+  stale_receipts: string[];
+  wrong_subject_receipts: string[];
+  insufficient_trust_receipts: string[];
+  source_manifest_ids: string[];
+  passed: boolean;
 }
 
 export interface WorkflowRunSnapshot {
@@ -385,6 +443,24 @@ export class OmnixApiClient {
   async listAgentArtifacts(runId: string): Promise<AgentArtifact[]> {
     return this.get<AgentArtifact[]>(
       `/api/agent-runs/${encodeURIComponent(runId)}/artifacts`,
+    );
+  }
+
+  async listAgentTaskRevisions(runId: string): Promise<AgentTaskRevision[]> {
+    return this.get<AgentTaskRevision[]>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/task-revisions`,
+    );
+  }
+
+  async listAgentEvidenceReceipts(runId: string): Promise<AgentEvidenceReceipt[]> {
+    return this.get<AgentEvidenceReceipt[]>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/evidence/receipts`,
+    );
+  }
+
+  async getAgentEvidenceSet(runId: string): Promise<AgentEvidenceSet> {
+    return this.get<AgentEvidenceSet>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/evidence`,
     );
   }
 

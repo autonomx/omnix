@@ -125,3 +125,31 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+
+
+.assistant-runtime-policy {
+  margin-top: 0.7rem;
+}
+
+.assistant-runtime-policy summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.assistant-runtime-policy-grid {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.assistant-runtime-policy-grid > div {
+  align-items: baseline;
+  display: grid;
+  gap: 0.15rem;
+  grid-template-columns: minmax(7.5rem, 0.45fr) minmax(0, 1fr);
+}
+
+.assistant-runtime-policy-grid span {
+  overflow-wrap: anywhere;
+  opacity: 0.82;
+}

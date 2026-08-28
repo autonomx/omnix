@@ -102,6 +102,21 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
     queryFn: () => omnixApiClient.listAgentArtifacts(id),
     refetchInterval: live ? 2000 : false,
   });
+  const revisions = useQuery({
+    queryKey: ['agent-run', id, 'task-revisions'],
+    queryFn: () => omnixApiClient.listAgentTaskRevisions(id),
+    refetchInterval: live ? 2000 : false,
+  });
+  const evidence = useQuery({
+    queryKey: ['agent-run', id, 'evidence'],
+    queryFn: () => omnixApiClient.getAgentEvidenceSet(id),
+    refetchInterval: live ? 2000 : false,
+  });
+  const receipts = useQuery({
+    queryKey: ['agent-run', id, 'evidence', 'receipts'],
+    queryFn: () => omnixApiClient.listAgentEvidenceReceipts(id),
+    refetchInterval: live ? 2000 : false,
+  });
   const approvals = useQuery({
     queryKey: ['agent-run', id, 'approvals'],
     queryFn: () => omnixApiClient.listAgentApprovals(id, 'pending'),
@@ -124,6 +139,12 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
   const tests = testEvidence(events.data ?? []);
   const diff = (artifacts.data ?? []).find((artifact) => artifact.kind === 'diff');
   const diffPreview = stringField(diff?.metadata.preview);
+  const latestRevision = (revisions.data ?? []).at(-1);
+  const requestMode = asRecord(query.data.spec.request_mode);
+  const evidencePolicy = asRecord(query.data.spec.evidence_policy);
+  const evidenceRequirements = Array.isArray(evidencePolicy?.requirements)
+    ? evidencePolicy.requirements.map(asRecord).filter((value): value is Metadata => Boolean(value))
+    : [];
 
   return (
     <section className="assistant-runtime-card" aria-label="Agent run">
@@ -134,6 +155,38 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
       <p>{query.data.spec.task}</p>
       <small>{id}</small>
       {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
+      {(requestMode || latestRevision || evidenceRequirements.length || evidence.data) ? (
+        <details className="assistant-runtime-policy">
+          <summary>Authority & evidence</summary>
+          <div className="assistant-runtime-policy-grid">
+            {requestMode ? <div><strong>Mode</strong><span>{stringField(requestMode.mode)} · {stringField(requestMode.source)}</span></div> : null}
+            {latestRevision ? <div><strong>Task revision</strong><span>#{latestRevision.sequence} · {latestRevision.evidence_decision.reason}</span></div> : null}
+            <div><strong>Evidence</strong><span>{evidence.data?.passed ? 'satisfied' : evidenceRequirements.length ? 'required' : 'not required'}</span></div>
+            {evidenceRequirements.map((requirement, index) => {
+              const subject = asRecord(requirement.subject);
+              const evaluation = evidence.data?.requirements.find((row) => row.requirement_id === stringField(requirement.id));
+              return (
+                <div key={stringField(requirement.id) || `requirement-${index}`}>
+                  <strong>{stringField(requirement.source_class) || 'evidence'}</strong>
+                  <span>
+                    {evaluation?.status ?? 'pending'}
+                    {subject ? ` · ${stringField(subject.display_name) || stringField(subject.canonical_id)}` : ''}
+                    {requirement.freshness ? ` · ${String(requirement.freshness)}` : ''}
+                  </span>
+                </div>
+              );
+            })}
+            {(receipts.data ?? []).slice(-5).map((receipt) => (
+              <div key={receipt.receipt_id}>
+                <strong>Receipt · {receipt.source_class}</strong>
+                <span>{receipt.provider ?? receipt.origin ?? receipt.capability_id} · {receipt.trust_level}</span>
+              </div>
+            ))}
+            {query.data.superseded_by_run_id ? <div><strong>Superseded by</strong><span>{query.data.superseded_by_run_id}</span></div> : null}
+            {query.data.spec.supersedes_run_id ? <div><strong>Supersedes</strong><span>{query.data.spec.supersedes_run_id}</span></div> : null}
+          </div>
+        </details>
+      ) : null}
 
       {progress.length ? (
         <div className="assistant-runtime-progress" aria-label="Agent progress">
