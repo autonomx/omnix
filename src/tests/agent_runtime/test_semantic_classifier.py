@@ -469,3 +469,71 @@ def test_non_streaming_chat_uses_generalized_semantic_router(
     assert stored is not None
     assert stored.messages[-2].metadata["omnix_route"]["lane"] == "agent"
     assert stored.messages[-1].metadata["semantic_intent"]["primary_intent"] == "repository_change"
+
+
+def test_semantic_classifier_cannot_override_explicit_negated_action() -> None:
+    prompt = "Don't change anything, just explain why the cache is cold."
+    deterministic = route_omnix_request(prompt)
+    assert deterministic.reason == "negated_action"
+
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="coding",
+        primary_intent="repository_change",
+        action_intents=["workspace_mutate"],
+        evidence_requirements=[],
+        multi_step=True,
+        confidence=0.99,
+        reason="deliberately wrong semantic proposal for the guard test",
+    )
+
+    routed = _apply_semantic_route_decision(deterministic, semantic)
+
+    assert routed.lane == "chat"
+    assert routed.reason == "negated_action"
+
+
+def test_explicit_no_edit_instruction_blocks_semantic_workspace_mutation() -> None:
+    compiled = compile_task_authority(
+        get_agent_profile("coding"),
+        "do not edit the files; explain the cache behavior",
+        EvidenceDecision(),
+        semantic_action_intents=["workspace_mutate"],
+    )
+
+    assert "workspace.edit" not in compiled.required_local
+    assert "workspace.write" not in compiled.required_local
+    assert "workspace.command" not in compiled.required_local
+    assert "workspace.test" not in compiled.required_local
+
+
+def test_explicit_email_send_negation_blocks_send_but_allows_requested_draft() -> None:
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="personal-assistant",
+        primary_intent="draft_without_sending",
+        action_intents=["email_send", "email_draft"],
+        evidence_requirements=[],
+        multi_step=False,
+        confidence=0.99,
+        reason="The user wants a draft only.",
+    )
+    proposal = evidence_decision_from_semantic(
+        "don't send the email; draft an email to Bob instead",
+        semantic,
+    )
+    decision = classify_evidence(
+        "don't send the email; draft an email to Bob instead",
+        profile_id="personal-assistant",
+        semantic_adviser=lambda *_: proposal,
+    )
+    compiled = compile_task_authority(
+        get_agent_profile("personal-assistant"),
+        "don't send the email; draft an email to Bob instead",
+        decision,
+        semantic_action_intents=semantic.action_intents,
+    )
+
+    assert "gmail.send_email" not in compiled.required_external
+    assert "gmail.create_draft" in compiled.required_external
+    assert "gmail.read_email" in compiled.required_external
