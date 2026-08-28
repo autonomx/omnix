@@ -51,6 +51,10 @@ _WORKSPACE_MUTATION = re.compile(
     r"\b(?:implement|fix|refactor|edit|modify|patch|write|change|update|create|delete|remove)\b",
     re.I,
 )
+_WORKSPACE_EXECUTION = re.compile(
+    r"\b(?:run|test|pytest|vitest|typecheck|lint|debug|diagnose|investigate|reproduce|verify)\b",
+    re.I,
+)
 _HOME_MUTATION = re.compile(r"\b(?:turn|set|adjust|lower|raise|prepare|apply)\b", re.I)
 _EMAIL_SEND = re.compile(r"\b(?:send|reply|forward)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
 _EMAIL_DRAFT = re.compile(r"\b(?:draft|compose|write)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
@@ -488,9 +492,40 @@ def compile_task_authority(
     authority is minimized task-by-task.
     """
     evidence = compile_evidence(profile, decision)
-    local = list(profile.capabilities)
-    external = list(evidence.required_external)
     text = str(task or "")
+    if profile.id == "coding":
+        read_caps = [
+            capability
+            for capability in profile.capabilities
+            if capability in {
+                "workspace.read",
+                "workspace.list",
+                "workspace.search",
+                "workspace.git_status",
+                "workspace.git_diff",
+            }
+        ]
+        local = list(read_caps)
+        if task_requires_workspace_mutation(text):
+            local.extend(
+                capability
+                for capability in profile.capabilities
+                if capability in {
+                    "workspace.edit",
+                    "workspace.write",
+                    "workspace.command",
+                    "workspace.test",
+                }
+            )
+        elif _WORKSPACE_EXECUTION.search(text):
+            local.extend(
+                capability
+                for capability in profile.capabilities
+                if capability in {"workspace.command", "workspace.test"}
+            )
+    else:
+        local = list(profile.capabilities)
+    external = list(evidence.required_external)
     if profile.id == "house" and _HOME_MUTATION.search(text):
         external.append("home.set_state")
     elif profile.id == "personal-assistant":

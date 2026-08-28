@@ -42,3 +42,36 @@ def test_coding_profile_keeps_publication_off_by_default_but_allows_explicit_req
             profile,
             requested_external=["gmail.send_email"],
         )
+
+
+
+def test_coding_task_authority_is_minimized_for_read_only_and_execution_tasks() -> None:
+    from app.agent_runtime.contracts import EvidenceDecision
+    from app.agent_runtime.evidence import compile_task_authority
+
+    profile = get_agent_profile("coding")
+    read_only = compile_task_authority(
+        profile,
+        "Explain the router implementation",
+        EvidenceDecision(),
+    )
+    assert "workspace.read" in read_only.required_local
+    assert "workspace.edit" not in read_only.required_local
+    assert "workspace.command" not in read_only.required_local
+
+    diagnostic = compile_task_authority(
+        profile,
+        "Diagnose the failing tests without changing code",
+        EvidenceDecision(),
+    )
+    assert "workspace.command" in diagnostic.required_local
+    assert "workspace.test" in diagnostic.required_local
+    assert "workspace.edit" not in diagnostic.required_local
+
+    mutating = compile_task_authority(
+        profile,
+        "Fix the failing tests",
+        EvidenceDecision(),
+    )
+    assert "workspace.edit" in mutating.required_local
+    assert "workspace.test" in mutating.required_local

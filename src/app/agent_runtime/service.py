@@ -14,6 +14,7 @@ from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.assistant_tools.repo_adapter import _github_repository_from_remote
+from app.agent_runtime.capabilities import default_capability_registry
 
 from .acceptance import evaluate_acceptance
 from .evidence import (
@@ -25,7 +26,7 @@ from .evidence import (
     task_requires_workspace_mutation,
     validate_required_evidence_capabilities,
 )
-from .profiles import get_agent_profile, select_agent_profile_id
+from .profiles import get_agent_profile, resolve_profile_capabilities, select_agent_profile_id
 from .budget import AgentBudgetError, AgentBudgetManager
 from .contracts import (
     AgentArtifact,
@@ -71,6 +72,7 @@ class AgentRunService:
 
     def start(self, spec: AgentRunSpec) -> AgentRunSnapshot:
         self._ensure_supervisor()
+        self._validate_run_spec_authority(spec)
         self._validate_evidence_authority(spec)
         issued = self._prepare_workspace(self._bind_github_repository_authority(spec))
         with unit_of_work(self.database) as work:
@@ -105,6 +107,7 @@ class AgentRunService:
             if parent.status in {"completed", "failed", "cancelled"}:
                 raise ValueError("cannot start child from terminal parent")
             child_spec = derive_child_spec(parent, request)
+            self._validate_run_spec_authority(child_spec)
             self._validate_evidence_authority(child_spec)
             existing = repository.list_children(parent_run_id)
             parent_usage = repository.get_usage(parent_run_id)
@@ -242,6 +245,47 @@ class AgentRunService:
                 self._maybe_finalize_parent_in_repository(repository, stored.run_id)
                 work.commit()
         return self.get(stored.run_id) or current
+
+    @staticmethod
+    def _validate_run_spec_authority(spec: AgentRunSpec) -> None:
+        """Treat the durable service boundary as the final authority compiler."""
+        profile = get_agent_profile(spec.profile)
+        try:
+            resolve_profile_capabilities(
+                profile,
+                requested=list(spec.capabilities),
+                requested_external=list(spec.external_capabilities),
+            )
+        except ValueError as exc:
+            raise EvidenceCompilationError(
+                "run_spec_exceeds_profile_ceiling",
+                str(exc),
+            ) from exc
+        if profile.requires_workspace and spec.workspace is None:
+            raise EvidenceCompilationError(
+                "required_workspace_unavailable",
+                f"profile {profile.id} requires an explicitly issued workspace",
+            )
+        if not profile.requires_workspace and spec.workspace is not None:
+            raise EvidenceCompilationError(
+                "workspace_outside_profile_ceiling",
+                f"profile {profile.id} does not permit local workspace authority",
+            )
+
+        registry = default_capability_registry()
+        issued = set(spec.capabilities) | set(spec.external_capabilities)
+        for scope in spec.resource_scopes:
+            canonical = registry.canonical_id(scope.capability)
+            if canonical is None:
+                raise EvidenceCompilationError(
+                    "unknown_resource_scope_capability",
+                    f"resource scope references unknown capability {scope.capability}",
+                )
+            if canonical not in issued:
+                raise EvidenceCompilationError(
+                    "resource_scope_outside_run_authority",
+                    f"resource scope {scope.capability} is not issued to this run",
+                )
 
     def _validate_evidence_authority(self, spec: AgentRunSpec) -> None:
         if spec.evidence_policy.requirement != "required":
