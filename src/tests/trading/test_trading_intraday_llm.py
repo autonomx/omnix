@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -7,11 +8,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.trading.gapper_dataset import GapperCandidate
+from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.strategies.models import GapPullbackConfig, GapPullbackFeatures, GapPullbackResult, StrategySignal
+from app.trading.strategy_monitor import TradingStrategyMonitor
+from app.trading.strategy_repository import TradingStrategyConfigDocument
 from app.trading.strategy_intraday_learning import IntradayLearningSnapshot
 from app.trading.strategy_intraday_llm import (
+    IntradayLLMAssessment,
     IntradayLLMAnalyzer,
+    IntradayLLMResult,
     build_intraday_llm_payload,
     select_intraday_llm_candidates,
     should_run_intraday_llm_batch,
@@ -222,3 +227,154 @@ def test_intraday_llm_requires_deterministic_learning_layer():
             intraday_learning_enabled=False,
             intraday_llm_enabled=True,
         )
+
+
+
+class MemoryEventRepository:
+    def __init__(self):
+        self.events = []
+
+    def recent_events(self, strategy_id, limit=200):
+        matching = [event for event in self.events if event.strategy_id == strategy_id]
+        return sorted(matching, key=lambda event: event.observed_at, reverse=True)[:limit]
+
+    def append_event(self, event):
+        if any(existing.idempotency_key == event.idempotency_key for existing in self.events):
+            return False
+        self.events.append(event)
+        return True
+
+
+class FixtureAnalyzer:
+    def __init__(self, *, fail=False):
+        self.fail = fail
+        self.calls = 0
+
+    def assess(self, rows, *, ranks, previous_by_instrument=None):
+        self.calls += 1
+        if self.fail:
+            raise RuntimeError("fixture provider unavailable")
+        assessments = []
+        for candidate_, *_ in rows:
+            assessments.append(
+                IntradayLLMAssessment.model_validate(
+                    assessment(candidate_.instrument_id)
+                )
+            )
+        return IntradayLLMResult(
+            assessments=tuple(assessments),
+            provider="fixture",
+            model="fixture-model",
+        )
+
+
+def _llm_strategy() -> TradingStrategyConfigDocument:
+    config = GapPullbackConfig(
+        strategy_version="2.0.0",
+        universe_discovery_source="finviz",
+        intraday_learning_enabled=True,
+        intraday_llm_enabled=True,
+        intraday_llm_top_n=1,
+        intraday_llm_interval_minutes=5,
+    )
+    return TradingStrategyConfigDocument(
+        strategy_id="intraday-llm-test",
+        account_id="paper-test",
+        strategy_version="2.0.0",
+        mode="shadow",
+        config=config,
+    )
+
+
+def _llm_universe():
+    observed = OBSERVED - timedelta(minutes=10)
+    return freeze_gapper_universe(
+        universe_id="finviz-intraday-llm-test",
+        session_date=OBSERVED.date(),
+        evaluation_time=OBSERVED,
+        discovery_source="finviz",
+        source_locator="https://finviz.com/screener?v=340&s=ta_topgainers",
+        source_candidate_symbols=("AAA",),
+        candidates=[candidate("AAA", 1).model_copy(update={"observed_at": observed})],
+    )
+
+
+def test_monitor_persists_llm_assessment_and_uses_batch_event_as_cadence_checkpoint():
+    repository = MemoryEventRepository()
+    analyzer = FixtureAnalyzer()
+    monitor = TradingStrategyMonitor(
+        intraday_llm_analyzer_factory=lambda: analyzer,
+        interval_seconds=30,
+    )
+    monitor.current_run_id = "run-test"
+    ranked = [row("AAA", 1)]
+
+    asyncio.run(
+        monitor._run_intraday_llm(
+            _llm_strategy(),
+            repository,
+            _llm_universe(),
+            ranked,
+        )
+    )
+
+    assert analyzer.calls == 1
+    assert monitor.intraday_llm_call_count == 1
+    assert monitor.intraday_llm_assessment_count == 1
+    assert [event.event_type for event in repository.events] == [
+        "intraday_llm",
+        "intraday_llm_batch",
+    ]
+    llm_event = repository.events[0]
+    assert llm_event.payload["execution_authority"] is False
+    assert llm_event.payload["assessment"]["execution_authority"] is False
+
+    # Same causal minute cannot re-call the LLM because the persisted batch
+    # checkpoint is at the same observed_at.
+    asyncio.run(
+        monitor._run_intraday_llm(
+            _llm_strategy(),
+            repository,
+            _llm_universe(),
+            ranked,
+        )
+    )
+    assert analyzer.calls == 1
+    assert monitor.intraday_llm_call_count == 1
+
+
+def test_monitor_persists_failed_batch_checkpoint_to_bound_provider_retries():
+    repository = MemoryEventRepository()
+    analyzer = FixtureAnalyzer(fail=True)
+    monitor = TradingStrategyMonitor(
+        intraday_llm_analyzer_factory=lambda: analyzer,
+        interval_seconds=30,
+    )
+    monitor.current_run_id = "run-error"
+    ranked = [row("AAA", 1)]
+
+    asyncio.run(
+        monitor._run_intraday_llm(
+            _llm_strategy(),
+            repository,
+            _llm_universe(),
+            ranked,
+        )
+    )
+
+    assert analyzer.calls == 1
+    assert monitor.intraday_llm_call_count == 1
+    assert monitor.intraday_llm_error_count == 1
+    assert len(repository.events) == 1
+    assert repository.events[0].event_type == "intraday_llm_batch"
+    assert repository.events[0].state == "error"
+
+    asyncio.run(
+        monitor._run_intraday_llm(
+            _llm_strategy(),
+            repository,
+            _llm_universe(),
+            ranked,
+        )
+    )
+    assert analyzer.calls == 1
