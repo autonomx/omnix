@@ -488,3 +488,70 @@ def test_revision_filters_do_not_reuse_prior_tool_or_evidence_rows() -> None:
         [prior_receipt, current_receipt],
         revision,
     ) == [current_receipt]
+
+
+
+def test_required_subject_qualifiers_must_be_present_on_receipt() -> None:
+    from app.agent_runtime.evidence import subject_matches
+
+    required = SubjectRef(
+        type="repository_ref",
+        canonical_id="autonomx/omnix",
+        qualifiers={"resolved_commit": "abc123"},
+    )
+    broad = SubjectRef(
+        type="repository_ref",
+        canonical_id="autonomx/omnix",
+        qualifiers={},
+    )
+    assert subject_matches(required, broad) is False
+
+
+def test_generic_equity_ticker_subject_is_canonicalized() -> None:
+    decision = classify_evidence(
+        "What is AAPL trading at today?",
+        profile_id="trading-research",
+    )
+    requirement = decision.policy.requirements[0]
+    assert requirement.source_class == "market_quote"
+    assert requirement.subject is not None
+    assert requirement.subject.qualifiers["ticker"] == "AAPL"
+
+
+def test_mixed_web_results_cannot_inherit_primary_filing_trust() -> None:
+    receipt = build_evidence_receipt(
+        run_id="run-1",
+        task_revision_id="rev-1",
+        policy=EvidencePolicy(
+            requirement="required",
+            requirements=[
+                EvidenceRequirement(
+                    id="filing",
+                    source_class="company_filing",
+                    trust_floor="primary",
+                    subject=_security_subject("AAPL"),
+                    acceptable_sources=[
+                        EvidenceSourceOption(
+                            source_class="company_filing",
+                            trust_floor="primary",
+                            preference=0,
+                        )
+                    ],
+                )
+            ],
+        ),
+        capability_id="research.web_search",
+        request_input={"query": "AAPL SEC filing"},
+        result_payload={
+            "output": {
+                "items": [
+                    {"url": "https://www.sec.gov/example"},
+                    {"url": "https://example.com/summary"},
+                ],
+                "diagnostics": {"provider": "test"},
+            }
+        },
+        error=None,
+    )
+    assert receipt is not None
+    assert receipt.trust_level == "reputable"

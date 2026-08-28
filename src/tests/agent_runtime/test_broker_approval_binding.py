@@ -43,3 +43,42 @@ def test_approval_cannot_authorize_changed_arguments() -> None:
         _approved_execution_key("run-1", "home.set_state", request, _approval())
     assert caught.value.status_code == 403
     assert caught.value.detail == "agent_approval_input_mismatch"
+
+
+
+def test_authoritative_market_subject_overrides_missing_ticker_and_rejects_conflict() -> None:
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from app.agent_runtime.broker_api import BrokerCapabilityRequest, _bind_authoritative_capability_input
+    from app.agent_runtime.contracts import EvidencePolicy, EvidenceRequirement, SubjectRef
+
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            EvidenceRequirement(
+                id="quote",
+                source_class="market_quote",
+                subject=SubjectRef(
+                    type="security",
+                    canonical_id="equity:NASDAQ:NVDA",
+                    qualifiers={"ticker": "NVDA"},
+                ),
+            )
+        ],
+    )
+    snapshot = SimpleNamespace(spec=SimpleNamespace(workspace=None))
+    bounded = _bind_authoritative_capability_input(
+        snapshot,
+        "trading.market_quote",
+        BrokerCapabilityRequest(input={}),
+        policy=policy,
+    )
+    assert bounded.input["ticker"] == "NVDA"
+    with pytest.raises(HTTPException) as caught:
+        _bind_authoritative_capability_input(
+            snapshot,
+            "trading.market_quote",
+            BrokerCapabilityRequest(input={"ticker": "TSLA"}),
+            policy=policy,
+        )
+    assert caught.value.status_code == 403

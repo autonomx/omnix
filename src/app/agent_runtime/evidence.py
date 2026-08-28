@@ -60,7 +60,14 @@ _EMAIL_SEND = re.compile(r"\b(?:send|reply|forward)\b.{0,80}\b(?:email|gmail|mes
 _EMAIL_DRAFT = re.compile(r"\b(?:draft|compose|write)\b.{0,80}\b(?:email|gmail|message)\b", re.I)
 _CALENDAR_CREATE = re.compile(r"\b(?:schedule|create|book|add)\b.{0,80}\b(?:meeting|appointment|calendar event)\b", re.I)
 _CONCEPTUAL = re.compile(r"^(?:what is|what are|explain|describe|teach me|how does|why does|compare)\b", re.I)
-_TICKER = re.compile(r"(?:\$([A-Z]{1,5})\b|\b(NVDA|GME|TSLA)\b)")
+_TICKER_DOLLAR = re.compile(r"\$([A-Z]{1,5})\b")
+_TICKER_BEFORE_CONTEXT = re.compile(
+    r"\b([A-Z]{1,5})\b(?=.{0,24}\b(?:stock|shares?|ticker|price|quote|trading at)\b)"
+)
+_TICKER_AFTER_CONTEXT = re.compile(
+    r"\b(?:stock|ticker|price|quote)\s+(?:of\s+|for\s+)?([A-Z]{1,5})\b",
+    re.I,
+)
 _PR = re.compile(r"\bPR\s*#?(\d+)\b", re.I)
 
 TRUST_RANK = {"general": 0, "reputable": 1, "primary": 2, "authoritative": 3}
@@ -247,18 +254,47 @@ def resolve_request_mode(
     )
 
 
+def _extract_ticker(task: str) -> str | None:
+    text = str(task or "")
+    for pattern in (_TICKER_DOLLAR, _TICKER_BEFORE_CONTEXT, _TICKER_AFTER_CONTEXT):
+        match = pattern.search(text)
+        if match:
+            return str(match.group(1)).upper()
+    return None
+
+
+def _security_subject(ticker: str) -> SubjectRef:
+    canonical_id = f"{ticker}:US"
+    qualifiers: dict[str, object] = {"ticker": ticker}
+    try:
+        from app.trading.catalog import search_instruments
+        from app.trading.models import AssetClass
+
+        candidates = [
+            item
+            for item in search_instruments(ticker)
+            if item.asset_class is AssetClass.EQUITY
+            and item.display_symbol.upper() == ticker
+        ]
+        if len(candidates) == 1:
+            canonical_id = candidates[0].instrument_id
+            qualifiers["instrument_id"] = candidates[0].instrument_id
+    except Exception:
+        pass
+    return SubjectRef(
+        type="security",
+        canonical_id=canonical_id,
+        display_name=ticker,
+        qualifiers=qualifiers,
+    )
+
+
 def resolve_subject(task: str, source_class: str) -> SubjectRef | None:
     text = str(task or "")
     if source_class in {"market_quote", "market_news", "market_status", "company_filing"}:
-        match = _TICKER.search(text.upper())
-        if match:
-            ticker = (match.group(1) or match.group(2) or "").upper()
-            return SubjectRef(
-                type="security",
-                canonical_id=f"{ticker}:US",
-                display_name=ticker,
-                qualifiers={"ticker": ticker},
-            )
+        ticker = _extract_ticker(text)
+        if ticker:
+            return _security_subject(ticker)
     if source_class in {"repo_ci_state", "repo_contents"}:
         pr = _PR.search(text)
         qualifiers = {"pull_request": int(pr.group(1))} if pr else {}
@@ -620,7 +656,7 @@ def subject_matches(required: SubjectRef | None, observed: SubjectRef | None) ->
     if required.type != observed.type or required.canonical_id != observed.canonical_id:
         return False
     for key, value in required.qualifiers.items():
-        if key in observed.qualifiers and observed.qualifiers.get(key) != value:
+        if key not in observed.qualifiers or observed.qualifiers.get(key) != value:
             return False
     return True
 
@@ -652,18 +688,49 @@ def evaluate_evidence_set(
     accepted_receipts: set[str] = set()
 
     for requirement in policy.requirements:
-        source_classes = {requirement.source_class, *[o.source_class for o in requirement.acceptable_sources]}
+        options = [
+            EvidenceSourceOption(
+                source_class=requirement.source_class,
+                trust_floor=requirement.trust_floor,
+                preference=0,
+            ),
+            *requirement.acceptable_sources,
+        ]
+        source_classes = {option.source_class for option in options}
         candidates = [r for r in receipts if r.source_class in source_classes]
         matched: list[str] = []
+        matched_units = 0
         rejected: list[str] = []
         statuses: list[str] = []
         for receipt in candidates:
+            compatible_options = [
+                option
+                for option in options
+                if option.source_class == receipt.source_class
+                and (
+                    not option.provider_hint
+                    or str(receipt.provider or receipt.origin or "").casefold()
+                    == option.provider_hint.casefold()
+                )
+            ]
+            if not compatible_options:
+                rejected.append(receipt.receipt_id)
+                statuses.append("rejected")
+                continue
             if not subject_matches(requirement.subject, receipt.subject):
                 wrong_subject.append(receipt.receipt_id)
                 rejected.append(receipt.receipt_id)
                 statuses.append("wrong_subject")
                 continue
-            if TRUST_RANK.get(receipt.trust_level, 0) < TRUST_RANK.get(requirement.trust_floor, 0):
+            option_trust = max(
+                (TRUST_RANK.get(option.trust_floor, 0) for option in compatible_options),
+                default=0,
+            )
+            required_trust = max(
+                TRUST_RANK.get(requirement.trust_floor, 0),
+                option_trust,
+            )
+            if TRUST_RANK.get(receipt.trust_level, 0) < required_trust:
                 low_trust.append(receipt.receipt_id)
                 rejected.append(receipt.receipt_id)
                 statuses.append("insufficient_trust")
@@ -676,9 +743,10 @@ def evaluate_evidence_set(
                 statuses.append("stale")
                 continue
             matched.append(receipt.receipt_id)
+            matched_units += max(1, int(receipt.source_count or 0))
             accepted_receipts.add(receipt.receipt_id)
 
-        if len(matched) >= requirement.minimum_matches:
+        if matched_units >= requirement.minimum_matches:
             status = "satisfied"
             reason = None
         elif not candidates:
@@ -757,23 +825,89 @@ def _result_output(result_payload: dict[str, object]) -> dict[str, object]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _actual_web_trust(output: dict[str, object]) -> str:
+def _web_domain_trust(source_class: str, domain: str) -> str:
+    value = domain.casefold().removeprefix("www.")
+    if source_class == "company_filing":
+        return "primary" if value == "sec.gov" or value.endswith(".sec.gov") else "reputable"
+    if source_class == "software_release":
+        return "primary" if value in {"github.com", "postgresql.org"} else "reputable"
+    return "reputable"
+
+
+def _actual_web_trust(output: dict[str, object], source_class: str) -> str:
     items = output.get("items")
-    urls: list[str] = []
+    domains: list[str] = []
     if isinstance(items, list):
         for item in items:
             if isinstance(item, dict) and item.get("url"):
-                urls.append(str(item["url"]))
-    domains = {urlparse(value).netloc.casefold().removeprefix("www.") for value in urls}
-    if any(
-        domain == "sec.gov"
-        or domain.endswith(".sec.gov")
-        or domain in {"postgresql.org", "github.com"}
-        for domain in domains
-    ):
-        return "primary"
-    return "reputable"
+                domain = urlparse(str(item["url"])).netloc.casefold().removeprefix("www.")
+                if domain:
+                    domains.append(domain)
+    if not domains:
+        return "general"
+    # A multi-result receipt receives only the trust shared by every result.
+    levels = [_web_domain_trust(source_class, domain) for domain in domains]
+    return min(levels, key=lambda value: TRUST_RANK.get(value, 0))
 
+
+def _observed_subject(
+    capability_id: str,
+    source_class: str,
+    request_input: dict[str, object],
+    output: dict[str, object],
+) -> SubjectRef | None:
+    if capability_id == "trading.market_quote":
+        ticker = str(output.get("ticker") or request_input.get("ticker") or "").strip().upper()
+        instrument_id = str(output.get("instrument_id") or "").strip()
+        if ticker:
+            subject = _security_subject(ticker)
+            if instrument_id:
+                return subject.model_copy(update={
+                    "canonical_id": instrument_id,
+                    "qualifiers": {**subject.qualifiers, "instrument_id": instrument_id},
+                })
+            return subject
+        return None
+    if capability_id in {"github.inspect_ci", "github.read_repo"}:
+        repository = str(output.get("repository") or request_input.get("repository") or "").strip()
+        if not repository:
+            return None
+        requested_ref = str(
+            output.get("requested_ref")
+            or request_input.get("requested_ref")
+            or ""
+        ).strip()
+        resolved_commit = str(
+            output.get("resolved_commit")
+            or output.get("ref")
+            or request_input.get("resolved_commit")
+            or request_input.get("ref")
+            or request_input.get("sha")
+            or ""
+        ).strip()
+        qualifiers: dict[str, object] = {}
+        if requested_ref:
+            qualifiers["requested_ref"] = requested_ref
+        if resolved_commit:
+            qualifiers["resolved_commit"] = resolved_commit
+        return SubjectRef(
+            type="repository_ref",
+            canonical_id=repository,
+            display_name=repository,
+            qualifiers=qualifiers,
+        )
+    if capability_id == "research.web_search":
+        query = str(request_input.get("query") or "")
+        return resolve_subject(query, source_class)
+    if source_class == "home_state":
+        return SubjectRef(type="home", canonical_id="current_home", display_name="current home")
+    if source_class == "home_energy":
+        return SubjectRef(type="home", canonical_id="current_home", display_name="current home")
+    if source_class == "calendar_state":
+        return SubjectRef(type="calendar", canonical_id="primary_calendar", display_name="primary calendar")
+    if source_class == "email_state":
+        return SubjectRef(type="mailbox", canonical_id="primary_mailbox", display_name="primary mailbox")
+    return None
 
 def _request_supports_subject(subject: SubjectRef | None, request_input: dict[str, object]) -> bool:
     if subject is None:
@@ -818,11 +952,7 @@ def build_evidence_receipt(
             if resolved_capability != capability_id:
                 continue
             source_class = candidate_source
-            subject = (
-                requirement.subject
-                if _request_supports_subject(requirement.subject, request_input)
-                else None
-            )
+            subject = None
             trust = (
                 option_trust
                 if TRUST_RANK.get(option_trust, 0) <= TRUST_RANK.get(resolved_trust, 0)
@@ -836,6 +966,12 @@ def build_evidence_receipt(
         return None
 
     output = _result_output(result_payload)
+    subject = _observed_subject(
+        capability_id,
+        source_class,
+        request_input,
+        output,
+    )
     diagnostics = output.get("diagnostics")
     diagnostics = dict(diagnostics) if isinstance(diagnostics, dict) else {}
     provider = str(diagnostics.get("provider") or output.get("provider") or "").strip() or None
@@ -844,7 +980,7 @@ def build_evidence_receipt(
     source_count = len(items) if isinstance(items, list) else int(output.get("source_count") or 0)
     origin = provider
     if capability_id == "research.web_search":
-        trust = _actual_web_trust(output)
+        trust = _actual_web_trust(output, source_class)
     elif capability_id.startswith(("github.", "home.", "calendar.", "gmail.")):
         trust = "authoritative"
 

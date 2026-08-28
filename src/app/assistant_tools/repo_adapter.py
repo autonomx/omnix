@@ -24,7 +24,7 @@ class RepositoryPullRequestRecord:
 
 
 class RepositoryRuntimeAdapter(Protocol):
-    def read_repo(self, *, repository: str) -> dict[str, object]: ...
+    def read_repo(self, *, repository: str, ref: str | None = None, requested_ref: str | None = None) -> dict[str, object]: ...
     def create_branch(self, *, repository: str, branch: str, base_sha: str) -> dict[str, object]: ...
     def push(self, *, repository: str, worktree: str, branch: str, remote: str = "origin") -> dict[str, object]: ...
     def inspect_ci(self, *, repository: str, ref: str) -> dict[str, object]: ...
@@ -36,8 +36,17 @@ class RepositoryRuntimeAdapter(Protocol):
 class FakeRepositoryRuntimeAdapter:
     pull_requests: dict[int, RepositoryPullRequestRecord] = field(default_factory=dict)
 
-    def read_repo(self, *, repository: str) -> dict[str, object]:
-        return {"repository": repository, "status": "readable", "pull_request_count": len(self.pull_requests)}
+    def read_repo(self, *, repository: str, ref: str | None = None, requested_ref: str | None = None) -> dict[str, object]:
+        output: dict[str, object] = {
+            "repository": repository,
+            "status": "readable",
+            "pull_request_count": len(self.pull_requests),
+        }
+        if requested_ref:
+            output["requested_ref"] = requested_ref
+        if ref:
+            output["resolved_commit"] = ref
+        return output
 
     def create_branch(self, *, repository: str, branch: str, base_sha: str) -> dict[str, object]:
         return {"repository": repository, "branch": branch, "base_sha": base_sha, "created": True}
@@ -46,7 +55,13 @@ class FakeRepositoryRuntimeAdapter:
         return {"repository": repository, "worktree": worktree, "branch": branch, "remote": remote, "pushed": True}
 
     def inspect_ci(self, *, repository: str, ref: str) -> dict[str, object]:
-        return {"repository": repository, "ref": ref, "status": "success", "checks_passed": True}
+        return {
+            "repository": repository,
+            "ref": ref,
+            "resolved_commit": ref,
+            "status": "success",
+            "checks_passed": True,
+        }
 
     def create_pr(self, *, repository: str, title: str, body: str, branch: str, base: str) -> RepositoryPullRequestRecord:
         number = max(self.pull_requests.keys(), default=1000) + 1
@@ -96,14 +111,20 @@ class GitHubCliRuntimeAdapter:
         text = completed.stdout.strip()
         return json.loads(text) if text else {}
 
-    def read_repo(self, *, repository: str) -> dict[str, object]:
+    def read_repo(self, *, repository: str, ref: str | None = None, requested_ref: str | None = None) -> dict[str, object]:
         _repository_parts(repository)
         data = self._gh(["api", f"repos/{repository}"])
-        return {
+        output: dict[str, object] = {
             "repository": str(data.get("full_name") or repository),
             "default_branch": data.get("default_branch"),
             "visibility": data.get("visibility"),
         }
+        if requested_ref:
+            output["requested_ref"] = requested_ref
+        if ref:
+            commit = self._gh(["api", f"repos/{repository}/commits/{ref}"])
+            output["resolved_commit"] = str(commit.get("sha") or ref)
+        return output
 
     def create_branch(self, *, repository: str, branch: str, base_sha: str) -> dict[str, object]:
         _repository_parts(repository)
@@ -175,6 +196,7 @@ class GitHubCliRuntimeAdapter:
         return {
             "repository": repository,
             "ref": ref,
+            "resolved_commit": ref,
             "checks_passed": passed,
             "checks": [
                 {"name": row.get("name"), "status": row.get("status"), "conclusion": row.get("conclusion")}
@@ -258,7 +280,17 @@ def run_repository_tool_request(request: AssistantToolRequest, adapter: Reposito
     repository = str(request.input.get("repository") or request.input.get("repo") or "")
     try:
         if request.action_id == "github.read_repo":
-            return _result(request, "low", False, "Read repository.", runtime.read_repo(repository=repository))
+            return _result(
+                request,
+                "low",
+                False,
+                "Read repository.",
+                runtime.read_repo(
+                    repository=repository,
+                    ref=str(request.input.get("ref") or "") or None,
+                    requested_ref=str(request.input.get("requested_ref") or "") or None,
+                ),
+            )
         if request.action_id == "github.create_branch":
             output = runtime.create_branch(repository=repository, branch=str(request.input.get("branch") or ""), base_sha=str(request.input.get("base_sha") or ""))
             return _result(request, "medium", True, f"Created repository branch {output.get('branch')}.", output)

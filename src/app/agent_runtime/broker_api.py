@@ -160,40 +160,80 @@ def _request_within_resource_scopes(
     return False
 
 
+def _evidence_requirement_for_capability(policy, capability_id: str):
+    from .evidence import SOURCE_CAPABILITIES
+
+    for requirement in policy.requirements:
+        candidates = [requirement.source_class]
+        if requirement.fallback_policy != "fail_closed":
+            candidates.extend(option.source_class for option in requirement.acceptable_sources)
+        for source_class in candidates:
+            resolved = SOURCE_CAPABILITIES.get(source_class)
+            if resolved and resolved[0] == capability_id:
+                return requirement
+    return None
+
+
 def _bind_authoritative_capability_input(
     snapshot,
     capability_id: str,
     request: BrokerCapabilityRequest,
+    *,
+    policy=None,
 ) -> BrokerCapabilityRequest:
-    if capability_id != "github.push":
-        return request
-    workspace = snapshot.spec.workspace
-    if workspace is None:
-        raise HTTPException(
-            status_code=409,
-            detail="agent_push_requires_issued_workspace",
-        )
-    if "worktree" in request.input:
-        raise HTTPException(
-            status_code=403,
-            detail="agent_push_worktree_is_omnix_managed",
-        )
-    if "remote" in request.input:
-        raise HTTPException(
-            status_code=403,
-            detail="agent_push_remote_is_omnix_managed",
-        )
-    issued_worktree = workspace.worktree or workspace.root
-    return request.model_copy(
-        update={
-            "input": {
-                **request.input,
-                "worktree": issued_worktree,
-                "remote": "origin",
-            }
-        }
-    )
+    bounded = dict(request.input)
+    requirement = _evidence_requirement_for_capability(policy, capability_id) if policy is not None else None
+    subject = requirement.subject if requirement is not None else None
 
+    def bind_exact(key: str, value: object) -> None:
+        if value in {None, ""}:
+            return
+        if key in bounded and str(bounded.get(key)).casefold() != str(value).casefold():
+            raise HTTPException(
+                status_code=403,
+                detail=f"agent_evidence_subject_input_mismatch:{key}",
+            )
+        bounded[key] = value
+
+    if capability_id == "trading.market_quote" and subject is not None:
+        bind_exact("ticker", subject.qualifiers.get("ticker"))
+    elif capability_id in {"github.inspect_ci", "github.read_repo"} and subject is not None:
+        bind_exact("repository", subject.canonical_id)
+        requested_ref = subject.qualifiers.get("requested_ref")
+        resolved_commit = subject.qualifiers.get("resolved_commit")
+        bind_exact("requested_ref", requested_ref)
+        if resolved_commit:
+            if "sha" in bounded and str(bounded.get("sha")).casefold() != str(resolved_commit).casefold():
+                raise HTTPException(
+                    status_code=403,
+                    detail="agent_evidence_subject_input_mismatch:sha",
+                )
+            bind_exact("ref", resolved_commit)
+            bounded["resolved_commit"] = resolved_commit
+
+    if capability_id == "github.push":
+        workspace = snapshot.spec.workspace
+        if workspace is None:
+            raise HTTPException(
+                status_code=409,
+                detail="agent_push_requires_issued_workspace",
+            )
+        if "worktree" in bounded:
+            raise HTTPException(
+                status_code=403,
+                detail="agent_push_worktree_is_omnix_managed",
+            )
+        if "remote" in bounded:
+            raise HTTPException(
+                status_code=403,
+                detail="agent_push_remote_is_omnix_managed",
+            )
+        issued_worktree = workspace.worktree or workspace.root
+        bounded.update({
+            "worktree": issued_worktree,
+            "remote": "origin",
+        })
+    return request.model_copy(update={"input": bounded})
 
 def _effective_evidence_context(service, snapshot):
     with unit_of_work(service.database) as work:
@@ -351,14 +391,15 @@ def execute_agent_capability(
     canonical = capability.id
     if canonical not in snapshot.spec.external_capabilities:
         raise HTTPException(status_code=403, detail="agent_capability_outside_run_spec")
+    policy, task_revision_id, evidence_started_at, existing_receipts = _effective_evidence_context(
+        service,
+        snapshot,
+    )
     request = _bind_authoritative_capability_input(
         snapshot,
         canonical,
         request,
-    )
-    policy, task_revision_id, evidence_started_at, existing_receipts = _effective_evidence_context(
-        service,
-        snapshot,
+        policy=policy,
     )
     request = _bind_evidence_retrieval_budget(
         canonical,
@@ -512,16 +553,10 @@ def execute_agent_capability(
             error=result.error,
             state_changed=result.state_changed,
         )
-        latest_revision = repository.latest_task_revision(run_id)
-        effective_policy = (
-            latest_revision.evidence_decision.policy
-            if latest_revision is not None
-            else snapshot.spec.evidence_policy
-        )
         receipt = build_evidence_receipt(
             run_id=run_id,
-            task_revision_id=latest_revision.revision_id if latest_revision else None,
-            policy=effective_policy,
+            task_revision_id=task_revision_id,
+            policy=policy,
             capability_id=canonical,
             request_input=request.input,
             result_payload=result_payload,
