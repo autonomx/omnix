@@ -110,7 +110,7 @@ _EVIDENCE_FIELDS = {
 }
 _MULTI_STEP_LANGUAGE = re.compile(
     r"\b(?:then|after(?:wards)?|follow[- ]?up|dig\s+into|investigate|diagnose|"
-    r"research|compare|narrow\s+down|go\s+through|look\s+through|"
+    r"research|compar(?:e|ing|ison)|narrow\s+down|go\s+through|look\s+through|"
     r"find\s+(?:the\s+)?cause|what\s+changed|why\s+it\s+moved|"
     r"get\s+it\s+green|sort\s+it\s+out)\b",
     re.I,
@@ -313,6 +313,10 @@ def _normalize_semantic_decision(
     inferred = (
         len(actions) >= 2
         or bool(_MULTI_STEP_LANGUAGE.search(text))
+        or (
+            "workspace_mutate" in actions
+            and bool(re.search(r"\b(?:tests?|testing|validate|verify)\b", text, re.I))
+        )
         or (
             bool(actions & {"research_read", "market_read"})
             and len(decision.evidence_requirements) >= 2
