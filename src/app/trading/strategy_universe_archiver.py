@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .gapper_dataset import GapperUniverseSnapshot, freeze_gapper_universe
-from .finviz_gapper_discovery import discover_finviz_gappers
+from .finviz_gapper_discovery import FINVIZ_TOP_GAINERS_SOURCE_URL, discover_finviz_gappers
 from .gapper_discovery import discover_yahoo_gappers
 from .providers.errors import ProviderDataUnavailableError
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
@@ -84,6 +84,7 @@ def archive_daily_universe_if_due(
             session_date=now_et.date(),
             evaluation_time=observed.astimezone(timezone.utc),
             discovery_source="finviz" if discovery_source == "finviz" else "provider",
+            source_locator=FINVIZ_TOP_GAINERS_SOURCE_URL if discovery_source == "finviz" else None,
             candidates=[],
             allow_empty=True,
         )
