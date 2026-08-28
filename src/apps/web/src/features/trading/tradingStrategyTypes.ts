@@ -57,6 +57,9 @@ export type GapPullbackConfig = {
   entry_start_et: string;
   last_entry_et: string;
   intraday_learning_enabled?: boolean;
+  intraday_llm_enabled?: boolean;
+  intraday_llm_top_n?: number;
+  intraday_llm_interval_minutes?: number;
 };
 
 export type StrategyRiskProfile = {
