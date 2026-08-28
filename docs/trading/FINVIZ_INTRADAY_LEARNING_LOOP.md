@@ -178,9 +178,9 @@ To avoid calling the model for every stock on every bar, Omnix uses an
   configured entry window;
 - outside the entry window, deterministic learning continues every minute but
   quiet heartbeat calls stop; material changes can still trigger LLM analysis;
-- ordinary event batches use a short two-minute debounce so several adjacent
-  one-minute changes collapse into one model call, while a new `entry_ready`
-  transition can bypass that debounce.
+- ordinary event batches use a five-minute debounce, so the event-driven policy
+  cannot call more frequently than the old five-minute baseline during normal
+  conditions; a new `entry_ready` transition can bypass that debounce.
 
 Each model assessment returns:
 
