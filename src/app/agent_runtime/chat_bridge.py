@@ -97,7 +97,11 @@ def route_typed_chat_turn(
         workflow_lookup=_workflow_lookup,
         research_mode=research_mode,
     )
-    if explicit_agent and decision.lane != "agent":
+    research_chat = (
+        str(research_mode or "").strip().casefold() == "quick"
+        and decision.lane == "chat"
+    )
+    if explicit_agent and decision.lane != "agent" and not research_chat:
         decision = OmnixRouteDecision(
             lane="agent",
             confidence=1.0,

@@ -22,6 +22,24 @@ describe('assistant Markdown rendering', () => {
     expect(html).not.toContain('href="javascript:');
   });
 
+  it('turns retrieved source citations into safe clickable links', () => {
+    const html = renderAssistantMessageHtml(
+      'The current conditions are mild. [S1] [S2]',
+      {
+        context_sources: [
+          { source_id: 'web_search', citation: 'S1', title: 'Weather source', url: 'https://example.com/weather' },
+          { source_id: 'web_search', citation: 'S2', title: 'Unsafe source', url: 'javascript:alert(1)' },
+        ],
+      },
+      'msg:weather',
+    );
+
+    expect(html).toContain('class="assistant-research-citation" href="https://example.com/weather"');
+    expect(html).toContain('aria-label="Open source S1"');
+    expect(html).toContain('<sup class="assistant-research-citation" title="Source citation">[S2]</sup>');
+    expect(html).not.toContain('href="javascript:');
+  });
+
   it('adds research metadata and preserves a five-page budget in the report header', () => {
     const html = renderResearchReportHtml('**Inference:** A volatile setup. [S1] [S2]', {
       research_mode: 'deep',

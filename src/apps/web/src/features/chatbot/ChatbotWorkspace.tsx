@@ -1773,7 +1773,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                         dangerouslySetInnerHTML={{
                           __html: isDeepResearchMessage(message.metadata)
                             ? renderResearchReportHtml(message.content, message.metadata)
-                            : renderMarkdownHtml(message.content),
+                            : renderMarkdownHtml(message.content, message.metadata),
                         }}
                       />
                       {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={displayedSessionId} onOpenTools={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }} />)}

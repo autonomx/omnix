@@ -170,6 +170,70 @@ def test_research_request_starts_without_workspace(monkeypatch) -> None:
     assert started[0].external_capabilities == ["research.web_search"]
 
 
+def test_quick_search_informational_turn_bypasses_agent_planner() -> None:
+    session = SimpleNamespace(
+        id="chat-1",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-1",
+        content="hows the weather in Vancouver right now?",
+        metadata={"agent_mode": True, "research_mode": "quick"},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        context_items=[{"source_id": "web_search", "content": "Current weather"}],
+    )
+
+    assert result is None
+
+
+def test_explicit_agent_request_still_uses_agent_lane_with_quick_search(monkeypatch) -> None:
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    session = SimpleNamespace(
+        id="chat-1",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-1",
+        content="/agent research Vancouver weather sources",
+        metadata={"agent_mode": True, "research_mode": "quick"},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        context_items=[{"source_id": "web_search", "content": "Current weather"}],
+    )
+
+    assert result is not None
+    assert result.metadata["agent_run"]["profile"] == "research"
+    assert len(started) == 1
+
+
 def test_trade_execution_request_is_rejected_before_start(monkeypatch) -> None:
     started = []
 

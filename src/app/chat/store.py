@@ -53,6 +53,10 @@ def _context_source_summaries(context_items: list[dict[str, Any]]) -> list[dict[
         summary = {"source_id": source_id, "title": title}
         if url:
             summary["url"] = url
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        citation = str(metadata.get("citation_label") or "").strip()
+        if citation:
+            summary["citation"] = citation
         summaries.append(summary)
     return summaries
 
@@ -75,6 +79,22 @@ def _format_turn_context(content: str, context_items: list[dict[str, Any]]) -> s
         lines.append(body)
     lines.extend(["", "User request:", content])
     return "\n".join(lines)
+
+
+def _quick_research_uses_chat_lane(content: str, research_mode: str | None) -> bool:
+    """Keep context-backed Quick Search answers out of the agent planner lane.
+
+    Agent Chat is an execution-authority toggle, while Quick Search owns retrieval and
+    evidence-aware reply generation for informational turns. Those turns must therefore
+    reach the provider with any retrieved context. Explicit agent tasks still resolve to
+    the agent lane and retain the existing planner behavior.
+    """
+
+    if str(research_mode or "").strip().casefold() != "quick":
+        return False
+    from app.agent_runtime.router import route_omnix_request
+
+    return route_omnix_request(content, research_mode=research_mode).lane == "chat"
 
 
 def default_chat_store_path() -> Path:
@@ -352,7 +372,10 @@ class ChatSessionStore:
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        if request.agent_mode:
+        if request.agent_mode and not _quick_research_uses_chat_lane(
+            user_message.content,
+            request.research_mode,
+        ):
             return self._generate_mode_reply(session, user_message, request=request, context_items=context_items)
         return self._generate_provider_reply(
             session,
