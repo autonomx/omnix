@@ -156,6 +156,8 @@ class GapPullbackConfig(BaseModel):
             and self.v2_protected_stop_r >= self.v2_profit_protection_trigger_r
         ):
             raise ValueError("v2 protected stop R must be below the profit-protection trigger R")
+        if self.intraday_llm_enabled and not self.intraday_learning_enabled:
+            raise ValueError("intraday LLM analysis requires intraday learning")
         return self
 
 
