@@ -252,6 +252,120 @@ def test_json_schema_response_format_is_projected_into_codex_system_prompt(
     assert "contract metadata" in system_text
 
 
+def test_provider_honors_structured_request_timeout_hint(monkeypatch):
+    provider = _provider(timeout=90.0)
+    captured = {}
+
+    def fake_stream(messages, **kwargs):
+        captured.update(kwargs)
+        yield SimpleNamespace(
+            content="ok",
+            model="gpt-5.6-sol",
+            usage=None,
+            tool_calls=None,
+            finish_reason="stop",
+        )
+
+    monkeypatch.setattr(provider, "_chat_stream", fake_stream)
+    try:
+        response = provider.chat_completion(
+            [ChatMessage(role="user", content="Classify")],
+            request_timeout_seconds=10.0,
+        )
+    finally:
+        provider.close()
+
+    assert response.content == "ok"
+    assert 9.0 <= captured["request_timeout_seconds"] < 10.0
+
+
+def test_stale_app_server_events_from_prior_turn_are_ignored(monkeypatch):
+    provider = _provider()
+    events = iter(
+        [
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-old",
+                    "turnId": "turn-old",
+                    "delta": "STALE",
+                },
+            },
+            {
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-old",
+                    "turn": {"id": "turn-old"},
+                },
+            },
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-new",
+                    "turnId": "turn-new",
+                    "delta": "Fresh",
+                },
+            },
+            {
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-new",
+                    "turn": {"id": "turn-new"},
+                },
+            },
+        ]
+    )
+
+    monkeypatch.setattr(provider, "_ensure_app_server", lambda: None)
+    monkeypatch.setattr(
+        provider,
+        "_start_thread",
+        lambda **_kwargs: "thread-new",
+    )
+
+    def fake_request(method, _params, **_kwargs):
+        if method == "turn/start":
+            return {"turn": {"id": "turn-new"}}
+        return {}
+
+    monkeypatch.setattr(provider, "_request", fake_request)
+    monkeypatch.setattr(provider, "_next_event", lambda _timeout: next(events))
+
+    try:
+        response = provider.chat_completion(
+            [ChatMessage(role="user", content="Current prompt")]
+        )
+    finally:
+        provider.close()
+
+    assert response.content == "Fresh"
+
+
+def test_event_identity_reads_turn_and_thread_from_supported_shapes():
+    provider = _provider()
+    try:
+        assert provider._event_identity(
+            {
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                }
+            }
+        ) == ("thread-1", "turn-1")
+        assert provider._event_identity(
+            {
+                "params": {
+                    "turn": {
+                        "id": "turn-2",
+                        "threadId": "thread-2",
+                    }
+                }
+            }
+        ) == ("thread-2", "turn-2")
+    finally:
+        provider.close()
+
+
 def test_fast_mode_uses_codex_fast_service_tier(monkeypatch):
     provider = _provider(fast_mode=True, reasoning_effort="none")
     events = iter([
