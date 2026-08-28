@@ -118,6 +118,8 @@ export type GapperUniverse = {
   session_date: string;
   evaluation_time: string;
   discovery_source: 'manual' | 'import' | 'scanner' | 'provider' | 'finviz';
+  source_locator?: string | null;
+  source_candidate_symbols?: string[];
   candidates: GapperCandidate[];
   source_fingerprint: string;
 };
