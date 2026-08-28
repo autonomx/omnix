@@ -41,7 +41,9 @@ _NEGATED_ACTION = re.compile(
     r"\bi\s+(?:don'?t|do\s+not)\s+want\s+(?:you|the\s+agent)\s+to\b)",
     re.I,
 )
-_QUOTED_SPAN = re.compile(r'"[^"\r\n]*"|“[^”\r\n]*”|`[^`\r\n]*`')
+_QUOTED_SPAN = re.compile(
+    r'"[^"\r\n]*"|“[^”\r\n]*”|‘[^’\r\n]*’|`[^`\r\n]*`|(?<!\w)'[^'\r\n]+'(?!\w)"
+)
 _BROAD_SEMANTIC = re.compile(r"\b(?:take care of|anything important|whatever needs|prepare everything|handle everything)\b", re.I)
 _AGENTIC = re.compile(r"\b(?:fix|debugg?|investigate|figure out|diagnose|research|reseach|analy[sz]e|anlyze|refactor|implement)\b", re.I)
 _RESEARCH_ACTION = re.compile(r"\b(?:research|reseach|investigate|analy[sz]e|anlyze)\b", re.I)
