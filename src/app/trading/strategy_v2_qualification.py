@@ -134,7 +134,13 @@ def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
     # fingerprint so old Yahoo prospective evidence cannot authorize it.
     payload = config.model_dump(
         mode="json",
-        exclude={"intraday_learning_enabled", "universe_discovery_source"},
+        exclude={
+            "intraday_learning_enabled",
+            "intraday_llm_enabled",
+            "intraday_llm_top_n",
+            "intraday_llm_interval_minutes",
+            "universe_discovery_source",
+        },
     )
     if config.universe_discovery_source != "yahoo":
         payload["universe_discovery_source"] = config.universe_discovery_source
