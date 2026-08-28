@@ -35,6 +35,12 @@ from .semantic_classifier import (
     semantic_confidence_threshold,
     semantic_profile_id,
 )
+from .semantic_classifier import (
+    SemanticIntentDecision,
+    classify_semantic_intent_safely,
+    default_semantic_intent_classifier,
+    semantic_confidence_threshold,
+)
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
 
@@ -157,7 +163,7 @@ def route_typed_chat_turn(
     provider_id: str | None,
     model_id: str | None,
     context_items: list[dict[str, Any]] | None = None,
-    semantic_classifier: Any = _SEMANTIC_AUTO,
+    semantic_classifier: Any | None = None,
 ) -> GeneralizedChatResult | None:
     del context_items
     if _is_live_voice(user_message):
@@ -167,47 +173,30 @@ def route_typed_chat_turn(
     metadata = getattr(user_message, "metadata", {}) or {}
     explicit_agent = bool(metadata.get("agent_mode"))
     research_mode = _message_research_mode(metadata)
-    deterministic_decision = route_omnix_request(
+    deterministic = route_omnix_request(
         content,
         workflow_lookup=_workflow_lookup,
         research_mode=research_mode,
     )
-    preliminary_mode = resolve_request_mode(
-        content,
-        turn_research_mode=research_mode,
-        persistent_agent=explicit_agent,
-        classifier_lane=deterministic_decision.lane,
-    )
-    # Quick/Deep is a separate bounded research lane and does not need Agent
-    # semantic classification. Explicit /agent still outranks a turn setting.
-    if preliminary_mode.mode in {"quick_research", "deep_research"}:
-        _mark_chat_route(
-            user_message,
-            deterministic_decision,
-            request_mode=preliminary_mode,
+
+    semantic: SemanticIntentDecision | None = None
+    if _should_use_semantic_classifier(
+        deterministic,
+        research_mode=research_mode,
+    ):
+        classifier = semantic_classifier or default_semantic_intent_classifier(
+            provider_id=provider_id or getattr(session, "provider_id", None),
+            model_id=model_id or getattr(session, "model_id", None),
         )
-        return None
+        semantic = classify_semantic_intent_safely(classifier, content)
+        if semantic is not None and semantic.confidence < semantic_confidence_threshold():
+            semantic = None
 
-    semantic_intent: SemanticIntentDecision | None = None
-    if _should_use_semantic_classifier(deterministic_decision, content):
-        classifier = semantic_classifier
-        if classifier is _SEMANTIC_AUTO:
-            classifier = default_semantic_intent_classifier(
-                provider_id=(
-                    str(provider_id or getattr(session, "provider_id", None) or "").strip()
-                    or None
-                ),
-                model_id=(
-                    str(model_id or getattr(session, "model_id", None) or "").strip()
-                    or None
-                ),
-            )
-        semantic_intent = classify_semantic_intent_safely(classifier, content)
+    decision = _merge_semantic_route(deterministic, semantic)
+    if semantic is not None:
+        metadata["semantic_intent"] = semantic.model_dump(mode="json")
+        user_message.metadata = metadata
 
-    decision = _apply_semantic_route_decision(
-        deterministic_decision,
-        semantic_intent,
-    )
     mode = resolve_request_mode(
         content,
         turn_research_mode=research_mode,
@@ -217,12 +206,6 @@ def route_typed_chat_turn(
     # A narrower per-turn Quick/Deep selection outranks the persistent Agent
     # toggle. An explicit /agent command outranks both.
     if mode.mode in {"quick_research", "deep_research"}:
-        _mark_chat_route(
-            user_message,
-            decision,
-            semantic_intent=semantic_intent,
-            request_mode=mode,
-        )
         return None
     if mode.mode == "agent" and decision.lane != "agent":
         decision = OmnixRouteDecision(
@@ -230,16 +213,18 @@ def route_typed_chat_turn(
             confidence=1.0 if mode.source in {"explicit_command", "persistent_setting"} else decision.confidence,
             reason=f"request_mode:{mode.source}",
             explicit=mode.source == "explicit_command",
-            hermes_recommended=semantic_intent.multi_step if semantic_intent else False,
         )
 
     if decision.lane == "chat":
-        _mark_chat_route(
-            user_message,
-            decision,
-            semantic_intent=semantic_intent,
-            request_mode=mode,
-        )
+        if semantic is not None and semantic.evidence_requirements:
+            semantic_evidence = evidence_decision_from_semantic(content, semantic)
+            evidence = classify_evidence(
+                content,
+                profile_id=semantic.profile_id,
+                semantic_adviser=lambda *_: semantic_evidence,
+            )
+            metadata["semantic_evidence"] = evidence.model_dump(mode="json")
+            user_message.metadata = metadata
         return None
 
     if decision.lane == "direct":
@@ -253,9 +238,47 @@ def route_typed_chat_turn(
         provider_id=provider_id,
         model_id=model_id,
         request_mode=mode,
-        semantic_intent=semantic_intent,
+        semantic_intent=semantic,
     )
 
+
+def _should_use_semantic_classifier(
+    decision: OmnixRouteDecision,
+    *,
+    research_mode: str | None,
+) -> bool:
+    """Use semantic understanding only outside deterministic final fast paths."""
+
+    if str(research_mode or "").strip().casefold() in {"quick", "deep"}:
+        return False
+    if decision.explicit or decision.lane in {"direct", "workflow"}:
+        return False
+    if decision.reason in {
+        "casual_or_empty",
+        "hypothetical_or_conditional",
+        "negated_action",
+    }:
+        return False
+    return True
+
+
+def _merge_semantic_route(
+    deterministic: OmnixRouteDecision,
+    semantic: SemanticIntentDecision | None,
+) -> OmnixRouteDecision:
+    """Let semantics interpret AUTO prompts without overriding hard routing facts."""
+
+    if semantic is None:
+        return deterministic
+    if deterministic.explicit or deterministic.lane in {"direct", "workflow"}:
+        return deterministic
+    return OmnixRouteDecision(
+        lane=semantic.lane,
+        confidence=semantic.confidence,
+        reason=f"semantic_intent:{semantic.primary_intent}"[:240],
+        explicit=False,
+        hermes_recommended=semantic.lane == "agent" and semantic.multi_step,
+    )
 
 def _workflow_lookup(candidate: str) -> str | None:
     try:
