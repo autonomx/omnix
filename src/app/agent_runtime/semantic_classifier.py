@@ -69,6 +69,23 @@ _BUILTIN_PROVIDER_IDS = {
 }
 
 
+def _provider_key(value: str | None) -> str:
+    text = str(value or "").strip()
+    if text.startswith("llm:"):
+        return text.split(":", 1)[1]
+    return text
+
+
+def _model_key(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    parts = text.split(":", 2)
+    if len(parts) == 3 and parts[0] == "llm":
+        return parts[2] or None
+    return text
+
+
 class SemanticEvidenceHint(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -203,7 +220,7 @@ def default_semantic_intent_classifier(
         return None
 
     override_provider = str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", "") or "").strip()
-    provider_name = override_provider or str(provider_id or "").strip()
+    provider_name = _provider_key(override_provider or provider_id)
     if not provider_name:
         return None
     if not override_provider and provider_name.casefold() not in _BUILTIN_PROVIDER_IDS:
@@ -217,7 +234,7 @@ def default_semantic_intent_classifier(
             return None
         model = (
             str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODEL", "") or "").strip()
-            or str(model_id or "").strip()
+            or _model_key(model_id)
             or str(getattr(getattr(provider, "config", None), "model", "") or "").strip()
             or None
         )
