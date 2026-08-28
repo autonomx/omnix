@@ -195,12 +195,12 @@ def test_event_batch_cooldown_is_bounded_but_not_the_heartbeat():
     )
     assert not should_run_intraday_llm_batch(
         observed_at=OBSERVED,
-        previous_batch_at=OBSERVED - timedelta(minutes=1, seconds=59),
+        previous_batch_at=OBSERVED - timedelta(minutes=4, seconds=59),
         minimum_interval_minutes=EVENT_BATCH_COOLDOWN_MINUTES,
     )
     assert should_run_intraday_llm_batch(
         observed_at=OBSERVED,
-        previous_batch_at=OBSERVED - timedelta(minutes=2),
+        previous_batch_at=OBSERVED - timedelta(minutes=5),
         minimum_interval_minutes=EVENT_BATCH_COOLDOWN_MINUTES,
     )
 
