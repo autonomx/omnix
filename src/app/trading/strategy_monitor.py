@@ -28,7 +28,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
-from .strategy_intraday_learning import build_intraday_learning_snapshot
+from .strategy_intraday_learning import IntradayLearningSnapshot, build_intraday_learning_snapshot
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
@@ -762,7 +762,7 @@ class TradingStrategyMonitor:
         universe,
     ) -> list[_EntryProposal]:
         proposals: list[_EntryProposal] = []
-        learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, object]] = []
+        learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]] = []
         for candidate in universe.candidates:
             try:
                 response = await asyncio.to_thread(
