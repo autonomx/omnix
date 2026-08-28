@@ -29,6 +29,11 @@ from .strategy_repository import (
     default_strategy_repository,
 )
 from .strategy_intraday_learning import IntradayLearningSnapshot, build_intraday_learning_snapshot
+from .strategy_intraday_llm import (
+    IntradayLLMAnalyzer,
+    select_intraday_llm_candidates,
+    should_run_intraday_llm_batch,
+)
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
@@ -286,11 +291,13 @@ class TradingStrategyMonitor:
         strategy_repository_factory: Callable[[], TradingStrategyRepository] = default_strategy_repository,
         paper_repository_factory: Callable[[], TradingPaperRepository] = default_runtime_paper_repository,
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
+        intraday_llm_analyzer_factory: Callable[[], IntradayLLMAnalyzer] = IntradayLLMAnalyzer,
         interval_seconds: float | None = None,
     ) -> None:
         self.strategy_repository_factory = strategy_repository_factory
         self.paper_repository_factory = paper_repository_factory
         self.market_service_factory = market_service_factory
+        self.intraday_llm_analyzer_factory = intraday_llm_analyzer_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
         self._task: asyncio.Task[None] | None = None
         self.current_run_id: str | None = None
@@ -301,6 +308,9 @@ class TradingStrategyMonitor:
         self.paper_order_count = 0
         self.rejection_count = 0
         self.intraday_learning_snapshot_count = 0
+        self.intraday_llm_call_count = 0
+        self.intraday_llm_assessment_count = 0
+        self.intraday_llm_error_count = 0
 
     def start(self) -> None:
         if self._task is None:
@@ -348,6 +358,124 @@ class TradingStrategyMonitor:
                 idempotency_key=idem,
                 payload=payload or {},
             ),
+        )
+
+    async def _run_intraday_llm(
+        self,
+        config: TradingStrategyConfigDocument,
+        strategy_repository: TradingStrategyRepository,
+        universe,
+        ranked_learning: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]],
+    ) -> None:
+        if not config.config.intraday_llm_enabled or not ranked_learning:
+            return
+
+        observed_at = max(row[2] for row in ranked_learning)
+        recent_events = await asyncio.to_thread(
+            strategy_repository.recent_events,
+            config.strategy_id,
+            2_000,
+        )
+        previous_by_instrument: dict[str, dict[str, Any]] = {}
+        previous_batch_at: datetime | None = None
+        for event in recent_events:
+            payload = event.payload if isinstance(event.payload, dict) else {}
+            if payload.get("universe_id") != universe.universe_id:
+                continue
+            if event.event_type == "intraday_llm_batch" and previous_batch_at is None:
+                previous_batch_at = event.observed_at
+            if event.event_type == "intraday_llm" and event.instrument_id not in previous_by_instrument:
+                previous_by_instrument[event.instrument_id] = payload
+
+        if not should_run_intraday_llm_batch(
+            observed_at=observed_at,
+            previous_batch_at=previous_batch_at,
+            minimum_interval_minutes=config.config.intraday_llm_interval_minutes,
+        ):
+            return
+
+        selected = select_intraday_llm_candidates(
+            ranked_learning,
+            top_n=config.config.intraday_llm_top_n,
+        )
+        ranks = {
+            row[0].instrument_id: rank
+            for rank, row in enumerate(ranked_learning, start=1)
+        }
+        analyzer = self.intraday_llm_analyzer_factory()
+        try:
+            result = await asyncio.to_thread(
+                analyzer.assess,
+                selected,
+                ranks=ranks,
+                previous_by_instrument=previous_by_instrument,
+            )
+        except Exception as exc:
+            self.intraday_llm_error_count += 1
+            trade_log(
+                "auto_trading",
+                "intraday_llm_error",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                universe_id=universe.universe_id,
+                error_type=type(exc).__name__,
+                detail=str(exc),
+                research_only=True,
+                execution_authority=False,
+            )
+            return
+
+        self.intraday_llm_call_count += 1
+        selected_by_id = {row[0].instrument_id: row for row in selected}
+        for assessment in result.assessments:
+            row = selected_by_id.get(assessment.instrument_id)
+            if row is None:
+                continue
+            candidate, deterministic, row_observed_at, learning = row
+            persisted = await self._event(
+                strategy_repository,
+                config,
+                instrument_id=assessment.instrument_id,
+                event_type="intraday_llm",
+                state=assessment.market_regime,
+                reason_code="INTRADAY_LLM_ASSESSMENT",
+                observed_at=row_observed_at,
+                payload={
+                    "universe_id": universe.universe_id,
+                    "universe_discovery_source": universe.discovery_source,
+                    "morning_discovery_rank": candidate.discovery_rank,
+                    "live_research_rank": ranks.get(assessment.instrument_id),
+                    "provider": result.provider,
+                    "model": result.model,
+                    "deterministic_state": deterministic.state,
+                    "deterministic_reason_code": deterministic.reason_code,
+                    "source_learning": learning.model_dump(mode="json"),
+                    "assessment": assessment.model_dump(mode="json"),
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+            )
+            self.intraday_llm_assessment_count += int(persisted)
+
+        await self._event(
+            strategy_repository,
+            config,
+            instrument_id="__universe__",
+            event_type="intraday_llm_batch",
+            state="completed",
+            reason_code="INTRADAY_LLM_BATCH_COMPLETED",
+            observed_at=observed_at,
+            payload={
+                "universe_id": universe.universe_id,
+                "provider": result.provider,
+                "model": result.model,
+                "requested_instrument_ids": [row[0].instrument_id for row in selected],
+                "assessment_count": len(result.assessments),
+                "top_n": config.config.intraday_llm_top_n,
+                "interval_minutes": config.config.intraday_llm_interval_minutes,
+                "research_only": True,
+                "execution_authority": False,
+            },
         )
 
     async def _reconcile_protections(
@@ -991,6 +1119,13 @@ class TradingStrategyMonitor:
                     for index, row in enumerate(ranked_learning, start=1)
                 ],
                 execution_authority=False,
+            )
+
+            await self._run_intraday_llm(
+                config,
+                strategy_repository,
+                universe,
+                ranked_learning,
             )
 
         proposals.sort(key=lambda proposal: proposal.priority)
