@@ -1,8 +1,9 @@
 """Converge typed Omnix Chat onto the generalized execution lanes.
 
 Live voice keeps the existing latency-optimized Live Agent path. Typed requests
-may enter DIRECT or a known WORKFLOW automatically. Open-ended AGENT execution
-requires the existing Agent Chat toggle or an explicit /agent-style request.
+are classified in AUTO mode across CHAT, DIRECT, WORKFLOW, and AGENT. The
+persistent Agent control forces eligible typed turns through AGENT, while
+explicit /agent and per-turn Quick/Deep research commands take precedence.
 """
 from __future__ import annotations
 

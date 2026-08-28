@@ -92,6 +92,7 @@ jobs:
             src/tests/persistence/test_agent_budget_integration.py \
             src/tests/persistence/test_agent_runtime_repository_integration.py \
             src/tests/persistence/test_agent_evidence_integration.py \
+            src/tests/persistence/test_agent_evidence_budget_integration.py \
             src/tests/persistence/test_workflow_runtime_integration.py \
             -q --tb=short
       - name: Run Agent evidence classification and steering contracts

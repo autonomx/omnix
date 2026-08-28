@@ -20,6 +20,36 @@ from app.research import ResearchMode
 ChatMessageRole = Literal["system", "user", "assistant"]
 _LIVE_VOICE_TURN_ID_PATTERN = re.compile(r"voice-turn:[A-Za-z0-9_.:-]+")
 
+_EXPLICIT_QUICK_RESEARCH = re.compile(
+    r"^/(?:search|quick(?:-search)?)(?:\s+)(.+)$",
+    re.I | re.S,
+)
+_EXPLICIT_DEEP_RESEARCH = re.compile(
+    r"^/(?:deep(?:-research)?)(?:\s+)(.+)$",
+    re.I | re.S,
+)
+_EXPLICIT_RESEARCH = re.compile(
+    r"^/research(?:\s+(quick|deep))?(?:\s+)(.+)$",
+    re.I | re.S,
+)
+
+
+def parse_explicit_research_command(content: str) -> tuple[str, ResearchMode] | None:
+    """Normalize explicit research slash commands into the existing research lane."""
+    text = str(content or "").strip()
+    match = _EXPLICIT_QUICK_RESEARCH.match(text)
+    if match and match.group(1).strip():
+        return match.group(1).strip(), "quick"
+    match = _EXPLICIT_DEEP_RESEARCH.match(text)
+    if match and match.group(1).strip():
+        return match.group(1).strip(), "deep"
+    match = _EXPLICIT_RESEARCH.match(text)
+    if match and match.group(2).strip():
+        mode: ResearchMode = "quick" if str(match.group(1) or "").casefold() == "quick" else "deep"
+        return match.group(2).strip(), mode
+    return None
+
+
 
 class ChatMessage(BaseModel):
     id: str
@@ -180,6 +210,21 @@ class SendChatMessageRequest(BaseModel):
     research_mode: ResearchMode | None = None
     user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_explicit_research_command(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        parsed = parse_explicit_research_command(str(payload.get("content") or ""))
+        if parsed is not None:
+            content, mode = parsed
+            payload["content"] = content
+            # A narrow explicit per-turn command outranks any broader persistent
+            # Agent setting or caller-supplied research preference.
+            payload["research_mode"] = mode
+        return payload
 
     @model_validator(mode="before")
     @classmethod

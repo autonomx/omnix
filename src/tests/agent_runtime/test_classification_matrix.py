@@ -259,3 +259,42 @@ def test_turn_deep_research_outranks_persistent_agent_mode() -> None:
         provider_id="test",
         model_id="model",
     ) is None
+
+
+
+@pytest.mark.parametrize(
+    "content,expected_content,expected_mode",
+    [
+        ("/search OpenAI latest API", "OpenAI latest API", "quick"),
+        ("/quick-search GME news", "GME news", "quick"),
+        ("/research quick NVDA catalysts", "NVDA catalysts", "quick"),
+        ("/research NVIDIA competitive position", "NVIDIA competitive position", "deep"),
+        ("/research deep Vancouver housing", "Vancouver housing", "deep"),
+        ("/deep-research TCP congestion control research", "TCP congestion control research", "deep"),
+    ],
+)
+def test_explicit_research_commands_normalize_to_existing_research_lane(
+    content: str,
+    expected_content: str,
+    expected_mode: str,
+) -> None:
+    request = SendChatMessageRequest(
+        content=content,
+        agent_mode=True,
+        research_mode="quick" if expected_mode == "deep" else "deep",
+    )
+    assert request.content == expected_content
+    assert request.research_mode == expected_mode
+
+
+def test_explicit_research_request_mode_outranks_persistent_agent() -> None:
+    from app.agent_runtime.evidence import resolve_request_mode
+
+    selected = resolve_request_mode(
+        "/research current database releases",
+        turn_research_mode=None,
+        persistent_agent=True,
+        classifier_lane="agent",
+    )
+    assert selected.mode == "deep_research"
+    assert selected.source == "explicit_command"

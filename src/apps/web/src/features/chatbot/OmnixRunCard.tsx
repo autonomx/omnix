@@ -145,6 +145,7 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
   const evidenceRequirements = Array.isArray(evidencePolicy?.requirements)
     ? evidencePolicy.requirements.map(asRecord).filter((value): value is Metadata => Boolean(value))
     : [];
+  const attributionRefs = evidence.data?.attribution_refs ?? [];
 
   return (
     <section className="assistant-runtime-card" aria-label="Agent run">
@@ -180,6 +181,12 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
               <div key={receipt.receipt_id}>
                 <strong>Receipt · {receipt.source_class}</strong>
                 <span>{receipt.provider ?? receipt.origin ?? receipt.capability_id} · {receipt.trust_level}</span>
+              </div>
+            ))}
+            {attributionRefs.slice(-5).map((reference) => (
+              <div key={`attribution-${reference}`}>
+                <strong>Source reference</strong>
+                <span>{reference}</span>
               </div>
             ))}
             {query.data.superseded_by_run_id ? <div><strong>Superseded by</strong><span>{query.data.superseded_by_run_id}</span></div> : null}

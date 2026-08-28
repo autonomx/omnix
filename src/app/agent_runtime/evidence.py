@@ -235,6 +235,25 @@ def resolve_request_mode(
 ) -> RequestModeSelection:
     text = str(content or "").strip()
     candidates: list[RequestModeCandidate] = []
+    explicit_research: str | None = None
+    if re.match(r"^/(?:search|quick(?:-search)?)\b", text, re.I):
+        explicit_research = "quick_research"
+    elif re.match(r"^/research\s+quick\b", text, re.I):
+        explicit_research = "quick_research"
+    elif re.match(r"^/(?:deep(?:-research)?)\b", text, re.I) or re.match(
+        r"^/research(?:\s+deep)?\b",
+        text,
+        re.I,
+    ):
+        explicit_research = "deep_research"
+    if explicit_research is not None:
+        candidates.append(
+            RequestModeCandidate(
+                mode=explicit_research,
+                source="explicit_command",
+                priority=500,
+            )
+        )
     if re.match(r"^(?:/agent\b|/agnet\b|agent[,:]\s|use (?:the )?agent\b)", text, re.I):
         candidates.append(RequestModeCandidate(mode="agent", source="explicit_command", priority=500))
     normalized = str(turn_research_mode or "").strip().casefold()

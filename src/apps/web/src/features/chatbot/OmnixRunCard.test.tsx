@@ -88,7 +88,7 @@ describe('OmnixRunCard', () => {
       wrong_subject_receipts: [],
       insufficient_trust_receipts: [],
       source_manifest_ids: [],
-      attribution_refs: [],
+      attribution_refs: ['manifest:run-evidence'],
       passed: true,
     });
     vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
@@ -120,5 +120,6 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('View tests')).toBeTruthy();
     expect(screen.getByText('View diff')).toBeTruthy();
     expect(screen.getByText('Authority & evidence')).toBeTruthy();
+    expect(await screen.findByText('manifest:run-evidence')).toBeTruthy();
   });
 });
