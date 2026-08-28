@@ -98,7 +98,7 @@ class GapperUniverseSnapshot(BaseModel):
     universe_id: str = Field(min_length=1, max_length=200)
     session_date: date
     evaluation_time: datetime
-    discovery_source: Literal["manual", "import", "scanner", "provider"]
+    discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"]
     candidates: tuple[GapperCandidate, ...]
     source_fingerprint: str = Field(min_length=64, max_length=64)
 
@@ -137,7 +137,7 @@ def _validate_point_in_time_candidate(
     evaluation = evaluation_time.astimezone(timezone.utc)
     if candidate.observed_at is not None and candidate.observed_at > evaluation:
         raise ValueError(f"candidate observation occurs after universe freeze: {candidate.instrument_id}")
-    if discovery_source in {"scanner", "provider"} and candidate.observed_at is None:
+    if discovery_source in {"scanner", "provider", "finviz"} and candidate.observed_at is None:
         raise ValueError(
             f"provider/scanner candidate requires observed_at: {candidate.instrument_id}"
         )
@@ -173,7 +173,7 @@ def freeze_gapper_universe(
     universe_id: str,
     session_date: date,
     evaluation_time: datetime,
-    discovery_source: Literal["manual", "import", "scanner", "provider"],
+    discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"],
     candidates: list[GapperCandidate] | tuple[GapperCandidate, ...],
     allow_empty: bool = False,
 ) -> GapperUniverseSnapshot:
