@@ -135,6 +135,23 @@ _CREATIVE_EMAIL_COMPOSITION = re.compile(
     r"\bfor\s+(?:a|the)\s+(?:novel|story|scene|script)\b)",
     re.I,
 )
+_OPEN_ENDED_RESEARCH_LANGUAGE = re.compile(
+    r"\b(?:research|investigate|dig\s+into|look\s+into|compare|comparing|"
+    r"narrow\s+down|deep\s+dive|spend\s+some\s+time|sourced\s+brief|"
+    r"what\s+actually\s+matters)\b",
+    re.I,
+)
+_PUBLIC_READ_ACTIONS = {"research_read", "market_read"}
+_PUBLIC_EVIDENCE_SOURCES = {
+    "general_current_web",
+    "breaking_news",
+    "market_news",
+    "company_filing",
+    "software_release",
+    "market_quote",
+    "market_status",
+    "weather_state",
+}
 
 
 def _profile_from_actions(actions: set[str]) -> str:
@@ -359,10 +376,18 @@ def _normalize_semantic_decision(
         effective_lane = "agent"
         updates["lane"] = "agent"
 
-    if not decision.multi_step and effective_lane == "agent":
-        inferred = (
+    inferred_multi_step = decision.multi_step
+    if effective_lane == "agent" and not inferred_multi_step:
+        inferred_multi_step = (
             len(actions) >= 2
             or bool(_MULTI_STEP_LANGUAGE.search(text))
+            or bool(
+                re.search(
+                    r"\bcheck\b.{0,120}\band\b.{0,120}\b(?:shut|switch|turn)\s+off\b",
+                    text,
+                    re.I,
+                )
+            )
             or (
                 "workspace_mutate" in actions
                 and bool(re.search(r"\b(?:tests?|testing|validate|verify)\b", text, re.I))
@@ -376,8 +401,24 @@ def _normalize_semantic_decision(
                 and len(decision.evidence_requirements) >= 2
             )
         )
-        if inferred:
+        if inferred_multi_step:
             updates["multi_step"] = True
+
+    evidence_sources = {
+        requirement.source_class
+        for requirement in (
+            updates.get("evidence_requirements")
+            or decision.evidence_requirements
+        )
+    }
+    if (
+        effective_lane == "agent"
+        and actions
+        and actions <= _PUBLIC_READ_ACTIONS
+        and evidence_sources <= _PUBLIC_EVIDENCE_SOURCES
+        and not _OPEN_ENDED_RESEARCH_LANGUAGE.search(text)
+    ):
+        updates["lane"] = "chat"
 
     return decision.model_copy(update=updates) if updates else decision
 
@@ -633,10 +674,32 @@ def semantic_profile_id(
         return select_agent_profile_id(content)
     actions = {str(value) for value in semantic.action_intents}
     if not actions:
-        # A high-confidence lane/profile label without any supporting action is
-        # too weak to override deterministic domain selection. This matters for
-        # classifier-directed prompt injection and other malformed advisory
-        # outputs while preserving semantic action precedence when present.
+        evidence_sources = {
+            str(requirement.source_class)
+            for requirement in semantic.evidence_requirements
+        }
+        if evidence_sources & {"home_state", "home_energy"}:
+            return "house"
+        if evidence_sources & {"calendar_state", "email_state"}:
+            return "personal-assistant"
+        if evidence_sources & {"repo_contents", "repo_ci_state"}:
+            return "coding"
+        if evidence_sources & {
+            "market_quote",
+            "market_status",
+            "market_news",
+            "company_filing",
+        }:
+            return "trading-research"
+        if evidence_sources & {
+            "general_current_web",
+            "breaking_news",
+            "software_release",
+            "weather_state",
+        }:
+            return "research"
+        # A high-confidence lane/profile label without supporting action or
+        # evidence is too weak to override deterministic domain selection.
         return select_agent_profile_id(content)
     if actions & {"workspace_read", "workspace_execute", "workspace_mutate"}:
         return "coding"
