@@ -177,7 +177,10 @@ export async function startBlankChat(): Promise<ChatSession> {
 
 function updateModeButton(button: HTMLButtonElement): void {
   const enabled = readMode();
-  button.textContent = enabled ? 'Agent Chat: On' : 'Agent Chat: Off';
+  button.textContent = enabled ? 'Agent: Forced' : 'Agent: Auto';
+  button.title = enabled
+    ? 'Force typed turns through the Agent runtime when possible.'
+    : 'Let Omnix automatically choose Chat, Direct, Workflow, or Agent.';
   button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   button.style.border = '1px solid rgba(255, 255, 255, 0.16)';
   button.style.borderRadius = '0.65rem';

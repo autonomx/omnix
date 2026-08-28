@@ -88,6 +88,7 @@ describe('OmnixRunCard', () => {
       wrong_subject_receipts: [],
       insufficient_trust_receipts: [],
       source_manifest_ids: [],
+      attribution_refs: [],
       passed: true,
     });
     vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);

@@ -109,6 +109,7 @@ class EvidenceSourceOption(BaseModel):
     source_class: str
     trust_floor: EvidenceTrust = "general"
     provider_hint: str | None = None
+    preference: int = Field(default=100, ge=0, le=10_000)
 
 
 class EvidenceRequirement(BaseModel):
@@ -234,6 +235,7 @@ class EvidenceSet(BaseModel):
     wrong_subject_receipts: list[str] = Field(default_factory=list)
     insufficient_trust_receipts: list[str] = Field(default_factory=list)
     source_manifest_ids: list[str] = Field(default_factory=list)
+    attribution_refs: list[str] = Field(default_factory=list)
     passed: bool = True
 
 

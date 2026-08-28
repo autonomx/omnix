@@ -34,7 +34,10 @@ from .contracts import (
     AgentRunSnapshot,
     AgentRunSpec,
     EvidenceDecision,
+    EvidencePolicy,
+    EvidenceRequirement,
     ResourceScope,
+    SubjectRef,
     SuccessCriterion,
     TaskRevision,
 )
@@ -277,6 +280,19 @@ class AgentRunService:
         target_profile_id = select_agent_profile_id(effective)
         target_profile = get_agent_profile(target_profile_id)
         decision = classify_evidence(effective, profile_id=target_profile_id)
+        if (
+            current.spec.workspace is not None
+            and current.spec.workspace.repository
+            and any(r.source_class in {"repo_ci_state", "repo_contents"} for r in decision.policy.requirements)
+        ):
+            repository_name = self._github_origin_repository(current.spec.workspace.repository)
+            decision = decision.model_copy(update={
+                "policy": self._bind_repository_evidence_policy(
+                    decision.policy,
+                    workspace=current.spec.workspace,
+                    repository_name=repository_name,
+                )
+            })
         compiled = compile_task_authority(target_profile, effective, decision)
         required_local = set(compiled.required_local)
         required_external = set(compiled.required_external)
@@ -895,6 +911,60 @@ class AgentRunService:
         owner, name = _github_repository_from_remote(completed.stdout.strip())
         return f"{owner}/{name}"
 
+    @staticmethod
+    def _resolve_repository_commit(repository: str, ref: str) -> str:
+        completed = subprocess.run(
+            ["git", "-C", str(Path(repository).expanduser().resolve()), "rev-parse", ref],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            check=False,
+            shell=False,
+        )
+        if completed.returncode != 0 or not completed.stdout.strip():
+            raise ValueError(f"unable to resolve repository ref: {ref}")
+        return completed.stdout.strip()
+
+    @classmethod
+    def _bind_repository_evidence_policy(
+        cls,
+        policy: EvidencePolicy,
+        *,
+        workspace: WorkspaceSpec,
+        repository_name: str,
+    ) -> EvidencePolicy:
+        if not any(
+            requirement.source_class in {"repo_ci_state", "repo_contents"}
+            for requirement in policy.requirements
+        ):
+            return policy
+        resolved_commit = cls._resolve_repository_commit(
+            workspace.repository or workspace.root,
+            workspace.base_ref,
+        )
+        requirements: list[EvidenceRequirement] = []
+        for requirement in policy.requirements:
+            if requirement.source_class not in {"repo_ci_state", "repo_contents"}:
+                requirements.append(requirement)
+                continue
+            prior = requirement.subject
+            qualifiers = dict(prior.qualifiers if prior else {})
+            qualifiers.update({
+                "requested_ref": workspace.base_ref,
+                "resolved_commit": resolved_commit,
+            })
+            requirements.append(requirement.model_copy(update={
+                "subject": SubjectRef(
+                    type="repository_ref",
+                    canonical_id=repository_name,
+                    display_name=repository_name,
+                    qualifiers=qualifiers,
+                )
+            }))
+        return policy.model_copy(update={"requirements": requirements})
+
     @classmethod
     def _bind_github_repository_authority(
         cls,
@@ -943,7 +1013,15 @@ class AgentRunService:
                     resource_id=repository,
                 )
             )
-        return spec.model_copy(update={"resource_scopes": scopes})
+        bound_policy = cls._bind_repository_evidence_policy(
+            spec.evidence_policy,
+            workspace=workspace,
+            repository_name=repository,
+        )
+        return spec.model_copy(update={
+            "resource_scopes": scopes,
+            "evidence_policy": bound_policy,
+        })
 
     @staticmethod
     def _prepare_workspace(spec: AgentRunSpec) -> AgentRunSpec:

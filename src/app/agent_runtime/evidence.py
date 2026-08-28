@@ -286,7 +286,7 @@ def _requirement(
         freshness=freshness,
         trust_floor=source_trust,
         acceptable_sources=[
-            EvidenceSourceOption(source_class=source_class, trust_floor=source_trust)
+            EvidenceSourceOption(source_class=source_class, trust_floor=source_trust, preference=0)
         ],
         fallback_policy=fallback,
         max_age_seconds=freshness_max_age_seconds(source_class) if freshness == "current" else None,
@@ -398,22 +398,71 @@ def classify_evidence(
     )
 
 
+def _requirement_source_candidates(requirement: EvidenceRequirement) -> list[tuple[int, str, str]]:
+    rows: list[tuple[int, str, str]] = [(0, requirement.source_class, requirement.trust_floor)]
+    rows.extend(
+        (option.preference, option.source_class, option.trust_floor)
+        for option in requirement.acceptable_sources
+        if option.source_class != requirement.source_class
+    )
+    return sorted(rows, key=lambda row: row[0])
+
+
 def capability_for_requirement(requirement: EvidenceRequirement) -> tuple[str, str]:
-    options = [requirement.source_class, *[row.source_class for row in requirement.acceptable_sources]]
-    seen: set[str] = set()
-    for source_class in options:
-        if source_class in seen:
-            continue
-        seen.add(source_class)
+    for _preference, source_class, option_trust in _requirement_source_candidates(requirement):
         resolved = SOURCE_CAPABILITIES.get(source_class)
-        if resolved:
-            return resolved
+        if resolved is None:
+            continue
+        capability, source_trust = resolved
+        effective_trust = (
+            option_trust
+            if TRUST_RANK.get(option_trust, 0) <= TRUST_RANK.get(source_trust, 0)
+            else source_trust
+        )
+        return capability, effective_trust
     raise EvidenceCompilationError(
         "evidence_required_but_unavailable",
         f"no capability mapping exists for evidence source {requirement.source_class}",
         requirement_id=requirement.id,
     )
 
+
+def _resolve_requirement_capability(
+    profile: AgentProfile,
+    requirement: EvidenceRequirement,
+) -> tuple[str, str]:
+    ceiling = profile_external_ceiling(profile)
+    candidates = _requirement_source_candidates(requirement)
+    if requirement.fallback_policy == "fail_closed":
+        candidates = candidates[:1]
+    unavailable: list[str] = []
+    for _preference, source_class, option_trust in candidates:
+        resolved = SOURCE_CAPABILITIES.get(source_class)
+        if resolved is None:
+            unavailable.append(source_class)
+            continue
+        capability, source_trust = resolved
+        required_trust = max(
+            TRUST_RANK.get(requirement.trust_floor, 0),
+            TRUST_RANK.get(option_trust, 0),
+        )
+        if TRUST_RANK.get(source_trust, 0) < required_trust:
+            unavailable.append(f"{source_class}:trust")
+            continue
+        if capability.startswith("workspace."):
+            if capability in profile.capabilities:
+                return capability, source_trust
+        elif capability in ceiling:
+            return capability, source_trust
+        unavailable.append(f"{source_class}:{capability}")
+    raise EvidenceCompilationError(
+        "required_source_outside_profile_ceiling",
+        (
+            f"no acceptable source for {requirement.id} fits profile {profile.id}; "
+            f"attempted {', '.join(unavailable) or requirement.source_class}"
+        ),
+        requirement_id=requirement.id,
+    )
 
 def task_requires_workspace_mutation(task: str) -> bool:
     text = str(task or "")
@@ -496,27 +545,14 @@ def compile_evidence(profile: AgentProfile, decision: EvidenceDecision) -> Compi
             "external_evidence_forbidden",
             "required evidence can only be obtained externally, but external access is forbidden",
         )
-    ceiling = profile_external_ceiling(profile)
     required_external: list[str] = []
     required_local: list[str] = []
     if policy.requirement == "required":
         for requirement in policy.requirements:
-            capability, _trust = capability_for_requirement(requirement)
+            capability, _trust = _resolve_requirement_capability(profile, requirement)
             if capability.startswith("workspace."):
-                if capability not in profile.capabilities:
-                    raise EvidenceCompilationError(
-                        "required_source_outside_profile_ceiling",
-                        f"{capability} is outside profile {profile.id}",
-                        requirement_id=requirement.id,
-                    )
                 required_local.append(capability)
             else:
-                if capability not in ceiling:
-                    raise EvidenceCompilationError(
-                        "required_source_outside_profile_ceiling",
-                        f"{capability} is outside profile {profile.id}",
-                        requirement_id=requirement.id,
-                    )
                 required_external.append(capability)
     return CompiledEvidence(
         decision=decision,
@@ -559,6 +595,11 @@ def evaluate_evidence_set(
         return EvidenceSet(
             run_id=run_id,
             source_manifest_ids=sorted({r.source_manifest_id for r in receipts if r.source_manifest_id}),
+            attribution_refs=sorted({
+                r.source_manifest_id or f"receipt:{r.receipt_id}"
+                for r in receipts
+                if r.source_manifest_id or r.provider or r.origin
+            }),
             passed=True,
         )
     current = now or datetime.now(timezone.utc)
@@ -567,6 +608,7 @@ def evaluate_evidence_set(
     stale: list[str] = []
     wrong_subject: list[str] = []
     low_trust: list[str] = []
+    accepted_receipts: set[str] = set()
 
     for requirement in policy.requirements:
         source_classes = {requirement.source_class, *[o.source_class for o in requirement.acceptable_sources]}
@@ -593,6 +635,7 @@ def evaluate_evidence_set(
                 statuses.append("stale")
                 continue
             matched.append(receipt.receipt_id)
+            accepted_receipts.add(receipt.receipt_id)
 
         if len(matched) >= requirement.minimum_matches:
             status = "satisfied"
@@ -632,7 +675,17 @@ def evaluate_evidence_set(
         stale_receipts=sorted(set(stale)),
         wrong_subject_receipts=sorted(set(wrong_subject)),
         insufficient_trust_receipts=sorted(set(low_trust)),
-        source_manifest_ids=sorted({r.source_manifest_id for r in receipts if r.source_manifest_id}),
+        source_manifest_ids=sorted({
+            r.source_manifest_id
+            for r in receipts
+            if r.receipt_id in accepted_receipts and r.source_manifest_id
+        }),
+        attribution_refs=sorted({
+            r.source_manifest_id or f"receipt:{r.receipt_id}"
+            for r in receipts
+            if r.receipt_id in accepted_receipts
+            and (r.source_manifest_id or r.provider or r.origin)
+        }),
         passed=not missing,
     )
 

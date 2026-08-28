@@ -93,6 +93,11 @@ _CODE_INTENT = re.compile(
     r"\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b)",
     re.I,
 )
+_REPO_OPS_INTENT = re.compile(
+    r"(?:\bgithub\b.{0,60}\b(?:ci|actions?|workflows?|checks?|pull request|repo(?:sitory)?)\b|"
+    r"\b(?:ci|workflow checks?|github actions?)\b)",
+    re.I,
+)
 _HOME_INTENT = re.compile(r"\b(?:kasa|smart\s+plugs?|plugs?|outlets?|lamps?|lights?|thermostats?|home)\b", re.I)
 _PERSONAL_INTENT = re.compile(r"\b(?:gmail|emails?|calendars?|meetings?|contacts?|appointments?|schedules?)\b", re.I)
 _TRADING_INTENT = re.compile(
@@ -105,7 +110,7 @@ _TRADING_INTENT = re.compile(
 def select_agent_profile_id(content: str) -> str:
     """Shared deterministic profile precedence used by Chat and steering."""
     text = str(content or "")
-    if _CODE_INTENT.search(text):
+    if _CODE_INTENT.search(text) or _REPO_OPS_INTENT.search(text):
         return "coding"
     if _HOME_INTENT.search(text):
         return "house"

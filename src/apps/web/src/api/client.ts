@@ -129,6 +129,7 @@ export interface AgentEvidenceSet {
   wrong_subject_receipts: string[];
   insufficient_trust_receipts: string[];
   source_manifest_ids: string[];
+  attribution_refs: string[];
   passed: boolean;
 }
 

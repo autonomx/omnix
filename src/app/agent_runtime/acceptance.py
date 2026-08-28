@@ -92,7 +92,7 @@ def evaluate_acceptance(
         attribution_ready = bool(
             evidence_set is not None
             and evidence_set.passed
-            and evidence_set.source_manifest_ids
+            and evidence_set.attribution_refs
         )
         checks["user_visible_attribution_ready"] = attribution_ready
         if not attribution_ready:
