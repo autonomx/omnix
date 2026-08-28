@@ -194,6 +194,8 @@ def create_trading_strategy_operations_router(
                 "intraday_llm_call_count",
                 "intraday_llm_assessment_count",
                 "intraday_llm_error_count",
+                "intraday_llm_input_character_count",
+                "intraday_llm_estimated_input_token_count",
             ),
             ),
             deep_recovery_shadow_monitor=_monitor_status(
