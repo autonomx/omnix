@@ -185,7 +185,24 @@ def _normalize_semantic_payload(value: Any) -> Any:
 
     lane = str(data.get("lane") or "").strip().casefold()
     if lane not in {"chat", "agent"}:
-        data["lane"] = "agent" if action_set else "chat"
+        stateful_actions = action_set & {
+            "workspace_read",
+            "workspace_execute",
+            "workspace_mutate",
+            "home_read",
+            "home_mutate",
+            "email_read",
+            "email_draft",
+            "email_send",
+            "calendar_read",
+            "calendar_create",
+            "contacts_read",
+        }
+        data["lane"] = (
+            "agent"
+            if stateful_actions or bool(data.get("multi_step", False))
+            else "chat"
+        )
     else:
         data["lane"] = lane
 
@@ -222,6 +239,24 @@ def _normalize_semantic_payload(value: Any) -> Any:
             continue
         if source not in _SEMANTIC_SOURCES:
             continue
+        freshness = str(row.get("freshness") or "current").strip().casefold()
+        row["freshness"] = (
+            freshness if freshness in {"timeless", "current"} else "current"
+        )
+        trust = str(row.get("trust_floor") or "reputable").strip().casefold()
+        row["trust_floor"] = (
+            trust
+            if trust in {"authoritative", "primary", "reputable", "general"}
+            else "reputable"
+        )
+        fallback = str(
+            row.get("fallback_policy") or "fail_closed"
+        ).strip().casefold()
+        row["fallback_policy"] = (
+            fallback
+            if fallback in {"fail_closed", "allow_fallback"}
+            else "fail_closed"
+        )
         normalized_evidence.append(row)
     data["evidence_requirements"] = normalized_evidence[:8]
 
