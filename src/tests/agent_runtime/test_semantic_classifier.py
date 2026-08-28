@@ -493,6 +493,81 @@ def test_semantic_classifier_cannot_override_explicit_negated_action() -> None:
     assert routed.reason == "negated_action"
 
 
+def test_narrow_email_send_negation_can_still_route_to_agent_for_drafting() -> None:
+    prompt = "don't send anything. read the latest message from Maya and draft the response she needs."
+    deterministic = route_omnix_request(prompt)
+    assert deterministic.reason == "negated_action"
+
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="personal-assistant",
+        primary_intent="draft_without_sending",
+        action_intents=["email_read", "email_draft"],
+        evidence_requirements=[],
+        multi_step=True,
+        confidence=0.99,
+        reason="The user requests email reading and drafting while prohibiting send.",
+    )
+
+    routed = _apply_semantic_route_decision(
+        deterministic,
+        semantic,
+        content=prompt,
+    )
+
+    assert routed.lane == "agent"
+
+
+def test_narrow_home_mutation_negation_can_still_route_to_agent_for_read() -> None:
+    prompt = "don't change the lights. just tell me whether the porch light is currently on."
+    deterministic = route_omnix_request(prompt)
+    assert deterministic.reason == "negated_action"
+
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="house",
+        primary_intent="read_light_state",
+        action_intents=["home_read"],
+        evidence_requirements=[],
+        multi_step=False,
+        confidence=0.99,
+        reason="The user requests state inspection while prohibiting mutation.",
+    )
+
+    routed = _apply_semantic_route_decision(
+        deterministic,
+        semantic,
+        content=prompt,
+    )
+
+    assert routed.lane == "agent"
+
+
+def test_rhetorical_dont_just_explain_can_still_route_to_requested_coding_work() -> None:
+    prompt = "don't just tell me why the parser breaks — actually update the code so it works."
+    deterministic = route_omnix_request(prompt)
+    assert deterministic.reason == "negated_action"
+
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="coding",
+        primary_intent="repository_change",
+        action_intents=["workspace_mutate"],
+        evidence_requirements=[],
+        multi_step=False,
+        confidence=0.99,
+        reason="The user explicitly requests a code change.",
+    )
+
+    routed = _apply_semantic_route_decision(
+        deterministic,
+        semantic,
+        content=prompt,
+    )
+
+    assert routed.lane == "agent"
+
+
 def test_explicit_no_edit_instruction_blocks_semantic_workspace_mutation() -> None:
     compiled = compile_task_authority(
         get_agent_profile("coding"),
