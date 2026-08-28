@@ -130,8 +130,9 @@ class GapPullbackConfig(BaseModel):
     # This flag never changes deterministic entry/exit authorization.
     intraday_learning_enabled: bool = False
     intraday_llm_enabled: bool = False
-    intraday_llm_top_n: int = Field(default=8, ge=1, le=20)
-    intraday_llm_interval_minutes: int = Field(default=5, ge=2, le=60)
+    intraday_llm_top_n: int = Field(default=5, ge=1, le=20)
+    # Heartbeat for top active names; material events can invoke the LLM sooner.
+    intraday_llm_interval_minutes: int = Field(default=10, ge=5, le=60)
 
     @model_validator(mode="after")
     def validate_range(self):
