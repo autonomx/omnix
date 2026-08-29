@@ -97,7 +97,7 @@ _CODE_STRONG_INTENT = re.compile(
     re.I,
 )
 _CODE_ACTION_TARGET = re.compile(
-    r"\b(?:fix|debugg?|inspect|review|edit|modify|change|update|refactor|implement|"
+    r"\b(?:fix|debugg?|diagnose|inspect|review|edit|modify|change|update|refactor|implement|"
     r"trace|test|build|lint|typecheck)\b.{0,100}"
     r"\b(?:bugs?|tests?|router|api|module|function|source|migration|schema)\b",
     re.I,
