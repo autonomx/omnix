@@ -1957,6 +1957,7 @@ class TradingStrategyMonitor:
                     "daily_realized_pnl": str(daily_realized_pnl) if daily_realized_pnl is not None else None,
                     "open_strategy_risk_before_entry": str(open_risk),
                     "universe_id": universe.universe_id,
+                    "universe_source": universe_source,
                 },
             )
             trade_log(
