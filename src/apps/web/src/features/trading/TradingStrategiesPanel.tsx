@@ -492,7 +492,7 @@ export function TradingStrategiesPanel() {
       config,
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
-    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. Every finalized 1-minute bar updates deterministic research scores/ranks; the configured default LLM runs on material changes with a 10-minute top-name heartbeat and compact delta payloads. LLM output is research-only and cannot authorize an order. This non-canonical Finviz cohort cannot inherit the frozen Yahoo V2 AUTO PAPER qualification.');
+    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. Every finalized 1-minute bar updates deterministic research scores/ranks; the configured default LLM runs on material changes with a 10-minute top-name heartbeat and compact delta payloads. LLM output is research-only and cannot authorize an order. This profile has its own Aug 31+ prospective AUTO PAPER qualification and cannot inherit Yahoo V2 evidence.');
   };
 
   const reviewV2Qualification = async () => {
