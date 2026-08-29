@@ -595,12 +595,6 @@ function createLocalFolderToolItem(): HTMLButtonElement {
   return item;
 }
 
-function closeContextToolsMenuForItem(item: HTMLElement): void {
-  const menu = item.closest<HTMLElement>('.assistant-context-tool-menu');
-  const addButton = menu?.parentElement?.querySelector<HTMLButtonElement>('.assistant-context-add-button');
-  if (menu && addButton) closeContextToolsMenu(addButton, menu);
-}
-
 function closeContextToolsMenu(addButton: HTMLButtonElement, menu: HTMLElement): void {
   menu.hidden = true;
   addButton.setAttribute('aria-expanded', 'false');
