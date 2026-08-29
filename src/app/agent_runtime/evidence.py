@@ -437,12 +437,27 @@ def evidence_decision_from_semantic(task: str, semantic_decision: object) -> Evi
         if source_class not in SOURCE_CAPABILITIES or source_class in seen:
             return
         seen.add(source_class)
+
+        # Semantic trust is advisory and must not make a source class
+        # deterministically impossible to compile. Bound the model-proposed
+        # floor by the strongest trust level that this source class can
+        # actually deliver. User/deterministic hard floors are merged later
+        # and remain authoritative.
+        requested_trust = trust if trust in TRUST_RANK else None
+        source_trust = SOURCE_CAPABILITIES[source_class][1]
+        bounded_trust = requested_trust
+        if (
+            requested_trust is not None
+            and TRUST_RANK.get(requested_trust, 0) > TRUST_RANK.get(source_trust, 0)
+        ):
+            bounded_trust = source_trust
+
         requirements.append(
             _requirement(
                 text,
                 source_class,
                 freshness=freshness if freshness in {"timeless", "current"} else "current",
-                trust=trust if trust in TRUST_RANK else None,
+                trust=bounded_trust,
                 fallback=fallback if fallback in {"fail_closed", "allow_fallback"} else "fail_closed",
             )
         )
