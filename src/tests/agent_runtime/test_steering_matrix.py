@@ -229,3 +229,18 @@ def test_revision_policy_is_evaluated_independently() -> None:
     evidence = evaluate_evidence_set("run-1", decision.policy, [])
     assert evidence.passed is False
     assert evidence.missing_requirements
+
+
+def test_ambiguous_go_ahead_does_not_remove_prior_read_only_restriction() -> None:
+    objective = revise_objective(
+        "Inspect the auth code but don't edit anything",
+        "go ahead",
+    )
+    _, compiled = _compile(
+        "coding",
+        objective,
+        actions=("workspace_read",),
+    )
+    assert "workspace.read" in compiled.required_local
+    assert "workspace.edit" not in compiled.required_local
+    assert "workspace.write" not in compiled.required_local
