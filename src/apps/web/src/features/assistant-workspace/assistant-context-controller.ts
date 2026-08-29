@@ -351,7 +351,7 @@ async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Pr
   return '';
 }
 
-function injectControls(root: ParentNode): void {
+export function injectControls(root: ParentNode): void {
   const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
   const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
   const contextHost = assistantContextHost(composerActions, composerControls);
