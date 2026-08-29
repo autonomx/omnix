@@ -26,6 +26,11 @@ from .evidence import (
     resolve_request_mode,
     task_requires_workspace_mutation,
 )
+from .local_workspace import (
+    LocalWorkspaceSelectionError,
+    local_workspace_repository_root,
+    validate_local_workspace_root,
+)
 from .profiles import get_agent_profile, select_agent_profile_id
 from .router import OmnixRouteDecision, route_omnix_request
 from .semantic_classifier import (
@@ -549,7 +554,23 @@ def _agent_result(
             },
         )
 
+    message_metadata = getattr(user_message, "metadata", {}) or {}
+    selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
     repository = os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
+    selected_repository: str | None = None
+    if profile.requires_workspace and selected_workspace:
+        try:
+            selected_workspace = validate_local_workspace_root(selected_workspace)
+            selected_repository = local_workspace_repository_root(selected_workspace)
+        except LocalWorkspaceSelectionError as exc:
+            return _agent_start_failure(
+                decision,
+                run_id=None,
+                profile=profile_id,
+                task=_agent_task(content),
+                error=exc,
+            )
+        repository = selected_workspace
     if profile.requires_workspace and not repository:
         return _agent_start_failure(
             decision,
@@ -557,7 +578,8 @@ def _agent_result(
             profile=profile_id,
             task=_agent_task(content),
             error=RuntimeError(
-                f"the {profile_id} profile requires OMNIX_AGENT_DEFAULT_REPOSITORY"
+                f"the {profile_id} profile requires a Local folder or "
+                "OMNIX_AGENT_DEFAULT_REPOSITORY"
             ),
         )
 
@@ -633,15 +655,21 @@ def _agent_result(
         )
     local = list(compiled.required_local)
     external = list(compiled.required_external)
-    workspace = (
-        WorkspaceSpec(
-            root=repository,
-            repository=repository,
-            base_ref=os.environ.get("OMNIX_AGENT_DEFAULT_BASE_REF", "HEAD").strip() or "HEAD",
-        )
-        if repository and profile.requires_workspace
-        else None
-    )
+    workspace = None
+    if repository and profile.requires_workspace:
+        if selected_workspace:
+            workspace = WorkspaceSpec(
+                root=selected_workspace,
+                repository=selected_repository,
+                worktree=selected_workspace if selected_repository else None,
+                base_ref="HEAD",
+            )
+        else:
+            workspace = WorkspaceSpec(
+                root=repository,
+                repository=repository,
+                base_ref=os.environ.get("OMNIX_AGENT_DEFAULT_BASE_REF", "HEAD").strip() or "HEAD",
+            )
     spec = AgentRunSpec(
         session_id=str(session.id),
         task=task,
