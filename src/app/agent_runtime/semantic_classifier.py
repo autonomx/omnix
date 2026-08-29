@@ -268,6 +268,15 @@ def _normalize_semantic_payload(value: Any) -> Any:
             row = {key: item[key] for key in _EVIDENCE_FIELDS if key in item}
             source = str(row.get("source_class") or "").strip()
             row["source_class"] = source
+        elif isinstance(item, BaseModel):
+            model_row = item.model_dump(mode="python")
+            row = {
+                key: model_row[key]
+                for key in _EVIDENCE_FIELDS
+                if key in model_row
+            }
+            source = str(row.get("source_class") or "").strip()
+            row["source_class"] = source
         else:
             continue
         # contacts are governed by contacts_read; there is intentionally no
