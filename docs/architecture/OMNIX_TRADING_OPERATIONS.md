@@ -168,6 +168,34 @@ When `intraday_learning_enabled=true`, the deterministic strategy monitor also w
 
 When `intraday_llm_enabled=true`, the monitor uses an event-driven bounded batch of the configured default LLM. Deterministic learning still evaluates every candidate every finalized minute; the LLM normally sees the top 5 only when material state/rank/VWAP/turnover/score changes occur, plus a 10-minute heartbeat for quiet top names during the configured entry window. `entry_ready` candidates are always included. Most calls send compact deltas plus the prior assessment, with a periodic 30-minute full-context refresh. Ordinary event batches are capped at one call per five minutes; a new `entry_ready` transition may bypass that cooldown. Batch events persist trigger reasons and normalized token usage: provider-reported prompt/completion/total tokens when available, otherwise a clearly labeled character/4 estimate fallback. LLM output remains interpretation-only, always `execution_authority=false`, and provider/model failures never block or authorize deterministic paper execution.
 
+### Finviz V2 prospective AUTO PAPER qualification
+
+Finviz V2 has an isolated promotion contract beginning **2026-08-31**. It
+cannot inherit canonical Yahoo V2 evidence. The V2 qualification monitor
+recognizes two exact replay contracts and writes separate event families for
+them. For Finviz it writes `finviz_v2_shadow_replay_trade` and
+`finviz_v2_shadow_replay_session`; the operations status exposes
+`finviz_replay_count` separately.
+
+Finviz AUTO PAPER remains fail-closed until the exact frozen profile has at
+least 20 matched trades across 15 sessions and 10 symbols, at least 90%
+execution match, at least +0.20R expectancy, a positive one-sided 90% lower
+confidence bound, no more than 5R maximum drawdown, and an explicit operator
+review bound to the current evidence fingerprint. Pre-policy history cannot
+satisfy these floors.
+
+Once approved, the runtime resolves that day's strategy-owned 09:20 ET Finviz
+archive directly; a manually attached universe is rejected for this promoted
+profile. The archive must itself have `discovery_source=finviz`. Every AUTO
+PAPER entry still passes deterministic strategy state, server risk, fresh
+Alpaca IEX execution eligibility, paper fill policy and protection management.
+The LLM remains research-only.
+
+A new qualifying replay changes the evidence fingerprint and invalidates the
+prior approval until the new snapshot is reviewed. A strategy execution-profile
+change changes the profile fingerprint and starts a new prospective evidence
+line rather than reusing old results.
+
 ## Paper simulation operations
 
 Paper simulation is not brokerage execution.
