@@ -29,6 +29,7 @@ from .evidence import EvidenceCompilationError, classify_evidence, compile_task_
 from .local_workspace import (
     LocalWorkspaceSelectionError,
     local_request_host_allowed,
+    local_request_origin_allowed,
     pick_local_workspace,
 )
 from .profiles import get_agent_profile, resolve_profile_capabilities
@@ -83,7 +84,8 @@ def _service() -> AgentRunService:
 @router.post("/workspace-picker", response_model=LocalWorkspacePickResponse, include_in_schema=False)
 def pick_agent_workspace(request: Request) -> LocalWorkspacePickResponse:
     host = request.client.host if request.client is not None else None
-    if not local_request_host_allowed(host):
+    origin = request.headers.get("origin")
+    if not local_request_host_allowed(host) or not local_request_origin_allowed(origin):
         raise HTTPException(status_code=403, detail="local_workspace_picker_requires_loopback")
     try:
         selected = pick_local_workspace()
