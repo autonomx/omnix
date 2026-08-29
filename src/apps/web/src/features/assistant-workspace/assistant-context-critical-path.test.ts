@@ -31,7 +31,10 @@ describe('assistant context live-chat critical path', () => {
     expect(menu?.hidden).toBe(false);
     menu?.querySelector<HTMLButtonElement>('[data-omnix-context-tool-mode="quick"]')?.click();
 
-    expect(menu?.hidden).toBe(true);
+    // The hybrid context menu intentionally stays open after choosing a
+    // research radio so the user can also toggle Desktop and Local folder
+    // without reopening the menu.
+    expect(menu?.hidden).toBe(false);
     expect(document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]')?.value).toBe('quick');
     expect(document.querySelector('.assistant-context-tool-summary')?.textContent).toContain('Quick search');
   });
