@@ -208,6 +208,29 @@ export type V2ProspectiveQualification = {
   reason_codes: string[];
 };
 
+export type FinvizV2ProspectiveQualification = {
+  strategy_id: string;
+  qualification_version: string;
+  prospective_start: string;
+  expected_profile_fingerprint: string;
+  current_profile_fingerprint: string;
+  profile_match: boolean;
+  replay_trade_count: number;
+  matched_eligible_trade_count: number;
+  distinct_sessions: number;
+  distinct_symbols: number;
+  execution_match_rate?: string | number | null;
+  expectancy_r?: string | number | null;
+  one_sided_90_lcb_r?: string | number | null;
+  max_drawdown_r?: string | number | null;
+  thresholds: V2QualificationThresholds;
+  evidence_fingerprint: string;
+  qualified: boolean;
+  reviewed: boolean;
+  auto_paper_authorized: boolean;
+  reason_codes: string[];
+};
+
 export type ProspectiveEconomicMetrics = {
   signal_count: number;
   matched_signal_count: number;
