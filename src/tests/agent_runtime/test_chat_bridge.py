@@ -10,7 +10,7 @@ from app.agent_runtime.chat_bridge import (
     _unauthorized_agent_command,
     route_typed_chat_turn,
 )
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef
+from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
 from app.agent_runtime.router import route_omnix_request
 
 
@@ -466,3 +466,67 @@ def test_invalid_attached_local_folder_fails_coding_run_before_start(
     assert started == []
     assert result.metadata["agent_start"]["status"] == "failed"
     assert "does not exist" in result.metadata["agent_start"]["error"]
+
+
+
+def test_active_agent_rejects_switch_to_different_attached_workspace(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    snapshot = SimpleNamespace(
+        run_id="active-workspace-run",
+        status="running",
+        revision=1,
+        last_error=None,
+        spec=AgentRunSpec(
+            run_id="active-workspace-run",
+            session_id="chat-active-workspace",
+            task="inspect tests",
+            profile="coding",
+            model=ModelRef(provider_id="test", model_id="model"),
+            capabilities=["workspace.read"],
+            workspace=WorkspaceSpec(root=str(first)),
+        ),
+    )
+
+    class _Service:
+        def get(self, run_id):
+            return snapshot if run_id == snapshot.run_id else None
+
+        def command(self, _command):
+            raise AssertionError("workspace-mismatched steering must not reach the active run")
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    session = SimpleNamespace(
+        id="chat-active-workspace",
+        provider_id="test",
+        model_id="model",
+        messages=[
+            SimpleNamespace(
+                role="assistant",
+                metadata={"agent_run": {"run_id": snapshot.run_id}},
+            )
+        ],
+    )
+    message = SimpleNamespace(
+        id="message-switch-workspace",
+        content="/agent inspect the repository tests",
+        metadata={"workspace_root": str(second)},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=None,
+    )
+
+    assert result is not None
+    assert result.metadata["agent_start"]["status"] == "rejected"
+    assert result.metadata["agent_start"]["reason"] == "active_run_workspace_mismatch"
+    assert "different Local folder" in result.content
