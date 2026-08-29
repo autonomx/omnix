@@ -231,3 +231,31 @@ def test_matching_subject_with_wrong_source_class_does_not_satisfy() -> None:
     )
     assert result.passed is False
     assert result.missing_requirements == ["quote"]
+
+
+def test_email_evidence_wrong_account_context_is_rejected() -> None:
+    required = SubjectRef(
+        type="email_account",
+        canonical_id="primary",
+        qualifiers={"account": "primary"},
+    )
+    observed = SubjectRef(
+        type="email_account",
+        canonical_id="work",
+        qualifiers={"account": "work"},
+    )
+    assert subject_matches(required, observed) is False
+
+
+def test_calendar_evidence_wrong_calendar_context_is_rejected() -> None:
+    required = SubjectRef(
+        type="calendar_account",
+        canonical_id="primary",
+        qualifiers={"calendar": "primary"},
+    )
+    observed = SubjectRef(
+        type="calendar_account",
+        canonical_id="shared",
+        qualifiers={"calendar": "shared"},
+    )
+    assert subject_matches(required, observed) is False
