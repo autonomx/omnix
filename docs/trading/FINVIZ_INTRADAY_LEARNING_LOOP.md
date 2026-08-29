@@ -203,7 +203,7 @@ only.
 
 The model output is persisted as `intraday_llm` events. A separate
 `intraday_llm_batch` event records the completed batch, trigger reasons,
-heartbeat/cooldown policy, payload mode and an approximate input-token estimate.
+heartbeat/cooldown policy, payload mode and normalized provider/estimated token usage.
 
 Most calls use a compact **delta payload** containing only stable context,
 current high-value features, materially changed fields and the previous LLM
@@ -249,28 +249,55 @@ This makes it possible to answer questions such as:
 - which deterministic entries came from poor-quality dynamic ranks?
 - did a rejected name subsequently produce a large counterfactual move?
 
-## V2 qualification boundary
+## Separate Finviz V2 AUTO PAPER qualification
 
 The canonical frozen V2 profile predates this Finviz experiment and uses the
-legacy Yahoo discovery population.
+legacy Yahoo discovery population. Changing discovery from Yahoo to Finviz
+creates a distinct execution-profile fingerprint. Yahoo prospective evidence
+therefore cannot authorize Finviz AUTO PAPER.
 
-The `intraday_learning_enabled` toggle is observational and does not alter the
-canonical V2 execution-profile fingerprint.
+The Finviz profile now has its own prospective qualification contract:
 
-Changing V2 discovery from Yahoo to Finviz *does* create a non-canonical
-fingerprint. Existing Yahoo prospective evidence therefore cannot authorize
-AUTO PAPER for the Finviz experiment.
+- prospective epoch starts **2026-08-31**; observations or reconstructed results
+  from 2026-08-28 or earlier never count toward promotion;
+- at least **20 matched replay trades** are required;
+- those trades must cover at least **15 distinct sessions** and **10 distinct
+  symbols**;
+- execution match rate must be at least **90%**;
+- expectancy must be at least **+0.20R**;
+- the one-sided **90% lower confidence bound must be positive**;
+- maximum drawdown must be no more than **5R**;
+- an operator must explicitly approve the exact evidence fingerprint after the
+  quantitative floors pass.
 
-The Trading UI exposes a dedicated **Load Finviz learning V2** action that:
+The post-session V2 replay monitor writes separate
+`finviz_v2_shadow_replay_trade` and `finviz_v2_shadow_replay_session` events.
+Only the exact frozen Finviz profile, exact strategy-owned Finviz morning
+archive, and live eligible SHADOW execution observations can enter this sample.
+
+Approval is intentionally snapshot-bound. Any later qualifying evidence changes
+the evidence fingerprint and removes AUTO PAPER authorization until that new
+snapshot is explicitly reviewed. Any execution-profile change creates a new
+profile fingerprint and must build a new prospective sample. Intraday
+learning/LLM settings remain observational and do not grant execution authority.
+
+After the Finviz qualification is authorized, AUTO PAPER continues to use the
+strategy-owned raw **09:20 ET Finviz archive**. It does not require or permit a
+manually curated `active_universe_id` for this promoted profile. Each trade
+still requires deterministic `entry_ready`, server risk approval and fresh,
+eligible Alpaca IEX execution evidence.
+
+The Trading UI exposes **Load Finviz learning V2**, which:
 
 - selects the frozen V2 causal geometry;
 - switches discovery to Finviz;
-- enables intraday learning;
-- forces SHADOW;
-- clears `active_universe_id`.
+- enables intraday learning and the research-only LLM analyst;
+- forces SHADOW while qualification is incomplete;
+- clears `active_universe_id`;
+- displays the isolated Finviz qualification progress and review action.
 
-This provides a clean prospective learning cohort without weakening the
-existing AUTO PAPER promotion boundary.
+This preserves the clean prospective experiment while providing a controlled
+path from SHADOW to simulated AUTO PAPER.
 
 ## UI
 
