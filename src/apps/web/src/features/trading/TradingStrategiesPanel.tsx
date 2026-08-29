@@ -891,34 +891,43 @@ export function TradingStrategiesPanel() {
             </section>
 
             {draft.config.strategy_version === '2.0.0' ? (
-              <section className="trading-config-block" aria-label="V2 prospective qualification">
+              <section className="trading-config-block" aria-label={draftUsesFinvizV2 ? 'Finviz V2 prospective qualification' : 'V2 prospective qualification'}>
                 <header>
-                  <strong>Prospective AUTO PAPER qualification</strong>
-                  <small>Frozen Aug 24+ policy · raw morning archive + live eligible SHADOW signal + post-session Alpaca IEX replay</small>
+                  <strong>{draftUsesFinvizV2 ? 'Finviz prospective AUTO PAPER qualification' : 'Prospective AUTO PAPER qualification'}</strong>
+                  <small>{draftUsesFinvizV2
+                    ? 'Separate Aug 31+ Finviz policy · raw 09:20 ET archive · live eligible SHADOW signal · post-session Alpaca replay'
+                    : 'Frozen Aug 24+ Yahoo policy · raw morning archive + live eligible SHADOW signal + post-session Alpaca IEX replay'}</small>
                 </header>
-                {v2Qualification ? (
+                {activeV2Qualification ? (
                   <>
                     <div className="trading-strategy-grid">
-                      <div><strong>Profile</strong><small>{v2Qualification.profile_match ? 'Exact frozen V2 profile' : 'Mismatch — reload frozen V11 v2'}</small></div>
-                      <div><strong>Matched trades</strong><small>{v2Qualification.matched_eligible_trade_count} / {v2Qualification.thresholds.minimum_matched_trades}</small></div>
-                      <div><strong>Distinct sessions</strong><small>{v2Qualification.distinct_sessions} / {v2Qualification.thresholds.minimum_distinct_sessions}</small></div>
-                      <div><strong>Distinct symbols</strong><small>{v2Qualification.distinct_symbols} / {v2Qualification.thresholds.minimum_distinct_symbols}</small></div>
-                      <div><strong>Execution match</strong><small>{v2Qualification.execution_match_rate == null ? 'N/A' : `${(Number(v2Qualification.execution_match_rate) * 100).toFixed(1)}%`} · min {(Number(v2Qualification.thresholds.minimum_execution_match_rate) * 100).toFixed(0)}%</small></div>
-                      <div><strong>Expectancy</strong><small>{v2Qualification.expectancy_r == null ? 'N/A' : `${Number(v2Qualification.expectancy_r).toFixed(3)}R`} · min +{Number(v2Qualification.thresholds.minimum_expectancy_r).toFixed(2)}R</small></div>
-                      <div><strong>90% lower bound</strong><small>{v2Qualification.one_sided_90_lcb_r == null ? 'N/A' : `${Number(v2Qualification.one_sided_90_lcb_r).toFixed(3)}R`} · must be &gt; 0R</small></div>
-                      <div><strong>Max drawdown</strong><small>{v2Qualification.max_drawdown_r == null ? 'N/A' : `${Number(v2Qualification.max_drawdown_r).toFixed(3)}R`} · max {Number(v2Qualification.thresholds.maximum_drawdown_r).toFixed(1)}R</small></div>
+                      <div><strong>Profile</strong><small>{activeV2Qualification.profile_match
+                        ? draftUsesFinvizV2 ? 'Exact frozen Finviz V2 profile' : 'Exact frozen V2 profile'
+                        : draftUsesFinvizV2 ? 'Mismatch — reload Finviz learning V2' : 'Mismatch — reload frozen V11 v2'}</small></div>
+                      <div><strong>Matched trades</strong><small>{activeV2Qualification.matched_eligible_trade_count} / {activeV2Qualification.thresholds.minimum_matched_trades}</small></div>
+                      <div><strong>Distinct sessions</strong><small>{activeV2Qualification.distinct_sessions} / {activeV2Qualification.thresholds.minimum_distinct_sessions}</small></div>
+                      <div><strong>Distinct symbols</strong><small>{activeV2Qualification.distinct_symbols} / {activeV2Qualification.thresholds.minimum_distinct_symbols}</small></div>
+                      <div><strong>Execution match</strong><small>{activeV2Qualification.execution_match_rate == null ? 'N/A' : `${(Number(activeV2Qualification.execution_match_rate) * 100).toFixed(1)}%`} · min {(Number(activeV2Qualification.thresholds.minimum_execution_match_rate) * 100).toFixed(0)}%</small></div>
+                      <div><strong>Expectancy</strong><small>{activeV2Qualification.expectancy_r == null ? 'N/A' : `${Number(activeV2Qualification.expectancy_r).toFixed(3)}R`} · min +{Number(activeV2Qualification.thresholds.minimum_expectancy_r).toFixed(2)}R</small></div>
+                      <div><strong>90% lower bound</strong><small>{activeV2Qualification.one_sided_90_lcb_r == null ? 'N/A' : `${Number(activeV2Qualification.one_sided_90_lcb_r).toFixed(3)}R`} · must be &gt; 0R</small></div>
+                      <div><strong>Max drawdown</strong><small>{activeV2Qualification.max_drawdown_r == null ? 'N/A' : `${Number(activeV2Qualification.max_drawdown_r).toFixed(3)}R`} · max {Number(activeV2Qualification.thresholds.maximum_drawdown_r).toFixed(1)}R</small></div>
                     </div>
-                    <p><small>Profile <code>{v2Qualification.current_profile_fingerprint.slice(0, 12)}</code> · evidence <code>{v2Qualification.evidence_fingerprint.slice(0, 12)}</code> · replay trades {v2Qualification.replay_trade_count}. {v2Qualification.reason_codes.length ? `Blocking: ${v2Qualification.reason_codes.join(', ')}` : 'All quantitative floors pass.'}</small></p>
-                    <p><strong>{v2Qualification.auto_paper_authorized ? 'AUTO PAPER authorized' : v2Qualification.qualified ? 'Quantitatively qualified — explicit review required' : 'Prospective qualification in progress'}</strong></p>
-                    {v2Qualification.qualified && !v2Qualification.reviewed ? (
+                    <p><small>Profile <code>{activeV2Qualification.current_profile_fingerprint.slice(0, 12)}</code> · evidence <code>{activeV2Qualification.evidence_fingerprint.slice(0, 12)}</code> · replay trades {activeV2Qualification.replay_trade_count}. {activeV2Qualification.reason_codes.length ? `Blocking: ${activeV2Qualification.reason_codes.join(', ')}` : 'All quantitative floors pass.'}</small></p>
+                    {draftUsesFinvizV2 ? (
+                      <p><small>Finviz promotion is isolated from Yahoo V2. It requires at least 20 matched trades across 15 sessions and 10 symbols, ≥90% execution match, ≥+0.20R expectancy, positive 90% lower bound, ≤5R drawdown, then explicit approval of the exact evidence fingerprint.</small></p>
+                    ) : null}
+                    <p><strong>{activeV2Qualification.auto_paper_authorized ? 'AUTO PAPER authorized' : activeV2Qualification.qualified ? 'Quantitatively qualified — explicit review required' : 'Prospective qualification in progress'}</strong></p>
+                    {activeV2Qualification.qualified && !activeV2Qualification.reviewed ? (
                       <div className="trading-strategy-grid">
                         <label className="wide-field"><span>Promotion review note<small>binds approval to this exact evidence fingerprint</small></span><textarea value={v2ReviewNote} onChange={(event) => setV2ReviewNote(event.target.value)} placeholder="Review the prospective sample, execution coverage, drawdown and edge before approving AUTO PAPER." /></label>
-                        <button type="button" onClick={() => void reviewV2Qualification()} disabled={v2Reviewing || v2ReviewNote.trim().length < 10}>{v2Reviewing ? 'Recording review…' : 'Approve exact V2 evidence snapshot'}</button>
+                        <button type="button" onClick={() => void reviewV2Qualification()} disabled={v2Reviewing || v2ReviewNote.trim().length < 10}>{v2Reviewing ? 'Recording review…' : draftUsesFinvizV2 ? 'Approve exact Finviz evidence snapshot' : 'Approve exact V2 evidence snapshot'}</button>
                       </div>
                     ) : null}
                   </>
                 ) : (
-                  <p><small>Save the frozen V2 profile in SHADOW mode first. Qualification begins with the prospective epoch on 2026-08-24; historical reconstruction cannot unlock AUTO PAPER.</small></p>
+                  <p><small>{draftUsesFinvizV2
+                    ? 'Save the frozen Finviz V2 profile in SHADOW mode first. Qualification begins prospectively on 2026-08-31; Aug 28 and earlier observations cannot unlock AUTO PAPER.'
+                    : 'Save the frozen V2 profile in SHADOW mode first. Qualification begins with the prospective epoch on 2026-08-24; historical reconstruction cannot unlock AUTO PAPER.'}</small></p>
                 )}
               </section>
             ) : null}
