@@ -10,6 +10,7 @@ from app.agent_runtime import api
 from app.agent_runtime.local_workspace import (
     LocalWorkspaceSelectionError,
     local_request_host_allowed,
+    local_request_origin_allowed,
     local_workspace_repository_root,
     validate_local_workspace_root,
 )
@@ -39,6 +40,22 @@ def test_local_workspace_picker_allows_loopback_hosts(host: str) -> None:
 @pytest.mark.parametrize("host", ["192.168.1.10", "10.0.0.8", "example.com", None])
 def test_local_workspace_picker_rejects_non_loopback_hosts(host: str | None) -> None:
     assert local_request_host_allowed(host) is False
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["http://127.0.0.1:3000", "http://localhost:5173", None],
+)
+def test_local_workspace_picker_allows_local_browser_origins(origin: str | None) -> None:
+    assert local_request_origin_allowed(origin) is True
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["https://example.com", "http://192.168.1.5:3000", "not a url"],
+)
+def test_local_workspace_picker_rejects_remote_or_invalid_origins(origin: str) -> None:
+    assert local_request_origin_allowed(origin) is False
 
 
 def test_repository_root_detection_is_bounded_to_git_result(monkeypatch, tmp_path) -> None:
@@ -72,7 +89,7 @@ def test_repository_root_detection_returns_none_for_non_git_folder(monkeypatch, 
 
 def test_workspace_picker_endpoint_returns_selected_folder(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(api, "pick_local_workspace", lambda: str(tmp_path.resolve()))
-    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), headers={})
     response = api.pick_agent_workspace(request)
     assert response.path == str(tmp_path.resolve())
     assert response.name == tmp_path.name
@@ -81,14 +98,26 @@ def test_workspace_picker_endpoint_returns_selected_folder(monkeypatch, tmp_path
 
 def test_workspace_picker_endpoint_reports_cancel(monkeypatch) -> None:
     monkeypatch.setattr(api, "pick_local_workspace", lambda: None)
-    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+    request = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), headers={})
     response = api.pick_agent_workspace(request)
     assert response.path is None
     assert response.cancelled is True
 
 
 def test_workspace_picker_endpoint_rejects_remote_client() -> None:
-    request = SimpleNamespace(client=SimpleNamespace(host="192.168.1.44"))
+    request = SimpleNamespace(client=SimpleNamespace(host="192.168.1.44"), headers={})
+    with pytest.raises(HTTPException) as caught:
+        api.pick_agent_workspace(request)
+    assert caught.value.status_code == 403
+
+
+
+def test_workspace_picker_endpoint_rejects_remote_browser_origin(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(api, "pick_local_workspace", lambda: str(tmp_path.resolve()))
+    request = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        headers={"origin": "https://example.com"},
+    )
     with pytest.raises(HTTPException) as caught:
         api.pick_agent_workspace(request)
     assert caught.value.status_code == 403
