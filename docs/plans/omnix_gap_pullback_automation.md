@@ -216,10 +216,14 @@ attached `active_universe_id`. Deterministic `entry_ready`, server risk and
 fresh eligible Alpaca IEX evidence remain mandatory before any simulated order.
 Intraday learning and LLM interpretation remain research-only.
 
-Approval does not become permanent: new prospective replay evidence changes the
-evidence fingerprint and requires another explicit review. This makes promotion
-a measured, auditable paper-trading transition rather than an automatic
-calendar-based switch.
+Approval is profile-bound rather than permanent profitability permission. New
+prospective replay and AUTO PAPER execution evidence updates the qualification
+metrics continuously. The system keeps paper trading without a daily re-review
+while all floors continue to pass, but automatically pauses new paper entries
+if execution match, expectancy, confidence bound, drawdown or another floor
+deteriorates. A profile/policy change still requires a new prospective review.
+This makes promotion a measured, auditable paper-trading transition rather than
+an automatic calendar-based switch.
 
 ## P2 — automated paper runner and terminal
 
