@@ -817,7 +817,7 @@
             "title": "Action Id"
           },
           "confidence": {
-            "default": 0.0,
+            "default": 0,
             "title": "Confidence",
             "type": "number"
           },
@@ -1326,7 +1326,7 @@
         "additionalProperties": false,
         "properties": {
           "byte_size": {
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Byte Size",
             "type": "integer"
           },
@@ -1409,8 +1409,8 @@
           "commission_bps": {
             "anyOf": [
               {
-                "maximum": 1000.0,
-                "minimum": 0.0,
+                "maximum": 1000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -1430,8 +1430,8 @@
           "position_size_fraction": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 1.0,
+                "exclusiveMinimum": 0,
+                "maximum": 1,
                 "type": "number"
               },
               {
@@ -1445,8 +1445,8 @@
           "slippage_bps": {
             "anyOf": [
               {
-                "maximum": 1000.0,
-                "minimum": 0.0,
+                "maximum": 1000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -1543,7 +1543,7 @@
           "initial_cash": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -1795,7 +1795,7 @@
             "type": "string"
           },
           "fill_bar_index": {
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Fill Bar Index",
             "type": "integer"
           },
@@ -1828,7 +1828,7 @@
             "type": "string"
           },
           "signal_bar_index": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Signal Bar Index",
             "type": "integer"
           },
@@ -1838,7 +1838,7 @@
             "type": "string"
           },
           "trade_index": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Trade Index",
             "type": "integer"
           }
@@ -2355,7 +2355,7 @@
             "type": "string"
           },
           "iterations": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Iterations",
             "type": "integer"
           },
@@ -2388,7 +2388,7 @@
             "type": "string"
           },
           "positive_examples": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Positive Examples",
             "type": "integer"
           },
@@ -2404,7 +2404,7 @@
             "type": "string"
           },
           "training_examples": {
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Training Examples",
             "type": "integer"
           },
@@ -2568,16 +2568,16 @@
           },
           "iterations": {
             "default": 800,
-            "maximum": 20000.0,
-            "minimum": 1.0,
+            "maximum": 20000,
+            "minimum": 1,
             "title": "Iterations",
             "type": "integer"
           },
           "l2_penalty": {
             "anyOf": [
               {
-                "maximum": 10.0,
-                "minimum": 0.0,
+                "maximum": 10,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -2591,8 +2591,8 @@
           "learning_rate": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 2.0,
+                "exclusiveMinimum": 0,
+                "maximum": 2,
                 "type": "number"
               },
               {
@@ -2644,15 +2644,15 @@
           },
           "minimum_examples": {
             "default": 100,
-            "maximum": 50000.0,
-            "minimum": 1.0,
+            "maximum": 50000,
+            "minimum": 1,
             "title": "Minimum Examples",
             "type": "integer"
           },
           "minimum_sessions": {
             "default": 20,
-            "maximum": 10000.0,
-            "minimum": 1.0,
+            "maximum": 10000,
+            "minimum": 1,
             "title": "Minimum Sessions",
             "type": "integer"
           },
@@ -2705,8 +2705,8 @@
             "$ref": "#/components/schemas/BounceFeatureVector-Input"
           },
           "label": {
-            "maximum": 1.0,
-            "minimum": 0.0,
+            "maximum": 1,
+            "minimum": 0,
             "title": "Label",
             "type": "integer"
           },
@@ -2980,7 +2980,7 @@
           },
           "price_scale": {
             "default": 100,
-            "exclusiveMinimum": 0.0,
+            "exclusiveMinimum": 0,
             "title": "Price Scale",
             "type": "integer"
           },
@@ -3310,13 +3310,13 @@
           },
           "source_count_primary": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Source Count Primary",
             "type": "integer"
           },
           "source_count_secondary": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Source Count Secondary",
             "type": "integer"
           },
@@ -3381,9 +3381,9 @@
             "type": "string"
           },
           "confidence": {
-            "default": 0.0,
-            "maximum": 1.0,
-            "minimum": 0.0,
+            "default": 0,
+            "maximum": 1,
+            "minimum": 0,
             "title": "Confidence",
             "type": "number"
           },
@@ -3513,7 +3513,7 @@
           "character_profile_version": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -3570,7 +3570,7 @@
           },
           "memory_record_count": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Memory Record Count",
             "type": "integer"
           },
@@ -3588,7 +3588,7 @@
           "memory_snapshot_revision": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -3772,7 +3772,7 @@
           "character_profile_version": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -3829,7 +3829,7 @@
           },
           "memory_record_count": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Memory Record Count",
             "type": "integer"
           },
@@ -3847,7 +3847,7 @@
           "memory_snapshot_revision": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -4022,15 +4022,15 @@
         "properties": {
           "cpu_limit": {
             "default": 2,
-            "maximum": 64.0,
-            "minimum": 1.0,
+            "maximum": 64,
+            "minimum": 1,
             "title": "Cpu Limit",
             "type": "integer"
           },
           "lease_seconds": {
             "default": 30,
-            "maximum": 3600.0,
-            "minimum": 1.0,
+            "maximum": 3600,
+            "minimum": 1,
             "title": "Lease Seconds",
             "type": "integer"
           },
@@ -4560,7 +4560,7 @@
           },
           "delay_seconds": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Delay Seconds",
             "type": "integer"
           },
@@ -5101,8 +5101,8 @@
         "properties": {
           "count": {
             "default": 30,
-            "maximum": 100.0,
-            "minimum": 1.0,
+            "maximum": 100,
+            "minimum": 1,
             "title": "Count",
             "type": "integer"
           },
@@ -5114,7 +5114,7 @@
           "maximum_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -5128,8 +5128,8 @@
           "minimum_gap_pct": {
             "anyOf": [
               {
-                "maximum": 1000.0,
-                "minimum": 0.0,
+                "maximum": 1000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -5143,7 +5143,7 @@
           "minimum_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -5165,6 +5165,204 @@
           "universe_id"
         ],
         "title": "FinvizGapperDiscoveryRequest",
+        "type": "object"
+      },
+      "FinvizV2ProspectiveQualification": {
+        "properties": {
+          "auto_paper_authorized": {
+            "default": false,
+            "title": "Auto Paper Authorized",
+            "type": "boolean"
+          },
+          "current_profile_fingerprint": {
+            "title": "Current Profile Fingerprint",
+            "type": "string"
+          },
+          "distinct_sessions": {
+            "minimum": 0,
+            "title": "Distinct Sessions",
+            "type": "integer"
+          },
+          "distinct_symbols": {
+            "minimum": 0,
+            "title": "Distinct Symbols",
+            "type": "integer"
+          },
+          "evidence_fingerprint": {
+            "title": "Evidence Fingerprint",
+            "type": "string"
+          },
+          "execution_match_rate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Match Rate"
+          },
+          "expectancy_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectancy R"
+          },
+          "expected_profile_fingerprint": {
+            "title": "Expected Profile Fingerprint",
+            "type": "string"
+          },
+          "matched_eligible_trade_count": {
+            "minimum": 0,
+            "title": "Matched Eligible Trade Count",
+            "type": "integer"
+          },
+          "max_drawdown_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown R"
+          },
+          "one_sided_90_lcb_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Sided 90 Lcb R"
+          },
+          "profile_match": {
+            "title": "Profile Match",
+            "type": "boolean"
+          },
+          "prospective_start": {
+            "default": "2026-08-31",
+            "format": "date",
+            "title": "Prospective Start",
+            "type": "string"
+          },
+          "qualification_version": {
+            "default": "finviz-v2-prospective-qualification-1",
+            "title": "Qualification Version",
+            "type": "string"
+          },
+          "qualified": {
+            "default": false,
+            "title": "Qualified",
+            "type": "boolean"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "replay_trade_count": {
+            "minimum": 0,
+            "title": "Replay Trade Count",
+            "type": "integer"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/FinvizV2QualificationThresholds"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "expected_profile_fingerprint",
+          "current_profile_fingerprint",
+          "profile_match",
+          "replay_trade_count",
+          "matched_eligible_trade_count",
+          "distinct_sessions",
+          "distinct_symbols",
+          "evidence_fingerprint"
+        ],
+        "title": "FinvizV2ProspectiveQualification",
+        "type": "object"
+      },
+      "FinvizV2QualificationThresholds": {
+        "properties": {
+          "live_match_window_minutes": {
+            "default": 10,
+            "title": "Live Match Window Minutes",
+            "type": "integer"
+          },
+          "maximum_drawdown_r": {
+            "default": "5",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Drawdown R",
+            "type": "string"
+          },
+          "minimum_distinct_sessions": {
+            "default": 15,
+            "title": "Minimum Distinct Sessions",
+            "type": "integer"
+          },
+          "minimum_distinct_symbols": {
+            "default": 10,
+            "title": "Minimum Distinct Symbols",
+            "type": "integer"
+          },
+          "minimum_execution_match_rate": {
+            "default": "0.90",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Execution Match Rate",
+            "type": "string"
+          },
+          "minimum_expectancy_r": {
+            "default": "0.20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Expectancy R",
+            "type": "string"
+          },
+          "minimum_matched_trades": {
+            "default": 20,
+            "title": "Minimum Matched Trades",
+            "type": "integer"
+          },
+          "one_sided_confidence_level": {
+            "default": "0.90",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "One Sided Confidence Level",
+            "type": "string"
+          },
+          "prospective_start": {
+            "default": "2026-08-31",
+            "format": "date",
+            "title": "Prospective Start",
+            "type": "string"
+          }
+        },
+        "title": "FinvizV2QualificationThresholds",
         "type": "object"
       },
       "FreezeDatasetRequest": {
@@ -5212,8 +5410,8 @@
           },
           "limit": {
             "default": 500,
-            "maximum": 5000.0,
-            "minimum": 1.0,
+            "maximum": 5000,
+            "minimum": 1,
             "title": "Limit",
             "type": "integer"
           }
@@ -5484,8 +5682,8 @@
           "quality_score": {
             "anyOf": [
               {
-                "maximum": 10.0,
-                "minimum": 0.0,
+                "maximum": 10,
+                "minimum": 0,
                 "type": "integer"
               },
               {
@@ -5534,8 +5732,8 @@
           "assumed_spread_bps": {
             "anyOf": [
               {
-                "maximum": 10000.0,
-                "minimum": 0.0,
+                "maximum": 10000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -5565,7 +5763,7 @@
           "initial_cash": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -5578,16 +5776,16 @@
           },
           "max_concurrent_positions": {
             "default": 3,
-            "maximum": 50.0,
-            "minimum": 1.0,
+            "maximum": 50,
+            "minimum": 1,
             "title": "Max Concurrent Positions",
             "type": "integer"
           },
           "max_hold_minutes": {
             "default": 390,
             "description": "Legacy compatibility field; indicator-based exits do not use elapsed time.",
-            "maximum": 390.0,
-            "minimum": 1.0,
+            "maximum": 390,
+            "minimum": 1,
             "title": "Max Hold Minutes",
             "type": "integer"
           },
@@ -5971,8 +6169,8 @@
           },
           "quality_score": {
             "default": 0,
-            "maximum": 10.0,
-            "minimum": 0.0,
+            "maximum": 10,
+            "minimum": 0,
             "title": "Quality Score",
             "type": "integer"
           },
@@ -6058,16 +6256,16 @@
           },
           "breakout_hold_bars": {
             "default": 1,
-            "maximum": 5.0,
-            "minimum": 1.0,
+            "maximum": 5,
+            "minimum": 1,
             "title": "Breakout Hold Bars",
             "type": "integer"
           },
           "breakout_hold_tolerance_bps": {
             "anyOf": [
               {
-                "maximum": 1000.0,
-                "minimum": 0.0,
+                "maximum": 1000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6081,7 +6279,7 @@
           "breakout_volume_ratio": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -6109,16 +6307,16 @@
           },
           "exit_rsi_period": {
             "default": 14,
-            "maximum": 100.0,
-            "minimum": 2.0,
+            "maximum": 100,
+            "minimum": 2,
             "title": "Exit Rsi Period",
             "type": "integer"
           },
           "exit_rsi_threshold": {
             "anyOf": [
               {
-                "maximum": 100.0,
-                "minimum": 0.0,
+                "maximum": 100,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6142,7 +6340,7 @@
           "higher_low_buffer_bps": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6165,15 +6363,15 @@
           },
           "intraday_llm_interval_minutes": {
             "default": 10,
-            "maximum": 60.0,
-            "minimum": 5.0,
+            "maximum": 60,
+            "minimum": 5,
             "title": "Intraday Llm Interval Minutes",
             "type": "integer"
           },
           "intraday_llm_top_n": {
             "default": 5,
-            "maximum": 20.0,
-            "minimum": 1.0,
+            "maximum": 20,
+            "minimum": 1,
             "title": "Intraday Llm Top N",
             "type": "integer"
           },
@@ -6186,7 +6384,7 @@
           "maximum_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -6200,7 +6398,7 @@
           "maximum_spread_bps": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -6214,7 +6412,7 @@
           "minimum_gap_pct": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6228,7 +6426,7 @@
           "minimum_premarket_dollar_volume": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6242,7 +6440,7 @@
           "minimum_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -6255,15 +6453,15 @@
           },
           "minimum_quality_score": {
             "default": 0,
-            "maximum": 10.0,
-            "minimum": 0.0,
+            "maximum": 10,
+            "minimum": 0,
             "title": "Minimum Quality Score",
             "type": "integer"
           },
           "minimum_tod_rvol": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6277,7 +6475,7 @@
           "opening_impulse_min_pct": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6290,22 +6488,22 @@
           },
           "pivot_left_bars": {
             "default": 2,
-            "maximum": 10.0,
-            "minimum": 1.0,
+            "maximum": 10,
+            "minimum": 1,
             "title": "Pivot Left Bars",
             "type": "integer"
           },
           "pivot_right_bars": {
             "default": 2,
-            "maximum": 10.0,
-            "minimum": 1.0,
+            "maximum": 10,
+            "minimum": 1,
             "title": "Pivot Right Bars",
             "type": "integer"
           },
           "preferred_float_max_shares": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -6319,7 +6517,7 @@
           "preferred_float_min_shares": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -6333,7 +6531,7 @@
           "pullback_max_pct": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -6347,7 +6545,7 @@
           "pullback_min_pct": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6361,8 +6559,8 @@
           "pullback_volume_max_ratio": {
             "anyOf": [
               {
-                "maximum": 5.0,
-                "minimum": 0.0,
+                "maximum": 5,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6394,8 +6592,8 @@
           "reward_multiple": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 10.0,
+                "exclusiveMinimum": 0,
+                "maximum": 10,
                 "type": "number"
               },
               {
@@ -6409,7 +6607,7 @@
           "stop_buffer_bps": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6448,15 +6646,15 @@
           },
           "universe_archive_grace_minutes": {
             "default": 10,
-            "maximum": 60.0,
-            "minimum": 1.0,
+            "maximum": 60,
+            "minimum": 1,
             "title": "Universe Archive Grace Minutes",
             "type": "integer"
           },
           "universe_discovery_count": {
             "default": 50,
-            "maximum": 100.0,
-            "minimum": 1.0,
+            "maximum": 100,
+            "minimum": 1,
             "title": "Universe Discovery Count",
             "type": "integer"
           },
@@ -6477,23 +6675,23 @@
           },
           "v2_max_hold_minutes": {
             "default": 60,
-            "maximum": 390.0,
-            "minimum": 1.0,
+            "maximum": 390,
+            "minimum": 1,
             "title": "V2 Max Hold Minutes",
             "type": "integer"
           },
           "v2_maximum_l2_to_signal_minutes": {
             "default": 8,
-            "maximum": 390.0,
-            "minimum": 1.0,
+            "maximum": 390,
+            "minimum": 1,
             "title": "V2 Maximum L2 To Signal Minutes",
             "type": "integer"
           },
           "v2_minimum_breakout_volume_ratio": {
             "anyOf": [
               {
-                "maximum": 1000.0,
-                "minimum": 0.0,
+                "maximum": 1000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6506,16 +6704,16 @@
           },
           "v2_minimum_l1_to_b1_minutes": {
             "default": 4,
-            "maximum": 120.0,
-            "minimum": 0.0,
+            "maximum": 120,
+            "minimum": 0,
             "title": "V2 Minimum L1 To B1 Minutes",
             "type": "integer"
           },
           "v2_profit_protection_trigger_r": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 20.0,
+                "exclusiveMinimum": 0,
+                "maximum": 20,
                 "type": "number"
               },
               {
@@ -6532,8 +6730,8 @@
           "v2_protected_stop_r": {
             "anyOf": [
               {
-                "maximum": 20.0,
-                "minimum": 0.0,
+                "maximum": 20,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6547,8 +6745,8 @@
           "v2_recovery_min_pct": {
             "anyOf": [
               {
-                "maximum": 1000.0,
-                "minimum": 0.0,
+                "maximum": 1000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6562,8 +6760,8 @@
           "v2_second_pullback_min_pct": {
             "anyOf": [
               {
-                "maximum": 100.0,
-                "minimum": 0.0,
+                "maximum": 100,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -6576,8 +6774,8 @@
           },
           "volume_lookback_bars": {
             "default": 10,
-            "maximum": 100.0,
-            "minimum": 2.0,
+            "maximum": 100,
+            "minimum": 2,
             "title": "Volume Lookback Bars",
             "type": "integer"
           }
@@ -6601,8 +6799,8 @@
           },
           "breakout_hold_bars": {
             "default": 1,
-            "maximum": 5.0,
-            "minimum": 1.0,
+            "maximum": 5,
+            "minimum": 1,
             "title": "Breakout Hold Bars",
             "type": "integer"
           },
@@ -6635,8 +6833,8 @@
           },
           "exit_rsi_period": {
             "default": 14,
-            "maximum": 100.0,
-            "minimum": 2.0,
+            "maximum": 100,
+            "minimum": 2,
             "title": "Exit Rsi Period",
             "type": "integer"
           },
@@ -6674,15 +6872,15 @@
           },
           "intraday_llm_interval_minutes": {
             "default": 10,
-            "maximum": 60.0,
-            "minimum": 5.0,
+            "maximum": 60,
+            "minimum": 5,
             "title": "Intraday Llm Interval Minutes",
             "type": "integer"
           },
           "intraday_llm_top_n": {
             "default": 5,
-            "maximum": 20.0,
-            "minimum": 1.0,
+            "maximum": 20,
+            "minimum": 1,
             "title": "Intraday Llm Top N",
             "type": "integer"
           },
@@ -6724,8 +6922,8 @@
           },
           "minimum_quality_score": {
             "default": 0,
-            "maximum": 10.0,
-            "minimum": 0.0,
+            "maximum": 10,
+            "minimum": 0,
             "title": "Minimum Quality Score",
             "type": "integer"
           },
@@ -6743,15 +6941,15 @@
           },
           "pivot_left_bars": {
             "default": 2,
-            "maximum": 10.0,
-            "minimum": 1.0,
+            "maximum": 10,
+            "minimum": 1,
             "title": "Pivot Left Bars",
             "type": "integer"
           },
           "pivot_right_bars": {
             "default": 2,
-            "maximum": 10.0,
-            "minimum": 1.0,
+            "maximum": 10,
+            "minimum": 1,
             "title": "Pivot Right Bars",
             "type": "integer"
           },
@@ -6843,15 +7041,15 @@
           },
           "universe_archive_grace_minutes": {
             "default": 10,
-            "maximum": 60.0,
-            "minimum": 1.0,
+            "maximum": 60,
+            "minimum": 1,
             "title": "Universe Archive Grace Minutes",
             "type": "integer"
           },
           "universe_discovery_count": {
             "default": 50,
-            "maximum": 100.0,
-            "minimum": 1.0,
+            "maximum": 100,
+            "minimum": 1,
             "title": "Universe Discovery Count",
             "type": "integer"
           },
@@ -6872,15 +7070,15 @@
           },
           "v2_max_hold_minutes": {
             "default": 60,
-            "maximum": 390.0,
-            "minimum": 1.0,
+            "maximum": 390,
+            "minimum": 1,
             "title": "V2 Max Hold Minutes",
             "type": "integer"
           },
           "v2_maximum_l2_to_signal_minutes": {
             "default": 8,
-            "maximum": 390.0,
-            "minimum": 1.0,
+            "maximum": 390,
+            "minimum": 1,
             "title": "V2 Maximum L2 To Signal Minutes",
             "type": "integer"
           },
@@ -6892,8 +7090,8 @@
           },
           "v2_minimum_l1_to_b1_minutes": {
             "default": 4,
-            "maximum": 120.0,
-            "minimum": 0.0,
+            "maximum": 120,
+            "minimum": 0,
             "title": "V2 Minimum L1 To B1 Minutes",
             "type": "integer"
           },
@@ -6930,8 +7128,8 @@
           },
           "volume_lookback_bars": {
             "default": 10,
-            "maximum": 100.0,
-            "minimum": 2.0,
+            "maximum": 100,
+            "minimum": 2,
             "title": "Volume Lookback Bars",
             "type": "integer"
           }
@@ -6984,8 +7182,8 @@
           },
           "catalyst_score": {
             "default": 0,
-            "maximum": 2.0,
-            "minimum": 0.0,
+            "maximum": 2,
+            "minimum": 0,
             "title": "Catalyst Score",
             "type": "integer"
           },
@@ -7097,8 +7295,8 @@
           },
           "opening_structure_score": {
             "default": 0,
-            "maximum": 2.0,
-            "minimum": 0.0,
+            "maximum": 2,
+            "minimum": 0,
             "title": "Opening Structure Score",
             "type": "integer"
           },
@@ -7116,8 +7314,8 @@
           },
           "pullback_quality_score": {
             "default": 0,
-            "maximum": 2.0,
-            "minimum": 0.0,
+            "maximum": 2,
+            "minimum": 0,
             "title": "Pullback Quality Score",
             "type": "integer"
           },
@@ -7147,15 +7345,15 @@
           },
           "quality_score": {
             "default": 0,
-            "maximum": 10.0,
-            "minimum": 0.0,
+            "maximum": 10,
+            "minimum": 0,
             "title": "Quality Score",
             "type": "integer"
           },
           "reclaim_break_score": {
             "default": 0,
-            "maximum": 2.0,
-            "minimum": 0.0,
+            "maximum": 2,
+            "minimum": 0,
             "title": "Reclaim Break Score",
             "type": "integer"
           },
@@ -7197,8 +7395,8 @@
           },
           "supply_score": {
             "default": 0,
-            "maximum": 2.0,
-            "minimum": 0.0,
+            "maximum": 2,
+            "minimum": 0,
             "title": "Supply Score",
             "type": "integer"
           },
@@ -7237,7 +7435,7 @@
         "additionalProperties": false,
         "properties": {
           "evaluated_bar_count": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Evaluated Bar Count",
             "type": "integer"
           },
@@ -7360,7 +7558,7 @@
           "discovery_rank": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -7380,7 +7578,7 @@
           "float_shares": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -7414,7 +7612,7 @@
           "market_cap": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -7442,7 +7640,7 @@
           "premarket_dollar_volume": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -7456,7 +7654,7 @@
           "premarket_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -7469,7 +7667,7 @@
           "premarket_volume": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -7483,7 +7681,7 @@
           "previous_close": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -7496,7 +7694,7 @@
           "raw_previous_close": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -7512,7 +7710,7 @@
           "split_adjustment_factor": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -7526,7 +7724,7 @@
           "spread_bps": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -7542,7 +7740,7 @@
           "tod_rvol": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -7608,7 +7806,7 @@
           "discovery_rank": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -8028,7 +8226,7 @@
           "total_vram_mb": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "integer"
               },
               {
@@ -8819,7 +9017,7 @@
           },
           "ingestion_revision": {
             "default": 1,
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Ingestion Revision",
             "type": "integer"
           },
@@ -8953,7 +9151,7 @@
           },
           "ingestion_revision": {
             "default": 1,
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Ingestion Revision",
             "type": "integer"
           },
@@ -9047,8 +9245,8 @@
         "properties": {
           "bar_limit": {
             "default": 120,
-            "maximum": 200.0,
-            "minimum": 30.0,
+            "maximum": 200,
+            "minimum": 30,
             "title": "Bar Limit",
             "type": "integer"
           },
@@ -9245,7 +9443,7 @@
           "estimated_vram_mb": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "integer"
               },
               {
@@ -9394,15 +9592,15 @@
         "properties": {
           "fast_period": {
             "default": 10,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Fast Period",
             "type": "integer"
           },
           "slow_period": {
             "default": 30,
-            "maximum": 500.0,
-            "minimum": 2.0,
+            "maximum": 500,
+            "minimum": 2,
             "title": "Slow Period",
             "type": "integer"
           },
@@ -9581,8 +9779,8 @@
           "commission_bps": {
             "anyOf": [
               {
-                "maximum": 1000.0,
-                "minimum": 0.0,
+                "maximum": 1000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -9596,7 +9794,7 @@
           "initial_cash": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -10246,16 +10444,16 @@
         "properties": {
           "latency_ms": {
             "default": 250,
-            "maximum": 60000.0,
-            "minimum": 0.0,
+            "maximum": 60000,
+            "minimum": 0,
             "title": "Latency Ms",
             "type": "integer"
           },
           "max_observation_age_seconds": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 300.0,
+                "exclusiveMinimum": 0,
+                "maximum": 300,
                 "type": "number"
               },
               {
@@ -10269,8 +10467,8 @@
           "max_volume_participation_pct": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 1.0,
+                "exclusiveMinimum": 0,
+                "maximum": 1,
                 "type": "number"
               },
               {
@@ -10300,8 +10498,8 @@
           "slippage_bps": {
             "anyOf": [
               {
-                "maximum": 5000.0,
-                "minimum": 0.0,
+                "maximum": 5000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -10315,8 +10513,8 @@
           "stop_slippage_bps": {
             "anyOf": [
               {
-                "maximum": 10000.0,
-                "minimum": 0.0,
+                "maximum": 10000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -10914,7 +11112,7 @@
           "limit_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -10945,7 +11143,7 @@
           "quantity": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -10958,7 +11156,7 @@
           "reference_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -10982,7 +11180,7 @@
           "stop_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -11220,7 +11418,7 @@
           },
           "revision": {
             "default": 1,
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Revision",
             "type": "integer"
           },
@@ -11344,7 +11542,7 @@
           "stop_loss": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -11360,7 +11558,7 @@
           "take_profit": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -11428,7 +11626,7 @@
           "initial_cash": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -12221,7 +12419,7 @@
           "max_drawdown_r": {
             "anyOf": [
               {
-                "minimum": 0.0,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -12253,16 +12451,16 @@
             "type": "string"
           },
           "trade_count": {
-            "maximum": 10000.0,
-            "minimum": 0.0,
+            "maximum": 10000,
+            "minimum": 0,
             "title": "Trade Count",
             "type": "integer"
           },
           "win_rate": {
             "anyOf": [
               {
-                "maximum": 1.0,
-                "minimum": 0.0,
+                "maximum": 1,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -12620,7 +12818,7 @@
           },
           "delay_seconds": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Delay Seconds",
             "type": "integer"
           },
@@ -12900,7 +13098,7 @@
           },
           "delay_seconds": {
             "default": 0,
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Delay Seconds",
             "type": "integer"
           },
@@ -13429,7 +13627,7 @@
             "type": "string"
           },
           "step": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Step",
             "type": "integer"
           },
@@ -13914,8 +14112,8 @@
             "type": "string"
           },
           "bar_count": {
-            "maximum": 200.0,
-            "minimum": 1.0,
+            "maximum": 200,
+            "minimum": 1,
             "title": "Bar Count",
             "type": "integer"
           },
@@ -13977,7 +14175,7 @@
         "additionalProperties": false,
         "properties": {
           "exact_sample_size": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Exact Sample Size",
             "type": "integer"
           },
@@ -14016,7 +14214,7 @@
             "type": "boolean"
           },
           "sample_size": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Sample Size",
             "type": "integer"
           },
@@ -14796,8 +14994,8 @@
         "properties": {
           "deadline_seconds": {
             "default": 45,
-            "maximum": 180.0,
-            "minimum": 5.0,
+            "maximum": 180,
+            "minimum": 5,
             "title": "Deadline Seconds",
             "type": "integer"
           },
@@ -14821,29 +15019,29 @@
           },
           "max_extracts": {
             "default": 8,
-            "maximum": 30.0,
-            "minimum": 0.0,
+            "maximum": 30,
+            "minimum": 0,
             "title": "Max Extracts",
             "type": "integer"
           },
           "max_queries": {
             "default": 5,
-            "maximum": 20.0,
-            "minimum": 0.0,
+            "maximum": 20,
+            "minimum": 0,
             "title": "Max Queries",
             "type": "integer"
           },
           "max_sources": {
             "default": 20,
-            "maximum": 100.0,
-            "minimum": 1.0,
+            "maximum": 100,
+            "minimum": 1,
             "title": "Max Sources",
             "type": "integer"
           },
           "max_steps": {
             "default": 8,
-            "maximum": 20.0,
-            "minimum": 1.0,
+            "maximum": 20,
+            "minimum": 1,
             "title": "Max Steps",
             "type": "integer"
           },
@@ -14912,15 +15110,15 @@
         "properties": {
           "lookback_hours": {
             "default": 72,
-            "maximum": 168.0,
-            "minimum": 1.0,
+            "maximum": 168,
+            "minimum": 1,
             "title": "Lookback Hours",
             "type": "integer"
           },
           "max_items_per_candidate": {
             "default": 8,
-            "maximum": 25.0,
-            "minimum": 1.0,
+            "maximum": 25,
+            "minimum": 1,
             "title": "Max Items Per Candidate",
             "type": "integer"
           }
@@ -14931,7 +15129,7 @@
       "StrategyCatalystCaptureResponse": {
         "properties": {
           "candidates_with_evidence": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Candidates With Evidence",
             "type": "integer"
           },
@@ -14943,7 +15141,7 @@
             "type": "object"
           },
           "evidence_count": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Evidence Count",
             "type": "integer"
           },
@@ -15573,8 +15771,8 @@
           "assumed_spread_bps": {
             "anyOf": [
               {
-                "maximum": 10000.0,
-                "minimum": 0.0,
+                "maximum": 10000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -15593,7 +15791,7 @@
           "initial_cash": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -15607,22 +15805,22 @@
           "max_hold_minutes": {
             "default": 390,
             "description": "Legacy compatibility field; indicator-based exits do not use elapsed time.",
-            "maximum": 390.0,
-            "minimum": 1.0,
+            "maximum": 390,
+            "minimum": 1,
             "title": "Max Hold Minutes",
             "type": "integer"
           },
           "max_sessions": {
             "default": 60,
-            "maximum": 252.0,
-            "minimum": 1.0,
+            "maximum": 252,
+            "minimum": 1,
             "title": "Max Sessions",
             "type": "integer"
           },
           "reconstruction_max_age_days": {
             "default": 30,
-            "maximum": 3650.0,
-            "minimum": 1.0,
+            "maximum": 3650,
+            "minimum": 1,
             "title": "Reconstruction Max Age Days",
             "type": "integer"
           },
@@ -16140,8 +16338,8 @@
           "max_daily_loss_pct": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 20.0,
+                "exclusiveMinimum": 0,
+                "maximum": 20,
                 "type": "number"
               },
               {
@@ -16155,8 +16353,8 @@
           "max_open_risk_pct": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 20.0,
+                "exclusiveMinimum": 0,
+                "maximum": 20,
                 "type": "number"
               },
               {
@@ -16169,16 +16367,16 @@
           },
           "max_positions": {
             "default": 3,
-            "maximum": 50.0,
-            "minimum": 1.0,
+            "maximum": 50,
+            "minimum": 1,
             "title": "Max Positions",
             "type": "integer"
           },
           "max_spread_bps": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 10000.0,
+                "exclusiveMinimum": 0,
+                "maximum": 10000,
                 "type": "number"
               },
               {
@@ -16192,7 +16390,7 @@
           "max_trade_value": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -16205,8 +16403,8 @@
           },
           "max_trades_per_day": {
             "default": 5,
-            "maximum": 100.0,
-            "minimum": 1.0,
+            "maximum": 100,
+            "minimum": 1,
             "title": "Max Trades Per Day",
             "type": "integer"
           },
@@ -16218,8 +16416,8 @@
           "risk_per_trade_pct": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
-                "maximum": 5.0,
+                "exclusiveMinimum": 0,
+                "maximum": 5,
                 "type": "number"
               },
               {
@@ -16274,8 +16472,8 @@
           },
           "max_positions": {
             "default": 3,
-            "maximum": 50.0,
-            "minimum": 1.0,
+            "maximum": 50,
+            "minimum": 1,
             "title": "Max Positions",
             "type": "integer"
           },
@@ -16293,8 +16491,8 @@
           },
           "max_trades_per_day": {
             "default": 5,
-            "maximum": 100.0,
-            "minimum": 1.0,
+            "maximum": 100,
+            "minimum": 1,
             "title": "Max Trades Per Day",
             "type": "integer"
           },
@@ -16391,8 +16589,8 @@
           },
           "quality_score": {
             "default": 0,
-            "maximum": 10.0,
-            "minimum": 0.0,
+            "maximum": 10,
+            "minimum": 0,
             "title": "Quality Score",
             "type": "integer"
           },
@@ -16754,8 +16952,8 @@
           },
           "cooldown_seconds": {
             "default": 0,
-            "maximum": 31536000.0,
-            "minimum": 0.0,
+            "maximum": 31536000,
+            "minimum": 0,
             "title": "Cooldown Seconds",
             "type": "integer"
           },
@@ -16838,7 +17036,7 @@
           },
           "revision": {
             "default": 1,
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Revision",
             "type": "integer"
           },
@@ -16913,8 +17111,8 @@
           },
           "cooldown_seconds": {
             "default": 0,
-            "maximum": 31536000.0,
-            "minimum": 0.0,
+            "maximum": 31536000,
+            "minimum": 0,
             "title": "Cooldown Seconds",
             "type": "integer"
           },
@@ -17134,8 +17332,8 @@
         "properties": {
           "anchor_bars_ago": {
             "default": 0,
-            "maximum": 499.0,
-            "minimum": 0.0,
+            "maximum": 499,
+            "minimum": 0,
             "title": "Anchor Bars Ago",
             "type": "integer"
           },
@@ -17155,8 +17353,8 @@
           },
           "fast_period": {
             "default": 12,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Fast Period",
             "type": "integer"
           },
@@ -17183,8 +17381,8 @@
           },
           "lookback_bars": {
             "default": 1,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Lookback Bars",
             "type": "integer"
           },
@@ -17209,22 +17407,22 @@
           },
           "period": {
             "default": 14,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Period",
             "type": "integer"
           },
           "signal_period": {
             "default": 9,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Signal Period",
             "type": "integer"
           },
           "slow_period": {
             "default": 26,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Slow Period",
             "type": "integer"
           },
@@ -17281,8 +17479,8 @@
         "properties": {
           "anchor_bars_ago": {
             "default": 0,
-            "maximum": 499.0,
-            "minimum": 0.0,
+            "maximum": 499,
+            "minimum": 0,
             "title": "Anchor Bars Ago",
             "type": "integer"
           },
@@ -17302,8 +17500,8 @@
           },
           "fast_period": {
             "default": 12,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Fast Period",
             "type": "integer"
           },
@@ -17330,8 +17528,8 @@
           },
           "lookback_bars": {
             "default": 1,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Lookback Bars",
             "type": "integer"
           },
@@ -17356,22 +17554,22 @@
           },
           "period": {
             "default": 14,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Period",
             "type": "integer"
           },
           "signal_period": {
             "default": 9,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Signal Period",
             "type": "integer"
           },
           "slow_period": {
             "default": 26,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Slow Period",
             "type": "integer"
           },
@@ -17585,8 +17783,8 @@
           },
           "cooldown_seconds": {
             "default": 0,
-            "maximum": 31536000.0,
-            "minimum": 0.0,
+            "maximum": 31536000,
+            "minimum": 0,
             "title": "Cooldown Seconds",
             "type": "integer"
           },
@@ -18409,7 +18607,7 @@
             "type": "string"
           },
           "report_version": {
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Report Version",
             "type": "integer"
           },
@@ -18585,29 +18783,29 @@
           },
           "max_extracts": {
             "default": 8,
-            "maximum": 30.0,
-            "minimum": 0.0,
+            "maximum": 30,
+            "minimum": 0,
             "title": "Max Extracts",
             "type": "integer"
           },
           "max_queries": {
             "default": 5,
-            "maximum": 20.0,
-            "minimum": 0.0,
+            "maximum": 20,
+            "minimum": 0,
             "title": "Max Queries",
             "type": "integer"
           },
           "max_sources": {
             "default": 20,
-            "maximum": 100.0,
-            "minimum": 1.0,
+            "maximum": 100,
+            "minimum": 1,
             "title": "Max Sources",
             "type": "integer"
           },
           "max_steps": {
             "default": 8,
-            "maximum": 20.0,
-            "minimum": 1.0,
+            "maximum": 20,
+            "minimum": 1,
             "title": "Max Steps",
             "type": "integer"
           },
@@ -18685,8 +18883,8 @@
           },
           "history_limit": {
             "default": 100,
-            "maximum": 500.0,
-            "minimum": 2.0,
+            "maximum": 500,
+            "minimum": 2,
             "title": "History Limit",
             "type": "integer"
           },
@@ -18708,8 +18906,8 @@
           },
           "max_concurrency": {
             "default": 4,
-            "maximum": 8.0,
-            "minimum": 1.0,
+            "maximum": 8,
+            "minimum": 1,
             "title": "Max Concurrency",
             "type": "integer"
           },
@@ -18721,14 +18919,14 @@
           },
           "request_timeout_seconds": {
             "default": 10,
-            "maximum": 30.0,
-            "minimum": 1.0,
+            "maximum": 30,
+            "minimum": 1,
             "title": "Request Timeout Seconds",
             "type": "number"
           },
           "revision": {
             "default": 1,
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Revision",
             "type": "integer"
           },
@@ -18743,8 +18941,8 @@
           },
           "run_timeout_seconds": {
             "default": 120,
-            "maximum": 300.0,
-            "minimum": 1.0,
+            "maximum": 300,
+            "minimum": 1,
             "title": "Run Timeout Seconds",
             "type": "number"
           },
@@ -18810,8 +19008,8 @@
           },
           "history_limit": {
             "default": 100,
-            "maximum": 500.0,
-            "minimum": 2.0,
+            "maximum": 500,
+            "minimum": 2,
             "title": "History Limit",
             "type": "integer"
           },
@@ -18833,8 +19031,8 @@
           },
           "max_concurrency": {
             "default": 4,
-            "maximum": 8.0,
-            "minimum": 1.0,
+            "maximum": 8,
+            "minimum": 1,
             "title": "Max Concurrency",
             "type": "integer"
           },
@@ -18846,14 +19044,14 @@
           },
           "request_timeout_seconds": {
             "default": 10,
-            "maximum": 30.0,
-            "minimum": 1.0,
+            "maximum": 30,
+            "minimum": 1,
             "title": "Request Timeout Seconds",
             "type": "number"
           },
           "revision": {
             "default": 1,
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Revision",
             "type": "integer"
           },
@@ -18868,8 +19066,8 @@
           },
           "run_timeout_seconds": {
             "default": 120,
-            "maximum": 300.0,
-            "minimum": 1.0,
+            "maximum": 300,
+            "minimum": 1,
             "title": "Run Timeout Seconds",
             "type": "number"
           },
@@ -18936,7 +19134,7 @@
             "type": "string"
           },
           "rank": {
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Rank",
             "type": "integer"
           },
@@ -18991,8 +19189,8 @@
         "properties": {
           "lookback_bars": {
             "default": 1,
-            "maximum": 499.0,
-            "minimum": 1.0,
+            "maximum": 499,
+            "minimum": 1,
             "title": "Lookback Bars",
             "type": "integer"
           },
@@ -19021,8 +19219,8 @@
           },
           "period": {
             "default": 14,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Period",
             "type": "integer"
           },
@@ -19059,8 +19257,8 @@
         "properties": {
           "lookback_bars": {
             "default": 1,
-            "maximum": 499.0,
-            "minimum": 1.0,
+            "maximum": 499,
+            "minimum": 1,
             "title": "Lookback Bars",
             "type": "integer"
           },
@@ -19089,8 +19287,8 @@
           },
           "period": {
             "default": 14,
-            "maximum": 500.0,
-            "minimum": 1.0,
+            "maximum": 500,
+            "minimum": 1,
             "title": "Period",
             "type": "integer"
           },
@@ -19307,7 +19505,7 @@
           },
           "revision": {
             "default": 1,
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Revision",
             "type": "integer"
           },
@@ -19426,7 +19624,7 @@
           },
           "revision": {
             "default": 1,
-            "minimum": 1.0,
+            "minimum": 1,
             "title": "Revision",
             "type": "integer"
           },
@@ -19541,12 +19739,12 @@
             "type": "string"
           },
           "distinct_sessions": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Distinct Sessions",
             "type": "integer"
           },
           "distinct_symbols": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Distinct Symbols",
             "type": "integer"
           },
@@ -19583,7 +19781,7 @@
             "type": "string"
           },
           "matched_eligible_trade_count": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Matched Eligible Trade Count",
             "type": "integer"
           },
@@ -19645,7 +19843,7 @@
             "type": "array"
           },
           "replay_trade_count": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Replay Trade Count",
             "type": "integer"
           },
@@ -19816,7 +20014,7 @@
             "title": "Confidence Interval Low"
           },
           "exact_sample_size": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Exact Sample Size",
             "type": "integer"
           },
@@ -19865,7 +20063,7 @@
             "type": "string"
           },
           "sample_size": {
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Sample Size",
             "type": "integer"
           },
@@ -19895,15 +20093,15 @@
         "properties": {
           "minimum_exact_sample": {
             "default": 50,
-            "maximum": 100000.0,
-            "minimum": 10.0,
+            "maximum": 100000,
+            "minimum": 10,
             "title": "Minimum Exact Sample",
             "type": "integer"
           },
           "minimum_sample": {
             "default": 100,
-            "maximum": 100000.0,
-            "minimum": 20.0,
+            "maximum": 100000,
+            "minimum": 20,
             "title": "Minimum Sample",
             "type": "integer"
           },
@@ -20116,8 +20314,8 @@
         "properties": {
           "count": {
             "default": 30,
-            "maximum": 100.0,
-            "minimum": 1.0,
+            "maximum": 100,
+            "minimum": 1,
             "title": "Count",
             "type": "integer"
           },
@@ -20129,7 +20327,7 @@
           "maximum_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -20143,8 +20341,8 @@
           "minimum_gap_pct": {
             "anyOf": [
               {
-                "maximum": 1000.0,
-                "minimum": 0.0,
+                "maximum": 1000,
+                "minimum": 0,
                 "type": "number"
               },
               {
@@ -20158,7 +20356,7 @@
           "minimum_price": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
+                "exclusiveMinimum": 0,
                 "type": "number"
               },
               {
@@ -27170,6 +27368,100 @@
           }
         },
         "summary": "Recent Events",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/finviz/qualification": {
+      "get": {
+        "operationId": "get_finviz_v2_qualification_api_trading_strategies__strategy_id__finviz_qualification_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinvizV2ProspectiveQualification"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Finviz V2 Qualification",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/finviz/qualification/review": {
+      "post": {
+        "operationId": "review_finviz_v2_qualification_api_trading_strategies__strategy_id__finviz_qualification_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2QualificationReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinvizV2ProspectiveQualification"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Finviz V2 Qualification",
         "tags": [
           "trading-strategies"
         ]
