@@ -174,7 +174,8 @@ function installFetchInterceptor(): void {
     if (!isAssistantMessageRequest(inputUrl, method)) return originalFetch(input, init);
 
     const messageMatch = parsed.pathname.match(MESSAGE_PATH);
-    activeSessionId = messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null;
+    const messageSessionId = messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null;
+    adoptActiveSession(messageSessionId);
 
     if (activeSessionId && localWorkspace) storeLocalWorkspace(activeSessionId, localWorkspace);
     const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null || localWorkspace !== null;
@@ -258,9 +259,7 @@ function installFetchInterceptor(): void {
 async function applySessionResearchMode(sessionId: string, response: Response): Promise<void> {
   try {
     const session = await response.json() as { research_mode_override?: unknown };
-    activeSessionId = sessionId;
-    localWorkspace = readStoredLocalWorkspace(sessionId);
-    localWorkspaceStatus = null;
+    adoptActiveSession(sessionId);
     researchMode = session.research_mode_override == null
       ? profileDefaultMode
       : normalizeResearchMode(session.research_mode_override);
@@ -699,8 +698,7 @@ function decodePathSegment(value: string): string {
   }
 }
 
-function handleChatSessionSelected(event: Event): void {
-  const nextSessionId = (event as CustomEvent<{ sessionId?: string | null }>).detail?.sessionId ?? null;
+function adoptActiveSession(nextSessionId: string | null): void {
   if (nextSessionId === activeSessionId) return;
   if (nextSessionId && activeSessionId === null && localWorkspace) {
     storeLocalWorkspace(nextSessionId, localWorkspace);
@@ -709,6 +707,11 @@ function handleChatSessionSelected(event: Event): void {
   }
   activeSessionId = nextSessionId;
   localWorkspaceStatus = null;
+}
+
+function handleChatSessionSelected(event: Event): void {
+  const nextSessionId = (event as CustomEvent<{ sessionId?: string | null }>).detail?.sessionId ?? null;
+  adoptActiveSession(nextSessionId);
   renderControls();
 }
 
