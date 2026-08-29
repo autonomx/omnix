@@ -2,6 +2,17 @@ import { DesktopTemporalCapture } from './desktop-temporal-capture';
 
 type ResearchMode = 'disabled' | 'quick' | 'deep';
 
+export type LocalWorkspaceSelection = {
+  path: string;
+  name: string;
+};
+
+type LocalWorkspacePickResponse = {
+  path?: unknown;
+  name?: unknown;
+  cancelled?: unknown;
+};
+
 type DesktopShareSession = {
   stream: MediaStream;
   video: HTMLVideoElement;
@@ -35,6 +46,7 @@ const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const DEEP_RESEARCH_PAGES_STORAGE_KEY = 'omnix.deepResearch.maxPages';
+const LOCAL_WORKSPACES_STORAGE_KEY = 'omnix.chat.localWorkspaces.v1';
 const DEFAULT_DEEP_RESEARCH_PAGES = 12;
 const MAX_DEEP_RESEARCH_PAGES = 30;
 const assistantContextWindow = window as AssistantContextWindow;
@@ -46,6 +58,8 @@ let activeSessionId: string | null = null;
 let nativeFetch: typeof window.fetch | null = null;
 let desktopShare: DesktopShareSession | null = null;
 let desktopStatus = 'Off';
+let localWorkspace: LocalWorkspaceSelection | null = null;
+let localWorkspaceStatus: string | null = null;
 let openContextToolsMenu: { addButton: HTMLButtonElement; menu: HTMLElement; tools: HTMLElement } | null = null;
 const knownResearchModes = new Map<string, ResearchMode>();
 const researchModePersistenceQueues = new Map<string, Promise<void>>();
@@ -57,6 +71,7 @@ export function initializeAssistantContextController(root: ParentNode = document
   void loadProfileResearchDefault();
   injectControls(root);
   document.addEventListener('pointerdown', handleContextToolsOutsidePointerDown);
+  window.addEventListener('omnix:chat-session-selected', handleChatSessionSelected);
   const observer = new MutationObserver(() => {
     if (assistantContextControlsMissing(root)) injectControls(root);
   });
@@ -98,6 +113,20 @@ export function webResearchModeLabel(mode: ResearchMode): string {
   if (mode === 'quick') return 'Quick search';
   if (mode === 'deep') return 'Deep research';
   return 'Disabled';
+}
+
+export function normalizeLocalWorkspaceSelection(value: unknown): LocalWorkspaceSelection | null {
+  const record = asRecord(value);
+  const path = typeof record.path === 'string' ? record.path.trim() : '';
+  if (!path) return null;
+  const explicitName = typeof record.name === 'string' ? record.name.trim() : '';
+  const normalized = path.replace(/[\\/]+$/, '');
+  const inferredName = normalized.split(/[\\/]/).filter(Boolean).at(-1) || path;
+  return { path, name: explicitName || inferredName };
+}
+
+export function localWorkspaceSummary(selection: LocalWorkspaceSelection | null): string {
+  return selection ? `Local folder · ${selection.name}` : '';
 }
 
 export function normalizeResearchMode(value: unknown): ResearchMode {
@@ -147,7 +176,8 @@ function installFetchInterceptor(): void {
     const messageMatch = parsed.pathname.match(MESSAGE_PATH);
     activeSessionId = messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null;
 
-    const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null;
+    if (activeSessionId && localWorkspace) storeLocalWorkspace(activeSessionId, localWorkspace);
+    const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null || localWorkspace !== null;
     if (!shouldEnhance) {
       const responsePromise = originalFetch(input, init);
       deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
@@ -206,6 +236,7 @@ function installFetchInterceptor(): void {
         ...payload,
         web_research_mode: researchMode,
         deep_research_max_pages: researchMode === 'deep' ? deepResearchMaxPages : undefined,
+        workspace_root: localWorkspace?.path,
         desktop_current_image_data_url: desktopPayload?.currentImageDataUrl,
         desktop_history_image_data_url: desktopPayload?.historyImageDataUrl,
         desktop_combined_image_data_url: desktopPayload?.combinedImageDataUrl,
@@ -228,6 +259,8 @@ async function applySessionResearchMode(sessionId: string, response: Response): 
   try {
     const session = await response.json() as { research_mode_override?: unknown };
     activeSessionId = sessionId;
+    localWorkspace = readStoredLocalWorkspace(sessionId);
+    localWorkspaceStatus = null;
     researchMode = session.research_mode_override == null
       ? profileDefaultMode
       : normalizeResearchMode(session.research_mode_override);
@@ -439,7 +472,7 @@ function injectContextToolsMenu(container: HTMLElement): void {
   const divider = document.createElement('div');
   divider.className = 'assistant-context-tool-menu-divider';
   divider.setAttribute('role', 'separator');
-  menu.append(divider, createDesktopToolItem());
+  menu.append(divider, createDesktopToolItem(), createLocalFolderToolItem());
 
   const pageBudget = container.querySelector<HTMLElement>('[data-omnix-deep-research-pages]');
   if (pageBudget) {
@@ -505,7 +538,6 @@ function createResearchToolItem(
   item.append(copy, check);
   item.addEventListener('click', () => {
     chooseResearchMode(mode);
-    closeContextToolsMenuForItem(item);
   });
   return item;
 }
@@ -533,8 +565,33 @@ function createDesktopToolItem(): HTMLButtonElement {
   item.append(copy, check);
   item.addEventListener('click', () => {
     void toggleDesktopShare();
-    closeContextToolsMenuForItem(item);
   });
+  return item;
+}
+
+function createLocalFolderToolItem(): HTMLButtonElement {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item';
+  item.setAttribute('role', 'menuitemcheckbox');
+  item.setAttribute('data-omnix-context-tool-local-folder', 'true');
+  item.setAttribute('aria-checked', 'false');
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = 'Local folder';
+  const detail = document.createElement('small');
+  detail.setAttribute('data-omnix-local-folder-detail', 'true');
+  detail.textContent = 'Attach a local project or workspace folder.';
+  copy.append(label, detail);
+
+  const check = document.createElement('span');
+  check.className = 'assistant-context-tool-check';
+  check.setAttribute('aria-hidden', 'true');
+  check.textContent = '✓';
+  item.append(copy, check);
+  item.addEventListener('click', () => void toggleLocalWorkspace());
   return item;
 }
 
@@ -608,12 +665,25 @@ function renderControls(): void {
     item.classList.toggle('active', active);
     item.setAttribute('aria-checked', String(active));
   });
+  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-local-folder]').forEach((item) => {
+    const active = localWorkspace !== null;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-checked', String(active));
+    item.title = localWorkspace?.path || localWorkspaceStatus || 'Attach a local project or workspace folder';
+  });
+  document.querySelectorAll<HTMLElement>('[data-omnix-local-folder-detail]').forEach((element) => {
+    element.textContent = localWorkspace?.path
+      || localWorkspaceStatus
+      || 'Attach a local project or workspace folder.';
+  });
   document.querySelectorAll<HTMLElement>('.assistant-context-tool-summary').forEach((element) => {
     const activeTools = [
       researchMode !== 'disabled' ? webResearchModeLabel(researchMode) : '',
       desktopShare !== null ? 'Desktop sharing' : '',
+      localWorkspaceSummary(localWorkspace),
     ].filter(Boolean);
     element.textContent = activeTools.join(' · ');
+    element.title = localWorkspace?.path || activeTools.join(' · ');
     element.toggleAttribute('hidden', activeTools.length === 0);
   });
   document.querySelectorAll<HTMLButtonElement>('.assistant-context-desktop').forEach((button) => {
@@ -632,6 +702,63 @@ function decodePathSegment(value: string): string {
     return decodeURIComponent(value);
   } catch {
     return value;
+  }
+}
+
+function handleChatSessionSelected(event: Event): void {
+  const nextSessionId = (event as CustomEvent<{ sessionId?: string | null }>).detail?.sessionId ?? null;
+  if (nextSessionId === activeSessionId) return;
+  if (nextSessionId && activeSessionId === null && localWorkspace) {
+    storeLocalWorkspace(nextSessionId, localWorkspace);
+  } else {
+    localWorkspace = nextSessionId ? readStoredLocalWorkspace(nextSessionId) : null;
+  }
+  activeSessionId = nextSessionId;
+  localWorkspaceStatus = null;
+  renderControls();
+}
+
+async function toggleLocalWorkspace(): Promise<void> {
+  if (localWorkspace) {
+    localWorkspace = null;
+    localWorkspaceStatus = null;
+    if (activeSessionId) storeLocalWorkspace(activeSessionId, null);
+    renderControls();
+    return;
+  }
+  localWorkspaceStatus = 'Choose a folder…';
+  renderControls();
+  const fetchImpl = nativeFetch ?? window.fetch.bind(window);
+  try {
+    const response = await fetchImpl('/api/agent-runs/workspace-picker', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      let detail = 'Folder picker unavailable';
+      try {
+        const payload = await response.json() as { detail?: unknown };
+        if (typeof payload.detail === 'string' && payload.detail.trim()) detail = payload.detail.trim();
+      } catch {
+        // Keep the concise status when the endpoint does not return JSON.
+      }
+      localWorkspaceStatus = detail;
+      renderControls();
+      return;
+    }
+    const selection = normalizeLocalWorkspaceSelection(await response.json() as LocalWorkspacePickResponse);
+    if (!selection) {
+      localWorkspaceStatus = null;
+      renderControls();
+      return;
+    }
+    localWorkspace = selection;
+    localWorkspaceStatus = null;
+    if (activeSessionId) storeLocalWorkspace(activeSessionId, selection);
+    renderControls();
+  } catch (error) {
+    localWorkspaceStatus = error instanceof Error ? error.message : 'Folder picker unavailable';
+    renderControls();
   }
 }
 
@@ -726,6 +853,34 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function readStoredLocalWorkspace(sessionId: string): LocalWorkspaceSelection | null {
+  if (!sessionId) return null;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_WORKSPACES_STORAGE_KEY);
+    if (!raw) return null;
+    const payload = JSON.parse(raw) as Record<string, unknown>;
+    return normalizeLocalWorkspaceSelection(payload[sessionId]);
+  } catch {
+    return null;
+  }
+}
+
+function storeLocalWorkspace(
+  sessionId: string,
+  selection: LocalWorkspaceSelection | null,
+): void {
+  if (!sessionId) return;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_WORKSPACES_STORAGE_KEY);
+    const payload = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    if (selection) payload[sessionId] = selection;
+    else delete payload[sessionId];
+    window.localStorage.setItem(LOCAL_WORKSPACES_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Browser storage is optional; the selection remains active for this page.
+  }
 }
 
 function readStoredDeepResearchPageLimit(): number | null {
