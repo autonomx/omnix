@@ -1140,6 +1140,26 @@ def revise_objective(previous: str, instruction: str) -> str:
     return f"{prior}\nLater steering: {clean}"
 
 
+def steering_semantic_context(previous: str, instruction: str) -> str:
+    """Preserve referential context for steering classification without preserving authority."""
+    clean = " ".join(str(instruction or "").split())
+    prior = str(previous or "").strip()
+    if not prior:
+        return clean
+    if not clean:
+        return prior
+    return (
+        "Previous task context (non-authoritative; reference resolution only):\n"
+        f"{prior}\n\n"
+        "Latest user steering (authoritative; overrides conflicting prior instructions):\n"
+        f"{clean}\n\n"
+        "Classify the effective task after applying the latest steering. "
+        "Use previous task context only to resolve references or omitted subjects. "
+        "Never carry forward an action that the latest steering cancels, forbids, "
+        "narrows, or replaces."
+    )
+
+
 def subject_matches(required: SubjectRef | None, observed: SubjectRef | None) -> bool:
     if required is None:
         return True
