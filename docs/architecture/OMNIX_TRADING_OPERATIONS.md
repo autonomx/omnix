@@ -191,10 +191,13 @@ PAPER entry still passes deterministic strategy state, server risk, fresh
 Alpaca IEX execution eligibility, paper fill policy and protection management.
 The LLM remains research-only.
 
-A new qualifying replay changes the evidence fingerprint and invalidates the
-prior approval until the new snapshot is reviewed. A strategy execution-profile
-change changes the profile fingerprint and starts a new prospective evidence
-line rather than reusing old results.
+After approval, qualification continues to ingest both live SHADOW execution
+observations and qualified AUTO PAPER entry observations. New replay evidence
+updates the metrics continuously. The profile remains authorized while every
+quantitative floor continues to pass; if a floor deteriorates, new AUTO PAPER
+entries pause automatically. A strategy execution-profile or qualification
+policy-version change invalidates the approval and starts a new prospective
+evidence line rather than reusing old results.
 
 ## Paper simulation operations
 
