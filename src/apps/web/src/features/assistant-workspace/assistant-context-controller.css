@@ -53,7 +53,7 @@
   color: rgba(226, 232, 240, 0.78);
   font-size: 0.78rem;
   font-weight: 760;
-  max-width: 12rem;
+  max-width: 18rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -134,6 +134,13 @@
   color: rgba(203, 213, 225, 0.68);
   font-size: 0.72rem;
   line-height: 1.25;
+}
+
+.assistant-context-tool-copy small[data-omnix-local-folder-detail] {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .assistant-context-tool-check {
