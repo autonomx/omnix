@@ -388,6 +388,8 @@ def _finviz_v2_qualification_events(
 def _require_v2_auto_paper_authorized(
     document: TradingStrategyConfigDocument,
     repository: TradingStrategyRepository,
+    *,
+    now: datetime | None = None,
 ) -> None:
     if document.mode != "auto_paper" or document.config.strategy_version != "2.0.0":
         return
@@ -397,7 +399,11 @@ def _require_v2_auto_paper_authorized(
             raise ValueError("finviz_v2_auto_paper_requires_strategy_owned_archive")
         qualification = evaluate_finviz_v2_prospective_qualification(
             document,
-            _finviz_v2_qualification_events(repository, document.strategy_id),
+            _finviz_v2_qualification_events(
+                repository,
+                document.strategy_id,
+                now=now,
+            ),
         )
         if not qualification.auto_paper_authorized:
             raise ValueError(
@@ -407,7 +413,7 @@ def _require_v2_auto_paper_authorized(
 
     qualification = evaluate_v2_prospective_qualification(
         document,
-        _v2_qualification_events(repository, document.strategy_id),
+        _v2_qualification_events(repository, document.strategy_id, now=now),
     )
     if not qualification.auto_paper_authorized:
         raise ValueError("v2_auto_paper_requires_reviewed_prospective_qualification")
