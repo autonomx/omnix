@@ -34,6 +34,7 @@ FINVIZ_V2_REPLAY_VERSION = "finviz-v2-shadow-replay-1"
 
 FINVIZ_V2_QUALIFICATION_EVENT_TYPES = (
     "shadow_execution",
+    "entry_order_submitted",
     "finviz_v2_shadow_replay_trade",
     "finviz_v2_shadow_replay_session",
     "finviz_v2_promotion_review",
@@ -163,18 +164,33 @@ def _is_finviz_replay(event: StrategyEvent, expected_profile: str) -> bool:
     )
 
 
-def _is_eligible_live_shadow(event: StrategyEvent, expected_profile: str) -> bool:
+def _is_eligible_live_evidence(event: StrategyEvent, expected_profile: str) -> bool:
     execution = event.payload.get("execution")
     execution_dict = execution if isinstance(execution, dict) else {}
-    return (
-        event.event_type == "shadow_execution"
-        and event.reason_code == "SHADOW_EXECUTION_OBSERVED"
-        and event.payload.get("execution_authority") is False
-        and event.payload.get("universe_source") == "auto_archive_shadow"
-        and event.payload.get("profile_fingerprint") == expected_profile
-        and execution_dict.get("execution_eligible") is True
-        and event.observed_at.date() >= FINVIZ_V2_PROSPECTIVE_START
-    )
+    profile_matches = event.payload.get("profile_fingerprint") == expected_profile
+    eligible_execution = execution_dict.get("execution_eligible") is True
+    in_epoch = event.observed_at.date() >= FINVIZ_V2_PROSPECTIVE_START
+
+    if event.event_type == "shadow_execution":
+        return (
+            event.reason_code == "SHADOW_EXECUTION_OBSERVED"
+            and event.payload.get("execution_authority") is False
+            and event.payload.get("universe_source") == "auto_archive_shadow"
+            and profile_matches
+            and eligible_execution
+            and in_epoch
+        )
+
+    if event.event_type == "entry_order_submitted":
+        return (
+            event.reason_code == "AUTO_PAPER_ENTRY_SUBMITTED"
+            and event.payload.get("universe_source") == "auto_archive_auto_paper"
+            and profile_matches
+            and eligible_execution
+            and in_epoch
+        )
+
+    return False
 
 
 def _matches_live(replay: StrategyEvent, live: StrategyEvent) -> bool:
@@ -264,7 +280,7 @@ def evaluate_finviz_v2_prospective_qualification(
         event for event in ordered if _is_finviz_replay(event, expected_profile)
     ]
     live_events = [
-        event for event in ordered if _is_eligible_live_shadow(event, expected_profile)
+        event for event in ordered if _is_eligible_live_evidence(event, expected_profile)
     ]
 
     matched: list[StrategyEvent] = []
@@ -330,12 +346,16 @@ def evaluate_finviz_v2_prospective_qualification(
         reasons.append("FINVIZ_V2_DRAWDOWN_TOO_HIGH")
 
     qualified = not reasons
+    # Operator approval is bound to the frozen profile/policy, not to every
+    # subsequent daily evidence fingerprint. New evidence is evaluated
+    # continuously; if the quantitative floors deteriorate, qualification
+    # becomes false and AUTO PAPER pauses automatically. A profile or policy
+    # version change still invalidates the approval.
     reviewed = any(
         event.event_type == "finviz_v2_promotion_review"
         and event.payload.get("qualification_version")
         == FINVIZ_V2_QUALIFICATION_VERSION
         and event.payload.get("profile_fingerprint") == current_profile
-        and event.payload.get("evidence_fingerprint") == evidence_fingerprint
         and event.payload.get("approved") is True
         and event.payload.get("execution_authority") is False
         for event in ordered
