@@ -323,3 +323,146 @@ def test_live_voice_metadata_can_be_detected_without_session_state() -> None:
     from app.agent_runtime.chat_bridge import _is_live_voice
     message = SimpleNamespace(metadata={"speech_segment_id": "voice-segment:abc"})
     assert _is_live_voice(message) is True
+
+
+
+def test_attached_local_folder_overrides_default_coding_workspace(monkeypatch, tmp_path) -> None:
+    selected = tmp_path / "selected"
+    default = tmp_path / "default"
+    selected.mkdir()
+    default.mkdir()
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+        def get(self, _run_id):
+            return None
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(default))
+    session = SimpleNamespace(
+        id="chat-workspace",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-workspace",
+        content="/agent inspect the repository tests",
+        metadata={"workspace_root": str(selected)},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=None,
+    )
+
+    assert result is not None
+    assert len(started) == 1
+    workspace = started[0].workspace
+    assert workspace is not None
+    assert workspace.root == str(selected.resolve())
+    assert workspace.repository is None
+    assert workspace.worktree is None
+
+
+def test_attached_local_folder_does_not_grant_workspace_to_research_profile(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+        def get(self, _run_id):
+            return None
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+    session = SimpleNamespace(
+        id="chat-research-workspace",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-research-workspace",
+        content="/agent research the latest PostgreSQL maintenance release",
+        metadata={"workspace_root": str(tmp_path / "does-not-need-to-exist")},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=None,
+    )
+
+    assert result is not None
+    assert len(started) == 1
+    assert started[0].profile == "research"
+    assert started[0].workspace is None
+
+
+def test_invalid_attached_local_folder_fails_coding_run_before_start(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            raise AssertionError("invalid workspace must not reach runtime start")
+
+        def get(self, _run_id):
+            return None
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+    session = SimpleNamespace(
+        id="chat-invalid-workspace",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-invalid-workspace",
+        content="/agent inspect the repository tests",
+        metadata={"workspace_root": str(tmp_path / "missing")},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=None,
+    )
+
+    assert result is not None
+    assert started == []
+    assert result.metadata["agent_start"]["status"] == "failed"
+    assert "does not exist" in result.metadata["agent_start"]["error"]
