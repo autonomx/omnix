@@ -45,6 +45,7 @@ class AssistantContextChatRequest(BaseModel):
     model_id: str | None = None
     agent_mode: bool = False
     dry_run: bool = False
+    workspace_root: str | None = Field(default=None, max_length=4096)
     web_research_mode: ResearchMode = "disabled"
     allow_research_downgrade: bool = False
     internal_research_identity: str | None = Field(default=None, exclude=True)
