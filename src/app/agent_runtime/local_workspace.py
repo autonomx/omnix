@@ -6,6 +6,7 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+from urllib.parse import urlparse
 
 
 class LocalWorkspaceSelectionError(ValueError):
@@ -63,6 +64,17 @@ def local_request_host_allowed(host: str | None) -> bool:
         return ipaddress.ip_address(value).is_loopback
     except ValueError:
         return False
+
+
+def local_request_origin_allowed(origin: str | None) -> bool:
+    value = str(origin or "").strip()
+    if not value:
+        return True
+    try:
+        host = urlparse(value).hostname
+    except ValueError:
+        return False
+    return local_request_host_allowed(host)
 
 
 def pick_local_workspace() -> str | None:
