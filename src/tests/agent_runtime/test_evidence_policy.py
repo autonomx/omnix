@@ -24,6 +24,7 @@ from app.agent_runtime.evidence import (
     classify_evidence,
     compile_evidence,
     compile_task_authority,
+    evidence_decision_from_semantic,
     evaluate_evidence_set,
     fallback_capabilities_for_requirement,
     freshness_max_age_seconds,
@@ -83,6 +84,41 @@ def test_timeless_conceptual_trading_question_needs_no_external_evidence() -> No
     decision = classify_evidence("What is a stock split?", profile_id="trading-research")
     assert decision.policy.requirement == "none"
     assert decision.policy.external_access == "allowed"
+
+
+def test_semantic_software_release_trust_is_bounded_to_compilable_source() -> None:
+    from types import SimpleNamespace
+
+    semantic = SimpleNamespace(
+        evidence_requirements=[
+            SimpleNamespace(
+                source_class="software_release",
+                freshness="current",
+                trust_floor="authoritative",
+                fallback_policy="fail_closed",
+            )
+        ],
+        action_intents=["research_read"],
+        confidence=0.99,
+        reason="Use authoritative release evidence.",
+    )
+
+    decision = evidence_decision_from_semantic(
+        "Compare the latest stable Python and Node releases.",
+        semantic,
+    )
+
+    requirement = decision.policy.requirements[0]
+    assert requirement.source_class == "software_release"
+    assert requirement.trust_floor == "primary"
+
+    compiled = compile_task_authority(
+        get_agent_profile("research"),
+        "Compare the latest stable Python and Node releases.",
+        decision,
+        semantic_action_intents=["research_read"],
+    )
+    assert compiled.required_external == ("research.web_search",)
 
 
 def test_current_general_research_requires_web_evidence() -> None:
