@@ -233,7 +233,7 @@ def create_trading_strategy_operations_router(
                 getattr(state, "_omnix_trading_strategy_v2_qualification_monitor", None),
                 expected_type=TradingStrategyV2QualificationMonitor,
                 configured_enabled=strategy_v2_qualification_monitor_enabled(),
-                counter_names=("replay_count",),
+                counter_names=("replay_count", "finviz_replay_count"),
             ),
             alpaca_status_monitor=_alpaca_status(
                 getattr(state, "_omnix_alpaca_iex_status_monitor", None),
