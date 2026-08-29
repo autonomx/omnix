@@ -2325,6 +2325,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategies/{strategy_id}/finviz/qualification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Finviz V2 Qualification */
+        get: operations["get_finviz_v2_qualification_api_trading_strategies__strategy_id__finviz_qualification_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/strategies/{strategy_id}/finviz/qualification/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Finviz V2 Qualification */
+        post: operations["review_finviz_v2_qualification_api_trading_strategies__strategy_id__finviz_qualification_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/strategies/{strategy_id}/prospective-economic": {
         parameters: {
             query?: never;
@@ -4844,6 +4878,116 @@ export interface components {
             minimum_price: number | string;
             /** Universe Id */
             universe_id: string;
+        };
+        /** FinvizV2ProspectiveQualification */
+        FinvizV2ProspectiveQualification: {
+            /**
+             * Auto Paper Authorized
+             * @default false
+             */
+            auto_paper_authorized: boolean;
+            /** Current Profile Fingerprint */
+            current_profile_fingerprint: string;
+            /** Distinct Sessions */
+            distinct_sessions: number;
+            /** Distinct Symbols */
+            distinct_symbols: number;
+            /** Evidence Fingerprint */
+            evidence_fingerprint: string;
+            /** Execution Match Rate */
+            execution_match_rate?: string | null;
+            /** Expectancy R */
+            expectancy_r?: string | null;
+            /** Expected Profile Fingerprint */
+            expected_profile_fingerprint: string;
+            /** Matched Eligible Trade Count */
+            matched_eligible_trade_count: number;
+            /** Max Drawdown R */
+            max_drawdown_r?: string | null;
+            /** One Sided 90 Lcb R */
+            one_sided_90_lcb_r?: string | null;
+            /** Profile Match */
+            profile_match: boolean;
+            /**
+             * Prospective Start
+             * Format: date
+             * @default 2026-08-31
+             */
+            prospective_start: string;
+            /**
+             * Qualification Version
+             * @default finviz-v2-prospective-qualification-1
+             */
+            qualification_version: string;
+            /**
+             * Qualified
+             * @default false
+             */
+            qualified: boolean;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Replay Trade Count */
+            replay_trade_count: number;
+            /**
+             * Reviewed
+             * @default false
+             */
+            reviewed: boolean;
+            /** Strategy Id */
+            strategy_id: string;
+            thresholds?: components["schemas"]["FinvizV2QualificationThresholds"];
+        };
+        /** FinvizV2QualificationThresholds */
+        FinvizV2QualificationThresholds: {
+            /**
+             * Live Match Window Minutes
+             * @default 10
+             */
+            live_match_window_minutes: number;
+            /**
+             * Maximum Drawdown R
+             * @default 5
+             */
+            maximum_drawdown_r: string;
+            /**
+             * Minimum Distinct Sessions
+             * @default 15
+             */
+            minimum_distinct_sessions: number;
+            /**
+             * Minimum Distinct Symbols
+             * @default 10
+             */
+            minimum_distinct_symbols: number;
+            /**
+             * Minimum Execution Match Rate
+             * @default 0.90
+             */
+            minimum_execution_match_rate: string;
+            /**
+             * Minimum Expectancy R
+             * @default 0.20
+             */
+            minimum_expectancy_r: string;
+            /**
+             * Minimum Matched Trades
+             * @default 20
+             */
+            minimum_matched_trades: number;
+            /**
+             * One Sided Confidence Level
+             * @default 0.90
+             */
+            one_sided_confidence_level: string;
+            /**
+             * Prospective Start
+             * Format: date
+             * @default 2026-08-31
+             */
+            prospective_start: string;
         };
         /** FreezeDatasetRequest */
         FreezeDatasetRequest: {
@@ -16208,6 +16352,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StrategyEventListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_finviz_v2_qualification_api_trading_strategies__strategy_id__finviz_qualification_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinvizV2ProspectiveQualification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_finviz_v2_qualification_api_trading_strategies__strategy_id__finviz_qualification_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                strategy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2QualificationReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinvizV2ProspectiveQualification"];
                 };
             };
             /** @description Validation Error */
