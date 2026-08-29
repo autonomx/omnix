@@ -113,7 +113,9 @@ _UI_CODE_CONTEXT = re.compile(
 )
 _REPO_OPS_INTENT = re.compile(
     r"(?:\bgithub\b.{0,60}\b(?:ci|actions?|workflows?|checks?|pull request|repo(?:sitory)?)\b|"
-    r"\b(?:ci|workflow checks?|github actions?)\b)",
+    r"\b(?:ci|workflow checks?|github actions?)\b|"
+    r"\b(?:push|commit|checkout|rebase|merge)\b.{0,80}\b(?:branch|repo(?:sitory)?|git)\b|"
+    r"\b(?:branch|repo(?:sitory)?|git)\b.{0,80}\b(?:push|commit|checkout|rebase|merge)\b)",
     re.I,
 )
 _HOME_INTENT = re.compile(r"\b(?:kasa|smart\s+plugs?|plugs?|outlets?|lamps?|lights?|thermostats?|home)\b", re.I)
