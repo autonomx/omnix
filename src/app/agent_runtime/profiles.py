@@ -89,7 +89,7 @@ def resolve_profile_capabilities(profile: AgentProfile, *, requested: list[str] 
 
 _CODE_STRONG_INTENT = re.compile(
     r"(?:\b(?:code|codebase|repo(?:sitory)?|pull request|pytest|vitest|workspace|git|"
-    r"selector|classname|css|html|stylesheet|tsx?|jsx?|frontend|backend|"
+    r"selector|classname|css|html|stylesheet|tsx?|jsx?|ui|ux|frontend|backend|"
     r"middleware|callback|handler|hook|endpoint)\b|"
     r"(?<!\w)[.#]?(?:[A-Za-z][A-Za-z0-9_]*-){2,}[A-Za-z][A-Za-z0-9_]*|"
     r"(?:^|[\\/])(?:src|app|tests?|packages?|components?)[\\/][^\s]+|"
