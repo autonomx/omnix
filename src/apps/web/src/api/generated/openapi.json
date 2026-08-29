@@ -15971,6 +15971,18 @@
               }
             ],
             "title": "User Turn Id"
+          },
+          "workspace_root": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Root"
           }
         },
         "required": [
