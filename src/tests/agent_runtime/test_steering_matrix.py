@@ -11,6 +11,7 @@ from app.agent_runtime.evidence import (
     compile_task_authority,
     evaluate_evidence_set,
     revise_objective,
+    steering_semantic_context,
 )
 from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.service import AgentRunService
@@ -32,6 +33,29 @@ def test_steering_replaces_objective_for_explicit_correction() -> None:
         "Research the latest Python release",
         "Actually explain it from memory only",
     ) == "Actually explain it from memory only"
+
+
+def test_replacement_steering_keeps_old_task_out_of_effective_authority() -> None:
+    effective = revise_objective(
+        "Send Bob a status update.",
+        "Actually don't send anything; draft the status reply for me to review.",
+    )
+    assert effective == (
+        "Actually don't send anything; draft the status reply for me to review."
+    )
+    assert "Send Bob" not in effective
+
+
+def test_steering_semantic_context_preserves_referents_without_authority() -> None:
+    context = steering_semantic_context(
+        "Send Bob a status update.",
+        "Actually don't send anything; draft the status reply for me to review.",
+    )
+    assert "Previous task context (non-authoritative; reference resolution only):" in context
+    assert "Send Bob a status update." in context
+    assert "Latest user steering (authoritative; overrides conflicting prior instructions):" in context
+    assert "don't send anything; draft the status reply" in context
+    assert "Never carry forward an action" in context
 
 
 def test_steering_appends_incremental_instruction() -> None:
