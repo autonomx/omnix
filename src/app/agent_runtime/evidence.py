@@ -30,14 +30,15 @@ from .profiles import AgentProfile, profile_external_ceiling
 
 _CURRENT = re.compile(r"\b(?:today|tomorrow|tonight|current(?:ly)?|latest|right now|this (?:morning|afternoon|evening|week|month|year)|next (?:morning|day|week|month)|recent|newest|news)\b", re.I)
 _NO_EXTERNAL = re.compile(
-    r"\b(?:without (?:using )?(?:the )?(?:internet|web)|"
-    r"do not (?:use (?:the )?(?:internet|web)|"
-    r"search (?:the )?(?:internet|web)|"
-    r"browse(?: (?:the )?(?:internet|web))?)|"
-    r"don't (?:use (?:the )?(?:internet|web)|"
-    r"search (?:the )?(?:internet|web)|"
-    r"browse(?: (?:the )?(?:internet|web))?)|"
-    r"from memory only)\b",
+    r"\b(?:"
+    r"without (?:using )?(?:the )?(?:internet|web)|"
+    r"without (?:using )?(?:any\s+|anything\s+)?external(?:\s+(?:services?|sources?|tools?))?|"
+    r"(?:do not|don't|never) (?:use|access) (?:the )?(?:internet|web)|"
+    r"(?:do not|don't|never) (?:use|access) (?:any\s+|anything\s+)?external(?:\s+(?:services?|sources?|tools?))?|"
+    r"(?:do not|don't|never) search (?:the )?(?:internet|web)|"
+    r"(?:do not|don't|never) browse(?: (?:the )?(?:internet|web))?|"
+    r"from memory only"
+    r")\b",
     re.I,
 )
 _SOURCE_REQUEST = re.compile(r"\b(?:find|give|provide|include|cite)\b.{0,40}\b(?:sources?|citations?|evidence)\b|\bresearch\b", re.I)
