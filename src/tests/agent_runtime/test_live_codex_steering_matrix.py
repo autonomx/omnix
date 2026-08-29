@@ -19,6 +19,7 @@ from app.agent_runtime.evidence import (
     compile_task_authority,
     evidence_decision_from_semantic,
     revise_objective,
+    steering_semantic_context,
 )
 from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.semantic_classifier import (
@@ -250,7 +251,8 @@ def test_live_codex_steering_matrix(
     case: SteeringCase,
 ) -> None:
     effective = revise_objective(case.initial, case.steering)
-    decision = live_steering_classifier.classify(effective)
+    semantic_context = steering_semantic_context(case.initial, case.steering)
+    decision = live_steering_classifier.classify(semantic_context)
     payload = decision.model_dump(mode="json")
 
     assert decision.confidence >= semantic_confidence_threshold(), payload
