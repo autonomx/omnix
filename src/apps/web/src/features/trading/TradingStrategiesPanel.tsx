@@ -511,7 +511,7 @@ export function TradingStrategiesPanel() {
         );
         setFinvizV2Qualification(qualification);
         setNotice(qualification.auto_paper_authorized
-          ? 'Finviz prospective evidence review recorded. AUTO PAPER is authorized for this exact frozen Finviz profile/evidence snapshot; new evidence requires a new review.'
+          ? 'Finviz prospective review recorded. AUTO PAPER is authorized for this frozen Finviz profile while the live qualification floors continue to pass; deteriorating evidence pauses AUTO PAPER automatically.'
           : 'Finviz review recorded, but AUTO PAPER remains blocked by the server qualification policy.');
       } else {
         const qualification = await tradingStrategyApi.reviewV2Qualification(
@@ -919,7 +919,7 @@ export function TradingStrategiesPanel() {
                     <p><strong>{activeV2Qualification.auto_paper_authorized ? 'AUTO PAPER authorized' : activeV2Qualification.qualified ? 'Quantitatively qualified — explicit review required' : 'Prospective qualification in progress'}</strong></p>
                     {activeV2Qualification.qualified && !activeV2Qualification.reviewed ? (
                       <div className="trading-strategy-grid">
-                        <label className="wide-field"><span>Promotion review note<small>binds approval to this exact evidence fingerprint</small></span><textarea value={v2ReviewNote} onChange={(event) => setV2ReviewNote(event.target.value)} placeholder="Review the prospective sample, execution coverage, drawdown and edge before approving AUTO PAPER." /></label>
+                        <label className="wide-field"><span>Promotion review note<small>{draftUsesFinvizV2 ? 'approves this frozen profile after the current evidence passes; future evidence is monitored continuously' : 'binds approval to this exact evidence fingerprint'}</small></span><textarea value={v2ReviewNote} onChange={(event) => setV2ReviewNote(event.target.value)} placeholder="Review the prospective sample, execution coverage, drawdown and edge before approving AUTO PAPER." /></label>
                         <button type="button" onClick={() => void reviewV2Qualification()} disabled={v2Reviewing || v2ReviewNote.trim().length < 10}>{v2Reviewing ? 'Recording review…' : draftUsesFinvizV2 ? 'Approve exact Finviz evidence snapshot' : 'Approve exact V2 evidence snapshot'}</button>
                       </div>
                     ) : null}
