@@ -87,13 +87,28 @@ def resolve_profile_capabilities(profile: AgentProfile, *, requested: list[str] 
     return local, external
 
 
-_CODE_INTENT = re.compile(
-    r"(?:\b(?:code|repo(?:sitory)?|branch|pull request|bug(?:s)?|test(?:s|ing)?|pytest|vitest|"
-    r"refactor(?:ing)?|implement(?:ation|ing)?|fix(?:es|ing)?|debugg?(?:ing)?|edit(?:ing)?|"
-    r"modify|patch|workspace|file(?:s)?|module|function|class|git|button|icon|element|"
-    r"component|selector|classname|css|html|stylesheet|tsx?|jsx?)\b|"
+_CODE_STRONG_INTENT = re.compile(
+    r"(?:\b(?:code|codebase|repo(?:sitory)?|pull request|pytest|vitest|workspace|git|"
+    r"selector|classname|css|html|stylesheet|tsx?|jsx?|frontend|backend|"
+    r"middleware|callback|handler|hook|endpoint)\b|"
     r"(?<!\w)[.#]?(?:[A-Za-z][A-Za-z0-9_]*-){2,}[A-Za-z][A-Za-z0-9_]*|"
-    r"\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b)",
+    r"(?:^|[\\/])(?:src|app|tests?|packages?|components?)[\\/][^\s]+|"
+    r"\b[A-Za-z0-9_.-]+\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b)",
+    re.I,
+)
+_CODE_ACTION_TARGET = re.compile(
+    r"\b(?:fix|debugg?|inspect|review|edit|modify|change|update|refactor|implement|"
+    r"trace|test|run|build|lint|typecheck)\b.{0,100}"
+    r"\b(?:bugs?|tests?|router|api|module|function|source|migration|schema)\b",
+    re.I,
+)
+_UI_CODE_CONTEXT = re.compile(
+    r"(?:\b(?:app|ui|ux|frontend|web|page|screen|interface|react|vue|css|html|omnix)\b"
+    r".{0,100}\b(?:button|icon|element|component|layout|menu|modal|dropdown|tab|sidebar|"
+    r"header|footer|form|input|textarea|dialog|tooltip|badge|chip)\b|"
+    r"\b(?:button|icon|element|component|layout|menu|modal|dropdown|tab|sidebar|"
+    r"header|footer|form|input|textarea|dialog|tooltip|badge|chip)\b"
+    r".{0,100}\b(?:app|ui|ux|frontend|web|page|screen|interface|react|vue|css|html|omnix)\b)",
     re.I,
 )
 _REPO_OPS_INTENT = re.compile(
@@ -102,18 +117,52 @@ _REPO_OPS_INTENT = re.compile(
     re.I,
 )
 _HOME_INTENT = re.compile(r"\b(?:kasa|smart\s+plugs?|plugs?|outlets?|lamps?|lights?|thermostats?|home)\b", re.I)
+_HOME_TASK_INTENT = re.compile(
+    r"\b(?:turn|set|adjust|lower|raise|check|inspect|fix|change|dim|brighten)\b"
+    r".{0,100}\b(?:kasa|smart\s+plugs?|plugs?|outlets?|lamps?|lights?|thermostats?|home)\b",
+    re.I,
+)
 _PERSONAL_INTENT = re.compile(r"\b(?:gmail|emails?|calendars?|meetings?|contacts?|appointments?|schedules?)\b", re.I)
+_PERSONAL_TASK_INTENT = re.compile(
+    r"\b(?:check|inspect|read|summarize|find|look\s+up|draft|send|reply|forward|"
+    r"schedule|book|create|cancel)\b.{0,100}"
+    r"\b(?:gmail|emails?|calendars?|meetings?|contacts?|appointments?|schedules?)\b",
+    re.I,
+)
 _TRADING_INTENT = re.compile(
     r"\b(?:stocks?|trading|trades?|tickers?|markets?|shares?|equities|gainers?|losers?|"
     r"orders?|positions?|buy|sell|purchase|short|cover|nvda|gme|tsla)\b",
     re.I,
 )
+_TRADING_TASK_INTENT = re.compile(
+    r"\b(?:research|investigate|analy[sz]e|check|quote|price|buy|sell|purchase|short|cover|"
+    r"place|submit|cancel)\b.{0,100}"
+    r"\b(?:stocks?|trading|trades?|tickers?|markets?|shares?|equities|gainers?|losers?|"
+    r"orders?|positions?|nvda|gme|tsla)\b",
+    re.I,
+)
 
 
 def select_agent_profile_id(content: str) -> str:
-    """Shared deterministic profile precedence used by Chat and steering."""
+    """Shared deterministic profile precedence used by Chat and steering.
+
+    Domain-bound actions outrank generic vocabulary. Coding is selected by
+    software/workspace evidence or contextual UI work, not by generic verbs
+    such as "fix" or nouns such as "button" in isolation.
+    """
     text = str(content or "")
-    if _CODE_INTENT.search(text) or _REPO_OPS_INTENT.search(text):
+    if _HOME_TASK_INTENT.search(text):
+        return "house"
+    if _PERSONAL_TASK_INTENT.search(text):
+        return "personal-assistant"
+    if _TRADING_TASK_INTENT.search(text):
+        return "trading-research"
+    if (
+        _CODE_STRONG_INTENT.search(text)
+        or _CODE_ACTION_TARGET.search(text)
+        or _UI_CODE_CONTEXT.search(text)
+        or _REPO_OPS_INTENT.search(text)
+    ):
         return "coding"
     if _HOME_INTENT.search(text):
         return "house"
