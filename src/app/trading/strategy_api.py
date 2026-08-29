@@ -823,30 +823,6 @@ def create_trading_strategy_router(
                     "qualification_version": V2_QUALIFICATION_VERSION,
                     "profile_fingerprint": qualification.current_profile_fingerprint,
                     "evidence_fingerprint": qualification.evidence_fingerprint,
-                    "approved_evidence_fingerprint": qualification.evidence_fingerprint,
-                    "matched_eligible_trade_count": qualification.matched_eligible_trade_count,
-                    "distinct_sessions": qualification.distinct_sessions,
-                    "distinct_symbols": qualification.distinct_symbols,
-                    "execution_match_rate": (
-                        str(qualification.execution_match_rate)
-                        if qualification.execution_match_rate is not None
-                        else None
-                    ),
-                    "expectancy_r": (
-                        str(qualification.expectancy_r)
-                        if qualification.expectancy_r is not None
-                        else None
-                    ),
-                    "one_sided_90_lcb_r": (
-                        str(qualification.one_sided_90_lcb_r)
-                        if qualification.one_sided_90_lcb_r is not None
-                        else None
-                    ),
-                    "max_drawdown_r": (
-                        str(qualification.max_drawdown_r)
-                        if qualification.max_drawdown_r is not None
-                        else None
-                    ),
                     "approved": True,
                     "review_note": note,
                     "execution_authority": False,
@@ -947,6 +923,30 @@ def create_trading_strategy_router(
                     "qualification_version": FINVIZ_V2_QUALIFICATION_VERSION,
                     "profile_fingerprint": qualification.current_profile_fingerprint,
                     "evidence_fingerprint": qualification.evidence_fingerprint,
+                    "approved_evidence_fingerprint": qualification.evidence_fingerprint,
+                    "matched_eligible_trade_count": qualification.matched_eligible_trade_count,
+                    "distinct_sessions": qualification.distinct_sessions,
+                    "distinct_symbols": qualification.distinct_symbols,
+                    "execution_match_rate": (
+                        str(qualification.execution_match_rate)
+                        if qualification.execution_match_rate is not None
+                        else None
+                    ),
+                    "expectancy_r": (
+                        str(qualification.expectancy_r)
+                        if qualification.expectancy_r is not None
+                        else None
+                    ),
+                    "one_sided_90_lcb_r": (
+                        str(qualification.one_sided_90_lcb_r)
+                        if qualification.one_sided_90_lcb_r is not None
+                        else None
+                    ),
+                    "max_drawdown_r": (
+                        str(qualification.max_drawdown_r)
+                        if qualification.max_drawdown_r is not None
+                        else None
+                    ),
                     "approved": True,
                     "review_note": note,
                     "execution_authority": False,
