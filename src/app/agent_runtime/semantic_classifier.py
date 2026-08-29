@@ -385,6 +385,29 @@ def _normalize_semantic_decision(
         effective_lane = "agent"
         updates["lane"] = "agent"
 
+    effective_evidence_requirements = (
+        updates["evidence_requirements"]
+        if "evidence_requirements" in updates
+        else decision.evidence_requirements
+    )
+    evidence_sources = {
+        requirement.source_class
+        for requirement in effective_evidence_requirements
+    }
+    public_read_only = (
+        bool(actions)
+        and actions <= _PUBLIC_READ_ACTIONS
+        and evidence_sources <= _PUBLIC_EVIDENCE_SOURCES
+    )
+    open_ended_public_research = bool(_OPEN_ENDED_RESEARCH_LANGUAGE.search(text))
+    if public_read_only:
+        if effective_lane == "chat" and open_ended_public_research:
+            effective_lane = "agent"
+            updates["lane"] = "agent"
+        elif effective_lane == "agent" and not open_ended_public_research:
+            effective_lane = "chat"
+            updates["lane"] = "chat"
+
     inferred_multi_step = decision.multi_step
     if effective_lane == "agent" and not inferred_multi_step:
         inferred_multi_step = (
@@ -407,29 +430,11 @@ def _normalize_semantic_decision(
             )
             or (
                 bool(actions & {"research_read", "market_read"})
-                and len(decision.evidence_requirements) >= 2
+                and len(effective_evidence_requirements) >= 2
             )
         )
         if inferred_multi_step:
             updates["multi_step"] = True
-
-    effective_evidence_requirements = (
-        updates["evidence_requirements"]
-        if "evidence_requirements" in updates
-        else decision.evidence_requirements
-    )
-    evidence_sources = {
-        requirement.source_class
-        for requirement in effective_evidence_requirements
-    }
-    if (
-        effective_lane == "agent"
-        and actions
-        and actions <= _PUBLIC_READ_ACTIONS
-        and evidence_sources <= _PUBLIC_EVIDENCE_SOURCES
-        and not _OPEN_ENDED_RESEARCH_LANGUAGE.search(text)
-    ):
-        updates["lane"] = "chat"
 
     return decision.model_copy(update=updates) if updates else decision
 
