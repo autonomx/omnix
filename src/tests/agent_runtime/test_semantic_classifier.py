@@ -510,6 +510,76 @@ def test_open_ended_research_read_remains_agent() -> None:
     assert decision.lane == "agent"
 
 
+def test_open_ended_market_compare_upgrades_chat_lane_to_agent() -> None:
+    provider = _StructuredFakeProvider(
+        {
+            "lane": "chat",
+            "profile_id": "trading-research",
+            "primary_intent": "compare_market_catalysts",
+            "action_intents": ["market_read"],
+            "evidence_requirements": [
+                {
+                    "source_class": "market_news",
+                    "freshness": "current",
+                    "trust_floor": "reputable",
+                    "fallback_policy": "fail_closed",
+                }
+            ],
+            "multi_step": False,
+            "confidence": 0.99,
+            "reason": "The model treated this as a simple market lookup.",
+        }
+    )
+    classifier = ProviderSemanticIntentClassifier(
+        provider,
+        model="fake-model",
+        timeout_seconds=2,
+    )
+
+    decision = classifier.classify(
+        "compare today's NVDA and AMD catalysts and rank which one looks more material."
+    )
+
+    assert decision.lane == "agent"
+    assert decision.multi_step is True
+    assert decision.action_intents == ["market_read"]
+    assert semantic_profile_id("compare NVDA and AMD catalysts", decision) == "trading-research"
+
+
+def test_bounded_market_news_check_stays_chat() -> None:
+    provider = _StructuredFakeProvider(
+        {
+            "lane": "agent",
+            "profile_id": "trading-research",
+            "primary_intent": "market_news_check",
+            "action_intents": ["market_read"],
+            "evidence_requirements": [
+                {
+                    "source_class": "market_news",
+                    "freshness": "current",
+                    "trust_floor": "reputable",
+                    "fallback_policy": "allow_fallback",
+                }
+            ],
+            "multi_step": False,
+            "confidence": 0.99,
+            "reason": "Check one current public fact.",
+        }
+    )
+    classifier = ProviderSemanticIntentClassifier(
+        provider,
+        model="fake-model",
+        timeout_seconds=2,
+    )
+
+    decision = classifier.classify(
+        "did NVDA announce a stock split today? check and answer yes or no."
+    )
+
+    assert decision.lane == "chat"
+    assert decision.action_intents == ["market_read"]
+
+
 def test_semantic_classifier_can_upgrade_arbitrary_language_to_agent() -> None:
     prompt = "could you make this behave better whenever the cache starts cold?"
     deterministic = route_omnix_request(prompt)
