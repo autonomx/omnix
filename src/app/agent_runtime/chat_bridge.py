@@ -217,6 +217,14 @@ def _apply_semantic_route_decision(
     if deterministic.lane in {"direct", "workflow"} and deterministic.confidence >= 0.95:
         return deterministic
     if (
+        deterministic.lane == "agent"
+        and deterministic.reason == "workspace_mutation_request"
+        and deterministic.confidence >= 0.95
+    ):
+        # Concrete file/UI mutations are executable requests even when the
+        # advisory classifier mistakes a terse implementation request for chat.
+        return deterministic
+    if (
         deterministic.lane == "chat"
         and semantic.lane == "agent"
         and not semantic.action_intents
@@ -618,8 +626,8 @@ def _agent_result(
             profile=profile_id,
             task=_agent_task(content),
             error=RuntimeError(
-                f"the {profile_id} profile requires a Local folder or "
-                "OMNIX_AGENT_DEFAULT_REPOSITORY"
+                f"the {profile_id} profile requires OMNIX_AGENT_DEFAULT_REPOSITORY "
+                "or a Local folder"
             ),
         )
 

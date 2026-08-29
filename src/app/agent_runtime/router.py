@@ -52,6 +52,24 @@ _QUOTED_SPAN = re.compile(
 _BROAD_SEMANTIC = re.compile(r"\b(?:take care of|anything important|whatever needs|prepare everything|handle everything)\b", re.I)
 _AGENTIC = re.compile(r"\b(?:fix|debugg?|investigate|figure out|diagnose|research|reseach|analy[sz]e|anlyze|refactor|implement)\b", re.I)
 _RESEARCH_ACTION = re.compile(r"\b(?:research|reseach|investigate|analy[sz]e|anlyze)\b", re.I)
+_CODE_TARGET = (
+    r"(?:\b(?:code|repo(?:sitory)?|file|module|component|button|icon|element|"
+    r"selector|class(?:name)?|css|html|stylesheet|tsx?|jsx?)\b|"
+    r"(?<!\w)[.#]?(?:[A-Za-z][A-Za-z0-9_]*-){2,}[A-Za-z][A-Za-z0-9_]*)"
+)
+_WORKSPACE_MUTATION = re.compile(
+    r"(?:"
+    r"\b(?:fix|edit|modify|patch|change|update|create|add|remove|delete|implement|"
+    r"refactor|write|make|center|centre|align|move|style|restyle)\b.{0,160}"
+    + _CODE_TARGET
+    + r"|"
+    + _CODE_TARGET
+    + r".{0,160}\b(?:should|needs?|must)\b.{0,80}"
+    r"\b(?:center(?:ed|ing)?|centre(?:d|ing)?|align(?:ed|ing)?|move|style|"
+    r"restyle|change|update|fix)\b"
+    r")",
+    re.I,
+)
 _HOME_SEMANTIC_TASK = re.compile(
     r"(?:\b(?:turn|set|adjust|lower|raise|check|inspect|prepare)\b.{0,100}"
     r"\b(?:thermostat|home|lights?|lamps?|plugs?|outlets?|kasa)\b|"
@@ -122,6 +140,14 @@ def route_omnix_request(
             confidence=0.72,
             reason="broad_semantic_task",
             hermes_recommended=True,
+        )
+    if _INFORMATIONAL.match(text):
+        return OmnixRouteDecision(lane="chat", confidence=0.95, reason="informational")
+    if _WORKSPACE_MUTATION.search(actionable_text):
+        return OmnixRouteDecision(
+            lane="agent",
+            confidence=0.98,
+            reason="workspace_mutation_request",
         )
 
     workflow_match = _WORKFLOW.match(actionable_text)

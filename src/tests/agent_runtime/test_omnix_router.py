@@ -26,3 +26,12 @@ def test_router_recognizes_known_workflow_without_llm() -> None:
     )
     assert decision.lane == "workflow"
     assert decision.workflow_id == "bedtime-v1"
+
+
+def test_router_recognizes_terse_ui_mutation_as_workspace_agent_work() -> None:
+    decision = route_omnix_request(
+        "in omnix, the plus sign on assistant-context-add-button should be centered"
+    )
+
+    assert decision.lane == "agent"
+    assert decision.reason == "workspace_mutation_request"

@@ -243,6 +243,61 @@ def test_auto_classifier_can_start_agent_without_explicit_authority_toggle(monke
     assert len(started) == 1
 
 
+def test_terse_ui_mutation_with_local_workspace_starts_coding_agent(monkeypatch, tmp_path) -> None:
+    from app.agent_runtime import chat_bridge
+    from app.agent_runtime.semantic_classifier import SemanticIntentDecision
+
+    selected = tmp_path / "omnix"
+    selected.mkdir()
+    started = []
+
+    class Service:
+        def get(self, _run_id):
+            return None
+
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                superseded_by_run_id=None,
+                spec=spec,
+            )
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: Service())
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+    session = SimpleNamespace(id="chat-ui-change", provider_id="test", model_id="model", messages=[])
+    message = SimpleNamespace(
+        id="message-ui-change",
+        content="in omnix, the plus sign on assistant-context-add-button should be centered",
+        metadata={"workspace_root": str(selected)},
+    )
+
+    class ChatClassifier:
+        def classify(self, _content):
+            return SemanticIntentDecision(
+                lane="chat",
+                primary_intent="conversation",
+                confidence=0.99,
+                reason="terse UI request was misread as conversation",
+            )
+
+    result = chat_bridge.route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=ChatClassifier(),
+    )
+
+    assert result is not None
+    assert result.metadata["agent_run"]["profile"] == "coding"
+    assert len(started) == 1
+    assert started[0].workspace.root == str(selected.resolve())
+
+
 def test_turn_deep_research_outranks_persistent_agent_mode() -> None:
     from app.agent_runtime import chat_bridge
     from types import SimpleNamespace
