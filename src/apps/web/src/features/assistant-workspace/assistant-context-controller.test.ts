@@ -11,6 +11,8 @@ const {
   enhancedAssistantMessageUrl,
   isAssistantMessageRequest,
   normalizeDeepResearchPageLimit,
+  normalizeLocalWorkspaceSelection,
+  localWorkspaceSummary,
   normalizeResearchMode,
   webResearchModeLabel,
 } = await import('./assistant-context-controller');
@@ -59,6 +61,27 @@ describe('assistant context control mounting', () => {
     expect(normalizeResearchMode('quick')).toBe('quick');
     expect(normalizeResearchMode('deep')).toBe('deep');
     expect(normalizeResearchMode('unknown')).toBe('disabled');
+  });
+
+  it('normalizes local workspace picker responses without changing research mode', () => {
+    expect(normalizeLocalWorkspaceSelection({ path: 'F:\\\\LLM\\\\omnix', name: 'omnix' })).toEqual({
+      path: 'F:\\\\LLM\\\\omnix',
+      name: 'omnix',
+    });
+    expect(normalizeLocalWorkspaceSelection({ path: '/home/dev/project/' })).toEqual({
+      path: '/home/dev/project/',
+      name: 'project',
+    });
+    expect(normalizeLocalWorkspaceSelection({ cancelled: true })).toBeNull();
+  });
+
+  it('renders local folder as an independent context summary', () => {
+    const selection = normalizeLocalWorkspaceSelection({
+      path: 'F:\\\\LLM\\\\omnix',
+      name: 'omnix',
+    });
+    expect(localWorkspaceSummary(selection)).toBe('Local folder · omnix');
+    expect(localWorkspaceSummary(null)).toBe('');
   });
 
   it('keeps the deep-research page budget within the hard per-run cap', () => {
