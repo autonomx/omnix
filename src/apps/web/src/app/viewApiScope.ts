@@ -36,7 +36,7 @@ const MODULE_API_PREFIXES: Record<OmnixModuleId, readonly string[]> = {
     '/api/character-avatar-visemes', '/api/character-live2d', '/api/image-generation',
     '/api/live', '/api/live-chat', '/api/live-call', '/api/tts', '/api/voice',
     '/api/voice-profiles', '/api/voice-library', '/api/assets', '/api/jobs', '/api/providers',
-    '/api/settings', '/api/hermes', '/api/agent', '/api/prompts', '/api/desktop-companion',
+    '/api/settings', '/api/hermes', '/api/agent', '/api/agent-runs', '/api/prompts', '/api/desktop-companion',
   ],
   storyteller: ['/api/storyteller', '/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/voice', '/api/agent', '/api/prompts'],
   podcast: ['/api/assets', '/api/jobs', '/api/providers', '/api/settings', '/api/tts', '/api/voice', '/api/agent', '/api/prompts'],
