@@ -69,9 +69,24 @@ _UI_CODE_TARGET = (
     r".{0,100}\b(?:app|ui|ux|frontend|web|page|screen|interface|react|vue|css|html|omnix)\b))"
 )
 _CODE_TARGET = f"(?:{_CODE_STRONG_TARGET}|{_UI_CODE_TARGET})"
+_WORKSPACE_ANCHOR = re.compile(
+    r"(?:\b(?:repo(?:sitory)?|codebase|workspace|project|existing|current|omnix|"
+    r"frontend|backend|app)\b|"
+    r"(?<!\w)[.#]?(?:[A-Za-z][A-Za-z0-9_]*-){2,}[A-Za-z][A-Za-z0-9_]*|"
+    r"(?:^|[\\/])(?:src|app|tests?|packages?|components?)[\\/][^\s]+|"
+    r"\b[A-Za-z0-9_.-]+\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b)",
+    re.I,
+)
+_STANDALONE_CODE_GENERATION = re.compile(
+    r"(?:^(?:write|create|generate|show\s+me|give\s+me)\b.{0,180}"
+    r"\b(?:code|function|class|script|snippet|example|sample|regex|query|css|html|"
+    r"component)\b|"
+    r"\b(?:example|sample|snippet|code\s+below|following\s+code|pasted\s+code)\b)",
+    re.I,
+)
 _WORKSPACE_MUTATION = re.compile(
     r"(?:"
-    r"\b(?:fix|edit|modify|patch|change|update|create|add|remove|delete|implement|"
+    r"\b(?:fix|edit|modify|patch|change|update|create|add|remove|delete|implement|apply|"
     r"refactor|write|make|center|centre|align|move|style|restyle)\b.{0,160}"
     + _CODE_TARGET
     + r"|"
@@ -160,6 +175,15 @@ def route_omnix_request(
         )
     if _INFORMATIONAL.match(text):
         return OmnixRouteDecision(lane="chat", confidence=0.95, reason="informational")
+    if (
+        _STANDALONE_CODE_GENERATION.search(actionable_text)
+        and not _WORKSPACE_ANCHOR.search(actionable_text)
+    ):
+        return OmnixRouteDecision(
+            lane="chat",
+            confidence=0.96,
+            reason="standalone_code_generation",
+        )
     if _WORKSPACE_MUTATION.search(actionable_text):
         return OmnixRouteDecision(
             lane="agent",
