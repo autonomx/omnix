@@ -24,6 +24,7 @@ from .evidence import (
     evidence_decision_from_semantic,
     evaluate_evidence_set,
     revise_objective,
+    steering_semantic_context,
     task_requires_workspace_mutation,
     validate_required_evidence_capabilities,
 )
@@ -350,12 +351,13 @@ class AgentRunService:
             else (current.spec.objective or current.spec.task)
         )
         effective = revise_objective(previous_objective, message)
+        semantic_context = steering_semantic_context(previous_objective, message)
         semantic = classify_semantic_intent_safely(
             default_semantic_intent_classifier(
                 provider_id=current.spec.model.provider_id,
                 model_id=current.spec.model.model_id,
             ),
-            effective,
+            semantic_context,
         )
         target_profile_id = semantic_profile_id(effective, semantic)
         target_profile = get_agent_profile(target_profile_id)
