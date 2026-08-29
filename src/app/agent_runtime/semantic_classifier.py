@@ -137,8 +137,8 @@ _CREATIVE_EMAIL_COMPOSITION = re.compile(
 )
 _OPEN_ENDED_RESEARCH_LANGUAGE = re.compile(
     r"\b(?:research|investigate|dig\s+into|look\s+into|compare|comparing|"
-    r"narrow\s+down|deep\s+dive|spend\s+some\s+time|sourced\s+brief|"
-    r"what\s+actually\s+matters)\b",
+    r"rank|ranking|synthesi[sz]e|narrow\s+down|deep\s+dive|"
+    r"spend\s+some\s+time|sourced\s+brief|what\s+actually\s+matters)\b",
     re.I,
 )
 _PUBLIC_READ_ACTIONS = {"research_read", "market_read"}
@@ -525,7 +525,9 @@ def _system_prompt() -> str:
         "Choose lane=chat for ordinary conversation, explanation, simple factual/current "
         "lookups, weather lookups, and bounded read-only questions that do not need an "
         "autonomous run. A one-off request to verify a current public claim before "
-        "explaining it is still lane=chat; reserve lane=agent for open-ended investigation. "
+        "explaining it is still lane=chat. Comparative or ranking analysis across multiple "
+        "current subjects, synthesis, or requests to decide which development matters more "
+        "are lane=agent; reserve lane=agent for open-ended investigation. "
         "Choose lane=agent for coding work, stateful personal-assistant "
         "or smart-home work, open-ended investigation/research, or autonomous execution. "
         "Exact Direct/Workflow commands are handled outside this classifier. "
