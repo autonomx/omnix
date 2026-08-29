@@ -9581,6 +9581,8 @@ export interface components {
             speech_segment_id?: string | null;
             /** User Turn Id */
             user_turn_id?: string | null;
+            /** Workspace Root */
+            workspace_root?: string | null;
         };
         /** SendChatMessageResponse */
         SendChatMessageResponse: {
