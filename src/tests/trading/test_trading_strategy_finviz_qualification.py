@@ -4,6 +4,9 @@ import hashlib
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
+from app.trading.strategy_api import _require_v2_auto_paper_authorized
 from app.trading.strategies.models import StrategyRiskProfile
 from app.trading.strategy_finviz_qualification import (
     FINVIZ_V2_PROSPECTIVE_START,
@@ -306,3 +309,92 @@ def test_finviz_execution_profile_change_fails_closed_but_llm_settings_do_not() 
     assert result.profile_match is False
     assert result.auto_paper_authorized is False
     assert "FINVIZ_V2_PROFILE_MISMATCH" in result.reason_codes
+
+
+
+class _QualificationRepository:
+    def __init__(self, events: list[StrategyEvent]) -> None:
+        self.events = events
+
+    def events_by_types_between(
+        self,
+        strategy_id: str,
+        *,
+        event_types,
+        start_time,
+        end_time,
+        limit: int,
+    ):
+        assert strategy_id == "finviz-v2-prospective"
+        allowed = set(event_types)
+        return [
+            event
+            for event in self.events
+            if event.event_type in allowed
+            and start_time <= event.observed_at < end_time
+        ][:limit]
+
+
+def _review_event(
+    qualification,
+    events: list[StrategyEvent],
+) -> StrategyEvent:
+    return _event(
+        event_type="finviz_v2_promotion_review",
+        instrument_id="strategy:finviz-v2-prospective",
+        observed_at=max(event.observed_at for event in events) + timedelta(minutes=1),
+        reason_code="FINVIZ_V2_PROMOTION_REVIEW_APPROVED",
+        suffix="server-review",
+        payload={
+            "qualification_version": FINVIZ_V2_QUALIFICATION_VERSION,
+            "profile_fingerprint": qualification.current_profile_fingerprint,
+            "evidence_fingerprint": qualification.evidence_fingerprint,
+            "approved": True,
+            "review_note": "Reviewed exact Finviz prospective evidence for AUTO PAPER.",
+            "execution_authority": False,
+        },
+    )
+
+
+def test_server_auto_paper_gate_uses_only_reviewed_finviz_evidence() -> None:
+    shadow = _strategy()
+    events = _qualified_evidence()
+    qualification = evaluate_finviz_v2_prospective_qualification(shadow, events)
+    auto_paper = shadow.model_copy(update={"mode": "auto_paper"})
+
+    with pytest.raises(
+        ValueError,
+        match="finviz_v2_auto_paper_requires_reviewed_prospective_qualification",
+    ):
+        _require_v2_auto_paper_authorized(
+            auto_paper,
+            _QualificationRepository(events),
+        )
+
+    reviewed_events = [*events, _review_event(qualification, events)]
+    _require_v2_auto_paper_authorized(
+        auto_paper,
+        _QualificationRepository(reviewed_events),
+    )
+
+
+def test_server_rejects_manually_attached_universe_for_finviz_auto_paper() -> None:
+    shadow = _strategy()
+    events = _qualified_evidence()
+    qualification = evaluate_finviz_v2_prospective_qualification(shadow, events)
+    reviewed_events = [*events, _review_event(qualification, events)]
+    manually_attached = shadow.model_copy(
+        update={
+            "mode": "auto_paper",
+            "active_universe_id": "manually-curated-universe",
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="finviz_v2_auto_paper_requires_strategy_owned_archive",
+    ):
+        _require_v2_auto_paper_authorized(
+            manually_attached,
+            _QualificationRepository(reviewed_events),
+        )
