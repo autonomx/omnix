@@ -275,10 +275,15 @@ The post-session V2 replay monitor writes separate
 Only the exact frozen Finviz profile, exact strategy-owned Finviz morning
 archive, and live eligible SHADOW execution observations can enter this sample.
 
-Approval is intentionally snapshot-bound. Any later qualifying evidence changes
-the evidence fingerprint and removes AUTO PAPER authorization until that new
-snapshot is explicitly reviewed. Any execution-profile change creates a new
-profile fingerprint and must build a new prospective sample. Intraday
+The operator review records the qualifying evidence snapshot that justified
+promotion, but approval is bound to the frozen profile/policy rather than to
+every future daily fingerprint. New SHADOW or AUTO PAPER evidence is evaluated
+continuously. If execution match, expectancy, confidence bound, drawdown or
+another quantitative floor deteriorates, AUTO PAPER authorization becomes false
+and the runtime pauses new paper entries automatically. If the floors continue
+to pass, the approved profile can keep paper trading without a daily manual
+re-review. Any execution-profile or qualification-policy version change still
+invalidates the approval and requires a new prospective sample/review. Intraday
 learning/LLM settings remain observational and do not grant execution authority.
 
 After the Finviz qualification is authorized, AUTO PAPER continues to use the
