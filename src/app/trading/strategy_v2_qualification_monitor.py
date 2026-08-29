@@ -91,9 +91,6 @@ _FINVIZ_CONTRACT = _ReplayContract(
 _ALL_QUALIFICATION_EVENT_TYPES = tuple(
     dict.fromkeys((*V2_QUALIFICATION_EVENT_TYPES, *FINVIZ_V2_QUALIFICATION_EVENT_TYPES))
 )
-_EARLIEST_PROSPECTIVE_START = min(V2_PROSPECTIVE_START, FINVIZ_V2_PROSPECTIVE_START)
-
-
 def _flag(name: str, default: str = "1") -> bool:
     return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
