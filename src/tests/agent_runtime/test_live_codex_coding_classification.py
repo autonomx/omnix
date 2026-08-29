@@ -447,8 +447,17 @@ CASES: tuple[CodingClassificationCase, ...] = (
         forbid_workspace_actions=True,
     ),
     CodingClassificationCase(
-        "chat_compare_frameworks",
+        "research_compare_frameworks",
         "Compare React and Vue for a small dashboard.",
+        "agent",
+        "agent",
+        "research",
+        required_actions=("research_read",),
+        forbid_workspace_actions=True,
+    ),
+    CodingClassificationCase(
+        "chat_framework_concepts",
+        "In general, what are the conceptual differences between React and Vue? No need for current release information.",
         "chat",
         "chat",
         forbid_workspace_actions=True,
