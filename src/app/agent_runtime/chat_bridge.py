@@ -527,6 +527,8 @@ def _agent_result(
     semantic_intent: SemanticIntentDecision | None = None,
 ) -> GeneralizedChatResult | None:
     content = str(user_message.content or "").strip()
+    message_metadata = getattr(user_message, "metadata", {}) or {}
+    selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
     profile_id = semantic_profile_id(content, semantic_intent)
     profile = get_agent_profile(profile_id)
     try:
@@ -542,6 +544,46 @@ def _agent_result(
     latest = _latest_agent_run(service, session)
     active = latest if latest is not None and latest.status not in _TERMINAL_AGENT else None
     if active is not None:
+        if selected_workspace:
+            try:
+                selected_workspace = validate_local_workspace_root(selected_workspace)
+            except LocalWorkspaceSelectionError as exc:
+                return _agent_request_rejection(
+                    decision,
+                    profile=profile_id,
+                    task=_agent_task(content),
+                    reason="local_workspace_unavailable",
+                    message=f"I can't use the attached Local folder: {exc}",
+                )
+            issued_workspace = getattr(active.spec, "workspace", None)
+            issued_paths = {
+                str(value)
+                for value in (
+                    getattr(issued_workspace, "root", None),
+                    getattr(issued_workspace, "worktree", None),
+                    getattr(issued_workspace, "repository", None),
+                )
+                if value
+            }
+            normalized_issued = {
+                os.path.normcase(os.path.abspath(path))
+                for path in issued_paths
+            }
+            if (
+                normalized_issued
+                and os.path.normcase(os.path.abspath(selected_workspace))
+                not in normalized_issued
+            ):
+                return _agent_request_rejection(
+                    decision,
+                    profile=profile_id,
+                    task=_agent_task(content),
+                    reason="active_run_workspace_mismatch",
+                    message=(
+                        "The active Agent run is bound to a different Local folder. "
+                        "Cancel or finish that run before switching workspaces."
+                    ),
+                )
         return _continue_agent_run(service, active, content, decision)
     if latest is not None and _CONTROL.fullmatch(content):
         return GeneralizedChatResult(
@@ -554,8 +596,6 @@ def _agent_result(
             },
         )
 
-    message_metadata = getattr(user_message, "metadata", {}) or {}
-    selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
     repository = os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
     selected_repository: str | None = None
     if profile.requires_workspace and selected_workspace:
