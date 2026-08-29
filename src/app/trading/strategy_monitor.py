@@ -39,7 +39,6 @@ from .strategy_intraday_llm import (
 from .strategy_finviz_qualification import (
     FINVIZ_V2_PROSPECTIVE_START,
     FINVIZ_V2_QUALIFICATION_EVENT_TYPES,
-    FROZEN_FINVIZ_V2_PROFILE_FINGERPRINT,
     evaluate_finviz_v2_prospective_qualification,
 )
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
