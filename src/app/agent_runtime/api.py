@@ -5,7 +5,7 @@ import asyncio
 import json
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,11 @@ from .contracts import (
     WorkspaceSpec,
 )
 from .evidence import EvidenceCompilationError, classify_evidence, compile_task_authority, task_requires_workspace_mutation
+from .local_workspace import (
+    LocalWorkspaceSelectionError,
+    local_request_host_allowed,
+    pick_local_workspace,
+)
 from .profiles import get_agent_profile, resolve_profile_capabilities
 from .subagents import ChildRunRequest
 from .service import AgentRunService, default_agent_run_service
@@ -65,8 +70,34 @@ class AgentCommandRequest(BaseModel):
     idempotency_key: str | None = None
 
 
+class LocalWorkspacePickResponse(BaseModel):
+    path: str | None = None
+    name: str | None = None
+    cancelled: bool = False
+
+
 def _service() -> AgentRunService:
     return default_agent_run_service()
+
+
+@router.post("/workspace-picker", response_model=LocalWorkspacePickResponse, include_in_schema=False)
+def pick_agent_workspace(request: Request) -> LocalWorkspacePickResponse:
+    host = request.client.host if request.client is not None else None
+    if not local_request_host_allowed(host):
+        raise HTTPException(status_code=403, detail="local_workspace_picker_requires_loopback")
+    try:
+        selected = pick_local_workspace()
+    except LocalWorkspaceSelectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if selected is None:
+        return LocalWorkspacePickResponse(cancelled=True)
+    from pathlib import Path
+
+    return LocalWorkspacePickResponse(
+        path=selected,
+        name=Path(selected).name or selected,
+        cancelled=False,
+    )
 
 
 @router.post("", response_model=AgentRunSnapshot)
