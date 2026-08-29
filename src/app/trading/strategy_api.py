@@ -28,6 +28,13 @@ from .research.outcome_dataset import persist_backtest_trade_outcomes
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult, StrategyRiskProfile
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
+from .strategy_finviz_qualification import (
+    FINVIZ_V2_PROSPECTIVE_START,
+    FINVIZ_V2_QUALIFICATION_EVENT_TYPES,
+    FINVIZ_V2_QUALIFICATION_VERSION,
+    FinvizV2ProspectiveQualification,
+    evaluate_finviz_v2_prospective_qualification,
+)
 from .strategy_range_backtest import (
     ProgressCallback,
     StrategyRangeBacktestRequest,
@@ -348,12 +355,54 @@ def _v2_qualification_events(
     ]
 
 
+def _finviz_v2_qualification_events(
+    repository: TradingStrategyRepository,
+    strategy_id: str,
+    *,
+    now: datetime | None = None,
+) -> list[StrategyEvent]:
+    observed = now or datetime.now(timezone.utc)
+    start = datetime(
+        FINVIZ_V2_PROSPECTIVE_START.year,
+        FINVIZ_V2_PROSPECTIVE_START.month,
+        FINVIZ_V2_PROSPECTIVE_START.day,
+        tzinfo=timezone.utc,
+    )
+    end = observed.astimezone(timezone.utc) + timedelta(seconds=1)
+    if hasattr(repository, "events_by_types_between"):
+        return repository.events_by_types_between(
+            strategy_id,
+            event_types=FINVIZ_V2_QUALIFICATION_EVENT_TYPES,
+            start_time=start,
+            end_time=end,
+            limit=20_000,
+        )
+    return [
+        event
+        for event in repository.recent_events(strategy_id, 20_000)
+        if event.event_type in FINVIZ_V2_QUALIFICATION_EVENT_TYPES
+        and start <= event.observed_at.astimezone(timezone.utc) < end
+    ]
+
+
 def _require_v2_auto_paper_authorized(
     document: TradingStrategyConfigDocument,
     repository: TradingStrategyRepository,
 ) -> None:
     if document.mode != "auto_paper" or document.config.strategy_version != "2.0.0":
         return
+
+    if document.config.universe_discovery_source == "finviz":
+        qualification = evaluate_finviz_v2_prospective_qualification(
+            document,
+            _finviz_v2_qualification_events(repository, document.strategy_id),
+        )
+        if not qualification.auto_paper_authorized:
+            raise ValueError(
+                "finviz_v2_auto_paper_requires_reviewed_prospective_qualification"
+            )
+        return
+
     qualification = evaluate_v2_prospective_qualification(
         document,
         _v2_qualification_events(repository, document.strategy_id),
