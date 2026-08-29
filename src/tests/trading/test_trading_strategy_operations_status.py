@@ -72,7 +72,10 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
     assert payload["universe_archive_monitor"]["interval_seconds"] == 19.0
     assert payload["universe_archive_monitor"]["counters"] == {"archive_count": 0}
     assert payload["v2_qualification_monitor"]["interval_seconds"] == 61.0
-    assert payload["v2_qualification_monitor"]["counters"] == {"replay_count": 0}
+    assert payload["v2_qualification_monitor"]["counters"] == {
+        "replay_count": 0,
+        "finviz_replay_count": 0,
+    }
     assert payload["alpaca_status_monitor"] == {
         "configured_enabled": True,
         "registered": True,
