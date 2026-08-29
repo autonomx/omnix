@@ -830,6 +830,106 @@ def create_trading_strategy_router(
             status = 404 if str(exc) == "strategy_config_not_found" else 422
             raise HTTPException(status_code=status, detail=str(exc)) from exc
 
+    @router.get(
+        "/{strategy_id}/finviz/qualification",
+        response_model=FinvizV2ProspectiveQualification,
+    )
+    async def get_finviz_v2_qualification(
+        strategy_id: str,
+    ) -> FinvizV2ProspectiveQualification:
+        try:
+            repository = repository_factory()
+            strategy = await asyncio.to_thread(repository.get_config, strategy_id)
+            if strategy.config.strategy_version != "2.0.0":
+                raise ValueError(
+                    "finviz_v2_qualification_requires_strategy_version_2_0_0"
+                )
+            if strategy.config.universe_discovery_source != "finviz":
+                raise ValueError("finviz_v2_qualification_requires_finviz_discovery")
+            events = await asyncio.to_thread(
+                _finviz_v2_qualification_events, repository, strategy_id
+            )
+            return await asyncio.to_thread(
+                evaluate_finviz_v2_prospective_qualification,
+                strategy,
+                events,
+            )
+        except ValueError as exc:
+            status = 404 if str(exc) == "strategy_config_not_found" else 422
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @router.post(
+        "/{strategy_id}/finviz/qualification/review",
+        response_model=FinvizV2ProspectiveQualification,
+    )
+    async def review_finviz_v2_qualification(
+        strategy_id: str,
+        request: V2QualificationReviewRequest,
+    ) -> FinvizV2ProspectiveQualification:
+        try:
+            note = " ".join(request.review_note.split()).strip()
+            if len(note) < 10:
+                raise ValueError("finviz_v2_qualification_review_note_too_short")
+            repository = repository_factory()
+            strategy = await asyncio.to_thread(repository.get_config, strategy_id)
+            if strategy.config.strategy_version != "2.0.0":
+                raise ValueError(
+                    "finviz_v2_qualification_requires_strategy_version_2_0_0"
+                )
+            if strategy.config.universe_discovery_source != "finviz":
+                raise ValueError("finviz_v2_qualification_requires_finviz_discovery")
+
+            events = await asyncio.to_thread(
+                _finviz_v2_qualification_events, repository, strategy_id
+            )
+            qualification = await asyncio.to_thread(
+                evaluate_finviz_v2_prospective_qualification,
+                strategy,
+                events,
+            )
+            if qualification.auto_paper_authorized:
+                return qualification
+            if not qualification.qualified:
+                raise ValueError("finviz_v2_prospective_qualification_not_met")
+
+            observed_at = datetime.now(timezone.utc)
+            raw = "|".join(
+                (
+                    "finviz-v2-promotion-review",
+                    strategy_id,
+                    qualification.current_profile_fingerprint,
+                    qualification.evidence_fingerprint,
+                )
+            )
+            idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            review_event = StrategyEvent(
+                strategy_id=strategy_id,
+                event_id=idem[:32],
+                instrument_id=f"strategy:{strategy_id}",
+                event_type="finviz_v2_promotion_review",
+                state="qualification_reviewed",
+                reason_code="FINVIZ_V2_PROMOTION_REVIEW_APPROVED",
+                observed_at=observed_at,
+                idempotency_key=idem,
+                payload={
+                    "qualification_version": FINVIZ_V2_QUALIFICATION_VERSION,
+                    "profile_fingerprint": qualification.current_profile_fingerprint,
+                    "evidence_fingerprint": qualification.evidence_fingerprint,
+                    "approved": True,
+                    "review_note": note,
+                    "execution_authority": False,
+                },
+            )
+            await asyncio.to_thread(repository.append_event, review_event)
+            return await asyncio.to_thread(
+                evaluate_finviz_v2_prospective_qualification,
+                strategy,
+                [*events, review_event],
+            )
+        except ValueError as exc:
+            status = 404 if str(exc) == "strategy_config_not_found" else 422
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
     @router.get("/{strategy_id}", response_model=TradingStrategyConfigDocument)
     async def get_strategy(strategy_id: str):
         try:
