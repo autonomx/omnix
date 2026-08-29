@@ -60,12 +60,18 @@ _HOME_SEMANTIC_TASK = re.compile(
     re.I,
 )
 _PERSONAL_TASK = re.compile(
-    r"\b(?:chec?k|inspect|summarize|find|draft|send|schedule|create|look\s+up|resolve)\b"
+    r"\b(?:chec?k|inspect|read|summarize|find|draft|send|schedule|create|look\s+up|resolve)\b"
     r".{0,100}\b(?:gmail|emails?|calendar|meetings?|contacts?|appointments?|schedule)\b",
     re.I,
 )
 _CONJUNCTION = re.compile(r"\b(?:and|then|also)\b", re.I)
 _CONVERSATIONAL_SECOND_INTENT = re.compile(r"\b(?:tell me a joke|explain it|summarize it|answer me)\b", re.I)
+_REPO_READ_TASK = re.compile(
+    r"(?:\b(?:check|inspect|read|summarize|review|diagnose)\b.{0,100}"
+    r"\b(?:repo(?:sitory)?|ci|github actions?|workflows?|checks?|branch|diff)\b|"
+    r"\bwhat\s+changed\b.{0,100}\b(?:repo(?:sitory)?|branch|diff)\b)",
+    re.I,
+)
 _TRADING_SUBJECT = re.compile(
     r"\b(?:stocks?|trading|trades?|tickers?|markets?|shares?|equities|nvda|gme|tsla|"
     r"gainers?|losers?|orders?|positions?)\b",
@@ -173,6 +179,8 @@ def _is_mixed_intent(text: str) -> bool:
     if _PERSONAL_TASK.search(text):
         signals += 1
     if _HOME_SEMANTIC_TASK.search(text):
+        signals += 1
+    if _REPO_READ_TASK.search(text):
         signals += 1
     if _AGENTIC.search(text):
         signals += 1
