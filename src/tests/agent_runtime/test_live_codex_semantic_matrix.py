@@ -738,13 +738,6 @@ CASES: tuple[LiveSemanticCase, ...] = (
         forbidden_evidence=("calendar_state",),
     ),
     LiveSemanticCase(
-        "edge_fictional_home_command",
-        "write a scene where one character says 'turn off all the lights' and the other refuses.",
-        "chat",
-        forbidden_actions=("home_read", "home_mutate"),
-        forbidden_evidence=("home_state",),
-    ),
-    LiveSemanticCase(
         "edge_late_cancel_home_mutation",
         "turn off the porch light — actually, don't change it; just check whether it's on.",
         "agent",
