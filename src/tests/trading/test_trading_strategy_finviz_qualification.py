@@ -218,27 +218,11 @@ def test_finviz_quantitative_floors_then_explicit_review_authorize_auto_paper() 
     assert "FINVIZ_V2_OPERATOR_REVIEW_REQUIRED" not in after_review.reason_codes
 
 
-def test_new_finviz_replay_trade_invalidates_exact_review() -> None:
+def test_new_matched_auto_paper_evidence_keeps_profile_approval_active() -> None:
     strategy = _strategy()
     events = _qualified_evidence()
     qualified = evaluate_finviz_v2_prospective_qualification(strategy, events)
-    review_at = max(event.observed_at for event in events) + timedelta(minutes=1)
-    events.append(
-        _event(
-            event_type="finviz_v2_promotion_review",
-            instrument_id="strategy:finviz-v2-prospective",
-            observed_at=review_at,
-            reason_code="FINVIZ_V2_PROMOTION_REVIEW_APPROVED",
-            suffix="review",
-            payload={
-                "qualification_version": FINVIZ_V2_QUALIFICATION_VERSION,
-                "profile_fingerprint": qualified.current_profile_fingerprint,
-                "evidence_fingerprint": qualified.evidence_fingerprint,
-                "approved": True,
-                "execution_authority": False,
-            },
-        )
-    )
+    events.append(_review_event(qualified, events))
     assert evaluate_finviz_v2_prospective_qualification(
         strategy, events
     ).auto_paper_authorized is True
@@ -249,15 +233,14 @@ def test_new_finviz_replay_trade_invalidates_exact_review() -> None:
     events.extend(
         [
             _event(
-                event_type="shadow_execution",
+                event_type="entry_order_submitted",
                 instrument_id="equity:NEW",
                 observed_at=signal_at,
-                reason_code="SHADOW_EXECUTION_OBSERVED",
-                suffix="new-live",
+                reason_code="AUTO_PAPER_ENTRY_SUBMITTED",
+                suffix="new-auto-paper-live",
                 payload={
-                    "universe_source": "auto_archive_shadow",
+                    "universe_source": "auto_archive_auto_paper",
                     "profile_fingerprint": FROZEN_FINVIZ_V2_PROFILE_FINGERPRINT,
-                    "execution_authority": False,
                     "execution": {"execution_eligible": True},
                 },
             ),
@@ -282,10 +265,51 @@ def test_new_finviz_replay_trade_invalidates_exact_review() -> None:
         ]
     )
     changed = evaluate_finviz_v2_prospective_qualification(strategy, events)
+    assert changed.matched_eligible_trade_count == 21
     assert changed.qualified is True
-    assert changed.reviewed is False
+    assert changed.reviewed is True
+    assert changed.auto_paper_authorized is True
+    assert changed.evidence_fingerprint != qualified.evidence_fingerprint
+
+
+def test_new_adverse_evidence_can_automatically_pause_auto_paper() -> None:
+    strategy = _strategy()
+    events = _qualified_evidence()
+    qualified = evaluate_finviz_v2_prospective_qualification(strategy, events)
+    events.append(_review_event(qualified, events))
+
+    # Add five replay trades without matching live execution observations. This
+    # drops execution-match coverage from 100% to 80%, below the 90% floor.
+    sessions = _session_dates(25)
+    for index, session in enumerate(sessions[-5:], start=20):
+        entry_at = datetime.combine(session, time(14, 1), tzinfo=timezone.utc)
+        events.append(
+            _event(
+                event_type="finviz_v2_shadow_replay_trade",
+                instrument_id=f"equity:MISS{index}",
+                observed_at=entry_at + timedelta(hours=1),
+                reason_code="FINVIZ_V2_SHADOW_REPLAY_TRADE",
+                suffix=f"unmatched-{index}",
+                payload={
+                    "qualification_version": FINVIZ_V2_QUALIFICATION_VERSION,
+                    "replay_version": FINVIZ_V2_REPLAY_VERSION,
+                    "session_date": session.isoformat(),
+                    "universe_source": "auto_archive_shadow",
+                    "discovery_source": "finviz",
+                    "profile_fingerprint": FROZEN_FINVIZ_V2_PROFILE_FINGERPRINT,
+                    "entry_time": entry_at.isoformat(),
+                    "r_result": "0.50",
+                    "execution_authority": False,
+                },
+            )
+        )
+
+    changed = evaluate_finviz_v2_prospective_qualification(strategy, events)
+    assert changed.reviewed is True
+    assert changed.execution_match_rate == Decimal("0.8")
+    assert changed.qualified is False
     assert changed.auto_paper_authorized is False
-    assert "FINVIZ_V2_OPERATOR_REVIEW_REQUIRED" in changed.reason_codes
+    assert "FINVIZ_V2_EXECUTION_MATCH_RATE_LOW" in changed.reason_codes
 
 
 def test_finviz_execution_profile_change_fails_closed_but_llm_settings_do_not() -> None:
