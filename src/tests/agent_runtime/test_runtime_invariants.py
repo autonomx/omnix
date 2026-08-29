@@ -4,7 +4,7 @@ from itertools import product
 
 import pytest
 
-from app.agent_runtime.contracts import EvidencePolicy
+from app.agent_runtime.contracts import EvidenceDecision, EvidencePolicy
 from app.agent_runtime.evidence import (
     classify_evidence,
     compile_task_authority,
@@ -132,12 +132,12 @@ def test_model_output_cannot_create_authority_when_policy_has_no_grant() -> None
     decision = compile_task_authority(
         profile,
         "Explain TCP congestion control",
-        decision=type("Decision", (), {
-            "policy": EvidencePolicy(requirement="none"),
-            "confidence": 1.0,
-            "reason": "test",
-            "classifier": "deterministic",
-        })(),
+        decision=EvidenceDecision(
+            policy=EvidencePolicy(requirement="none"),
+            confidence=1.0,
+            reason="test",
+            classifier="deterministic",
+        ),
         semantic_action_intents=(),
     )
     assert decision.required_local == ()
