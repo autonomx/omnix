@@ -192,6 +192,35 @@ Reported evidence includes trigger/trade counts, risk-rejection reasons, R multi
 
 Replay gap validation is session aware: normal overnight/weekend exchange closures are not reported as missing intraday bars, while missing bars inside one continuous session are.
 
+## Separate Finviz V2 promotion path
+
+The Finviz learning cohort has a separate prospective AUTO PAPER promotion
+contract instead of inheriting the canonical Yahoo V2 qualification.
+
+The frozen Finviz policy begins on **2026-08-31** and requires all of the
+following before AUTO PAPER can be armed: 20 matched trades, 15 distinct
+sessions, 10 distinct symbols, at least 90% execution match, at least +0.20R
+expectancy, a positive one-sided 90% lower confidence bound, maximum drawdown
+no greater than 5R, and explicit operator approval of the exact evidence
+fingerprint.
+
+After each completed session, the V2 replay monitor evaluates the same immutable
+strategy-owned Finviz morning archive and writes Finviz-specific replay events.
+Historical sessions before the prospective epoch are excluded. Yahoo V2 replay
+events are excluded. A changed execution profile cannot reuse the old sample.
+
+When the exact Finviz profile is approved, AUTO PAPER deliberately uses the
+strategy-owned raw 09:20 ET Finviz archive rather than an operator-selected
+subset. The server rejects a Finviz AUTO PAPER configuration with a manually
+attached `active_universe_id`. Deterministic `entry_ready`, server risk and
+fresh eligible Alpaca IEX evidence remain mandatory before any simulated order.
+Intraday learning and LLM interpretation remain research-only.
+
+Approval does not become permanent: new prospective replay evidence changes the
+evidence fingerprint and requires another explicit review. This makes promotion
+a measured, auditable paper-trading transition rather than an automatic
+calendar-based switch.
+
 ## P2 — automated paper runner and terminal
 
 The gateway owns a deterministic strategy monitor with bounded polling and environment controls. The runner loads active configurations and the attached frozen universe, evaluates each candidate, checks Alpaca IEX execution eligibility, applies server risk, creates idempotent paper orders, persists state/rejection events and reconciles server stop/target protection.
