@@ -52,11 +52,23 @@ _QUOTED_SPAN = re.compile(
 _BROAD_SEMANTIC = re.compile(r"\b(?:take care of|anything important|whatever needs|prepare everything|handle everything)\b", re.I)
 _AGENTIC = re.compile(r"\b(?:fix|debugg?|investigate|figure out|diagnose|research|reseach|analy[sz]e|anlyze|refactor|implement)\b", re.I)
 _RESEARCH_ACTION = re.compile(r"\b(?:research|reseach|investigate|analy[sz]e|anlyze)\b", re.I)
-_CODE_TARGET = (
-    r"(?:\b(?:code|repo(?:sitory)?|file|module|component|button|icon|element|"
-    r"selector|class(?:name)?|css|html|stylesheet|tsx?|jsx?)\b|"
-    r"(?<!\w)[.#]?(?:[A-Za-z][A-Za-z0-9_]*-){2,}[A-Za-z][A-Za-z0-9_]*)"
+_CODE_STRONG_TARGET = (
+    r"(?:\b(?:code|codebase|repo(?:sitory)?|workspace|tests?|pytest|vitest|"
+    r"selector|classname|css|html|stylesheet|tsx?|jsx?|frontend|backend|"
+    r"middleware|callback|handler|hook|endpoint|router|api|module|function|source)\b|"
+    r"(?<!\w)[.#]?(?:[A-Za-z][A-Za-z0-9_]*-){2,}[A-Za-z][A-Za-z0-9_]*|"
+    r"(?:^|[\\/])(?:src|app|tests?|packages?|components?)[\\/][^\s]+|"
+    r"\b[A-Za-z0-9_.-]+\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b)"
 )
+_UI_CODE_TARGET = (
+    r"(?:(?:\b(?:app|ui|ux|frontend|web|page|screen|interface|react|vue|css|html|omnix)\b"
+    r".{0,100}\b(?:button|icon|element|component|layout|menu|modal|dropdown|tab|sidebar|"
+    r"header|footer|form|input|textarea|dialog|tooltip|badge|chip)\b)|"
+    r"(?:\b(?:button|icon|element|component|layout|menu|modal|dropdown|tab|sidebar|"
+    r"header|footer|form|input|textarea|dialog|tooltip|badge|chip)\b"
+    r".{0,100}\b(?:app|ui|ux|frontend|web|page|screen|interface|react|vue|css|html|omnix)\b))"
+)
+_CODE_TARGET = f"(?:{_CODE_STRONG_TARGET}|{_UI_CODE_TARGET})"
 _WORKSPACE_MUTATION = re.compile(
     r"(?:"
     r"\b(?:fix|edit|modify|patch|change|update|create|add|remove|delete|implement|"
@@ -68,6 +80,11 @@ _WORKSPACE_MUTATION = re.compile(
     r"\b(?:center(?:ed|ing)?|centre(?:d|ing)?|align(?:ed|ing)?|move|style|"
     r"restyle|change|update|fix)\b"
     r")",
+    re.I,
+)
+_WORKSPACE_READ = re.compile(
+    r"\b(?:inspect|review|read|check|find|locate|search|trace|examine|diagnose)\b"
+    r".{0,160}" + _CODE_TARGET,
     re.I,
 )
 _HOME_SEMANTIC_TASK = re.compile(
@@ -148,6 +165,12 @@ def route_omnix_request(
             lane="agent",
             confidence=0.98,
             reason="workspace_mutation_request",
+        )
+    if _WORKSPACE_READ.search(actionable_text):
+        return OmnixRouteDecision(
+            lane="agent",
+            confidence=0.96,
+            reason="workspace_read_request",
         )
 
     workflow_match = _WORKFLOW.match(actionable_text)
