@@ -146,6 +146,7 @@ CASES: tuple[SteeringCase, ...] = (
         "research",
         required_actions=("research_read",),
         required_evidence=("software_release",),
+        required_external=("research.web_search",),
     ),
     SteeringCase(
         "research_to_memory_only",
@@ -162,10 +163,11 @@ CASES: tuple[SteeringCase, ...] = (
         "Don't change anything; inspect current CI and diagnose the failure only.",
         "agent",
         "coding",
-        required_actions=("workspace_read",),
         forbidden_actions=("workspace_mutate",),
         required_evidence=("repo_ci_state",),
+        required_local=("workspace.read", "workspace.command"),
         forbidden_local=("workspace.edit", "workspace.write"),
+        required_external=("github.inspect_ci",),
     ),
 )
 
