@@ -357,11 +357,30 @@ export function TradingStrategiesPanel() {
       setSelectedId(nextId);
       const current = nextStrategies.find((item) => item.strategy_id === nextId) ?? null;
       setDraft(current ? structuredClone(current) : null);
-      if (current) await refreshDetail(current.strategy_id, current.active_universe_id);
-      else {
+      if (current) {
+        await refreshDetail(current.strategy_id, current.active_universe_id);
+        if (current.config.strategy_version === '2.0.0') {
+          if (current.config.universe_discovery_source === 'finviz') {
+            setV2Qualification(null);
+            setFinvizV2Qualification(
+              await tradingStrategyApi.finvizV2Qualification(current.strategy_id),
+            );
+          } else {
+            setFinvizV2Qualification(null);
+            setV2Qualification(
+              await tradingStrategyApi.v2Qualification(current.strategy_id),
+            );
+          }
+        } else {
+          setV2Qualification(null);
+          setFinvizV2Qualification(null);
+        }
+      } else {
         setEvents([]);
         setProtections([]);
         setUniverse(null);
+        setV2Qualification(null);
+        setFinvizV2Qualification(null);
       }
       setStatus('ready');
     } catch (error) {
