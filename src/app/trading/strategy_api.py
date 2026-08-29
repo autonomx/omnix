@@ -393,6 +393,8 @@ def _require_v2_auto_paper_authorized(
         return
 
     if document.config.universe_discovery_source == "finviz":
+        if document.active_universe_id is not None:
+            raise ValueError("finviz_v2_auto_paper_requires_strategy_owned_archive")
         qualification = evaluate_finviz_v2_prospective_qualification(
             document,
             _finviz_v2_qualification_events(repository, document.strategy_id),
