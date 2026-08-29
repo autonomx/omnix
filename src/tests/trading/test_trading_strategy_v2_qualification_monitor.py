@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from app.trading.gapper_dataset import freeze_gapper_universe
 from app.trading.strategies.models import StrategyRiskProfile
+from app.trading.strategy_finviz_qualification import frozen_finviz_v2_config
 from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 from app.trading.strategy_universe_archiver import _archive_universe_id
 from app.trading.strategy_v2_qualification import frozen_v2_config
@@ -11,6 +12,7 @@ from app.trading.strategy_v2_qualification_monitor import replay_v2_shadow_sessi
 
 
 SESSION_NOW = datetime(2026, 8, 24, 20, 30, tzinfo=timezone.utc)  # after 16:00 ET + grace
+FINVIZ_SESSION_NOW = datetime(2026, 8, 31, 20, 30, tzinfo=timezone.utc)
 
 
 class FakeRepository:
@@ -120,6 +122,88 @@ def test_post_session_replay_continues_after_auto_paper_promotion() -> None:
     assert repository.events[0].event_type == "v2_shadow_replay_session"
     assert repository.events[0].payload["execution_authority"] is False
     assert strategy.active_universe_id == "selected-universe"
+
+
+def test_post_session_replay_supports_separate_finviz_contract() -> None:
+    config = frozen_finviz_v2_config()
+    strategy = TradingStrategyConfigDocument(
+        strategy_id="v2-prospective",
+        account_id="paper-1",
+        strategy_kind="gap_pullback_v1",
+        strategy_version="2.0.0",
+        mode="shadow",
+        active_universe_id=None,
+        config=config,
+        risk=StrategyRiskProfile(),
+        enabled=True,
+    )
+    universe_id = _archive_universe_id(strategy, FINVIZ_SESSION_NOW.astimezone())
+    universe = freeze_gapper_universe(
+        universe_id=universe_id,
+        session_date=FINVIZ_SESSION_NOW.astimezone().date(),
+        evaluation_time=datetime(2026, 8, 31, 13, 20, tzinfo=timezone.utc),
+        discovery_source="finviz",
+        source_locator="https://finviz.com/screener?v=340&s=ta_topgainers",
+        source_candidate_symbols=(),
+        candidates=[],
+        allow_empty=True,
+    )
+    repository = FakeRepository(universe)
+
+    result = replay_v2_shadow_session(
+        strategy,
+        repository,
+        universe.session_date,
+        observed_at=FINVIZ_SESSION_NOW,
+        bar_loader=lambda candidates, session_date: {},
+    )
+
+    assert result is not None
+    assert result.summary.trade_count == 0
+    assert repository.writes == 1
+    event = repository.events[0]
+    assert event.event_type == "finviz_v2_shadow_replay_session"
+    assert event.reason_code == "FINVIZ_V2_SHADOW_REPLAY_COMPLETED"
+    assert event.payload["discovery_source"] == "finviz"
+    assert event.payload["execution_authority"] is False
+
+
+def test_finviz_replay_refuses_non_finviz_archive() -> None:
+    config = frozen_finviz_v2_config()
+    strategy = TradingStrategyConfigDocument(
+        strategy_id="v2-prospective",
+        account_id="paper-1",
+        strategy_kind="gap_pullback_v1",
+        strategy_version="2.0.0",
+        mode="shadow",
+        active_universe_id=None,
+        config=config,
+        risk=StrategyRiskProfile(),
+        enabled=True,
+    )
+    universe_id = _archive_universe_id(strategy, FINVIZ_SESSION_NOW.astimezone())
+    universe = freeze_gapper_universe(
+        universe_id=universe_id,
+        session_date=FINVIZ_SESSION_NOW.astimezone().date(),
+        evaluation_time=datetime(2026, 8, 31, 13, 20, tzinfo=timezone.utc),
+        discovery_source="provider",
+        candidates=[],
+        allow_empty=True,
+    )
+    repository = FakeRepository(universe)
+
+    try:
+        replay_v2_shadow_session(
+            strategy,
+            repository,
+            universe.session_date,
+            observed_at=FINVIZ_SESSION_NOW,
+            bar_loader=lambda candidates, session_date: {},
+        )
+    except ValueError as exc:
+        assert str(exc) == "finviz_v2_replay_requires_finviz_archive"
+    else:
+        raise AssertionError("Finviz replay accepted a non-Finviz archive")
 
 
 def test_post_session_replay_refuses_noncanonical_v2_profile() -> None:
