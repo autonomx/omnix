@@ -218,11 +218,14 @@ def _apply_semantic_route_decision(
         return deterministic
     if (
         deterministic.lane == "agent"
-        and deterministic.reason == "workspace_mutation_request"
+        and deterministic.reason in {
+            "workspace_mutation_request",
+            "workspace_read_request",
+        }
         and deterministic.confidence >= 0.95
     ):
-        # Concrete file/UI mutations are executable requests even when the
-        # advisory classifier mistakes a terse implementation request for chat.
+        # Concrete workspace reads/mutations are executable requests even when
+        # the advisory classifier mistakes a terse repository request for Chat.
         return deterministic
     if (
         deterministic.lane == "chat"
