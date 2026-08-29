@@ -30,6 +30,32 @@ def validate_local_workspace_root(value: str) -> str:
     return str(path)
 
 
+def local_workspace_repository_root(value: str) -> str | None:
+    workspace = validate_local_workspace_root(value)
+    git = shutil.which("git")
+    if not git:
+        return None
+    try:
+        completed = subprocess.run(
+            [git, "-C", workspace, "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return None
+    try:
+        root = Path(completed.stdout.strip()).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    return str(root) if root.is_dir() else None
+
+
 def local_request_host_allowed(host: str | None) -> bool:
     value = str(host or "").strip().casefold()
     if value in {"localhost", "testclient"}:
