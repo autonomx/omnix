@@ -393,12 +393,14 @@ def test_server_auto_paper_gate_uses_only_reviewed_finviz_evidence() -> None:
         _require_v2_auto_paper_authorized(
             auto_paper,
             _QualificationRepository(events),
+            now=max(event.observed_at for event in events) + timedelta(minutes=2),
         )
 
     reviewed_events = [*events, _review_event(qualification, events)]
     _require_v2_auto_paper_authorized(
         auto_paper,
         _QualificationRepository(reviewed_events),
+        now=max(event.observed_at for event in reviewed_events) + timedelta(minutes=2),
     )
 
 
@@ -421,4 +423,5 @@ def test_server_rejects_manually_attached_universe_for_finviz_auto_paper() -> No
         _require_v2_auto_paper_authorized(
             manually_attached,
             _QualificationRepository(reviewed_events),
+            now=max(event.observed_at for event in reviewed_events) + timedelta(minutes=2),
         )
