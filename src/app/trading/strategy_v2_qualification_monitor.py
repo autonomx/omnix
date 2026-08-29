@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+from collections.abc import Callable
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Callable
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
@@ -14,6 +15,13 @@ from fastapi import FastAPI
 from .paper import PaperExecutionPolicy
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
+from .strategy_finviz_qualification import (
+    FINVIZ_V2_PROSPECTIVE_START,
+    FINVIZ_V2_QUALIFICATION_EVENT_TYPES,
+    FINVIZ_V2_QUALIFICATION_VERSION,
+    FINVIZ_V2_REPLAY_VERSION,
+    FROZEN_FINVIZ_V2_PROFILE_FINGERPRINT,
+)
 from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import (
     StrategyEvent,
@@ -43,6 +51,49 @@ _REPLAY_CLOSE_GRACE_MINUTES = 10
 BarLoader = Callable[..., dict[str, list[object]]]
 
 
+@dataclass(frozen=True)
+class _ReplayContract:
+    name: str
+    prospective_start: date
+    expected_profile_fingerprint: str
+    qualification_version: str
+    replay_version: str
+    trade_event_type: str
+    session_event_type: str
+    trade_reason_code: str
+    session_reason_code: str
+
+
+_CANONICAL_CONTRACT = _ReplayContract(
+    name="canonical_yahoo_v2",
+    prospective_start=V2_PROSPECTIVE_START,
+    expected_profile_fingerprint=FROZEN_V2_PROFILE_FINGERPRINT,
+    qualification_version=V2_QUALIFICATION_VERSION,
+    replay_version=V2_REPLAY_VERSION,
+    trade_event_type="v2_shadow_replay_trade",
+    session_event_type="v2_shadow_replay_session",
+    trade_reason_code="V2_SHADOW_REPLAY_TRADE",
+    session_reason_code="V2_SHADOW_REPLAY_COMPLETED",
+)
+
+_FINVIZ_CONTRACT = _ReplayContract(
+    name="finviz_v2",
+    prospective_start=FINVIZ_V2_PROSPECTIVE_START,
+    expected_profile_fingerprint=FROZEN_FINVIZ_V2_PROFILE_FINGERPRINT,
+    qualification_version=FINVIZ_V2_QUALIFICATION_VERSION,
+    replay_version=FINVIZ_V2_REPLAY_VERSION,
+    trade_event_type="finviz_v2_shadow_replay_trade",
+    session_event_type="finviz_v2_shadow_replay_session",
+    trade_reason_code="FINVIZ_V2_SHADOW_REPLAY_TRADE",
+    session_reason_code="FINVIZ_V2_SHADOW_REPLAY_COMPLETED",
+)
+
+_ALL_QUALIFICATION_EVENT_TYPES = tuple(
+    dict.fromkeys((*V2_QUALIFICATION_EVENT_TYPES, *FINVIZ_V2_QUALIFICATION_EVENT_TYPES))
+)
+_EARLIEST_PROSPECTIVE_START = min(V2_PROSPECTIVE_START, FINVIZ_V2_PROSPECTIVE_START)
+
+
 def _flag(name: str, default: str = "1") -> bool:
     return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -61,17 +112,31 @@ def _interval_seconds() -> float:
     return max(60.0, value)
 
 
+def _replay_contract(config: TradingStrategyConfigDocument) -> _ReplayContract | None:
+    if (
+        not config.enabled
+        or config.mode not in {"shadow", "auto_paper"}
+        or config.config.strategy_version != "2.0.0"
+    ):
+        return None
+    fingerprint = v2_profile_fingerprint(config.config)
+    if fingerprint == FROZEN_V2_PROFILE_FINGERPRINT:
+        return _CANONICAL_CONTRACT
+    if fingerprint == FROZEN_FINVIZ_V2_PROFILE_FINGERPRINT:
+        return _FINVIZ_CONTRACT
+    return None
+
+
 def _eligible_strategy(config: TradingStrategyConfigDocument) -> bool:
+    return _replay_contract(config) is not None
+
+
+def _trading_session(session_date: date, contract: _ReplayContract) -> bool:
     return (
-        config.enabled
-        and config.mode in {"shadow", "auto_paper"}
-        and config.config.strategy_version == "2.0.0"
-        and v2_profile_fingerprint(config.config) == FROZEN_V2_PROFILE_FINGERPRINT
+        session_date >= contract.prospective_start
+        and session_date.weekday() < 5
+        and session_date not in regular_holidays(session_date.year)
     )
-
-
-def _trading_session(session_date: date) -> bool:
-    return session_date >= V2_PROSPECTIVE_START and session_date.weekday() < 5 and session_date not in regular_holidays(session_date.year)
 
 
 def _session_finalized(session_date: date, now: datetime) -> bool:
@@ -79,7 +144,9 @@ def _session_finalized(session_date: date, now: datetime) -> bool:
         raise ValueError("v2 qualification clock must be timezone-aware")
     now_et = now.astimezone(_ET)
     close = early_close_time(session_date) or time(16, 0)
-    finalized = datetime.combine(session_date, close, tzinfo=_ET) + timedelta(minutes=_REPLAY_CLOSE_GRACE_MINUTES)
+    finalized = datetime.combine(session_date, close, tzinfo=_ET) + timedelta(
+        minutes=_REPLAY_CLOSE_GRACE_MINUTES
+    )
     return now_et >= finalized
 
 
@@ -99,25 +166,30 @@ def _qualification_events(
     if hasattr(repository, "events_by_types_between"):
         return repository.events_by_types_between(
             strategy_id,
-            event_types=V2_QUALIFICATION_EVENT_TYPES,
+            event_types=_ALL_QUALIFICATION_EVENT_TYPES,
             start_time=start_time,
             end_time=end_time,
-            limit=20_000,
+            limit=40_000,
         )
     return [
         event
-        for event in repository.recent_events(strategy_id, 20_000)
-        if event.event_type in V2_QUALIFICATION_EVENT_TYPES
+        for event in repository.recent_events(strategy_id, 40_000)
+        if event.event_type in _ALL_QUALIFICATION_EVENT_TYPES
         and start_time <= event.observed_at.astimezone(timezone.utc) < end_time
     ]
 
 
-def _already_replayed(events: list[StrategyEvent], session_date: date, profile_fingerprint: str) -> bool:
+def _already_replayed(
+    events: list[StrategyEvent],
+    session_date: date,
+    profile_fingerprint: str,
+    contract: _ReplayContract,
+) -> bool:
     session = session_date.isoformat()
     return any(
-        event.event_type == "v2_shadow_replay_session"
-        and event.payload.get("qualification_version") == V2_QUALIFICATION_VERSION
-        and event.payload.get("replay_version") == V2_REPLAY_VERSION
+        event.event_type == contract.session_event_type
+        and event.payload.get("qualification_version") == contract.qualification_version
+        and event.payload.get("replay_version") == contract.replay_version
         and event.payload.get("profile_fingerprint") == profile_fingerprint
         and event.payload.get("session_date") == session
         and event.payload.get("status") == "completed"
@@ -133,9 +205,10 @@ def replay_v2_shadow_session(
     observed_at: datetime | None = None,
     bar_loader=alpaca_historical_session_bars,
 ) -> GapPullbackBacktestResult | None:
-    """Replay one captured prospective V2 session as evidence without order authority."""
+    """Replay one captured Yahoo or Finviz V2 session as evidence only."""
 
-    if not _eligible_strategy(config) or not _trading_session(session_date):
+    contract = _replay_contract(config)
+    if contract is None or not _trading_session(session_date, contract):
         return None
     observed = observed_at or datetime.now(timezone.utc)
     if observed.tzinfo is None:
@@ -147,15 +220,21 @@ def replay_v2_shadow_session(
     events = _qualification_events(
         repository,
         config.strategy_id,
-        start_time=datetime.combine(V2_PROSPECTIVE_START, time.min, tzinfo=timezone.utc),
+        start_time=datetime.combine(
+            contract.prospective_start, time.min, tzinfo=timezone.utc
+        ),
         end_time=observed.astimezone(timezone.utc) + timedelta(seconds=1),
     )
-    if _already_replayed(events, session_date, profile_fingerprint):
+    if _already_replayed(events, session_date, profile_fingerprint, contract):
         return None
 
-    universe = resolve_v2_evidence_archive_for_session(config, repository, session_date=session_date)
+    universe = resolve_v2_evidence_archive_for_session(
+        config, repository, session_date=session_date
+    )
     if universe is None:
         return None
+    if contract is _FINVIZ_CONTRACT and universe.discovery_source != "finviz":
+        raise ValueError("finviz_v2_replay_requires_finviz_archive")
 
     bars_by_instrument = bar_loader(universe.candidates, session_date)
     dataset = freeze_backtest_session(
@@ -177,7 +256,7 @@ def replay_v2_shadow_session(
     observed_utc = observed.astimezone(timezone.utc)
     for index, trade in enumerate(result.trades):
         event_id, idem = _event_id(
-            V2_REPLAY_VERSION,
+            contract.replay_version,
             config.strategy_id,
             session_date.isoformat(),
             profile_fingerprint,
@@ -191,17 +270,18 @@ def replay_v2_shadow_session(
                 event_id=event_id,
                 run_id=None,
                 instrument_id=trade.instrument_id,
-                event_type="v2_shadow_replay_trade",
+                event_type=contract.trade_event_type,
                 state="replayed",
-                reason_code="V2_SHADOW_REPLAY_TRADE",
+                reason_code=contract.trade_reason_code,
                 observed_at=observed_utc,
                 idempotency_key=idem,
                 payload={
-                    "qualification_version": V2_QUALIFICATION_VERSION,
-                    "replay_version": V2_REPLAY_VERSION,
+                    "qualification_version": contract.qualification_version,
+                    "replay_version": contract.replay_version,
                     "session_date": session_date.isoformat(),
                     "universe_id": universe.universe_id,
                     "universe_source": "auto_archive_shadow",
+                    "discovery_source": universe.discovery_source,
                     "universe_fingerprint": universe.source_fingerprint,
                     "profile_fingerprint": profile_fingerprint,
                     "dataset_fingerprint": result.dataset_fingerprint,
@@ -219,7 +299,7 @@ def replay_v2_shadow_session(
         )
 
     session_event_id, session_idem = _event_id(
-        V2_REPLAY_VERSION,
+        contract.replay_version,
         config.strategy_id,
         session_date.isoformat(),
         profile_fingerprint,
@@ -232,18 +312,19 @@ def replay_v2_shadow_session(
             event_id=session_event_id,
             run_id=None,
             instrument_id=f"strategy:{config.strategy_id}",
-            event_type="v2_shadow_replay_session",
+            event_type=contract.session_event_type,
             state="replayed",
-            reason_code="V2_SHADOW_REPLAY_COMPLETED",
+            reason_code=contract.session_reason_code,
             observed_at=observed_utc,
             idempotency_key=session_idem,
             payload={
-                "qualification_version": V2_QUALIFICATION_VERSION,
-                "replay_version": V2_REPLAY_VERSION,
+                "qualification_version": contract.qualification_version,
+                "replay_version": contract.replay_version,
                 "session_date": session_date.isoformat(),
                 "status": "completed",
                 "universe_id": universe.universe_id,
                 "universe_source": "auto_archive_shadow",
+                "discovery_source": universe.discovery_source,
                 "universe_fingerprint": universe.source_fingerprint,
                 "profile_fingerprint": profile_fingerprint,
                 "dataset_fingerprint": result.dataset_fingerprint,
@@ -260,8 +341,10 @@ def replay_v2_shadow_session(
         "auto_trading",
         "v2_shadow_replay_completed",
         strategy_id=config.strategy_id,
+        qualification_contract=contract.name,
         session_date=session_date,
         universe_id=universe.universe_id,
+        discovery_source=universe.discovery_source,
         profile_fingerprint=profile_fingerprint,
         dataset_fingerprint=result.dataset_fingerprint,
         trade_count=result.summary.trade_count,
@@ -272,7 +355,7 @@ def replay_v2_shadow_session(
 
 
 class TradingStrategyV2QualificationMonitor:
-    """Evidence-only prospective V2 replay monitor across SHADOW/AUTO PAPER; never creates orders."""
+    """Evidence-only replay monitor for canonical Yahoo and separate Finviz V2."""
 
     def __init__(self, *, interval_seconds: float | None = None) -> None:
         self.interval_seconds = interval_seconds or _interval_seconds()
@@ -280,6 +363,7 @@ class TradingStrategyV2QualificationMonitor:
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.replay_count = 0
+        self.finviz_replay_count = 0
 
     def start(self) -> None:
         if self._task is None:
@@ -298,12 +382,17 @@ class TradingStrategyV2QualificationMonitor:
         configs = await asyncio.to_thread(repository.list_configs, active_only=False)
         now = datetime.now(timezone.utc)
         replays = 0
+        finviz_replays = 0
         for config in configs:
-            if not _eligible_strategy(config):
+            contract = _replay_contract(config)
+            if contract is None:
                 continue
             for offset in range(_REPLAY_LOOKBACK_DAYS + 1):
                 session_date = now.astimezone(_ET).date() - timedelta(days=offset)
-                if not _trading_session(session_date) or not _session_finalized(session_date, now):
+                if (
+                    not _trading_session(session_date, contract)
+                    or not _session_finalized(session_date, now)
+                ):
                     continue
                 try:
                     result = await asyncio.to_thread(
@@ -315,18 +404,30 @@ class TradingStrategyV2QualificationMonitor:
                     )
                     if result is not None:
                         replays += 1
-                except (ProviderContractError, ProviderDataUnavailableError, OSError, ValueError) as exc:
-                    self.last_error = f"{config.strategy_id}/{session_date}: {type(exc).__name__}: {exc}"
+                        if contract is _FINVIZ_CONTRACT:
+                            finviz_replays += 1
+                except (
+                    ProviderContractError,
+                    ProviderDataUnavailableError,
+                    OSError,
+                    ValueError,
+                ) as exc:
+                    self.last_error = (
+                        f"{config.strategy_id}/{session_date}: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
                     trade_log(
                         "auto_trading",
                         "v2_shadow_replay_error",
                         strategy_id=config.strategy_id,
+                        qualification_contract=contract.name,
                         session_date=session_date,
                         error_type=type(exc).__name__,
                         detail=str(exc),
                         execution_authority=False,
                     )
         self.replay_count += replays
+        self.finviz_replay_count += finviz_replays
         self.last_run_at = datetime.now(timezone.utc)
         return replays
 
@@ -346,7 +447,9 @@ class TradingStrategyV2QualificationMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_strategy_v2_qualification_monitor(gateway: FastAPI) -> TradingStrategyV2QualificationMonitor:
+def register_trading_strategy_v2_qualification_monitor(
+    gateway: FastAPI,
+) -> TradingStrategyV2QualificationMonitor:
     existing = getattr(gateway.state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyV2QualificationMonitor):
         return existing
