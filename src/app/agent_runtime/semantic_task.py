@@ -14,6 +14,7 @@ from .contracts import (
     EvidencePolicy,
     EvidenceRequirement,
     EvidenceSourceOption,
+    SubjectRef,
 )
 from .evidence import freshness_max_age_seconds, resolve_subject
 
@@ -266,19 +267,52 @@ _PUBLIC_READ_TARGETS = {
 }
 
 
+def _reference_for_target(task: SemanticTask, target: str) -> str | None:
+    """Resolve a parser-supplied subject reference without making it authority."""
+
+    for dependency in task.data_dependencies:
+        if dependency.target == target and dependency.subject_reference:
+            return dependency.subject_reference.strip() or None
+    for operation in task.operations:
+        if operation.target == target and operation.subject_reference:
+            return operation.subject_reference.strip() or None
+    for subject in task.subjects:
+        if subject.target == target and subject.reference:
+            return subject.reference.strip() or None
+    return None
+
+
+def _explicit_location_subject(reference: str) -> SubjectRef | None:
+    clean = " ".join(str(reference or "").split()).strip(" .!?")
+    if not clean:
+        return None
+    canonical = clean.casefold()
+    return SubjectRef(
+        type="location",
+        canonical_id=canonical,
+        display_name=clean,
+    )
+
+
 def _evidence_requirement(
     latest_user_message: str,
     dependency: SemanticDataDependency,
+    task: SemanticTask,
 ) -> EvidenceRequirement | None:
     policy = _EVIDENCE_POLICY.get(dependency.target)
     if policy is None or not dependency.required:
         return None
     source_class, trust_floor, fallback_policy = policy
     freshness = dependency.freshness
+    reference = dependency.subject_reference or _reference_for_target(task, dependency.target)
+    if source_class == "weather_state" and dependency.subject_reference:
+        subject = _explicit_location_subject(dependency.subject_reference)
+    else:
+        subject = resolve_subject(reference or latest_user_message, source_class)
     return EvidenceRequirement(
         id=f"semantic-task-{source_class}",
         source_class=source_class,
-        subject=resolve_subject(latest_user_message, source_class),
+        subject=subject,
         freshness=freshness,
         trust_floor=trust_floor,
         acceptable_sources=[
@@ -427,6 +461,7 @@ def compile_semantic_task(
                 SemanticDataDependency(
                     target=target,
                     freshness=freshness,
+                    subject_reference=_reference_for_target(task, target),
                     required=True,
                 )
             )
@@ -434,8 +469,24 @@ def compile_semantic_task(
     requirements: list[EvidenceRequirement] = []
     seen_sources: set[str] = set()
     for dependency in dependencies:
-        requirement = _evidence_requirement(latest_user_message, dependency)
-        if requirement is None or requirement.source_class in seen_sources:
+        requirement = _evidence_requirement(latest_user_message, dependency, task)
+        if requirement is None:
+            continue
+        if (
+            requirement.source_class in {"market_quote", "company_filing"}
+            and requirement.subject is None
+        ):
+            anomalies.append(
+                SemanticCompilerAnomaly(
+                    code="unresolved_evidence_subject",
+                    detail=(
+                        f"{requirement.source_class} requires a resolved subject; "
+                        f"semantic target {dependency.target} did not provide one"
+                    ),
+                    rejected_operation=dependency.target,
+                )
+            )
+        if requirement.source_class in seen_sources:
             continue
         seen_sources.add(requirement.source_class)
         requirements.append(requirement)
@@ -482,6 +533,8 @@ def compile_semantic_task(
         anomaly.code in {
             "unsupported_composite_profiles",
             "unexpected_cross_domain_action",
+            "unsupported_semantic_operation",
+            "unresolved_evidence_subject",
         }
         for anomaly in anomalies
     )
@@ -517,6 +570,13 @@ def compile_semantic_task(
         requires_clarification=requires_clarification,
         reason_code=task.reason_code,
         anomalies=anomalies,
+        denied_actions=list(
+            dict.fromkeys(
+                anomaly.rejected_operation
+                for anomaly in anomalies
+                if anomaly.rejected_operation
+            )
+        ),
         multi_step=task.multi_step,
         autonomous=task.autonomous,
     )

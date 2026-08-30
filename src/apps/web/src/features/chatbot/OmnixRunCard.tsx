@@ -204,6 +204,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const semanticTask = asRecord(routing?.semantic_task);
   const semanticCompilation = asRecord(routing?.semantic_compilation);
   const routingShadow = asRecord(routing?.routing_shadow);
+  const authorityCompilation = asRecord(routing?.authority_compilation);
   const legacyRoute = asRecord(routingShadow?.legacy);
   const semanticV2Route = asRecord(routingShadow?.semantic_v2);
   const parserDiagnostics = asRecord(routingShadow?.parser);
@@ -213,7 +214,19 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const semanticAnomalies = Array.isArray(semanticCompilation?.anomalies)
     ? semanticCompilation.anomalies.map(asRecord).filter((value): value is Metadata => Boolean(value))
     : [];
-  const showRouting = Boolean(semanticTask || semanticCompilation || routingShadow);
+  const issuedLocal = Array.isArray(authorityCompilation?.issued_local)
+    ? authorityCompilation.issued_local.map(String)
+    : [];
+  const issuedExternal = Array.isArray(authorityCompilation?.issued_external)
+    ? authorityCompilation.issued_external.map(String)
+    : [];
+  const deniedActions = Array.isArray(authorityCompilation?.denied_actions)
+    ? authorityCompilation.denied_actions.map(String)
+    : [];
+  const disagreementReasons = Array.isArray(routingShadow?.disagreement_reasons)
+    ? routingShadow.disagreement_reasons.map(String)
+    : [];
+  const showRouting = Boolean(semanticTask || semanticCompilation || routingShadow || authorityCompilation);
 
   return (
     <section className="assistant-runtime-card" aria-label="Agent run">
@@ -295,14 +308,27 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
                 </span>
               </div>
             ) : null}
+            {authorityCompilation ? (
+              <div>
+                <strong>Issued authority</strong>
+                <span>
+                  {issuedLocal.length ? `local=${issuedLocal.join(', ')}` : 'local=none'}
+                  {issuedExternal.length ? ` · external=${issuedExternal.join(', ')}` : ' · external=none'}
+                  {deniedActions.length ? ` · denied=${deniedActions.join(', ')}` : ''}
+                </span>
+              </div>
+            ) : null}
             {routingShadow ? (
               <div>
                 <strong>Routing comparison</strong>
                 <span>
                   {stringField(routingShadow.production) || 'semantic_v2'}
                   {legacyRoute ? ` · legacy=${stringField(legacyRoute.lane)}` : ''}
+                  {stringField(routingShadow.legacy_profile) ? `/${stringField(routingShadow.legacy_profile)}` : ''}
                   {semanticV2Route ? ` · v2=${stringField(semanticV2Route.lane)}` : ''}
+                  {stringField(routingShadow.semantic_profile) ? `/${stringField(routingShadow.semantic_profile)}` : ''}
                   {routingShadow.disagrees === true ? ' · disagreement' : ''}
+                  {disagreementReasons.length ? ` (${disagreementReasons.join(', ')})` : ''}
                 </span>
               </div>
             ) : null}

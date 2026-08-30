@@ -80,7 +80,18 @@ maps that dependency to evidence policy. Examples:
 - current market quote -> `market_quote` -> authoritative, fail closed
 - current public web fact -> `general_current_web` -> reputable, fallback allowed
 
-The LLM does not choose trust floors or fallback rules.
+The LLM does not choose trust floors or fallback rules. Parser-resolved subject
+references are bound into the deterministic evidence requirement, so a
+contextual request such as "what about it?" cannot be satisfied by a receipt
+for a different security. Subject-sensitive requirements that cannot be
+resolved fail closed.
+
+Bounded evidence-required Chat reads are executed through the same governed
+read-only capability gate before the normal Chat provider is allowed to answer.
+The resulting receipts are evaluated for subject, freshness, and trust, then
+the verified output is appended to the Chat context. If required evidence is
+unavailable or fails evaluation, Chat returns a governed evidence failure
+instead of answering from model memory.
 
 ## Least privilege
 
@@ -99,12 +110,17 @@ Examples:
 
 ## Migration and shadow mode
 
-`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=v2` is the default.
+Production AUTO routing defaults to
+`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=shadow` while the v2 behavior matrices and
+disagreement telemetry are being validated. Explicit test/extension parsers can
+exercise v2 directly, and operators may opt in with
+`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=v2`.
 
-`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=shadow` keeps the legacy v1
-classifier/deterministic merger as the production result while SemanticTask v2
-runs for comparison. Every typed turn records routing comparison metadata,
-including disagreement state.
+Shadow mode keeps the legacy v1 classifier/deterministic merger as the
+production result while SemanticTask v2 runs for comparison. Every typed turn
+records routing comparison metadata across lane, profile, semantic actions, and
+evidence domains. Promotion to v2 should happen only after those disagreements
+have been reviewed and the exact-head runtime gates are green.
 
 Legacy semantic regexes remain temporarily for:
 - shadow diagnostics/rollback,

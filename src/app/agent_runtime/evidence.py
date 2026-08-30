@@ -368,10 +368,16 @@ def _security_subject(ticker: str) -> SubjectRef:
 
 def resolve_subject(task: str, source_class: str) -> SubjectRef | None:
     text = str(task or "")
-    if source_class in {"market_quote", "market_news", "market_status", "company_filing"}:
+    if source_class in {"market_quote", "market_news", "company_filing"}:
         ticker = _extract_ticker(text)
         if ticker:
             return _security_subject(ticker)
+    if source_class == "market_status":
+        return SubjectRef(
+            type="market",
+            canonical_id="us_equities",
+            display_name="US equities market",
+        )
     if source_class in {"repo_ci_state", "repo_contents"}:
         pr = _PR.search(text)
         qualifiers = {"pull_request": int(pr.group(1))} if pr else {}
@@ -389,6 +395,13 @@ def resolve_subject(task: str, source_class: str) -> SubjectRef | None:
         return SubjectRef(type="calendar", canonical_id="primary_calendar", display_name="primary calendar")
     if source_class == "email_state":
         return SubjectRef(type="mailbox", canonical_id="primary_mailbox", display_name="primary mailbox")
+    if source_class == "market_status":
+        return SubjectRef(type="market", canonical_id="us_equities", display_name="US equities market")
+    if capability_id == "weather.current":
+        location = str(output.get("location") or request_input.get("location") or "").strip()
+        if not location or location.casefold() == "user_location":
+            return SubjectRef(type="location", canonical_id="user_location", display_name="user location")
+        return SubjectRef(type="location", canonical_id=location.casefold(), display_name=location)
     return None
 
 
@@ -1365,6 +1378,8 @@ _REVERSE_SOURCE_CAPABILITIES: dict[str, str] = {
     "home.get_energy": "home_energy",
     "calendar.read_availability": "calendar_state",
     "gmail.read_email": "email_state",
+    "market.status": "market_status",
+    "weather.current": "weather_state",
 }
 
 

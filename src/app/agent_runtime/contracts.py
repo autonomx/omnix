@@ -47,6 +47,7 @@ AgentEventType = Literal[
     "steering.received",
     "acceptance.started",
     "acceptance.completed",
+    "acceptance.retry_requested",
     "worker.heartbeat",
     "task.revised",
     "evidence.receipt",

@@ -120,7 +120,7 @@ _UI_THEME_CONTEXT = re.compile(
 )
 _UI_THEME_ACTION = re.compile(
     r"\b(?:fix|debugg?|diagnose|inspect|review|check|edit|modify|change|update|refactor|implement|"
-    r"test|build|adjust|improve|apply|style|restyle)\b",
+    r"test|build|adjust|improve|apply|add|remove|move|align|center|style|restyle)\b",
     re.I,
 )
 _REPO_OPS_INTENT = re.compile(

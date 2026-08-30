@@ -467,7 +467,10 @@ class AgentRunService:
                 "semantic_parser_unavailable",
                 "steering requires semantic parsing; Omnix will not guess a stateful domain",
             )
-        semantic_compilation = compile_semantic_task(effective, semantic_task)
+        # Compile policy from the latest authoritative steering only. The
+        # previous objective remains reference-only and must not reintroduce
+        # cancelled prohibitions or widen authority.
+        semantic_compilation = compile_semantic_task(message, semantic_task)
         if semantic_compilation.requires_clarification:
             detail = "; ".join(
                 anomaly.detail
@@ -498,7 +501,7 @@ class AgentRunService:
             })
         compiled = compile_task_authority(
             target_profile,
-            effective,
+            message,
             decision,
             semantic_action_intents=semantic_actions,
             allow_text_semantic_fallback=False,
@@ -516,7 +519,7 @@ class AgentRunService:
             ["diff"]
             if target_profile_id == "coding"
             and task_requires_workspace_mutation(
-                effective,
+                message,
                 semantic_action_intents=semantic_actions,
                 allow_text_semantic_fallback=False,
             )
@@ -562,7 +565,7 @@ class AgentRunService:
         replacement = AgentRunSpec(
             run_id=replacement_run_id,
             session_id=current.spec.session_id,
-            task=effective,
+            task=message,
             objective=effective,
             profile=target_profile_id,
             model=current.spec.model,
