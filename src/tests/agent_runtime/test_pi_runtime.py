@@ -83,6 +83,8 @@ def test_initial_prompt_requires_progress_updates_and_validation_recovery() -> N
     assert "short normal-assistant progress updates" in prompt
     assert "do not reveal private chain-of-thought" in prompt
     assert "do not stop merely because a test, lint, or typecheck command failed" in prompt
+    assert "do not chain commands with semicolons, pipes, redirection" in prompt
+    assert "an unrelated passing test is not completion evidence" in prompt
 
 
 def test_initial_prompt_can_receive_ephemeral_chat_reference_context() -> None:
