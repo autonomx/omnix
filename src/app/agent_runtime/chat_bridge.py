@@ -428,10 +428,7 @@ def _routing_shadow_payload(
         payload["parser"] = dict(parser_diagnostics)
     if semantic is not None:
         payload["semantic_v2"] = semantic.model_dump(mode="json")
-        payload["disagrees"] = bool(
-            legacy.lane != semantic.lane
-            or legacy.reason != semantic.reason
-        )
+        payload["disagrees"] = legacy.lane != semantic.lane
     else:
         payload["semantic_v2"] = None
         payload["disagrees"] = None
