@@ -584,6 +584,19 @@ def _system_prompt() -> str:
     )
 
 
+_LATEST_STEERING_MARKER = "Latest user steering (authoritative):"
+
+
+def _authoritative_semantic_turn(content: str) -> str:
+    """Return the latest user-authored turn from a context-enriched classifier input."""
+
+    text = str(content or "")
+    marker_index = text.rfind(_LATEST_STEERING_MARKER)
+    if marker_index < 0:
+        return text
+    return text[marker_index + len(_LATEST_STEERING_MARKER):].strip()
+
+
 class ProviderSemanticIntentClassifier:
     """Schema-validated classifier backed by the currently selected LLM provider."""
 
@@ -625,7 +638,10 @@ class ProviderSemanticIntentClassifier:
                 deadline_seconds=self.timeout_seconds,
             ),
         )
-        return _normalize_semantic_decision(content, decision)
+        return _normalize_semantic_decision(
+            _authoritative_semantic_turn(content),
+            decision,
+        )
 
 
 def default_semantic_intent_classifier(
