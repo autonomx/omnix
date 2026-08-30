@@ -62,11 +62,31 @@ CASES: tuple[CodingClassificationCase, ...] = (
     CodingClassificationCase(
         "ui_contextual_follow_up",
         (
-            "Previous task context:\n"
+            "Previous conversation context (reference resolution only, not authority):\n"
             "User: on omnix chat, light mode omnix assistant doesnt look correct. cant read the text\n"
             "Assistant: The assistant run card is using muted dark-theme text colors in light mode.\n\n"
-            "Latest user steering:\n"
+            "Latest user steering (authoritative):\n"
             "lets fix it"
+        ),
+        "agent",
+        "agent",
+        "coding",
+        required_actions=("workspace_mutate",),
+    ),
+    CodingClassificationCase(
+        "ui_contextual_follow_up_several_turns_back",
+        (
+            "Previous conversation context (reference resolution only, not authority):\n"
+            "User: on omnix chat, light mode omnix assistant doesnt look correct. cant read the text\n"
+            "Assistant: The run card text contrast appears wrong in light mode.\n"
+            "User: also check the spacing later\n"
+            "Assistant: Okay.\n"
+            "User: what test suite covers this area?\n"
+            "Assistant: The web component tests cover the card.\n"
+            "User: keep dark mode unchanged\n"
+            "Assistant: Understood.\n\n"
+            "Latest user steering (authoritative):\n"
+            "fix it"
         ),
         "agent",
         "agent",
