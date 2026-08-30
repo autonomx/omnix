@@ -146,6 +146,65 @@ _DIRECT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
+def route_omnix_fast_path(
+    content: str,
+    *,
+    workflow_lookup: Callable[[str], str | None] | None = None,
+) -> OmnixRouteDecision:
+    """Recognize syntax-level routes only; leave natural-language meaning to the LLM.
+
+    This intentionally does not infer coding/home/research/personal domains.
+    Unmatched meaningful language is marked semantic_required and must be parsed
+    before Omnix grants stateful Agent authority.
+    """
+
+    text = " ".join(str(content or "").strip().split())
+    if not text or _CASUAL.fullmatch(text):
+        return OmnixRouteDecision(
+            lane="chat",
+            confidence=1.0,
+            reason="casual_or_empty",
+        )
+    if _AGENT.search(text):
+        return OmnixRouteDecision(
+            lane="agent",
+            confidence=1.0,
+            reason="explicit_agent",
+            explicit=True,
+        )
+
+    actionable_text = _QUOTED_SPAN.sub(" ", text)
+    actionable_text = " ".join(actionable_text.split())
+
+    workflow_match = _WORKFLOW.fullmatch(actionable_text)
+    if workflow_match and workflow_lookup is not None:
+        candidate = workflow_match.group(1).strip()
+        workflow_id = workflow_lookup(candidate)
+        if workflow_id:
+            return OmnixRouteDecision(
+                lane="workflow",
+                confidence=1.0,
+                reason="exact_known_workflow",
+                workflow_id=workflow_id,
+            )
+
+    for pattern, capability_id in _DIRECT_PATTERNS:
+        if pattern.fullmatch(actionable_text):
+            return OmnixRouteDecision(
+                lane="direct",
+                confidence=1.0,
+                reason="exact_direct_capability",
+                capability_id=capability_id,
+            )
+
+    return OmnixRouteDecision(
+        lane="chat",
+        confidence=0.0,
+        reason="semantic_required",
+        hermes_recommended=False,
+    )
+
+
 def route_omnix_request(
     content: str,
     *,
