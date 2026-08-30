@@ -395,13 +395,6 @@ def resolve_subject(task: str, source_class: str) -> SubjectRef | None:
         return SubjectRef(type="calendar", canonical_id="primary_calendar", display_name="primary calendar")
     if source_class == "email_state":
         return SubjectRef(type="mailbox", canonical_id="primary_mailbox", display_name="primary mailbox")
-    if source_class == "market_status":
-        return SubjectRef(type="market", canonical_id="us_equities", display_name="US equities market")
-    if capability_id == "weather.current":
-        location = str(output.get("location") or request_input.get("location") or "").strip()
-        if not location or location.casefold() == "user_location":
-            return SubjectRef(type="location", canonical_id="user_location", display_name="user location")
-        return SubjectRef(type="location", canonical_id=location.casefold(), display_name=location)
     return None
 
 
@@ -1474,6 +1467,13 @@ def _observed_subject(
         return SubjectRef(type="calendar", canonical_id="primary_calendar", display_name="primary calendar")
     if source_class == "email_state":
         return SubjectRef(type="mailbox", canonical_id="primary_mailbox", display_name="primary mailbox")
+    if source_class == "market_status":
+        return SubjectRef(type="market", canonical_id="us_equities", display_name="US equities market")
+    if capability_id == "weather.current":
+        location = str(output.get("location") or request_input.get("location") or "").strip()
+        if not location or location.casefold() == "user_location":
+            return SubjectRef(type="location", canonical_id="user_location", display_name="user location")
+        return SubjectRef(type="location", canonical_id=location.casefold(), display_name=location)
     return None
 
 def _request_supports_subject(subject: SubjectRef | None, request_input: dict[str, object]) -> bool:
