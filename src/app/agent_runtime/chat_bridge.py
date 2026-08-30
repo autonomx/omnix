@@ -33,13 +33,22 @@ from .local_workspace import (
     validate_local_workspace_root,
 )
 from .profiles import get_agent_profile, select_agent_profile_id
-from .router import OmnixRouteDecision, route_omnix_request
+from .router import OmnixRouteDecision, route_omnix_fast_path, route_omnix_request
 from .semantic_classifier import (
     SemanticIntentDecision,
     classify_semantic_intent_safely,
     default_semantic_intent_classifier,
     semantic_confidence_threshold,
     semantic_profile_id,
+)
+from .semantic_task import (
+    SemanticTask,
+    SemanticTaskCompilation,
+    compile_semantic_task,
+)
+from .semantic_task_parser import (
+    classify_semantic_task_safely,
+    default_semantic_task_parser,
 )
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
@@ -355,6 +364,9 @@ def _mark_chat_route(
     decision: OmnixRouteDecision,
     *,
     semantic_intent: SemanticIntentDecision | None = None,
+    semantic_task: SemanticTask | None = None,
+    semantic_compilation: SemanticTaskCompilation | None = None,
+    routing_shadow: dict[str, Any] | None = None,
     request_mode: RequestModeSelection | None = None,
 ) -> None:
     metadata = getattr(user_message, "metadata", None)
@@ -364,6 +376,12 @@ def _mark_chat_route(
     metadata["omnix_route"] = decision.model_dump(mode="json")
     if semantic_intent is not None:
         metadata["semantic_intent"] = semantic_intent.model_dump(mode="json")
+    if semantic_task is not None:
+        metadata["semantic_task"] = semantic_task.model_dump(mode="json")
+    if semantic_compilation is not None:
+        metadata["semantic_compilation"] = semantic_compilation.model_dump(mode="json")
+    if routing_shadow is not None:
+        metadata["routing_shadow"] = routing_shadow
     if request_mode is not None:
         metadata["request_mode"] = request_mode.model_dump(mode="json")
 
